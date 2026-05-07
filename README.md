@@ -9,6 +9,14 @@ Portable AI workflow framework.
 - `hooks/` - reusable hook scripts
 - `scripts/` - setup helpers
 
+## What Flow Owns
+
+`flow` is split into:
+
+- machine-local install support in `~/.flow/`
+- reusable framework source in this repo
+- repo-local instantiated framework in `repo/.flow/`
+
 ## Local install
 
 ```bash
@@ -24,4 +32,5 @@ repo into `~/.flow/framework`.
 flow doctor
 flow setup machine
 flow setup project
+flow bootstrap
 ```
