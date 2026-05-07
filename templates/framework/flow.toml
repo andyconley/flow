@@ -1,0 +1,187 @@
+[framework]
+name = "flow"
+version = 1
+
+[project]
+flow_dir = ".flow"
+source_of_truth = ".flow"
+
+[claude]
+skill_dir = ".claude/skills"
+agent_dir = ".claude/agents"
+hook_dir = ".claude/hooks"
+settings_file = ".claude/settings.json"
+managed_manifest = ".claude/flow.managed.toml"
+
+[claude.skill_defaults]
+disable_model_invocation = true
+argument_hint = "[focus]"
+
+[claude.agent_defaults]
+generation_mode = "verbatim"
+
+[claude.settings]
+preserve_unmanaged = true
+manage_hooks = true
+manage_settings_file = true
+
+[codex]
+skill_dir = ".codex/skills"
+managed_manifest = ".codex/flow.managed.toml"
+
+[codex.skill_defaults]
+argument_hint = "[focus]"
+
+[[claude.commands]]
+name = "flow-boot"
+source = "commands/flow-boot.md"
+description = "Orients to the project before planning or implementation work. Use when starting a session, resuming interrupted work, or when context feels stale."
+
+[[claude.commands]]
+name = "flow-plan"
+source = "commands/flow-plan.md"
+description = "Shapes work before implementation. Use when turning an idea, bug, or request into an implementation-ready plan."
+argument_hint = "[focus]"
+
+[[claude.commands]]
+name = "flow-scout"
+source = "commands/flow-scout.md"
+description = "Executes small scoped changes quickly. Use for XS or S changes that do not justify a full gated run."
+argument_hint = "[focus]"
+
+[[claude.commands]]
+name = "flow-implement"
+source = "commands/flow-implement.md"
+description = "Runs the gated implementation lane. Use when work spans multiple files, sessions, or decision surfaces and needs durable artifacts."
+argument_hint = "[work-id or focus]"
+
+[[claude.commands]]
+name = "flow-review"
+source = "commands/flow-review.md"
+description = "Runs structured review after implementation. Use when acceptance, correctness, UX fit, or validation still needs an explicit judgment."
+argument_hint = "[work-id or focus]"
+
+[[claude.commands]]
+name = "flow-resume"
+source = "commands/flow-resume.md"
+description = "Resumes interrupted work. Use when a prior run or slice should continue instead of starting over."
+argument_hint = "[work-id]"
+
+[[claude.commands]]
+name = "flow-status"
+source = "commands/flow-status.md"
+description = "Summarizes current execution state. Use when the question is where the project stands and what should happen next."
+
+[[claude.commands]]
+name = "flow-archive"
+source = "commands/flow-archive.md"
+description = "Closes out completed work and updates durable memory. Use when a slice or run is complete and ready to be archived."
+argument_hint = "[work-id]"
+
+[[claude.agents]]
+name = "architect"
+source = "agents/architect.md"
+
+[[claude.agents]]
+name = "business-analyst"
+source = "agents/business-analyst.md"
+
+[[claude.agents]]
+name = "code-reviewer"
+source = "agents/code-reviewer.md"
+
+[[claude.agents]]
+name = "data-engineer"
+source = "agents/data-engineer.md"
+
+[[claude.agents]]
+name = "lead-developer"
+source = "agents/lead-developer.md"
+
+[[claude.agents]]
+name = "product-manager"
+source = "agents/product-manager.md"
+
+[[claude.agents]]
+name = "security-reviewer"
+source = "agents/security-reviewer.md"
+
+[[claude.agents]]
+name = "sre"
+source = "agents/sre.md"
+
+[[claude.agents]]
+name = "support-lead"
+source = "agents/support-lead.md"
+
+[[claude.agents]]
+name = "tech-writer"
+source = "agents/tech-writer.md"
+
+[[claude.agents]]
+name = "test-engineer"
+source = "agents/test-engineer.md"
+
+[[claude.agents]]
+name = "ux-specialist"
+source = "agents/ux-specialist.md"
+
+[[claude.hooks]]
+name = "flow-session-start"
+event = "SessionStart"
+matcher = "startup|resume|clear|compact"
+type = "command"
+script = "flow-session-start.sh"
+
+[[claude.hooks]]
+name = "flow-managed-write-reminder"
+event = "PostToolUse"
+matcher = "Write|Edit"
+type = "command"
+script = "flow-managed-write-reminder.sh"
+
+[[codex.commands]]
+name = "flow-boot"
+source = "commands/flow-boot.md"
+description = "Orients to the project before planning or implementation work. Use when starting a session, resuming interrupted work, or when context feels stale."
+
+[[codex.commands]]
+name = "flow-plan"
+source = "commands/flow-plan.md"
+description = "Shapes work before implementation. Use when turning an idea, bug, or request into an implementation-ready plan."
+argument_hint = "[focus]"
+
+[[codex.commands]]
+name = "flow-scout"
+source = "commands/flow-scout.md"
+description = "Executes small scoped changes quickly. Use for XS or S changes that do not justify a full gated run."
+argument_hint = "[focus]"
+
+[[codex.commands]]
+name = "flow-implement"
+source = "commands/flow-implement.md"
+description = "Runs the gated implementation lane. Use when work spans multiple files, sessions, or decision surfaces and needs durable artifacts."
+argument_hint = "[work-id or focus]"
+
+[[codex.commands]]
+name = "flow-review"
+source = "commands/flow-review.md"
+description = "Runs structured review after implementation. Use when acceptance, correctness, UX fit, or validation still needs an explicit judgment."
+argument_hint = "[work-id or focus]"
+
+[[codex.commands]]
+name = "flow-resume"
+source = "commands/flow-resume.md"
+description = "Resumes interrupted work. Use when a prior run or slice should continue instead of starting over."
+argument_hint = "[work-id]"
+
+[[codex.commands]]
+name = "flow-status"
+source = "commands/flow-status.md"
+description = "Summarizes current execution state. Use when the question is where the project stands and what should happen next."
+
+[[codex.commands]]
+name = "flow-archive"
+source = "commands/flow-archive.md"
+description = "Closes out completed work and updates durable memory. Use when a slice or run is complete and ready to be archived."
+argument_hint = "[work-id]"
