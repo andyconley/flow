@@ -48,6 +48,23 @@ def copy_if_missing(src: Path, dest: Path) -> None:
         shutil.copy2(src, dest)
 
 
+def sync_missing_tree(src: Path, dest: Path) -> tuple[int, int]:
+    added = 0
+    skipped = 0
+    if src.is_dir():
+        ensure_dir(dest)
+        for child in src.iterdir():
+            child_added, child_skipped = sync_missing_tree(child, dest / child.name)
+            added += child_added
+            skipped += child_skipped
+        return added, skipped
+    if dest.exists():
+        return 0, 1
+    ensure_dir(dest.parent)
+    shutil.copy2(src, dest)
+    return 1, 0
+
+
 def parse_toml_value(raw: str):
     raw = raw.strip()
     if raw.startswith('"') and raw.endswith('"'):
@@ -322,17 +339,12 @@ def desired_claude_outputs(
     return outputs, managed_entries, mergeable_paths
 
 
-def sync_outputs(
-    root: Path,
-    desired: dict[Path, str],
-    previous_managed: set[Path],
-    mergeable_paths: set[Path],
-    check: bool,
-) -> int:
+def analyze_sync(
+    desired: dict[Path, str], previous_managed: set[Path], mergeable_paths: set[Path]
+) -> tuple[list[Path], list[Path], list[Path]]:
     desired_paths = set(desired)
     conflicts: list[Path] = []
     changed: list[Path] = []
-    removed: list[Path] = []
 
     for target, content in desired.items():
         if target.exists():
@@ -349,6 +361,18 @@ def sync_outputs(
         changed.append(target)
 
     stale = [path for path in previous_managed if path not in desired_paths and path.exists()]
+    return conflicts, changed, stale
+
+
+def sync_outputs(
+    root: Path,
+    desired: dict[Path, str],
+    previous_managed: set[Path],
+    mergeable_paths: set[Path],
+    check: bool,
+) -> int:
+    conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
+    removed: list[Path] = []
 
     if conflicts:
         print("sync claude found unmanaged conflicts:")
@@ -420,6 +444,26 @@ def setup_project() -> int:
     return 0
 
 
+def refresh_project() -> int:
+    root = repo_root()
+    target = root / ".flow"
+    if not target.exists():
+        print("repo is missing .flow; run `flow setup project` first")
+        return 1
+
+    added = 0
+    skipped = 0
+    for item in TEMPLATES_DIR.iterdir():
+        item_added, item_skipped = sync_missing_tree(item, target / item.name)
+        added += item_added
+        skipped += item_skipped
+
+    print(f"project refresh complete: {target}")
+    print(f"added missing files: {added}")
+    print(f"left existing files unchanged: {skipped}")
+    return 0
+
+
 def doctor() -> int:
     root = repo_root()
     flow_dir = root / ".flow"
@@ -427,6 +471,22 @@ def doctor() -> int:
     managed_ok = (root / ".claude" / "flow.managed.toml").exists()
     skills_dir = root / ".claude" / "skills"
     agents_dir = root / ".claude" / "agents"
+    claude_drift = "n/a"
+
+    if manifest_ok:
+        try:
+            _manifest_path, manifest = load_flow_manifest(flow_dir)
+            previous_managed = read_managed_paths(root / manifest["claude"]["managed_manifest"])
+            desired, _managed_entries, mergeable_paths = desired_claude_outputs(root, flow_dir, manifest)
+            conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
+            if conflicts:
+                claude_drift = "conflict"
+            elif changed or stale:
+                claude_drift = "stale"
+            else:
+                claude_drift = "clean"
+        except Exception:
+            claude_drift = "error"
 
     print(f"python:      {sys.executable}")
     print(f"flow home:   {FLOW_HOME}")
@@ -438,6 +498,7 @@ def doctor() -> int:
     print(f"repo .flow:  {'ok' if flow_dir.exists() else 'missing'}")
     print(f"manifest:    {'ok' if manifest_ok else 'missing'}")
     print(f"claude sync: {'ok' if managed_ok else 'missing'}")
+    print(f"claude drift:{claude_drift}")
     print(f"skills dir:  {'ok' if skills_dir.exists() else 'missing'}")
     print(f"agents dir:  {'ok' if agents_dir.exists() else 'missing'}")
     return 0
@@ -504,6 +565,10 @@ def main() -> int:
     setup_sub.add_parser("machine")
     setup_sub.add_parser("project")
 
+    refresh = sub.add_parser("refresh")
+    refresh_sub = refresh.add_subparsers(dest="refresh_target", required=True)
+    refresh_sub.add_parser("project")
+
     sub.add_parser("doctor")
     sub.add_parser("bootstrap")
     sync = sub.add_parser("sync")
@@ -516,6 +581,8 @@ def main() -> int:
         return setup_machine()
     if args.command == "setup" and args.setup_target == "project":
         return setup_project()
+    if args.command == "refresh" and args.refresh_target == "project":
+        return refresh_project()
     if args.command == "doctor":
         return doctor()
     if args.command == "bootstrap":
