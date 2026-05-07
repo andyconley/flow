@@ -1,12 +1,102 @@
 # flow-resume
 
-Use to pick up interrupted work.
+Use `flow-resume` to pick up interrupted work.
 
-Resume should:
+## Overview
 
-1. locate the most relevant run in `.flow/runs/`
-2. identify the last completed phase
-3. restate the current blocker or next step
-4. recommend whether to continue in scout mode or gated implementation
+This command reconstructs the state of interrupted execution so work can continue without guessing or restarting unnecessarily.
 
-Resume should prefer continuing the existing artifact chain over starting a fresh run unless the prior attempt is clearly obsolete.
+## When to Use
+
+Use this command when:
+
+- there is an interrupted run
+- a session ended mid-slice
+- the current state of execution is unclear but a fresh start would lose useful artifacts
+
+**When NOT to use:** when there is no meaningful prior run to continue, or when the previous attempt is clearly obsolete and should be superseded intentionally.
+
+## Primary inputs
+
+- `.flow/runs/`
+- durable memory files
+- latest run artifacts and notes
+
+## Primary outputs
+
+- identified run to resume
+- last completed phase
+- current blocker or next step
+- recommended continuation lane
+
+## Composition
+
+Primary roles:
+
+- `lead-developer` for interpreting incomplete execution state
+- `tech-writer` for reconstructing artifact chains
+- `support-lead` when the interruption involves operational or validation ambiguity
+
+`flow-resume` should prefer continuity over restart unless the old run is clearly obsolete.
+
+## Resume Workflow
+
+1. Locate the most relevant interrupted run.
+2. Identify the last completed phase.
+3. Restate:
+   - current blocker
+   - next step
+   - missing evidence or missing artifacts
+4. Recommend whether to continue in:
+   - scout mode
+   - gated implementation
+5. Continue the existing artifact chain unless starting fresh is clearly safer.
+
+## Output Format
+
+```md
+## Resume Summary
+
+### Selected Run
+- [Run identifier]
+
+### Last Completed Phase
+- [Phase]
+
+### Current State
+- Blocker:
+- Next step:
+- Missing artifacts or evidence:
+
+### Recommended Continuation
+- `flow-scout` | `flow-implement`
+- Why:
+```
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "It's easier to start over." | Restarting often throws away useful artifact chains and hides prior decisions. |
+| "The last phase is obvious from memory." | Resume exists because memory is usually incomplete. |
+| "The missing artifact probably doesn't matter." | Missing evidence often explains why the work stopped. |
+
+## Red Flags
+
+- selected run is not justified
+- last completed phase is unclear
+- next step is guessed rather than derived
+- missing artifacts are ignored instead of called out
+
+## Verification
+
+Before leaving `flow-resume`, confirm:
+
+- [ ] the correct interrupted run was identified
+- [ ] the last completed phase is explicit
+- [ ] the blocker or next step is explicit
+- [ ] the continuation lane is justified
+
+## Finish Criteria
+
+`flow-resume` is done when the team can continue from the interrupted work without re-deriving context.

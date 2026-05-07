@@ -1,6 +1,48 @@
 # flow-review
 
-Use for structured review after implementation work.
+Use `flow-review` for structured review after implementation work.
+
+## Overview
+
+This command judges the implementation against intent. It exists to separate "code was written" from "the slice is actually acceptable."
+
+## When to Use
+
+Use this command when:
+
+- implementation is complete but acceptance is not yet clear
+- a structured second pass is needed before archive
+- a separate review lane owns correctness or acceptance
+
+**When NOT to use:** initial shaping or planning work, or final memory packaging that belongs in `flow-archive`.
+
+## Primary inputs
+
+- implemented change
+- relevant plan or requirements
+- tests and validation evidence
+- standards and project overlays that apply
+
+## Primary outputs
+
+- structured review verdict
+- prioritized findings
+- acceptance disposition
+- residual-risk summary
+
+## Composition
+
+Primary roles:
+
+- `code-reviewer` for correctness and architecture-fit review
+- `test-engineer` for coverage and proof review
+- `security-reviewer` for risky surfaces
+- `ux-specialist` for user-facing fit
+- `sre` for rollout, runtime, and observability fit
+
+`flow-review` is the place where implementation is judged against intent, not just whether the code compiles.
+
+## Review Dimensions
 
 Review should check:
 
@@ -10,14 +52,73 @@ Review should check:
 4. validation evidence
 5. follow-up risks or gaps
 
-Use this when:
+## Review Workflow
 
-- implementation is complete but acceptance is not yet clear
-- a second pass is needed before archive
-- a review-focused agent or human provider owns this lane
+1. Read the plan or requirements.
+2. Read the implementation and changed tests.
+3. Compare implementation to:
+   - requested behavior
+   - standards
+   - acceptance criteria
+4. Assess proof:
+   - automated tests
+   - manual checks
+   - runtime evidence
+5. Produce one of these dispositions:
+   - ready to accept or archive
+   - needs refinement
+   - wrong slice or drifted scope
 
-Review output should make one of these clear:
+## Output Format
 
-- ready to accept or archive
-- needs refinement
-- wrong slice or drifted scope
+```md
+## Review Summary
+
+### Verdict
+- Ready to accept/archive | Needs refinement | Wrong slice/drifted scope
+
+### Findings
+- Critical:
+- Important:
+- Suggestions:
+
+### Requirement Fit
+- [Assessment]
+
+### Validation Fit
+- [Assessment]
+
+### Residual Risks
+- [Assessment]
+```
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "The tests pass, so review is done." | Passing tests are evidence, not the whole judgment. Scope, UX, architecture, and risk still matter. |
+| "It's close enough; we can fix the rest later." | Unclear acceptance standards create drift and recurring rework. |
+| "I already reviewed it while coding." | Self-review is useful but not a substitute for structured acceptance review. |
+| "Only big issues matter." | Missing proof, wrong slice boundaries, and silent scope drift also matter. |
+
+## Red Flags
+
+- no comparison to the original plan or acceptance criteria
+- verdict is vague or non-committal
+- missing distinction between critical issues and suggestions
+- validation evidence is mentioned but not assessed
+- review ignores UX, security, or runtime fit on relevant changes
+
+## Verification
+
+Before leaving `flow-review`, confirm:
+
+- [ ] requirement fit was assessed explicitly
+- [ ] validation evidence was assessed explicitly
+- [ ] findings are prioritized
+- [ ] the verdict is clear
+- [ ] residual risks or next actions are stated
+
+## Finish Criteria
+
+`flow-review` is done when the team knows clearly whether to accept, refine, or rescope the work.
