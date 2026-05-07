@@ -182,10 +182,75 @@ def load_flow_manifest(flow_dir: Path) -> tuple[Path, dict]:
     return manifest_path, read_toml(manifest_path)
 
 
-def desired_claude_outputs(root: Path, flow_dir: Path, manifest: dict) -> tuple[dict[Path, str], list[dict]]:
+def read_json(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text())
+
+
+def remove_managed_flow_hooks(settings: dict) -> dict:
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        return settings
+
+    cleaned_events: dict[str, list] = {}
+    for event, groups in hooks.items():
+        if not isinstance(groups, list):
+            continue
+        cleaned_groups = []
+        for group in groups:
+            handlers = group.get("hooks", [])
+            kept_handlers = []
+            for handler in handlers:
+                command = handler.get("command", "")
+                if handler.get("type") == "command" and "/.claude/hooks/flow-" in command:
+                    continue
+                kept_handlers.append(handler)
+            if kept_handlers:
+                updated = dict(group)
+                updated["hooks"] = kept_handlers
+                cleaned_groups.append(updated)
+        if cleaned_groups:
+            cleaned_events[event] = cleaned_groups
+
+    if cleaned_events:
+        settings["hooks"] = cleaned_events
+    else:
+        settings.pop("hooks", None)
+    return settings
+
+
+def build_claude_settings(root: Path, manifest: dict) -> str:
+    claude = manifest["claude"]
+    settings_path = root / claude["settings_file"]
+    settings = remove_managed_flow_hooks(read_json(settings_path))
+    hooks = settings.setdefault("hooks", {})
+
+    for hook in claude.get("hooks", []):
+        event = hook["event"]
+        groups = hooks.setdefault(event, [])
+        groups.append(
+            {
+                "matcher": hook["matcher"],
+                "hooks": [
+                    {
+                        "type": hook["type"],
+                        "command": f'"$CLAUDE_PROJECT_DIR"/.claude/hooks/{hook["script"]}',
+                    }
+                ],
+            }
+        )
+
+    return json.dumps(settings, indent=2, sort_keys=True) + "\n"
+
+
+def desired_claude_outputs(
+    root: Path, flow_dir: Path, manifest: dict
+) -> tuple[dict[Path, str], list[dict], set[Path]]:
     claude = manifest["claude"]
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
+    mergeable_paths: set[Path] = set()
 
     for command in claude.get("commands", []):
         source_rel = command["source"]
@@ -220,6 +285,30 @@ def desired_claude_outputs(root: Path, flow_dir: Path, manifest: dict) -> tuple[
             }
         )
 
+    for hook in claude.get("hooks", []):
+        source = FRAMEWORK_DIR / "hooks" / hook["script"]
+        target = root / claude["hook_dir"] / hook["script"]
+        content = source.read_text()
+        outputs[target] = content
+        managed_entries.append(
+            {
+                "path": rel_posix(target, root),
+                "kind": "hook-script",
+                "source": f'flow/hooks/{hook["script"]}',
+            }
+        )
+
+    settings_path = root / claude["settings_file"]
+    outputs[settings_path] = build_claude_settings(root, manifest)
+    mergeable_paths.add(settings_path)
+    managed_entries.append(
+        {
+            "path": rel_posix(settings_path, root),
+            "kind": "settings",
+            "source": ".flow/flow.toml",
+        }
+    )
+
     managed_manifest_path = root / claude["managed_manifest"]
     outputs[managed_manifest_path] = build_managed_manifest(managed_entries)
     managed_entries.append(
@@ -230,10 +319,16 @@ def desired_claude_outputs(root: Path, flow_dir: Path, manifest: dict) -> tuple[
         }
     )
     outputs[managed_manifest_path] = build_managed_manifest(managed_entries)
-    return outputs, managed_entries
+    return outputs, managed_entries, mergeable_paths
 
 
-def sync_outputs(root: Path, desired: dict[Path, str], previous_managed: set[Path], check: bool) -> int:
+def sync_outputs(
+    root: Path,
+    desired: dict[Path, str],
+    previous_managed: set[Path],
+    mergeable_paths: set[Path],
+    check: bool,
+) -> int:
     desired_paths = set(desired)
     conflicts: list[Path] = []
     changed: list[Path] = []
@@ -244,7 +339,11 @@ def sync_outputs(root: Path, desired: dict[Path, str], previous_managed: set[Pat
             current = target.read_text()
             if current == content:
                 continue
-            if target not in previous_managed and GENERATED_MARKER not in current:
+            if (
+                target not in previous_managed
+                and target not in mergeable_paths
+                and GENERATED_MARKER not in current
+            ):
                 conflicts.append(target)
                 continue
         changed.append(target)
@@ -278,6 +377,8 @@ def sync_outputs(root: Path, desired: dict[Path, str], previous_managed: set[Pat
         ensure_dir(target.parent)
         if not target.exists() or target.read_text() != content:
             target.write_text(content)
+        if target.suffix == ".sh":
+            target.chmod(0o755)
 
     print("claude sync wrote managed files:")
     for path in changed:
@@ -386,8 +487,8 @@ def sync_claude(check: bool = False) -> int:
         return 1
 
     previous_managed = read_managed_paths(root / manifest["claude"]["managed_manifest"])
-    desired, _managed_entries = desired_claude_outputs(root, flow_dir, manifest)
-    result = sync_outputs(root, desired, previous_managed, check=check)
+    desired, _managed_entries, mergeable_paths = desired_claude_outputs(root, flow_dir, manifest)
+    result = sync_outputs(root, desired, previous_managed, mergeable_paths, check=check)
     if result == 0:
         mode = "check" if check else "sync"
         print(f"claude {mode} complete from {manifest_path}")
