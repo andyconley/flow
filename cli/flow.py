@@ -143,6 +143,63 @@ def render_skill(name: str, description: str, source_path: str, body: str) -> st
     return "\n".join(lines)
 
 
+def build_skill_frontmatter(name: str, command: dict, skill_defaults: dict) -> list[str]:
+    frontmatter = {
+        "name": name,
+        "description": command["description"],
+    }
+
+    merged = dict(skill_defaults)
+    merged.update(command)
+
+    field_map = [
+        ("when_to_use", "when-to-use"),
+        ("argument_hint", "argument-hint"),
+        ("disable_model_invocation", "disable-model-invocation"),
+        ("user_invocable", "user-invocable"),
+        ("allowed_tools", "allowed-tools"),
+        ("model", "model"),
+        ("effort", "effort"),
+        ("context", "context"),
+        ("agent", "agent"),
+    ]
+    for source_key, target_key in field_map:
+        if source_key in merged:
+            frontmatter[target_key] = merged[source_key]
+
+    lines = ["---"]
+    for key, value in frontmatter.items():
+        if isinstance(value, bool):
+            rendered = "true" if value else "false"
+        else:
+            rendered = str(value)
+        lines.append(f"{key}: {rendered}")
+    lines.append("---")
+    return lines
+
+
+def render_skill_from_command(command: dict, skill_defaults: dict) -> str:
+    source_path = command["source"]
+    body = command["_body"]
+    lines = build_skill_frontmatter(command["name"], command, skill_defaults)
+    lines.extend(
+        [
+            "",
+            f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->",
+            "",
+            body.rstrip(),
+            "",
+            "## Invocation Arguments",
+            "",
+            "If arguments were provided after the skill name, treat them as the specific focus for this run:",
+            "",
+            "`$ARGUMENTS`",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def insert_generated_marker(source_path: str, body: str) -> str:
     marker = f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->"
     if body.startswith("---\n"):
@@ -157,8 +214,10 @@ def build_managed_manifest(entries: list[dict]) -> str:
     lines = [
         "[managed]",
         'generator = "flow"',
-        "version = 1",
+        "version = 2",
         'target = "claude"',
+        'source_manifest = ".flow/flow.toml"',
+        'preserve_unmanaged = true',
         "",
     ]
     for entry in entries:
@@ -168,6 +227,7 @@ def build_managed_manifest(entries: list[dict]) -> str:
                 f'path = "{entry["path"]}"',
                 f'kind = "{entry["kind"]}"',
                 f'source = "{entry["source"]}"',
+                f'sync_mode = "{entry["sync_mode"]}"',
                 "",
             ]
         )
@@ -265,6 +325,8 @@ def desired_claude_outputs(
     root: Path, flow_dir: Path, manifest: dict
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
     claude = manifest["claude"]
+    skill_defaults = claude.get("skill_defaults", {})
+    agent_defaults = claude.get("agent_defaults", {})
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()
@@ -273,18 +335,16 @@ def desired_claude_outputs(
         source_rel = command["source"]
         source_path = flow_dir / source_rel
         target = root / claude["skill_dir"] / command["name"] / "SKILL.md"
-        content = render_skill(
-            command["name"],
-            command["description"],
-            source_rel,
-            source_path.read_text(),
-        )
+        command_with_body = dict(command)
+        command_with_body["_body"] = source_path.read_text()
+        content = render_skill_from_command(command_with_body, skill_defaults)
         outputs[target] = content
         managed_entries.append(
             {
                 "path": rel_posix(target, root),
                 "kind": "skill",
                 "source": f'.flow/{source_rel}',
+                "sync_mode": "replace",
             }
         )
 
@@ -292,6 +352,9 @@ def desired_claude_outputs(
         source_rel = agent["source"]
         source_path = flow_dir / source_rel
         target = root / claude["agent_dir"] / f'{agent["name"]}.md'
+        generation_mode = agent.get("generation_mode", agent_defaults.get("generation_mode", "verbatim"))
+        if generation_mode != "verbatim":
+            raise ValueError(f"unsupported agent generation mode: {generation_mode}")
         content = insert_generated_marker(source_rel, source_path.read_text())
         outputs[target] = content
         managed_entries.append(
@@ -299,6 +362,7 @@ def desired_claude_outputs(
                 "path": rel_posix(target, root),
                 "kind": "agent",
                 "source": f'.flow/{source_rel}',
+                "sync_mode": "replace",
             }
         )
 
@@ -312,6 +376,7 @@ def desired_claude_outputs(
                 "path": rel_posix(target, root),
                 "kind": "hook-script",
                 "source": f'flow/hooks/{hook["script"]}',
+                "sync_mode": "replace",
             }
         )
 
@@ -323,6 +388,7 @@ def desired_claude_outputs(
             "path": rel_posix(settings_path, root),
             "kind": "settings",
             "source": ".flow/flow.toml",
+            "sync_mode": "merge",
         }
     )
 
@@ -333,6 +399,7 @@ def desired_claude_outputs(
             "path": rel_posix(managed_manifest_path, root),
             "kind": "managed-manifest",
             "source": ".flow/flow.toml",
+            "sync_mode": "replace",
         }
     )
     outputs[managed_manifest_path] = build_managed_manifest(managed_entries)
