@@ -9,6 +9,8 @@ HOME = Path.home()
 FLOW_HOME = HOME / ".flow"
 FRAMEWORK_DIR = FLOW_HOME / "framework"
 TEMPLATES_DIR = FRAMEWORK_DIR / "templates" / "framework"
+USER_BIN_DIR = HOME / ".local" / "bin"
+FLOW_CONFIG = FLOW_HOME / "config.toml"
 
 
 def repo_root() -> Path:
@@ -19,10 +21,26 @@ def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def ensure_file(path: Path, content: str) -> None:
+    if path.exists():
+        return
+    ensure_dir(path.parent)
+    path.write_text(content)
+
+
 def setup_machine() -> int:
     ensure_dir(FLOW_HOME)
-    ensure_dir(HOME / ".local" / "bin")
+    ensure_dir(USER_BIN_DIR)
+    ensure_dir(FLOW_HOME / "hooks")
+    ensure_dir(FLOW_HOME / "templates")
+    ensure_dir(FLOW_HOME / "user")
+    ensure_dir(FLOW_HOME / "logs")
+    ensure_file(
+        FLOW_CONFIG,
+        "[flow]\nframework_home = \"~/.flow/framework\"\nlauncher = \"~/.local/bin/flow\"\n",
+    )
     print(f"flow home ready: {FLOW_HOME}")
+    print(f"config:     {FLOW_CONFIG}")
     print("next: run `flow setup project` inside a repository")
     return 0
 
@@ -55,13 +73,36 @@ def doctor() -> int:
     print(f"flow home:   {FLOW_HOME}")
     print(f"framework:   {FRAMEWORK_DIR}")
     print(f"repo:        {repo_root()}")
+    print(f"config:      {'ok' if FLOW_CONFIG.exists() else 'missing'}")
+    print(f"launcher:    {'ok' if (USER_BIN_DIR / 'flow').exists() else 'missing'}")
     print(f"templates:   {'ok' if TEMPLATES_DIR.exists() else 'missing'}")
     print(f"repo .flow:  {'ok' if (repo_root() / '.flow').exists() else 'missing'}")
     return 0
 
 
 def bootstrap() -> int:
-    print("bootstrap not implemented yet")
+    root = repo_root()
+    flow_dir = root / ".flow"
+    if not flow_dir.exists():
+        print("repo is missing .flow; run `flow setup project` first")
+        return 1
+
+    required = [
+        flow_dir / "FRAMEWORK.md",
+        flow_dir / "PROJECT.md",
+        flow_dir / "standards",
+        flow_dir / "project",
+        flow_dir / "memory",
+    ]
+    missing = [str(p) for p in required if not p.exists()]
+    if missing:
+        print("bootstrap found missing framework paths:")
+        for path in missing:
+            print(f"- {path}")
+        return 1
+
+    print(f"bootstrap ok: {flow_dir}")
+    print("next: run `flow doctor` or begin with `/flow-boot` once Claude integration exists")
     return 0
 
 

@@ -1,6 +1,12 @@
 # flow-implement
 
-Use for gated implementation work.
+Use for gated implementation work when the task is large enough to benefit from explicit phases and durable artifacts.
+
+Prefer this command when:
+
+- work spans multiple files or sessions
+- architecture or UX contract decisions matter
+- reviewability and traceability are important
 
 Phases:
 
@@ -13,3 +19,11 @@ Phases:
 7. handback
 
 Artifacts live under `.flow/runs/<work-id>/`.
+
+Expected outputs:
+
+- durable run artifacts
+- code and test changes
+- review findings or sign-off
+- validation evidence
+- structured handback for archive or acceptance review
