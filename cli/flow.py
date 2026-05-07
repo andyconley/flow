@@ -143,6 +143,22 @@ def render_skill(name: str, description: str, source_path: str, body: str) -> st
     return "\n".join(lines)
 
 
+def render_codex_skill(source_path: str, body: str) -> str:
+    lines = [
+        f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and rerun `flow sync codex`. -->",
+        "",
+        body.rstrip(),
+        "",
+        "## Invocation Arguments",
+        "",
+        "If arguments were provided after the skill name, treat them as the specific focus for this run:",
+        "",
+        "`$ARGUMENTS`",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def build_skill_frontmatter(name: str, command: dict, skill_defaults: dict) -> list[str]:
     frontmatter = {
         "name": name,
@@ -210,12 +226,12 @@ def insert_generated_marker(source_path: str, body: str) -> str:
     return marker + "\n\n" + body
 
 
-def build_managed_manifest(entries: list[dict]) -> str:
+def build_managed_manifest(target_name: str, entries: list[dict]) -> str:
     lines = [
         "[managed]",
         'generator = "flow"',
         "version = 2",
-        'target = "claude"',
+        f'target = "{target_name}"',
         'source_manifest = ".flow/flow.toml"',
         'preserve_unmanaged = true',
         "",
@@ -234,12 +250,12 @@ def build_managed_manifest(entries: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def read_managed_paths(path: Path) -> set[Path]:
+def read_managed_paths(root: Path, path: Path) -> set[Path]:
     if not path.exists():
         return set()
     data = read_toml(path)
     files = data.get("files", [])
-    return {repo_root() / entry["path"] for entry in files if "path" in entry}
+    return {root / entry["path"] for entry in files if "path" in entry}
 
 
 def remove_empty_parents(path: Path, stop_at: Path) -> None:
@@ -297,13 +313,12 @@ def remove_managed_flow_hooks(settings: dict) -> dict:
     return settings
 
 
-def build_claude_settings(root: Path, manifest: dict) -> str:
-    claude = manifest["claude"]
-    settings_path = root / claude["settings_file"]
+def build_claude_settings(root: Path, runtime: dict) -> str:
+    settings_path = root / runtime["settings_file"]
     settings = remove_managed_flow_hooks(read_json(settings_path))
     hooks = settings.setdefault("hooks", {})
 
-    for hook in claude.get("hooks", []):
+    for hook in runtime.get("hooks", []):
         event = hook["event"]
         groups = hooks.setdefault(event, [])
         groups.append(
@@ -322,19 +337,19 @@ def build_claude_settings(root: Path, manifest: dict) -> str:
 
 
 def desired_claude_outputs(
-    root: Path, flow_dir: Path, manifest: dict
+    root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
-    claude = manifest["claude"]
-    skill_defaults = claude.get("skill_defaults", {})
-    agent_defaults = claude.get("agent_defaults", {})
+    runtime = manifest["claude"]
+    skill_defaults = runtime.get("skill_defaults", {})
+    agent_defaults = runtime.get("agent_defaults", {})
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()
 
-    for command in claude.get("commands", []):
+    for command in runtime.get("commands", []):
         source_rel = command["source"]
         source_path = flow_dir / source_rel
-        target = root / claude["skill_dir"] / command["name"] / "SKILL.md"
+        target = root / runtime["skill_dir"] / command["name"] / "SKILL.md"
         command_with_body = dict(command)
         command_with_body["_body"] = source_path.read_text()
         content = render_skill_from_command(command_with_body, skill_defaults)
@@ -348,10 +363,10 @@ def desired_claude_outputs(
             }
         )
 
-    for agent in claude.get("agents", []):
+    for agent in runtime.get("agents", []):
         source_rel = agent["source"]
         source_path = flow_dir / source_rel
-        target = root / claude["agent_dir"] / f'{agent["name"]}.md'
+        target = root / runtime["agent_dir"] / f'{agent["name"]}.md'
         generation_mode = agent.get("generation_mode", agent_defaults.get("generation_mode", "verbatim"))
         if generation_mode != "verbatim":
             raise ValueError(f"unsupported agent generation mode: {generation_mode}")
@@ -366,9 +381,9 @@ def desired_claude_outputs(
             }
         )
 
-    for hook in claude.get("hooks", []):
+    for hook in runtime.get("hooks", []):
         source = FRAMEWORK_DIR / "hooks" / hook["script"]
-        target = root / claude["hook_dir"] / hook["script"]
+        target = root / runtime["hook_dir"] / hook["script"]
         content = source.read_text()
         outputs[target] = content
         managed_entries.append(
@@ -380,29 +395,65 @@ def desired_claude_outputs(
             }
         )
 
-    settings_path = root / claude["settings_file"]
-    outputs[settings_path] = build_claude_settings(root, manifest)
+    settings_path = root / runtime["settings_file"]
+    outputs[settings_path] = build_claude_settings(root, runtime)
     mergeable_paths.add(settings_path)
     managed_entries.append(
         {
             "path": rel_posix(settings_path, root),
             "kind": "settings",
-            "source": ".flow/flow.toml",
+            "source": manifest_rel,
             "sync_mode": "merge",
         }
     )
 
-    managed_manifest_path = root / claude["managed_manifest"]
-    outputs[managed_manifest_path] = build_managed_manifest(managed_entries)
+    managed_manifest_path = root / runtime["managed_manifest"]
+    outputs[managed_manifest_path] = build_managed_manifest("claude", managed_entries)
     managed_entries.append(
         {
             "path": rel_posix(managed_manifest_path, root),
             "kind": "managed-manifest",
-            "source": ".flow/flow.toml",
+            "source": manifest_rel,
             "sync_mode": "replace",
         }
     )
-    outputs[managed_manifest_path] = build_managed_manifest(managed_entries)
+    outputs[managed_manifest_path] = build_managed_manifest("claude", managed_entries)
+    return outputs, managed_entries, mergeable_paths
+
+
+def desired_codex_outputs(
+    root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
+) -> tuple[dict[Path, str], list[dict], set[Path]]:
+    runtime = manifest["codex"]
+    outputs: dict[Path, str] = {}
+    managed_entries: list[dict] = []
+    mergeable_paths: set[Path] = set()
+
+    for command in runtime.get("commands", []):
+        source_rel = command["source"]
+        source_path = flow_dir / source_rel
+        target = root / runtime["skill_dir"] / command["name"] / "SKILL.md"
+        outputs[target] = render_codex_skill(source_rel, source_path.read_text())
+        managed_entries.append(
+            {
+                "path": rel_posix(target, root),
+                "kind": "skill",
+                "source": f'.flow/{source_rel}',
+                "sync_mode": "replace",
+            }
+        )
+
+    managed_manifest_path = root / runtime["managed_manifest"]
+    outputs[managed_manifest_path] = build_managed_manifest("codex", managed_entries)
+    managed_entries.append(
+        {
+            "path": rel_posix(managed_manifest_path, root),
+            "kind": "managed-manifest",
+            "source": manifest_rel,
+            "sync_mode": "replace",
+        }
+    )
+    outputs[managed_manifest_path] = build_managed_manifest("codex", managed_entries)
     return outputs, managed_entries, mergeable_paths
 
 
@@ -431,8 +482,33 @@ def analyze_sync(
     return conflicts, changed, stale
 
 
+def runtime_status(
+    root: Path, flow_dir: Path, manifest_path: Path, manifest: dict, target: str
+) -> tuple[str, bool]:
+    runtime = manifest.get(target)
+    if not isinstance(runtime, dict):
+        return "n/a", False
+
+    managed_path = root / runtime["managed_manifest"]
+    managed_ok = managed_path.exists()
+    try:
+        previous_managed = read_managed_paths(root, managed_path)
+        desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
+            target, root, flow_dir, manifest, rel_posix(manifest_path, root)
+        )
+        conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
+        if conflicts:
+            return "conflict", managed_ok
+        if changed or stale:
+            return "stale", managed_ok
+        return "clean", managed_ok
+    except Exception:
+        return "error", managed_ok
+
+
 def sync_outputs(
     root: Path,
+    target_name: str,
     desired: dict[Path, str],
     previous_managed: set[Path],
     mergeable_paths: set[Path],
@@ -450,9 +526,9 @@ def sync_outputs(
 
     if check:
         if not changed and not stale:
-            print("claude sync check: up to date")
+            print(f"{target_name} sync check: up to date")
             return 0
-        print("claude sync check: drift detected")
+        print(f"{target_name} sync check: drift detected")
         for path in changed:
             print(f"- update: {path}")
         for path in stale:
@@ -471,7 +547,7 @@ def sync_outputs(
         if target.suffix == ".sh":
             target.chmod(0o755)
 
-    print("claude sync wrote managed files:")
+    print(f"{target_name} sync wrote managed files:")
     for path in changed:
         print(f"- {path}")
     for path in removed:
@@ -479,6 +555,16 @@ def sync_outputs(
     if not changed and not removed:
         print("- no changes needed")
     return 0
+
+
+def desired_outputs_for_target(
+    target: str, root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
+) -> tuple[dict[Path, str], list[dict], set[Path]]:
+    if target == "claude":
+        return desired_claude_outputs(root, flow_dir, manifest, manifest_rel)
+    if target == "codex":
+        return desired_codex_outputs(root, flow_dir, manifest, manifest_rel)
+    raise ValueError(f"unsupported sync target: {target}")
 
 
 def setup_machine() -> int:
@@ -535,25 +621,22 @@ def doctor() -> int:
     root = repo_root()
     flow_dir = root / ".flow"
     manifest_ok = (flow_dir / "flow.toml").exists()
-    managed_ok = (root / ".claude" / "flow.managed.toml").exists()
     skills_dir = root / ".claude" / "skills"
     agents_dir = root / ".claude" / "agents"
+    claude_managed_ok = False
     claude_drift = "n/a"
+    codex_skills_dir = root / ".codex" / "skills"
+    codex_managed_ok = False
+    codex_drift = "n/a"
 
     if manifest_ok:
         try:
-            _manifest_path, manifest = load_flow_manifest(flow_dir)
-            previous_managed = read_managed_paths(root / manifest["claude"]["managed_manifest"])
-            desired, _managed_entries, mergeable_paths = desired_claude_outputs(root, flow_dir, manifest)
-            conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
-            if conflicts:
-                claude_drift = "conflict"
-            elif changed or stale:
-                claude_drift = "stale"
-            else:
-                claude_drift = "clean"
+            manifest_path, manifest = load_flow_manifest(flow_dir)
+            claude_drift, claude_managed_ok = runtime_status(root, flow_dir, manifest_path, manifest, "claude")
+            codex_drift, codex_managed_ok = runtime_status(root, flow_dir, manifest_path, manifest, "codex")
         except Exception:
             claude_drift = "error"
+            codex_drift = "error"
 
     print(f"python:      {sys.executable}")
     print(f"flow home:   {FLOW_HOME}")
@@ -564,10 +647,13 @@ def doctor() -> int:
     print(f"templates:   {'ok' if TEMPLATES_DIR.exists() else 'missing'}")
     print(f"repo .flow:  {'ok' if flow_dir.exists() else 'missing'}")
     print(f"manifest:    {'ok' if manifest_ok else 'missing'}")
-    print(f"claude sync: {'ok' if managed_ok else 'missing'}")
+    print(f"claude sync: {'ok' if claude_managed_ok else 'missing'}")
     print(f"claude drift:{claude_drift}")
     print(f"skills dir:  {'ok' if skills_dir.exists() else 'missing'}")
     print(f"agents dir:  {'ok' if agents_dir.exists() else 'missing'}")
+    print(f"codex sync:  {'ok' if codex_managed_ok else 'missing'}")
+    print(f"codex drift: {codex_drift}")
+    print(f"codex skills:{'ok' if codex_skills_dir.exists() else 'missing'}")
     return 0
 
 
@@ -601,7 +687,7 @@ def bootstrap() -> int:
     return 0
 
 
-def sync_claude(check: bool = False) -> int:
+def sync_target(target: str, check: bool = False) -> int:
     root = repo_root()
     flow_dir = root / ".flow"
     if not flow_dir.exists():
@@ -614,12 +700,19 @@ def sync_claude(check: bool = False) -> int:
         print(str(err))
         return 1
 
-    previous_managed = read_managed_paths(root / manifest["claude"]["managed_manifest"])
-    desired, _managed_entries, mergeable_paths = desired_claude_outputs(root, flow_dir, manifest)
-    result = sync_outputs(root, desired, previous_managed, mergeable_paths, check=check)
+    runtime = manifest.get(target)
+    if not isinstance(runtime, dict):
+        print(f"sync target is not configured in .flow/flow.toml: {target}")
+        return 1
+
+    previous_managed = read_managed_paths(root, root / runtime["managed_manifest"])
+    desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
+        target, root, flow_dir, manifest, rel_posix(manifest_path, root)
+    )
+    result = sync_outputs(root, target, desired, previous_managed, mergeable_paths, check=check)
     if result == 0:
         mode = "check" if check else "sync"
-        print(f"claude {mode} complete from {manifest_path}")
+        print(f"{target} {mode} complete from {manifest_path}")
     return result
 
 
@@ -639,7 +732,7 @@ def main() -> int:
     sub.add_parser("doctor")
     sub.add_parser("bootstrap")
     sync = sub.add_parser("sync")
-    sync.add_argument("target", choices=["claude"])
+    sync.add_argument("target", choices=["claude", "codex"])
     sync.add_argument("--check", action="store_true")
 
     args = parser.parse_args()
@@ -654,8 +747,8 @@ def main() -> int:
         return doctor()
     if args.command == "bootstrap":
         return bootstrap()
-    if args.command == "sync" and args.target == "claude":
-        return sync_claude(check=args.check)
+    if args.command == "sync":
+        return sync_target(args.target, check=args.check)
     return 1
 
 
