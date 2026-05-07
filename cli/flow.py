@@ -717,23 +717,95 @@ def sync_target(target: str, check: bool = False) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="flow")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        prog="flow",
+        description="Portable AI workflow framework CLI.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Common examples:\n"
+            "  flow setup machine\n"
+            "  flow setup project\n"
+            "  flow bootstrap\n"
+            "  flow sync claude\n"
+            "  flow sync codex --check\n"
+            "  flow doctor\n"
+        ),
+    )
+    sub = parser.add_subparsers(dest="command", required=True, title="commands")
 
-    setup = sub.add_parser("setup")
-    setup_sub = setup.add_subparsers(dest="setup_target", required=True)
-    setup_sub.add_parser("machine")
-    setup_sub.add_parser("project")
+    setup = sub.add_parser(
+        "setup",
+        help="prepare the machine install or scaffold .flow into the current repo",
+        description="Prepare machine-local flow support or scaffold the project-local .flow source of truth.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  flow setup machine\n"
+            "  flow setup project\n"
+        ),
+    )
+    setup_sub = setup.add_subparsers(dest="setup_target", required=True, title="setup targets")
+    setup_sub.add_parser(
+        "machine",
+        help="create ~/.flow support directories, config, and launcher expectations",
+        description="Create the machine-local flow home, config, and support directories under ~/.flow.",
+    )
+    setup_sub.add_parser(
+        "project",
+        help="scaffold .flow into the current repository",
+        description="Copy missing framework template files into repo/.flow without touching existing files.",
+    )
 
-    refresh = sub.add_parser("refresh")
-    refresh_sub = refresh.add_subparsers(dest="refresh_target", required=True)
-    refresh_sub.add_parser("project")
+    refresh = sub.add_parser(
+        "refresh",
+        help="add newly introduced framework files into an existing repo/.flow",
+        description="Refresh an existing repo-local .flow by copying only files that are missing.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Example:\n  flow refresh project\n",
+    )
+    refresh_sub = refresh.add_subparsers(dest="refresh_target", required=True, title="refresh targets")
+    refresh_sub.add_parser(
+        "project",
+        help="copy missing files from the framework template into repo/.flow",
+        description="Bring an existing project forward to the latest template surface without overwriting local edits.",
+    )
 
-    sub.add_parser("doctor")
-    sub.add_parser("bootstrap")
-    sync = sub.add_parser("sync")
-    sync.add_argument("target", choices=["claude", "codex"])
-    sync.add_argument("--check", action="store_true")
+    sub.add_parser(
+        "doctor",
+        help="report machine, repo, and runtime sync state",
+        description="Inspect the current machine install, repo framework, and generated runtime adapter state.",
+    )
+    sub.add_parser(
+        "bootstrap",
+        help="validate that the required repo/.flow structure exists",
+        description="Check that the current repository contains the minimum .flow structure needed for sync and workflow use.",
+    )
+    sync = sub.add_parser(
+        "sync",
+        help="generate runtime adapters from repo/.flow",
+        description="Generate runtime-facing adapters from the repo-local .flow source of truth.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Targets:\n"
+            "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
+            "  codex   Generate .codex skills and a managed manifest.\n\n"
+            "Examples:\n"
+            "  flow sync claude\n"
+            "  flow sync claude --check\n"
+            "  flow sync codex\n"
+            "  flow sync codex --check\n"
+        ),
+    )
+    sync.add_argument(
+        "target",
+        choices=["claude", "codex"],
+        help="runtime adapter target to generate or check",
+    )
+    sync.add_argument(
+        "--check",
+        action="store_true",
+        help="report drift without writing files",
+    )
 
     args = parser.parse_args()
 

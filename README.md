@@ -16,9 +16,20 @@ Runtime-facing files in folders like `.claude/` and `.codex/` are generated adap
 ## Current Repo Layout
 
 - `cli/` - local CLI entrypoint
+- `docs/` - maintainer docs for architecture, file structure, runtime adapters, and backlog
 - `templates/` - repo scaffold source
 - `hooks/` - reusable Claude hook scripts bundled by `flow`
 - `scripts/` - setup helpers
+
+## Maintainer Docs
+
+For maintainer-oriented documentation, start with:
+
+- [architecture.md](/Users/andyconley/src/flow/docs/architecture.md)
+- [file-structure.md](/Users/andyconley/src/flow/docs/file-structure.md)
+- [cli-reference.md](/Users/andyconley/src/flow/docs/cli-reference.md)
+- [runtime-adapters.md](/Users/andyconley/src/flow/docs/runtime-adapters.md)
+- [backlog.md](/Users/andyconley/src/flow/docs/backlog.md)
 
 ## What Exists Now
 

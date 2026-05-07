@@ -105,6 +105,20 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("claude drift:clean", result.stdout)
         self.assertIn("codex drift: clean", result.stdout)
 
+    def test_top_level_help_lists_core_commands_and_examples(self) -> None:
+        result = self.run_flow("--help")
+        self.assert_ok(result)
+        self.assertIn("Portable AI workflow framework CLI.", result.stdout)
+        self.assertIn("sync                generate runtime adapters from repo/.flow", result.stdout)
+        self.assertIn("flow sync codex --check", result.stdout)
+
+    def test_sync_help_describes_targets_and_examples(self) -> None:
+        result = self.run_flow("sync", "--help")
+        self.assert_ok(result)
+        self.assertIn("Generate runtime-facing adapters from the repo-local .flow source of truth.", result.stdout)
+        self.assertIn("claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.", result.stdout)
+        self.assertIn("codex   Generate .codex skills and a managed manifest.", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
