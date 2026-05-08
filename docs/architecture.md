@@ -21,9 +21,9 @@ This keeps durable workflow content, standards, commands, and role definitions i
 
 This is the machine-local install home. It contains:
 
-- the linked framework repo at `~/.flow/framework`
+- the linked framework repo at `~/.flow/source`
 - local config at `~/.flow/config.toml`
-- support directories such as `hooks/`, `templates/`, `user/`, and `logs/`
+- support directories such as `hooks/`, `user/`, and `logs/`
 
 This layer is about installation and local execution support, not project truth.
 
@@ -33,8 +33,8 @@ The framework repo contains:
 
 - the CLI
 - reusable hook scripts
-- the project scaffold template under `templates/framework/`
-- the runtime adapter manifest under `templates/framework/flow.toml`
+- the project scaffold template under `scaffolds/default/`
+- the runtime adapter manifest under `scaffolds/default/flow.toml`
 - tests and maintainer docs
 
 This layer defines what a project gets when it runs `flow setup project` or `flow refresh project`.

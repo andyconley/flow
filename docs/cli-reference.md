@@ -18,7 +18,6 @@ Creates:
 
 - `~/.flow/config.toml`
 - `~/.flow/hooks/`
-- `~/.flow/templates/`
 - `~/.flow/user/`
 - `~/.flow/logs/`
 
@@ -30,7 +29,7 @@ Scaffold `repo/.flow` into the current repository.
 
 Behavior:
 
-- copies template files from `templates/framework/`
+- copies template files from `scaffolds/default/`
 - does not overwrite files that already exist
 
 Use this when bootstrapping a repo for the first time.
@@ -208,7 +207,7 @@ Fix:
 
 This script:
 
-- links the framework repo into `~/.flow/framework`
+- links the framework repo into `~/.flow/source`
 - writes the launcher to `~/.local/bin/flow`
 
 Use this when:

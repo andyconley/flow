@@ -17,8 +17,8 @@ flow/
     flow-session-start.sh
     flow-managed-write-reminder.sh
   scripts/
-  templates/
-    framework/
+  scaffolds/
+    default/
       FRAMEWORK.md
       PROJECT.md
       flow.toml
@@ -73,7 +73,7 @@ Reserved for helper scripts that support framework maintenance or runtime genera
 
 This is intentionally light right now.
 
-### `templates/framework/`
+### `scaffolds/default/`
 
 This is the scaffold source copied into `repo/.flow`.
 
@@ -82,15 +82,15 @@ The important rule:
 - content here becomes project-local source of truth
 - content here is not itself the generated runtime surface
 
-#### `templates/framework/FRAMEWORK.md`
+#### `scaffolds/default/FRAMEWORK.md`
 
 Portable framework-level operating model.
 
-#### `templates/framework/PROJECT.md`
+#### `scaffolds/default/PROJECT.md`
 
 Project overlay template for local role assignment, project-specific constraints, and deviations.
 
-#### `templates/framework/flow.toml`
+#### `scaffolds/default/flow.toml`
 
 Machine-readable manifest describing:
 
@@ -102,31 +102,31 @@ Machine-readable manifest describing:
 
 This file is the adapter contract for runtime generation.
 
-#### `templates/framework/agents/`
+#### `scaffolds/default/agents/`
 
 Reusable role definitions. These are portable role prompts and operating contracts.
 
-#### `templates/framework/commands/`
+#### `scaffolds/default/commands/`
 
 Reusable workflow command definitions. These are the source contracts for generated runtime skills.
 
-#### `templates/framework/standards/`
+#### `scaffolds/default/standards/`
 
 Reusable framework standards library.
 
-#### `templates/framework/project/`
+#### `scaffolds/default/project/`
 
 Project-specific overlay templates for domain, terminology, UX, integrations, and similar project-local truth.
 
-#### `templates/framework/memory/`
+#### `scaffolds/default/memory/`
 
 Durable project memory placeholders and conventions.
 
-#### `templates/framework/templates/`
+#### `scaffolds/default/templates/`
 
 Reusable document templates such as handoffs, ADRs, and run summaries.
 
-#### `templates/framework/runs/`
+#### `scaffolds/default/runs/`
 
 Reserved project-local execution log area.
 
@@ -147,7 +147,7 @@ Machine-local install helper.
 
 It:
 
-- links the framework repo into `~/.flow/framework`
+- links the framework repo into `~/.flow/source`
 - writes a launcher to `~/.local/bin/flow`
 
 Edit here when installation or launcher behavior changes.
@@ -157,10 +157,10 @@ Edit here when installation or launcher behavior changes.
 Edit these directly in the `flow` repo:
 
 - `cli/flow.py` for CLI behavior
-- `templates/framework/flow.toml` for runtime adapter policy
-- `templates/framework/commands/*.md` for workflow source contracts
-- `templates/framework/agents/*.md` for role source contracts
-- `templates/framework/standards/*.md` for reusable standards
+- `scaffolds/default/flow.toml` for runtime adapter policy
+- `scaffolds/default/commands/*.md` for workflow source contracts
+- `scaffolds/default/agents/*.md` for role source contracts
+- `scaffolds/default/standards/*.md` for reusable standards
 - `hooks/*.sh` for reusable runtime hook behavior
 - `docs/*.md` for maintainer documentation
 

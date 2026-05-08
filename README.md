@@ -179,7 +179,7 @@ The current implementation has been smoke-tested for:
 ./install-flow.sh
 ```
 
-This installs a `flow` launcher at `~/.local/bin/flow` and links the framework repo into `~/.flow/framework`.
+This installs a `flow` launcher at `~/.local/bin/flow` and links the framework repo into `~/.flow/source`.
 
 ## Typical Flow
 
