@@ -2,7 +2,10 @@
 
 ## Purpose
 
-This backlog tracks the work still needed before `flow` can be adopted confidently into an existing project instead of only a fresh scaffold.
+This backlog tracks the work still needed before `flow` can be adopted confidently in two scenarios:
+
+1. as a **personal workflow framework** installed at user level and used across every Claude session
+2. as a **project-adoption framework** brought into existing repos with prior local conventions
 
 The adoption bar is higher for existing repos because they already have:
 
@@ -10,6 +13,13 @@ The adoption bar is higher for existing repos because they already have:
 - existing AI runtime folders
 - durable project docs
 - prior state and migration history
+
+## Recently Completed
+
+- **User-level install support** (`flow setup user`, `flow sync <target> --user`) — the framework can now be installed at `~/.claude/` so it is active in every Claude session regardless of cwd. `flow doctor` reports user-level and project-level state in distinct sections.
+- **Scaffold customization for personal use** — light commands (boot, scout, resume, status) drop role casting; heavier commands restructure into core + conditional roles; flow-plan generalized beyond UI/frontend bias; flow-scout gets explicit size criteria and a hard checkpoint; flow-implement language sharpened to be domain-agnostic.
+- **`code-reviewer` → `quality-reviewer` rename** — agent broadened to handle any deliverable (code, docs, analyses, runbooks, configurations).
+- **Stacked overlay semantics in command contracts** — boot, status, resume, and archive describe how to traverse ancestor `.flow/` overlays. (Note: the CLI itself doesn't yet enforce stacked-overlay traversal — see item below.)
 
 ## Adoption Readiness Themes
 
@@ -268,3 +278,83 @@ Before broad existing-project adoption, the strongest sequence is:
 5. define project-level overrides and exclusions
 6. validate the process end-to-end in Witmark
 7. validate it again in a second existing repo with different runtime conditions
+
+## Personal-Framework Use Case Backlog
+
+These items are specific to the user-level install model — using flow as a personal framework rather than adopting it into a specific project.
+
+### P1. CLI implementation of stacked overlay traversal
+
+Status: prose contract only
+
+Current:
+
+- Command contracts describe how stacked overlays merge (most-specific overrides; reads merge across levels; writes go to most-specific)
+- The CLI itself does not walk ancestor directories or merge `.flow/` overlays
+
+Need:
+
+- CLI helpers that walk up from cwd, find ancestor projects with `.flow/`, and merge their overlays
+- A consistent merge model that flow-boot, flow-status, flow-resume, and flow-archive can rely on
+- Tests for stacked overlay scenarios (nested projects with conflicting PROJECT.md, runs at multiple levels, etc.)
+
+Why it matters:
+
+- Today the stacked-overlay behavior depends on Claude doing what the prose contract asks; a CLI implementation makes it deterministic and testable
+
+### P2. User-level overrides via `~/.flow/user/`
+
+Status: placeholder dir exists, not consumed
+
+Current:
+
+- `flow setup machine` creates `~/.flow/user/` as an empty placeholder
+- Nothing in the CLI reads from it
+
+Need:
+
+- A defined model for user-level customizations that survive framework updates
+- Examples: override a single agent's prompt without forking the framework; add a personal command that doesn't ship with the framework; suppress a specific framework agent at user level
+- A merge step during `flow sync <target> --user` that layers `~/.flow/user/*` on top of the framework scaffold
+
+Why it matters:
+
+- Today personalizing the framework means editing `scaffolds/default/` directly, which conflicts with pulling upstream framework updates
+
+### P3. Agents and standards review pass
+
+Status: deferred from initial scaffold review
+
+Current:
+
+- 8 commands and 1 agent (`quality-reviewer`) were reviewed and customized in the initial scaffold-customization pass
+- 11 other agents and all 23 standards have only been inspected, not reviewed against personal working preferences
+
+Need:
+
+- A focused review pass per agent: does the prompt reflect how this role should engage with Claude?
+- A focused review pass per standard: does it apply to actual working surfaces, or is it over-spec?
+- Decisions about which agents to keep, drop, or rename
+
+Why it matters:
+
+- Today the agents and standards inherit content from the develop-branch codex-hardening work, not from distilled personal conventions
+- Deferred intentionally until real usage surfaces what's actually wrong vs what just reads oddly on paper
+
+### P4. Framework update workflow for an installed user-level surface
+
+Status: manual
+
+Current:
+
+- User-level install is generated from this repo's scaffold; after a framework update, the user re-runs `flow sync claude --user` / `flow sync codex --user`
+- No prompt or notification when the framework has drifted from the installed surface
+
+Need:
+
+- A way to detect that the installed user-level surface is older than the framework scaffold (e.g., `flow doctor` surfaces "framework updated since last sync")
+- Optionally, a `flow update` command that pulls the latest framework and re-syncs user-level surfaces
+
+Why it matters:
+
+- Without prompting, the user-level install will silently drift behind framework changes

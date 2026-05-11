@@ -166,9 +166,21 @@ Edit these directly in the `flow` repo:
 
 ## What Not To Treat As Source Of Truth
 
-Do not treat generated runtime folders in downstream projects as the primary source of truth:
+Do not treat generated runtime folders as the primary source of truth at any scope:
 
-- `.claude/`
-- `.codex/`
+- `<repo>/.claude/` and `<repo>/.codex/` — project-level adapter outputs derived from `<repo>/.flow/`
+- `~/.claude/` and `~/.codex/` — user-level adapter outputs derived from this repo's `scaffolds/default/`
 
-Those are adapter outputs derived from `repo/.flow`.
+All of these are generated. To change them, edit the corresponding source:
+
+- For user-level outputs: edit `scaffolds/default/*` in this repo and rerun `flow sync claude --user` / `flow sync codex --user`
+- For project-level outputs: edit `<repo>/.flow/*` in the consuming repo and rerun `flow sync claude` / `flow sync codex` there
+
+## Install Scopes At A Glance
+
+| Scope | Source | Generated to | Purpose |
+|---|---|---|---|
+| **User-level** | `scaffolds/default/` (this repo) | `~/.claude/`, `~/.codex/` | Framework active in every Claude session |
+| **Project-level** | `<repo>/.flow/` | `<repo>/.claude/`, `<repo>/.codex/` | Per-project overlay with project-specific role assignments, memory, runs |
+
+User-level and project-level are independent — a single repo can run both, with the project overlay supplying repo-specific context layered on top of the universally-active framework.

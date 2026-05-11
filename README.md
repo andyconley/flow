@@ -4,32 +4,33 @@ Portable AI workflow framework.
 
 ## What It Is
 
-`flow` is split into three layers:
+`flow` operates across four layers:
 
-- machine-local install support in `~/.flow/`
-- reusable framework source in this repo
-- repo-local instantiated framework in `repo/.flow`
+1. **Machine support** at `~/.flow/` — install state, config, the source symlink
+2. **Framework source** in this repo (`scaffolds/default/`) — the canonical workflow vocabulary
+3. **User-level install** at `~/.claude/` and `~/.codex/` — generated adapters active in **every** Claude session, regardless of cwd
+4. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/` and `<repo>/.codex/` — per-project, opt-in, only where you want project-specific role assignments / memory / run artifacts
 
-The framework source of truth lives in `.flow/`.
-Runtime-facing files in folders like `.claude/` and `.codex/` are generated adapters.
+Framework content (commands, agents, standards) is the source of truth; runtime-facing files in `.claude/` and `.codex/` are generated adapters at both user-level and project-level scopes.
 
 ## Current Repo Layout
 
 - `cli/` - local CLI entrypoint
 - `docs/` - maintainer docs for architecture, file structure, runtime adapters, and backlog
-- `templates/` - repo scaffold source
+- `scaffolds/default/` - the framework scaffold copied into user-level installs and per-project overlays
 - `hooks/` - reusable Claude hook scripts bundled by `flow`
-- `scripts/` - setup helpers
+- `scripts/` - reserved for framework maintenance helpers
+- `tests/` - CLI-level regression tests
 
 ## Maintainer Docs
 
 For maintainer-oriented documentation, start with:
 
-- [architecture.md](/Users/andyconley/src/flow/docs/architecture.md)
-- [file-structure.md](/Users/andyconley/src/flow/docs/file-structure.md)
-- [cli-reference.md](/Users/andyconley/src/flow/docs/cli-reference.md)
-- [runtime-adapters.md](/Users/andyconley/src/flow/docs/runtime-adapters.md)
-- [backlog.md](/Users/andyconley/src/flow/docs/backlog.md)
+- [architecture.md](docs/architecture.md)
+- [file-structure.md](docs/file-structure.md)
+- [cli-reference.md](docs/cli-reference.md)
+- [runtime-adapters.md](docs/runtime-adapters.md)
+- [backlog.md](docs/backlog.md)
 
 ## What Exists Now
 
@@ -51,60 +52,56 @@ Available commands:
 ```bash
 flow doctor
 flow setup machine
+flow setup user
 flow setup project
 flow refresh project
 flow bootstrap
-flow sync claude
+flow sync claude              # project-level
 flow sync claude --check
+flow sync claude --user       # user-level
 flow sync codex
 flow sync codex --check
+flow sync codex --user
 ```
 
 What they do:
 
 - `flow setup machine`
   - prepares `~/.flow/`, `~/.local/bin/flow`, and local config
+- `flow setup user`
+  - installs the framework at user level so it is active in every Claude session (runs `flow sync claude --user` and `flow sync codex --user`)
 - `flow setup project`
-  - scaffolds `.flow/` into the current repo
+  - scaffolds `.flow/` into the current repo (only needed when you want a project overlay)
 - `flow refresh project`
   - adds newly introduced framework files into an existing `.flow/` without overwriting local edits
 - `flow bootstrap`
-  - validates that the required `.flow/` structure exists
+  - validates that the required `.flow/` structure exists in the current repo
 - `flow doctor`
-  - reports framework, repo, and runtime sync state
-- `flow sync claude`
-  - generates Claude adapters from `.flow/`
-- `flow sync claude --check`
-  - reports Claude adapter drift without writing files
-- `flow sync codex`
-  - generates Codex skill adapters from `.flow/`
-- `flow sync codex --check`
-  - reports Codex adapter drift without writing files
+  - reports machine, user-level, and project-level state in distinct sections
+- `flow sync claude` / `flow sync codex`
+  - generate adapters from the repo's `.flow/` into the repo's `.claude/` or `.codex/`
+- `flow sync claude --user` / `flow sync codex --user`
+  - generate adapters from the framework scaffold directly into `~/.claude/` or `~/.codex/`
+- `--check` on any sync target reports drift without writing files
 
 ### Runtime adapter generation
 
-`flow sync claude` currently generates:
+`flow sync claude` (project mode) generates into the repo's `.claude/`:
 
-- `.claude/skills/<flow-command>/SKILL.md`
-  - from `.flow/commands/*.md`
-- `.claude/agents/*.md`
-  - from `.flow/agents/*.md`
-- `.claude/hooks/*.sh`
-  - from reusable hook scripts in this repo
-- `.claude/settings.json`
-  - with managed hook configuration merged into existing settings
-- `.claude/flow.managed.toml`
-  - machine-readable manifest of managed generated files
+- `.claude/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md`
+- `.claude/agents/*.md` from `.flow/agents/*.md`
+- `.claude/hooks/*.sh` from reusable hook scripts in this repo
+- `.claude/settings.json` with managed hook configuration merged into existing settings
+- `.claude/flow.managed.toml` machine-readable manifest of managed generated files
 
-`flow sync codex` currently generates:
+`flow sync claude --user` (user mode) generates the same surfaces into `~/.claude/` instead, with `$HOME`-based hook commands and manifest entries that reference the framework scaffold path. The session-start hook then fires in every Claude Code session and detects project-level `.flow/` overlays automatically.
 
-- `.codex/skills/<flow-command>/SKILL.md`
-  - from `.flow/commands/*.md`
-- `.codex/flow.managed.toml`
-  - machine-readable manifest of managed generated files
+`flow sync codex` and `flow sync codex --user` follow the same pattern but generate a narrower surface:
 
-The Codex target is intentionally narrower than Claude right now.
-It proves that `flow` is not Claude-only, while only generating surfaces that map cleanly to the current Codex runtime model.
+- `.codex/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md` (or from the scaffold in user mode)
+- `.codex/flow.managed.toml` machine-readable manifest of managed generated files
+
+The Codex target is intentionally narrower than Claude — it proves `flow` is not Claude-only while only generating surfaces that map cleanly to the current Codex runtime model.
 
 ## Managed Boundaries
 
@@ -177,22 +174,39 @@ The current implementation has been smoke-tested for:
 
 ```bash
 ./install-flow.sh
+flow setup machine
+flow setup user        # installs flow at user level — active in every Claude session
 ```
 
-This installs a `flow` launcher at `~/.local/bin/flow` and links the framework repo into `~/.flow/source`.
+`./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and links the framework repo into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates the framework's commands, agents, and hooks into `~/.claude/` and `~/.codex/` so they are available everywhere.
 
 ## Typical Flow
 
-```bash
-cd ~/src/flow
-./install-flow.sh
+**First-time install (once per machine):**
 
+```bash
+cd ~/personal/flow
+./install-flow.sh
+flow setup machine
+flow setup user
+```
+
+**Optional: per-project overlay** (only for repos that need project-specific role assignments, durable memory, or run artifacts):
+
+```bash
 cd /path/to/project
 flow setup project
 flow bootstrap
 flow sync claude
 flow sync codex
 flow doctor
+```
+
+**After framework changes** (when this repo updates):
+
+```bash
+flow sync claude --user
+flow sync codex --user
 ```
 
 ## What’s Left
@@ -208,4 +222,4 @@ The framework is now usable, but it is not finished. Main gaps:
 
 ## Current Recommendation
 
-Use `develop` as the active integration branch while the framework runtime keeps evolving.
+`main` is the active branch. Both `main` and `develop` track the same content as of the most recent release; future work can branch from either, but `main` is what user-level installs reference.
