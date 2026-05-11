@@ -54,7 +54,10 @@ Inspect:
    - the active standards and overlays that matter right now
    - active or interrupted work
    - memory caveats, blockers, or migration notes
-8. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay AND substantial work happens here, recommend `flow setup project` as a candidate next command. Phrase it as an option, not a mandate — many projects don't need an overlay.
+8. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay:
+   - Check for an explicit opt-out marker `.flow-skip` at the project root.
+   - If `.flow-skip` exists, treat the absence as **"by design"** — the user has explicitly opted out. Do not recommend setup.
+   - Otherwise, **recommend `flow setup project`**. Default to recommending — do not qualify it as "optional" or speculate that "this project doesn't need one." If the user wants to opt out for this repo, they can `touch .flow-skip` at the root; until that marker exists, recommend setup.
 9. Recommend the next command. Candidates depend on state:
    - `flow setup project` — if no overlay exists and one would help
    - `flow-status` — if active work is unclear
@@ -73,7 +76,7 @@ Inspect:
 ### Context
 - Project:
 - Current focus:
-- Overlay status: (one of: "active at <path>" | "absent — flow setup project recommended" | "absent — project is light, no overlay needed")
+- Overlay status: (one of: "active at <path>" | "absent — flow setup project recommended" | "absent — by design (.flow-skip marker present)")
 
 ### Active Memory
 - [Important STATE highlights + relevant auto-memory entries]
@@ -116,7 +119,7 @@ Before leaving `flow-boot`, confirm:
 - [ ] PROJECT.md and STATE.md were read across all stacked overlay levels
 - [ ] auto-memory MEMORY.md was consulted for relevant durable facts/decisions
 - [ ] interrupted or active runs were checked across all stacked overlay levels
-- [ ] overlay status was reported in the output (active / absent-with-recommendation / absent-by-design)
+- [ ] overlay status was reported; `.flow-skip` marker was checked before classifying "by design"; default for missing overlay is "recommended", not "by design"
 - [ ] the next recommended command is explicit
 
 ## Finish Criteria
