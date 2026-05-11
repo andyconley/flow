@@ -40,7 +40,7 @@ Do not use this command to decide whether work is ready. Use `flow-review` first
 Primary roles:
 
 - `tech-writer` for durable summary and memory wording
-- `code-reviewer` when unresolved review debt needs to be summarized accurately
+- `quality-reviewer` when unresolved review debt needs to be summarized accurately
 - `support-lead` when known operational caveats or workarounds should be preserved
 
 The archive command does not replace review. It packages the accepted outcome.
@@ -54,7 +54,7 @@ The archive command does not replace review. It packages the accepted outcome.
    - manual checks
    - runtime or deploy checks
 4. Record residual risks, follow-ups, and deferred work.
-5. Update `.flow/memory/STATE.md` and `.flow/memory/DECISIONS.md` if the work changed durable project knowledge.
+5. Update `.flow/memory/STATE.md` and `.flow/memory/DECISIONS.md` at the **most-specific stacked overlay** (e.g., when archiving in path-nexus, writes go to `~/KB/repos/path-nexus/.flow/memory/`, not the workspace's). If the work also materially affects a parent overlay's state, surface that in the archive output so it can be picked up in a separate parent-level archive.
 6. Mark the run complete.
 
 ## Output Format
@@ -78,8 +78,9 @@ The archive command does not replace review. It packages the accepted outcome.
 - [Deferred or future work]
 
 ### Memory Updates
-- STATE:
-- DECISIONS:
+- STATE: (always present; use "n/a — no durable state changed" if nothing applies)
+- DECISIONS: (always present; use "n/a — no durable decisions made" if nothing applies)
+- Parent-overlay implications: (only if changes here affect a higher overlay)
 ```
 
 ## Common Rationalizations
@@ -104,7 +105,8 @@ Before leaving `flow-archive`, confirm:
 - [ ] what changed is summarized clearly
 - [ ] validation status is explicit
 - [ ] residual risks and follow-up work are explicit
-- [ ] durable memory was updated where needed
+- [ ] memory updates are explicit (STATE and DECISIONS each have content or are marked "n/a")
+- [ ] writes went to the most-specific overlay; parent-overlay implications surfaced if applicable
 - [ ] the run is clearly marked complete
 
 ## Finish Criteria

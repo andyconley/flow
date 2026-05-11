@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -15,16 +16,21 @@ class FlowCliTests(unittest.TestCase):
         self._tempdir = tempfile.TemporaryDirectory()
         self.repo = Path(self._tempdir.name)
         (self.repo / ".git").mkdir()
+        self._fake_home: Path | None = None
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
 
     def run_flow(self, *args: str) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        if self._fake_home is not None:
+            env["HOME"] = str(self._fake_home)
         return subprocess.run(
             [sys.executable, str(FLOW_CLI), *args],
             cwd=self.repo,
             text=True,
             capture_output=True,
+            env=env,
         )
 
     def assert_ok(self, result: subprocess.CompletedProcess[str]) -> None:
@@ -37,6 +43,15 @@ class FlowCliTests(unittest.TestCase):
 
     def setup_project(self) -> None:
         self.assert_ok(self.run_flow("setup", "project"))
+
+    def use_fake_home(self) -> Path:
+        """Create a fake HOME with a flow source symlink. Subsequent run_flow calls use this HOME."""
+        fake_home = self.repo / "fake_home"
+        fake_home.mkdir()
+        (fake_home / ".flow").mkdir()
+        (fake_home / ".flow" / "source").symlink_to(REPO_ROOT)
+        self._fake_home = fake_home
+        return fake_home
 
     def test_setup_project_scaffolds_flow_manifest(self) -> None:
         self.setup_project()
@@ -102,8 +117,10 @@ class FlowCliTests(unittest.TestCase):
 
         result = self.run_flow("doctor")
         self.assert_ok(result)
-        self.assertIn("claude drift:clean", result.stdout)
-        self.assertIn("codex drift: clean", result.stdout)
+        self.assertIn("claude drift:     clean", result.stdout)
+        self.assertIn("codex drift:      clean", result.stdout)
+        self.assertIn("-- user-level", result.stdout)
+        self.assertIn("-- project:", result.stdout)
 
     def test_top_level_help_lists_core_commands_and_examples(self) -> None:
         result = self.run_flow("--help")
@@ -115,9 +132,84 @@ class FlowCliTests(unittest.TestCase):
     def test_sync_help_describes_targets_and_examples(self) -> None:
         result = self.run_flow("sync", "--help")
         self.assert_ok(result)
-        self.assertIn("Generate runtime-facing adapters from the repo-local .flow source of truth.", result.stdout)
+        self.assertIn("Generate runtime-facing adapters", result.stdout)
+        self.assertIn("--user", result.stdout)
         self.assertIn("claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.", result.stdout)
         self.assertIn("codex   Generate .codex skills and a managed manifest.", result.stdout)
+        self.assertIn("flow sync claude --user", result.stdout)
+
+    def test_sync_claude_user_writes_to_user_home(self) -> None:
+        fake_home = self.use_fake_home()
+        result = self.run_flow("sync", "claude", "--user")
+        self.assert_ok(result)
+
+        skill_path = fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md"
+        agent_path = fake_home / ".claude" / "agents" / "architect.md"
+        hook_path = fake_home / ".claude" / "hooks" / "flow-session-start.sh"
+        settings_path = fake_home / ".claude" / "settings.json"
+        managed_path = fake_home / ".claude" / "flow.managed.toml"
+
+        self.assertTrue(skill_path.exists())
+        self.assertTrue(agent_path.exists())
+        self.assertTrue(hook_path.exists())
+        self.assertTrue(managed_path.exists())
+
+        # User-mode hook command uses $HOME, not $CLAUDE_PROJECT_DIR
+        settings = json.loads(settings_path.read_text())
+        session_groups = settings["hooks"]["SessionStart"]
+        self.assertTrue(
+            any(
+                group["hooks"][0]["command"] == '"$HOME"/.claude/hooks/flow-session-start.sh'
+                for group in session_groups
+            ),
+            f"expected $HOME-based hook command in: {settings}",
+        )
+
+        # User-mode managed manifest references the scaffold path, not .flow/
+        managed_text = managed_path.read_text()
+        self.assertIn("~/.flow/source/scaffolds/default/commands/flow-plan.md", managed_text)
+
+    def test_sync_codex_user_writes_to_user_home(self) -> None:
+        fake_home = self.use_fake_home()
+        result = self.run_flow("sync", "codex", "--user")
+        self.assert_ok(result)
+
+        skill_path = fake_home / ".codex" / "skills" / "flow-plan" / "SKILL.md"
+        managed_path = fake_home / ".codex" / "flow.managed.toml"
+
+        self.assertTrue(skill_path.exists())
+        self.assertTrue(managed_path.exists())
+        self.assertFalse((fake_home / ".codex" / "agents").exists())
+
+    def test_setup_user_runs_both_target_syncs(self) -> None:
+        fake_home = self.use_fake_home()
+        result = self.run_flow("setup", "user")
+        self.assert_ok(result)
+        self.assertTrue((fake_home / ".claude" / "flow.managed.toml").exists())
+        self.assertTrue((fake_home / ".codex" / "flow.managed.toml").exists())
+
+    def test_sync_claude_user_check_detects_drift(self) -> None:
+        fake_home = self.use_fake_home()
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        skill_path = fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md"
+        skill_path.write_text(skill_path.read_text() + "\nmanual drift\n")
+
+        result = self.run_flow("sync", "claude", "--user", "--check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("drift detected", result.stdout)
+
+    def test_doctor_with_user_install_shows_clean_user_state(self) -> None:
+        fake_home = self.use_fake_home()
+        self.assert_ok(self.run_flow("setup", "user"))
+
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        self.assertIn("-- user-level", result.stdout)
+        # Both user-level and project-level should appear; user-level should be clean
+        user_section = result.stdout.split("-- user-level")[1].split("-- project:")[0]
+        self.assertIn("claude drift:     clean", user_section)
+        self.assertIn("codex drift:      clean", user_section)
 
 
 if __name__ == "__main__":

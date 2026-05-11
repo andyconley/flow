@@ -37,13 +37,16 @@ If the work cannot be understood without chat history, the plan is not done yet.
 
 ## Composition
 
-Primary roles:
+Core roles (always invoked):
 
 - `business-analyst` for problem framing and acceptance criteria
 - `product-manager` for scope and prioritization discipline
+- `architect` for solution shape and structural fit
+
+Conditional roles (invoked by the core trio when relevant):
+
 - `ux-specialist` when user-facing states or interaction contracts matter
-- `architect` when the shape of the solution materially affects scope
-- `test-engineer` for proof expectations
+- `test-engineer` when proof expectations need explicit shaping beyond the default
 
 `flow-plan` is the command that makes a task buildable without relying on invisible context.
 
@@ -61,11 +64,13 @@ Primary roles:
    - error
    - success
    - confirmation
-5. Define contract expectations:
-   - Storybook
-   - API
-   - data
-   - workflow
+5. Define contract expectations for whichever apply to this work:
+   - UI/UX contract (states, interaction patterns, accessibility)
+   - API shape (request/response, error envelope)
+   - data shape (schema, invariants, migration concerns)
+   - workflow contract (events, transitions, idempotency)
+   - document structure (sections, audience, level of detail)
+   - other contract types as relevant
 6. Define validation expectations.
 7. Recommend:
    - `flow-scout`

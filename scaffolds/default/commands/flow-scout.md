@@ -31,31 +31,34 @@ Do not use scout mode when the task grows into architecture, cross-session execu
 - focused validation
 - concise handback
 
-## Composition
+## Scout-Size Criteria
 
-Primary roles:
+A change qualifies for scout mode when ALL of the following hold:
 
-- `lead-developer` for small technical changes
-- `tech-writer` for copy or terminology fixes
-- `test-engineer` for targeted proof updates
-- `ux-specialist` for small polish on established patterns
+- **Single primary file** — incidental edits to imports, an adjacent test, or one supporting file are fine
+- **No new abstractions, interfaces, or data shapes**
+- **No new UI states** — no new loading/empty/error states; existing patterns only
+- **Validation completes within 5 minutes** of focused effort
+
+If any criterion fails, do not start scout. Escalate to `flow-plan` to shape the work first.
 
 `flow-scout` should stay narrow and should not silently turn into full implementation mode.
 
 ## Scout Workflow
 
-1. Confirm the change is small enough for scout mode.
+1. **Hard checkpoint:** verify the change meets ALL Scout-Size Criteria. If any criterion fails, stop and route to `flow-plan` — do NOT continue in scout mode.
 2. Identify the narrowest possible change surface.
 3. Make the focused change.
-4. Validate at the smallest sufficient level.
-5. Return concise handback.
+4. **Mid-flight check:** if any Scout-Size Criterion stops holding (e.g., the change is touching a second primary file, a new abstraction is forming, validation is running long), stop and route to `flow-plan` with what you've learned. Do not silently continue.
+5. Validate at the smallest sufficient level.
+6. Return concise handback.
 
 ## Rules
 
 - keep scope narrow
 - avoid architectural drift
 - do not widen requirements
-- escalate to `flow-plan` or `flow-implement` if the task grows
+- escalation is mandatory, not advisory: if Scout-Size Criteria fail at any point, stop and route to `flow-plan`
 
 ## Output Format
 
@@ -94,6 +97,7 @@ Primary roles:
 
 Before leaving `flow-scout`, confirm:
 
+- [ ] Scout-Size Criteria were verified at the start and held throughout
 - [ ] the scope stayed narrow
 - [ ] the validation is proportionate and explicit
 - [ ] no hidden architecture or requirement changes were introduced

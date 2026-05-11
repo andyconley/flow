@@ -32,18 +32,10 @@ This is a state-summary command, not a shaping or implementation command.
 - important blockers or caveats
 - recommended next command
 
-## Composition
-
-Primary roles:
-
-- `product-manager` for execution-state framing
-- `tech-writer` for durable-memory interpretation
-- `support-lead` when operational blockers or caveats affect next steps
-
 ## Status Workflow
 
-1. Identify active or recent runs.
-2. Read current memory highlights.
+1. Identify active or recent runs at the current project level. Note any active runs at parent overlay levels separately as parent context (do not conflate them with the project's own state).
+2. Read current memory highlights from all stacked overlay levels. Surface project-level highlights prominently; parent-overlay highlights appear under a separate parent-context heading.
 3. Summarize blockers, caveats, or unresolved decisions.
 4. Recommend the next command based on the real current state.
 
@@ -53,10 +45,13 @@ Primary roles:
 ## Status Summary
 
 ### Active or Recent Work
-- [Runs / slices]
+- [Runs / slices at current project level]
 
 ### Memory Highlights
-- [Important state / decisions]
+- [Important state / decisions at current project level]
+
+### Parent Workspace Context (if applicable)
+- [Active runs or notable state at parent overlay levels — surface but do not conflate]
 
 ### Blockers or Caveats
 - [Current issues]

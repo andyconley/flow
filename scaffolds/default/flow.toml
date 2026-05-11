@@ -87,8 +87,8 @@ name = "business-analyst"
 source = "agents/business-analyst.md"
 
 [[claude.agents]]
-name = "code-reviewer"
-source = "agents/code-reviewer.md"
+name = "quality-reviewer"
+source = "agents/quality-reviewer.md"
 
 [[claude.agents]]
 name = "data-engineer"

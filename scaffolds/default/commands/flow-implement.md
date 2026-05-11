@@ -38,23 +38,27 @@ Artifacts should live under:
 
 ## Composition
 
-Primary roles:
+Core roles (always invoked):
 
 - `lead-developer` for execution plan and slice sequencing
+- `test-engineer` for prove-it coverage and verification strategy
+- `quality-reviewer` for acceptance-readiness review
+- `tech-writer` for final durable handback
+
+Conditional roles (invoked when relevant):
+
 - `architect` when boundaries, integrations, or ADRs are involved
 - `ux-specialist` when user-facing behavior changes
 - `data-engineer` when persistent state changes
-- `test-engineer` for prove-it coverage and verification strategy
-- `code-reviewer` for merge-readiness review
-- `security-reviewer` and `sre` when the change touches riskier surfaces
-- `tech-writer` for final durable handback
+- `security-reviewer` when the change touches sensitive or risky surfaces
+- `sre` when rollout, runtime, or operational risk is non-trivial
 
 This command is the orchestrated lane for multi-phase execution. It should make role handoffs explicit.
 
 ## Phases
 
 1. requirements
-2. as-is
+2. current state
 3. plan
 4. implementation
 5. review
@@ -69,20 +73,20 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 - identify missing assumptions or contradictions
 - escalate back to `flow-plan` if needed
 
-### 2. As-Is
+### 2. Current state
 
-- inspect current code, behavior, and constraints
-- identify where the change actually lives
+- inspect existing artifacts — code, docs, configurations, prior runs
+- identify where the change actually lives and what it touches
 
 ### 3. Plan
 
-- create file-level change plan
-- define test and rollout strategy
-- create run artifacts
+- create a concrete change plan at the right granularity for the work — file-level for code, section-level for documents, component-level for configurations
+- define validation and rollout strategy
+- create run artifacts under `.flow/runs/<work-id>/`
 
 ### 4. Implementation
 
-- make the code changes
+- make the changes — code, docs, or other artifacts as the work requires
 - keep the slice incremental and reviewable
 
 ### 5. Review
@@ -110,7 +114,7 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 
 ### Phase Status
 - Requirements:
-- As-is:
+- Current state:
 - Plan:
 - Implementation:
 - Review:

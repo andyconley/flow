@@ -34,6 +34,19 @@ Behavior:
 
 Use this when bootstrapping a repo for the first time.
 
+### `flow setup user`
+
+Install flow at the **user level** so it is active in every Claude session regardless of cwd.
+
+Behavior:
+
+- runs `flow sync claude --user` and `flow sync codex --user` in sequence
+- generates `~/.claude/skills/flow-*/`, `~/.claude/agents/*.md`, `~/.claude/hooks/flow-*.sh`
+- merges flow hook entries into `~/.claude/settings.json` (preserves unmanaged settings)
+- writes `~/.claude/flow.managed.toml` and `~/.codex/flow.managed.toml` for drift tracking
+
+Use this once per machine, then again whenever the framework scaffold changes and you want the user-level surface to follow.
+
 ### `flow refresh project`
 
 Copy only missing files from the current framework template into an existing `repo/.flow`.
@@ -65,17 +78,13 @@ Use this after scaffold or when diagnosing a broken repo state.
 
 ### `flow doctor`
 
-Report machine, repo, and runtime adapter state.
+Report machine, user-level, and project-level state in one output.
 
-Current output includes:
+Current sections:
 
-- config status
-- launcher status
-- framework template availability
-- `repo/.flow` presence
-- manifest presence
-- Claude sync state and drift status
-- Codex sync state and drift status
+- **machine** — Python, flow home, source symlink, scaffold availability, config, launcher
+- **user-level** — Claude/Codex sync state and drift for `~/.claude/` and `~/.codex/` (active in every Claude session)
+- **project** — repo `.flow/` presence, manifest, Claude/Codex sync state and drift for the current repo
 
 Use this as the main diagnostics command.
 
@@ -114,17 +123,31 @@ Current outputs:
 
 Report Codex runtime drift without writing files.
 
+### `flow sync <target> --user`
+
+Generate the runtime adapter surface at the **user level** (`~/.claude/` or `~/.codex/`) from the framework scaffold directly. Combine with `--check` to detect drift without writing.
+
+User-mode differences from project-mode:
+
+- source files come from the framework scaffold (`~/.flow/source/scaffolds/default/`), not from a project's `.flow/`
+- output goes to `~/.claude/...` / `~/.codex/...` (universal across every Claude session)
+- hook commands in `settings.json` use `$HOME` instead of `$CLAUDE_PROJECT_DIR`
+- the managed manifest's `source` fields reference the scaffold path (e.g., `~/.flow/source/scaffolds/default/commands/flow-boot.md`)
+
+Use `flow setup user` for the initial install; use `flow sync <target> --user` to re-sync after framework changes.
+
 ## Typical Sequences
 
 ### First-time local install
 
 ```bash
-cd ~/src/flow
+cd ~/personal/flow
 ./install-flow.sh
 flow setup machine
+flow setup user        # installs flow at user level — active in every Claude session
 ```
 
-### First-time project bootstrap
+### First-time project bootstrap (only for repos where you want a project overlay)
 
 ```bash
 cd /path/to/project

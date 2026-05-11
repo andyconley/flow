@@ -29,19 +29,13 @@ Use this command when:
 - current blocker or next step
 - recommended continuation lane
 
-## Composition
-
-Primary roles:
-
-- `lead-developer` for interpreting incomplete execution state
-- `tech-writer` for reconstructing artifact chains
-- `support-lead` when the interruption involves operational or validation ambiguity
+## Guiding Principle
 
 `flow-resume` should prefer continuity over restart unless the old run is clearly obsolete.
 
 ## Resume Workflow
 
-1. Locate the most relevant interrupted run.
+1. Locate the most relevant interrupted run. Search the **most-specific overlay first**; fall back to broader stacked overlay levels only if no runs are present locally.
 2. Identify the last completed phase.
 3. Restate:
    - current blocker
@@ -92,7 +86,7 @@ Primary roles:
 
 Before leaving `flow-resume`, confirm:
 
-- [ ] the correct interrupted run was identified
+- [ ] the correct interrupted run was identified (most-specific overlay searched first, broader as fallback)
 - [ ] the last completed phase is explicit
 - [ ] the blocker or next step is explicit
 - [ ] the continuation lane is justified

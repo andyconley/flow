@@ -32,15 +32,18 @@ Use this command when:
 
 ## Composition
 
-Primary roles:
+Core roles (always invoked):
 
-- `code-reviewer` for correctness and architecture-fit review
+- `quality-reviewer` for correctness and structural-fit review
 - `test-engineer` for coverage and proof review
-- `security-reviewer` for risky surfaces
-- `ux-specialist` for user-facing fit
-- `sre` for rollout, runtime, and observability fit
 
-`flow-review` is the place where implementation is judged against intent, not just whether the code compiles.
+Conditional roles (invoked when relevant):
+
+- `security-reviewer` when the work touches sensitive or risky surfaces
+- `ux-specialist` when user-facing fit is at stake
+- `sre` when rollout, runtime, or observability fit is at stake
+
+`flow-review` is the place where implementation is judged against intent, not just whether the work mechanically completes.
 
 ## Review Dimensions
 

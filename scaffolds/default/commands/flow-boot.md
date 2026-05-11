@@ -18,45 +18,41 @@ Use this command:
 
 ## Primary inputs
 
-Read at minimum:
+Synthesize across:
 
-- `.flow/FRAMEWORK.md`
+- the CLAUDE.md context already loaded for the session (user → workspace → project levels)
+- the framework operating model (provided via the session-start hook)
+- `/tmp/session_checkpoint.md` if present (within-session continuity from a prior compaction)
+
+Read explicitly from every stacked overlay level (most-specific to most-general):
+
 - `.flow/PROJECT.md`
 - `.flow/memory/STATE.md`
 - `.flow/memory/DECISIONS.md`
 
 Inspect:
 
-- `.flow/runs/`
+- `.flow/runs/` from every stacked overlay level
 
 ## Primary outputs
 
 - current orientation summary
 - active or interrupted work summary
-- current sources of truth
+- current sources of truth (including which overlay level provides which)
 - recommended next command
-
-## Composition
-
-Primary roles:
-
-- `business-analyst` for reading intent and current work context
-- `tech-writer` for identifying durable source-of-truth documents
-- `support-lead` when interrupted work or operational caveats need triage
-
-`flow-boot` should orient, not re-plan the project.
 
 ## Boot Workflow
 
-1. Read the framework and project overlays.
-2. Read current durable memory.
-3. Check for interrupted or active runs.
-4. Identify:
-   - the project’s operating model
+1. Synthesize the CLAUDE.md context already loaded (user, workspace, project) and the session-start hook's framework context.
+2. Read `/tmp/session_checkpoint.md` if present.
+3. Read project overlay files from every stacked overlay level (most-specific to most-general): PROJECT.md, memory/STATE.md, memory/DECISIONS.md. Merge with more-specific overriding on conflicts.
+4. Check for interrupted or active runs across all stacked overlay levels.
+5. Identify:
+   - the project's operating model and any project-specific role assignments
    - the active standards and overlays that matter right now
    - active or interrupted work
    - memory caveats, blockers, or migration notes
-5. Recommend the next command:
+6. Recommend the next command:
    - `flow-status`
    - `flow-resume`
    - `flow-plan`
@@ -104,9 +100,10 @@ Primary roles:
 
 Before leaving `flow-boot`, confirm:
 
-- [ ] current framework and project overlays were read
-- [ ] durable memory was reviewed
-- [ ] interrupted or active runs were checked
+- [ ] CLAUDE.md context across user/workspace/project was synthesized
+- [ ] `/tmp/session_checkpoint.md` was read if present
+- [ ] PROJECT.md and memory were read across all stacked overlay levels
+- [ ] interrupted or active runs were checked across all stacked overlay levels
 - [ ] the next recommended command is explicit
 
 ## Finish Criteria

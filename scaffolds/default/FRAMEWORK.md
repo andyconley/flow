@@ -10,15 +10,17 @@ Portable workflow contract.
 
 ## Operating model
 
-This framework assumes two layers:
+This framework has two distinct layers:
 
-- framework rules in `.flow/`
-- project-specific overrides in `.flow/PROJECT.md` and `.flow/project/`
+- **Framework** lives at the user level (installed into `~/.claude/`, sourced from this scaffold). Defines the workflow vocabulary (commands), the role agents, and the shared standards library. Active in every Claude session regardless of cwd.
+- **Project overlays** live per-project in `<repo>/.flow/`. Hold project-specific role assignments, sources of truth, durable memory, and run artifacts. Overlays stack — when working in a nested project, the workspace overlay (e.g., `~/KB/.flow/`) and the project overlay (e.g., `~/KB/repos/path-nexus/.flow/`) merge.
 
-The framework defines the shape of work. Each project defines:
+When stacked overlays merge, the more-specific overlay overrides on conflicts. Memory writes always go to the most-specific overlay; reads merge across all stacked levels.
+
+Each project overlay defines:
 
 - role providers
-- active standards
+- active standards (subset of the framework's standards library that applies here)
 - source-of-truth order
 - runtime and integration constraints
 
@@ -55,15 +57,15 @@ Not every task needs every phase. Small work should stay small.
 
 ## Canonical sources
 
-This framework prefers durable files over chat.
+This framework prefers durable files over chat. When stacked overlays exist, more-specific overlays win on conflicts.
 
 By default, use:
 
 1. issue tracker or explicitly assigned work item
-2. `.flow/PROJECT.md`
+2. `.flow/PROJECT.md` (read from every stacked overlay level)
 3. relevant files in `.flow/standards/` and `.flow/project/`
 4. ADRs and code
-5. `.flow/memory/`
+5. `.flow/memory/` (read from every stacked overlay level)
 
 ## Role provider model
 

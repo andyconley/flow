@@ -2,13 +2,30 @@
 
 ## Purpose
 
-Runtime adapters let `flow` keep durable source content in `repo/.flow` while generating runtime-specific surfaces elsewhere.
+Runtime adapters let `flow` keep durable source content runtime-neutral while generating runtime-specific surfaces elsewhere.
 
 The core pattern is:
 
-- write durable source content once
-- generate runtime-specific wrappers and outputs per target
+- write durable source content once (in the framework scaffold for the HOW; in project overlays for the WHAT)
+- generate runtime-specific wrappers and outputs per target, per scope
 - track generated ownership with a managed manifest
+
+## Install Scopes
+
+Each runtime target can be generated at two scopes:
+
+| Scope | Source of truth | Generated to | When to use |
+|---|---|---|---|
+| **User-level** | Framework scaffold (`~/.flow/source/scaffolds/default/`) | `~/.claude/`, `~/.codex/` | Always — installs flow framework into every Claude session |
+| **Project-level** | Project overlay (`<repo>/.flow/`) | `<repo>/.claude/`, `<repo>/.codex/` | Per-repo, when you want project-specific role assignments, memory, and run artifacts |
+
+User-mode sync (`flow sync claude --user`) and project-mode sync (`flow sync claude`) generate distinct artifacts to distinct locations and are independent. A single repo can have both active simultaneously — the user-level install provides the universal framework while the project overlay provides repo-specific context.
+
+Mode-specific differences:
+
+- **Hook command paths**: user-mode uses `$HOME/.claude/hooks/flow-*.sh`; project-mode uses `$CLAUDE_PROJECT_DIR/.claude/hooks/flow-*.sh`
+- **Managed manifest `source` fields**: user-mode references the scaffold path (`~/.flow/source/scaffolds/default/commands/flow-boot.md`); project-mode references `.flow/commands/flow-boot.md`
+- **Settings merge target**: user-mode merges into `~/.claude/settings.json`; project-mode merges into `<repo>/.claude/settings.json`
 
 ## Current Targets
 
