@@ -83,6 +83,11 @@ name = "flow-help"
 source = "commands/flow-help.md"
 description = "Shows the flow framework overview: phase machine, command catalog, agent roster, and architecture summary. Use to remember which command does what or to orient to flow."
 
+[[claude.commands]]
+name = "flow-init-project"
+source = "commands/flow-init-project.md"
+description = "Walks the user through filling in `.flow/PROJECT.md` with inferred proposals after `flow setup project`. Use right after scaffolding a new project overlay, or to refresh an existing PROJECT.md."
+
 [[claude.agents]]
 name = "architect"
 source = "agents/architect.md"
@@ -195,3 +200,8 @@ argument_hint = "[work-id]"
 name = "flow-help"
 source = "commands/flow-help.md"
 description = "Shows the flow framework overview: phase machine, command catalog, agent roster, and architecture summary. Use to remember which command does what or to orient to flow."
+
+[[codex.commands]]
+name = "flow-init-project"
+source = "commands/flow-init-project.md"
+description = "Walks the user through filling in `.flow/PROJECT.md` with inferred proposals after `flow setup project`. Use right after scaffolding a new project overlay, or to refresh an existing PROJECT.md."

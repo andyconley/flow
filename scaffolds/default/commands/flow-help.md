@@ -71,6 +71,7 @@ These are *workflow* commands — the things you do during work:
 | /flow-archive | Close a run; STATE.md → transient state; durable decisions → auto-memory |
 | /flow-resume | Pick up interrupted work |
 | /flow-status | "Where are we, what's next?" |
+| /flow-init-project | Walk through filling in `.flow/PROJECT.md` (right after `flow setup project`) |
 | /flow-help | This help output |
 
 ### CLI commands (run from the shell, or ask Claude to run them)
