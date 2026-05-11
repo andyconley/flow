@@ -53,7 +53,13 @@ boot ──┬─→ scout (XS/S, narrow) ────────────�
                           ↑
                           └── resume (recover from interruption)
 
-## Commands
+## Command surfaces
+
+Flow has **two distinct command surfaces** — invoke each differently:
+
+### Slash commands (invoked inside Claude as `/flow-XXX`)
+
+These are *workflow* commands — the things you do during work:
 
 | Command | Use when |
 |---|---|
@@ -66,6 +72,21 @@ boot ──┬─→ scout (XS/S, narrow) ────────────�
 | /flow-resume | Pick up interrupted work |
 | /flow-status | "Where are we, what's next?" |
 | /flow-help | This help output |
+
+### CLI commands (run from the shell, or ask Claude to run them)
+
+These are *lifecycle* commands — the things you do to install, sync, or check flow itself. Invoke from a terminal as `flow XXX YYY` — or just ask Claude (it has Bash). They are NOT slash commands and won't work as `/flow XXX`.
+
+| Command | Use when |
+|---|---|
+| `flow setup machine` | First-time machine setup — creates `~/.flow/` support directories |
+| `flow setup user` | Install flow at user level (active in every Claude session) |
+| `flow setup project` | Scaffold `.flow/` overlay into the current repo |
+| `flow refresh project` | Pull missing framework files into an existing project overlay |
+| `flow sync claude [--user] [--check]` | Generate or check Claude adapters |
+| `flow sync codex [--user] [--check]` | Generate or check Codex adapters |
+| `flow bootstrap` | Validate the current repo's `.flow/` structure |
+| `flow doctor` | Report machine, user-level, and project-level state |
 
 ## Agents
 
@@ -112,6 +133,8 @@ These agents are **personal working agents** — they define how Claude engages 
 - "I have an idea, shape it" → `/flow-plan`
 - "Build something durable" → `/flow-plan` → `/flow-implement` → `/flow-review` → `/flow-archive`
 - "Where do we stand?" → `/flow-status`
+- "Set up flow for a new repo" → `flow setup project` (shell — ask Claude or run from terminal)
+- "Skip flow for a specific repo" → ask Claude to opt out (will `touch .flow-skip` at repo root)
 - "Read the framework operating model" → `~/.flow/source/scaffolds/default/FRAMEWORK.md`
 - "Deeper maintainer docs" → `~/.flow/source/docs/`
 ```
@@ -121,7 +144,7 @@ These agents are **personal working agents** — they define how Claude engages 
 Before leaving `flow-help`, confirm:
 
 - [ ] phase machine was rendered
-- [ ] all 9 commands listed with "use when" notes
+- [ ] both command surfaces listed (slash commands and CLI commands), with the distinction made explicit
 - [ ] all 12 agents listed with role descriptions
 - [ ] core+conditional invocation pattern explained
 - [ ] architecture section included

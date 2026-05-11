@@ -58,15 +58,19 @@ Inspect:
    - Check for an explicit opt-out marker `.flow-skip` at the project root.
    - If `.flow-skip` exists, treat the absence as **"by design"** — the user has explicitly opted out. Do not recommend setup.
    - Otherwise, **recommend `flow setup project`**. Default to recommending — do not qualify it as "optional" or speculate that "this project doesn't need one." If the user wants to opt out for this repo, they can `touch .flow-skip` at the root; until that marker exists, recommend setup.
-9. Recommend the next command. Candidates depend on state:
-   - `flow setup project` — if no overlay exists and no `.flow-skip` marker is present
-   - `flow-status` — if active work is unclear
-   - `flow-resume` — if there is interrupted work to continue
-   - `flow-plan` — if new work needs shaping
-   - `flow-scout` — for small in-flight changes
-   - `flow-implement` — for gated work already shaped
+9. Recommend the next command. Candidates depend on state. **Distinguish slash commands (invoked inside Claude as `/flow-XXX`) from CLI commands (run from the shell or asked of Claude):**
+   - `flow setup project` *(shell command — ask Claude to run it, or run it yourself from a terminal at the repo root)* — if no overlay exists and no `.flow-skip` marker is present
+   - `/flow-status` — if active work is unclear
+   - `/flow-resume` — if there is interrupted work to continue
+   - `/flow-plan` — if new work needs shaping
+   - `/flow-scout` — for small in-flight changes
+   - `/flow-implement` — for gated work already shaped
 
-   **When recommending `flow setup project`, the output must also surface the opt-out as a parallel option**: the user can tell you (Claude) to opt out, at which point you `touch .flow-skip` at the repo root yourself. The user may also run the shell command manually if they prefer. Phrase this clearly so the user knows they can just *ask* — they don't need to context-switch to a terminal to silence the recommendation. This pairing keeps the recommendation strong-by-default without nagging users who have decided flow's overlay isn't right for a particular repo.
+   **When recommending `flow setup project`, the output must:**
+   - **Make it clear this is a shell command, not a slash command** — the user types `/flow-boot` to invoke a skill, but `flow setup project` is invoked via shell. The user can just ask Claude to run it (Claude has Bash), or run it themselves from a terminal at the repo root.
+   - **Surface the opt-out as a parallel option**: the user can tell Claude to opt out, at which point Claude `touch .flow-skip` at the repo root. The user may also run that shell command themselves.
+
+   Phrase both options so the user knows they can simply *ask* — they don't need to context-switch to a terminal for either path. This pairing keeps the recommendation strong-by-default without nagging users who have decided flow's overlay isn't right for a particular repo.
 
 ## Output Format
 
@@ -93,8 +97,9 @@ Inspect:
 - [Files that matter right now]
 
 ### Recommended Next Command
-- [Command and why]
-- (If recommending `flow setup project`, also show: "Or to silence this recommendation: tell me to opt out (I'll `touch .flow-skip` at the repo root). You can also run that shell command yourself if you prefer.")
+- [Command and why — write slash commands as `/flow-XXX` and CLI commands as `flow XXX YYY` (shell)]
+- (If recommending `flow setup project`, the output must also clarify: "`flow setup project` is a shell command, not a slash command — ask me to run it, or run it yourself from a terminal at the repo root.")
+- (If recommending `flow setup project`, also surface the opt-out: "Or to silence this recommendation: tell me to opt out (I'll `touch .flow-skip` at the repo root). You can also run that shell command yourself if you prefer.")
 ```
 
 ## Common Rationalizations
