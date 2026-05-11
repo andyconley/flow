@@ -23,12 +23,12 @@ Synthesize across:
 - the CLAUDE.md context already loaded for the session (user → workspace → project levels)
 - the framework operating model (provided via the session-start hook)
 - `/tmp/session_checkpoint.md` if present (within-session continuity from a prior compaction)
+- durable facts and decisions in Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (read `MEMORY.md` as the index)
 
 Read explicitly from every stacked overlay level (most-specific to most-general):
 
 - `.flow/PROJECT.md`
-- `.flow/memory/STATE.md`
-- `.flow/memory/DECISIONS.md`
+- `.flow/memory/STATE.md` (transient work state only — durable facts live in auto-memory)
 
 Inspect:
 
@@ -45,14 +45,15 @@ Inspect:
 
 1. Synthesize the CLAUDE.md context already loaded (user, workspace, project) and the session-start hook's framework context.
 2. Read `/tmp/session_checkpoint.md` if present.
-3. Read project overlay files from every stacked overlay level (most-specific to most-general): PROJECT.md, memory/STATE.md, memory/DECISIONS.md. Merge with more-specific overriding on conflicts.
-4. Check for interrupted or active runs across all stacked overlay levels.
-5. Identify:
+3. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
+4. Read the auto-memory index at `~/.claude/projects/<project-id>/memory/MEMORY.md` and pull in any entries relevant to the current focus.
+5. Check for interrupted or active runs across all stacked overlay levels.
+6. Identify:
    - the project's operating model and any project-specific role assignments
    - the active standards and overlays that matter right now
    - active or interrupted work
    - memory caveats, blockers, or migration notes
-6. Recommend the next command:
+7. Recommend the next command:
    - `flow-status`
    - `flow-resume`
    - `flow-plan`
@@ -60,6 +61,8 @@ Inspect:
    - `flow-implement`
 
 ## Output Format
+
+**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
 
 ```md
 ## Project Orientation
@@ -102,7 +105,8 @@ Before leaving `flow-boot`, confirm:
 
 - [ ] CLAUDE.md context across user/workspace/project was synthesized
 - [ ] `/tmp/session_checkpoint.md` was read if present
-- [ ] PROJECT.md and memory were read across all stacked overlay levels
+- [ ] PROJECT.md and STATE.md were read across all stacked overlay levels
+- [ ] auto-memory MEMORY.md was consulted for relevant durable facts/decisions
 - [ ] interrupted or active runs were checked across all stacked overlay levels
 - [ ] the next recommended command is explicit
 

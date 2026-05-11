@@ -74,6 +74,8 @@ Review should check:
 
 ## Output Format
 
+**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
+
 ```md
 ## Review Summary
 

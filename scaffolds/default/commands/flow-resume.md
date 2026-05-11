@@ -18,8 +18,9 @@ Use this command when:
 
 ## Primary inputs
 
-- `.flow/runs/`
-- durable memory files
+- `.flow/runs/` (every stacked overlay level — most-specific first)
+- `.flow/memory/STATE.md` — transient work state at every stacked overlay level
+- Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` — relevant durable facts/decisions
 - latest run artifacts and notes
 
 ## Primary outputs
@@ -47,6 +48,8 @@ Use this command when:
 5. Continue the existing artifact chain unless starting fresh is clearly safer.
 
 ## Output Format
+
+**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
 
 ```md
 ## Resume Summary

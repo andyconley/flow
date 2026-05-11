@@ -106,6 +106,8 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 
 ## Output Format
 
+**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
+
 ```md
 ## Implementation Run Summary
 

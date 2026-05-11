@@ -78,6 +78,8 @@ Conditional roles (invoked by the core trio when relevant):
 
 ## Output Format
 
+**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
+
 ```md
 ## Plan Summary
 

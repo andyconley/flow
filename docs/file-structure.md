@@ -120,7 +120,7 @@ Project-specific overlay templates for domain, terminology, UX, integrations, an
 
 #### `scaffolds/default/memory/`
 
-Durable project memory placeholders and conventions.
+Transient work-state placeholder (`STATE.md`). Durable project facts and decisions live in Claude Code's auto-memory at `~/.claude/projects/<project-id>/memory/`, not in `.flow/memory/`.
 
 #### `scaffolds/default/templates/`
 

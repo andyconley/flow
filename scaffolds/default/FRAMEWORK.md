@@ -52,8 +52,10 @@ Not every task needs every phase. Small work should stay small.
 - `PROJECT.md` - project overlay
 - `standards/` - reusable standards categories
 - `project/` - project-specific content
-- `memory/` - cross-session state
+- `memory/STATE.md` - transient work state (what is in flight, blocked, or pending right now)
 - `runs/` - per-work-item artifacts
+
+Durable project facts and cross-cutting decisions do NOT live in `.flow/memory/` — they live in Claude Code's auto-memory at `~/.claude/projects/<project-id>/memory/`. `flow-archive` writes there explicitly.
 
 ## Canonical sources
 
@@ -65,7 +67,8 @@ By default, use:
 2. `.flow/PROJECT.md` (read from every stacked overlay level)
 3. relevant files in `.flow/standards/` and `.flow/project/`
 4. ADRs and code
-5. `.flow/memory/` (read from every stacked overlay level)
+5. `.flow/memory/STATE.md` (transient work state — read from every stacked overlay level)
+6. Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (durable project facts and decisions; consult `MEMORY.md` as the index)
 
 ## Role provider model
 

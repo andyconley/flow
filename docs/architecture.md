@@ -60,7 +60,7 @@ The session-start hook is responsible for detecting whether the current project 
 Per-project source of truth for **project-specific** content only:
 
 - `PROJECT.md` — role assignments, sources of truth, project distinctives
-- `memory/STATE.md`, `memory/DECISIONS.md` — cross-session durable memory
+- `memory/STATE.md` — transient work state (what is in flight, blocked, pending). Durable facts and decisions live in Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/`, not here.
 - `runs/<work-id>/...` — per-task execution artifacts
 
 The framework content (commands, agents, standards) is NOT duplicated here in the user-level install model — it's served from the user-level install. Projects only opt into the overlay layer when they actually need project-specific role assignments, memory, or run artifacts.

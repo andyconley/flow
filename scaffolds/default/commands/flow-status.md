@@ -20,9 +20,9 @@ This is a state-summary command, not a shaping or implementation command.
 
 ## Primary inputs
 
-- `.flow/runs/`
-- `.flow/memory/STATE.md`
-- `.flow/memory/DECISIONS.md`
+- `.flow/runs/` (every stacked overlay level)
+- `.flow/memory/STATE.md` — transient work state at every stacked overlay level
+- Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` — durable project facts and decisions; read `MEMORY.md` as the index
 - current project overlays when needed
 
 ## Primary outputs
@@ -35,11 +35,14 @@ This is a state-summary command, not a shaping or implementation command.
 ## Status Workflow
 
 1. Identify active or recent runs at the current project level. Note any active runs at parent overlay levels separately as parent context (do not conflate them with the project's own state).
-2. Read current memory highlights from all stacked overlay levels. Surface project-level highlights prominently; parent-overlay highlights appear under a separate parent-context heading.
-3. Summarize blockers, caveats, or unresolved decisions.
-4. Recommend the next command based on the real current state.
+2. Read current transient work state from STATE.md across stacked overlay levels. Surface project-level prominently; parent-overlay state appears under a separate parent-context heading.
+3. Pull any auto-memory entries relevant to the current focus (from `~/.claude/projects/<project-id>/memory/`). Mention them when they affect the current state readout.
+4. Summarize blockers, caveats, or unresolved decisions.
+5. Recommend the next command based on the real current state.
 
 ## Output Format
+
+**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
 
 ```md
 ## Status Summary

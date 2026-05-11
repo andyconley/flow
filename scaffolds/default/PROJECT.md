@@ -28,7 +28,8 @@
 2. Project standards in `.flow/project/`
 3. ADRs
 4. Code
-5. `.flow/memory/`
+5. `.flow/memory/STATE.md` (transient work state — what is in flight, blocked, or pending right now)
+6. Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (durable project facts and decisions)
 
 ## Active project standards
 
