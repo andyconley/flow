@@ -98,7 +98,7 @@ These agents are **personal working agents** — they define how Claude engages 
 ## Architecture
 
 - **Framework** (commands, agents) lives universally at `~/.claude/` (user-level install — active in every session)
-- **Project overlays** at `<repo>/.flow/` are opt-in per repo (only where you want project-specific role assignments, memory, or run artifacts). `/flow-boot` recommends `flow setup project` by default in any repo without an overlay; to silence that recommendation for a specific repo permanently, `touch .flow-skip` at the repo root.
+- **Project overlays** at `<repo>/.flow/` are opt-in per repo (only where you want project-specific role assignments, memory, or run artifacts). `/flow-boot` recommends `flow setup project` by default in any repo without an overlay; to silence that recommendation for a specific repo permanently, ask Claude to opt out (Claude will `touch .flow-skip` at the repo root) — or run that shell command yourself if you prefer.
 - **Durable facts and decisions** → auto-memory at `~/.claude/projects/<project-id>/memory/`
 - **Transient work state** → `.flow/memory/STATE.md` (only when an overlay exists)
 - **Run artifacts** → `.flow/runs/<work-id>/` (only when an overlay exists)

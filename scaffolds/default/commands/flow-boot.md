@@ -66,7 +66,7 @@ Inspect:
    - `flow-scout` — for small in-flight changes
    - `flow-implement` — for gated work already shaped
 
-   **When recommending `flow setup project`, the output must also surface the opt-out as a parallel option**: `touch .flow-skip` permanently silences the recommendation for this repo. This pairing keeps the recommendation strong-by-default without nagging users who have decided flow's overlay isn't right for a particular repo.
+   **When recommending `flow setup project`, the output must also surface the opt-out as a parallel option**: the user can tell you (Claude) to opt out, at which point you `touch .flow-skip` at the repo root yourself. The user may also run the shell command manually if they prefer. Phrase this clearly so the user knows they can just *ask* — they don't need to context-switch to a terminal to silence the recommendation. This pairing keeps the recommendation strong-by-default without nagging users who have decided flow's overlay isn't right for a particular repo.
 
 ## Output Format
 
@@ -94,7 +94,7 @@ Inspect:
 
 ### Recommended Next Command
 - [Command and why]
-- (If recommending `flow setup project`, also show: "Or: `touch .flow-skip` to permanently silence this recommendation for this repo")
+- (If recommending `flow setup project`, also show: "Or to silence this recommendation: tell me to opt out (I'll `touch .flow-skip` at the repo root). You can also run that shell command yourself if you prefer.")
 ```
 
 ## Common Rationalizations
