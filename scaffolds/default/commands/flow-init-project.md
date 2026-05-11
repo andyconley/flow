@@ -55,10 +55,14 @@ Conditional roles (invoked when relevant):
    - Workflow notes — propose preferred small-change and gated-work paths based on observed work patterns.
    - Runtime and integration notes — propose based on file inspection (Dockerfile, package.json, requirements.txt, .github/workflows/, etc.).
 4. **Write the updated `.flow/PROJECT.md`.** Edit the file in place — don't make the user copy-paste.
-5. **Optional follow-up.** Offer to also walk through:
+5. **Project-level sync check.** Determine whether `flow sync claude` (and `flow sync codex`) at the project level is actually needed:
+   - Compare `.flow/agents/*.md`, `.flow/commands/*.md`, and `.flow/standards/*.md` against the framework scaffold at `~/.flow/source/scaffolds/default/`
+   - If NO divergence (all files match the scaffold), project-level sync is **not needed**. The user-level install (`flow setup user`) already covers the framework surfaces in every Claude session. Tell the user explicitly: "No project-level sync needed — your user-level install handles the framework's Claude surfaces."
+   - If YES divergence (this project has customized agents, commands, or standards), recommend running `flow sync claude` to regenerate this project's `.claude/` adapters. Offer to run it.
+6. **Optional follow-up.** Offer to also walk through:
    - which `.flow/standards/*.md` files to keep vs delete (only override framework defaults where the project actually differs)
    - which `.flow/project/*.md` overlay files to populate now vs defer
-6. **Recommend next steps.** Commit the overlay change. Run `/flow-boot` to verify the overlay is being read correctly.
+7. **Recommend next steps.** Commit the overlay change. Run `/flow-boot` to verify the overlay is being read correctly.
 
 ## Output Format
 
@@ -79,6 +83,9 @@ Conditional roles (invoked when relevant):
 - Inferred (no user input needed): [sections]
 - Asked the user: [sections]
 
+### Project-level sync status
+- [One of: "Not needed — no divergence from framework scaffold; user-level install covers Claude surfaces" | "Needed — project has customized {agents/commands/standards}; recommend `flow sync claude` to regenerate `.claude/`"]
+
 ### Follow-up offered
 - [What you offered to do next — standards trim, project overlay population, etc.]
 
@@ -86,8 +93,9 @@ Conditional roles (invoked when relevant):
 - `.flow/PROJECT.md` updated
 
 ### Recommended Next Command
-- Commit the overlay change: `git add .flow/PROJECT.md && git commit -m "Initialize flow project overlay"`
+- Commit the overlay change: `git add .flow/ && git commit -m "Initialize flow project overlay"`
 - `/flow-boot` to verify the overlay is being read correctly
+- (If sync was needed): `flow sync claude` and `flow sync codex` to regenerate project adapters
 ```
 
 ## Common Rationalizations
@@ -115,7 +123,8 @@ Before leaving `flow-init-project`, confirm:
 - [ ] role-provider fields are populated (not blank)
 - [ ] inferred vs asked sections are distinguished in the output
 - [ ] no template placeholders remain
-- [ ] the user was given a clear next step (commit + flow-boot)
+- [ ] project-level sync status was explicitly stated ("not needed" vs "needed + offer to run")
+- [ ] the user was given a clear next step (commit + flow-boot, plus sync if needed)
 
 ## Finish Criteria
 
