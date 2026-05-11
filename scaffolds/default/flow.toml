@@ -78,6 +78,11 @@ source = "commands/flow-archive.md"
 description = "Closes out completed work and updates durable memory. Use when a slice or run is complete and ready to be archived."
 argument_hint = "[work-id]"
 
+[[claude.commands]]
+name = "flow-help"
+source = "commands/flow-help.md"
+description = "Shows the flow framework overview: phase machine, command catalog, agent roster, and architecture summary. Use to remember which command does what or to orient to flow."
+
 [[claude.agents]]
 name = "architect"
 source = "agents/architect.md"
@@ -185,3 +190,8 @@ name = "flow-archive"
 source = "commands/flow-archive.md"
 description = "Closes out completed work and updates durable memory. Use when a slice or run is complete and ready to be archived."
 argument_hint = "[work-id]"
+
+[[codex.commands]]
+name = "flow-help"
+source = "commands/flow-help.md"
+description = "Shows the flow framework overview: phase machine, command catalog, agent roster, and architecture summary. Use to remember which command does what or to orient to flow."

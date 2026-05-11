@@ -1,0 +1,133 @@
+# flow-help
+
+Show the flow framework overview — phase machine, command catalog, agent roster, and architecture summary.
+
+## Overview
+
+This command is the framework's discoverable entry point. It exists so a session can answer "what does flow do?" and "which command/agent fits this task?" without re-reading every command's full contract.
+
+## When to Use
+
+Use this command when:
+
+- you want to remember which command does what
+- you're new to flow and want orientation
+- you want to look up an agent role without re-reading the framework docs
+- you want to point a collaborator at the framework's shape
+
+**When NOT to use:** to learn the deep workflow inside a specific command — those phases live in each command's own contract. `flow-help` is the orientation surface, not the manual.
+
+## Primary inputs
+
+- the framework's own identity (this file + FRAMEWORK.md)
+- no project state required — `flow-help` is intentionally project-agnostic
+
+## Primary outputs
+
+- a one-screen orientation including phase machine, command catalog, agent roster, architecture summary, and pointers to deeper docs
+
+## Help Workflow
+
+1. State the framework's one-line identity.
+2. Render the phase machine diagram.
+3. List the available commands with one-line "use when" guidance.
+4. List the available agents with one-line role descriptions and the core+conditional invocation pattern.
+5. Summarize architecture (user-level vs project-level; auto-memory vs STATE.md vs runs).
+6. List common entry points by intent ("Start a fresh session" → /flow-boot, etc.).
+7. Point at deeper docs (`FRAMEWORK.md`, the maintainer docs at `~/.flow/source/docs/`).
+
+## Output Format
+
+**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
+
+```md
+## flow Framework
+
+Personal AI workflow framework — defines HOW Claude operates with you, not WHAT you work on. Active in every Claude session via the user-level install.
+
+## Phase machine
+
+boot ──┬─→ scout (XS/S, narrow) ────────────────→ archive
+       │                                          ↑
+       └─→ plan ──→ implement (gated) ──→ review ┘
+                          ↑
+                          └── resume (recover from interruption)
+
+## Commands
+
+| Command | Use when |
+|---|---|
+| /flow-boot | Starting a session, resuming, or context feels stale |
+| /flow-scout | XS/S changes — single primary file, no new abstractions, validates in <5min |
+| /flow-plan | Idea / bug / request → implementation-ready plan |
+| /flow-implement | Gated multi-phase work; runs land under `.flow/runs/<work-id>/` |
+| /flow-review | Structured review after implementation |
+| /flow-archive | Close a run; STATE.md → transient state; durable decisions → auto-memory |
+| /flow-resume | Pick up interrupted work |
+| /flow-status | "Where are we, what's next?" |
+| /flow-help | This help output |
+
+## Agents
+
+12 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (plan, implement, review, archive) invoke a **core trio + conditional specialists** pattern — core agents always engage, conditional agents activate when their concern applies.
+
+| Agent | Role |
+|---|---|
+| architect | Boundaries, integrations, ADR decisions |
+| business-analyst | Problem framing, acceptance criteria |
+| data-engineer | Persistent state changes, schema, migration |
+| lead-developer | Execution planning, slice sequencing |
+| product-manager | Scope, prioritization, tradeoff framing |
+| quality-reviewer | Pre-acceptance review of any deliverable (code, docs, analyses, runbooks) |
+| security-reviewer | Sensitive surfaces, secrets, auth |
+| sre | Rollout, runtime, observability |
+| support-lead | Operator-facing notes, troubleshooting |
+| tech-writer | Durable summary, memory wording, handback |
+| test-engineer | Coverage strategy, validation depth |
+| ux-specialist | Interaction states, accessibility |
+
+### How agents get invoked
+
+- **By commands**: `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents per their composition. See each command's "Composition" section for which agents are core vs conditional.
+- **Directly**: ask Claude to engage a specific role for a focused task — e.g., "@architect look at this boundary decision" or "use the quality-reviewer to check this PR".
+
+### Agent vs distribution-tool distinction
+
+These agents are **personal working agents** — they define how Claude engages with you when playing a specific role. They are NOT distribution outputs designed for others to install. Project-specific review tools (e.g., path-nexus's review agents in `tools/agents/`) live in their project's own distribution surface, not in this framework.
+
+## Architecture
+
+- **Framework** (commands, agents) lives universally at `~/.claude/` (user-level install — active in every session)
+- **Project overlays** at `<repo>/.flow/` are opt-in per repo (only where you want project-specific role assignments, memory, or run artifacts)
+- **Durable facts and decisions** → auto-memory at `~/.claude/projects/<project-id>/memory/`
+- **Transient work state** → `.flow/memory/STATE.md` (only when an overlay exists)
+- **Run artifacts** → `.flow/runs/<work-id>/` (only when an overlay exists)
+- Overlays stack: in nested projects (e.g., `~/KB/repos/path-nexus/` inside `~/KB/`), more-specific overlays override on conflicts; memory writes go to the most-specific overlay.
+
+## Common entry points
+
+- "Start a fresh session" → `/flow-boot`
+- "Where do I pick up?" → `/flow-resume`
+- "Quick fix" → `/flow-scout`
+- "I have an idea, shape it" → `/flow-plan`
+- "Build something durable" → `/flow-plan` → `/flow-implement` → `/flow-review` → `/flow-archive`
+- "Where do we stand?" → `/flow-status`
+- "Read the framework operating model" → `~/.flow/source/scaffolds/default/FRAMEWORK.md`
+- "Deeper maintainer docs" → `~/.flow/source/docs/`
+```
+
+## Verification
+
+Before leaving `flow-help`, confirm:
+
+- [ ] phase machine was rendered
+- [ ] all 9 commands listed with "use when" notes
+- [ ] all 12 agents listed with role descriptions
+- [ ] core+conditional invocation pattern explained
+- [ ] architecture section included
+- [ ] common entry points listed by intent
+- [ ] pointers to deeper docs included
+
+## Finish Criteria
+
+`flow-help` is done when the user has a complete-on-one-screen orientation to the framework's commands, agents, architecture, and common entry points.
