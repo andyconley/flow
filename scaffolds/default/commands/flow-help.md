@@ -79,6 +79,7 @@ These are *lifecycle* commands — the things you do to install, sync, or check 
 
 | Command | Use when |
 |---|---|
+| `flow help` | This overview, but rendered at the shell (same content as `/flow-help`) |
 | `flow setup machine` | First-time machine setup — creates `~/.flow/` support directories |
 | `flow setup user` | Install flow at user level (active in every Claude session) |
 | `flow setup project` | Scaffold `.flow/` overlay into the current repo |

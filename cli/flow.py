@@ -617,7 +617,27 @@ def setup_project() -> int:
         copy_if_missing(item, target / item.name)
 
     print(f"project scaffold ready: {target}")
-    print("next: fill in .flow/PROJECT.md and run `flow sync claude` later")
+    print()
+    print("Next steps:")
+    print()
+    print("1. Edit .flow/PROJECT.md to declare:")
+    print("   - project name, type, and primary runtime")
+    print("   - role providers (who plays each role for this project)")
+    print("   - project-specific sources of truth")
+    print()
+    print("2. Optional — populate project-specific overlays where this project")
+    print("   differs from the framework defaults:")
+    print("   - .flow/project/*.md   (brand, domain, terminology, UX, etc.)")
+    print("   - .flow/standards/*.md (only when a project standard must override the framework's)")
+    print()
+    print("3. Project-level `flow sync claude` / `flow sync codex` is only")
+    print("   needed when this project has uniquely-shaped Claude tooling")
+    print("   (custom agents, hooks, or settings). If you only need the")
+    print("   framework's universal surfaces, the user-level install")
+    print("   (`flow setup user`) already covers them everywhere.")
+    print()
+    print("4. Open a fresh Claude Code session in this repo and try `/flow-boot`")
+    print("   to verify the overlay is being read.")
     return 0
 
 
@@ -738,6 +758,34 @@ def doctor() -> int:
     return 0
 
 
+def help_command() -> int:
+    """Render the framework overview (same content as the `/flow-help` slash command).
+
+    Reads the rendered output block from scaffolds/default/commands/flow-help.md
+    so the CLI and slash-command surfaces stay in lockstep.
+    """
+    help_source = SCAFFOLD_DIR / "commands" / "flow-help.md"
+    if not help_source.exists():
+        print(f"help source missing: {help_source}")
+        print("re-run install-flow.sh or check that ~/.flow/source resolves correctly")
+        return 1
+
+    text = help_source.read_text()
+    fence_open = "```md\n"
+    fence_close = "```"
+    start = text.find(fence_open)
+    if start == -1:
+        print("could not locate rendered help block in flow-help.md")
+        return 1
+    body_start = start + len(fence_open)
+    end = text.find(fence_close, body_start)
+    if end == -1:
+        print("could not locate end of rendered help block")
+        return 1
+    print(text[body_start:end].rstrip())
+    return 0
+
+
 def bootstrap() -> int:
     root = repo_root()
     flow_dir = root / ".flow"
@@ -815,8 +863,10 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Common examples:\n"
+            "  flow help                          (framework overview)\n"
             "  flow setup machine\n"
-            "  flow setup project\n"
+            "  flow setup user                    (install at user level)\n"
+            "  flow setup project                 (per-repo overlay)\n"
             "  flow bootstrap\n"
             "  flow sync claude\n"
             "  flow sync codex --check\n"
@@ -867,6 +917,11 @@ def main() -> int:
         description="Bring an existing project forward to the latest template surface without overwriting local edits.",
     )
 
+    sub.add_parser(
+        "help",
+        help="show framework overview (phase machine, commands, agents, architecture)",
+        description="Print the framework orientation: workflow phases, slash commands, CLI commands, agents, and architecture. Same content as the `/flow-help` slash command — invoke this at the shell when you are not in a Claude session.",
+    )
     sub.add_parser(
         "doctor",
         help="report machine, repo, and runtime sync state",
@@ -921,6 +976,8 @@ def main() -> int:
         return setup_user()
     if args.command == "refresh" and args.refresh_target == "project":
         return refresh_project()
+    if args.command == "help":
+        return help_command()
     if args.command == "doctor":
         return doctor()
     if args.command == "bootstrap":
