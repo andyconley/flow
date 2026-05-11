@@ -59,12 +59,14 @@ Inspect:
    - If `.flow-skip` exists, treat the absence as **"by design"** — the user has explicitly opted out. Do not recommend setup.
    - Otherwise, **recommend `flow setup project`**. Default to recommending — do not qualify it as "optional" or speculate that "this project doesn't need one." If the user wants to opt out for this repo, they can `touch .flow-skip` at the root; until that marker exists, recommend setup.
 9. Recommend the next command. Candidates depend on state:
-   - `flow setup project` — if no overlay exists and one would help
+   - `flow setup project` — if no overlay exists and no `.flow-skip` marker is present
    - `flow-status` — if active work is unclear
    - `flow-resume` — if there is interrupted work to continue
    - `flow-plan` — if new work needs shaping
    - `flow-scout` — for small in-flight changes
    - `flow-implement` — for gated work already shaped
+
+   **When recommending `flow setup project`, the output must also surface the opt-out as a parallel option**: `touch .flow-skip` permanently silences the recommendation for this repo. This pairing keeps the recommendation strong-by-default without nagging users who have decided flow's overlay isn't right for a particular repo.
 
 ## Output Format
 
@@ -92,6 +94,7 @@ Inspect:
 
 ### Recommended Next Command
 - [Command and why]
+- (If recommending `flow setup project`, also show: "Or: `touch .flow-skip` to permanently silence this recommendation for this repo")
 ```
 
 ## Common Rationalizations
