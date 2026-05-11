@@ -45,20 +45,23 @@ Inspect:
 
 1. Synthesize the CLAUDE.md context already loaded (user, workspace, project) and the session-start hook's framework context.
 2. Read `/tmp/session_checkpoint.md` if present.
-3. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
-4. Read the auto-memory index at `~/.claude/projects/<project-id>/memory/MEMORY.md` and pull in any entries relevant to the current focus.
-5. Check for interrupted or active runs across all stacked overlay levels.
-6. Identify:
+3. **Freshness check the session checkpoint.** If `/tmp/session_checkpoint.md` exists, compare its "Files modified this session" / "Tasks completed" lists against `git log --stat` since the checkpoint's date. If commits since that date cover the checkpoint's work, treat the checkpoint as **superseded** rather than interrupted, and recommend discarding it in the output.
+4. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
+5. Read the auto-memory index at `~/.claude/projects/<project-id>/memory/MEMORY.md` and pull in any entries relevant to the current focus.
+6. Check for interrupted or active runs across all stacked overlay levels.
+7. Identify:
    - the project's operating model and any project-specific role assignments
    - the active standards and overlays that matter right now
    - active or interrupted work
    - memory caveats, blockers, or migration notes
-7. Recommend the next command:
-   - `flow-status`
-   - `flow-resume`
-   - `flow-plan`
-   - `flow-scout`
-   - `flow-implement`
+8. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay AND substantial work happens here, recommend `flow setup project` as a candidate next command. Phrase it as an option, not a mandate — many projects don't need an overlay.
+9. Recommend the next command. Candidates depend on state:
+   - `flow setup project` — if no overlay exists and one would help
+   - `flow-status` — if active work is unclear
+   - `flow-resume` — if there is interrupted work to continue
+   - `flow-plan` — if new work needs shaping
+   - `flow-scout` — for small in-flight changes
+   - `flow-implement` — for gated work already shaped
 
 ## Output Format
 
@@ -70,12 +73,16 @@ Inspect:
 ### Context
 - Project:
 - Current focus:
+- Overlay status: (one of: "active at <path>" | "absent — flow setup project recommended" | "absent — project is light, no overlay needed")
 
 ### Active Memory
-- [Important STATE / DECISIONS highlights]
+- [Important STATE highlights + relevant auto-memory entries]
 
 ### Active or Interrupted Work
-- [Run or slice summaries]
+- [Run or slice summaries; "none active" if clean]
+
+### Session Checkpoint
+- [Status: "current" | "superseded by commits since <date> — safe to discard" | "no checkpoint present"]
 
 ### Sources of Truth
 - [Files that matter right now]
@@ -105,9 +112,11 @@ Before leaving `flow-boot`, confirm:
 
 - [ ] CLAUDE.md context across user/workspace/project was synthesized
 - [ ] `/tmp/session_checkpoint.md` was read if present
+- [ ] checkpoint freshness was checked against `git log` since its date (when checkpoint exists)
 - [ ] PROJECT.md and STATE.md were read across all stacked overlay levels
 - [ ] auto-memory MEMORY.md was consulted for relevant durable facts/decisions
 - [ ] interrupted or active runs were checked across all stacked overlay levels
+- [ ] overlay status was reported in the output (active / absent-with-recommendation / absent-by-design)
 - [ ] the next recommended command is explicit
 
 ## Finish Criteria
