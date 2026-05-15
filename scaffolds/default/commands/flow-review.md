@@ -2,6 +2,10 @@
 
 Use `flow-review` for structured review after implementation work.
 
+<HARD-GATE>
+Do NOT produce a verdict, findings, or the Review Summary until you have actually read both (a) the changed artifacts and (b) the original plan / requirements / acceptance criteria they are being judged against. Skimming is not reading. A verdict produced without comparison against intent is theatre — it provides false confidence and lets drift through. If either side is missing (e.g., no plan exists), say so explicitly in the Verdict rather than producing a judgment that pretends it has the comparison.
+</HARD-GATE>
+
 ## Overview
 
 This command judges the implementation against intent. It exists to separate "code was written" from "the slice is actually acceptable."
@@ -108,6 +112,8 @@ Review should check:
 
 ## Red Flags
 
+- verdict produced without an explicit read of the original plan / acceptance criteria
+- "the diff looks fine" as a verdict without comparison against intent
 - no comparison to the original plan or acceptance criteria
 - verdict is vague or non-committal
 - missing distinction between critical issues and suggestions

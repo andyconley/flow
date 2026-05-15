@@ -2,6 +2,10 @@
 
 Use `flow-implement` for gated implementation work when the task is large enough to benefit from explicit phases and durable artifacts.
 
+<HARD-GATE>
+Do NOT proceed past Phase 1 (Requirements) into current-state inspection, planning, or implementation until missing assumptions, contradictions, or ambiguities in the requirements have been surfaced to the engineer and either resolved or explicitly waived. "I confirmed the requirements myself" is not enough — Phase 1 produces a user-facing check-in. Implementation that starts on inferred requirements produces wrong code, however clean the phases that follow.
+</HARD-GATE>
+
 ## Overview
 
 This command is the main execution lane for substantial work. It coordinates planning, implementation, review, validation, and handback so multi-file or multi-session changes stay auditable and recoverable.
@@ -70,8 +74,9 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 ### 1. Requirements
 
 - confirm the work is implementation-ready
-- identify missing assumptions or contradictions
-- escalate back to `flow-plan` if needed
+- identify missing assumptions, contradictions, or ambiguities — and surface them to the engineer for resolution; do not proceed on inference. If everything is clear, say so explicitly ("requirements are fully specified, no clarifications needed") before moving to Phase 2 — that statement is the user-facing check-in
+- escalate back to `flow-plan` if requirements turn out to be under-specified rather than just unclear
+- **Hard checkpoint**: do not move to Phase 2 until either (a) every surfaced ambiguity has been resolved by the engineer, or (b) you have explicitly stated "no clarifications needed" and the engineer has not pushed back
 
 ### 2. Current state
 
@@ -150,6 +155,8 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 ## Red Flags
 
 - multiple phases implied but not recorded
+- implementation phase started without an explicit Phase 1 check-in with the engineer
+- ambiguities were "resolved by inference" rather than surfaced to the engineer
 - implementation starts before requirements are stable
 - no explicit validation evidence
 - review is reduced to "looks fine"
