@@ -50,11 +50,27 @@ The framework source. Contains:
 
 - workflow command contracts under `commands/`
 - role agent definitions under `agents/`
-- shared standards library under `standards/`
+- shared standards library under `standards/` (flow-authored standards) and `standards/vendor/` (verbatim mirrors of upstream specs that flow depends on)
 - project overlay templates under `project/`, memory placeholders under `memory/`, form templates under `templates/`
-- the runtime adapter manifest at `flow.toml`
+- the runtime adapter manifest at `flow.toml` (also records declared dependencies on upstream standards via `[standards.<name>]` blocks)
 
 This defines what the user-level install generates and what `flow setup project` copies into a repo's overlay.
+
+#### Vendored Upstream Content
+
+Some flow standards are pinned to external specifications maintained outside the project (e.g., Conventional Commits). Flow handles these via a *vendored mirror* pattern rather than runtime fetch or git submodules:
+
+- The upstream spec is copied verbatim into `scaffolds/default/standards/vendor/<spec-name>-<version>.md`, with an attribution header (`<!-- VENDORED VERBATIM -->`) naming the source repo, pinned commit SHA, and license.
+- A flow-authored standard at `scaffolds/default/standards/<topic>.md` cites the vendored mirror and distills the rules agents actually need at decision time.
+- The dependency is declared in `flow.toml` under `[standards.<topic>]` with `upstream`, `upstream_version`, `vendored_sha`, and `vendored_at`.
+- A maintainer script under `scripts/refresh-<topic>.py` resolves the latest upstream content, diffs against the vendor mirror, and updates both the mirror and the `flow.toml` metadata in one step. Consumers never run this — they receive whatever's vendored in the flow release they installed.
+
+Why this shape:
+
+- **No runtime fetch.** The framework works offline; agents never need to reach the network to consult a standard.
+- **No submodule fragility.** `install-flow.sh` (both develop and release modes) treats the vendor mirror as ordinary scaffold content.
+- **Auditable.** The pinned SHA + date in `flow.toml` makes it trivial to confirm what version of an external spec a given flow install is bound to.
+- **The `vendor/` boundary is the editing contract.** Anything under `vendor/` is verbatim upstream content; never hand-edit. Flow-authored extensions and project-specific overlays live elsewhere.
 
 ### User-Level Install (`~/.claude/`, `~/.codex/`)
 

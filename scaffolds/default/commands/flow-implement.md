@@ -88,6 +88,7 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 
 - make the changes — code, docs, or other artifacts as the work requires
 - keep the slice incremental and reviewable
+- **commit per Conventional Commits** — every commit message follows `standards/git-commits.md` (type prefix required; breaking changes declared explicitly; one logical change per commit). When the slice itself is a breaking change, the commit message records it
 
 ### 5. Review
 

@@ -39,11 +39,12 @@ For maintainer-oriented documentation, start with:
 The framework template now includes:
 
 - a broad standards library under `.flow/standards/`
+- vendored upstream specs (verbatim mirrors of external standards flow depends on) under `.flow/standards/vendor/` — e.g., the Conventional Commits v1.0.0 spec
 - richer command contracts under `.flow/commands/`
 - richer role definitions under `.flow/agents/`
 - project overlay templates under `.flow/project/`
 - memory, templates, and run scaffolding
-- a machine-readable framework manifest at `.flow/flow.toml`
+- a machine-readable framework manifest at `.flow/flow.toml` (also declares dependencies on upstream standards via `[standards.<name>]` blocks)
 
 ### CLI lifecycle
 

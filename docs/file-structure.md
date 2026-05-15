@@ -114,6 +114,8 @@ Reusable workflow command definitions. These are the source contracts for genera
 
 Reusable framework standards library.
 
+The `standards/vendor/` subdirectory holds **verbatim mirrors** of external specifications that flow depends on (e.g., the Conventional Commits spec). Files under `vendor/` are upstream content and must not be hand-edited; the corresponding `flow.toml` `[standards.<name>]` block records the pinned upstream version and SHA. A maintainer script in `scripts/refresh-<topic>.py` rolls the mirror forward against new upstream releases.
+
 #### `scaffolds/default/project/`
 
 Project-specific overlay templates for domain, terminology, UX, integrations, and similar project-local truth.
