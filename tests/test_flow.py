@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,21 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_CLI = REPO_ROOT / "cli" / "flow.py"
+INSTALL_SCRIPT = REPO_ROOT / "install-flow.sh"
+
+
+def _clean_env(home: Path | None = None) -> dict[str, str]:
+    """Return a subprocess env that won't pull ANSI color into captured stdout.
+
+    Python 3.14's argparse emits ANSI codes when FORCE_COLOR is set; NO_COLOR
+    suppresses them. Tests assert on plain text, so we standardize.
+    """
+    env = os.environ.copy()
+    env.pop("FORCE_COLOR", None)
+    env["NO_COLOR"] = "1"
+    if home is not None:
+        env["HOME"] = str(home)
+    return env
 
 
 class FlowCliTests(unittest.TestCase):
@@ -22,15 +38,12 @@ class FlowCliTests(unittest.TestCase):
         self._tempdir.cleanup()
 
     def run_flow(self, *args: str) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        if self._fake_home is not None:
-            env["HOME"] = str(self._fake_home)
         return subprocess.run(
             [sys.executable, str(FLOW_CLI), *args],
             cwd=self.repo,
             text=True,
             capture_output=True,
-            env=env,
+            env=_clean_env(self._fake_home),
         )
 
     def assert_ok(self, result: subprocess.CompletedProcess[str]) -> None:
@@ -52,6 +65,75 @@ class FlowCliTests(unittest.TestCase):
         (fake_home / ".flow" / "source").symlink_to(REPO_ROOT)
         self._fake_home = fake_home
         return fake_home
+
+    # ------------------------------------------------------------------
+    # Two-mode install helpers
+    # ------------------------------------------------------------------
+
+    def _new_fake_home(self) -> Path:
+        fake_home = self.repo / "fake_home"
+        fake_home.mkdir()
+        self._fake_home = fake_home
+        return fake_home
+
+    def _run_install_sh(self, *args: str) -> subprocess.CompletedProcess[str]:
+        if self._fake_home is None:
+            self._new_fake_home()
+        result = subprocess.run(
+            ["bash", str(INSTALL_SCRIPT), *args],
+            cwd=str(REPO_ROOT),
+            text=True,
+            capture_output=True,
+            env=_clean_env(self._fake_home),
+        )
+        return result
+
+    def do_install_develop(self) -> Path:
+        if self._fake_home is None:
+            self._new_fake_home()
+        result = self._run_install_sh("--develop")
+        if result.returncode != 0:
+            self.fail(f"install-flow.sh --develop failed:\n{result.stdout}\n{result.stderr}")
+        return self._fake_home  # type: ignore[return-value]
+
+    def do_install_release(self) -> Path:
+        if self._fake_home is None:
+            self._new_fake_home()
+        result = self._run_install_sh("--release")
+        if result.returncode != 0:
+            self.fail(f"install-flow.sh --release failed:\n{result.stdout}\n{result.stderr}")
+        return self._fake_home  # type: ignore[return-value]
+
+    def make_fake_remote_with_tags(self, tags: list[str]) -> Path:
+        """Build a bare git repo seeded from REPO_ROOT with the given tags.
+
+        Returns the bare repo path; pass `file://<path>` as the `--remote` arg.
+        Every tag points at the same single initial commit — sufficient for
+        latest-tag selection and for `flow update` to clone a valid scaffold.
+        """
+        work = self.repo / "fake-remote-work"
+        bare = self.repo / "fake-remote.git"
+        shutil.copytree(
+            REPO_ROOT,
+            work,
+            ignore=shutil.ignore_patterns(
+                ".git", "*.pyc", "__pycache__", "fake_home", "fake-remote*"
+            ),
+        )
+        env = _clean_env()
+        env["GIT_AUTHOR_NAME"] = "test"
+        env["GIT_AUTHOR_EMAIL"] = "test@example.com"
+        env["GIT_COMMITTER_NAME"] = "test"
+        env["GIT_COMMITTER_EMAIL"] = "test@example.com"
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=work, check=True, env=env)
+        subprocess.run(["git", "add", "-A"], cwd=work, check=True, env=env)
+        subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=work, check=True, env=env)
+        for tag in tags:
+            subprocess.run(["git", "tag", tag], cwd=work, check=True, env=env)
+        subprocess.run(
+            ["git", "clone", "--bare", "-q", str(work), str(bare)], check=True, env=env
+        )
+        return bare
 
     def test_setup_project_scaffolds_flow_manifest(self) -> None:
         self.setup_project()
@@ -210,6 +292,181 @@ class FlowCliTests(unittest.TestCase):
         user_section = result.stdout.split("-- user-level")[1].split("-- project:")[0]
         self.assertIn("claude drift:     clean", user_section)
         self.assertIn("codex drift:      clean", user_section)
+
+    # ----------------------------------------------------------------------
+    # Two-mode install (develop / release) tests
+    # ----------------------------------------------------------------------
+
+    def test_install_flow_sh_develop_creates_symlink(self) -> None:
+        fake_home = self.do_install_develop()
+        source = fake_home / ".flow" / "source"
+        self.assertTrue(source.is_symlink(), f"expected {source} to be a symlink")
+        self.assertEqual(source.resolve(), REPO_ROOT)
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('mode = "develop"', config)
+        self.assertIn('source_target = "', config)
+
+    def test_install_flow_sh_release_creates_real_directory(self) -> None:
+        fake_home = self.do_install_release()
+        source = fake_home / ".flow" / "source"
+        self.assertTrue(source.is_dir())
+        self.assertFalse(source.is_symlink(), f"{source} should be a real directory in release mode")
+        # Release roster present
+        self.assertTrue((source / "cli" / "flow.py").is_file())
+        self.assertTrue((source / "scaffolds" / "default" / "flow.toml").is_file())
+        # Excluded paths absent
+        self.assertFalse((source / ".git").exists(), "release copy must exclude .git/")
+        self.assertFalse((source / "tests").exists(), "release copy must exclude tests/")
+        self.assertFalse((source / "install-flow.sh").exists(), "release copy must exclude install-flow.sh")
+
+    def test_install_flow_sh_release_stamps_mode_and_version(self) -> None:
+        fake_home = self.do_install_release()
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('mode = "release"', config)
+        self.assertIn('version = "', config)
+        self.assertIn('remote = "', config)
+        self.assertIn('installed_at = "', config)
+
+    def test_release_install_is_self_contained_after_clone_removed(self) -> None:
+        """After release install, the CLI must run even if the source clone is gone.
+
+        We can't actually remove REPO_ROOT during tests, but we can verify the
+        installed CLI doesn't read from REPO_ROOT — by running it with a wrong
+        cwd and confirming it resolves through ~/.flow/source/.
+        """
+        fake_home = self.do_install_release()
+        result = subprocess.run(
+            [sys.executable, str(fake_home / ".flow" / "source" / "cli" / "flow.py"), "doctor"],
+            cwd=str(self.repo),
+            text=True,
+            capture_output=True,
+            env=_clean_env(fake_home),
+        )
+        self.assert_ok(result)
+        self.assertIn("mode:             release", result.stdout)
+
+    def test_doctor_release_install_reports_mode_and_version(self) -> None:
+        self.do_install_release()
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        self.assertIn("-- install --", result.stdout)
+        self.assertIn("mode:             release", result.stdout)
+        install_section = result.stdout.split("-- install --")[1].split("-- user-level")[0]
+        self.assertIn("version:", install_section)
+        self.assertIn("remote:", install_section)
+        self.assertIn("installed at:", install_section)
+
+    def test_doctor_develop_install_reports_source_target(self) -> None:
+        self.do_install_develop()
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        self.assertIn("-- install --", result.stdout)
+        self.assertIn("mode:             develop", result.stdout)
+        install_section = result.stdout.split("-- install --")[1].split("-- user-level")[0]
+        self.assertIn("source target:", install_section)
+
+    def test_install_command_release_converts_from_develop(self) -> None:
+        fake_home = self.do_install_develop()
+        source = fake_home / ".flow" / "source"
+        self.assertTrue(source.is_symlink())
+
+        self.assert_ok(self.run_flow("install", "--release"))
+
+        self.assertFalse(source.is_symlink(), "after conversion source should be a real directory")
+        self.assertTrue((source / "cli" / "flow.py").is_file())
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('mode = "release"', config)
+        # Clone preserved
+        self.assertTrue((REPO_ROOT / "cli" / "flow.py").is_file())
+
+    def test_install_command_develop_converts_from_release(self) -> None:
+        fake_home = self.do_install_release()
+        source = fake_home / ".flow" / "source"
+        self.assertFalse(source.is_symlink())
+
+        self.assert_ok(self.run_flow("install", "--develop", str(REPO_ROOT)))
+
+        self.assertTrue(source.is_symlink())
+        self.assertEqual(source.resolve(), REPO_ROOT)
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('mode = "develop"', config)
+        self.assertIn(f'source_target = "{REPO_ROOT}"', config)
+
+    def test_install_command_requires_a_mode(self) -> None:
+        self.do_install_develop()
+        result = self.run_flow("install")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_install_develop_rejects_nonexistent_path(self) -> None:
+        self.do_install_release()
+        result = self.run_flow("install", "--develop", str(self.repo / "nope"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not exist", result.stdout)
+
+    def test_install_develop_rejects_non_flow_directory(self) -> None:
+        self.do_install_release()
+        bogus = self.repo / "bogus-clone"
+        bogus.mkdir()
+        result = self.run_flow("install", "--develop", str(bogus))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not a flow checkout", result.stdout)
+
+    def test_update_in_develop_mode_prints_manual_instructions(self) -> None:
+        self.do_install_develop()
+        result = self.run_flow("update")
+        self.assert_ok(result)
+        self.assertIn("develop install", result.stdout)
+        self.assertIn("git -C", result.stdout)
+        self.assertIn("flow sync claude --user", result.stdout)
+
+    def test_update_check_in_release_mode_reports_available_tag(self) -> None:
+        self.do_install_release()
+        remote = self.make_fake_remote_with_tags(["v9.9.9"])
+
+        result = self.run_flow("update", "--check", "--remote", f"file://{remote}")
+        self.assert_ok(result)
+        self.assertIn("latest:", result.stdout)
+        self.assertIn("v9.9.9", result.stdout)
+        self.assertIn("update available", result.stdout)
+
+    def test_update_check_already_current_is_noop(self) -> None:
+        fake_home = self.do_install_release()
+        # Pin the config's version to one that matches the fake remote's only tag.
+        config_path = fake_home / ".flow" / "config.toml"
+        text = config_path.read_text()
+        import re
+        text = re.sub(r'version = "[^"]*"', 'version = "v9.9.9"', text)
+        config_path.write_text(text)
+        remote = self.make_fake_remote_with_tags(["v9.9.9"])
+
+        result = self.run_flow("update", "--check", "--remote", f"file://{remote}")
+        self.assert_ok(result)
+        self.assertIn("already at the latest tag", result.stdout)
+
+    def test_update_apply_in_release_mode_swaps_and_records_version(self) -> None:
+        fake_home = self.do_install_release()
+        remote = self.make_fake_remote_with_tags(["v9.9.9"])
+
+        result = self.run_flow("update", "--remote", f"file://{remote}")
+        self.assert_ok(result)
+
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('version = "v9.9.9"', config)
+        # New install is intact
+        self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
+        self.assertTrue((fake_home / ".flow" / "source" / "scaffolds" / "default" / "flow.toml").is_file())
+        # Stage and rollback dirs cleaned up
+        self.assertFalse((fake_home / ".flow" / "source.new").exists())
+        self.assertFalse((fake_home / ".flow" / "source.old").exists())
+
+    def test_update_picks_highest_semver_tag(self) -> None:
+        self.do_install_release()
+        # Order on purpose — tag insertion order != semver order
+        remote = self.make_fake_remote_with_tags(["v1.0.0", "v1.10.0", "v1.2.0"])
+
+        result = self.run_flow("update", "--check", "--remote", f"file://{remote}")
+        self.assert_ok(result)
+        self.assertIn("latest:  v1.10.0", result.stdout)
 
 
 if __name__ == "__main__":

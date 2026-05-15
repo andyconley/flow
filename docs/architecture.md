@@ -14,7 +14,7 @@ This keeps durable workflow content runtime-neutral while supporting runtime-spe
 
 `flow` operates across four layers:
 
-1. **Machine support** at `~/.flow/` — install state, config, the source symlink
+1. **Machine support** at `~/.flow/` — install state, config, the source link or copy
 2. **Framework source** in the `flow` repo (`scaffolds/default/`) — the canonical workflow vocabulary
 3. **User-level install** at `~/.claude/` and `~/.codex/` — generated adapters active in every session
 4. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/` and `<repo>/.codex/` — per-project, opt-in
@@ -23,11 +23,26 @@ This keeps durable workflow content runtime-neutral while supporting runtime-spe
 
 The machine-local install home. Contains:
 
-- the linked framework repo at `~/.flow/source` (symlink)
-- local config at `~/.flow/config.toml`
+- the framework at `~/.flow/source/` (the path contract — see "Install Modes" below)
+- local config at `~/.flow/config.toml` (includes the `[install]` section: mode, version, installed_at)
 - support directories: `hooks/`, `user/`, `logs/`
 
 Installation and local execution support, not project truth.
+
+#### Install Modes
+
+`~/.flow/source` resolves to the same path in both modes, but its storage shape differs:
+
+| Mode | Storage | Use |
+|---|---|---|
+| **Develop** (`install-flow.sh --develop`, default) | symlink to the user's clone | Maintainers editing framework content; edits in the clone go live immediately |
+| **Release** (`install-flow.sh --release`) | real directory of copied content | Consumers who want flow installed without keeping a clone; rolled forward via `flow update` |
+
+Why a single path contract: everything downstream — `flow sync`, managed manifests, hook commands, scaffold references like `~/.flow/source/scaffolds/default/commands/flow-boot.md` — resolves through `~/.flow/source/` regardless of mode. Install-mode awareness lives entirely in the install layer (`install-flow.sh`, `flow install`, `flow update`, `flow doctor`). The rest of the CLI never branches on mode.
+
+`flow update` rolls forward a release install by staging the new tree, validating it, and atomically swapping it into `~/.flow/source/`. A failed update — at any point before the swap — leaves the existing install untouched. The window between renaming the old install aside and renaming the staging into place is a single syscall pair; failures during the swap attempt rollback.
+
+`flow install --release` / `flow install --develop <path>` converts between modes in place. The clone is never deleted by either direction; the user controls its lifecycle.
 
 ### Framework Repo (`scaffolds/default/`)
 
