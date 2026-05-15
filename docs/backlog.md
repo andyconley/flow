@@ -20,6 +20,10 @@ The adoption bar is higher for existing repos because they already have:
 - **Scaffold customization for personal use** — light commands (boot, scout, resume, status) drop role casting; heavier commands restructure into core + conditional roles; flow-plan generalized beyond UI/frontend bias; flow-scout gets explicit size criteria and a hard checkpoint; flow-implement language sharpened to be domain-agnostic.
 - **`code-reviewer` → `quality-reviewer` rename** — agent broadened to handle any deliverable (code, docs, analyses, runbooks, configurations).
 - **Stacked overlay semantics in command contracts** — boot, status, resume, and archive describe how to traverse ancestor `.flow/` overlays. (Note: the CLI itself doesn't yet enforce stacked-overlay traversal — see item below.)
+- **Packaged release/versioning workflow** (v0.4.0) — two-mode install (`install-flow.sh --develop`/`--release`), `flow update [--check] [--resync]` for atomic version rollforward against the configured remote, `flow install --release`/`--develop` for in-place mode conversion, install metadata (mode, version, source_target, installed_at) stamped into `~/.flow/config.toml`, and `flow doctor` reporting the install state. Resolves the previously-listed personal-framework backlog item P4.
+- **Conventional Commits as a declared upstream dependency** (v0.4.0) — flow-authored standard at `standards/git-commits.md` cites a verbatim vendored upstream mirror at `standards/vendor/conventional-commits-1.0.0.md`, with a `[standards.git-commits]` block in `flow.toml` pinning the upstream SHA and a maintainer-only refresh script at `scripts/refresh-conventional-commits.py`. Establishes the vendor-with-attribution pattern for future upstream-spec dependencies.
+- **Solutioning workflow** (v0.4.0) — new `/flow-solution` command (optional pre-plan step for option exploration), new `solution-architect` agent, three new standards (`solutioning-criteria.md`, `solutioning-decisions.md`, `solutioning-risks.md`), and a `spike-template.md` (Form A / Form B / Investigation variants).
+- **Engagement-discipline hardening** (v0.4.1) — `<HARD-GATE>` blocks + three-phase structure (Engagement → Shaping → Capture) applied to `flow-solution`, `flow-plan`, `flow-implement` (Phase 1), `flow-review`, and the `solution-architect` agent. Adopts the pattern from the superpowers `brainstorming` skill without taking a dependency. Fixes the observed failure mode where agents jumped straight to structured output without clarifying problem framing first.
 
 ## Adoption Readiness Themes
 
@@ -341,20 +345,70 @@ Why it matters:
 - Today the agents and standards inherit content from the develop-branch codex-hardening work, not from distilled personal conventions
 - Deferred intentionally until real usage surfaces what's actually wrong vs what just reads oddly on paper
 
-### P4. Framework update workflow for an installed user-level surface
+### P5. Single-command portable installer for consumers
 
-Status: manual
+Status: not started
 
 Current:
 
-- User-level install is generated from this repo's scaffold; after a framework update, the user re-runs `flow sync claude --user` / `flow sync codex --user`
-- No prompt or notification when the framework has drifted from the installed surface
+- Install requires the consumer to (1) clone the repo, (2) `cd` into it, (3) run `./install-flow.sh --release`
+- The clone-first step is a real adoption barrier — consumers are forced through a git-user ceremony before they can touch flow
+- Release mode (v0.4.0) made the install self-contained *after the fact*; the cloning is the remaining setup-time barrier
 
 Need:
 
-- A way to detect that the installed user-level surface is older than the framework scaffold (e.g., `flow doctor` surfaces "framework updated since last sync")
-- Optionally, a `flow update` command that pulls the latest framework and re-syncs user-level surfaces
+- A single-command installer that consumers can run without first cloning:
+  - `curl -fsSL <URL> | bash` (or a GitHub raw URL while the project doesn't have its own domain)
+  - The installer detects the latest release tag, downloads the release archive (or shallow-clones to a temp dir), invokes the existing `install-flow.sh --release` logic against the downloaded tree, then cleans up
+- Default to release mode (consumer-shaped); maintainer flow still requires an explicit clone + `--develop`
+
+Open questions:
+
+- Verification model — checksum / signature, or accept the curl-bash trust idiom that's standard for personal tools (rustup, nvm, oh-my-zsh)?
+- URL stability — bare `raw.githubusercontent.com` couples the install path to a specific repo location; a redirect via a domain (e.g., `flow.andyconley.dev`) lets the repo move later
+- Relation to `flow update` — separate concerns. Installer bootstraps from zero; `flow update` rolls forward an existing install. Both should call into the same staging/swap helpers; no behavioral overlap
 
 Why it matters:
 
-- Without prompting, the user-level install will silently drift behind framework changes
+- Standard distribution pattern for personal frameworks (rustup, nvm, oh-my-zsh, asdf): one command, no prior knowledge required
+- Removes the only remaining "you need to clone first" barrier between a curious user and an active flow install in their next Claude session
+
+### P6. flow-help.md drift from CLI/agent surfaces
+
+Status: not started
+
+Current:
+
+- `flow-help.md` contains a CLI commands table and an agents table maintained by hand
+- These have already drifted twice (PR adding `flow install`/`flow update`; solutioning commit adding `/flow-solution` and `solution-architect`) — each landing required a follow-up commit to flow-help.md
+
+Need:
+
+- Generate the CLI commands table from `cli/flow.py`'s subparsers
+- Generate the agents table from `flow.toml`'s `[[claude.agents]]` blocks
+- The framework-overview surface should be derived from the manifest and the CLI, not duplicated
+
+Why it matters:
+
+- Drift goes unnoticed until someone runs `flow help` and sees a stale list — exactly when a new user is looking for orientation
+- Maintenance overhead grows linearly as agents/commands are added
+
+### P7. Engagement-discipline pattern duplication
+
+Status: pattern shipped (v0.4.1), abstraction deferred
+
+Current:
+
+- `<HARD-GATE>` blocks + three-phase structure (Engagement → Shaping/Solutioning → Capture) are duplicated across `flow-solution.md`, `flow-plan.md`, `flow-implement.md` (Phase 1 only), `flow-review.md`, and `solution-architect.md`
+- Each command's anti-pattern section and red flags carry parallel content adapted to that command's specifics
+
+Need:
+
+- Consider promoting the engagement-discipline pattern to `standards/engagement-discipline.md` that the commands cite by section name, rather than duplicating the structure inline
+- Citations would follow the existing pattern (commands already cite `standards/git-commits.md`, `architecture.md`, etc.)
+
+Why deferred:
+
+- Abstraction at 4 occurrences is borderline; at 5 it would be justified
+- Premature abstraction is worse than the current duplication — each command's framing is slightly different and the pattern is still settling
+- Revisit when a fifth command needs the same discipline, or when one of the existing four needs a non-trivial pattern update that would otherwise require editing the same content in multiple places
