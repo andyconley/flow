@@ -47,11 +47,13 @@ Personal AI workflow framework — defines HOW Claude operates with you, not WHA
 
 ## Phase machine
 
-boot ──┬─→ scout (XS/S, narrow) ────────────────→ archive
-       │                                          ↑
-       └─→ plan ──→ implement (gated) ──→ review ┘
-                          ↑
-                          └── resume (recover from interruption)
+boot ──┬─→ scout (XS/S, narrow) ────────────────────────────→ archive
+       │                                                      ↑
+       └─→ [solution] ──→ plan ──→ implement (gated) ──→ review ┘
+                                          ↑
+                                          └── resume (recover from interruption)
+
+`[solution]` is an optional pre-plan step — use it when multiple approaches exist, architectural decisions are needed, or the work needs chunking before `plan` can shape it.
 
 ## Command surfaces
 
@@ -65,6 +67,7 @@ These are *workflow* commands — the things you do during work:
 |---|---|
 | /flow-boot | Starting a session, resuming, or context feels stale |
 | /flow-scout | XS/S changes — single primary file, no new abstractions, validates in <5min |
+| /flow-solution | Optional pre-plan step when multiple approaches exist or architectural decisions are needed |
 | /flow-plan | Idea / bug / request → implementation-ready plan |
 | /flow-implement | Gated multi-phase work; runs land under `.flow/runs/<work-id>/` |
 | /flow-review | Structured review after implementation |
@@ -87,12 +90,14 @@ These are *lifecycle* commands — the things you do to install, sync, or check 
 | `flow refresh project` | Pull missing framework files into an existing project overlay |
 | `flow sync claude [--user] [--check]` | Generate or check Claude adapters |
 | `flow sync codex [--user] [--check]` | Generate or check Codex adapters |
+| `flow install --release` / `flow install --develop <path>` | Convert the local install between modes (symlink ↔ copy) |
+| `flow update [--check] [--resync]` | Roll a release install forward to the latest tagged release |
 | `flow bootstrap` | Validate the current repo's `.flow/` structure |
-| `flow doctor` | Report machine, user-level, and project-level state |
+| `flow doctor` | Report machine, install, user-level, and project-level state |
 
 ## Agents
 
-12 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (plan, implement, review, archive) invoke a **core trio + conditional specialists** pattern — core agents always engage, conditional agents activate when their concern applies.
+13 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (solution, plan, implement, review, archive) invoke a **core trio + conditional specialists** pattern — core agents always engage, conditional agents activate when their concern applies.
 
 | Agent | Role |
 |---|---|
@@ -103,6 +108,7 @@ These are *lifecycle* commands — the things you do to install, sync, or check 
 | product-manager | Scope, prioritization, tradeoff framing |
 | quality-reviewer | Pre-acceptance review of any deliverable (code, docs, analyses, runbooks) |
 | security-reviewer | Sensitive surfaces, secrets, auth |
+| solution-architect | Consulting design partner — walks options, tradeoffs, principles, and recommended design artifacts before plan |
 | sre | Rollout, runtime, observability |
 | support-lead | Operator-facing notes, troubleshooting |
 | tech-writer | Durable summary, memory wording, handback |
@@ -111,7 +117,7 @@ These are *lifecycle* commands — the things you do to install, sync, or check 
 
 ### How agents get invoked
 
-- **By commands**: `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents per their composition. See each command's "Composition" section for which agents are core vs conditional.
+- **By commands**: `flow-solution`, `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents per their composition. See each command's "Composition" section for which agents are core vs conditional.
 - **Directly**: ask Claude to engage a specific role for a focused task — e.g., "@architect look at this boundary decision" or "use the quality-reviewer to check this PR".
 
 ### Agent vs distribution-tool distinction
@@ -132,6 +138,7 @@ These agents are **personal working agents** — they define how Claude engages 
 - "Start a fresh session" → `/flow-boot`
 - "Where do I pick up?" → `/flow-resume`
 - "Quick fix" → `/flow-scout`
+- "Multiple approaches, need to choose" → `/flow-solution` → `/flow-plan`
 - "I have an idea, shape it" → `/flow-plan`
 - "Build something durable" → `/flow-plan` → `/flow-implement` → `/flow-review` → `/flow-archive`
 - "Where do we stand?" → `/flow-status`
@@ -147,7 +154,7 @@ Before leaving `flow-help`, confirm:
 
 - [ ] phase machine was rendered
 - [ ] both command surfaces listed (slash commands and CLI commands), with the distinction made explicit
-- [ ] all 12 agents listed with role descriptions
+- [ ] all 13 agents listed with role descriptions
 - [ ] core+conditional invocation pattern explained
 - [ ] architecture section included
 - [ ] common entry points listed by intent
