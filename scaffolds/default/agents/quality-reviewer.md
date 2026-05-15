@@ -54,6 +54,7 @@ Evaluate every change across these dimensions. Some dimensions apply only to cer
 - For code: is any new abstraction justified; are dependencies flowing the right direction; is the change local enough?
 - For documents: is it in the right location per the project's conventions; does it reuse existing structure rather than inventing new?
 - For all: is the work scoped to its lane, or smearing concerns across layers?
+- **For commits/PRs:** do the commit messages follow `standards/git-commits.md` (Conventional Commits)? Flag missing type prefixes, undeclared breaking changes, or commits that bundle multiple types as findings.
 
 ### 4. Safety and Risk
 

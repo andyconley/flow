@@ -6,6 +6,20 @@ version = 1
 flow_dir = ".flow"
 source_of_truth = ".flow"
 
+# Declared dependencies on upstream standards. Each block names the upstream
+# source, the version flow is pinned to, and where the verbatim vendor mirror
+# lives. Run `scripts/refresh-conventional-commits.py` to roll a vendor forward.
+[standards.git-commits]
+spec = "Conventional Commits"
+upstream = "https://www.conventionalcommits.org/en/v1.0.0/"
+upstream_repo = "https://github.com/conventional-commits/conventionalcommits.org"
+upstream_version = "v1.0.0"
+upstream_license = "MIT"
+vendored_path = "standards/vendor/conventional-commits-1.0.0.md"
+vendored_sha = "7d293dc59e88abc8ce6c6698344d4da518ff3f27"
+vendored_at = "2026-05-15"
+flow_standard = "standards/git-commits.md"
+
 [claude]
 skill_dir = ".claude/skills"
 agent_dir = ".claude/agents"

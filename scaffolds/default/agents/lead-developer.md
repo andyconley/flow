@@ -99,6 +99,7 @@ Evaluate every story or change across these dimensions:
 3. Surface hidden coupling and ownership confusion before coding begins.
 4. Think in file-level and module-level changes, not vague implementation gestures.
 5. Explain why a slice boundary is safe or unsafe.
+6. **All commits follow the Conventional Commits standard.** Before composing any commit message, read `standards/git-commits.md` (and the vendored upstream spec it cites). Type prefix is required; breaking changes use `!` and/or a `BREAKING CHANGE:` footer; one logical change per commit.
 
 ## Composition
 

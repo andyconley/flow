@@ -51,7 +51,8 @@ If any criterion fails, do not start scout. Escalate to `flow-plan` to shape the
 3. Make the focused change.
 4. **Mid-flight check:** if any Scout-Size Criterion stops holding (e.g., the change is touching a second primary file, a new abstraction is forming, validation is running long), stop and route to `flow-plan` with what you've learned. Do not silently continue.
 5. Validate at the smallest sufficient level.
-6. Return concise handback.
+6. **Commit per Conventional Commits.** A scout change is a single logical commit; use the message format defined in `standards/git-commits.md` (type prefix required; `fix`/`docs`/`test`/`refactor`/`chore` are the most common types in scout mode).
+7. Return concise handback.
 
 ## Rules
 

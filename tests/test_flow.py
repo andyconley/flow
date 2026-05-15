@@ -468,6 +468,124 @@ class FlowCliTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertIn("latest:  v1.10.0", result.stdout)
 
+    # ----------------------------------------------------------------------
+    # Standards / vendored upstream content
+    # ----------------------------------------------------------------------
+
+    def test_git_commits_standard_exists_and_cites_upstream(self) -> None:
+        standard = REPO_ROOT / "scaffolds" / "default" / "standards" / "git-commits.md"
+        self.assertTrue(standard.exists(), "flow-authored git-commits standard must exist")
+        text = standard.read_text()
+        self.assertIn("Conventional Commits", text)
+        self.assertIn("conventionalcommits.org", text)
+        self.assertIn("vendor/conventional-commits-1.0.0.md", text)
+        # Project overrides section is the documented extension point.
+        self.assertIn("Project Overrides", text)
+
+    def test_vendor_mirror_exists_and_carries_attribution(self) -> None:
+        vendor = REPO_ROOT / "scaffolds" / "default" / "standards" / "vendor" / "conventional-commits-1.0.0.md"
+        self.assertTrue(vendor.exists(), "vendor mirror must exist at the canonical path")
+        text = vendor.read_text()
+        # Attribution header lives in an HTML comment so it doesn't disturb rendering.
+        self.assertIn("VENDORED VERBATIM", text)
+        self.assertIn("Pinned SHA:", text)
+        self.assertIn("Spec version:  v1.0.0", text)
+        self.assertIn("License:", text)
+        # Upstream spec body markers — would change if the upstream content drifted.
+        self.assertIn("# Conventional Commits 1.0.0", text)
+        self.assertIn("BREAKING CHANGE", text)
+
+    def test_vendor_license_file_present(self) -> None:
+        license_path = REPO_ROOT / "scaffolds" / "default" / "standards" / "vendor" / "conventional-commits-LICENSE.txt"
+        self.assertTrue(license_path.exists(), "upstream license must be carried with the vendor mirror")
+        self.assertIn("MIT License", license_path.read_text())
+
+    def test_flow_toml_declares_git_commits_dependency(self) -> None:
+        manifest_path = REPO_ROOT / "scaffolds" / "default" / "flow.toml"
+        text = manifest_path.read_text()
+        # Required keys for the dependency declaration.
+        self.assertIn("[standards.git-commits]", text)
+        for key in (
+            'spec = "Conventional Commits"',
+            'upstream = "',
+            'upstream_repo = "',
+            'upstream_version = "v1.0.0"',
+            'upstream_license = "MIT"',
+            'vendored_path = "standards/vendor/conventional-commits-1.0.0.md"',
+            'vendored_sha = "',
+            'vendored_at = "',
+            'flow_standard = "standards/git-commits.md"',
+        ):
+            self.assertIn(key, text, f"flow.toml [standards.git-commits] missing key: {key}")
+        # The vendored_sha and vendored_at values must be non-empty.
+        import re
+        for key in ("vendored_sha", "vendored_at", "upstream_version"):
+            match = re.search(rf'{key}\s*=\s*"([^"]+)"', text)
+            self.assertIsNotNone(match, f"{key} regex did not match")
+            self.assertTrue(match.group(1), f"{key} must have a non-empty value")
+
+    def test_flow_toml_parses_with_internal_parser(self) -> None:
+        """Validate the new metadata block round-trips through flow's own TOML parser."""
+        # Import flow.py's parser directly so we cover the same code path the CLI uses.
+        import importlib.util
+        flow_module_path = REPO_ROOT / "cli" / "flow.py"
+        spec = importlib.util.spec_from_file_location("flow_cli", flow_module_path)
+        flow_cli = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        assert spec and spec.loader
+        spec.loader.exec_module(flow_cli)  # type: ignore[union-attr]
+        data = flow_cli.read_toml(REPO_ROOT / "scaffolds" / "default" / "flow.toml")
+        block = data.get("standards", {}).get("git-commits")
+        self.assertIsInstance(block, dict)
+        self.assertEqual(block.get("upstream_version"), "v1.0.0")
+        self.assertEqual(block.get("upstream_license"), "MIT")
+        self.assertEqual(
+            block.get("vendored_path"),
+            "standards/vendor/conventional-commits-1.0.0.md",
+        )
+
+    def test_agents_and_commands_cite_git_commits_standard(self) -> None:
+        """The four touchpoints must reference the standard so Claude actually sees it."""
+        scaffolds = REPO_ROOT / "scaffolds" / "default"
+        citing_paths = [
+            scaffolds / "agents" / "lead-developer.md",
+            scaffolds / "agents" / "quality-reviewer.md",
+            scaffolds / "commands" / "flow-implement.md",
+            scaffolds / "commands" / "flow-scout.md",
+        ]
+        for path in citing_paths:
+            text = path.read_text()
+            self.assertIn(
+                "standards/git-commits.md",
+                text,
+                f"{path.relative_to(REPO_ROOT)} must cite standards/git-commits.md",
+            )
+
+    def test_refresh_script_dry_run_resolves_upstream(self) -> None:
+        """Smoke-test that the maintainer refresh script is callable and reaches upstream.
+
+        Skipped automatically when offline or git/network is unavailable.
+        """
+        script = REPO_ROOT / "scripts" / "refresh-conventional-commits.py"
+        self.assertTrue(script.exists())
+        result = subprocess.run(
+            [sys.executable, str(script), "--dry-run"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_clean_env(),
+            timeout=60,
+        )
+        if result.returncode != 0:
+            # Network failures shouldn't break the test suite — skip rather than fail.
+            if "could not resolve host" in (result.stderr.lower() + result.stdout.lower()):
+                self.skipTest("offline: cannot reach upstream")
+            self.fail(
+                f"refresh script exited {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+            )
+        self.assertIn("upstream:", result.stdout)
+        self.assertIn("resolved SHA:", result.stdout)
+        self.assertIn("dry-run: no files written", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
