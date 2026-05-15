@@ -173,12 +173,71 @@ The current implementation has been smoke-tested for:
 ## Local Install
 
 ```bash
-./install-flow.sh
+./install-flow.sh                # develop mode (default) — symlink to this clone
 flow setup machine
-flow setup user        # installs flow at user level — active in every Claude session
+flow setup user                  # installs flow at user level — active in every Claude session
 ```
 
-`./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and links the framework repo into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates the framework's commands, agents, and hooks into `~/.claude/` and `~/.codex/` so they are available everywhere.
+`./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and either symlinks (develop) or copies (release) the framework into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates the framework's commands, agents, and hooks into `~/.claude/` and `~/.codex/` so they are available everywhere.
+
+## Choosing an Install Mode
+
+`install-flow.sh` supports two install modes that share the same path contract (`~/.flow/source/`):
+
+| Mode | Storage | When to use |
+|---|---|---|
+| **Develop** (`--develop`, default) | `~/.flow/source` → symlink to this checkout | Maintainers and contributors editing framework content. Edits in the clone go live immediately. |
+| **Release** (`--release`) | `~/.flow/source/` → real directory of copied content | Consumers who want flow installed without keeping a clone around. The clone is disposable after install. Use `flow update` to roll forward to newer tags. |
+
+The mode and installed version are stamped into `~/.flow/config.toml` and reported by `flow doctor`.
+
+### Develop install (current behavior)
+
+```bash
+cd ~/personal/flow
+./install-flow.sh                # or: ./install-flow.sh --develop
+flow setup machine
+flow setup user
+```
+
+`~/.flow/source` is a symlink to your clone. Editing files in the clone immediately changes flow's behavior. Pull-and-resync to roll forward:
+
+```bash
+git -C ~/personal/flow pull --ff-only
+flow sync claude --user
+flow sync codex --user
+```
+
+### Release install
+
+```bash
+cd /tmp/flow-clone
+git clone https://github.com/andyconley/flow.git .
+./install-flow.sh --release
+flow setup machine
+flow setup user
+cd / && rm -rf /tmp/flow-clone   # clone is disposable now
+flow doctor                       # confirms release mode and installed version
+```
+
+`~/.flow/source/` is a real directory; the clone is no longer required. Roll forward to a newer tagged release:
+
+```bash
+flow update --check               # report current vs latest tag
+flow update                       # apply: stage, atomic swap, update config
+flow update --resync              # apply + re-run `flow sync claude --user` / `flow sync codex --user`
+```
+
+`flow update` stages the new content first, validates it, then atomically renames it into place — a failed update can never leave a half-installed framework.
+
+### Converting between modes
+
+```bash
+flow install --release                          # symlink → copied directory (clone preserved)
+flow install --develop ~/personal/flow          # copied directory → symlink to clone
+```
+
+`flow doctor` reports the current install mode, version (release) or symlink target (develop), and how to check for updates.
 
 ## Typical Flow
 
@@ -218,7 +277,6 @@ The framework is now usable, but it is not finished. Main gaps:
 - no richer non-Claude runtime surface yet beyond Codex skill generation
 - no runtime-specific agent adapter layer beyond Claude verbatim sync
 - no project-specific migration helpers beyond the generic framework lifecycle
-- no packaged release/versioning workflow yet beyond the branch structure in git
 
 ## Current Recommendation
 
