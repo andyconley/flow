@@ -8,6 +8,39 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 No unreleased changes.
 
+## [0.4.4] — 2026-05-15
+
+### Added
+
+- **Portable bootstrap installer** at the repo root: `install.sh`. Single-command install for consumers — `curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash` queries the configured flow remote for the latest semver tag, shallow-clones it to a temporary directory, delegates to `install-flow.sh --release`, and cleans up. No prior cloning required. Resolves backlog P5.
+- `FLOW_REPO_URL` env var override for `install.sh` — primarily for tests; lets the installer target a non-default remote.
+- `FLOW_VERSION_OVERRIDE` env var support in `install-flow.sh` — lets a caller (the bootstrap installer) pin the exact version label, preserving caller intent even when the cloned commit has multiple tags referencing it.
+
+### Changed
+
+- README "Quick Install (recommended for consumers)" section added at the top of the install documentation. The existing "Local Install" section is now scoped to maintainer/contributor flow.
+
+### Resolved from backlog
+
+- **P5: Single-command portable installer for consumers** — adoption barrier removed.
+
+## [0.4.3] — 2026-05-15
+
+### Added
+
+- **`scripts/regenerate-flow-help.py`** generates the three `flow-help.md` tables (slash commands, CLI commands, agents) from `flow.toml`. Supports `--check` for drift detection — exits 1 with a unified diff if regeneration would change anything.
+- `summary` field on each `[[claude.commands]]` and `[[claude.agents]]` entry — the short label rendered in the flow-help tables (distinct from the longer `description` used for skill/agent metadata).
+- `[[help.cli_commands]]` array in `flow.toml` — `invocation` + `summary` per CLI command, used to build the CLI-commands table.
+
+### Changed
+
+- `scaffolds/default/commands/flow-help.md` now uses HTML-comment markers around the three generated tables. Hand-editing the tables is no longer supported — edit `flow.toml` and re-run the generator. The phase machine diagram, agent-invocation prose, architecture section, and verification checklist remain hand-maintained.
+- `[[claude.commands]]` in `flow.toml` reordered into workflow-narrative sequence (boot → scout → solution → plan → implement → review → archive → resume → status → init-project → help) so registration order matches rendered help-table order.
+
+### Resolved from backlog
+
+- **P6: flow-help.md drift from CLI/agent surfaces** — single source of truth wired up; new test catches forgotten regeneration at PR/CI time.
+
 ## [0.4.2] — 2026-05-15
 
 ### Fixed
@@ -50,7 +83,9 @@ No unreleased changes.
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/andyconley/flow/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/andyconley/flow/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/andyconley/flow/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/andyconley/flow/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/andyconley/flow/releases/tag/v0.4.0

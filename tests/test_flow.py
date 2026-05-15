@@ -11,6 +11,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_CLI = REPO_ROOT / "cli" / "flow.py"
 INSTALL_SCRIPT = REPO_ROOT / "install-flow.sh"
+BOOTSTRAP_INSTALL_SCRIPT = REPO_ROOT / "install.sh"
 
 
 def _clean_env(home: Path | None = None) -> dict[str, str]:
@@ -585,6 +586,71 @@ class FlowCliTests(unittest.TestCase):
                 text,
                 f"{path.relative_to(REPO_ROOT)} must cite standards/git-commits.md",
             )
+
+    def test_bootstrap_installer_installs_latest_tag_from_remote(self) -> None:
+        """End-to-end test of the portable curl-able installer.
+
+        Builds a fake bare remote with two tags (v0.1.0, v0.2.0), points
+        `install.sh` at it via FLOW_REPO_URL, and verifies it picks v0.2.0
+        (highest semver) and produces a working release install.
+        """
+        fake_home = self._new_fake_home()
+        remote = self.make_fake_remote_with_tags(["v0.1.0", "v0.2.0"])
+
+        env = _clean_env(fake_home)
+        env["FLOW_REPO_URL"] = f"file://{remote}"
+
+        result = subprocess.run(
+            ["bash", str(BOOTSTRAP_INSTALL_SCRIPT)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            self.fail(
+                f"install.sh failed with exit {result.returncode}\n"
+                f"stdout:\n{result.stdout}\n"
+                f"stderr:\n{result.stderr}"
+            )
+
+        # Bootstrap should have picked the higher semver tag.
+        self.assertIn("latest release: v0.2.0", result.stdout)
+
+        # Release-mode install must be in place.
+        source = fake_home / ".flow" / "source"
+        self.assertTrue(source.is_dir())
+        self.assertFalse(source.is_symlink(), "bootstrap install must produce a real directory, not a symlink")
+        self.assertTrue((source / "cli" / "flow.py").is_file())
+        self.assertTrue((source / "scaffolds" / "default" / "flow.toml").is_file())
+
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('mode = "release"', config)
+        self.assertIn('version = "v0.2.0"', config)
+
+        # Launcher placed on PATH.
+        self.assertTrue((fake_home / ".local" / "bin" / "flow").is_file())
+
+    def test_bootstrap_installer_errors_when_no_semver_tags_exist(self) -> None:
+        """install.sh must fail loudly if the remote has no semver tags."""
+        fake_home = self._new_fake_home()
+        # Build a fake remote with a non-semver tag so the strict regex rejects it.
+        remote = self.make_fake_remote_with_tags(["not-a-version"])
+
+        env = _clean_env(fake_home)
+        env["FLOW_REPO_URL"] = f"file://{remote}"
+
+        result = subprocess.run(
+            ["bash", str(BOOTSTRAP_INSTALL_SCRIPT)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            timeout=60,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no semver tags", result.stderr + result.stdout)
 
     def test_regenerate_flow_help_check_is_clean(self) -> None:
         """Drift test for flow-help.md.

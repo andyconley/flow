@@ -171,9 +171,23 @@ The current implementation has been smoke-tested for:
 - missing-file restoration in `flow refresh project`
 - automated CLI tests for setup, sync, and drift behavior
 
-## Local Install
+## Quick Install (recommended for consumers)
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash
+flow setup machine
+flow setup user
+```
+
+That single command queries the flow remote for the latest tagged release, shallow-clones it to a temporary directory, installs the framework into `~/.flow/source/` in release mode, then cleans up. After it runs, you can throw the temp clone away — the install is self-contained, and `flow update` rolls it forward to newer tagged releases later.
+
+## Local Install (for maintainers and contributors)
+
+If you want to edit framework content yourself, clone the repo and use the maintainer flow:
+
+```bash
+git clone https://github.com/andyconley/flow.git ~/personal/flow
+cd ~/personal/flow
 ./install-flow.sh                # develop mode (default) — symlink to this clone
 flow setup machine
 flow setup user                  # installs flow at user level — active in every Claude session

@@ -55,7 +55,13 @@ rm -rf "${FLOW_HOME}/framework" "${SOURCE_DIR}"
 installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 if [[ "${MODE}" == "release" ]]; then
-  if version="$(git -C "${ROOT_DIR}" describe --tags --exact-match HEAD 2>/dev/null)"; then
+  # FLOW_VERSION_OVERRIDE lets a caller (e.g., the bootstrap install.sh)
+  # pin the exact version label, preserving caller intent when the checkout
+  # has multiple tags at HEAD or when version inference would otherwise be
+  # ambiguous.
+  if [[ -n "${FLOW_VERSION_OVERRIDE:-}" ]]; then
+    version="${FLOW_VERSION_OVERRIDE}"
+  elif version="$(git -C "${ROOT_DIR}" describe --tags --exact-match HEAD 2>/dev/null)"; then
     :
   elif base_tag="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null)"; then
     sha="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
