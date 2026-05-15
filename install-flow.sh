@@ -77,17 +77,20 @@ if [[ "${MODE}" == "release" ]]; then
   fi
 
   mkdir -p "${SOURCE_DIR}"
-  # Copy roster: cli/, scaffolds/, hooks/, scripts/, docs/, README.md.
+  # Copy roster: cli/, scaffolds/, hooks/, scripts/, docs/, README.md, CHANGELOG.md.
   # Excluded from the runtime install: .git/, tests/, install-flow.sh itself
-  # (the bootstrap lives in the clone; `flow update` is the post-install path).
+  # (the bootstrap lives in the clone; `flow update` is the post-install path),
+  # install.sh (same — bootstrap path).
   for item in cli scaffolds hooks scripts docs; do
     if [[ -d "${ROOT_DIR}/${item}" ]]; then
       cp -R "${ROOT_DIR}/${item}" "${SOURCE_DIR}/${item}"
     fi
   done
-  if [[ -f "${ROOT_DIR}/README.md" ]]; then
-    cp "${ROOT_DIR}/README.md" "${SOURCE_DIR}/README.md"
-  fi
+  for file in README.md CHANGELOG.md; do
+    if [[ -f "${ROOT_DIR}/${file}" ]]; then
+      cp "${ROOT_DIR}/${file}" "${SOURCE_DIR}/${file}"
+    fi
+  done
   # Drop dev-only artifacts that may have ridden along with cp -R.
   find "${SOURCE_DIR}" -type d \( -name __pycache__ -o -name .claude -o -name .codex \) -prune -exec rm -rf {} +
   find "${SOURCE_DIR}" -type f \( -name "*.pyc" -o -name ".DS_Store" \) -delete

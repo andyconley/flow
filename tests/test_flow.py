@@ -315,6 +315,11 @@ class FlowCliTests(unittest.TestCase):
         # Release roster present
         self.assertTrue((source / "cli" / "flow.py").is_file())
         self.assertTrue((source / "scaffolds" / "default" / "flow.toml").is_file())
+        self.assertTrue((source / "README.md").is_file())
+        self.assertTrue(
+            (source / "CHANGELOG.md").is_file(),
+            "CHANGELOG.md must ship in release installs so users can read their version history offline",
+        )
         # Excluded paths absent
         self.assertFalse((source / ".git").exists(), "release copy must exclude .git/")
         self.assertFalse((source / "tests").exists(), "release copy must exclude tests/")

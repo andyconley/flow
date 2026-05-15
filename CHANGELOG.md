@@ -8,6 +8,12 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 No unreleased changes.
 
+## [0.4.5] — 2026-05-15
+
+### Changed
+
+- **`CHANGELOG.md` now ships in the release install roster.** Previously, `flow install --release`, `flow update`, and the bootstrap `install.sh` copied `README.md` but not `CHANGELOG.md` — release-mode users couldn't read their installed framework's version history without going to GitHub. Both `install-flow.sh`'s copy loop and `cli/flow.py`'s `RELEASE_COPY_FILES` updated. Existing release-roster test extended to assert `CHANGELOG.md` lands.
+
 ## [0.4.4] — 2026-05-15
 
 ### Added
@@ -83,7 +89,8 @@ No unreleased changes.
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/andyconley/flow/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/andyconley/flow/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/andyconley/flow/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/andyconley/flow/compare/v0.4.1...v0.4.2
