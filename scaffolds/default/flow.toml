@@ -52,6 +52,12 @@ source = "commands/flow-boot.md"
 description = "Orients to the project before planning or implementation work. Use when starting a session, resuming interrupted work, or when context feels stale."
 
 [[claude.commands]]
+name = "flow-solution"
+source = "commands/flow-solution.md"
+description = "Turns approved requirements into a recommended technical approach. Optional pre-plan step when multiple approaches exist, architectural decisions are needed, or work needs to be broken into chunks before planning."
+argument_hint = "[focus]"
+
+[[claude.commands]]
 name = "flow-plan"
 source = "commands/flow-plan.md"
 description = "Shapes work before implementation. Use when turning an idea, bug, or request into an implementation-ready plan."
@@ -105,6 +111,10 @@ description = "Walks the user through filling in `.flow/PROJECT.md` with inferre
 [[claude.agents]]
 name = "architect"
 source = "agents/architect.md"
+
+[[claude.agents]]
+name = "solution-architect"
+source = "agents/solution-architect.md"
 
 [[claude.agents]]
 name = "business-analyst"
@@ -168,6 +178,12 @@ script = "flow-managed-write-reminder.sh"
 name = "flow-boot"
 source = "commands/flow-boot.md"
 description = "Orients to the project before planning or implementation work. Use when starting a session, resuming interrupted work, or when context feels stale."
+
+[[codex.commands]]
+name = "flow-solution"
+source = "commands/flow-solution.md"
+description = "Turns approved requirements into a recommended technical approach. Optional pre-plan step when multiple approaches exist, architectural decisions are needed, or work needs to be broken into chunks before planning."
+argument_hint = "[focus]"
 
 [[codex.commands]]
 name = "flow-plan"
