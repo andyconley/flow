@@ -379,6 +379,32 @@ class FlowCliTests(unittest.TestCase):
         # Clone preserved
         self.assertTrue((REPO_ROOT / "cli" / "flow.py").is_file())
 
+    def test_install_release_cleans_up_source_old_symlink_leftover(self) -> None:
+        """Regression test for the shutil.rmtree-doesn't-delete-symlinks bug.
+
+        When converting develop → release, the swap renames the develop-mode
+        symlink (~/.flow/source → clone) to ~/.flow/source.old. The post-swap
+        cleanup must actually delete that symlink — `shutil.rmtree` with
+        ignore_errors=True silently no-ops on symlinks, leaving a leftover
+        that causes the next `flow update` to crash with ENOTDIR.
+        """
+        fake_home = self.do_install_develop()
+        self.assert_ok(self.run_flow("install", "--release"))
+        source_old = fake_home / ".flow" / "source.old"
+        # If the symlink leaked, source_old.is_symlink() returns True and
+        # source_old.exists() follows it to the clone and is also True. Both
+        # must be False after the conversion cleanup.
+        self.assertFalse(
+            source_old.is_symlink(),
+            f"{source_old} symlink was leaked; "
+            "shutil.rmtree(ignore_errors=True) silently fails to delete symlinks — "
+            "must use _remove_path or os.unlink for symlink-typed entries",
+        )
+        self.assertFalse(
+            source_old.exists(),
+            f"{source_old} must not exist after the develop→release conversion cleanup",
+        )
+
     def test_install_command_develop_converts_from_release(self) -> None:
         fake_home = self.do_install_release()
         source = fake_home / ".flow" / "source"

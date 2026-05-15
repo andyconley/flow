@@ -777,6 +777,34 @@ def _stage_path(suffix: str) -> Path:
     return FLOW_HOME / f"source.{suffix}"
 
 
+def _remove_path(path: Path) -> None:
+    """Best-effort removal of any path entry: symlink, file, or directory.
+
+    `shutil.rmtree(..., ignore_errors=True)` silently no-ops on symlinks (even
+    symlinks to directories) — it refuses to follow them by design. That meant
+    stale `source.old` symlinks left over from `flow install --release` (where
+    the original develop-mode symlink got renamed aside) were never cleaned up,
+    and the next `flow update` crashed with ENOTDIR when trying to rename
+    `source` over the leftover symlink. This helper routes symlinks and
+    regular files through `os.unlink` and only uses `shutil.rmtree` for real
+    directories.
+    """
+    if path.is_symlink():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        return
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+        return
+    if path.exists():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
 def _validate_staging(staging: Path) -> str | None:
     """Return None when staging is well-formed, else a human-readable reason."""
     cli_entry = staging / "cli" / "flow.py"
@@ -796,8 +824,8 @@ def _swap_source_with_staging(staging: Path) -> str | None:
     left without an install.
     """
     old_dir = _stage_path("old")
-    if old_dir.exists():
-        shutil.rmtree(old_dir, ignore_errors=True)
+    # Symlink-aware cleanup — shutil.rmtree silently no-ops on symlinks (see _remove_path).
+    _remove_path(old_dir)
     moved_existing = False
     if SOURCE_DIR.exists() or SOURCE_DIR.is_symlink():
         try:
@@ -818,7 +846,9 @@ def _swap_source_with_staging(staging: Path) -> str | None:
                 )
         return f"rename failed: {err}"
     if moved_existing:
-        shutil.rmtree(old_dir, ignore_errors=True)
+        # The renamed-aside entry may have been a symlink (develop→release case) — use
+        # the symlink-aware helper so it actually gets cleaned up rather than silently leaked.
+        _remove_path(old_dir)
     return None
 
 
@@ -874,18 +904,17 @@ def _convert_to_release() -> int:
     remote = _resolve_remote_from_clone(clone)
 
     staging = _stage_path("new")
-    if staging.exists():
-        shutil.rmtree(staging, ignore_errors=True)
+    _remove_path(staging)
     try:
         _populate_release_dir(clone, staging)
     except Exception as err:
-        shutil.rmtree(staging, ignore_errors=True)
+        _remove_path(staging)
         print(f"failed to populate staging: {err}")
         return 1
 
     invalid = _validate_staging(staging)
     if invalid:
-        shutil.rmtree(staging, ignore_errors=True)
+        _remove_path(staging)
         print(invalid)
         return 1
 
@@ -1026,18 +1055,17 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
             return 1
 
         staging = _stage_path("new")
-        if staging.exists():
-            shutil.rmtree(staging, ignore_errors=True)
+        _remove_path(staging)
         try:
             _populate_release_dir(clone_dir, staging)
         except Exception as err:
-            shutil.rmtree(staging, ignore_errors=True)
+            _remove_path(staging)
             print(f"failed to populate staging: {err}")
             return 1
 
         invalid = _validate_staging(staging)
         if invalid:
-            shutil.rmtree(staging, ignore_errors=True)
+            _remove_path(staging)
             print(invalid)
             return 1
 
