@@ -8,6 +8,16 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 No unreleased changes.
 
+## [0.5.0] — 2026-05-15
+
+### Added
+
+- **`flow update --check` now previews the CHANGELOG section for the available version.** After printing the version comparison, the command fetches `CHANGELOG.md` from the remote at the new tag (via a sparse partial-clone — `--filter=blob:none --no-checkout --sparse` + `sparse-checkout set CHANGELOG.md`, so only the one file is actually downloaded) and prints the `## [<version>]` section. Users now know *what* they'd be updating to, not just that an update exists. Failure to fetch or parse falls back silently — version comparison remains the primary signal.
+
+### Why this is a minor bump (0.5.0 rather than 0.4.6)
+
+The patch trajectory (0.4.x) was about install/update mechanics — getting the scaffolding right. This is the first commit that adds a *new behavior* to the CLI rather than fixing or refining existing behavior. `flow update --check` previously answered "is there an update?"; it now also answers "what's in it?". Different question, different value, hence the minor bump.
+
 ## [0.4.5] — 2026-05-15
 
 ### Changed
@@ -89,7 +99,8 @@ No unreleased changes.
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/andyconley/flow/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/andyconley/flow/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/andyconley/flow/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/andyconley/flow/compare/v0.4.2...v0.4.3

@@ -773,6 +773,64 @@ def _latest_remote_tag(remote: str) -> tuple[str, str] | None:
     return candidates[-1]
 
 
+def _extract_changelog_section(text: str, version: str) -> str | None:
+    """Return the section for `## [<version>]` from a Keep-a-Changelog document.
+
+    Matches the section header including version (with or without `v` prefix)
+    and returns the header line plus the body up to the next `## ` or EOF.
+    Returns None when the section isn't present.
+    """
+    needle = version.lstrip("v")
+    pattern = re.compile(
+        rf"^## \[{re.escape(needle)}\][^\n]*\n.*?(?=^## |\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    match = pattern.search(text)
+    if not match:
+        return None
+    return match.group(0).rstrip()
+
+
+def _fetch_changelog_at(remote: str, tag: str) -> str | None:
+    """Fetch CHANGELOG.md from `remote` at `tag`. Returns the file's text, or None.
+
+    Uses git's partial-clone + sparse-checkout to avoid downloading the whole
+    repo just to read one file. Best effort — returns None on any failure
+    (missing file, network error, unsupported git version, etc.) so the caller
+    can fall back gracefully.
+    """
+    with tempfile.TemporaryDirectory(prefix="flow-changelog-") as tmp_str:
+        clone_dir = Path(tmp_str) / "clone"
+        # --filter=blob:none + --no-checkout + --sparse downloads metadata only;
+        # we then check out just CHANGELOG.md.
+        rc, _out, _err = _run_git(
+            "clone",
+            "--depth", "1",
+            "--branch", tag,
+            "--filter=blob:none",
+            "--no-checkout",
+            "--sparse",
+            "--quiet",
+            remote,
+            str(clone_dir),
+        )
+        if rc != 0:
+            return None
+        rc, _out, _err = _run_git("sparse-checkout", "set", "CHANGELOG.md", cwd=clone_dir)
+        if rc != 0:
+            return None
+        rc, _out, _err = _run_git("checkout", "--quiet", cwd=clone_dir)
+        if rc != 0:
+            return None
+        changelog_path = clone_dir / "CHANGELOG.md"
+        if not changelog_path.is_file():
+            return None
+        try:
+            return changelog_path.read_text()
+        except OSError:
+            return None
+
+
 def _stage_path(suffix: str) -> Path:
     return FLOW_HOME / f"source.{suffix}"
 
@@ -1022,6 +1080,16 @@ def update_command(check: bool, resync: bool, remote_override: str | None) -> in
 
     if check:
         print(f"update available: {current_version} -> {latest_tag}")
+        # Best-effort preview of what's in the available version: fetch
+        # CHANGELOG.md from the remote at `latest_tag` and print the section
+        # for that version. Failure is silent — the version comparison is the
+        # primary signal and shouldn't be blocked by changelog issues.
+        changelog_text = _fetch_changelog_at(remote, latest_tag)
+        if changelog_text:
+            section = _extract_changelog_section(changelog_text, latest_tag)
+            if section:
+                print()
+                print(section)
         return 0
 
     apply_rc = _apply_release_update(remote, latest_tag, install)

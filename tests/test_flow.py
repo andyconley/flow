@@ -461,6 +461,31 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("v9.9.9", result.stdout)
         self.assertIn("update available", result.stdout)
 
+    def test_update_check_shows_changelog_section_for_new_version(self) -> None:
+        """flow update --check fetches the remote's CHANGELOG.md at the latest
+        tag and prints the section for that version, so the user knows what
+        they'd be getting.
+        """
+        fake_home = self.do_install_release()
+        # Pin the config to an older version so the fake remote's v0.4.5 looks
+        # like an available update. CHANGELOG.md in REPO_ROOT has a v0.4.5
+        # entry (this commit added it), so the fake remote will too.
+        config_path = fake_home / ".flow" / "config.toml"
+        import re as _re
+        text = config_path.read_text()
+        text = _re.sub(r'version = "[^"]*"', 'version = "v0.4.0"', text)
+        config_path.write_text(text)
+        remote = self.make_fake_remote_with_tags(["v0.4.5"])
+
+        result = self.run_flow("update", "--check", "--remote", f"file://{remote}")
+        self.assert_ok(result)
+        self.assertIn("update available: v0.4.0 -> v0.4.5", result.stdout)
+        # The CHANGELOG section header for v0.4.5 should appear in the output.
+        self.assertIn("## [0.4.5]", result.stdout)
+        # And content from that section should appear too — the v0.4.5 entry
+        # is the "CHANGELOG.md ships in the release install roster" change.
+        self.assertIn("release install roster", result.stdout.lower())
+
     def test_update_check_already_current_is_noop(self) -> None:
         fake_home = self.do_install_release()
         # Pin the config's version to one that matches the fake remote's only tag.
