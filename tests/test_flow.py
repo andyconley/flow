@@ -586,6 +586,32 @@ class FlowCliTests(unittest.TestCase):
                 f"{path.relative_to(REPO_ROOT)} must cite standards/git-commits.md",
             )
 
+    def test_regenerate_flow_help_check_is_clean(self) -> None:
+        """Drift test for flow-help.md.
+
+        Asserts that `scripts/regenerate-flow-help.py --check` exits clean —
+        i.e., the generated tables in flow-help.md match what flow.toml
+        currently says. Catches the case where someone adds/edits a command,
+        agent, or CLI summary in flow.toml without re-running the generator.
+        Fast, no network, no fake home.
+        """
+        script = REPO_ROOT / "scripts" / "regenerate-flow-help.py"
+        self.assertTrue(script.exists(), f"missing {script}")
+        result = subprocess.run(
+            [sys.executable, str(script), "--check"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_clean_env(),
+        )
+        if result.returncode != 0:
+            self.fail(
+                "flow-help.md is out of sync with flow.toml.\n"
+                "run `python3 scripts/regenerate-flow-help.py` to regenerate.\n\n"
+                f"stdout:\n{result.stdout}\n"
+                f"stderr:\n{result.stderr}"
+            )
+
     def test_refresh_script_dry_run_resolves_upstream(self) -> None:
         """Smoke-test that the maintainer refresh script is callable and reaches upstream.
 

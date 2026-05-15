@@ -63,6 +63,7 @@ Flow has **two distinct command surfaces** — invoke each differently:
 
 These are *workflow* commands — the things you do during work:
 
+<!-- generated:slash-commands-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Command | Use when |
 |---|---|
 | /flow-boot | Starting a session, resuming, or context feels stale |
@@ -73,14 +74,18 @@ These are *workflow* commands — the things you do during work:
 | /flow-review | Structured review after implementation |
 | /flow-archive | Close a run; STATE.md → transient state; durable decisions → auto-memory |
 | /flow-resume | Pick up interrupted work |
-| /flow-status | "Where are we, what's next?" |
+| /flow-status | Where are we, what's next? |
 | /flow-init-project | Walk through filling in `.flow/PROJECT.md` (right after `flow setup project`) |
 | /flow-help | This help output |
+<!-- generated:slash-commands-table:end -->
+
+The table above is derived from `[[claude.commands]]` `summary` fields in `flow.toml`.
 
 ### CLI commands (run from the shell, or ask Claude to run them)
 
 These are *lifecycle* commands — the things you do to install, sync, or check flow itself. Invoke from a terminal as `flow XXX YYY` — or just ask Claude (it has Bash). They are NOT slash commands and won't work as `/flow XXX`.
 
+<!-- generated:cli-commands-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Command | Use when |
 |---|---|
 | `flow help` | This overview, but rendered at the shell (same content as `/flow-help`) |
@@ -90,15 +95,19 @@ These are *lifecycle* commands — the things you do to install, sync, or check 
 | `flow refresh project` | Pull missing framework files into an existing project overlay |
 | `flow sync claude [--user] [--check]` | Generate or check Claude adapters |
 | `flow sync codex [--user] [--check]` | Generate or check Codex adapters |
-| `flow install --release` / `flow install --develop <path>` | Convert the local install between modes (symlink ↔ copy) |
+| `flow install --release / flow install --develop <path>` | Convert the local install between modes (symlink ↔ copy) |
 | `flow update [--check] [--resync]` | Roll a release install forward to the latest tagged release |
 | `flow bootstrap` | Validate the current repo's `.flow/` structure |
 | `flow doctor` | Report machine, install, user-level, and project-level state |
+<!-- generated:cli-commands-table:end -->
+
+The table above is derived from `[[help.cli_commands]]` in `flow.toml`.
 
 ## Agents
 
 13 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (solution, plan, implement, review, archive) invoke a **core trio + conditional specialists** pattern — core agents always engage, conditional agents activate when their concern applies.
 
+<!-- generated:agents-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Agent | Role |
 |---|---|
 | architect | Boundaries, integrations, ADR decisions |
@@ -114,6 +123,9 @@ These are *lifecycle* commands — the things you do to install, sync, or check 
 | tech-writer | Durable summary, memory wording, handback |
 | test-engineer | Coverage strategy, validation depth |
 | ux-specialist | Interaction states, accessibility |
+<!-- generated:agents-table:end -->
+
+The table above is derived from `[[claude.agents]]` `summary` fields in `flow.toml` (agents are sorted by `name`).
 
 ### How agents get invoked
 
