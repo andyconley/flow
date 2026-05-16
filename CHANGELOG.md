@@ -8,6 +8,20 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 No unreleased changes.
 
+## [0.6.1] — 2026-05-15
+
+### Changed
+
+- **Release roster is now a blacklist, not a whitelist** (backlog P8 fix). Previously `install-flow.sh` and `cli/flow.py`'s `_populate_release_dir` enumerated specific dirs and files to include (`RELEASE_COPY_DIRS = ("cli", "scaffolds", ...)`, `RELEASE_COPY_FILES = ("README.md", "CHANGELOG.md")`). When a new top-level item was added in version B and a user updated from version A directly to version C, A's whitelist didn't know about the new item, and it was silently omitted from the release — observed concretely when v0.4.5 added `CHANGELOG.md`. The roster now copies every non-dotfile top-level entry **except** the explicit excludes (`tests/`, `install-flow.sh`, `install.sh`, plus the existing recursive-cleanup list for `__pycache__`/`.claude`/`.codex`/`.git`/`*.pyc`/`.DS_Store`). New top-level files added in future versions are picked up automatically by older clients doing the swap.
+
+### Why this is 0.6.1 (patch)
+
+Bug fix. No new behavior visible to existing users (the same set of files lands in a release install today as before this commit — the difference matters for *future* additions, where the blacklist approach silently does the right thing).
+
+### Resolved from backlog
+
+- **P8: Two-phase update for roster changes** — addressed by removing the need for a "two-phase update" entirely: the new blacklist-based roster is forward-compatible, so old clients doing the swap include any new top-level files from the new version without knowing what they are.
+
 ## [0.6.0] — 2026-05-15
 
 ### Added
@@ -124,7 +138,8 @@ The patch trajectory (0.4.x) was about install/update mechanics — getting the 
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/andyconley/flow/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/andyconley/flow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/andyconley/flow/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/andyconley/flow/compare/v0.4.4...v0.4.5

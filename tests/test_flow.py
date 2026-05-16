@@ -524,6 +524,43 @@ class FlowCliTests(unittest.TestCase):
         self.assertFalse((source / "tests").exists(), "release copy must exclude tests/")
         self.assertFalse((source / "install-flow.sh").exists(), "release copy must exclude install-flow.sh")
 
+    def test_release_install_includes_arbitrary_new_top_level_file(self) -> None:
+        """Forward-compatibility (backlog P8): the release roster uses a
+        blacklist, so a new top-level file added to the framework in a future
+        version is automatically included in releases produced by today's
+        code — no roster-update required in older clients.
+        """
+        # Build a temp copy of REPO_ROOT with an extra marker file we know is
+        # NOT in the current framework. Install from that.
+        temp_repo = self.repo / "marker-repo"
+        shutil.copytree(
+            REPO_ROOT,
+            temp_repo,
+            ignore=shutil.ignore_patterns(
+                ".git", "*.pyc", "__pycache__", "fake_home", "fake-remote*", "marker-repo"
+            ),
+        )
+        (temp_repo / "FUTURE_FILE.md").write_text("Pretend-future top-level file.\n")
+
+        fake_home = self._new_fake_home()
+        result = subprocess.run(
+            ["bash", str(temp_repo / "install-flow.sh"), "--release"],
+            cwd=str(temp_repo),
+            text=True,
+            capture_output=True,
+            env=_clean_env(fake_home),
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"install failed: stdout={result.stdout}\nstderr={result.stderr}",
+        )
+        # The arbitrary new top-level file landed in the release install.
+        self.assertTrue(
+            (fake_home / ".flow" / "source" / "FUTURE_FILE.md").is_file(),
+            "blacklist-based release roster should include arbitrary new top-level files",
+        )
+
     def test_install_flow_sh_release_stamps_mode_and_version(self) -> None:
         fake_home = self.do_install_release()
         config = (fake_home / ".flow" / "config.toml").read_text()

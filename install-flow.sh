@@ -77,22 +77,31 @@ if [[ "${MODE}" == "release" ]]; then
   fi
 
   mkdir -p "${SOURCE_DIR}"
-  # Copy roster: cli/, scaffolds/, hooks/, scripts/, docs/, README.md, CHANGELOG.md.
-  # Excluded from the runtime install: .git/, tests/, install-flow.sh itself
-  # (the bootstrap lives in the clone; `flow update` is the post-install path),
-  # install.sh (same — bootstrap path).
-  for item in cli scaffolds hooks scripts docs; do
-    if [[ -d "${ROOT_DIR}/${item}" ]]; then
-      cp -R "${ROOT_DIR}/${item}" "${SOURCE_DIR}/${item}"
-    fi
+  # Blacklist-based release roster (backlog P8 fix). Copy every top-level entry
+  # except dotfiles and the explicit excludes below. New top-level files added
+  # to the framework in future versions are picked up automatically — no
+  # roster-update needed in older clients.
+  #
+  # Excludes:
+  #   tests/              dev-only
+  #   install-flow.sh     bootstrap script — `flow update` is the post-install path
+  #   install.sh          curl-able bootstrap; not part of the runtime
+  #   .git, .DS_Store     dotfiles, excluded by `*` glob default
+  #   __pycache__, *.pyc  pruned recursively after the copy below
+  shopt -s nullglob
+  for entry in "${ROOT_DIR}"/*; do
+    name="$(basename "$entry")"
+    case "$name" in
+      tests|install-flow.sh|install.sh|__pycache__|.claude|.codex)
+        continue
+        ;;
+    esac
+    cp -R "$entry" "${SOURCE_DIR}/$name"
   done
-  for file in README.md CHANGELOG.md; do
-    if [[ -f "${ROOT_DIR}/${file}" ]]; then
-      cp "${ROOT_DIR}/${file}" "${SOURCE_DIR}/${file}"
-    fi
-  done
+  shopt -u nullglob
+
   # Drop dev-only artifacts that may have ridden along with cp -R.
-  find "${SOURCE_DIR}" -type d \( -name __pycache__ -o -name .claude -o -name .codex \) -prune -exec rm -rf {} +
+  find "${SOURCE_DIR}" -type d \( -name __pycache__ -o -name .claude -o -name .codex -o -name .git \) -prune -exec rm -rf {} +
   find "${SOURCE_DIR}" -type f \( -name "*.pyc" -o -name ".DS_Store" \) -delete
 
   cat > "${CONFIG_FILE}" <<TOML

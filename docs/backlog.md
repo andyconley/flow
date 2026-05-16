@@ -27,6 +27,7 @@ The adoption bar is higher for existing repos because they already have:
 - **flow-help.md drift class eliminated** (v0.4.3) — `scripts/regenerate-flow-help.py` derives the three flow-help tables (slash commands, CLI commands, agents) from `flow.toml`. New `summary` fields on commands/agents and `[[help.cli_commands]]` array carry the short labels. Drift-detection test catches forgotten regeneration. Resolves P6.
 - **Portable bootstrap installer** (v0.4.4) — `install.sh` at the repo root, curl-able from `raw.githubusercontent.com`. Single-command install for consumers: queries the configured remote for the latest semver tag, shallow-clones it, runs `install-flow.sh --release`, cleans up. Removes the clone-first adoption barrier. Resolves P5.
 - **User-level overlay at `~/.flow/user/`** (v0.6.0) — personal overrides and additions that survive framework updates. Commands and agents merge at sync time via `merge_user_overlay`; standards and templates follow a runtime resolution convention (project > user > framework, documented in FRAMEWORK.md). `flow doctor` reports overlay state. Resolves P2.
+- **Blacklist-based release roster** (v0.6.1) — `_populate_release_dir` and `install-flow.sh` now copy every non-dotfile top-level entry except an explicit exclude list (`tests/`, `install-flow.sh`, `install.sh`). New top-level files added in future versions are picked up automatically by older clients doing the swap. Resolves P8 by eliminating the need for a "two-phase update."
 
 ## Adoption Readiness Themes
 
@@ -328,26 +329,6 @@ Why it matters:
 
 - Today the agents and standards inherit content from the develop-branch codex-hardening work, not from distilled personal conventions
 - Deferred intentionally until real usage surfaces what's actually wrong vs what just reads oddly on paper
-
-### P8. Two-phase update for roster changes
-
-Status: not started — known limitation
-
-Current:
-
-- `flow update` does the staging/swap using the *currently installed* code's `RELEASE_COPY_DIRS` and `RELEASE_COPY_FILES`
-- When those constants change between versions A and C, and a user updates A → C (skipping the intermediate version B that introduced the change), the new roster isn't applied
-- Observed example: v0.4.5 added `CHANGELOG.md` to `RELEASE_COPY_FILES`. A user at v0.4.4 who updated directly to v0.5.0 had v0.4.4's swap code populate the install — without `CHANGELOG.md`. Manual `cp` was required to heal.
-
-Need:
-
-- After the swap, do a second consistency pass using the *now-installed* code's roster — either by re-exec'ing the new `cli/flow.py`, or by structuring `_populate_release_dir` so it can be invoked from the new install
-- Alternative: explicit `flow doctor --repair` that detects roster mismatches and self-heals
-
-Why it matters:
-
-- Roster constants are part of the install contract; changing them silently across updates is a footgun
-- The fix is small in absolute scope (re-run populate against the new install's own logic) but bigger than a single function — needs a clean handoff point between old-code-doing-the-swap and new-code-finishing-the-install
 
 ### P7. Engagement-discipline pattern duplication
 
