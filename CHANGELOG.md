@@ -8,6 +8,31 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 No unreleased changes.
 
+## [0.6.0] — 2026-05-15
+
+### Added
+
+- **User-level overlay at `~/.flow/user/`** — personal customizations that survive framework updates. Lets you override the framework's built-in commands and agents, *and* add wholly new ones (your own `/flow-jira-status` and friends) without forking. Resolves backlog P2.
+- The overlay mirrors `scaffolds/default/`'s layout:
+  ```
+  ~/.flow/user/flow.toml     — explicit registration of overrides/additions
+  ~/.flow/user/agents/*.md   — overriding or new agents
+  ~/.flow/user/commands/*.md — overriding or new commands
+  ~/.flow/user/standards/*.md — overriding or new standards (runtime-resolved)
+  ~/.flow/user/templates/*.md — overriding or new templates (runtime-resolved)
+  ```
+- **Merge semantics at sync time** (commands + agents): when `flow sync claude --user` (or `--codex`) runs, the framework's `flow.toml` is loaded and the user's `flow.toml` is layered on top. Entries with the same `name` replace the framework entry (override); new names append (addition). Implemented in `merge_user_overlay()` in `cli/flow.py`. The merged manifest drives adapter generation, and the managed manifest records `~/.flow/user/...` paths so origin is auditable.
+- **Runtime resolution convention** (standards + templates): not merged at sync time — referenced by name and resolved at runtime in **most-specific-wins** order: project overlay > user overlay > framework default. Documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates."
+- **`flow doctor` reports user overlay state** — lists the overlay's commands and agents if present, or notes "none" if `~/.flow/user/flow.toml` is absent.
+
+### Why this is a minor bump (0.6.0)
+
+This is the second new behavior added to the CLI after v0.5.0's CHANGELOG preview. It changes what `flow sync --user` does: previously framework-only; now framework + user overlay. Existing installs without `~/.flow/user/flow.toml` see identical behavior (regression test confirms). New behavior is fully additive — no breaking change.
+
+### Resolved from backlog
+
+- **P2: User-level overrides via `~/.flow/user/`** — shipped. Standards/templates left as runtime-resolution convention rather than a new generation pipeline, per the c-lite scope decision.
+
 ## [0.5.0] — 2026-05-15
 
 ### Added
@@ -99,7 +124,8 @@ The patch trajectory (0.4.x) was about install/update mechanics — getting the 
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/andyconley/flow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/andyconley/flow/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/andyconley/flow/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/andyconley/flow/compare/v0.4.3...v0.4.4

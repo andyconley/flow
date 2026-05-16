@@ -12,12 +12,13 @@ This keeps durable workflow content runtime-neutral while supporting runtime-spe
 
 ## Layer Model
 
-`flow` operates across four layers:
+`flow` operates across five layers:
 
 1. **Machine support** at `~/.flow/` — install state, config, the source link or copy
 2. **Framework source** in the `flow` repo (`scaffolds/default/`) — the canonical workflow vocabulary
-3. **User-level install** at `~/.claude/` and `~/.codex/` — generated adapters active in every session
-4. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/` and `<repo>/.codex/` — per-project, opt-in
+3. **User overlay** at `~/.flow/user/` — personal overrides and additions that apply in every Claude session (opt-in)
+4. **User-level install** at `~/.claude/` and `~/.codex/` — generated adapters active in every session (built from framework + user overlay)
+5. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/` and `<repo>/.codex/` — per-project, opt-in
 
 ### `~/.flow/`
 
@@ -25,7 +26,8 @@ The machine-local install home. Contains:
 
 - the framework at `~/.flow/source/` (the path contract — see "Install Modes" below)
 - local config at `~/.flow/config.toml` (includes the `[install]` section: mode, version, installed_at)
-- support directories: `hooks/`, `user/`, `logs/`
+- the user overlay at `~/.flow/user/` (see "User Overlay" below)
+- support directories: `hooks/`, `logs/`
 
 Installation and local execution support, not project truth.
 
@@ -43,6 +45,29 @@ Why a single path contract: everything downstream — `flow sync`, managed manif
 `flow update` rolls forward a release install by staging the new tree, validating it, and atomically swapping it into `~/.flow/source/`. A failed update — at any point before the swap — leaves the existing install untouched. The window between renaming the old install aside and renaming the staging into place is a single syscall pair; failures during the swap attempt rollback.
 
 `flow install --release` / `flow install --develop <path>` converts between modes in place. The clone is never deleted by either direction; the user controls its lifecycle.
+
+#### User Overlay
+
+`~/.flow/user/` is the user's personal customization layer. It mirrors `scaffolds/default/`'s layout:
+
+```text
+~/.flow/user/
+  flow.toml              — explicit registration of overrides/additions
+  agents/<name>.md       — user-authored or overriding agents
+  commands/<name>.md     — user-authored or overriding commands
+  standards/<name>.md    — user-authored or overriding standards (runtime-resolved)
+  templates/<name>.md    — user-authored or overriding templates (runtime-resolved)
+```
+
+How it merges:
+
+- **Commands and agents are merged at sync time** by `merge_user_overlay` in `cli/flow.py`. When `flow sync claude --user` (or `flow sync codex --user`) runs, the framework's `flow.toml` is loaded and the user's `flow.toml` is layered on top:
+  - Entries in the user manifest with the same `name` as a framework entry **replace** it (override).
+  - Entries with a new `name` are **appended** (addition).
+  - The merged manifest drives adapter generation. Generated SKILLs and agent files embed the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.
+- **Standards and templates are *not* merged at sync time** — they're not embedded into adapters; they're referenced by name at runtime. The runtime resolution order is documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates": project overlay > user overlay > framework default.
+
+The user overlay is opt-in. Without `~/.flow/user/flow.toml`, sync behavior is identical to the framework-only baseline. `flow doctor` reports whether the overlay is present and what it declares.
 
 ### Framework Repo (`scaffolds/default/`)
 

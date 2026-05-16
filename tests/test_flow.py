@@ -282,6 +282,205 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("drift detected", result.stdout)
 
+    # ----------------------------------------------------------------------
+    # User overlay (P2) — ~/.flow/user/ merge during user-mode sync
+    # ----------------------------------------------------------------------
+
+    def _write_user_overlay_command(
+        self,
+        fake_home: Path,
+        name: str,
+        body: str,
+        description: str = "user-overlay command description",
+        summary: str = "user overlay summary",
+    ) -> None:
+        """Drop a user-overlay command under ~/.flow/user/ and register it in flow.toml."""
+        overlay_dir = fake_home / ".flow" / "user"
+        commands_dir = overlay_dir / "commands"
+        commands_dir.mkdir(parents=True, exist_ok=True)
+        cmd_file = commands_dir / f"{name}.md"
+        cmd_file.write_text(body)
+
+        manifest = overlay_dir / "flow.toml"
+        # Append the [[claude.commands]] block — minimal TOML the parser
+        # in cli/flow.py accepts (single-line string values).
+        block = (
+            "\n"
+            "[[claude.commands]]\n"
+            f'name = "{name}"\n'
+            f'source = "commands/{name}.md"\n'
+            f'description = "{description}"\n'
+            f'summary = "{summary}"\n'
+        )
+        if manifest.exists():
+            manifest.write_text(manifest.read_text() + block)
+        else:
+            manifest.write_text(block)
+
+    def _write_user_overlay_agent(
+        self,
+        fake_home: Path,
+        name: str,
+        body: str,
+    ) -> None:
+        overlay_dir = fake_home / ".flow" / "user"
+        agents_dir = overlay_dir / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+        (agents_dir / f"{name}.md").write_text(body)
+
+        manifest = overlay_dir / "flow.toml"
+        block = (
+            "\n"
+            "[[claude.agents]]\n"
+            f'name = "{name}"\n'
+            f'source = "agents/{name}.md"\n'
+        )
+        if manifest.exists():
+            manifest.write_text(manifest.read_text() + block)
+        else:
+            manifest.write_text(block)
+
+    def test_user_overlay_overrides_framework_command(self) -> None:
+        """User overlay can replace a framework command's source — the generated
+        SKILL.md should embed the user's body, not the framework's."""
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_command(
+            fake_home,
+            name="flow-plan",
+            body="# flow-plan (USER OVERRIDE)\n\nMy custom plan workflow body.\n",
+            description="user override of flow-plan",
+            summary="user-overridden plan",
+        )
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        skill = fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md"
+        self.assertTrue(skill.exists())
+        content = skill.read_text()
+        self.assertIn("USER OVERRIDE", content)
+        self.assertIn("My custom plan workflow body", content)
+        # Managed manifest should record the user-origin source path.
+        managed = (fake_home / ".claude" / "flow.managed.toml").read_text()
+        self.assertIn("~/.flow/user/commands/flow-plan.md", managed)
+
+    def test_user_overlay_adds_new_command(self) -> None:
+        """User overlay can register a command not in the framework."""
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_command(
+            fake_home,
+            name="flow-jira-status",
+            body="# flow-jira-status\n\nA user-defined command for checking Jira status.\n",
+            description="user-defined Jira status check",
+            summary="check Jira tickets",
+        )
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        skill = fake_home / ".claude" / "skills" / "flow-jira-status" / "SKILL.md"
+        self.assertTrue(skill.exists(), "user-added command must generate a SKILL.md")
+        self.assertIn("user-defined Jira status", skill.read_text())
+
+    def test_user_overlay_overrides_framework_agent(self) -> None:
+        """User overlay can replace a framework agent's content."""
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_agent(
+            fake_home,
+            name="architect",
+            body="---\nname: architect\ndescription: USER OVERRIDE\n---\n\n# Architect (user override)\nBody.\n",
+        )
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        agent = fake_home / ".claude" / "agents" / "architect.md"
+        self.assertTrue(agent.exists())
+        content = agent.read_text()
+        self.assertIn("USER OVERRIDE", content)
+        managed = (fake_home / ".claude" / "flow.managed.toml").read_text()
+        self.assertIn("~/.flow/user/agents/architect.md", managed)
+
+    def test_user_overlay_adds_new_agent(self) -> None:
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_agent(
+            fake_home,
+            name="personal-tutor",
+            body="---\nname: personal-tutor\ndescription: explains things at my level\n---\n\n# Personal Tutor\nBody.\n",
+        )
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        agent = fake_home / ".claude" / "agents" / "personal-tutor.md"
+        self.assertTrue(agent.exists(), "user-added agent must be generated")
+        self.assertIn("Personal Tutor", agent.read_text())
+
+    def test_user_overlay_codex_command_addition(self) -> None:
+        """Codex side also picks up user-overlay commands when registered there."""
+        fake_home = self.use_fake_home()
+        overlay_dir = fake_home / ".flow" / "user"
+        (overlay_dir / "commands").mkdir(parents=True)
+        (overlay_dir / "commands" / "flow-custom-codex.md").write_text("# flow-custom-codex body\n")
+        (overlay_dir / "flow.toml").write_text(
+            "\n[[codex.commands]]\n"
+            'name = "flow-custom-codex"\n'
+            'source = "commands/flow-custom-codex.md"\n'
+            'description = "custom codex skill"\n'
+        )
+
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        skill = fake_home / ".codex" / "skills" / "flow-custom-codex" / "SKILL.md"
+        self.assertTrue(skill.exists())
+        self.assertIn("flow-custom-codex body", skill.read_text())
+
+    def test_user_overlay_absent_means_unchanged_behavior(self) -> None:
+        """Regression guard: without ~/.flow/user/flow.toml, sync output is
+        identical to the pre-user-overlay world."""
+        fake_home = self.use_fake_home()
+        # No overlay manifest written.
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        # All framework adapters should be present.
+        self.assertTrue((fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md").exists())
+        self.assertTrue((fake_home / ".claude" / "agents" / "architect.md").exists())
+
+        # No spurious entries.
+        managed = (fake_home / ".claude" / "flow.managed.toml").read_text()
+        self.assertNotIn("~/.flow/user/", managed)
+
+    def test_user_overlay_invalid_toml_falls_back_gracefully(self) -> None:
+        """A broken ~/.flow/user/flow.toml prints a warning and proceeds with
+        framework-only manifest — sync should still succeed."""
+        fake_home = self.use_fake_home()
+        (fake_home / ".flow" / "user").mkdir(parents=True, exist_ok=True)
+        # Intentionally bad TOML: parse_simple_toml rejects `= 1.5` (no float support).
+        (fake_home / ".flow" / "user" / "flow.toml").write_text(
+            "[[claude.commands]]\nname = invalid syntax here\n"
+        )
+
+        result = self.run_flow("sync", "claude", "--user")
+        self.assert_ok(result)
+        # Framework adapters still generated.
+        self.assertTrue((fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md").exists())
+
+    def test_doctor_reports_user_overlay_when_present(self) -> None:
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_command(
+            fake_home,
+            name="flow-personal",
+            body="# personal\n",
+            description="personal command",
+        )
+
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        self.assertIn("user overlay:", result.stdout)
+        self.assertIn("flow-personal", result.stdout)
+
+    def test_doctor_reports_no_user_overlay_when_absent(self) -> None:
+        fake_home = self.use_fake_home()
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        self.assertIn("user overlay:     none", result.stdout)
+
     def test_doctor_with_user_install_shows_clean_user_state(self) -> None:
         fake_home = self.use_fake_home()
         self.assert_ok(self.run_flow("setup", "user"))

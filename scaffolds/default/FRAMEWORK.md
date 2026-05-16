@@ -70,6 +70,16 @@ By default, use:
 5. `.flow/memory/STATE.md` (transient work state — read from every stacked overlay level)
 6. Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (durable project facts and decisions; consult `MEMORY.md` as the index)
 
+## Overlay resolution for standards and templates
+
+Commands and agents cite standards by name (e.g., `standards/git-commits.md`) and may cite templates similarly (e.g., `templates/spike-template.md`). At runtime, look for these files in **most-specific-wins** order:
+
+1. **Project overlay** — `<repo>/.flow/standards/<name>.md` or `<repo>/.flow/templates/<name>.md`. Only when invoked inside a repo with a `.flow/` overlay; the most-specific overlay walked up from the current directory wins.
+2. **User overlay** — `~/.flow/user/standards/<name>.md` or `~/.flow/user/templates/<name>.md`. Personal customizations that apply in every session.
+3. **Framework default** — `~/.flow/source/scaffolds/default/standards/<name>.md` or `~/.flow/source/scaffolds/default/templates/<name>.md`. The shipped baseline.
+
+Use the Read tool to resolve. If a name is cited and the project overlay or user overlay has its own version, use that and note the resolution in the role's output if the difference matters. Commands and agents are merged at sync time (see `merge_user_overlay` in `cli/flow.py`); standards and templates are resolved at runtime by this convention.
+
 ## Role provider model
 
 The same workflow role may be provided by:

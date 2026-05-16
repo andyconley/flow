@@ -45,6 +45,7 @@ The framework template now includes:
 - project overlay templates under `.flow/project/`
 - memory, templates, and run scaffolding
 - a machine-readable framework manifest at `.flow/flow.toml` (also declares dependencies on upstream standards via `[standards.<name>]` blocks)
+- **user overlay support** at `~/.flow/user/` — drop your own commands, agents, standards, or templates here to override the framework defaults or add new ones, without forking. See `docs/architecture.md` "User Overlay" for the merge model.
 
 ### CLI lifecycle
 
