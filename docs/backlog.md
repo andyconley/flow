@@ -26,6 +26,7 @@ The adoption bar is higher for existing repos because they already have:
 - **Engagement-discipline hardening** (v0.4.1) — `<HARD-GATE>` blocks + three-phase structure (Engagement → Shaping → Capture) applied to `flow-solution`, `flow-plan`, `flow-implement` (Phase 1), `flow-review`, and the `solution-architect` agent. Adopts the pattern from the superpowers `brainstorming` skill without taking a dependency. Fixes the observed failure mode where agents jumped straight to structured output without clarifying problem framing first.
 - **flow-help.md drift class eliminated** (v0.4.3) — `scripts/regenerate-flow-help.py` derives the three flow-help tables (slash commands, CLI commands, agents) from `flow.toml`. New `summary` fields on commands/agents and `[[help.cli_commands]]` array carry the short labels. Drift-detection test catches forgotten regeneration. Resolves P6.
 - **Portable bootstrap installer** (v0.4.4) — `install.sh` at the repo root, curl-able from `raw.githubusercontent.com`. Single-command install for consumers: queries the configured remote for the latest semver tag, shallow-clones it, runs `install-flow.sh --release`, cleans up. Removes the clone-first adoption barrier. Resolves P5.
+- **User-level overlay at `~/.flow/user/`** (v0.6.0) — personal overrides and additions that survive framework updates. Commands and agents merge at sync time via `merge_user_overlay`; standards and templates follow a runtime resolution convention (project > user > framework, documented in FRAMEWORK.md). `flow doctor` reports overlay state. Resolves P2.
 
 ## Adoption Readiness Themes
 
@@ -307,25 +308,6 @@ Need:
 Why it matters:
 
 - Today the stacked-overlay behavior depends on Claude doing what the prose contract asks; a CLI implementation makes it deterministic and testable
-
-### P2. User-level overrides via `~/.flow/user/`
-
-Status: placeholder dir exists, not consumed
-
-Current:
-
-- `flow setup machine` creates `~/.flow/user/` as an empty placeholder
-- Nothing in the CLI reads from it
-
-Need:
-
-- A defined model for user-level customizations that survive framework updates
-- Examples: override a single agent's prompt without forking the framework; add a personal command that doesn't ship with the framework; suppress a specific framework agent at user level
-- A merge step during `flow sync <target> --user` that layers `~/.flow/user/*` on top of the framework scaffold
-
-Why it matters:
-
-- Today personalizing the framework means editing `scaffolds/default/` directly, which conflicts with pulling upstream framework updates
 
 ### P3. Agents and standards review pass
 
