@@ -133,7 +133,7 @@ In develop mode: prints the manual `git pull` + `flow sync ... --user` commands;
 
 Flags:
 
-- `--check` — report current vs latest version without applying
+- `--check` — report current vs latest version without applying. When a newer version is available, also fetches `CHANGELOG.md` from the remote at the new tag (via a sparse partial-clone — only the one file is actually downloaded) and prints the `## [<version>]` section so you can see what's in the available release. Falls back silently if no CHANGELOG entry exists for that version.
 - `--resync` — after applying, also run `flow sync claude --user` and `flow sync codex --user`
 - `--remote URL` — override the remote configured in `~/.flow/config.toml` (useful for testing)
 
@@ -184,6 +184,7 @@ User-mode differences from project-mode:
 - output goes to `~/.claude/...` / `~/.codex/...` (universal across every Claude session)
 - hook commands in `settings.json` use `$HOME` instead of `$CLAUDE_PROJECT_DIR`
 - the managed manifest's `source` fields reference the scaffold path (e.g., `~/.flow/source/scaffolds/default/commands/flow-boot.md`)
+- if `~/.flow/user/flow.toml` exists, the user overlay merges on top of the framework manifest before generation: same-name commands/agents override the framework entry, new names append. User-origin entries in the managed manifest carry `~/.flow/user/...` source paths so origin is auditable. See `docs/architecture.md` "User Overlay" for the merge semantics.
 
 Use `flow setup user` for the initial install; use `flow sync <target> --user` to re-sync after framework changes.
 
@@ -284,7 +285,32 @@ Fix:
 
 - rerun the matching sync command without `--check`
 
-## Install Script
+## Install Scripts
+
+flow ships two install scripts at the repo root:
+
+- `install.sh` — portable curl-able bootstrap, primary consumer path
+- `install-flow.sh` — direct installer used by the bootstrap (and by maintainers running from a clone)
+
+### `install.sh` (portable bootstrap, consumer path)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash
+```
+
+This script (added in v0.4.4):
+
+- queries the configured flow remote (`https://github.com/andyconley/flow.git` by default, override via `FLOW_REPO_URL`) for the highest semver tag
+- shallow-clones that tag into a temporary directory
+- delegates to that clone's `install-flow.sh --release` with `FLOW_VERSION_OVERRIDE=<tag>` so the install metadata records the exact tag the user asked for, even when multiple tags reference the cloned commit
+- cleans up the temporary clone on exit
+
+Use this when:
+
+- a first-time install where the consumer doesn't want to keep a clone
+- you want the latest released version without thinking about it
+
+Requires `git` on the consumer's `PATH`. Public hosting of the curl URL requires the flow repo to be publicly readable; against a private repo, run `bash install.sh` from a local clone instead (the script's logic works either way once it can reach the remote).
 
 ### `./install-flow.sh [--develop|--release]`
 
@@ -297,11 +323,11 @@ This script:
 Modes:
 
 - `--develop` (default) — symlinks `~/.flow/source` to the current checkout. Maintainer-shaped: edits in the clone go live immediately.
-- `--release` — copies `cli/`, `scaffolds/`, `hooks/`, `scripts/`, `docs/`, and `README.md` into `~/.flow/source/`. Excludes `.git/`, `tests/`, `install-flow.sh`, `__pycache__/`. The clone becomes disposable. Version is derived via `git describe` in the checkout.
+- `--release` — copies the framework into `~/.flow/source/` as a real directory using a **blacklist-based roster** (v0.6.1+): every non-dotfile top-level entry of the checkout is included except `tests/`, `install-flow.sh`, `install.sh`, plus the recursive cleanup of `__pycache__/`, `.claude/`, `.codex/`, `.git/`, `*.pyc`, `.DS_Store`. New top-level files added in future versions are picked up automatically. The clone becomes disposable. Version is derived via `git describe` in the checkout, or via `FLOW_VERSION_OVERRIDE` if set.
 
 Use this when:
 
-- first installing `flow`
+- first installing `flow` directly from a clone (maintainer flow)
 - moving the framework repo
 - repairing the local launcher
 - switching to release mode for a non-contributor install

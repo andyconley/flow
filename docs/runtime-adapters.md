@@ -16,7 +16,7 @@ Each runtime target can be generated at two scopes:
 
 | Scope | Source of truth | Generated to | When to use |
 |---|---|---|---|
-| **User-level** | Framework scaffold (`~/.flow/source/scaffolds/default/`) | `~/.claude/`, `~/.codex/` | Always — installs flow framework into every Claude session |
+| **User-level** | Framework scaffold (`~/.flow/source/scaffolds/default/`) **plus** user overlay (`~/.flow/user/`) when present | `~/.claude/`, `~/.codex/` | Always — installs flow framework into every Claude session |
 | **Project-level** | Project overlay (`<repo>/.flow/`) | `<repo>/.claude/`, `<repo>/.codex/` | Per-repo, when you want project-specific role assignments, memory, and run artifacts |
 
 User-mode sync (`flow sync claude --user`) and project-mode sync (`flow sync claude`) generate distinct artifacts to distinct locations and are independent. A single repo can have both active simultaneously — the user-level install provides the universal framework while the project overlay provides repo-specific context.
@@ -24,8 +24,9 @@ User-mode sync (`flow sync claude --user`) and project-mode sync (`flow sync cla
 Mode-specific differences:
 
 - **Hook command paths**: user-mode uses `$HOME/.claude/hooks/flow-*.sh`; project-mode uses `$CLAUDE_PROJECT_DIR/.claude/hooks/flow-*.sh`
-- **Managed manifest `source` fields**: user-mode references the scaffold path (`~/.flow/source/scaffolds/default/commands/flow-boot.md`); project-mode references `.flow/commands/flow-boot.md`
+- **Managed manifest `source` fields**: user-mode references the scaffold path (`~/.flow/source/scaffolds/default/commands/flow-boot.md`); project-mode references `.flow/commands/flow-boot.md`. User-overlay entries in user mode reference `~/.flow/user/...` so origin is auditable.
 - **Settings merge target**: user-mode merges into `~/.claude/settings.json`; project-mode merges into `<repo>/.claude/settings.json`
+- **User overlay** (user mode only, v0.6.0+): if `~/.flow/user/flow.toml` exists, its `[[claude.commands]]`, `[[claude.agents]]`, and `[[codex.commands]]` entries layer on top of the framework manifest before adapter generation. Same-name entries override; new names append. See `docs/architecture.md` "User Overlay" for the merge semantics. Standards and templates aren't merged at sync time — they follow the runtime resolution convention documented in `FRAMEWORK.md`.
 
 ## Current Targets
 
