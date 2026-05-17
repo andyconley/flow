@@ -7,6 +7,96 @@ BIN_DIR="${HOME}/.local/bin"
 SOURCE_DIR="${FLOW_HOME}/source"
 CONFIG_FILE="${FLOW_HOME}/config.toml"
 DEFAULT_REMOTE="https://github.com/andyconley/flow.git"
+MIN_PYTHON_VERSION="3.10"
+
+err() { echo "error: $*" >&2; exit 1; }
+
+append_python_candidate() {
+  local candidate="$1"
+  [[ -n "${candidate}" ]] || return 0
+  if [[ -e "${candidate}" || "${candidate}" == */* ]]; then
+    candidate="$(cd "$(dirname "${candidate}")" 2>/dev/null && pwd)/$(basename "${candidate}")"
+  fi
+  case ":${PYTHON_CANDIDATE_SET:-}:" in
+    *:"${candidate}":*)
+      return 0
+      ;;
+  esac
+  PYTHON_CANDIDATE_SET="${PYTHON_CANDIDATE_SET:-}:${candidate}"
+  PYTHON_CANDIDATES+=("${candidate}")
+}
+
+build_python_candidates() {
+  PYTHON_CANDIDATES=()
+  PYTHON_CANDIDATE_SET=""
+
+  if [[ -n "${FLOW_PYTHON:-}" ]]; then
+    append_python_candidate "${FLOW_PYTHON}"
+  fi
+
+  if [[ -n "${FLOW_PYTHON_CANDIDATES:-}" ]]; then
+    local candidate
+    IFS=':' read -r -a flow_python_candidates <<< "${FLOW_PYTHON_CANDIDATES}"
+    for candidate in "${flow_python_candidates[@]}"; do
+      append_python_candidate "${candidate}"
+    done
+    return 0
+  fi
+
+  local name
+  for name in python3.13 python3.12 python3.11 python3.10 python3; do
+    append_python_candidate "$(command -v "${name}" 2>/dev/null || true)"
+  done
+
+  local prefix
+  for prefix in /opt/homebrew/bin /usr/local/bin; do
+    for name in python3.13 python3.12 python3.11 python3.10; do
+      append_python_candidate "${prefix}/${name}"
+    done
+  done
+}
+
+resolve_python() {
+  build_python_candidates
+
+  local candidate output status
+  local -a attempted=()
+  for candidate in "${PYTHON_CANDIDATES[@]}"; do
+    [[ -x "${candidate}" ]] || continue
+    set +e
+    output="$("${candidate}" -c 'import sys; print("{}.{}.{}".format(*sys.version_info[:3])); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null)"
+    status=$?
+    set -e
+    if [[ ${status} -eq 0 ]]; then
+      FLOW_PYTHON_BIN="${candidate}"
+      FLOW_PYTHON_VERSION="${output}"
+      return 0
+    fi
+    if [[ -n "${output}" ]]; then
+      attempted+=("${candidate} (${output})")
+    else
+      attempted+=("${candidate} (unusable)")
+    fi
+  done
+
+  {
+    echo "error: flow requires Python ${MIN_PYTHON_VERSION}+ to run the CLI."
+    if [[ ${#attempted[@]} -gt 0 ]]; then
+      echo "checked:"
+      printf '  - %s\n' "${attempted[@]}"
+    else
+      echo "checked: no runnable Python interpreters were found on PATH or in common Homebrew locations."
+    fi
+    echo
+    echo "Install Python ${MIN_PYTHON_VERSION}+ and rerun the installer."
+    echo "On macOS with Homebrew, a typical fix is:"
+    echo "  brew install python@3.12"
+    echo
+    echo "If you already have a compatible interpreter, point flow at it explicitly:"
+    echo "  FLOW_PYTHON=/absolute/path/to/python3.12 ./install-flow.sh --${MODE}"
+  } >&2
+  exit 1
+}
 
 MODE="develop"
 while [[ $# -gt 0 ]]; do
@@ -46,6 +136,8 @@ USAGE
       ;;
   esac
 done
+
+resolve_python
 
 mkdir -p "${FLOW_HOME}" "${BIN_DIR}"
 # Remove the legacy framework→source rename target and any prior install at the
@@ -108,6 +200,8 @@ if [[ "${MODE}" == "release" ]]; then
 [flow]
 source_home = "~/.flow/source"
 launcher = "~/.local/bin/flow"
+python = "${FLOW_PYTHON_BIN}"
+python_version = "${FLOW_PYTHON_VERSION}"
 
 [install]
 mode = "release"
@@ -121,6 +215,8 @@ else
 [flow]
 source_home = "~/.flow/source"
 launcher = "~/.local/bin/flow"
+python = "${FLOW_PYTHON_BIN}"
+python_version = "${FLOW_PYTHON_VERSION}"
 
 [install]
 mode = "develop"
@@ -129,18 +225,37 @@ installed_at = "${installed_at}"
 TOML
 fi
 
-cat > "${BIN_DIR}/flow" <<'EOF'
+cat > "${BIN_DIR}/flow" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-exec python3 "$HOME/.flow/source/cli/flow.py" "$@"
+exec "${FLOW_PYTHON_BIN}" "\$HOME/.flow/source/cli/flow.py" "\$@"
 EOF
 
 chmod +x "${BIN_DIR}/flow"
+
+smoke_output="$("${BIN_DIR}/flow" --help 2>&1 >/dev/null || true)"
+if ! "${BIN_DIR}/flow" --help >/dev/null 2>&1; then
+  {
+    echo "error: flow installed files, but the launcher smoke test failed."
+    echo "selected python: ${FLOW_PYTHON_BIN} (${FLOW_PYTHON_VERSION})"
+    echo "launcher:        ${BIN_DIR}/flow"
+    echo "smoke test:      ${BIN_DIR}/flow --help"
+    if [[ -n "${smoke_output}" ]]; then
+      echo
+      echo "${smoke_output}"
+    fi
+    echo
+    echo "If you already have another compatible interpreter, rerun with:"
+    echo "  FLOW_PYTHON=/absolute/path/to/python3.12 ./install-flow.sh --${MODE}"
+  } >&2
+  exit 1
+fi
 
 echo "Installed flow (${MODE} mode)."
 echo "Source:    ${SOURCE_DIR}"
 echo "Launcher:  ${BIN_DIR}/flow"
 echo "Config:    ${CONFIG_FILE}"
+echo "Python:    ${FLOW_PYTHON_BIN} (${FLOW_PYTHON_VERSION})"
 if [[ "${MODE}" == "release" ]]; then
   echo "Version:   ${version}"
 fi

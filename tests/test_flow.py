@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 import shutil
 import subprocess
 import sys
@@ -88,6 +89,33 @@ class FlowCliTests(unittest.TestCase):
             env=_clean_env(self._fake_home),
         )
         return result
+
+    def _make_fake_python_bin(self, include_compatible: bool) -> Path:
+        fake_bin = self.repo / "fake-bin"
+        fake_bin.mkdir(exist_ok=True)
+
+        old_python = fake_bin / "python3"
+        old_python.write_text(
+            "#!/usr/bin/env bash\n"
+            "if [[ \"${1:-}\" == \"-c\" ]]; then\n"
+            "  echo \"3.9.6\"\n"
+            "  exit 1\n"
+            "fi\n"
+            "echo \"Python 3.9.6\"\n"
+            "exit 1\n"
+        )
+        old_python.chmod(old_python.stat().st_mode | stat.S_IXUSR)
+
+        if include_compatible:
+            if sys.version_info < (3, 10):
+                self.skipTest("test host Python must be 3.10+ to simulate a compatible interpreter")
+            good_name = f"python{sys.version_info.major}.{sys.version_info.minor}"
+            good_python = fake_bin / good_name
+            if good_python.exists() or good_python.is_symlink():
+                good_python.unlink()
+            good_python.symlink_to(sys.executable)
+
+        return fake_bin
 
     def do_install_develop(self) -> Path:
         if self._fake_home is None:
@@ -568,6 +596,57 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn('version = "', config)
         self.assertIn('remote = "', config)
         self.assertIn('installed_at = "', config)
+        self.assertIn('python = "', config)
+        self.assertIn('python_version = "', config)
+
+    def test_install_flow_sh_fails_clearly_without_python_3_10_plus(self) -> None:
+        fake_home = self._new_fake_home()
+        fake_bin = self._make_fake_python_bin(include_compatible=False)
+        env = _clean_env(fake_home)
+        env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+        env["FLOW_PYTHON_CANDIDATES"] = str(fake_bin / "python3")
+
+        result = subprocess.run(
+            ["bash", str(INSTALL_SCRIPT), "--release"],
+            cwd=str(REPO_ROOT),
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stdout + result.stderr
+        self.assertIn("flow requires Python 3.10+", combined)
+        self.assertIn("checked:", combined)
+        self.assertIn("brew install python@3.12", combined)
+        self.assertFalse((fake_home / ".flow" / "source").exists())
+
+    def test_install_flow_sh_uses_versioned_python_when_python3_is_too_old(self) -> None:
+        fake_home = self._new_fake_home()
+        fake_bin = self._make_fake_python_bin(include_compatible=True)
+        env = _clean_env(fake_home)
+        env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+        env["FLOW_PYTHON_CANDIDATES"] = f"{fake_bin / 'python3'}:{fake_bin / f'python{sys.version_info.major}.{sys.version_info.minor}'}"
+
+        result = subprocess.run(
+            ["bash", str(INSTALL_SCRIPT), "--release"],
+            cwd=str(REPO_ROOT),
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"install-flow.sh --release failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+        )
+
+        chosen_python = fake_bin / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        launcher = (fake_home / ".local" / "bin" / "flow").read_text()
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn(str(chosen_python), launcher)
+        self.assertIn(f'python = "{chosen_python}"', config)
+        self.assertIn(f'python_version = "{sys.version_info.major}.{sys.version_info.minor}.', config)
 
     def test_release_install_is_self_contained_after_clone_removed(self) -> None:
         """After release install, the CLI must run even if the source clone is gone.
