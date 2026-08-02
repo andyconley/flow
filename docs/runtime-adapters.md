@@ -16,8 +16,8 @@ Each runtime target can be generated at two scopes:
 
 | Scope | Source of truth | Generated to | When to use |
 |---|---|---|---|
-| **User-level** | Framework scaffold (`~/.flow/source/scaffolds/default/`) **plus** user overlay (`~/.flow/user/`) when present | `~/.claude/`, `~/.codex/` | Always — installs flow framework into every Claude session |
-| **Project-level** | Project overlay (`<repo>/.flow/`) | `<repo>/.claude/`, `<repo>/.codex/` | Per-repo, when you want project-specific role assignments, memory, and run artifacts |
+| **User-level** | Framework scaffold (`~/.flow/source/scaffolds/default/`) **plus** user overlay (`~/.flow/user/`) when present | `~/.claude/`, `~/.agents/skills/`, `~/.codex/` | Always — installs Flow into every supported runtime session |
+| **Project-level** | Project overlay (`<repo>/.flow/`) | `<repo>/.claude/`, `<repo>/.agents/skills/`, `<repo>/.codex/` | Per-repo, when you want project-specific role assignments, memory, and run artifacts |
 
 User-mode sync (`flow sync claude --user`) and project-mode sync (`flow sync claude`) generate distinct artifacts to distinct locations and are independent. A single repo can have both active simultaneously — the user-level install provides the universal framework while the project overlay provides repo-specific context.
 
@@ -106,8 +106,13 @@ Codex is currently the narrower runtime target.
 
 `flow sync codex` generates:
 
-- `.codex/skills/<flow-command>/SKILL.md`
+- `.agents/skills/<flow-command>/SKILL.md`
 - `.codex/flow.managed.toml`
+
+Generated Codex skills include the required `name` and `description` YAML
+frontmatter. Existing project manifests that still declare `.codex/skills`
+are normalized to `.agents/skills` during sync, and previously managed legacy
+files are removed without touching unmanaged files.
 
 ### Why It Is Narrower
 

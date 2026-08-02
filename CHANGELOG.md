@@ -6,7 +6,14 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
-No unreleased changes.
+### Fixed
+
+- **Current Codex standalone-skill discovery.** Codex adapters now generate
+  required `name` and `description` frontmatter under `.agents/skills/` while
+  retaining `.codex/flow.managed.toml` for Flow's ownership tracking. Existing
+  manifests that declare the former `.codex/skills` path migrate on their next
+  sync; only previously managed legacy files are removed. Claude generation is
+  unchanged.
 
 ## [0.6.1] — 2026-05-15
 

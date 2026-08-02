@@ -40,7 +40,7 @@ manage_hooks = true
 manage_settings_file = true
 
 [codex]
-skill_dir = ".codex/skills"
+skill_dir = ".agents/skills"
 managed_manifest = ".codex/flow.managed.toml"
 
 [codex.skill_defaults]

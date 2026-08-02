@@ -41,13 +41,19 @@ RELEASE_EXCLUDE_TOP_LEVEL = (
     "install-flow.sh",  # the bootstrap script lives in the clone; `flow update` is the post-install path
     "install.sh",       # same — curl-able bootstrap, not part of the runtime
 )
-RELEASE_EXCLUDE_DIRS = ("__pycache__", ".claude", ".codex", ".git")  # recursive cleanup
+RELEASE_EXCLUDE_DIRS = ("__pycache__", ".agents", ".claude", ".codex", ".git")  # recursive cleanup
 RELEASE_EXCLUDE_FILE_PATTERNS = ("*.pyc", ".DS_Store")
 SEMVER_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:[-+][\w.-]+)?$")
 
 # Sync modes
 MODE_PROJECT = "project"
 MODE_USER = "user"
+
+# Codex moved standalone skill discovery from `.codex/skills` to the shared
+# agent-skills locations. Normalize the legacy value so existing project
+# overlays migrate on their next sync without requiring a manifest edit.
+LEGACY_CODEX_SKILL_DIR = ".codex/skills"
+CODEX_SKILL_DIR = ".agents/skills"
 
 # Install modes
 INSTALL_MODE_DEVELOP = "develop"
@@ -207,8 +213,13 @@ def render_skill(name: str, description: str, source_path: str, body: str) -> st
     return "\n".join(lines)
 
 
-def render_codex_skill(source_path: str, body: str) -> str:
+def render_codex_skill(name: str, description: str, source_path: str, body: str) -> str:
     lines = [
+        "---",
+        f"name: {name}",
+        f"description: {json.dumps(description)}",
+        "---",
+        "",
         f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and rerun `flow sync codex`. -->",
         "",
         body.rstrip(),
@@ -221,6 +232,14 @@ def render_codex_skill(source_path: str, body: str) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def codex_skill_dir(runtime: dict) -> Path:
+    """Return the current Codex skill directory, migrating legacy manifests."""
+    configured = runtime.get("skill_dir", CODEX_SKILL_DIR)
+    if configured == LEGACY_CODEX_SKILL_DIR:
+        return Path(CODEX_SKILL_DIR)
+    return Path(configured)
 
 
 def build_skill_frontmatter(name: str, command: dict, skill_defaults: dict) -> list[str]:
@@ -586,8 +605,10 @@ def desired_codex_outputs(
         entry_root = command.get("_root", flow_dir)
         entry_origin = command.get("_origin", "framework")
         source_path = entry_root / source_rel
-        target = root / runtime["skill_dir"] / command["name"] / "SKILL.md"
-        outputs[target] = render_codex_skill(source_rel, source_path.read_text())
+        target = root / codex_skill_dir(runtime) / command["name"] / "SKILL.md"
+        outputs[target] = render_codex_skill(
+            command["name"], command["description"], source_rel, source_path.read_text()
+        )
         managed_entries.append(
             {
                 "path": rel_posix(target, root),
@@ -1387,7 +1408,7 @@ def doctor() -> int:
     agents_dir = root / ".claude" / "agents"
     claude_managed_ok = False
     claude_drift = "n/a"
-    codex_skills_dir = root / ".codex" / "skills"
+    codex_skills_dir = root / CODEX_SKILL_DIR
     codex_managed_ok = False
     codex_drift = "n/a"
 
@@ -1400,6 +1421,7 @@ def doctor() -> int:
             codex_drift, codex_managed_ok = runtime_status(
                 root, flow_dir, manifest_path, manifest, "codex", MODE_PROJECT
             )
+            codex_skills_dir = root / codex_skill_dir(manifest["codex"])
         except Exception:
             claude_drift = "error"
             codex_drift = "error"
@@ -1410,7 +1432,7 @@ def doctor() -> int:
     user_codex_drift = "n/a"
     user_skills_dir = HOME / ".claude" / "skills"
     user_agents_dir = HOME / ".claude" / "agents"
-    user_codex_skills_dir = HOME / ".codex" / "skills"
+    user_codex_skills_dir = HOME / CODEX_SKILL_DIR
     if SCAFFOLD_DIR.exists():
         try:
             user_manifest_path, user_manifest = merge_user_overlay(SCAFFOLD_DIR)
@@ -1420,6 +1442,7 @@ def doctor() -> int:
             user_codex_drift, user_codex_managed_ok = runtime_status(
                 HOME, SCAFFOLD_DIR, user_manifest_path, user_manifest, "codex", MODE_USER
             )
+            user_codex_skills_dir = HOME / codex_skill_dir(user_manifest["codex"])
         except Exception:
             user_claude_drift = "error"
             user_codex_drift = "error"
@@ -1680,7 +1703,7 @@ def main() -> int:
         epilog=(
             "Targets:\n"
             "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
-            "  codex   Generate .codex skills and a managed manifest.\n\n"
+            "  codex   Generate .agents skills and a .codex managed manifest.\n\n"
             "Examples:\n"
             "  flow sync claude\n"
             "  flow sync claude --check\n"
@@ -1703,7 +1726,7 @@ def main() -> int:
     sync.add_argument(
         "--user",
         action="store_true",
-        help="sync user-level surfaces under ~/.claude or ~/.codex from the framework scaffold (instead of the current repo)",
+        help="sync user-level runtime surfaces from the framework scaffold (instead of the current repo)",
     )
 
     install_parser = sub.add_parser(
