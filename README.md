@@ -8,10 +8,10 @@ Portable AI workflow framework.
 
 1. **Machine support** at `~/.flow/` — install state, config, the source symlink
 2. **Framework source** in this repo (`scaffolds/default/`) — the canonical workflow vocabulary
-3. **User-level install** at `~/.claude/` and `~/.codex/` — generated adapters active in **every** Claude session, regardless of cwd
-4. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/` and `<repo>/.codex/` — per-project, opt-in, only where you want project-specific role assignments / memory / run artifacts
+3. **User-level install** at `~/.claude/`, `~/.agents/skills/`, and `~/.codex/` — generated adapters active in every supported runtime session, regardless of cwd
+4. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/`, `<repo>/.agents/skills/`, and `<repo>/.codex/` — per-project, opt-in, only where you want project-specific role assignments / memory / run artifacts
 
-Framework content (commands, agents, standards) is the source of truth; runtime-facing files in `.claude/` and `.codex/` are generated adapters at both user-level and project-level scopes.
+Framework content (commands, agents, standards) is the source of truth; runtime-facing files in `.claude/`, `.agents/skills/`, and `.codex/` are generated adapters at both user-level and project-level scopes.
 
 ## Current Repo Layout
 
@@ -81,9 +81,9 @@ What they do:
 - `flow doctor`
   - reports machine, user-level, and project-level state in distinct sections
 - `flow sync claude` / `flow sync codex`
-  - generate adapters from the repo's `.flow/` into the repo's `.claude/` or `.codex/`
+  - generate adapters from the repo's `.flow/` into the repo's runtime locations
 - `flow sync claude --user` / `flow sync codex --user`
-  - generate adapters from the framework scaffold directly into `~/.claude/` or `~/.codex/`
+  - generate adapters from the framework scaffold directly into the user-level runtime locations
 - `--check` on any sync target reports drift without writing files
 
 ### Runtime adapter generation
@@ -100,7 +100,7 @@ What they do:
 
 `flow sync codex` and `flow sync codex --user` follow the same pattern but generate a narrower surface:
 
-- `.codex/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md` (or from the scaffold in user mode)
+- `.agents/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md` (or from the scaffold in user mode)
 - `.codex/flow.managed.toml` machine-readable manifest of managed generated files
 
 The Codex target is intentionally narrower than Claude — it proves `flow` is not Claude-only while only generating surfaces that map cleanly to the current Codex runtime model.
@@ -114,7 +114,7 @@ The Codex target is intentionally narrower than Claude — it proves `flow` is n
 - `.claude/hooks/flow-*.sh`
 - managed hook entries inside `.claude/settings.json`
 - `.claude/flow.managed.toml`
-- `.codex/skills/...`
+- `.agents/skills/...`
 - `.codex/flow.managed.toml`
 
 Rules:
@@ -194,7 +194,7 @@ flow setup machine
 flow setup user                  # installs flow at user level — active in every Claude session
 ```
 
-`./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and either symlinks (develop) or copies (release) the framework into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates the framework's commands, agents, and hooks into `~/.claude/` and `~/.codex/` so they are available everywhere.
+`./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and either symlinks (develop) or copies (release) the framework into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates Claude surfaces under `~/.claude/`, Codex skills under `~/.agents/skills/`, and the Codex managed manifest under `~/.codex/` so they are available everywhere.
 
 ## Choosing an Install Mode
 

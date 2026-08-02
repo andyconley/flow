@@ -84,7 +84,7 @@ Current sections:
 
 - **machine** — Python, flow home, source path, scaffold availability, config, launcher
 - **install** — install mode (develop or release), version (release only), source target (develop only), installed_at timestamp
-- **user-level** — Claude/Codex sync state and drift for `~/.claude/` and `~/.codex/` (active in every Claude session)
+- **user-level** — Claude/Codex sync state and drift for `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`
 - **project** — repo `.flow/` presence, manifest, Claude/Codex sync state and drift for the current repo
 
 Use this as the main diagnostics command.
@@ -167,7 +167,7 @@ Generate the Codex runtime adapter surface from `repo/.flow`.
 
 Current outputs:
 
-- `.codex/skills/...`
+- `.agents/skills/...`
 - `.codex/flow.managed.toml`
 
 ### `flow sync codex --check`
@@ -176,12 +176,12 @@ Report Codex runtime drift without writing files.
 
 ### `flow sync <target> --user`
 
-Generate the runtime adapter surface at the **user level** (`~/.claude/` or `~/.codex/`) from the framework scaffold directly. Combine with `--check` to detect drift without writing.
+Generate the runtime adapter surface at the **user level** (`~/.claude/`, `~/.agents/skills`, and `~/.codex/flow.managed.toml`) from the framework scaffold directly. Combine with `--check` to detect drift without writing.
 
 User-mode differences from project-mode:
 
 - source files come from the framework scaffold (`~/.flow/source/scaffolds/default/`), not from a project's `.flow/`
-- output goes to `~/.claude/...` / `~/.codex/...` (universal across every Claude session)
+- output goes to the runtime's user-level locations (universal across every session)
 - hook commands in `settings.json` use `$HOME` instead of `$CLAUDE_PROJECT_DIR`
 - the managed manifest's `source` fields reference the scaffold path (e.g., `~/.flow/source/scaffolds/default/commands/flow-boot.md`)
 - if `~/.flow/user/flow.toml` exists, the user overlay merges on top of the framework manifest before generation: same-name commands/agents override the framework entry, new names append. User-origin entries in the managed manifest carry `~/.flow/user/...` source paths so origin is auditable. See `docs/architecture.md` "User Overlay" for the merge semantics.
@@ -323,7 +323,7 @@ This script:
 Modes:
 
 - `--develop` (default) — symlinks `~/.flow/source` to the current checkout. Maintainer-shaped: edits in the clone go live immediately.
-- `--release` — copies the framework into `~/.flow/source/` as a real directory using a **blacklist-based roster** (v0.6.1+): every non-dotfile top-level entry of the checkout is included except `tests/`, `install-flow.sh`, `install.sh`, plus the recursive cleanup of `__pycache__/`, `.claude/`, `.codex/`, `.git/`, `*.pyc`, `.DS_Store`. New top-level files added in future versions are picked up automatically. The clone becomes disposable. Version is derived via `git describe` in the checkout, or via `FLOW_VERSION_OVERRIDE` if set.
+- `--release` — copies the framework into `~/.flow/source/` as a real directory using a **blacklist-based roster** (v0.6.1+): every non-dotfile top-level entry of the checkout is included except `tests/`, `install-flow.sh`, `install.sh`, plus the recursive cleanup of `__pycache__/`, `.agents/`, `.claude/`, `.codex/`, `.git/`, `*.pyc`, `.DS_Store`. New top-level files added in future versions are picked up automatically. The clone becomes disposable. Version is derived via `git describe` in the checkout, or via `FLOW_VERSION_OVERRIDE` if set.
 
 Use this when:
 

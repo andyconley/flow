@@ -170,8 +170,8 @@ Edit these directly in the `flow` repo:
 
 Do not treat generated runtime folders as the primary source of truth at any scope:
 
-- `<repo>/.claude/` and `<repo>/.codex/` — project-level adapter outputs derived from `<repo>/.flow/`
-- `~/.claude/` and `~/.codex/` — user-level adapter outputs derived from this repo's `scaffolds/default/`
+- `<repo>/.claude/`, `<repo>/.agents/skills/`, and `<repo>/.codex/` — project-level adapter outputs derived from `<repo>/.flow/`
+- `~/.claude/`, `~/.agents/skills/`, and `~/.codex/` — user-level adapter outputs derived from this repo's `scaffolds/default/`
 
 All of these are generated. To change them, edit the corresponding source:
 
@@ -182,8 +182,8 @@ All of these are generated. To change them, edit the corresponding source:
 
 | Scope | Source | Generated to | Purpose |
 |---|---|---|---|
-| **User-level** | `scaffolds/default/` (this repo) **plus** `~/.flow/user/` if present | `~/.claude/`, `~/.codex/` | Framework + personal overrides active in every Claude session |
-| **Project-level** | `<repo>/.flow/` | `<repo>/.claude/`, `<repo>/.codex/` | Per-project overlay with project-specific role assignments, memory, runs |
+| **User-level** | `scaffolds/default/` (this repo) **plus** `~/.flow/user/` if present | `~/.claude/`, `~/.agents/skills/`, `~/.codex/` | Framework + personal overrides active in every supported runtime session |
+| **Project-level** | `<repo>/.flow/` | `<repo>/.claude/`, `<repo>/.agents/skills/`, `<repo>/.codex/` | Per-project overlay with project-specific role assignments, memory, runs |
 
 User-level and project-level are independent — a single repo can run both, with the project overlay supplying repo-specific context layered on top of the universally-active framework.
 
