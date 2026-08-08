@@ -31,3 +31,4 @@
 - test results:
 - deploy/runtime status:
 - follow-ups:
+- capability gaps observed: (what the framework was missing, or "none observed")
