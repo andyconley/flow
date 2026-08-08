@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "Seed for the harness_capability table. Consumers join against that table",
+    "instead of hardcoding per-harness knowledge, so a new harness — or a",
+    "release of an existing one that starts reporting a field it previously",
+    "did not — is a data change here rather than a code change.",
+    "",
+    "supported=0 means the harness cannot report the field at all. In turn_norm",
+    "that field is NULL, which is distinct from a reported zero.",
+    "",
+    "Verified 2026-08-08 against ~/.codex/sessions and ~/.claude/projects."
+  ],
+  "capabilities": [
+    { "harness": "codex",  "field": "input_tokens",        "supported": 1 },
+    { "harness": "codex",  "field": "cache_read_tokens",   "supported": 1 },
+    { "harness": "codex",  "field": "cache_write_tokens",  "supported": 1 },
+    { "harness": "codex",  "field": "output_tokens",       "supported": 1 },
+    { "harness": "codex",  "field": "reasoning_tokens",    "supported": 1 },
+    { "harness": "codex",  "field": "context_window",      "supported": 1 },
+    { "harness": "codex",  "field": "capacity_primary",    "supported": 1 },
+    { "harness": "codex",  "field": "cache_ttl_split",     "supported": 0 },
+    { "harness": "codex",  "field": "sub_turn_detail",     "supported": 0 },
+    { "harness": "codex",  "field": "session_lineage",     "supported": 1 },
+
+    { "harness": "claude", "field": "input_tokens",        "supported": 1 },
+    { "harness": "claude", "field": "cache_read_tokens",   "supported": 1 },
+    { "harness": "claude", "field": "cache_write_tokens",  "supported": 1 },
+    { "harness": "claude", "field": "output_tokens",       "supported": 1 },
+    { "harness": "claude", "field": "reasoning_tokens",    "supported": 0 },
+    { "harness": "claude", "field": "context_window",      "supported": 0 },
+    { "harness": "claude", "field": "capacity_primary",    "supported": 0 },
+    { "harness": "claude", "field": "cache_ttl_split",     "supported": 1 },
+    { "harness": "claude", "field": "sub_turn_detail",     "supported": 1 },
+    { "harness": "claude", "field": "session_lineage",     "supported": 0 }
+  ]
+}

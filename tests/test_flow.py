@@ -1096,6 +1096,192 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("resolved SHA:", result.stdout)
         self.assertIn("dry-run: no files written", result.stdout)
 
+    # ------------------------------------------------------------------
+    # usage store
+    #
+    # Every test here drives the CLI through run_flow against a fake HOME, so
+    # the real ~/.flow/usage.db is never touched. The store is the one artifact
+    # the design says must never be rebuilt; a suite that could write to it
+    # would be able to corrupt exactly that.
+    # ------------------------------------------------------------------
+
+    def _store_path(self, home: Path) -> Path:
+        return home / ".flow" / "usage.db"
+
+    def _load_store_module(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "usage_store_under_test", REPO_ROOT / "cli" / "usage_store.py"
+        )
+        module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        assert spec and spec.loader
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        return module
+
+    def test_setup_machine_creates_store_at_current_version(self) -> None:
+        home = self.use_fake_home()
+        self.assert_ok(self.run_flow("setup", "machine"))
+
+        store = self._store_path(home)
+        self.assertTrue(store.is_file(), f"expected store at {store}")
+
+        usage_store = self._load_store_module()
+        status = usage_store.store_status(store)
+        self.assertEqual(status["state"], usage_store.STATE_EMPTY)
+        self.assertEqual(status["user_version"], usage_store.SCHEMA_VERSION)
+
+    def test_setup_machine_is_idempotent(self) -> None:
+        home = self.use_fake_home()
+        self.assert_ok(self.run_flow("setup", "machine"))
+        second = self.run_flow("setup", "machine")
+        self.assert_ok(second)
+        self.assertIn("usage store: current", second.stdout)
+
+        usage_store = self._load_store_module()
+        import sqlite3
+
+        conn = sqlite3.connect(self._store_path(home))
+        try:
+            rows = conn.execute("SELECT count(*) FROM schema_migration").fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(
+            rows,
+            len(usage_store.MIGRATIONS),
+            "re-running setup machine must not duplicate ledger rows",
+        )
+
+    def test_capability_seed_comes_from_data_file_not_code(self) -> None:
+        """The seed must be data. Editing the shipped file must change the store."""
+        home = self.use_fake_home()
+        self.assert_ok(self.run_flow("setup", "machine"))
+
+        import sqlite3
+
+        conn = sqlite3.connect(self._store_path(home))
+        try:
+            seeded = conn.execute(
+                "SELECT supported FROM harness_capability"
+                " WHERE harness='claude' AND field='context_window'"
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(seeded, "expected the shipped capability seed to load")
+        self.assertEqual(
+            seeded[0], 0, "claude cannot report a context window; seed should say so"
+        )
+
+    def test_doctor_reports_absent_store_without_creating_it(self) -> None:
+        """doctor is read-only. Reporting the absent state must not resolve it."""
+        home = self._new_fake_home()
+        (home / ".flow").mkdir(parents=True)
+        (home / ".flow" / "source").symlink_to(REPO_ROOT)
+
+        result = self.run_flow("doctor")
+        self.assertIn("usage store:", result.stdout)
+        self.assertIn("not created", result.stdout)
+        self.assertFalse(
+            self._store_path(home).exists(),
+            "doctor must not create the store it reports as absent",
+        )
+
+    def test_doctor_reports_empty_store(self) -> None:
+        self.use_fake_home()
+        self.assert_ok(self.run_flow("setup", "machine"))
+        result = self.run_flow("doctor")
+        self.assertIn("usage store:", result.stdout)
+        self.assertIn("ok, empty", result.stdout)
+
+    def test_doctor_reports_corrupt_store_without_failing_other_sections(self) -> None:
+        home = self.use_fake_home()
+        store = self._store_path(home)
+        store.parent.mkdir(parents=True, exist_ok=True)
+        store.write_text("this is not a sqlite database")
+
+        result = self.run_flow("doctor")
+        self.assertIn("usage store:      error", result.stdout)
+        # the rest of doctor still reports — one bad subsystem must not hide the others
+        self.assertIn("-- install --", result.stdout)
+
+    def test_doctor_reports_stale_store(self) -> None:
+        """A store behind the current schema version reports stale, not ok."""
+        home = self.use_fake_home()
+        self.assert_ok(self.run_flow("setup", "machine"))
+
+        import sqlite3
+
+        conn = sqlite3.connect(self._store_path(home))
+        try:
+            conn.execute("PRAGMA user_version = 0")
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = self.run_flow("doctor")
+        self.assertIn("stale", result.stdout)
+        self.assertIn("pending", result.stdout)
+
+    def test_setup_machine_migrates_a_stale_store(self) -> None:
+        """setup machine is the repair path — develop installs have no other one."""
+        home = self.use_fake_home()
+        self.assert_ok(self.run_flow("setup", "machine"))
+
+        import sqlite3
+
+        store = self._store_path(home)
+        conn = sqlite3.connect(store)
+        try:
+            conn.execute("DROP TABLE turn_norm")
+            conn.execute("DROP TABLE turn_raw")
+            conn.execute("DROP TABLE session")
+            conn.execute("DROP TABLE harvest")
+            conn.execute("DROP TABLE harness_capability")
+            conn.execute("DROP TABLE schema_migration")
+            conn.execute("PRAGMA user_version = 0")
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = self.run_flow("setup", "machine")
+        self.assert_ok(result)
+        self.assertIn("usage store: migrated to v", result.stdout)
+
+        usage_store = self._load_store_module()
+        status = usage_store.store_status(store)
+        self.assertEqual(status["state"], usage_store.STATE_EMPTY)
+
+    def test_release_staging_requires_cli_siblings(self) -> None:
+        """A release shipping the launcher without its siblings installs then breaks."""
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "flow_cli_staging", REPO_ROOT / "cli" / "flow.py"
+        )
+        flow_cli = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        assert spec and spec.loader
+        spec.loader.exec_module(flow_cli)  # type: ignore[union-attr]
+
+        staging = self.repo / "staging"
+        (staging / "cli").mkdir(parents=True)
+        (staging / "cli" / "flow.py").write_text("# entrypoint")
+        (staging / "scaffolds" / "default").mkdir(parents=True)
+        (staging / "scaffolds" / "default" / "flow.toml").write_text("")
+        (staging / "data").mkdir(parents=True)
+        (staging / "data" / "harness_capabilities.json").write_text(
+            '{"capabilities": []}'
+        )
+
+        reason = flow_cli._validate_staging(staging)
+        self.assertIsNotNone(reason, "staging without cli siblings must be rejected")
+        self.assertIn("usage_store.py", reason)
+
+        (staging / "cli" / "usage_store.py").write_text("# sibling")
+        self.assertIsNone(
+            flow_cli._validate_staging(staging),
+            "staging with all required files should validate",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
