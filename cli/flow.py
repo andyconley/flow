@@ -14,6 +14,13 @@ try:
 except ModuleNotFoundError:
     _tomllib = None
 
+# Sibling modules. The launcher runs cli/flow.py directly, which puts cli/ on
+# sys.path — but importing this file programmatically (importlib, as the test
+# suite does) does not. Append our own directory so the import holds either way.
+# Appended rather than prepended so stdlib still wins on any name collision.
+sys.path.append(str(Path(__file__).resolve().parent))
+import usage_store  # noqa: E402 — must follow the sys.path append above
+
 
 HOME = Path.home()
 FLOW_HOME = HOME / ".flow"
@@ -42,6 +49,10 @@ RELEASE_EXCLUDE_TOP_LEVEL = (
     "install.sh",       # same — curl-able bootstrap, not part of the runtime
 )
 RELEASE_EXCLUDE_DIRS = ("__pycache__", ".agents", ".claude", ".codex", ".git")  # recursive cleanup
+# Sibling modules flow.py imports at module scope. A release missing one of
+# these installs cleanly and fails on the next command, so staging validates
+# them alongside the entrypoint.
+CLI_REQUIRED_SIBLINGS = ("usage_store.py",)
 RELEASE_EXCLUDE_FILE_PATTERNS = ("*.pyc", ".DS_Store")
 SEMVER_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:[-+][\w.-]+)?$")
 
@@ -1021,6 +1032,16 @@ def _validate_staging(staging: Path) -> str | None:
     cli_entry = staging / "cli" / "flow.py"
     if not cli_entry.is_file():
         return f"staging is missing cli/flow.py at {cli_entry}"
+    # flow.py imports its siblings at module scope, so a release that ships the
+    # launcher without them installs cleanly and then fails on every command.
+    # Validate the whole cli/ surface, not just the entrypoint.
+    for sibling in CLI_REQUIRED_SIBLINGS:
+        sibling_path = staging / "cli" / sibling
+        if not sibling_path.is_file():
+            return f"staging is missing cli/{sibling} at {sibling_path}"
+    capabilities = staging / "data" / "harness_capabilities.json"
+    if not capabilities.is_file():
+        return f"staging is missing data/harness_capabilities.json at {capabilities}"
     scaffold_manifest = staging / "scaffolds" / "default" / "flow.toml"
     if not scaffold_manifest.is_file():
         return f"staging is missing scaffolds/default/flow.toml at {scaffold_manifest}"
@@ -1249,6 +1270,12 @@ def update_command(check: bool, resync: bool, remote_override: str | None) -> in
     if apply_rc != 0:
         return apply_rc
 
+    # Create-if-missing, not just migrate. A machine that ran `setup machine`
+    # before the store existed will never re-run it in a state where the store
+    # is absent, so without this an existing install never gets one.
+    print()
+    _ensure_usage_store()
+
     if resync:
         print()
         claude_rc = sync_target("claude", check=False, user_mode=True)
@@ -1318,8 +1345,35 @@ def setup_machine() -> int:
     )
     print(f"flow home ready: {FLOW_HOME}")
     print(f"config:     {FLOW_CONFIG}")
+    _ensure_usage_store()
     print("next: run `flow setup project` inside a repository")
     return 0
+
+
+def _ensure_usage_store() -> None:
+    """Create the usage store if absent and apply pending migrations.
+
+    Idempotent, so this is also the repair path. `flow update` covers release
+    installs; develop installs short-circuit that command, which leaves
+    `setup machine` as the only place a develop machine can pick up a schema
+    change. Re-running it is the expected usage, not a fallback.
+
+    `doctor` deliberately does not call this — a diagnostic that repairs the
+    condition it reports can never report it.
+    """
+    store = usage_store.default_store_path(HOME)
+    caps = usage_store.default_capabilities_path(SOURCE_DIR)
+    try:
+        created, applied = usage_store.ensure_store(store, caps)
+    except Exception as exc:  # noqa: BLE001 — never block machine setup on the store
+        print(f"usage store: error — {exc}")
+        return
+    if created:
+        print(f"usage store: created {store} (schema v{usage_store.SCHEMA_VERSION})")
+    elif applied:
+        print(f"usage store: migrated to v{applied[-1]}")
+    else:
+        print(f"usage store: current (schema v{usage_store.SCHEMA_VERSION})")
 
 
 def setup_project() -> int:
@@ -1453,6 +1507,11 @@ def doctor() -> int:
     print(f"scaffold:         {'ok' if SCAFFOLD_DIR.exists() else 'missing'}")
     print(f"config:           {'ok' if FLOW_CONFIG.exists() else 'missing'}")
     print(f"launcher:         {'ok' if (USER_BIN_DIR / 'flow').exists() else 'missing'}")
+    # Read-only. doctor never creates or migrates the store: repairing the
+    # condition being reported would make the absent and stale states
+    # unobservable. `flow setup machine` is the repair path.
+    store_status = usage_store.store_status(usage_store.default_store_path(HOME))
+    print(f"usage store:      {usage_store.format_status(store_status)}")
     print()
     print("-- install --")
     install = read_install_config()
