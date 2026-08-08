@@ -53,10 +53,11 @@ The archive command does not replace review. It packages the accepted outcome.
    - manual checks
    - runtime or deploy checks
 4. Record residual risks, follow-ups, and deferred work.
-5. **Update transient work state** in `.flow/memory/STATE.md` at the **most-specific stacked overlay** (e.g., when archiving in path-nexus, writes go to `~/KB/repos/path-nexus/.flow/memory/STATE.md`, not the workspace's). STATE.md should reflect what is now in flight, blocked, or pending — not durable facts.
-6. **Record durable decisions in auto-memory** at `~/.claude/projects/<project-id>/memory/`. For each cross-cutting decision worth remembering across sessions, write a structured memory file with frontmatter (`type: project`) and add a one-line entry to `MEMORY.md`. See your global CLAUDE.md auto-memory instructions for the exact format. Do NOT write decisions to `.flow/memory/` — that surface no longer exists.
-7. If the work materially affects a parent overlay's state, surface that in the archive output so it can be picked up in a separate parent-level archive.
-8. Mark the run complete.
+5. **Record capability gaps observed during the run** — what the *framework* was missing, as distinct from what the work left undone. Look for: steps you carried out by hand that a command or skill should have done, a standard whose absence caused rework, an agent role that would have fit and does not exist, and artifacts you wanted a template for. This is the only point in the phase machine where the run is fresh enough to notice and finished enough to judge. If nothing was missing, say so explicitly — an omitted section reads as "not considered."
+6. **Update transient work state** in `.flow/memory/STATE.md` at the **most-specific stacked overlay** (e.g., when archiving in path-nexus, writes go to `~/KB/repos/path-nexus/.flow/memory/STATE.md`, not the workspace's). STATE.md should reflect what is now in flight, blocked, or pending — not durable facts.
+7. **Record durable decisions in auto-memory** at `~/.claude/projects/<project-id>/memory/`. For each cross-cutting decision worth remembering across sessions, write a structured memory file with frontmatter (`type: project`) and add a one-line entry to `MEMORY.md`. See your global CLAUDE.md auto-memory instructions for the exact format. Do NOT write decisions to `.flow/memory/` — that surface no longer exists.
+8. If the work materially affects a parent overlay's state, surface that in the archive output so it can be picked up in a separate parent-level archive.
+9. Mark the run complete.
 
 ## Output Format
 
@@ -80,6 +81,13 @@ The archive command does not replace review. It packages the accepted outcome.
 ### Follow-up Work
 - [Deferred or future work]
 
+### Capability Gaps Observed
+(always present; what the framework was missing, or "none observed")
+- [Step carried out by hand that a command or skill should own]
+- [Standard whose absence caused rework]
+- [Agent role that would have fit and does not exist]
+- [Artifact that wanted a template]
+
 ### Memory Updates
 - STATE (`.flow/memory/STATE.md`): (always present; describe the transient work-state change, or "n/a — work state unchanged")
 - Auto-memory entries written: (always present; list new or updated auto-memory files by name + one-line summary, or "n/a — no durable decisions recorded")
@@ -94,6 +102,7 @@ The archive command does not replace review. It packages the accepted outcome.
 | "Residual risks are obvious from the diff." | Risks disappear quickly unless they are written down explicitly. |
 | "We can update STATE and auto-memory later." | Later is usually never; archive is the right time to make memory durable. |
 | "STATE.md and auto-memory hold the same kind of thing." | They do not — STATE.md is transient work state at the project; auto-memory holds durable cross-session facts and decisions. Mixing them defeats both. |
+| "Nothing was missing from the framework, so I'll skip that section." | Write "none observed." An omitted section is indistinguishable from one that was never considered, and the gap notes are only useful as a corpus — a run that silently skips them removes a data point rather than adding a null one. |
 
 ## Red Flags
 
@@ -109,6 +118,7 @@ Before leaving `flow-archive`, confirm:
 - [ ] what changed is summarized clearly
 - [ ] validation status is explicit
 - [ ] residual risks and follow-up work are explicit
+- [ ] capability gaps are recorded (or explicitly marked "none observed")
 - [ ] STATE.md was updated (or explicitly marked "n/a")
 - [ ] durable decisions were written to auto-memory (or explicitly marked "n/a — no durable decisions recorded")
 - [ ] writes went to the most-specific overlay; parent-overlay implications surfaced if applicable

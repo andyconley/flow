@@ -7,7 +7,7 @@ tools:
   - Read
   - Grep
   - Glob
-model: sonnet
+model: opus
 ---
 
 # Quality Reviewer

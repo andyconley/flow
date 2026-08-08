@@ -82,6 +82,9 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 
 - inspect existing artifacts — code, docs, configurations, prior runs
 - identify where the change actually lives and what it touches
+- **when inspection fans out into parallel investigation**, decompose into questions that are answerable independently — no dependencies between them, or the parallelism is not real — and give each investigator one question. Investigators write their analysis to `.flow/runs/<work-id>/research/<topic-slug>.md` and return only a short summary plus the path; the orchestrator reads the files rather than holding every finding in context
+- **collect the returned paths and pass them all forward** when synthesizing. Synthesizing from the inline summaries alone discards the detail the files were written to hold, which is the failure mode this pattern exists to avoid
+- reports live under the run because they are run artifacts: they archive with it, they are readable by `flow-archive`, and the work id already makes their location unambiguous
 
 ### 3. Plan
 
