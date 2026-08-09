@@ -8,6 +8,7 @@ module (`codex_collector.py`, `claude_collector.py`).
 import sqlite3
 
 import usage_store
+from claude_collector import HARNESS as CLAUDE_HARNESS
 from claude_collector import default_sessions_root as claude_sessions_root
 from claude_collector import harvest_all as claude_harvest_all
 from codex_collector import default_sessions_root as codex_sessions_root
@@ -66,8 +67,31 @@ def harvest_codex_command() -> int:
     return 1 if summary["failures"] else 0
 
 
-def harvest_claude_command() -> int:
-    """Harvest `~/.claude/projects/` into the usage store. Same contract as `harvest_codex_command`."""
+def _reset_claude_watermarks(conn: sqlite3.Connection) -> None:
+    """Rewind every recorded Claude file to the start of the file.
+
+    Used by `--backfill-titles`: replaying an already-harvested file from
+    offset 0 is a free no-op for turns already in `turn_raw` (its natural key
+    makes `INSERT OR IGNORE` idempotent), but it is the first time any
+    `custom-title`/`ai-title` line in that file is seen by a collector new
+    enough to read it. `last_size` is deliberately left alone —
+    `harvest_file` recomputes it fresh from `path.stat()` on every run and
+    never trusts the stored value for anything but reporting.
+    """
+    conn.execute(
+        "UPDATE harvest SET last_offset = 0, last_line_no = 0, last_line_hash = NULL"
+        " WHERE harness = ?",
+        (CLAUDE_HARNESS,),
+    )
+
+
+def harvest_claude_command(backfill_titles: bool = False) -> int:
+    """Harvest `~/.claude/projects/` into the usage store. Same contract as `harvest_codex_command`.
+
+    `backfill_titles=True` rewinds every already-recorded Claude file's
+    watermark first (see `_reset_claude_watermarks`), so sessions harvested
+    before title capture existed pick up `session.title` retroactively.
+    """
     store = usage_store.default_store_path(HOME)
     capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
     usage_store.ensure_store(store, capabilities)
@@ -79,6 +103,9 @@ def harvest_claude_command() -> int:
 
     conn = _connect(store)
     try:
+        if backfill_titles:
+            _reset_claude_watermarks(conn)
+            conn.commit()
         summary = claude_harvest_all(conn, sessions_root)
     finally:
         conn.close()

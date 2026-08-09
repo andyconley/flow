@@ -1473,6 +1473,7 @@ class FlowCliTests(unittest.TestCase):
             [
                 "claude_collector",
                 "codex_collector",
+                "cost",
                 "diagnostics",
                 "flowtoml",
                 "fsutil",
@@ -1608,6 +1609,89 @@ class FlowCliTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertIn("0 rows", result.stdout)
 
+    def test_cost_summary_end_to_end_via_cli(self) -> None:
+        """`flow cost summary` against real harvested-and-normalized data, both
+        render modes. Uses `--all`, matching every other fixture in this
+        class: their timestamps are fixed at 2026-01-01, far outside any
+        `--days` default window relative to whenever this test actually runs.
+        """
+        home = self.use_fake_home()
+        codex_dir = home / ".codex" / "sessions" / "2026" / "01" / "01"
+        codex_dir.mkdir(parents=True)
+        (codex_dir / "rollout-test.jsonl").write_text(
+            _jsonl(
+                _session_meta("sess-1"),
+                _task_started("turn-1"),
+                _turn_context("turn-1", "gpt-5.6"),
+                _token_count(),
+                _task_complete("turn-1"),
+            )
+        )
+        claude_dir = home / ".claude" / "projects" / "-tmp-proj"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "sess-1.jsonl").write_text(
+            _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1"))
+        )
+        self.assert_ok(self.run_flow("harvest", "codex"))
+        self.assert_ok(self.run_flow("harvest", "claude"))
+        self.assert_ok(self.run_flow("normalize"))
+
+        table = self.run_flow("cost", "summary", "--all")
+        self.assert_ok(table)
+        self.assertIn("HARNESS", table.stdout)
+        self.assertIn("codex", table.stdout)
+        self.assertIn("claude", table.stdout)
+
+        as_json = self.run_flow("cost", "summary", "--all", "--json")
+        self.assert_ok(as_json)
+        payload = json.loads(as_json.stdout)
+        self.assertEqual(len(payload["rows"]), 2)
+        harnesses = {row["harness"] for row in payload["rows"]}
+        self.assertEqual(harnesses, {"codex", "claude"})
+        # capacity_gauge is a codex-only, timestamp-gated snapshot; whether
+        # it's present depends on _token_count()'s fixture shape, not on
+        # anything this test asserts — only that the key is well-formed when
+        # it does appear.
+        if "capacity" in payload:
+            self.assertIn("capacity_primary_used_pct", payload["capacity"])
+
+    def test_cost_sessions_end_to_end_via_cli(self) -> None:
+        home = self.use_fake_home()
+        claude_dir = home / ".claude" / "projects" / "-tmp-proj"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "sess-1.jsonl").write_text(
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_custom_title("sess-1", "My Renamed Session"),
+                _claude_assistant("sess-1", "req-1"),
+            )
+        )
+        self.assert_ok(self.run_flow("harvest", "claude"))
+        self.assert_ok(self.run_flow("normalize"))
+
+        table = self.run_flow("cost", "sessions", "--all")
+        self.assert_ok(table)
+        self.assertIn("My Renamed Session", table.stdout)
+
+        as_json = self.run_flow("cost", "sessions", "--all", "--json")
+        self.assert_ok(as_json)
+        payload = json.loads(as_json.stdout)
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["label"], "My Renamed Session")
+        self.assertEqual(payload[0]["harness"], "claude")
+
+    def test_cost_summary_with_no_data_is_a_clean_empty_result(self) -> None:
+        self.use_fake_home()
+        table = self.run_flow("cost", "summary", "--all")
+        self.assert_ok(table)
+        self.assertIn("no data", table.stdout)
+
+        as_json = self.run_flow("cost", "summary", "--all", "--json")
+        self.assert_ok(as_json)
+        payload = json.loads(as_json.stdout)
+        self.assertEqual(payload["rows"], [])
+        self.assertNotIn("capacity", payload)
+
 
 def _jsonl(*records: dict) -> str:
     """One JSON object per line, newline-terminated — a well-formed Codex session file."""
@@ -1703,6 +1787,24 @@ def _claude_assistant(
         "isSidechain": is_sidechain,
         "timestamp": "2026-01-01T00:00:01Z",
         "message": {"model": model, "usage": usage},
+    }
+
+
+def _claude_custom_title(session_id: str, title: str) -> dict:
+    return {
+        "type": "custom-title",
+        "sessionId": session_id,
+        "customTitle": title,
+        "timestamp": "2026-01-01T00:00:00Z",
+    }
+
+
+def _claude_ai_title(session_id: str, title: str) -> dict:
+    return {
+        "type": "ai-title",
+        "sessionId": session_id,
+        "aiTitle": title,
+        "timestamp": "2026-01-01T00:00:00Z",
     }
 
 
@@ -2296,6 +2398,77 @@ class ClaudeCollectorTests(unittest.TestCase):
         self.assertEqual(result["turns"], 0)
 
     # ------------------------------------------------------------------
+    # title capture
+    # ------------------------------------------------------------------
+
+    def session_title(self, session_id: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT title FROM session WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        return row[0] if row is not None else None
+
+    def test_custom_title_sets_session_title(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), _claude_custom_title("sess-1", "My Renamed Session"))
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_title("sess-1"), "My Renamed Session")
+
+    def test_ai_title_fills_a_genuine_gap(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), _claude_ai_title("sess-1", "auto-generated title"))
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_title("sess-1"), "auto-generated title")
+
+    def test_custom_title_overwrites_an_existing_ai_title(self) -> None:
+        """ai-title arrives first, custom-title arrives second: the rename must win."""
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_ai_title("sess-1", "auto-generated title"),
+                _claude_custom_title("sess-1", "My Renamed Session"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_title("sess-1"), "My Renamed Session")
+
+    def test_ai_title_never_overwrites_an_existing_custom_title(self) -> None:
+        """custom-title arrives first, ai-title arrives second: the rename must survive."""
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_custom_title("sess-1", "My Renamed Session"),
+                _claude_ai_title("sess-1", "auto-generated title"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_title("sess-1"), "My Renamed Session")
+
+    def test_title_precedence_is_order_independent_across_separate_harvest_calls(self) -> None:
+        """The same precedence must hold when custom-title and ai-title land in
+        separate incremental runs, not just within one batch — this is the
+        property that rules out an in-memory, single-pass implementation.
+        """
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1")))
+        self.claude_collector.harvest_file(self.conn, path)
+        with path.open("a") as fh:
+            fh.write(_jsonl(_claude_custom_title("sess-1", "My Renamed Session")))
+        self.claude_collector.harvest_file(self.conn, path)
+        with path.open("a") as fh:
+            fh.write(_jsonl(_claude_ai_title("sess-1", "auto-generated title")))
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_title("sess-1"), "My Renamed Session")
+
+    def test_title_record_with_no_resolvable_session_is_skipped(self) -> None:
+        path = self.write_session("a.jsonl", _jsonl({"type": "custom-title", "customTitle": "orphaned"}))
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(result["turns"], 0)
+
+    # ------------------------------------------------------------------
     # malformed-line rule — identical to Codex's, same underlying property
     # ------------------------------------------------------------------
 
@@ -2362,6 +2535,110 @@ class ClaudeCollectorTests(unittest.TestCase):
         self.assertEqual(summary["turns"], 1)
         self.assertEqual(len(summary["failures"]), 1)
         self.assertIn("bad.jsonl", summary["failures"][0]["path"])
+
+
+class HarvestBackfillTests(unittest.TestCase):
+    """Direct tests of `cli/harvest.py`'s `_reset_claude_watermarks`, against
+    an in-memory store shared with `claude_collector`.
+
+    Simulates "already harvested before title capture existed" by harvesting
+    a file normally with the current, title-aware collector, then manually
+    clearing `session.title` back to `NULL` — the state a pre-chunk-6
+    collector would have left, since it consumed the same lines and advanced
+    the same watermark, just without ever writing a title. This is easier to
+    construct correctly than replaying an actually-older collector, and it
+    isolates what this test is actually about: that resetting the watermark
+    and re-harvesting recovers the title without duplicating `turn_raw` rows.
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import claude_collector
+        import harvest
+
+        self.usage_store = usage_store
+        self.claude_collector = claude_collector
+        self.harvest = harvest
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "claude_collector", "harvest"):
+            sys.modules.pop(name, None)
+
+    def write_session(self, name: str, content: str) -> Path:
+        path = self.dir / name
+        path.write_text(content)
+        return path
+
+    def test_backfill_titles_populates_title_without_duplicating_turn_raw(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_custom_title("sess-1", "My Renamed Session"),
+                _claude_assistant("sess-1", "req-1"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(
+            self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+            "My Renamed Session",
+        )
+        # Simulate the pre-chunk-6 state: same watermark, same turn_raw row,
+        # but no title was ever recorded.
+        self.conn.execute("UPDATE session SET title = NULL WHERE session_id = 'sess-1'")
+        turn_raw_count_before = self.conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0]
+
+        self.harvest._reset_claude_watermarks(self.conn)
+        self.claude_collector.harvest_all(self.conn, self.dir)
+
+        self.assertEqual(
+            self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+            "My Renamed Session",
+        )
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0],
+            turn_raw_count_before,
+            "replaying an already-harvested file must not duplicate turn_raw rows",
+        )
+
+    def test_reset_only_touches_claude_watermarks(self) -> None:
+        self.conn.execute(
+            "INSERT INTO harvest (harness, source_path, host_id, last_size, last_offset,"
+            " last_line_no, last_line_hash, harvested_at, collector_version)"
+            " VALUES ('codex', '/tmp/codex.jsonl', '', 100, 100, 5, 'h', '2026-01-01T00:00:00Z', 1)"
+        )
+        self.conn.execute(
+            "INSERT INTO harvest (harness, source_path, host_id, last_size, last_offset,"
+            " last_line_no, last_line_hash, harvested_at, collector_version)"
+            " VALUES ('claude', '/tmp/claude.jsonl', '', 100, 100, 5, 'h', '2026-01-01T00:00:00Z', 1)"
+        )
+        self.harvest._reset_claude_watermarks(self.conn)
+        codex_row = self.conn.execute(
+            "SELECT last_offset, last_line_no FROM harvest WHERE harness = 'codex'"
+        ).fetchone()
+        claude_row = self.conn.execute(
+            "SELECT last_offset, last_line_no FROM harvest WHERE harness = 'claude'"
+        ).fetchone()
+        self.assertEqual(codex_row, (100, 5), "resetting Claude watermarks must not touch Codex's")
+        self.assertEqual(claude_row, (0, 0))
 
 
 class NormalizeTests(unittest.TestCase):
@@ -2791,6 +3068,211 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(first["skipped"], 0, "the claude row must be filtered at the SQL level, not selected-then-skipped")
         self.assertEqual(second["normalized"], 0)
         self.assertEqual(first["failures"], [])
+
+
+class CostTests(unittest.TestCase):
+    """Direct tests of cli/cost.py's query functions, against a small
+    constructed turn_norm/session dataset — no collector or normalize
+    pipeline involved, since these functions only ever read what's already
+    in the store.
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import cost
+
+        self.usage_store = usage_store
+        self.cost = cost
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.row_factory = sqlite3.Row
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+        self._next_id = 1
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "cost"):
+            sys.modules.pop(name, None)
+
+    def insert_session(
+        self, session_id: str, harness: str = "codex", title: str | None = None, cwd: str | None = None
+    ) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO session (harness, session_id, title, cwd, source_path) VALUES (?, ?, ?, ?, ?)",
+            (harness, session_id, title, cwd, f"/tmp/{session_id}.jsonl"),
+        )
+        return cur.lastrowid
+
+    def insert_turn(
+        self,
+        session_row_id: int,
+        ts: str,
+        model: str | None = "some-model",
+        fresh: int = 0,
+        cache_read: int = 0,
+        cache_write: int = 0,
+        output: int = 0,
+        capacity_primary_used_pct: float | None = None,
+        capacity_primary_window_minutes: int | None = None,
+        capacity_primary_resets_at: int | None = None,
+        capacity_secondary_used_pct: float | None = None,
+    ) -> int:
+        turn_raw_id = self._next_id
+        self._next_id += 1
+        self.conn.execute(
+            "INSERT INTO turn_raw"
+            " (id, session_row_id, natural_turn_id, turn_seq, is_subagent, ts, model,"
+            "  payload, source_path, source_line_no, collector_version)"
+            " VALUES (?, ?, ?, ?, 0, ?, ?, '{}', '/tmp/x', ?, 1)",
+            (turn_raw_id, session_row_id, f"t{turn_raw_id}", turn_raw_id, ts, model, turn_raw_id),
+        )
+        self.conn.execute(
+            "INSERT INTO turn_norm"
+            " (turn_raw_id, ts, model, is_subagent, fresh_input_tokens, cache_read_tokens,"
+            "  cache_write_tokens, output_tokens, capacity_primary_used_pct,"
+            "  capacity_primary_window_minutes, capacity_primary_resets_at,"
+            "  capacity_secondary_used_pct, norm_version)"
+            " VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+            (
+                turn_raw_id,
+                ts,
+                model,
+                fresh,
+                cache_read,
+                cache_write,
+                output,
+                capacity_primary_used_pct,
+                capacity_primary_window_minutes,
+                capacity_primary_resets_at,
+                capacity_secondary_used_pct,
+            ),
+        )
+        return turn_raw_id
+
+    # ------------------------------------------------------------------
+    # summary_rows
+    # ------------------------------------------------------------------
+
+    def test_summary_rows_groups_by_harness_and_model(self) -> None:
+        codex_sess = self.insert_session("c-1", harness="codex")
+        claude_sess = self.insert_session("cl-1", harness="claude")
+        self.insert_turn(codex_sess, "2026-01-01T00:00:00+00:00", model="gpt-5", fresh=100, cache_read=40, output=10)
+        self.insert_turn(codex_sess, "2026-01-02T00:00:00+00:00", model="gpt-5", fresh=50, output=5)
+        self.insert_turn(claude_sess, "2026-01-01T00:00:00+00:00", model="claude-5", fresh=200, output=50)
+
+        rows = self.cost.summary_rows(self.conn, None)
+        self.assertEqual(len(rows), 2, "one row per distinct (harness, model) pair, not per turn")
+        by_key = {(r["harness"], r["model"]): r for r in rows}
+        self.assertEqual(by_key[("codex", "gpt-5")]["turns"], 2)
+        self.assertEqual(by_key[("codex", "gpt-5")]["fresh_input_tokens"], 150)
+        self.assertEqual(by_key[("claude", "claude-5")]["turns"], 1)
+
+    def test_summary_rows_respects_since_cutoff(self) -> None:
+        sess = self.insert_session("c-1")
+        self.insert_turn(sess, "2026-01-01T00:00:00+00:00", model="gpt-5", fresh=100)
+        self.insert_turn(sess, "2026-06-01T00:00:00+00:00", model="gpt-5", fresh=200)
+
+        rows = self.cost.summary_rows(self.conn, "2026-03-01T00:00:00+00:00")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["fresh_input_tokens"], 200)
+
+    def test_summary_rows_all_ignores_cutoff(self) -> None:
+        sess = self.insert_session("c-1")
+        self.insert_turn(sess, "2020-01-01T00:00:00+00:00", model="gpt-5", fresh=1)
+
+        rows = self.cost.summary_rows(self.conn, None)
+        self.assertEqual(len(rows), 1)
+
+    # ------------------------------------------------------------------
+    # capacity_gauge
+    # ------------------------------------------------------------------
+
+    def test_capacity_gauge_returns_the_most_recent_reading(self) -> None:
+        sess = self.insert_session("c-1", harness="codex")
+        self.insert_turn(
+            sess, "2026-01-01T00:00:00+00:00", capacity_primary_used_pct=10.0, capacity_primary_window_minutes=300
+        )
+        self.insert_turn(
+            sess, "2026-01-02T00:00:00+00:00", capacity_primary_used_pct=25.0, capacity_primary_window_minutes=300
+        )
+
+        gauge = self.cost.capacity_gauge(self.conn, None)
+        self.assertIsNotNone(gauge)
+        self.assertEqual(gauge["capacity_primary_used_pct"], 25.0)
+
+    def test_capacity_gauge_absent_when_no_capacity_data_in_window(self) -> None:
+        sess = self.insert_session("c-1", harness="codex")
+        self.insert_turn(sess, "2026-01-01T00:00:00+00:00")  # no capacity fields
+        self.assertIsNone(self.cost.capacity_gauge(self.conn, None))
+
+    def test_capacity_gauge_ignores_claude_rows(self) -> None:
+        """Claude turns never carry Codex's capacity columns; a gauge query
+        that forgot the harness filter would still coincidentally return
+        `None` here since the columns really are NULL — this test exists so
+        a future change that stops filtering by harness would be caught by
+        the codex-row still being found, not by this test staying silent.
+        """
+        codex_sess = self.insert_session("c-1", harness="codex")
+        claude_sess = self.insert_session("cl-1", harness="claude")
+        self.insert_turn(claude_sess, "2026-01-02T00:00:00+00:00")
+        self.insert_turn(codex_sess, "2026-01-01T00:00:00+00:00", capacity_primary_used_pct=5.0)
+
+        gauge = self.cost.capacity_gauge(self.conn, None)
+        self.assertIsNotNone(gauge)
+        self.assertEqual(gauge["capacity_primary_used_pct"], 5.0)
+
+    def test_capacity_gauge_respects_since_cutoff(self) -> None:
+        sess = self.insert_session("c-1", harness="codex")
+        self.insert_turn(sess, "2026-01-01T00:00:00+00:00", capacity_primary_used_pct=5.0)
+        self.assertIsNone(self.cost.capacity_gauge(self.conn, "2026-06-01T00:00:00+00:00"))
+
+    # ------------------------------------------------------------------
+    # sessions_rows
+    # ------------------------------------------------------------------
+
+    def test_sessions_rows_label_fallback_order(self) -> None:
+        titled = self.insert_session("s-titled", title="My Title", cwd="/tmp/a")
+        cwd_only = self.insert_session("s-cwd", title=None, cwd="/tmp/b")
+        neither = self.insert_session("s-bare-1234567890", title=None, cwd=None)
+        self.insert_turn(titled, "2026-01-01T00:00:00+00:00")
+        self.insert_turn(cwd_only, "2026-01-01T00:00:00+00:00")
+        self.insert_turn(neither, "2026-01-01T00:00:00+00:00")
+
+        by_session_id = {r["session_id"]: r["label"] for r in self.cost.sessions_rows(self.conn, None)}
+        self.assertEqual(by_session_id["s-titled"], "My Title")
+        self.assertEqual(by_session_id["s-cwd"], "/tmp/b")
+        self.assertEqual(by_session_id["s-bare-1234567890"], "session:s-bare-1")
+
+    def test_sessions_rows_ordered_most_recently_active_first(self) -> None:
+        older = self.insert_session("s-older")
+        newer = self.insert_session("s-newer")
+        self.insert_turn(older, "2026-01-01T00:00:00+00:00")
+        self.insert_turn(newer, "2026-06-01T00:00:00+00:00")
+
+        rows = self.cost.sessions_rows(self.conn, None)
+        self.assertEqual([r["session_id"] for r in rows], ["s-newer", "s-older"])
+
+    # ------------------------------------------------------------------
+    # renderers
+    # ------------------------------------------------------------------
+
+    def test_render_table_on_empty_rows_says_so_rather_than_printing_nothing(self) -> None:
+        self.assertEqual(self.cost.render_table([]), "(no data in range)")
+
+    def test_render_json_round_trips(self) -> None:
+        rows = [{"harness": "codex", "turns": 3}]
+        self.assertEqual(json.loads(self.cost.render_json(rows)), rows)
 
 
 if __name__ == "__main__":

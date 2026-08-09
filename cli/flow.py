@@ -15,6 +15,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # The `# noqa: E402` markers are load-bearing, not decoration: these imports
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
+from cost import cost_sessions_command, cost_summary_command  # noqa: E402
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
@@ -102,10 +103,15 @@ def main() -> int:
         help="harvest ~/.codex/sessions/ into the usage store",
         description="Incrementally read Codex session transcripts, writing session and turn records into the usage store's raw layer.",
     )
-    harvest_sub.add_parser(
+    harvest_claude_parser = harvest_sub.add_parser(
         "claude",
         help="harvest ~/.claude/projects/ into the usage store",
         description="Incrementally read Claude Code session transcripts, writing session and turn records into the usage store's raw layer.",
+    )
+    harvest_claude_parser.add_argument(
+        "--backfill-titles",
+        action="store_true",
+        help="rewind every already-recorded file's watermark first, so sessions harvested before title capture existed pick up session.title retroactively",
     )
 
     sub.add_parser(
@@ -113,6 +119,45 @@ def main() -> int:
         help="recompute the usage store's normalized layer from raw records",
         description="Project every harness's raw turn records into one shared token convention. Only rows without a current-version normalized counterpart are recomputed.",
     )
+
+    cost = sub.add_parser(
+        "cost",
+        help="read token usage back out of the usage store",
+        description="Read `~/.flow/usage.db`'s normalized layer. Read-only — never writes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n",
+    )
+    cost_sub = cost.add_subparsers(dest="cost_target", required=True, title="cost views")
+
+    cost_summary_parser = cost_sub.add_parser(
+        "summary",
+        help="token totals by harness/model, plus Codex's capacity gauge",
+        description="Token totals grouped by harness and model within the window, plus the most recent Codex capacity reading as a separate gauge line.",
+    )
+    cost_sessions_parser = cost_sub.add_parser(
+        "sessions",
+        help="token totals by session, most recently active first",
+        description="Token totals grouped by session, within the window, most recently active first.",
+    )
+    for cost_parser in (cost_summary_parser, cost_sessions_parser):
+        window = cost_parser.add_mutually_exclusive_group()
+        window.add_argument(
+            "--days",
+            type=int,
+            default=7,
+            metavar="N",
+            help="show the last N days (default: 7)",
+        )
+        window.add_argument(
+            "--all",
+            action="store_true",
+            help="show every row ever normalized, ignoring --days",
+        )
+        cost_parser.add_argument(
+            "--json",
+            action="store_true",
+            help="print the same result as JSON instead of an aligned table",
+        )
 
     sub.add_parser(
         "help",
@@ -235,9 +280,13 @@ def main() -> int:
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
     if args.command == "harvest" and args.harvest_target == "claude":
-        return harvest_claude_command()
+        return harvest_claude_command(backfill_titles=args.backfill_titles)
     if args.command == "normalize":
         return normalize_command()
+    if args.command == "cost" and args.cost_target == "summary":
+        return cost_summary_command(days=args.days, show_all=args.all, as_json=args.json)
+    if args.command == "cost" and args.cost_target == "sessions":
+        return cost_sessions_command(days=args.days, show_all=args.all, as_json=args.json)
     if args.command == "help":
         return help_command()
     if args.command == "doctor":
