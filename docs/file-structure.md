@@ -7,7 +7,18 @@ The main `flow` repo currently uses this structure:
 ```text
 flow/
   cli/
-    flow.py
+    flow.py          entrypoint: argparse declaration and dispatch
+    diagnostics.py   doctor, help, bootstrap
+    flowtoml.py      TOML reading
+    fsutil.py        filesystem primitives
+    lifecycle.py     two-mode install, release staging, update
+    paths.py         machine paths and mode constants
+    render.py        generated-adapter rendering
+    setup.py         machine / project / user setup and refresh
+    sync.py          the sync engine
+    usage_store.py   SQLite store for harvested harness usage
+  data/
+    harness_capabilities.json
   docs/
     architecture.md
     cli-reference.md
@@ -39,11 +50,31 @@ flow/
 
 ### `cli/`
 
-Contains the main local entrypoint:
+Flat sibling modules, not a package — the launcher runs `cli/flow.py` as a
+script, which is what puts `cli/` on `sys.path` and lets the modules import each
+other by bare name.
 
-- `flow.py` implements setup, refresh, validation, and runtime sync behavior
+- `flow.py` — the entrypoint. Argparse declaration and dispatch only; it holds
+  no command implementations and no constants.
+- `paths.py`, `flowtoml.py`, `fsutil.py` — leaves. They import nothing from
+  their siblings, which is what keeps the module graph acyclic.
+- `render.py` — builds the text of generated adapters. Touches no filesystem.
+- `sync.py` — resolves manifests, computes desired adapter output, reconciles
+  it against disk.
+- `setup.py` — machine, project, and user setup, plus project refresh.
+- `lifecycle.py` — two-mode install, release staging, and update.
+- `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; never writes.
+- `usage_store.py` — SQLite store for harvested harness usage.
 
-Edit here when changing lifecycle or runtime generation behavior.
+Edit the module that owns the behavior. `flow.py` changes only when a command
+is added, removed, or its arguments change.
+
+`cli/` imports only the standard library and its own siblings today, and flow
+ships no dependency installer, so anything added would have to be installed by
+hand. That is a design choice rather than a constraint the tooling imposes —
+release staging validation checks that every module-scope import *resolves*,
+against the staged tree or the environment, without needing to know which
+category a name belongs to. See `_validate_staging` in `cli/lifecycle.py`.
 
 ### `docs/`
 
@@ -158,7 +189,7 @@ Edit here when installation or launcher behavior changes.
 
 Edit these directly in the `flow` repo:
 
-- `cli/flow.py` for CLI behavior
+- `cli/*.py` for CLI behavior — the module that owns it, per the `cli/` section above
 - `scaffolds/default/flow.toml` for runtime adapter policy
 - `scaffolds/default/commands/*.md` for workflow source contracts
 - `scaffolds/default/agents/*.md` for role source contracts
