@@ -14,6 +14,7 @@ flow/
     fsutil.py          filesystem primitives
     harvest.py         thin CLI wrapper around the harness collectors
     lifecycle.py       two-mode install, release staging, update
+    normalize.py       turn_raw -> turn_norm, one convention across harnesses
     paths.py           machine paths and mode constants
     render.py          generated-adapter rendering
     setup.py           machine / project / user setup and refresh
@@ -72,6 +73,10 @@ other by bare name.
 - `harvest.py` — the thin CLI wrapper around collector modules (`codex_collector.py`
   today, a `claude_collector.py` sibling later). Argument resolution and
   printing live here; parsing and persistence live in each collector.
+- `normalize.py` — projects `turn_raw` into `turn_norm` in one shared,
+  harness-neutral convention. A separate command from `harvest`: appending new
+  raw data and recomputing derived data have different cost profiles, and a
+  rule change can touch every row.
 
 Edit the module that owns the behavior. `flow.py` changes only when a command
 is added, removed, or its arguments change.

@@ -20,6 +20,19 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   `session.source_path` (a direct pointer a resumed harvest needs to resolve
   which session a batch belongs to, without inferring it from a child row that
   may not exist yet).
+- **`flow normalize`** (token-advisory chunk 4) — projects every harness's raw
+  `turn_raw` records into `turn_norm`'s shared, disjoint-token convention, so
+  nothing above that layer needs to know Codex reports `cached_input_tokens`
+  as a *subset* of `input_tokens` while Claude's cache buckets are disjoint
+  and additive. Only rows with no current-version `turn_norm` counterpart are
+  (re)computed — a separate command from `flow harvest codex`, since appending
+  new raw data and recomputing derived data have different cost profiles and
+  a rule change can touch every row. Schema migration v3 adds
+  `capacity_secondary_*` columns to `turn_norm`, mirroring
+  `capacity_primary_*` — real data showed Codex's `rate_limits.secondary`
+  populated in 7.7% of rows on a 16,260-row corpus, not "null in every
+  sample" as originally found. `_V1` and `_V2` untouched; `_V2` is already
+  applied on real installs and could not be edited in place this time.
 
 ### Fixed
 

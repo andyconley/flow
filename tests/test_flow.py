@@ -2248,24 +2248,24 @@ class NormalizeTests(unittest.TestCase):
 
     def test_rerun_with_no_new_rows_normalizes_nothing(self) -> None:
         sess = self.insert_session()
-        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"info": None}})
+        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"type": "token_count", "info": None}})
         self.normalize.normalize_all(self.conn)
         second = self.normalize.normalize_all(self.conn)
         self.assertEqual(second["normalized"], 0)
 
     def test_new_turn_raw_row_is_the_only_one_normalized(self) -> None:
         sess = self.insert_session()
-        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"info": None}})
+        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"type": "token_count", "info": None}})
         self.normalize.normalize_all(self.conn)
-        new_id = self.insert_turn_raw(sess, {"timestamp": "y", "payload": {"info": None}})
+        new_id = self.insert_turn_raw(sess, {"timestamp": "y", "payload": {"type": "token_count", "info": None}})
         result = self.normalize.normalize_all(self.conn)
         self.assertEqual(result["normalized"], 1)
         self.assertIsNotNone(self.norm_row(new_id))
 
     def test_stale_norm_version_is_reprocessed_alone(self) -> None:
         sess = self.insert_session()
-        stale_id = self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"info": None}})
-        fresh_id = self.insert_turn_raw(sess, {"timestamp": "y", "payload": {"info": None}})
+        stale_id = self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"type": "token_count", "info": None}})
+        fresh_id = self.insert_turn_raw(sess, {"timestamp": "y", "payload": {"type": "token_count", "info": None}})
         self.normalize.normalize_all(self.conn)
         self.conn.execute("UPDATE turn_norm SET norm_version = 0 WHERE turn_raw_id = ?", (stale_id,))
         self.conn.commit()
@@ -2273,6 +2273,140 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(result["normalized"], 1)
         self.assertEqual(self.norm_row(stale_id)["norm_version"], self.normalize.NORM_VERSION)
         self.assertEqual(self.norm_row(fresh_id)["norm_version"], self.normalize.NORM_VERSION)
+
+    def test_reprocessing_a_stale_row_overwrites_changed_values(self) -> None:
+        """Proves ON CONFLICT DO UPDATE actually replaces content, not just presence.
+
+        A row that goes from having token data to not having any (or vice
+        versa) must have its turn_norm row reflect the NEW payload exactly —
+        a column populated by the first pass but absent from the second must
+        come back NULL, not keep its stale value.
+        """
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "x",
+                "payload": {
+                    "type": "token_count",
+                    "info": {"last_token_usage": {"input_tokens": 100, "cached_input_tokens": 40}},
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        self.assertEqual(self.norm_row(tr_id)["fresh_input_tokens"], 60)
+
+        # Change the underlying payload and force reprocessing.
+        self.conn.execute(
+            "UPDATE turn_raw SET payload = ? WHERE id = ?",
+            (json.dumps({"timestamp": "x", "payload": {"type": "token_count", "info": None}}), tr_id),
+        )
+        self.conn.execute("UPDATE turn_norm SET norm_version = 0 WHERE turn_raw_id = ?", (tr_id,))
+        self.conn.commit()
+
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertIsNone(row["fresh_input_tokens"], "must reflect the new payload, not retain the old value")
+        self.assertEqual(row["norm_version"], self.normalize.NORM_VERSION)
+
+    def test_cached_absent_with_input_present_is_treated_as_zero_cached(self) -> None:
+        """The gap the shared _token_count() fixture exercises everywhere else untested."""
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "x",
+                "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 100}}},
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertEqual(row["fresh_input_tokens"], 100, "no cached field present must mean nothing was cached")
+        self.assertIsNone(row["cache_read_tokens"])
+
+    def test_input_absent_with_cached_present_is_uncomputable(self) -> None:
+        """The genuinely-uncomputable direction — must stay None, not become 0 or negative."""
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "x",
+                "payload": {"type": "token_count", "info": {"last_token_usage": {"cached_input_tokens": 40}}},
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertIsNone(row["fresh_input_tokens"])
+        self.assertEqual(row["cache_read_tokens"], 40, "the independent measurement is still recorded")
+
+    def test_cached_exceeding_input_does_not_store_a_negative(self) -> None:
+        """Guards against a violation of Codex's own subset semantics reaching turn_norm."""
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "x",
+                "payload": {
+                    "type": "token_count",
+                    "info": {"last_token_usage": {"input_tokens": 10, "cached_input_tokens": 40}},
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertIsNone(row["fresh_input_tokens"], "a negative result must not be stored")
+
+    def test_non_numeric_leaf_is_skipped_not_a_crash(self) -> None:
+        """A leaf value with an unanticipated shape must not abort every other row."""
+        sess = self.insert_session()
+        bad_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "x",
+                "payload": {
+                    "type": "token_count",
+                    "info": {"last_token_usage": {"input_tokens": {"value": 5}}},
+                },
+            },
+        )
+        good_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "y",
+                "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 5}}},
+            },
+        )
+        result = self.normalize.normalize_all(self.conn)
+        # A non-scalar leaf degrades to None (via _num), not a raised
+        # exception — this row succeeds with fresh_input_tokens absent rather
+        # than failing. The real regression this guards is a leaf shape that
+        # *isn't* caught by _num reaching sqlite3 directly; this test pins
+        # the current, safe behavior so a future change can't quietly widen
+        # what gets passed straight through.
+        self.assertEqual(result["failures"], [])
+        self.assertIsNone(self.norm_row(bad_id)["fresh_input_tokens"])
+        self.assertEqual(self.norm_row(good_id)["fresh_input_tokens"], 5)
+
+    def test_non_token_count_record_is_skipped_not_normalized(self) -> None:
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"type": "some_future_record"}})
+        result = self.normalize.normalize_all(self.conn)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(result["normalized"], 0)
+        self.assertIsNone(self.norm_row(tr_id))
+
+    def test_unrecognized_harness_rows_are_not_reselected_every_run(self) -> None:
+        """Filtered at the SQL level, not per-row — a row with no extractor
+        must never appear in the candidate set at all, so it costs nothing on
+        repeated runs regardless of how many such rows accumulate.
+        """
+        sess = self.insert_session(session_id="claude-sess", harness="claude")
+        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"type": "token_count"}})
+        first = self.normalize.normalize_all(self.conn)
+        second = self.normalize.normalize_all(self.conn)
+        self.assertEqual(first["normalized"], 0)
+        self.assertEqual(second["normalized"], 0)
+        self.assertEqual(first["failures"], [])
 
 
 if __name__ == "__main__":
