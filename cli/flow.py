@@ -18,6 +18,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from harvest import harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
+from normalize import normalize_command  # noqa: E402
 from setup import (  # noqa: E402
     refresh_project,
     setup_machine,
@@ -100,6 +101,12 @@ def main() -> int:
         "codex",
         help="harvest ~/.codex/sessions/ into the usage store",
         description="Incrementally read Codex session transcripts, writing session and turn records into the usage store's raw layer.",
+    )
+
+    sub.add_parser(
+        "normalize",
+        help="recompute the usage store's normalized layer from raw records",
+        description="Project every harness's raw turn records into one shared token convention. Only rows without a current-version normalized counterpart are recomputed.",
     )
 
     sub.add_parser(
@@ -222,6 +229,8 @@ def main() -> int:
         return refresh_project()
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
+    if args.command == "normalize":
+        return normalize_command()
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

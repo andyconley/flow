@@ -1477,6 +1477,7 @@ class FlowCliTests(unittest.TestCase):
                 "fsutil",
                 "harvest",
                 "lifecycle",
+                "normalize",
                 "paths",
                 "render",
                 "setup",
@@ -1536,6 +1537,45 @@ class FlowCliTests(unittest.TestCase):
         result = self.run_flow("harvest", "codex")
         self.assert_ok(result)
         self.assertIn("no Codex sessions found", result.stdout)
+
+    def test_normalize_end_to_end_via_cli(self) -> None:
+        home = self.use_fake_home()
+        sessions_dir = home / ".codex" / "sessions" / "2026" / "01" / "01"
+        sessions_dir.mkdir(parents=True)
+        (sessions_dir / "rollout-test.jsonl").write_text(
+            _jsonl(
+                _session_meta("sess-1"),
+                _task_started("turn-1"),
+                _turn_context("turn-1", "gpt-5.6"),
+                _token_count(),
+                _task_complete("turn-1"),
+            )
+        )
+        self.assert_ok(self.run_flow("harvest", "codex"))
+
+        result = self.run_flow("normalize")
+        self.assert_ok(result)
+        self.assertIn("1 rows", result.stdout)
+
+        store = self._store_path(home)
+        # store_status doesn't expose turn_norm counts; check the table directly.
+        import sqlite3
+
+        conn = sqlite3.connect(store)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM turn_norm").fetchone()[0], 1)
+        conn.close()
+
+        # Idempotent from the CLI too.
+        second = self.run_flow("normalize")
+        self.assert_ok(second)
+        self.assertIn("0 rows", second.stdout)
+
+    def test_normalize_ensures_the_store_on_a_fresh_machine(self) -> None:
+        """flow normalize must work standalone, like flow harvest codex does."""
+        self.use_fake_home()
+        result = self.run_flow("normalize")
+        self.assert_ok(result)
+        self.assertIn("0 rows", result.stdout)
 
 
 def _jsonl(*records: dict) -> str:
@@ -2024,6 +2064,215 @@ class CodexCollectorTests(unittest.TestCase):
         self.assertIn("shrunk.jsonl", second["failures"][0]["path"])
         # The unaffected file must not be reprocessed or double-counted.
         self.assertEqual(second["turns"], 0)
+
+
+class NormalizeTests(unittest.TestCase):
+    """Direct tests of cli/normalize.py, against an in-memory store.
+
+    turn_raw rows are inserted directly rather than produced via the Codex
+    collector — normalization operates on whatever is already in turn_raw
+    regardless of how it got there, and decoupling from the collector means
+    a change to harvest logic can't accidentally mask a normalize regression.
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import normalize
+
+        self.usage_store = usage_store
+        self.normalize = normalize
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+        self._next_line = 1
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "normalize"):
+            sys.modules.pop(name, None)
+
+    def insert_session(self, session_id: str = "sess-1", harness: str = "codex") -> int:
+        cur = self.conn.execute(
+            "INSERT INTO session (harness, session_id, source_path) VALUES (?, ?, ?)",
+            (harness, session_id, f"/tmp/{session_id}.jsonl"),
+        )
+        return cur.lastrowid
+
+    def insert_turn_raw(
+        self,
+        session_row_id: int,
+        record: dict,
+        model: str | None = "gpt-5.6",
+        is_subagent: int = 0,
+    ) -> int:
+        line_no = self._next_line
+        self._next_line += 1
+        cur = self.conn.execute(
+            "INSERT INTO turn_raw"
+            " (session_row_id, natural_turn_id, turn_seq, is_subagent, ts, model,"
+            "  payload, source_path, source_line_no, collector_version)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_row_id,
+                f"turn:{line_no}",
+                line_no,
+                is_subagent,
+                record.get("timestamp", "2026-01-01T00:00:00Z"),
+                model,
+                json.dumps(record),
+                "/tmp/x.jsonl",
+                line_no,
+                1,
+            ),
+        )
+        return cur.lastrowid
+
+    def norm_row(self, turn_raw_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM turn_norm WHERE turn_raw_id = ?", (turn_raw_id,)).fetchone()
+        if row is None:
+            return None
+        cols = [d[0] for d in self.conn.execute("SELECT * FROM turn_norm LIMIT 0").description]
+        return dict(zip(cols, row))
+
+    # ------------------------------------------------------------------
+    # extraction correctness
+    # ------------------------------------------------------------------
+
+    def test_full_payload_extracts_every_field(self) -> None:
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "2026-01-01T00:00:01Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {
+                            "input_tokens": 100,
+                            "cached_input_tokens": 40,
+                            "cache_write_input_tokens": 5,
+                            "output_tokens": 10,
+                            "reasoning_output_tokens": 3,
+                        },
+                        "model_context_window": 200000,
+                    },
+                    "rate_limits": {
+                        "primary": {"used_percent": 5.0, "window_minutes": 300, "resets_at": 123},
+                        "secondary": {"used_percent": 10.0, "window_minutes": 10080, "resets_at": 456},
+                    },
+                },
+            },
+        )
+        result = self.normalize.normalize_all(self.conn)
+        self.assertEqual(result["normalized"], 1)
+        row = self.norm_row(tr_id)
+        self.assertEqual(row["fresh_input_tokens"], 60)
+        self.assertEqual(row["cache_read_tokens"], 40)
+        self.assertEqual(row["cache_write_tokens"], 5)
+        self.assertEqual(row["output_tokens"], 10)
+        self.assertEqual(row["reasoning_tokens"], 3)
+        self.assertEqual(row["context_window"], 200000)
+        self.assertEqual(row["capacity_primary_used_pct"], 5.0)
+        self.assertEqual(row["capacity_primary_window_minutes"], 300)
+        self.assertEqual(row["capacity_primary_resets_at"], 123)
+        self.assertEqual(row["capacity_secondary_used_pct"], 10.0)
+        self.assertEqual(row["capacity_secondary_window_minutes"], 10080)
+        self.assertEqual(row["capacity_secondary_resets_at"], 456)
+        self.assertEqual(row["model"], "gpt-5.6", "ts/model/is_subagent copy through from turn_raw")
+        self.assertEqual(row["norm_version"], self.normalize.NORM_VERSION)
+
+    def test_null_info_leaves_token_columns_null_but_still_produces_a_row(self) -> None:
+        """0.1% of real rows have info: null — absence, not a skipped row."""
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "2026-01-01T00:00:01Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": None,
+                    "rate_limits": {"primary": {"used_percent": 1.0, "window_minutes": 300, "resets_at": 1}},
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertIsNotNone(row, "a row must exist even when info is null")
+        self.assertIsNone(row["fresh_input_tokens"])
+        self.assertIsNone(row["cache_read_tokens"])
+        self.assertIsNone(row["context_window"])
+        self.assertEqual(row["capacity_primary_used_pct"], 1.0, "rate_limits is independent of info")
+        self.assertIsNone(row["capacity_secondary_used_pct"])
+
+    def test_absent_secondary_is_null_not_zero(self) -> None:
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "2026-01-01T00:00:01Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": {"last_token_usage": {"input_tokens": 10, "cached_input_tokens": 2}},
+                    "rate_limits": {"primary": {"used_percent": 1.0, "window_minutes": 300, "resets_at": 1}},
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertIsNone(row["capacity_secondary_used_pct"])
+        self.assertIsNone(row["capacity_secondary_window_minutes"])
+        self.assertIsNone(row["capacity_secondary_resets_at"])
+
+    def test_unknown_harness_is_left_alone_not_raised(self) -> None:
+        """The seam chunk 5 (Claude collector) fills in without changing this function."""
+        sess = self.insert_session(session_id="claude-sess", harness="claude")
+        tr_id = self.insert_turn_raw(sess, {"timestamp": "2026-01-01T00:00:01Z", "payload": {}})
+        result = self.normalize.normalize_all(self.conn)
+        self.assertEqual(result["normalized"], 0)
+        self.assertIsNone(self.norm_row(tr_id))
+
+    # ------------------------------------------------------------------
+    # idempotency, incrementality, staleness
+    # ------------------------------------------------------------------
+
+    def test_rerun_with_no_new_rows_normalizes_nothing(self) -> None:
+        sess = self.insert_session()
+        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"info": None}})
+        self.normalize.normalize_all(self.conn)
+        second = self.normalize.normalize_all(self.conn)
+        self.assertEqual(second["normalized"], 0)
+
+    def test_new_turn_raw_row_is_the_only_one_normalized(self) -> None:
+        sess = self.insert_session()
+        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"info": None}})
+        self.normalize.normalize_all(self.conn)
+        new_id = self.insert_turn_raw(sess, {"timestamp": "y", "payload": {"info": None}})
+        result = self.normalize.normalize_all(self.conn)
+        self.assertEqual(result["normalized"], 1)
+        self.assertIsNotNone(self.norm_row(new_id))
+
+    def test_stale_norm_version_is_reprocessed_alone(self) -> None:
+        sess = self.insert_session()
+        stale_id = self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"info": None}})
+        fresh_id = self.insert_turn_raw(sess, {"timestamp": "y", "payload": {"info": None}})
+        self.normalize.normalize_all(self.conn)
+        self.conn.execute("UPDATE turn_norm SET norm_version = 0 WHERE turn_raw_id = ?", (stale_id,))
+        self.conn.commit()
+        result = self.normalize.normalize_all(self.conn)
+        self.assertEqual(result["normalized"], 1)
+        self.assertEqual(self.norm_row(stale_id)["norm_version"], self.normalize.NORM_VERSION)
+        self.assertEqual(self.norm_row(fresh_id)["norm_version"], self.normalize.NORM_VERSION)
 
 
 if __name__ == "__main__":
