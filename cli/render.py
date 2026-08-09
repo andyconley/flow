@@ -5,10 +5,11 @@ string-building — it takes manifest dicts and command bodies and returns text.
 It never touches the filesystem, which is why the sync engine can diff proposed
 output against what is already on disk without a dry-run mode.
 
-Claude and Codex skills render separately rather than through one parameterized
-function: Codex needs its description JSON-encoded and points at a different
-resync command, and collapsing the two has repeatedly produced output that is
-subtly wrong for one runtime.
+Claude skills go through `render_skill_from_command`, which builds frontmatter
+from the manifest entry. Codex gets its own renderer rather than a parameter on
+that one: it needs its description JSON-encoded and points at a different resync
+command, and collapsing the two has repeatedly produced output subtly wrong for
+one runtime.
 """
 
 import json
@@ -50,27 +51,6 @@ def manifest_ref_for(mode: str, manifest_path: Path, root: Path) -> str:
     if mode == MODE_USER:
         return '~/.flow/source/scaffolds/default/flow.toml'
     return rel_posix(manifest_path, root)
-
-
-def render_skill(name: str, description: str, source_path: str, body: str) -> str:
-    lines = [
-        "---",
-        f"name: {name}",
-        f"description: {description}",
-        "---",
-        "",
-        f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->",
-        "",
-        body.rstrip(),
-        "",
-        "## Invocation Arguments",
-        "",
-        "If arguments were provided after the skill name, treat them as the specific focus for this run:",
-        "",
-        "`$ARGUMENTS`",
-        "",
-    ]
-    return "\n".join(lines)
 
 
 def render_codex_skill(name: str, description: str, source_path: str, body: str) -> str:

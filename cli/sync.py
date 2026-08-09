@@ -280,8 +280,10 @@ def desired_claude_outputs(
         }
     )
 
+    # The manifest lists itself, so its own entry has to be appended before the
+    # content is built — otherwise the file on disk describes every managed file
+    # except the one describing them.
     managed_manifest_path = root / runtime["managed_manifest"]
-    outputs[managed_manifest_path] = build_managed_manifest("claude", managed_entries)
     managed_entries.append(
         {
             "path": rel_posix(managed_manifest_path, root),
@@ -320,8 +322,9 @@ def desired_codex_outputs(
             }
         )
 
+    # See the note in desired_claude_outputs: the manifest lists itself, so its
+    # own entry is appended before the content is built.
     managed_manifest_path = root / runtime["managed_manifest"]
-    outputs[managed_manifest_path] = build_managed_manifest("codex", managed_entries)
     managed_entries.append(
         {
             "path": rel_posix(managed_manifest_path, root),

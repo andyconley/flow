@@ -69,10 +69,12 @@ other by bare name.
 Edit the module that owns the behavior. `flow.py` changes only when a command
 is added, removed, or its arguments change.
 
-`cli/` must import only the standard library and its own siblings. Release
-staging validation derives its required-file set from the entrypoint's imports,
-so a third-party dependency would make every subsequent release unrecoverable
-from an older client — see `_declared_sibling_imports` in `cli/lifecycle.py`.
+`cli/` imports only the standard library and its own siblings today, and flow
+ships no dependency installer, so anything added would have to be installed by
+hand. That is a design choice rather than a constraint the tooling imposes —
+release staging validation checks that every module-scope import *resolves*,
+against the staged tree or the environment, without needing to know which
+category a name belongs to. See `_validate_staging` in `cli/lifecycle.py`.
 
 ### `docs/`
 

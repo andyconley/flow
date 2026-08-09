@@ -1349,43 +1349,79 @@ class FlowCliTests(unittest.TestCase):
         self.assertIsNotNone(reason, "an unparseable entrypoint must be rejected")
         self.assertIn("does not parse", reason)
 
-    def test_cli_modules_import_only_stdlib_and_siblings(self) -> None:
-        """cli/ must stay dependency-free, because _validate_staging assumes it.
+    def test_release_staging_accepts_a_future_third_party_dependency(self) -> None:
+        """An installed release must not reject a later one for taking a dependency.
 
-        The staging check treats every non-stdlib module-scope import as a
-        required sibling. A third-party import would make every release after it
-        unrecoverable from an older client — the old code does the rejecting, so
-        there is no way to ship the fix. If flow ever takes a runtime
-        dependency, _declared_sibling_imports has to learn about it in a release
-        that ships first, and this test is what forces that conversation.
+        This validation runs from the *installed* version against a *newer*
+        staged tree. If it assumed every non-stdlib import were a flow module,
+        a future release that started importing a real package would be
+        rejected by every existing install — and the fix could not be shipped,
+        because the rejecting code is the installed code. Same shape as the P8
+        whitelist trap.
+
+        `json` would be filtered as stdlib, so the dependency here is faked with
+        a package that exists on sys.path but not under the staged cli/.
         """
-        import ast
+        lifecycle = self._load_cli_module("lifecycle")
 
-        stdlib = getattr(sys, "stdlib_module_names", None)
-        if stdlib is None:
-            self.skipTest("sys.stdlib_module_names requires Python 3.10+")
+        deps = self.repo / "site-packages"
+        (deps / "pretend_dep").mkdir(parents=True)
+        (deps / "pretend_dep" / "__init__.py").write_text("")
 
-        cli_dir = REPO_ROOT / "cli"
-        siblings = {p.stem for p in cli_dir.glob("*.py")}
-        offenders: list[str] = []
-        for module in sorted(cli_dir.glob("*.py")):
-            tree = ast.parse(module.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                names: list[str] = []
-                if isinstance(node, ast.Import):
-                    names = [a.name.split(".")[0] for a in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                    names = [node.module.split(".")[0]]
-                for name in names:
-                    if name not in stdlib and name not in siblings:
-                        offenders.append(f"{module.name}:{node.lineno} imports {name!r}")
-
-        self.assertEqual(
-            offenders,
-            [],
-            "cli/ must import only stdlib and its own siblings; see "
-            "_declared_sibling_imports in cli/lifecycle.py for why",
+        staging = self.repo / "staging_future"
+        (staging / "cli").mkdir(parents=True)
+        (staging / "cli" / "flow.py").write_text(
+            "import pretend_dep\nimport usage_store\n"
         )
+        (staging / "cli" / "usage_store.py").write_text("# sibling")
+        (staging / "scaffolds" / "default").mkdir(parents=True)
+        (staging / "scaffolds" / "default" / "flow.toml").write_text("")
+        (staging / "data").mkdir(parents=True)
+        (staging / "data" / "harness_capabilities.json").write_text(
+            '{"capabilities": []}'
+        )
+
+        # Not importable anywhere: indistinguishable from a broken tree, and a
+        # dependency flow could not import either. Rejecting is correct.
+        reason = lifecycle._validate_staging(staging)
+        self.assertIsNotNone(reason, "an unresolvable import must be rejected")
+        self.assertIn("pretend_dep", reason)
+
+        # Installed: the release is fine, and must be accepted by old code that
+        # has never heard of it.
+        sys.path.insert(0, str(deps))
+        try:
+            self.assertIsNone(
+                lifecycle._validate_staging(staging),
+                "an installed third-party dependency must not read as a "
+                "missing cli/ sibling",
+            )
+        finally:
+            sys.path.remove(str(deps))
+
+    def test_release_staging_ignores_the_running_install_when_resolving(self) -> None:
+        """The current install must not vouch for a module absent from staging.
+
+        Every flow module is importable from the running cli/ directory while
+        this check runs. If that directory counted as "resolvable", a staged
+        tree missing cli/paths.py would be waved through by the very install the
+        update is about to replace.
+        """
+        lifecycle = self._load_cli_module("lifecycle")
+        running_cli = REPO_ROOT / "cli"
+
+        sys.path.insert(0, str(running_cli))
+        try:
+            self.assertFalse(
+                lifecycle._resolves_in_environment("paths", running_cli.resolve()),
+                "the running cli/ directory must be excluded from resolution",
+            )
+            self.assertTrue(
+                lifecycle._resolves_in_environment("paths", Path("/nonexistent")),
+                "control: without the exclusion it would resolve",
+            )
+        finally:
+            sys.path.remove(str(running_cli))
 
     def test_release_staging_requires_every_real_cli_sibling(self) -> None:
         """Regression guard: the check must reject the real tree minus any one module.

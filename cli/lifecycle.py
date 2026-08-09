@@ -21,6 +21,7 @@ lands so a new schema version applies without waiting for the next
 """
 
 import ast
+import importlib.machinery
 import os
 import re
 import shutil
@@ -315,6 +316,47 @@ def _module_scope_imports(path: Path, stdlib: frozenset) -> list[str]:
     return [n for n in dict.fromkeys(names) if n not in stdlib]
 
 
+def _resolves_in_environment(name: str, exclude: Path) -> bool:
+    """Can `name` be imported from somewhere other than the running cli/ directory?
+
+    Used to tell a genuine third-party dependency apart from a sibling that
+    failed to make it into the staged tree. The running cli/ directory is
+    excluded because it is the *current* install: leaving it in would let the
+    installed copy of a module vouch for a staged copy that is not there.
+
+    `PathFinder.find_spec` rather than `importlib.util.find_spec` on purpose —
+    the latter consults `sys.modules` first, and flow has already imported most
+    of its own module names by the time this runs, so every one of them would
+    appear resolvable. PathFinder searches the given path entries only and
+    handles zip and namespace packages that a manual directory scan would miss.
+
+    Empty and cwd-relative sys.path entries are dropped. A stray `paths.py` in
+    whatever directory the user happened to run `flow update` from should not be
+    able to vouch for a missing sibling.
+    """
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        cwd = None
+
+    search: list[str] = []
+    for entry in sys.path:
+        if not entry:
+            continue
+        try:
+            resolved = Path(entry).resolve()
+        except OSError:
+            continue
+        if resolved == exclude or resolved == cwd:
+            continue
+        search.append(entry)
+
+    try:
+        return importlib.machinery.PathFinder.find_spec(name, search) is not None
+    except (ImportError, AttributeError, ValueError):
+        return False
+
+
 def _declared_sibling_imports(cli_entry: Path) -> list[str]:
     """Every sibling module a staged flow.py needs, following imports transitively.
 
@@ -331,17 +373,10 @@ def _declared_sibling_imports(cli_entry: Path) -> list[str]:
     rather than guessed at: under-validating can only let a bad release through,
     while guessing could reject a good one.
 
-    Modules that are named but absent are still reported. That is the point —
-    the caller turns them into the rejection reason.
-
-    This treats every non-stdlib module-scope import as a required sibling,
-    which rests on cli/ having no third-party runtime dependencies. That is a
-    real invariant of this CLI — it runs straight off ~/.flow/source with no
-    virtualenv — and `test_cli_modules_import_only_stdlib_and_siblings` enforces
-    it. Taking a runtime dependency without changing this check first would make
-    every release after it unupdatable from an older client, because the code
-    doing the rejecting is the old code. If flow ever needs one, this function
-    has to learn about it in a release that ships *before* the dependency does.
+    Names are returned whether or not a file backs them. Deciding what a
+    non-stdlib name *is* — a flow module or a third-party package — is not this
+    function's job and cannot be done from here; `_validate_staging` resolves
+    each one against the staged tree and the environment instead.
     """
     stdlib = getattr(sys, "stdlib_module_names", None)
     if stdlib is None:
@@ -380,14 +415,34 @@ def _validate_staging(staging: Path) -> str | None:
         return f"staged cli/flow.py does not parse: {err}"
     # flow.py imports its siblings at module scope, so a release that ships the
     # launcher without them installs cleanly and then fails on every command.
-    # The required set is read out of the staged entrypoint itself rather than
-    # from a roster maintained here: this code runs from the *old* install while
-    # validating a *newer* tree, so any hand-kept list is by definition behind.
-    # Same reasoning as the release roster's blacklist (see paths.py).
+    # The required set is read out of the staged entrypoint rather than from a
+    # roster kept here: this code runs from the *old* install while validating a
+    # *newer* tree, so any hand-kept list is behind by construction. Same
+    # reasoning as the release roster's blacklist (see paths.py).
+    #
+    # What is deliberately NOT decided here is what a non-stdlib name *is*. An
+    # older install cannot know whether `foo` in a future release is a flow
+    # module or a package flow started depending on, and guessing "flow module"
+    # would reject that release outright — with no way to ship the correction,
+    # since the rejecting code is the installed code. That is the P8 whitelist
+    # trap wearing a different hat.
+    #
+    # So the question asked is the one that does not require predicting the
+    # future: can the import resolve at all? flow ships no dependency installer,
+    # so a name that is neither stdlib, nor present in the staged tree, nor
+    # importable from this environment breaks the CLI whichever category it
+    # belongs to — and one that does resolve is fine whichever it is.
+    running_cli = Path(__file__).resolve().parent
     for sibling in _declared_sibling_imports(cli_entry):
         sibling_path = staging / "cli" / f"{sibling}.py"
-        if not sibling_path.is_file():
-            return f"staging is missing cli/{sibling}.py at {sibling_path}"
+        if sibling_path.is_file():
+            continue
+        if _resolves_in_environment(sibling, running_cli):
+            continue  # a real dependency, installed — not a sibling gone missing
+        return (
+            f"staged cli/ imports {sibling!r}, which is neither a staged module "
+            f"nor importable here (expected {sibling_path})"
+        )
     capabilities = staging / "data" / "harness_capabilities.json"
     if not capabilities.is_file():
         return f"staging is missing data/harness_capabilities.json at {capabilities}"
