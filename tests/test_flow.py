@@ -945,14 +945,17 @@ class FlowCliTests(unittest.TestCase):
 
     def test_flow_toml_parses_with_internal_parser(self) -> None:
         """Validate the new metadata block round-trips through flow's own TOML parser."""
-        # Import flow.py's parser directly so we cover the same code path the CLI uses.
+        # Import the parser module directly so we cover the same code path the
+        # CLI uses. flowtoml.py imports nothing from its siblings, so unlike the
+        # other direct-load tests this needs no sys.path arrangement.
         import importlib.util
-        flow_module_path = REPO_ROOT / "cli" / "flow.py"
-        spec = importlib.util.spec_from_file_location("flow_cli", flow_module_path)
-        flow_cli = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        spec = importlib.util.spec_from_file_location(
+            "flowtoml_under_test", REPO_ROOT / "cli" / "flowtoml.py"
+        )
+        flowtoml = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
         assert spec and spec.loader
-        spec.loader.exec_module(flow_cli)  # type: ignore[union-attr]
-        data = flow_cli.read_toml(REPO_ROOT / "scaffolds" / "default" / "flow.toml")
+        spec.loader.exec_module(flowtoml)  # type: ignore[union-attr]
+        data = flowtoml.read_toml(REPO_ROOT / "scaffolds" / "default" / "flow.toml")
         block = data.get("standards", {}).get("git-commits")
         self.assertIsInstance(block, dict)
         self.assertEqual(block.get("upstream_version"), "v1.0.0")
