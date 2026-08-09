@@ -77,6 +77,15 @@ def _reset_claude_watermarks(conn: sqlite3.Connection) -> None:
     enough to read it. `last_size` is deliberately left alone —
     `harvest_file` recomputes it fresh from `path.stat()` on every run and
     never trusts the stored value for anything but reporting.
+
+    Two small, accepted costs of resetting rather than a narrower title-only
+    scan: every recorded file is fully re-read from byte 0 for the duration
+    of this one run (each file's own future incremental runs are unaffected),
+    and `WatermarkAnomaly`'s rotation check (`current_size < last_offset`)
+    can't fire against a file that shrank or was replaced between harvests,
+    since the offset it would have compared against is now 0. Both are
+    one-run costs against files this collector has already fully harvested
+    once; neither compounds across repeated `--backfill-titles` runs.
     """
     conn.execute(
         "UPDATE harvest SET last_offset = 0, last_line_no = 0, last_line_hash = NULL"

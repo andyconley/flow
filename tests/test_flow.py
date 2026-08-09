@@ -1623,7 +1623,12 @@ class FlowCliTests(unittest.TestCase):
                 _session_meta("sess-1"),
                 _task_started("turn-1"),
                 _turn_context("turn-1", "gpt-5.6"),
-                _token_count(),
+                _token_count(
+                    rate_limits={
+                        "primary": {"used_percent": 41.0, "window_minutes": 300, "resets_at": 123},
+                        "secondary": {"used_percent": 12.0, "window_minutes": 10080, "resets_at": 456},
+                    }
+                ),
                 _task_complete("turn-1"),
             )
         )
@@ -1641,6 +1646,9 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("HARNESS", table.stdout)
         self.assertIn("codex", table.stdout)
         self.assertIn("claude", table.stdout)
+        self.assertIn("codex capacity", table.stdout)
+        self.assertIn("300m window 41.0%", table.stdout)
+        self.assertIn("10080m window 12.0%", table.stdout)
 
         as_json = self.run_flow("cost", "summary", "--all", "--json")
         self.assert_ok(as_json)
@@ -1648,12 +1656,8 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(len(payload["rows"]), 2)
         harnesses = {row["harness"] for row in payload["rows"]}
         self.assertEqual(harnesses, {"codex", "claude"})
-        # capacity_gauge is a codex-only, timestamp-gated snapshot; whether
-        # it's present depends on _token_count()'s fixture shape, not on
-        # anything this test asserts — only that the key is well-formed when
-        # it does appear.
-        if "capacity" in payload:
-            self.assertIn("capacity_primary_used_pct", payload["capacity"])
+        self.assertEqual(payload["capacity"]["capacity_primary_used_pct"], 41.0)
+        self.assertEqual(payload["capacity"]["capacity_secondary_used_pct"], 12.0)
 
     def test_cost_sessions_end_to_end_via_cli(self) -> None:
         home = self.use_fake_home()
@@ -1676,9 +1680,10 @@ class FlowCliTests(unittest.TestCase):
         as_json = self.run_flow("cost", "sessions", "--all", "--json")
         self.assert_ok(as_json)
         payload = json.loads(as_json.stdout)
-        self.assertEqual(len(payload), 1)
-        self.assertEqual(payload[0]["label"], "My Renamed Session")
-        self.assertEqual(payload[0]["harness"], "claude")
+        # Same {"rows": [...]} envelope as `cost summary --json`.
+        self.assertEqual(len(payload["rows"]), 1)
+        self.assertEqual(payload["rows"][0]["label"], "My Renamed Session")
+        self.assertEqual(payload["rows"][0]["harness"], "claude")
 
     def test_cost_summary_with_no_data_is_a_clean_empty_result(self) -> None:
         self.use_fake_home()
@@ -1691,6 +1696,40 @@ class FlowCliTests(unittest.TestCase):
         payload = json.loads(as_json.stdout)
         self.assertEqual(payload["rows"], [])
         self.assertNotIn("capacity", payload)
+
+    def test_cost_summary_default_window_excludes_data_outside_it(self) -> None:
+        """The actual default invocation — no `--all`, no `--days` — is what
+        every other CLI-boundary test in this class deliberately avoids
+        (their fixtures are fixed at 2026-01-01, so they always pass `--all`
+        to include it). This one uses `flow harvest`'s real ingestion
+        timestamp instead of a fixed date, so the default 7-day window has
+        something real to exclude: a session harvested with an ancient
+        `--all`-only-visible timestamp.
+        """
+        home = self.use_fake_home()
+        codex_dir = home / ".codex" / "sessions" / "2020" / "01" / "01"
+        codex_dir.mkdir(parents=True)
+        (codex_dir / "rollout-test.jsonl").write_text(
+            _jsonl(
+                _session_meta("sess-1"),
+                _task_started("turn-1"),
+                _turn_context("turn-1", "gpt-5.6"),
+                {**_token_count(), "timestamp": "2020-01-01T00:00:01Z"},
+                _task_complete("turn-1"),
+            )
+        )
+        self.assert_ok(self.run_flow("harvest", "codex"))
+        self.assert_ok(self.run_flow("normalize"))
+
+        # No --all, no --days: the default 7-day window.
+        result = self.run_flow("cost", "summary")
+        self.assert_ok(result)
+        self.assertIn("no data", result.stdout)
+
+        # The same data is visible with --all, proving it was really there.
+        all_time = self.run_flow("cost", "summary", "--all")
+        self.assert_ok(all_time)
+        self.assertIn("codex", all_time.stdout)
 
 
 def _jsonl(*records: dict) -> str:
@@ -1729,14 +1768,17 @@ def _task_complete(turn_id: str) -> dict:
     }
 
 
-def _token_count(total: int = 100) -> dict:
+def _token_count(total: int = 100, rate_limits: dict | None = None) -> dict:
+    payload = {
+        "type": "token_count",
+        "info": {"last_token_usage": {"input_tokens": total, "output_tokens": 1, "total_tokens": total + 1}},
+    }
+    if rate_limits is not None:
+        payload["rate_limits"] = rate_limits
     return {
         "timestamp": "2026-01-01T00:00:01Z",
         "type": "event_msg",
-        "payload": {
-            "type": "token_count",
-            "info": {"last_token_usage": {"input_tokens": total, "output_tokens": 1, "total_tokens": total + 1}},
-        },
+        "payload": payload,
     }
 
 
@@ -3194,6 +3236,21 @@ class CostTests(unittest.TestCase):
         rows = self.cost.summary_rows(self.conn, None)
         self.assertEqual(len(rows), 1)
 
+    def test_cutoff_excludes_older_rows_against_real_z_suffixed_timestamps(self) -> None:
+        """Every other test in this class passes a literal `+00:00` cutoff
+        string. This one calls the real `_cutoff()` — a `+00:00`-suffixed
+        string — and filters real `Z`-suffixed timestamps with it, the exact
+        combination every actual CLI invocation produces and the one no
+        other test exercises.
+        """
+        sess = self.insert_session("c-1")
+        self.insert_turn(sess, "2020-01-01T00:00:00.000Z", model="gpt-5", fresh=1)  # ancient
+        self.insert_turn(sess, self.cost._cutoff(0).replace("+00:00", "Z"), model="gpt-5", fresh=2)  # ~now
+
+        rows = self.cost.summary_rows(self.conn, self.cost._cutoff(1))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["fresh_input_tokens"], 2)
+
     # ------------------------------------------------------------------
     # capacity_gauge
     # ------------------------------------------------------------------
@@ -3217,16 +3274,17 @@ class CostTests(unittest.TestCase):
         self.assertIsNone(self.cost.capacity_gauge(self.conn, None))
 
     def test_capacity_gauge_ignores_claude_rows(self) -> None:
-        """Claude turns never carry Codex's capacity columns; a gauge query
-        that forgot the harness filter would still coincidentally return
-        `None` here since the columns really are NULL — this test exists so
-        a future change that stops filtering by harness would be caught by
-        the codex-row still being found, not by this test staying silent.
+        """Claude turns never carry real Codex capacity data in practice, but
+        this test doesn't rely on that: it gives the Claude row a capacity
+        value too, dated *later* than the Codex row, so a gauge query that
+        forgot the harness filter would pick up the Claude row instead
+        (`ORDER BY tn.ts DESC` favors it) and this test would catch that by
+        failing, not by staying silent the way an all-NULL Claude row would.
         """
         codex_sess = self.insert_session("c-1", harness="codex")
         claude_sess = self.insert_session("cl-1", harness="claude")
-        self.insert_turn(claude_sess, "2026-01-02T00:00:00+00:00")
         self.insert_turn(codex_sess, "2026-01-01T00:00:00+00:00", capacity_primary_used_pct=5.0)
+        self.insert_turn(claude_sess, "2026-01-02T00:00:00+00:00", capacity_primary_used_pct=99.0)
 
         gauge = self.cost.capacity_gauge(self.conn, None)
         self.assertIsNotNone(gauge)
@@ -3273,6 +3331,38 @@ class CostTests(unittest.TestCase):
     def test_render_json_round_trips(self) -> None:
         rows = [{"harness": "codex", "turns": 3}]
         self.assertEqual(json.loads(self.cost.render_json(rows)), rows)
+
+    def test_render_gauge_line_labels_by_actual_window_size_not_primary_secondary(self) -> None:
+        """`usage_store.py`'s _V3 migration documents that `primary`/
+        `secondary` don't reliably mean "short window"/"long window" — this
+        asserts the rendering leads with the number actually stored, not
+        those names, and includes the reading's own timestamp so a stale
+        snapshot doesn't read as current.
+        """
+        gauge = {
+            "ts": "2026-01-01T00:00:00+00:00",
+            "capacity_primary_used_pct": 41.0,
+            "capacity_primary_window_minutes": 300,
+            "capacity_secondary_used_pct": 12.0,
+            "capacity_secondary_window_minutes": 10080,
+        }
+        line = self.cost._render_gauge_line(gauge)
+        self.assertIn("2026-01-01T00:00:00+00:00", line)
+        self.assertIn("300m window 41.0%", line)
+        self.assertIn("10080m window 12.0%", line)
+        self.assertNotIn("primary", line)
+        self.assertNotIn("secondary", line)
+
+    def test_render_gauge_line_omits_secondary_when_absent(self) -> None:
+        gauge = {
+            "ts": "2026-01-01T00:00:00+00:00",
+            "capacity_primary_used_pct": 41.0,
+            "capacity_primary_window_minutes": 300,
+            "capacity_secondary_used_pct": None,
+        }
+        line = self.cost._render_gauge_line(gauge)
+        self.assertIn("300m window 41.0%", line)
+        self.assertEqual(line.count("%"), 1)
 
 
 if __name__ == "__main__":

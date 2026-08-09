@@ -42,6 +42,36 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   Claude's token fields are already disjoint. `cli/jsonl_watermark.py` and
   `cli/session_lookup.py` extracted from `codex_collector.py` (both entirely
   harness-agnostic) rather than duplicated into the new collector.
+- **`flow cost summary` / `flow cost sessions`** (token-advisory chunk 6) —
+  the first commands that read `turn_norm` instead of writing to it.
+  `summary` groups token totals by `(harness, model)` within a window
+  (`--days N`, default 7; `--all` for everything), plus Codex's most recent
+  capacity reading as a separate gauge line — a snapshot, not a sum, so it's
+  never blended into the token totals and is labeled by the window size
+  actually stored rather than by `primary`/`secondary` — `usage_store.py`'s
+  `_V3` migration documents that those names don't reliably mean "the short
+  window" and "the long window" (real data shows both a 300-minute and a
+  10080-minute value under the `primary` name alone).
+  `sessions` groups by session, most recently active first, with a
+  three-tier label fallback (`title` → `cwd` → a short id). Both views are
+  one pure query function returning a list of dicts, rendered two ways —
+  an aligned table by default, `--json` for the same result (`{"rows":
+  [...]}`, with `summary` adding a sibling `"capacity"` key) — rather than
+  two separate code paths that could drift from each other.
+- **Claude title capture and backfill**, in the same chunk. `custom-title`
+  and `ai-title` JSONL records now populate `session.title`, a column that
+  has existed since the schema's first version but that no collector wrote
+  to. Mirrors `token-report`'s precedence (`custom-title` always wins;
+  `ai-title` only fills a gap) but as two idempotent, order-independent SQL
+  `UPDATE`s instead of an in-memory single pass, since this collector runs
+  incrementally across many separate invocations rather than once per file.
+  `flow harvest claude --backfill-titles` rewinds every already-recorded
+  file's watermark and replays it through the normal pipeline so already-
+  harvested sessions pick up titles retroactively — `turn_raw`'s natural-key
+  uniqueness makes the replay a free no-op for turns already recorded, so
+  this reuses the whole validated harvest path rather than a narrower
+  title-only scanner. Validated against the real local corpus: 162 of 352
+  real Claude sessions picked up a title on the first backfill run.
 
 ### Fixed
 

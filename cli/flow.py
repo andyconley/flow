@@ -15,7 +15,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # The `# noqa: E402` markers are load-bearing, not decoration: these imports
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
-from cost import cost_sessions_command, cost_summary_command  # noqa: E402
+from cost import DEFAULT_WINDOW_DAYS, cost_sessions_command, cost_summary_command  # noqa: E402
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
@@ -123,7 +123,7 @@ def main() -> int:
     cost = sub.add_parser(
         "cost",
         help="read token usage back out of the usage store",
-        description="Read `~/.flow/usage.db`'s normalized layer. Read-only — never writes.",
+        description="Read `~/.flow/usage.db`'s normalized layer (ensuring the store's schema exists first, like every other command). Never touches turn_raw, turn_norm, or session data.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n",
     )
@@ -144,14 +144,14 @@ def main() -> int:
         window.add_argument(
             "--days",
             type=int,
-            default=7,
+            default=DEFAULT_WINDOW_DAYS,
             metavar="N",
-            help="show the last N days (default: 7)",
+            help=f"show the last N days (default: {DEFAULT_WINDOW_DAYS})",
         )
         window.add_argument(
             "--all",
             action="store_true",
-            help="show every row ever normalized, ignoring --days",
+            help="show every row ever normalized (cannot be combined with --days)",
         )
         cost_parser.add_argument(
             "--json",

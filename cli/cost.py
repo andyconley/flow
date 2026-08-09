@@ -1,13 +1,23 @@
 """`flow cost`: the first read surface over `turn_norm`.
 
-Every other module in `cli/` writes to the usage store. This one only reads
-it. `summary_rows`, `sessions_rows`, and `capacity_gauge` are pure query
+Every other module in `cli/` writes usage data to the store; this one reads
+it back out. It still calls `usage_store.ensure_store` before querying, the
+same convenience every other command module gives itself (see
+`harvest.py`'s own docstring) — a fresh machine gets a working `flow cost
+summary` rather than an error pointing at `flow setup machine`. What it
+never does is touch `turn_raw`, `turn_norm`, or `session`: schema creation
+and migration are the only writes this module can cause.
+
+`summary_rows`, `sessions_rows`, and `capacity_gauge` are pure query
 functions — a connection and an optional cutoff in, a list of dicts (or, for
 the gauge, a single dict or `None`) out. Nothing here decides how a caller
 displays the result; `render_table` and `render_json` are two independent
 renderers over the same shape, matching the convention `kubectl`/`docker`/
 `gh` use: one canonical structured result, one default human-readable
-rendering, one `--json` for the same data machine-readable.
+rendering, one `--json` for the same data machine-readable. Both commands'
+`--json` output shares one envelope, `{"rows": [...]}`, with `summary`
+adding an optional sibling `"capacity"` key — a caller can always read
+`payload["rows"]` without checking which subcommand produced it.
 
 Codex's capacity percentages are handled separately from the token-total
 rows, on purpose. `capacity_primary_used_pct` and its siblings are a
@@ -17,6 +27,14 @@ full right now" figure into a table of summed totals would misrepresent
 both. `cost_summary_command` prints it as an adjacent line (table mode) or
 an adjacent key (JSON mode) instead, and omits it entirely — not as a zero
 or a blank — when no Codex row with capacity data falls inside the window.
+The reading's own timestamp and each field's `window_minutes` are rendered
+alongside the percentage: `usage_store.py`'s `_V3` migration documents that
+`rate_limits.primary`/`secondary` are not reliably "the 5-hour window" and
+"the weekly window" respectively (real data shows both a 300-minute and a
+10080-minute value under the `primary` name) — a caller distinguishes them
+by the window size actually stored, not by the column name, and a bare
+percentage with no age shown would read as current when it may be up to a
+full `--days` window stale.
 
 No module-level path or connection resolution, matching every other command
 module in `cli/`: a directly-imported unit test must never be able to touch
@@ -28,17 +46,24 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import usage_store
+from codex_collector import HARNESS as CODEX_HARNESS
 from paths import HOME, SOURCE_DIR
 
 DEFAULT_WINDOW_DAYS = 7
 
 
 def _cutoff(days: int) -> str:
-    """UTC ISO8601 cutoff string for "the last `days` days," exclusive of tz math surprises.
+    """UTC ISO8601 cutoff string for "the last `days` days."
 
     Compared lexicographically against `turn_norm.ts`, which is safe because
     ISO8601 sorts correctly as text — the same convention already used
     everywhere else in this schema (`harvest.harvested_at`, `turn_raw.ts`).
+    This assumes every `ts` actually stored is UTC, same as this cutoff:
+    `datetime.isoformat()` renders a `+00:00` suffix rather than the `Z` both
+    collectors write, but the two compare correctly against each other
+    lexicographically as long as both sides are UTC — a `ts` written with a
+    non-UTC local offset would break the comparison silently, which is why
+    both collectors are expected to keep stamping UTC.
     """
     return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
@@ -84,6 +109,14 @@ def sessions_rows(conn: sqlite3.Connection, since: str | None) -> list[dict]:
     they're inputs to `label`, the three-tier fallback (`title` → `cwd` → a
     short id) computed here so every caller gets one usable display string
     instead of three raw, often-redundant ones to reconcile itself.
+
+    `first_ts`/`last_ts` are the first and last activity *inside the window*,
+    not the session's actual start and end — a `--days 7` run on a session
+    that started three weeks ago reports `first_ts` from seven days ago, the
+    earliest row the query is even allowed to see. `turns` and every token
+    sum fold in subagent (sidechain) turns alongside main-thread ones; this
+    module makes no distinction, matching `turn_norm.is_subagent` being
+    ordinary queryable data rather than a filter applied here.
     """
     where = "WHERE tn.ts >= ?" if since is not None else ""
     params = (since,) if since is not None else ()
@@ -101,7 +134,7 @@ def sessions_rows(conn: sqlite3.Connection, since: str | None) -> list[dict]:
         JOIN session s ON s.id = tr.session_row_id
         {where}
         GROUP BY s.id
-        ORDER BY last_ts DESC
+        ORDER BY last_ts DESC, s.id DESC
         """,
         params,
     ).fetchall()
@@ -132,21 +165,24 @@ def capacity_gauge(conn: sqlite3.Connection, since: str | None) -> dict | None:
 
     A snapshot, not a sum — see the module docstring for why this is kept
     out of `summary_rows` entirely rather than joined in as extra columns.
+    `ts` is included specifically so a renderer can show how stale the
+    reading is, since "most recent in the window" can still be days old.
     """
     where = "AND tn.ts >= ?" if since is not None else ""
     params = (since,) if since is not None else ()
     row = conn.execute(
         f"""
-        SELECT capacity_primary_used_pct, capacity_primary_window_minutes, capacity_primary_resets_at,
+        SELECT tn.ts AS ts,
+               capacity_primary_used_pct, capacity_primary_window_minutes, capacity_primary_resets_at,
                capacity_secondary_used_pct, capacity_secondary_window_minutes, capacity_secondary_resets_at
         FROM turn_norm tn
         JOIN turn_raw tr ON tr.id = tn.turn_raw_id
         JOIN session s ON s.id = tr.session_row_id
-        WHERE s.harness = 'codex' AND tn.capacity_primary_used_pct IS NOT NULL {where}
+        WHERE s.harness = ? AND tn.capacity_primary_used_pct IS NOT NULL {where}
         ORDER BY tn.ts DESC
         LIMIT 1
         """,
-        params,
+        (CODEX_HARNESS, *params),
     ).fetchone()
     return dict(row) if row is not None else None
 
@@ -174,16 +210,33 @@ def render_table(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def render_json(rows) -> str:
-    """The same structured result, serialized instead of aligned."""
-    return json.dumps(rows, indent=2)
+def render_json(payload) -> str:
+    """The same structured result, serialized instead of aligned.
+
+    Generic on purpose — a plain `json.dumps`, not a shape-specific
+    renderer. Both CLI wrappers pass a `{"rows": [...]}` dict (`summary`
+    adds a sibling `"capacity"` key when present), but nothing here assumes
+    that shape.
+    """
+    return json.dumps(payload, indent=2)
+
+
+def _render_gauge_field(used_pct: float, window_minutes: int | None) -> str:
+    # Labeled by the window size actually stored, not by "primary"/
+    # "secondary" — those names don't reliably mean "the short window" and
+    # "the long window" (see the module docstring), so the only honest label
+    # is the number SQLite actually has.
+    window = f"{window_minutes}m window" if window_minutes is not None else "window size unknown"
+    return f"{window} {used_pct:.1f}%"
 
 
 def _render_gauge_line(gauge: dict) -> str:
-    parts = [f"primary {gauge['capacity_primary_used_pct']:.1f}%"]
+    parts = [_render_gauge_field(gauge["capacity_primary_used_pct"], gauge.get("capacity_primary_window_minutes"))]
     if gauge.get("capacity_secondary_used_pct") is not None:
-        parts.append(f"secondary {gauge['capacity_secondary_used_pct']:.1f}%")
-    return "codex capacity: " + ", ".join(parts)
+        parts.append(
+            _render_gauge_field(gauge["capacity_secondary_used_pct"], gauge.get("capacity_secondary_window_minutes"))
+        )
+    return f"codex capacity (as of {gauge['ts']}): " + ", ".join(parts)
 
 
 def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False, as_json: bool = False) -> int:
@@ -206,7 +259,7 @@ def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False
         payload = {"rows": rows}
         if gauge is not None:
             payload["capacity"] = gauge
-        print(json.dumps(payload, indent=2))
+        print(render_json(payload))
     else:
         print(render_table(rows))
         if gauge is not None:
@@ -231,5 +284,8 @@ def cost_sessions_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = Fals
     finally:
         conn.close()
 
-    print(render_json(rows) if as_json else render_table(rows))
+    # Same envelope as `cost summary`'s --json — {"rows": [...]}, so a caller
+    # never needs to know which subcommand produced a payload before reading
+    # payload["rows"] out of it.
+    print(render_json({"rows": rows}) if as_json else render_table(rows))
     return 0
