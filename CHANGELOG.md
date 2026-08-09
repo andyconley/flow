@@ -6,6 +6,43 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+### Added
+
+- **`flow harvest codex`** — the first collector for the usage store (token-advisory
+  chunk 3). Incrementally reads `~/.codex/sessions/**/*.jsonl` into the raw
+  layer (`session`, `turn_raw`, and a new `agent_activity_raw` table), resuming
+  per file from the `harvest` table's watermark. Ensures the store on first
+  run rather than requiring `flow setup machine` first. No normalization, no
+  advisory behavior, no read surface — later chunks.
+- Schema migration v2: `agent_activity_raw` (coarse activity log for events
+  that carry no token usage — first observed as Codex's cloud/background-agent
+  telemetry, which has no local transcript to attach usage to) and
+  `session.source_path` (a direct pointer a resumed harvest needs to resolve
+  which session a batch belongs to, without inferring it from a child row that
+  may not exist yet).
+
+### Fixed
+
+- Two collector bugs found only by validating against a real 83-file, 6-month
+  Codex session corpus rather than synthetic fixtures alone, both silent —
+  neither raised an error or failed a test until the real-data counts were
+  cross-checked by hand:
+  - A subagent's session file carries a second `session_meta` record shortly
+    after its own — a verbatim copy of the *parent's*, injected so the
+    child's transcript is self-contained (confirmed on 35 of 83 real files).
+    Session identity now resolves once, up front, from the file itself
+    (`session.source_path`) rather than lazily from whichever `session_meta`
+    a given harvest batch happens to encounter first — the lazy version
+    worked within a single batch but reintroduced the bug across an
+    incremental resume, which is the only way this collector is ever
+    actually run.
+  - `INSERT OR IGNORE`, used to dedupe on the natural-key constraint, silently
+    swallows *every* constraint violation on that statement, not just the
+    intended duplicate — so a record missing a required field (`timestamp`)
+    would previously vanish with no error and no count, rather than being
+    reported like any other malformed line. Required fields are now checked
+    explicitly before the insert is attempted.
+
 ## [0.7.0] — 2026-08-08
 
 ### Added

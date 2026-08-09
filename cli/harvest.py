@@ -36,6 +36,9 @@ def harvest_codex_command() -> int:
 
     conn = sqlite3.connect(store)
     conn.execute("PRAGMA foreign_keys = ON")
+    # A manual run racing a scheduled one (cron, a hook) should wait for the
+    # other to finish rather than fail outright on "database is locked."
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
         summary = harvest_all(conn, sessions_root)
     finally:
@@ -45,7 +48,11 @@ def harvest_codex_command() -> int:
         f"codex harvest: {summary['files']} files, "
         f"{summary['turns']} turns, {summary['activity']} activity events"
     )
+    if summary["skipped"]:
+        print(f"  skipped {summary['skipped']} records with no resolvable session")
     for failure in summary["failures"]:
-        print(f"  stopped: {failure['path']}:{failure['line']} — {failure['reason']}")
+        line = failure["line"]
+        where = f":{line}" if line is not None else ""
+        print(f"  stopped: {failure['path']}{where} — {failure['reason']}")
 
     return 1 if summary["failures"] else 0

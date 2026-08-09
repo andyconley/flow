@@ -1766,6 +1766,125 @@ class CodexCollectorTests(unittest.TestCase):
         parent_row = self.conn.execute("SELECT id FROM session WHERE session_id = 'parent-1'").fetchone()
         self.assertIsNone(parent_row)
 
+    def test_second_session_meta_across_a_batch_boundary_does_not_hijack_attribution(self) -> None:
+        """Same bug as above, but reproduced the way it actually happened.
+
+        The single-file version of this test caught the bug within one batch,
+        but session identity used to be resolved lazily — from whatever
+        session_meta the loop hit first in THAT CALL — which only matched the
+        file's own identity by coincidence of both lines landing in the same
+        batch. Split the harvest so the child's own session_meta commits in
+        run A and the parent's injected copy is the first session_meta-typed
+        record run B ever sees, and the bug reappeared: every record in run B
+        misattributed to the parent. Fixed by resolving identity once, up
+        front, via `_lookup_session_for_path` rather than lazily inside the
+        loop — this test is what proves that fix holds across the boundary,
+        not just within one batch.
+        """
+        path = self.write_session(
+            "child.jsonl",
+            _jsonl(
+                _session_meta(
+                    "child-1",
+                    source={"subagent": {"thread_spawn": {"parent_thread_id": "parent-1", "agent_path": "/root/x"}}},
+                ),
+            ),
+        )
+        first = self.codex_collector.harvest_file(self.conn, path)
+        self.assertIsNone(first["hard_stop"])
+
+        with path.open("a") as fh:
+            fh.write(
+                _jsonl(
+                    _session_meta("parent-1", source="vscode"),
+                    _task_started("turn-1"),
+                    _turn_context("turn-1", "gpt-5.6"),
+                    _token_count(),
+                )
+            )
+        second = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(second["turns"], 1)
+
+        child_id = self.conn.execute("SELECT id FROM session WHERE session_id = 'child-1'").fetchone()[0]
+        row = self.conn.execute("SELECT session_row_id FROM turn_raw").fetchone()
+        self.assertEqual(row[0], child_id, "run B must still attribute to the child established in run A")
+        self.assertIsNone(
+            self.conn.execute("SELECT id FROM session WHERE session_id = 'parent-1'").fetchone()
+        )
+
+    # ------------------------------------------------------------------
+    # state-machine ordering and robustness
+    # ------------------------------------------------------------------
+
+    def test_turn_context_arriving_before_task_started_still_attributes_model(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _session_meta("sess-1"),
+                _turn_context("turn-1", "gpt-5.6"),  # arrives first, out of the "usual" order
+                _task_started("turn-1"),
+                _token_count(),
+            ),
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 1)
+        self.assertEqual(self.turn_raw_rows()[0][3], "gpt-5.6")
+
+    def test_stale_task_complete_does_not_close_a_newer_open_turn(self) -> None:
+        """A task_complete for a turn that isn't open must not close whatever is."""
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _session_meta("sess-1"),
+                _task_started("turn-1"),
+                _task_complete("turn-0"),  # some earlier, already-closed turn
+                _turn_context("turn-1", "gpt-5.6"),
+                _token_count(),
+            ),
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 1)
+        self.assertEqual(self.turn_raw_rows()[0][3], "gpt-5.6", "turn-1 must still be open when token_count arrives")
+
+    def test_non_dict_json_is_a_hard_stop_not_a_crash(self) -> None:
+        """Valid JSON, wrong shape: `123` parses cleanly but has no `.get()`."""
+        path = self.write_session("a.jsonl", _jsonl(_session_meta("sess-1")) + "123\n")
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertIsNotNone(result["hard_stop"])
+        self.assertEqual(result["hard_stop"]["line"], 2)
+
+    def test_missing_required_field_is_a_hard_stop_not_a_crash(self) -> None:
+        """A record missing `timestamp` would violate turn_raw.ts NOT NULL."""
+        bad_token_count = _token_count()
+        del bad_token_count["timestamp"]
+        path = self.write_session(
+            "a.jsonl", _jsonl(_session_meta("sess-1"), _task_started("t"), bad_token_count)
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertIsNotNone(result["hard_stop"])
+        self.assertIn("missing timestamp", result["hard_stop"]["reason"])
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0], 0)
+
+    def test_unattributable_records_are_counted_as_skipped_not_silently_dropped(self) -> None:
+        """A file whose session can never be resolved must say so, not report a clean 0."""
+        path = self.write_session("a.jsonl", _jsonl(_task_started("t"), _token_count()))
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 0)
+        self.assertEqual(result["skipped"], 2)
+
+    def test_repeated_activity_insert_is_ignored_not_duplicated(self) -> None:
+        """agent_activity_raw needs the same dedup shape as turn_raw for OR IGNORE to mean anything."""
+        path = self.write_session(
+            "a.jsonl", _jsonl(_session_meta("sess-1"), _sub_agent_activity("t", "/root/x"))
+        )
+        self.codex_collector.harvest_file(self.conn, path)
+        # Re-run the same batch directly against _harvest_lines, bypassing the
+        # watermark, to prove the constraint — not just the watermark — is
+        # what prevents a duplicate.
+        raw_lines, _, _ = self.codex_collector._read_new_lines(path, 0)
+        self.codex_collector._harvest_lines(self.conn, path, raw_lines, 1)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM agent_activity_raw").fetchone()[0], 1)
+
     # ------------------------------------------------------------------
     # activity log
     # ------------------------------------------------------------------
@@ -1843,7 +1962,7 @@ class CodexCollectorTests(unittest.TestCase):
         )
         self.codex_collector.harvest_file(self.conn, path)
         result = self.codex_collector.harvest_file(self.conn, path)
-        self.assertEqual(result, {"turns": 0, "activity": 0, "hard_stop": None})
+        self.assertEqual(result, {"turns": 0, "activity": 0, "skipped": 0, "hard_stop": None})
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0], 1)
 
     def test_incremental_append_processes_only_new_lines(self) -> None:
@@ -1881,6 +2000,30 @@ class CodexCollectorTests(unittest.TestCase):
         self.assertEqual(summary["turns"], 1)
         self.assertEqual(len(summary["failures"]), 1)
         self.assertIn("bad.jsonl", summary["failures"][0]["path"])
+
+    def test_a_files_watermark_anomaly_does_not_abort_the_run(self) -> None:
+        """WatermarkAnomaly is an exception, not a hard-stop return value — a
+        different failure shape than a malformed line, and one harvest_all has
+        to catch itself rather than rely on harvest_file to turn into a dict.
+        """
+        sessions = self.dir / "sessions"
+        sessions.mkdir()
+        good = sessions / "good.jsonl"
+        good.write_text(_jsonl(_session_meta("sess-good"), _task_started("t"), _token_count()))
+        shrunk = sessions / "shrunk.jsonl"
+        shrunk.write_text(_jsonl(_session_meta("sess-shrunk"), _task_started("t"), _token_count()))
+
+        summary = self.codex_collector.harvest_all(self.conn, sessions)
+        self.assertEqual(summary["turns"], 2)
+        self.assertEqual(summary["failures"], [])
+
+        shrunk.write_text(_jsonl(_session_meta("sess-shrunk")))  # now smaller than its recorded watermark
+        second = self.codex_collector.harvest_all(self.conn, sessions)
+        self.assertEqual(second["files"], 2)
+        self.assertEqual(len(second["failures"]), 1)
+        self.assertIn("shrunk.jsonl", second["failures"][0]["path"])
+        # The unaffected file must not be reprocessed or double-counted.
+        self.assertEqual(second["turns"], 0)
 
 
 if __name__ == "__main__":

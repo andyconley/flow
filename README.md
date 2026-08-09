@@ -64,6 +64,7 @@ flow sync claude --user       # user-level
 flow sync codex
 flow sync codex --check
 flow sync codex --user
+flow harvest codex
 ```
 
 What they do:
@@ -85,6 +86,8 @@ What they do:
 - `flow sync claude --user` / `flow sync codex --user`
   - generate adapters from the framework scaffold directly into the user-level runtime locations
 - `--check` on any sync target reports drift without writing files
+- `flow harvest codex`
+  - incrementally reads `~/.codex/sessions/` into `~/.flow/usage.db`'s raw layer (creating the store on first run); safe to run repeatedly or on a schedule
 
 ### Runtime adapter generation
 

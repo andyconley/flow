@@ -164,7 +164,12 @@ CREATE TABLE agent_activity_raw (
   payload           TEXT NOT NULL,
   source_path       TEXT NOT NULL,
   source_line_no    INTEGER NOT NULL,
-  collector_version INTEGER NOT NULL
+  collector_version INTEGER NOT NULL,
+  -- Same dedup shape as turn_raw's (session_row_id, natural_turn_id): one
+  -- line in one session's file identifies at most one row. Without it,
+  -- `INSERT OR IGNORE` in the collector has nothing to ignore against, and a
+  -- line reprocessed for any reason inserts a duplicate rather than a no-op.
+  UNIQUE (session_row_id, source_line_no)
 );
 
 CREATE INDEX idx_activity_session_ts ON agent_activity_raw(session_row_id, ts);

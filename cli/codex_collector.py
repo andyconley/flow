@@ -55,12 +55,22 @@ on, not inferred from documentation:
 
 A trailing line with no terminating `\\n` is a write in progress, not an
 error — `_read_new_lines` never returns it, and the next harvest picks it up
-once it's complete. A `\\n`-terminated line that fails to decode or parse is
-different: genuine corruption. The first one encountered stops that file's
-harvest; rows and the watermark for every earlier line in the batch are still
-committed. JSONL is append-only, so a bad line at a fixed offset never
-becomes valid — the stop reproduces every run until someone looks at it,
-which is the intended behavior, not a bug.
+once it's complete. Everything else that keeps a line from becoming a row is
+genuine corruption and stops that file's harvest at the first one: failing to
+decode, failing to parse, parsing to something other than a JSON object, or
+parsing to an object missing a field a row requires (`timestamp`, checked
+explicitly before each insert — not left for the database to catch, because
+the inserts use `INSERT OR IGNORE` for their real purpose of deduping on the
+natural key, and SQLite applies that conflict resolution to every constraint
+on the statement, not just the one it was written for. A NULL `timestamp`
+would silently no-op there, identical to a legitimate duplicate, which is
+worse than a crash — nothing would ever say the record was dropped). All of
+these funnel through the same `_HardStop` path in `_harvest_lines`, because a
+consumer deciding what to do next only needs to know "this line is not valid
+content," not which way it failed. Rows and the watermark for every earlier
+line in the batch are still committed. JSONL is append-only, so a bad line at
+a fixed offset never becomes valid — the stop reproduces every run until
+someone looks at it, which is the intended behavior, not a bug.
 """
 
 import hashlib
@@ -230,29 +240,45 @@ class _OpenTurnState:
     and `task_complete` / `turn_aborted`; `turn_context` records sharing that
     `turn_id` supply the model.
 
-    `turn_context` is not guaranteed to arrive before the first `token_count`
-    of its turn. When that happens `model` is None for that one row — stored
-    as-is, a legitimate absent value, rather than buffered and reconciled
-    retroactively. Reconciliation would mean the state machine is no longer a
-    single forward pass over the file, which is the property that keeps this
-    class simple.
+    `turn_context` is not guaranteed to arrive after `task_started` for the
+    same turn — only that both carry the same `turn_id` — so a `turn_context`
+    seen before its turn opens is held in `_pending_model` and applied when
+    `open()` sees that `turn_id`. Losing this ordering silently nulled every
+    `model` in the file, with no error, on the one real ordering variant this
+    was not originally built against.
+
+    `close()` and `set_model_for()` both check `turn_id` against the
+    currently-open turn before acting. Without that check, a stale
+    `task_complete` for a turn that already closed (or a `turn_context` for
+    some other, not-currently-open turn) would silently close or re-target
+    the wrong turn — attributing a live turn's remaining `token_count` records
+    to `untracked:` instead.
     """
 
     def __init__(self) -> None:
         self.turn_id: str | None = None
         self.model: str | None = None
+        self._pending_model: dict[str, str] = {}
 
     def open(self, turn_id: str | None) -> None:
         self.turn_id = turn_id
-        self.model = None
+        self.model = self._pending_model.pop(turn_id, None) if turn_id is not None else None
 
     def set_model_for(self, turn_id: str | None, model: str | None) -> None:
-        if turn_id is not None and turn_id == self.turn_id:
+        if turn_id is None:
+            return
+        if turn_id == self.turn_id:
             self.model = model
+        else:
+            # Not (yet, or any longer) the open turn. Held for a future
+            # open() rather than discarded, since turn_context is not
+            # guaranteed to follow task_started.
+            self._pending_model[turn_id] = model
 
-    def close(self) -> None:
-        self.turn_id = None
-        self.model = None
+    def close(self, turn_id: str | None) -> None:
+        if turn_id is None or turn_id == self.turn_id:
+            self.turn_id = None
+            self.model = None
 
 
 # --------------------------------------------------------------------------
@@ -260,151 +286,219 @@ class _OpenTurnState:
 # --------------------------------------------------------------------------
 
 
+class _HardStop(Exception):
+    """Internal signal: stop this file's harvest at a specific line, with a reason.
+
+    Raised from inside the per-line loop and caught once at the bottom of
+    `_harvest_lines`, so every way a line can fail — decode, parse, shape, or a
+    schema constraint the row itself violates — reports through the same path
+    rather than each needing its own early-return plumbing.
+    """
+
+    def __init__(self, line_no: int, reason: str):
+        self.line_no = line_no
+        self.reason = reason
+
+
 def _harvest_lines(
     conn: sqlite3.Connection,
     path: Path,
     raw_lines: list[bytes],
     starting_line_no: int,
-) -> tuple[int, int, int, str | None, int | None]:
+) -> tuple[int, int, int, int, str | None, int | None]:
     """Process one batch of already-read raw lines.
 
     `starting_line_no` is the file-global line number of `raw_lines[0]`
     (1-indexed), so `source_line_no` reflects real file position rather than
     an offset restarting at 1 on every incremental run.
 
-    Returns `(turns_written, activity_written, last_good_line_no,
+    Returns `(turns_written, activity_written, skipped, last_good_line_no,
     hard_stop_reason, hard_stop_line_no)`. `hard_stop_reason` is None on full
-    success. Decode and JSON failures funnel through the same path: both are
-    "this line is not valid content," and the caller does not need to
-    distinguish them to decide what to do next.
+    success. `turns_written` / `activity_written` count rows this call
+    actually inserted — `INSERT OR IGNORE` silently no-ops on a duplicate
+    natural key, and counting the attempt instead of the outcome would hide
+    exactly the kind of double-processing bug that constraint exists to catch.
+    `skipped` counts records seen but not attached to any session — see the
+    identity-resolution branch below; a file producing only skips is a shape
+    violation worth surfacing, not a silent `0 turns` "success."
+
+    Session identity is resolved ONCE, before the loop, via
+    `_lookup_session_for_path` — not lazily on first need inside it. Resolving
+    it lazily was the actual shape of a real bug: a batch that resumes
+    mid-file (the incremental case this whole harvester exists for) starts
+    with `session_row_id` unknown, and if the first `session_meta`-typed
+    record encountered in *that batch* happened to be the parent's injected
+    copy (see the module docstring) rather than this file's own — which,
+    on a resumed harvest, `session_meta` from THIS file already passed and
+    committed in an earlier batch — every record in the batch would misattach
+    to the parent. Resolving identity from the file itself up front removes
+    the ordering dependency entirely.
     """
-    session_row_id: int | None = None
+    session_row_id: int | None = _lookup_session_for_path(conn, path)
+    is_subagent = _is_subagent(conn, session_row_id) if session_row_id is not None else 0
     state = _OpenTurnState()
     turns_written = 0
     activity_written = 0
+    skipped = 0
     last_good_line_no = starting_line_no - 1
 
-    for offset, raw in enumerate(raw_lines):
-        line_no = starting_line_no + offset
-        try:
-            text = raw.decode("utf-8")
-            record = json.loads(text)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            return turns_written, activity_written, last_good_line_no, str(exc), line_no
+    try:
+        for offset, raw in enumerate(raw_lines):
+            line_no = starting_line_no + offset
+            try:
+                text = raw.decode("utf-8")
+                record = json.loads(text)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise _HardStop(line_no, str(exc)) from exc
+            if not isinstance(record, dict):
+                # Valid JSON, wrong shape — `123` and `"a string"` both parse
+                # cleanly but carry no `.get()`. Treated as malformed, same as
+                # a decode/parse failure: this line is not valid content.
+                raise _HardStop(line_no, f"expected a JSON object, got {type(record).__name__}")
 
-        rtype = record.get("type")
-        payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+            rtype = record.get("type")
+            payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
 
-        if rtype == "session_meta" and session_row_id is None:
-            # A subagent's file carries a SECOND session_meta shortly after its
-            # own — a verbatim copy of the parent's, injected so the child's
-            # transcript is self-contained. Confirmed against real data: it
-            # declares a different `id` (the parent's), not a repeat of this
-            # file's own. Locking identity to the first session_meta only
-            # means that injected copy is read like any other record but never
-            # treated as re-declaring which session this file belongs to —
-            # without the `is None` guard, every record after that second line
-            # silently misattributes to the parent's session row instead of
-            # this file's own.
-            sid = payload.get("id")
-            if sid is not None:
-                session_row_id = _get_or_create_session(conn, sid, payload, path)
+            if rtype == "session_meta" and session_row_id is None:
+                # A subagent's file carries a SECOND session_meta shortly
+                # after its own — a verbatim copy of the parent's, injected so
+                # the child's transcript is self-contained. Confirmed against
+                # real data: it declares a different `id` (the parent's), not
+                # a repeat of this file's own. The `is None` guard means that
+                # injected copy is read like any other record but never
+                # re-establishes identity — combined with resolving identity
+                # up front (see the docstring), this now holds regardless of
+                # which batch boundary it falls on.
+                sid = payload.get("id")
+                if sid is not None:
+                    session_row_id = _get_or_create_session(conn, sid, payload, path)
+                    is_subagent = _is_subagent(conn, session_row_id)
 
-        elif session_row_id is None:
-            session_row_id = _lookup_session_for_path(conn, path)
-            if session_row_id is None:
-                # Nothing to attach this record to. Expected on a fresh file
-                # whose first line in this batch isn't session_meta only if an
-                # earlier batch already established the session; otherwise
-                # this is a shape violation worth noting but not one that
+            elif session_row_id is None:
+                # Nothing to attach this record to — this file's own
+                # session_meta has not been seen yet in this batch or any
+                # prior one. A shape violation worth counting, not one that
                 # should take the whole file down over a non-identity record.
+                skipped += 1
                 last_good_line_no = line_no
                 continue
 
-        if rtype == "event_msg" and payload.get("type") == "task_started":
-            state.open(payload.get("turn_id"))
+            if rtype == "event_msg" and payload.get("type") == "task_started":
+                state.open(payload.get("turn_id"))
 
-        elif rtype == "turn_context":
-            state.set_model_for(payload.get("turn_id"), payload.get("model"))
+            elif rtype == "turn_context":
+                state.set_model_for(payload.get("turn_id"), payload.get("model"))
 
-        elif rtype == "event_msg" and payload.get("type") in ("task_complete", "turn_aborted"):
-            state.close()
+            elif rtype == "event_msg" and payload.get("type") in ("task_complete", "turn_aborted"):
+                state.close(payload.get("turn_id"))
 
-        elif rtype == "event_msg" and payload.get("type") == "token_count":
-            natural_turn_id = (
-                f"{state.turn_id}:{line_no}" if state.turn_id else f"untracked:{line_no}"
-            )
-            conn.execute(
-                "INSERT OR IGNORE INTO turn_raw"
-                " (session_row_id, natural_turn_id, turn_seq, is_subagent, ts, model,"
-                "  payload, source_path, source_line_no, collector_version)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    session_row_id,
-                    natural_turn_id,
-                    line_no,
-                    _is_subagent(conn, session_row_id),
-                    record.get("timestamp"),
-                    state.model,
-                    text,
-                    str(path),
-                    line_no,
-                    COLLECTOR_VERSION,
-                ),
-            )
-            turns_written += 1
+            elif rtype == "event_msg" and payload.get("type") == "token_count":
+                ts = record.get("timestamp")
+                if ts is None:
+                    # Checked explicitly rather than left for the database to
+                    # catch: turn_raw.ts is NOT NULL, but this insert uses
+                    # INSERT OR IGNORE for its actual purpose — dedup on the
+                    # natural key — and SQLite's conflict resolution applies
+                    # uniformly to every constraint on the statement. A NULL
+                    # here does not raise; it silently no-ops, identical to a
+                    # legitimate duplicate. That would make a record missing
+                    # `timestamp` disappear with no error and no skipped count
+                    # — worse than a crash, because nothing would ever say so.
+                    raise _HardStop(line_no, "token_count record is missing timestamp")
+                natural_turn_id = (
+                    f"{state.turn_id}:{line_no}" if state.turn_id else f"untracked:{line_no}"
+                )
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO turn_raw"
+                    " (session_row_id, natural_turn_id, turn_seq, is_subagent, ts, model,"
+                    "  payload, source_path, source_line_no, collector_version)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_row_id,
+                        natural_turn_id,
+                        line_no,
+                        is_subagent,
+                        ts,
+                        state.model,
+                        text,
+                        str(path),
+                        line_no,
+                        COLLECTOR_VERSION,
+                    ),
+                )
+                if cur.rowcount:
+                    turns_written += 1
 
-        elif rtype == "event_msg" and payload.get("type") == "sub_agent_activity":
-            conn.execute(
-                "INSERT INTO agent_activity_raw"
-                " (session_row_id, ts, kind, agent_thread_id, agent_path, payload,"
-                "  source_path, source_line_no, collector_version)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    session_row_id,
-                    record.get("timestamp"),
-                    payload.get("kind", ""),
-                    payload.get("agent_thread_id"),
-                    payload.get("agent_path"),
-                    text,
-                    str(path),
-                    line_no,
-                    COLLECTOR_VERSION,
-                ),
-            )
-            activity_written += 1
+            elif rtype == "event_msg" and payload.get("type") == "sub_agent_activity":
+                ts = record.get("timestamp")
+                if ts is None:
+                    raise _HardStop(line_no, "sub_agent_activity record is missing timestamp")
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO agent_activity_raw"
+                    " (session_row_id, ts, kind, agent_thread_id, agent_path, payload,"
+                    "  source_path, source_line_no, collector_version)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_row_id,
+                        ts,
+                        payload.get("kind", ""),
+                        payload.get("agent_thread_id"),
+                        payload.get("agent_path"),
+                        text,
+                        str(path),
+                        line_no,
+                        COLLECTOR_VERSION,
+                    ),
+                )
+                if cur.rowcount:
+                    activity_written += 1
 
-        last_good_line_no = line_no
+            last_good_line_no = line_no
+    except _HardStop as stop:
+        return turns_written, activity_written, skipped, last_good_line_no, stop.reason, stop.line_no
 
-    return turns_written, activity_written, last_good_line_no, None, None
+    return turns_written, activity_written, skipped, last_good_line_no, None, None
 
 
 def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dict:
     """Incrementally harvest one file. Returns a summary dict.
 
-    `{"turns": n, "activity": n, "hard_stop": None | {"line": n, "reason": str}}`.
+    `{"turns": n, "activity": n, "skipped": n, "hard_stop": None | {"line": n, "reason": str}}`.
     A hard stop is a return value, not an exception — `harvest_all` needs to
     move on to the next file, and a caller testing this directly is better
     served by an assertable value than a control-flow exception for a
     condition that is expected and recoverable (the next run retries).
+
+    `WatermarkAnomaly` still raises — a shrunk file is not "try again later,"
+    it is a sign the file was replaced or truncated, and `harvest_all` decides
+    how to treat that at the multi-file level rather than this function
+    guessing on its behalf.
     """
     row = conn.execute(
-        "SELECT last_offset, last_line_no FROM harvest"
+        "SELECT last_offset, last_line_no, last_line_hash FROM harvest"
         " WHERE harness = ? AND source_path = ? AND host_id = ?",
         (HARNESS, str(path), host_id),
     ).fetchone()
-    last_offset, last_line_no = (row[0], row[1]) if row is not None else (0, 0)
+    last_offset, last_line_no, prior_hash = row if row is not None else (0, 0, None)
 
     raw_lines, new_offset, current_size = _read_new_lines(path, last_offset)
     if not raw_lines:
-        return {"turns": 0, "activity": 0, "hard_stop": None}
+        return {"turns": 0, "activity": 0, "skipped": 0, "hard_stop": None}
 
     with conn:  # rows, watermark, and any hard-stop truncation commit together
-        turns, activity, last_good_line_no, reason, bad_line_no = _harvest_lines(
+        turns, activity, skipped, last_good_line_no, reason, bad_line_no = _harvest_lines(
             conn, path, raw_lines, last_line_no + 1
         )
 
-        if reason is not None:
+        if last_good_line_no == last_line_no:
+            # Nothing in this batch committed — either a hard stop on the very
+            # first line, or (unreachable today, but not assumed away) an
+            # empty batch. The watermark does not move, so its hash must not
+            # either: recomputing it as None here would erase a real prior
+            # value on every repeat of the same hard stop.
+            watermark_offset = last_offset
+            watermark_hash = prior_hash
+        elif reason is not None:
             # Only lines up to last_good_line_no were committed. Recompute the
             # byte offset to match — using the full batch's new_offset would
             # mark bytes as "read" that were never actually processed, so a
@@ -416,11 +510,7 @@ def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dic
                     break
                 committed_offset += _line_byte_length(raw)
             watermark_offset = committed_offset
-            watermark_hash = (
-                _line_hash(raw_lines[last_good_line_no - last_line_no - 1])
-                if last_good_line_no > last_line_no
-                else None
-            )
+            watermark_hash = _line_hash(raw_lines[last_good_line_no - last_line_no - 1])
         else:
             watermark_offset = new_offset
             watermark_hash = _line_hash(raw_lines[-1])
@@ -452,25 +542,41 @@ def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dic
         )
 
     hard_stop = {"line": bad_line_no, "reason": reason} if reason is not None else None
-    return {"turns": turns, "activity": activity, "hard_stop": hard_stop}
+    return {"turns": turns, "activity": activity, "skipped": skipped, "hard_stop": hard_stop}
 
 
 def harvest_all(conn: sqlite3.Connection, sessions_root: Path, host_id: str = "") -> dict:
     """Discover and harvest every `*.jsonl` under `sessions_root`.
 
-    One file's hard stop does not affect any other file — each is harvested in
-    its own transaction via `harvest_file`. Returns
-    `{"files": n, "turns": n, "activity": n, "failures": [{"path", "line", "reason"}, ...]}`.
+    One file's failure does not affect any other file. `harvest_file` itself
+    only ever raises `WatermarkAnomaly` — everything else it can detect is
+    already a return-value hard stop — but a file can still disappear or
+    become unreadable between the glob and the read (`OSError`), or a row can
+    violate a constraint this collector did not anticipate despite the
+    per-insert handling in `_harvest_lines` (`sqlite3.Error`, belt-and-braces).
+    Catching both here, per file, is what makes "one file's hard stop does not
+    affect any other file" true for every failure mode, not just the ones
+    `_harvest_lines` already turns into a clean return value.
+
+    Returns `{"files": n, "turns": n, "activity": n, "skipped": n,
+    "failures": [{"path", "line", "reason"}, ...]}`. `line` is `None` for a
+    failure caught here rather than reported by `_harvest_lines` itself.
     """
     files = sorted(sessions_root.glob("**/*.jsonl")) if sessions_root.is_dir() else []
     total_turns = 0
     total_activity = 0
+    total_skipped = 0
     failures: list[dict] = []
 
     for path in files:
-        result = harvest_file(conn, path, host_id=host_id)
+        try:
+            result = harvest_file(conn, path, host_id=host_id)
+        except (WatermarkAnomaly, OSError, sqlite3.Error) as exc:
+            failures.append({"path": str(path), "line": None, "reason": str(exc)})
+            continue
         total_turns += result["turns"]
         total_activity += result["activity"]
+        total_skipped += result["skipped"]
         if result["hard_stop"] is not None:
             failures.append({"path": str(path), **result["hard_stop"]})
 
@@ -478,5 +584,6 @@ def harvest_all(conn: sqlite3.Connection, sessions_root: Path, host_id: str = ""
         "files": len(files),
         "turns": total_turns,
         "activity": total_activity,
+        "skipped": total_skipped,
         "failures": failures,
     }
