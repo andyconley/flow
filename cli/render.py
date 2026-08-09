@@ -24,6 +24,107 @@ from paths import (
 )
 
 
+def parse_frontmatter(body: str) -> tuple[dict, str]:
+    """Parse the simple YAML frontmatter shape used by Flow source files."""
+    if not body.startswith("---\n"):
+        return {}, body
+    closing = body.find("\n---\n", 4)
+    if closing == -1:
+        return {}, body
+
+    raw = body[4:closing]
+    content = body[closing + 5 :].lstrip("\n")
+    frontmatter: dict[str, object] = {}
+    current_key: str | None = None
+    current_lines: list[str] = []
+    list_key: str | None = None
+
+    def flush_multiline() -> None:
+        nonlocal current_key, current_lines
+        if current_key is not None:
+            frontmatter[current_key] = " ".join(line.strip() for line in current_lines).strip()
+            current_key = None
+            current_lines = []
+
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if current_key is not None:
+            if line.startswith(" ") or stripped.startswith("- "):
+                current_lines.append(stripped[2:] if stripped.startswith("- ") else stripped)
+                continue
+            flush_multiline()
+        if stripped.startswith("- ") and list_key:
+            current = frontmatter.setdefault(list_key, [])
+            if isinstance(current, list):
+                current.append(stripped[2:].strip())
+            continue
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        list_key = None
+        if value == ">":
+            current_key = key
+            current_lines = []
+        elif value == "":
+            frontmatter[key] = []
+            list_key = key
+        else:
+            frontmatter[key] = value.strip('"')
+    flush_multiline()
+    return frontmatter, content
+
+
+def render_yaml_frontmatter(frontmatter: dict) -> list[str]:
+    lines = ["---"]
+    for key, value in frontmatter.items():
+        if isinstance(value, list):
+            lines.append(f"{key}:")
+            for item in value:
+                lines.append(f"  - {item}")
+        elif isinstance(value, bool):
+            lines.append(f"{key}: {'true' if value else 'false'}")
+        else:
+            lines.append(f"{key}: {value}")
+    lines.append("---")
+    return lines
+
+
+def toml_string(value: str) -> str:
+    return json.dumps(value)
+
+
+def routing_hints_for(target: str, agents: list[dict], model_tiers: dict) -> str:
+    if not agents:
+        return ""
+    lines = [
+        "## Flow Agent Routing",
+        "",
+        "When this command's Composition section calls for role agents, use these Flow-managed runtime agents and keep the task bounded to the role.",
+        "",
+        "| Agent | Tier | Runtime model | Effort |",
+        "|---|---|---|---|",
+    ]
+    for agent in sorted(agents, key=lambda a: a.get("name", "")):
+        tier = agent.get("model_tier", "")
+        runtime_policy = model_tiers.get(tier, {}).get(target, {})
+        effort = runtime_policy.get("model_reasoning_effort", runtime_policy.get("effort", ""))
+        lines.append(
+            f"| {agent.get('name', '')} | {tier} | {runtime_policy.get('model', '')} | {effort} |"
+        )
+    lines.extend(
+        [
+            "",
+            "These hints are generated from `flow.toml`. If a runtime ignores configured subagent models, use the named agent anyway and verify with the manual smoke test from `flow doctor`.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def hook_command_for(mode: str, script: str) -> str:
     """Return the absolute hook command path for a given sync mode."""
     if mode == MODE_USER:
@@ -53,7 +154,9 @@ def manifest_ref_for(mode: str, manifest_path: Path, root: Path) -> str:
     return rel_posix(manifest_path, root)
 
 
-def render_codex_skill(name: str, description: str, source_path: str, body: str) -> str:
+def render_codex_skill(
+    name: str, description: str, source_path: str, body: str, routing_hints: str = ""
+) -> str:
     lines = [
         "---",
         f"name: {name}",
@@ -64,13 +167,19 @@ def render_codex_skill(name: str, description: str, source_path: str, body: str)
         "",
         body.rstrip(),
         "",
-        "## Invocation Arguments",
-        "",
-        "If arguments were provided after the skill name, treat them as the specific focus for this run:",
-        "",
-        "`$ARGUMENTS`",
-        "",
     ]
+    if routing_hints:
+        lines.extend([routing_hints.rstrip(), ""])
+    lines.extend(
+        [
+            "## Invocation Arguments",
+            "",
+            "If arguments were provided after the skill name, treat them as the specific focus for this run:",
+            "",
+            "`$ARGUMENTS`",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -117,7 +226,7 @@ def build_skill_frontmatter(name: str, command: dict, skill_defaults: dict) -> l
     return lines
 
 
-def render_skill_from_command(command: dict, skill_defaults: dict) -> str:
+def render_skill_from_command(command: dict, skill_defaults: dict, routing_hints: str = "") -> str:
     source_path = command["source"]
     body = command["_body"]
     lines = build_skill_frontmatter(command["name"], command, skill_defaults)
@@ -128,6 +237,12 @@ def render_skill_from_command(command: dict, skill_defaults: dict) -> str:
             "",
             body.rstrip(),
             "",
+        ]
+    )
+    if routing_hints:
+        lines.extend([routing_hints.rstrip(), ""])
+    lines.extend(
+        [
             "## Invocation Arguments",
             "",
             "If arguments were provided after the skill name, treat them as the specific focus for this run:",
@@ -139,14 +254,40 @@ def render_skill_from_command(command: dict, skill_defaults: dict) -> str:
     return "\n".join(lines)
 
 
-def insert_generated_marker(source_path: str, body: str) -> str:
+def render_claude_agent(source_path: str, body: str, policy: dict) -> str:
+    frontmatter, content = parse_frontmatter(body)
+    for key, value in policy.items():
+        if value:
+            frontmatter[key] = value
     marker = f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->"
-    if body.startswith("---\n"):
-        closing = body.find("\n---\n", 4)
-        if closing != -1:
-            insert_at = closing + 5
-            return body[:insert_at] + "\n" + marker + "\n" + body[insert_at:].lstrip("\n")
-    return marker + "\n\n" + body
+    lines = render_yaml_frontmatter(frontmatter)
+    lines.extend(["", marker, "", content.rstrip(), ""])
+    return "\n".join(lines)
+
+
+def render_codex_agent(name: str, source_path: str, body: str, policy: dict) -> str:
+    frontmatter, content = parse_frontmatter(body)
+    description = str(frontmatter.get("description", f"Flow agent: {name}"))
+    safe_body = content.rstrip().replace('"""', '""\\"')
+    lines = [
+        f"name = {toml_string(name)}",
+        f"description = {toml_string(description)}",
+        f'developer_instructions = """{safe_body}\n"""',
+    ]
+    model = policy.get("model")
+    if model:
+        lines.append(f"model = {toml_string(model)}")
+    effort = policy.get("model_reasoning_effort")
+    if effort:
+        lines.append(f"model_reasoning_effort = {toml_string(effort)}")
+    lines.extend(
+        [
+            "",
+            f"# {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync codex`.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def build_managed_manifest(target_name: str, entries: list[dict]) -> str:

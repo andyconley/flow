@@ -168,6 +168,7 @@ Generate the Codex runtime adapter surface from `repo/.flow`.
 Current outputs:
 
 - `.agents/skills/...`
+- `.codex/agents/...`
 - `.codex/flow.managed.toml`
 
 ### `flow sync codex --check`
@@ -176,7 +177,7 @@ Report Codex runtime drift without writing files.
 
 ### `flow sync <target> --user`
 
-Generate the runtime adapter surface at the **user level** (`~/.claude/`, `~/.agents/skills`, and `~/.codex/flow.managed.toml`) from the framework scaffold directly. Combine with `--check` to detect drift without writing.
+Generate the runtime adapter surface at the **user level** (`~/.claude/`, `~/.agents/skills`, and `~/.codex/`) from the framework scaffold directly. Combine with `--check` to detect drift without writing.
 
 User-mode differences from project-mode:
 
@@ -184,7 +185,7 @@ User-mode differences from project-mode:
 - output goes to the runtime's user-level locations (universal across every session)
 - hook commands in `settings.json` use `$HOME` instead of `$CLAUDE_PROJECT_DIR`
 - the managed manifest's `source` fields reference the scaffold path (e.g., `~/.flow/source/scaffolds/default/commands/flow-boot.md`)
-- if `~/.flow/user/flow.toml` exists, the user overlay merges on top of the framework manifest before generation: same-name commands/agents override the framework entry, new names append. User-origin entries in the managed manifest carry `~/.flow/user/...` source paths so origin is auditable. See `docs/architecture.md` "User Overlay" for the merge semantics.
+- if `~/.flow/user/flow.toml` exists, the user overlay merges on top of the framework manifest before generation: same-name commands and shared agents override the framework entry, new names append. User-origin entries in the managed manifest carry `~/.flow/user/...` source paths so origin is auditable. See `docs/architecture.md` "User Overlay" for the merge semantics.
 
 Use `flow setup user` for the initial install; use `flow sync <target> --user` to re-sync after framework changes.
 

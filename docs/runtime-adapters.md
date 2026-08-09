@@ -26,7 +26,7 @@ Mode-specific differences:
 - **Hook command paths**: user-mode uses `$HOME/.claude/hooks/flow-*.sh`; project-mode uses `$CLAUDE_PROJECT_DIR/.claude/hooks/flow-*.sh`
 - **Managed manifest `source` fields**: user-mode references the scaffold path (`~/.flow/source/scaffolds/default/commands/flow-boot.md`); project-mode references `.flow/commands/flow-boot.md`. User-overlay entries in user mode reference `~/.flow/user/...` so origin is auditable.
 - **Settings merge target**: user-mode merges into `~/.claude/settings.json`; project-mode merges into `<repo>/.claude/settings.json`
-- **User overlay** (user mode only, v0.6.0+): if `~/.flow/user/flow.toml` exists, its `[[claude.commands]]`, `[[claude.agents]]`, and `[[codex.commands]]` entries layer on top of the framework manifest before adapter generation. Same-name entries override; new names append. See `docs/architecture.md` "User Overlay" for the merge semantics. Standards and templates aren't merged at sync time — they follow the runtime resolution convention documented in `FRAMEWORK.md`.
+- **User overlay** (user mode only, v0.6.0+): if `~/.flow/user/flow.toml` exists, its `[[claude.commands]]`, `[[codex.commands]]`, and shared `[[agents]]` entries layer on top of the framework manifest before adapter generation. Same-name entries override; new names append. See `docs/architecture.md` "User Overlay" for the merge semantics. Standards and templates aren't merged at sync time — they follow the runtime resolution convention documented in `FRAMEWORK.md`.
 
 ## Current Targets
 
@@ -70,7 +70,9 @@ Generated:
 
 Behavior:
 
-- current generation mode is near-verbatim sync
+- shared `[[agents]]` entries select source files and semantic model tiers
+- model and effort are resolved from `flow.toml` and written into generated frontmatter
+- source agent frontmatter remains the fallback for non-policy metadata such as tools and description
 - a generated marker is inserted so runtime edits can be traced back to the source
 
 ### Hook Mapping
@@ -102,11 +104,12 @@ This is why the Claude settings file is tracked as `sync_mode = "merge"` in the 
 
 ## Codex
 
-Codex is currently the narrower runtime target.
+Codex is currently a native skill and agent target.
 
 `flow sync codex` generates:
 
 - `.agents/skills/<flow-command>/SKILL.md`
+- `.codex/agents/*.toml`
 - `.codex/flow.managed.toml`
 
 Generated Codex skills include the required `name` and `description` YAML
@@ -114,15 +117,27 @@ frontmatter. Existing project manifests that still declare `.codex/skills`
 are normalized to `.agents/skills` during sync, and previously managed legacy
 files are removed without touching unmanaged files.
 
-### Why It Is Narrower
+Generated Codex agents include:
 
-This is intentional.
+- `name`
+- `description`
+- `developer_instructions` copied from the Flow agent body
+- `model`
+- `model_reasoning_effort`
 
-Reasons:
+### Model Routing
 
-- command skills map cleanly to Codex today
-- the framework does not yet have a mature Codex-specific contract for hooks, settings, or generated agents
-- generating fewer surfaces is better than inventing unstable abstractions
+Flow uses shared semantic tiers in `flow.toml` rather than hard-coding concrete
+runtime models in command prose. Runtime adapters resolve each agent's
+`model_tier` into native fields:
+
+- Claude writes `model` and `effort` into `.claude/agents/*.md`
+- Codex writes `model` and `model_reasoning_effort` into `.codex/agents/*.toml`
+
+Generated command skills also include a routing table derived from the same
+policy. Treat that table as Flow's intended runtime configuration, not a proof
+that the client honored it. Use `flow doctor` for static checks and the printed
+manual smoke-test guidance when verifying a specific Claude or Codex client.
 
 ## Managed Manifests
 
@@ -185,6 +200,5 @@ These commands:
 Current limitations of the adapter system:
 
 - no content-aware merge for most generated files
-- no richer Codex runtime surface yet
-- no runtime-specific agent adaptation layer beyond Claude verbatim sync
+- no runtime transcript verification for whether Claude or Codex honored configured subagent models
 - no project migration assistant for changing runtime contracts over time

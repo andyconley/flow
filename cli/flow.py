@@ -194,7 +194,7 @@ def main() -> int:
         epilog=(
             "Targets:\n"
             "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
-            "  codex   Generate .agents skills and a .codex managed manifest.\n\n"
+            "  codex   Generate .agents skills, .codex agents, and a .codex managed manifest.\n\n"
             "Examples:\n"
             "  flow sync claude\n"
             "  flow sync claude --check\n"
