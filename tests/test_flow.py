@@ -1255,12 +1255,19 @@ class FlowCliTests(unittest.TestCase):
         """A release shipping the launcher without its siblings installs then breaks."""
         import importlib.util
 
-        spec = importlib.util.spec_from_file_location(
-            "flow_cli_staging", REPO_ROOT / "cli" / "flow.py"
-        )
-        flow_cli = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-        assert spec and spec.loader
-        spec.loader.exec_module(flow_cli)  # type: ignore[union-attr]
+        # lifecycle.py imports its siblings by bare name, which only resolves
+        # when cli/ is on sys.path. flow.py arranges that for itself at import
+        # time; loading a sibling directly does not, so the test arranges it.
+        sys.path.insert(0, str(REPO_ROOT / "cli"))
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "flow_cli_staging", REPO_ROOT / "cli" / "lifecycle.py"
+            )
+            flow_cli = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+            assert spec and spec.loader
+            spec.loader.exec_module(flow_cli)  # type: ignore[union-attr]
+        finally:
+            sys.path.remove(str(REPO_ROOT / "cli"))
 
         staging = self.repo / "staging"
         (staging / "cli").mkdir(parents=True)
