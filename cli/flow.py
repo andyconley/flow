@@ -9,10 +9,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-try:
-    import tomllib as _tomllib
-except ModuleNotFoundError:
-    _tomllib = None
 
 # Sibling modules. The launcher runs cli/flow.py directly, which puts cli/ on
 # sys.path — but importing this file programmatically (importlib, as the test
@@ -45,6 +41,18 @@ from paths import (  # noqa: E402 — must follow the sys.path append above
     USER_BIN_DIR,
     USER_OVERLAY_DIR,
 )
+from flowtoml import read_toml  # noqa: E402
+from fsutil import (  # noqa: E402
+    _remove_path,
+    copy_if_missing,
+    ensure_dir,
+    ensure_file,
+    read_json,
+    rel_posix,
+    remove_empty_parents,
+    repo_root,
+    sync_missing_tree,
+)
 import usage_store  # noqa: E402 — must follow the sys.path append above
 
 
@@ -75,109 +83,6 @@ def manifest_ref_for(mode: str, manifest_path: Path, root: Path) -> str:
     if mode == MODE_USER:
         return '~/.flow/source/scaffolds/default/flow.toml'
     return rel_posix(manifest_path, root)
-
-
-def repo_root() -> Path:
-    cwd = Path.cwd().resolve()
-    for path in [cwd, *cwd.parents]:
-        if (path / ".flow").exists() or (path / ".git").exists():
-            return path
-    return cwd
-
-
-def ensure_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-
-
-def ensure_file(path: Path, content: str) -> None:
-    if path.exists():
-        return
-    ensure_dir(path.parent)
-    path.write_text(content)
-
-
-def copy_if_missing(src: Path, dest: Path) -> None:
-    if dest.exists():
-        return
-    if src.is_dir():
-        shutil.copytree(src, dest)
-    else:
-        ensure_dir(dest.parent)
-        shutil.copy2(src, dest)
-
-
-def sync_missing_tree(src: Path, dest: Path) -> tuple[int, int]:
-    added = 0
-    skipped = 0
-    if src.is_dir():
-        ensure_dir(dest)
-        for child in src.iterdir():
-            child_added, child_skipped = sync_missing_tree(child, dest / child.name)
-            added += child_added
-            skipped += child_skipped
-        return added, skipped
-    if dest.exists():
-        return 0, 1
-    ensure_dir(dest.parent)
-    shutil.copy2(src, dest)
-    return 1, 0
-
-
-def parse_toml_value(raw: str):
-    raw = raw.strip()
-    if raw.startswith('"') and raw.endswith('"'):
-        return raw[1:-1]
-    if raw in {"true", "false"}:
-        return raw == "true"
-    if raw.isdigit():
-        return int(raw)
-    raise ValueError(f"unsupported TOML value: {raw}")
-
-
-def assign_nested(container: dict, dotted_key: str, value) -> None:
-    parts = dotted_key.split(".")
-    current = container
-    for part in parts[:-1]:
-        current = current.setdefault(part, {})
-    current[parts[-1]] = value
-
-
-def parse_simple_toml(text: str) -> dict:
-    root: dict = {}
-    current = root
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("[[") and line.endswith("]]"):
-            path = line[2:-2].strip().split(".")
-            current = root
-            for part in path[:-1]:
-                current = current.setdefault(part, {})
-            current = current.setdefault(path[-1], [])
-            current.append({})
-            current = current[-1]
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            path = line[1:-1].strip().split(".")
-            current = root
-            for part in path:
-                current = current.setdefault(part, {})
-            continue
-        key, value = line.split("=", 1)
-        assign_nested(current, key.strip(), parse_toml_value(value))
-    return root
-
-
-def read_toml(path: Path) -> dict:
-    text = path.read_text()
-    if _tomllib is not None:
-        return _tomllib.loads(text)
-    return parse_simple_toml(text)
-
-
-def rel_posix(path: Path, root: Path) -> str:
-    return path.relative_to(root).as_posix()
 
 
 def render_skill(name: str, description: str, source_path: str, body: str) -> str:
@@ -329,16 +234,6 @@ def read_managed_paths(root: Path, path: Path) -> set[Path]:
     return {root / entry["path"] for entry in files if "path" in entry}
 
 
-def remove_empty_parents(path: Path, stop_at: Path) -> None:
-    current = path.parent
-    while current != stop_at and current.exists():
-        try:
-            current.rmdir()
-        except OSError:
-            return
-        current = current.parent
-
-
 def load_flow_manifest(flow_dir: Path) -> tuple[Path, dict]:
     manifest_path = flow_dir / "flow.toml"
     if not manifest_path.exists():
@@ -428,12 +323,6 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
         )
 
     return framework_manifest_path, manifest
-
-
-def read_json(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text())
 
 
 def remove_managed_flow_hooks(settings: dict) -> dict:
@@ -974,34 +863,6 @@ def _fetch_changelog_at(remote: str, tag: str) -> str | None:
 
 def _stage_path(suffix: str) -> Path:
     return FLOW_HOME / f"source.{suffix}"
-
-
-def _remove_path(path: Path) -> None:
-    """Best-effort removal of any path entry: symlink, file, or directory.
-
-    `shutil.rmtree(..., ignore_errors=True)` silently no-ops on symlinks (even
-    symlinks to directories) — it refuses to follow them by design. That meant
-    stale `source.old` symlinks left over from `flow install --release` (where
-    the original develop-mode symlink got renamed aside) were never cleaned up,
-    and the next `flow update` crashed with ENOTDIR when trying to rename
-    `source` over the leftover symlink. This helper routes symlinks and
-    regular files through `os.unlink` and only uses `shutil.rmtree` for real
-    directories.
-    """
-    if path.is_symlink():
-        try:
-            path.unlink()
-        except OSError:
-            pass
-        return
-    if path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
-        return
-    if path.exists():
-        try:
-            path.unlink()
-        except OSError:
-            pass
 
 
 def _validate_staging(staging: Path) -> str | None:
