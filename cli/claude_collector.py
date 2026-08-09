@@ -73,6 +73,36 @@ existing behavior:
   None of it is extracted here — the raw payload is stored verbatim
   regardless, so normalization can pick any of it up later without a
   re-harvest.
+- **`custom-title` and `ai-title` records populate `session.title`.**
+  `token-report` computes this precedence in one in-memory pass per file:
+  `custom-title` always wins and last-one-wins on repeats; `ai-title` only
+  fills in when no `custom-title` has ever appeared. This collector persists
+  incrementally across separate runs instead, so the same precedence is
+  expressed as two idempotent, order-independent SQL statements rather than
+  in-memory state: a `custom-title` record unconditionally overwrites
+  `session.title` (a deliberate rename always wins, regardless of when it's
+  seen relative to any `ai-title`); an `ai-title` record only fills the
+  column when it is still `NULL` (a genuine gap, never a real title). Either
+  can be encountered first, in this batch or a future one, and the result is
+  the same — for the case of one `custom-title` and one `ai-title`. Where
+  this diverges from `token-report`'s in-memory pass: a session can carry
+  *several* `ai-title` records (121 of 137 real files with any `ai-title`
+  have more than one), and `WHERE title IS NULL` means the first one wins
+  permanently, not the last, the way reassigning a local variable would. In
+  practice this never matters — every repeated `ai-title` sampled across
+  those 121 files carries the identical string, so first-wins and last-wins
+  agree — but if Claude Code ever starts regenerating a genuinely different
+  auto-title mid-session, this collector would keep the stale one. Not
+  fixed here: reproducing exact last-write-wins semantics needs to know
+  *which* record was last, which means either re-deriving it from `turn_raw`
+  on every batch or a new `title_source`/`title_seq` column — more schema
+  for a divergence real data doesn't currently exercise.
+  A title record whose `session_row_id` cannot be resolved is
+  counted as `skipped`, consistent with every other unresolvable record.
+  `flow harvest claude --backfill-titles` (see `cli/harvest.py`) resets the
+  `harvest` watermark and replays already-harvested files so already-recorded
+  sessions pick up titles retroactively — safe because `turn_raw`'s natural
+  key makes replaying already-seen turns a free no-op.
 """
 
 import json
@@ -194,12 +224,38 @@ def _harvest_lines(
                     last_good_line_no = line_no
                     continue
 
+            if rtype == "custom-title":
+                # Unconditional — a deliberate rename always wins, and the
+                # last one seen (whether within this batch or a future one)
+                # is correct regardless of when this line is encountered
+                # relative to any ai-title.
+                title = record.get("customTitle")
+                if title:
+                    conn.execute("UPDATE session SET title = ? WHERE id = ?", (title, session_row_id))
+                last_good_line_no = line_no
+                continue
+
+            if rtype == "ai-title":
+                # Fills a gap only. `AND title IS NULL` is what makes this
+                # order-independent across incremental runs without needing
+                # to remember "have I already seen a custom-title" in memory
+                # the way a single in-memory pass (token-report's approach)
+                # would: if a custom-title already set the title, this is a
+                # no-op forever, from any batch, in any order.
+                title = record.get("aiTitle")
+                if title:
+                    conn.execute(
+                        "UPDATE session SET title = ? WHERE id = ? AND title IS NULL", (title, session_row_id)
+                    )
+                last_good_line_no = line_no
+                continue
+
             if rtype != "assistant":
-                # Every other record type (user, system, custom-title,
-                # agent-name, attachment, ...) carries no usage data. Not
-                # counted as skipped — these are ordinary, expected content,
-                # unlike a record this collector genuinely couldn't attach to
-                # a session.
+                # Every other record type (user, system, agent-name,
+                # attachment, ...) carries no usage data. Not counted as
+                # skipped — these are ordinary, expected content, unlike a
+                # record this collector genuinely couldn't attach to a
+                # session.
                 last_good_line_no = line_no
                 continue
 

@@ -10,6 +10,7 @@ flow/
     flow.py            entrypoint: argparse declaration and dispatch
     claude_collector.py Claude Code session transcripts -> usage store raw layer
     codex_collector.py Codex session transcripts -> usage store raw layer
+    cost.py            flow cost: reads turn_norm, the first read-only surface
     diagnostics.py     doctor, help, bootstrap
     flowtoml.py        TOML reading
     fsutil.py          filesystem primitives
@@ -84,6 +85,11 @@ other by bare name.
   harness-neutral convention, dispatching per row by harness. A separate
   command from `harvest`: appending new raw data and recomputing derived data
   have different cost profiles, and a rule change can touch every row.
+- `cost.py` — `flow cost`, the first command that reads `turn_norm` instead
+  of writing to it. Pure query functions (`summary_rows`, `sessions_rows`,
+  `capacity_gauge`) return lists of dicts; `render_table`/`render_json` are
+  two independent renderings of the same structured result, not two
+  different queries.
 
 Edit the module that owns the behavior. `flow.py` changes only when a command
 is added, removed, or its arguments change.
