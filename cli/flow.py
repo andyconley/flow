@@ -16,6 +16,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
+from harvest import harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
 from setup import (  # noqa: E402
     refresh_project,
@@ -85,6 +86,20 @@ def main() -> int:
         "project",
         help="copy missing files from the framework template into repo/.flow",
         description="Bring an existing project forward to the latest template surface without overwriting local edits.",
+    )
+
+    harvest = sub.add_parser(
+        "harvest",
+        help="incrementally read a harness's local session transcripts into the usage store",
+        description="Read a harness's local session transcripts into ~/.flow/usage.db, resuming from the last-read position per file.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Example:\n  flow harvest codex\n",
+    )
+    harvest_sub = harvest.add_subparsers(dest="harvest_target", required=True, title="harvest targets")
+    harvest_sub.add_parser(
+        "codex",
+        help="harvest ~/.codex/sessions/ into the usage store",
+        description="Incrementally read Codex session transcripts, writing session and turn records into the usage store's raw layer.",
     )
 
     sub.add_parser(
@@ -205,6 +220,8 @@ def main() -> int:
         return setup_user()
     if args.command == "refresh" and args.refresh_target == "project":
         return refresh_project()
+    if args.command == "harvest" and args.harvest_target == "codex":
+        return harvest_codex_command()
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

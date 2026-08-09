@@ -1235,6 +1235,11 @@ class FlowCliTests(unittest.TestCase):
         store = self._store_path(home)
         conn = sqlite3.connect(store)
         try:
+            # Every table any migration has ever created, torn down to simulate
+            # a store at v0. Forgetting one here (as happened when v2 added
+            # agent_activity_raw) makes re-migration fail on "table already
+            # exists" rather than testing what this test means to test.
+            conn.execute("DROP TABLE agent_activity_raw")
             conn.execute("DROP TABLE turn_norm")
             conn.execute("DROP TABLE turn_raw")
             conn.execute("DROP TABLE session")
@@ -1466,9 +1471,11 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(
             victims,
             [
+                "codex_collector",
                 "diagnostics",
                 "flowtoml",
                 "fsutil",
+                "harvest",
                 "lifecycle",
                 "paths",
                 "render",
@@ -1486,6 +1493,394 @@ class FlowCliTests(unittest.TestCase):
             self.assertIsNotNone(reason, f"removing cli/{victim}.py must be rejected")
             self.assertIn(f"{victim}.py", reason)
             path.write_text(body)
+
+    def test_harvest_codex_end_to_end_via_cli(self) -> None:
+        """`flow harvest codex` against a fixture-backed fake HOME, matching this
+        class's subprocess convention rather than CodexCollectorTests's direct
+        in-memory-store convention — this is the one test proving the CLI
+        wiring (argparse, ensure_store, path resolution) works, not the
+        collector logic itself.
+        """
+        home = self.use_fake_home()
+        sessions_dir = home / ".codex" / "sessions" / "2026" / "01" / "01"
+        sessions_dir.mkdir(parents=True)
+        (sessions_dir / "rollout-test.jsonl").write_text(
+            _jsonl(
+                _session_meta("sess-1"),
+                _task_started("turn-1"),
+                _turn_context("turn-1", "gpt-5.6"),
+                _token_count(),
+                _task_complete("turn-1"),
+            )
+        )
+
+        result = self.run_flow("harvest", "codex")
+        self.assert_ok(result)
+        self.assertIn("1 files", result.stdout)
+        self.assertIn("1 turns", result.stdout)
+
+        store = self._store_path(home)
+        self.assertTrue(store.is_file())
+        usage_store = self._load_store_module()
+        status = usage_store.store_status(store)
+        self.assertEqual(status["state"], usage_store.STATE_OK)
+        self.assertEqual(status["user_version"], usage_store.SCHEMA_VERSION)
+
+        # Idempotent from the CLI too.
+        second = self.run_flow("harvest", "codex")
+        self.assert_ok(second)
+        self.assertIn("0 turns", second.stdout)
+
+    def test_harvest_codex_without_sessions_dir_is_a_clean_no_op(self) -> None:
+        home = self.use_fake_home()
+        result = self.run_flow("harvest", "codex")
+        self.assert_ok(result)
+        self.assertIn("no Codex sessions found", result.stdout)
+
+
+def _jsonl(*records: dict) -> str:
+    """One JSON object per line, newline-terminated — a well-formed Codex session file."""
+    return "".join(json.dumps(r) + "\n" for r in records)
+
+
+def _session_meta(session_id: str, cwd: str = "/tmp/proj", source=None) -> dict:
+    payload = {"id": session_id, "timestamp": "2026-01-01T00:00:00Z", "cwd": cwd}
+    if source is not None:
+        payload["source"] = source
+    return {"timestamp": "2026-01-01T00:00:00Z", "type": "session_meta", "payload": payload}
+
+
+def _task_started(turn_id: str) -> dict:
+    return {
+        "timestamp": "2026-01-01T00:00:01Z",
+        "type": "event_msg",
+        "payload": {"type": "task_started", "turn_id": turn_id},
+    }
+
+
+def _turn_context(turn_id: str, model: str) -> dict:
+    return {
+        "timestamp": "2026-01-01T00:00:01Z",
+        "type": "turn_context",
+        "payload": {"turn_id": turn_id, "model": model},
+    }
+
+
+def _task_complete(turn_id: str) -> dict:
+    return {
+        "timestamp": "2026-01-01T00:00:02Z",
+        "type": "event_msg",
+        "payload": {"type": "task_complete", "turn_id": turn_id},
+    }
+
+
+def _token_count(total: int = 100) -> dict:
+    return {
+        "timestamp": "2026-01-01T00:00:01Z",
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {"last_token_usage": {"input_tokens": total, "output_tokens": 1, "total_tokens": total + 1}},
+        },
+    }
+
+
+def _sub_agent_activity(agent_thread_id: str, agent_path: str, kind: str = "started") -> dict:
+    return {
+        "timestamp": "2026-01-01T00:00:01Z",
+        "type": "event_msg",
+        "payload": {
+            "type": "sub_agent_activity",
+            "kind": kind,
+            "agent_thread_id": agent_thread_id,
+            "agent_path": agent_path,
+        },
+    }
+
+
+class CodexCollectorTests(unittest.TestCase):
+    """Direct tests of cli/codex_collector.py, against an in-memory store.
+
+    No CLI, no fake HOME — codex_collector takes every path explicitly, so
+    these run against a plain sqlite3 in-memory connection with the real
+    migrations applied. The one CLI-boundary test lives in FlowCliTests below,
+    matching that class's existing subprocess-driven convention.
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import codex_collector
+
+        self.usage_store = usage_store
+        self.codex_collector = codex_collector
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "codex_collector"):
+            sys.modules.pop(name, None)
+
+    def write_session(self, name: str, content: str) -> Path:
+        path = self.dir / name
+        path.write_text(content)
+        return path
+
+    def turn_raw_rows(self) -> list[tuple]:
+        return list(
+            self.conn.execute(
+                "SELECT natural_turn_id, turn_seq, is_subagent, model FROM turn_raw ORDER BY turn_seq"
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # attribution
+    # ------------------------------------------------------------------
+
+    def test_multiple_token_counts_in_one_turn_are_distinct_rows(self) -> None:
+        """The finding that changed the natural-key design: one turn, several calls."""
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _session_meta("sess-1"),
+                _task_started("turn-1"),
+                _turn_context("turn-1", "gpt-5.6"),
+                _token_count(100),
+                _token_count(200),
+                _token_count(300),
+                _task_complete("turn-1"),
+            ),
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 3)
+        self.assertIsNone(result["hard_stop"])
+        rows = self.turn_raw_rows()
+        self.assertEqual(len(rows), 3)
+        # Distinct natural keys, all attributed to the one open turn's model.
+        self.assertEqual(len({r[0] for r in rows}), 3)
+        self.assertTrue(all(r[3] == "gpt-5.6" for r in rows))
+
+    def test_model_is_null_when_turn_context_has_not_arrived_yet(self) -> None:
+        """Absence, not a crash, when turn_context hasn't shown up for the open turn."""
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _session_meta("sess-1"),
+                _task_started("turn-1"),
+                _token_count(),  # turn_context never arrives in this fixture
+            ),
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 1)
+        rows = self.turn_raw_rows()
+        self.assertIsNone(rows[0][3])
+
+    def test_token_count_before_any_turn_uses_untracked_key(self) -> None:
+        """A token_count with no open turn still gets a stable, unique row."""
+        path = self.write_session("a.jsonl", _jsonl(_session_meta("sess-1"), _token_count()))
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 1)
+        self.assertTrue(self.turn_raw_rows()[0][0].startswith("untracked:"))
+
+    # ------------------------------------------------------------------
+    # lineage — the subagent shape, including the bug this run found
+    # ------------------------------------------------------------------
+
+    def test_parent_session_id_extracted_from_thread_spawn(self) -> None:
+        path = self.write_session(
+            "child.jsonl",
+            _jsonl(
+                _session_meta(
+                    "child-1",
+                    source={"subagent": {"thread_spawn": {"parent_thread_id": "parent-1", "agent_path": "/root/x"}}},
+                ),
+                _task_started("turn-1"),
+                _token_count(),
+            ),
+        )
+        self.codex_collector.harvest_file(self.conn, path)
+        row = self.conn.execute(
+            "SELECT parent_session_id FROM session WHERE session_id = 'child-1'"
+        ).fetchone()
+        self.assertEqual(row[0], "parent-1")
+        self.assertEqual(self.turn_raw_rows()[0][2], 1, "is_subagent must be true for every turn in a child session")
+
+    def test_plain_session_has_no_parent_and_is_not_subagent(self) -> None:
+        path = self.write_session(
+            "plain.jsonl", _jsonl(_session_meta("sess-1", source="vscode"), _task_started("t"), _token_count())
+        )
+        self.codex_collector.harvest_file(self.conn, path)
+        row = self.conn.execute("SELECT parent_session_id FROM session WHERE session_id = 'sess-1'").fetchone()
+        self.assertIsNone(row[0])
+        self.assertEqual(self.turn_raw_rows()[0][2], 0)
+
+    def test_second_session_meta_for_the_parent_does_not_hijack_attribution(self) -> None:
+        """Regression test for the bug this implementation run found against real data.
+
+        A subagent's file carries a second session_meta shortly after its own
+        — a verbatim copy of the PARENT's, injected so the child's transcript
+        is self-contained. Confirmed against 35 real files. Locking identity
+        to the first session_meta only is what this test guards: without that
+        guard, every record after the parent's injected copy misattributes to
+        the parent's session instead of the child's — which on real data
+        silently dropped roughly half of every affected session's rows via
+        the natural-key uniqueness constraint, with no error raised anywhere.
+        """
+        path = self.write_session(
+            "child.jsonl",
+            _jsonl(
+                _session_meta(
+                    "child-1",
+                    source={"subagent": {"thread_spawn": {"parent_thread_id": "parent-1", "agent_path": "/root/x"}}},
+                ),
+                _session_meta("parent-1", source="vscode"),  # injected copy of the parent's own record
+                _task_started("turn-1"),
+                _turn_context("turn-1", "gpt-5.6"),
+                _token_count(),
+            ),
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 1)
+
+        child_id = self.conn.execute("SELECT id FROM session WHERE session_id = 'child-1'").fetchone()[0]
+        row = self.conn.execute("SELECT session_row_id FROM turn_raw").fetchone()
+        self.assertEqual(row[0], child_id, "the turn must attribute to the child, not the injected parent record")
+        # The injected copy must not spawn its own session row either — this
+        # file is the child's; the parent's own row comes from harvesting the
+        # parent's own file, which real data confirms always exists separately.
+        parent_row = self.conn.execute("SELECT id FROM session WHERE session_id = 'parent-1'").fetchone()
+        self.assertIsNone(parent_row)
+
+    # ------------------------------------------------------------------
+    # activity log
+    # ------------------------------------------------------------------
+
+    def test_sub_agent_activity_recorded_without_token_data(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(_session_meta("sess-1"), _sub_agent_activity("cloud-thread-1", "/root/validation_design")),
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["activity"], 1)
+        self.assertEqual(result["turns"], 0)
+        row = self.conn.execute(
+            "SELECT kind, agent_thread_id, agent_path FROM agent_activity_raw"
+        ).fetchone()
+        self.assertEqual(row, ("started", "cloud-thread-1", "/root/validation_design"))
+
+    # ------------------------------------------------------------------
+    # malformed-line rule
+    # ------------------------------------------------------------------
+
+    def test_malformed_line_before_the_last_stops_that_file_only(self) -> None:
+        path = self.write_session(
+            "bad.jsonl",
+            _jsonl(_session_meta("sess-1"), _task_started("t"))
+            + "not json\n"
+            + _jsonl(_token_count()),
+        )
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertIsNotNone(result["hard_stop"])
+        self.assertEqual(result["hard_stop"]["line"], 3)
+        self.assertEqual(result["turns"], 0)
+
+    def test_malformed_line_reproduces_on_rerun_without_advancing(self) -> None:
+        path = self.write_session(
+            "bad.jsonl", _jsonl(_session_meta("sess-1")) + "not json\n" + _jsonl(_token_count())
+        )
+        first = self.codex_collector.harvest_file(self.conn, path)
+        second = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(first["hard_stop"], second["hard_stop"])
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0], 0)
+
+    def test_truncated_trailing_line_is_not_an_error(self) -> None:
+        """A write in progress: no terminating newline on the last line."""
+        content = _jsonl(_session_meta("sess-1")) + '{"type": "event_msg", "payload": {"type": "task_started"'
+        path = self.write_session("live.jsonl", content)
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertIsNone(result["hard_stop"])
+        row = self.conn.execute(
+            "SELECT last_line_no FROM harvest WHERE source_path = ?", (str(path),)
+        ).fetchone()
+        self.assertEqual(row[0], 1, "must not advance past the incomplete trailing line")
+
+    def test_truncated_line_completes_on_next_run(self) -> None:
+        path = self.write_session(
+            "live.jsonl",
+            _jsonl(_session_meta("sess-1")) + '{"type": "event_msg", "payload": {"type": "task_started"',
+        )
+        self.codex_collector.harvest_file(self.conn, path)
+        with path.open("a") as fh:
+            fh.write(', "turn_id": "t"}}\n')
+            fh.write(_jsonl(_turn_context("t", "gpt-5.6"), _token_count()))
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertIsNone(result["hard_stop"])
+        self.assertEqual(result["turns"], 1)
+        self.assertEqual(self.turn_raw_rows()[0][3], "gpt-5.6")
+
+    # ------------------------------------------------------------------
+    # idempotency and incremental append
+    # ------------------------------------------------------------------
+
+    def test_rerun_with_no_new_content_writes_nothing(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl(_session_meta("sess-1"), _task_started("t"), _token_count())
+        )
+        self.codex_collector.harvest_file(self.conn, path)
+        result = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(result, {"turns": 0, "activity": 0, "hard_stop": None})
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0], 1)
+
+    def test_incremental_append_processes_only_new_lines(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl(_session_meta("sess-1"), _task_started("t"), _token_count(1))
+        )
+        first = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(first["turns"], 1)
+        with path.open("a") as fh:
+            fh.write(_jsonl(_token_count(2)))
+        second = self.codex_collector.harvest_file(self.conn, path)
+        self.assertEqual(second["turns"], 1)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0], 2)
+
+    def test_watermark_anomaly_on_shrunk_file(self) -> None:
+        path = self.write_session("a.jsonl", _jsonl(_session_meta("sess-1"), _task_started("t"), _token_count()))
+        self.codex_collector.harvest_file(self.conn, path)
+        path.write_text(_jsonl(_session_meta("sess-1")))  # shrank
+        with self.assertRaises(self.codex_collector.WatermarkAnomaly):
+            self.codex_collector.harvest_file(self.conn, path)
+
+    # ------------------------------------------------------------------
+    # harvest_all — cross-file isolation
+    # ------------------------------------------------------------------
+
+    def test_one_files_hard_stop_does_not_affect_another(self) -> None:
+        sessions = self.dir / "sessions"
+        sessions.mkdir()
+        (sessions / "good.jsonl").write_text(
+            _jsonl(_session_meta("sess-good"), _task_started("t"), _token_count())
+        )
+        (sessions / "bad.jsonl").write_text(_jsonl(_session_meta("sess-bad")) + "not json\n")
+        summary = self.codex_collector.harvest_all(self.conn, sessions)
+        self.assertEqual(summary["files"], 2)
+        self.assertEqual(summary["turns"], 1)
+        self.assertEqual(len(summary["failures"]), 1)
+        self.assertIn("bad.jsonl", summary["failures"][0]["path"])
 
 
 if __name__ == "__main__":

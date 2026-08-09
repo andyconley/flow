@@ -30,7 +30,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 STATE_ABSENT = "absent"
 STATE_OK = "ok"
@@ -135,8 +135,44 @@ CREATE INDEX idx_norm_ts             ON turn_norm(ts);
 CREATE INDEX idx_norm_model_ts       ON turn_norm(model, ts);
 """
 
+_V2 = """
+-- A collector resuming a file mid-stream needs to find the session row for a
+-- batch that doesn't include the session_meta line (already committed in an
+-- earlier run). Without a direct pointer, that lookup has to infer the
+-- session from a child row — turn_raw or agent_activity_raw — which does not
+-- exist yet if the very first harvest of a file stopped (truncated write, or
+-- a hard-stop) before writing any. source_path is nullable because it is a
+-- convenience index for that one fallback path, not part of session
+-- identity — (harness, session_id) remains the real key.
+ALTER TABLE session ADD COLUMN source_path TEXT;
+CREATE INDEX idx_session_source_path ON session(source_path);
+
+-- Coarse activity log for events that describe an agent acting, but carry no
+-- token usage of their own. First observed as Codex's `sub_agent_activity`
+-- telemetry, which references an `agent_thread_id` matching no local session
+-- file — almost certainly a cloud/background agent whose transcript and token
+-- usage live server-side, not on this disk. There is nothing to normalize
+-- here and no token_norm-shaped counterpart: this table exists so the event
+-- itself is not silently dropped, not to make it queryable as usage.
+CREATE TABLE agent_activity_raw (
+  id                INTEGER PRIMARY KEY,
+  session_row_id    INTEGER NOT NULL REFERENCES session(id),
+  ts                TEXT NOT NULL,
+  kind              TEXT NOT NULL,
+  agent_thread_id   TEXT,
+  agent_path        TEXT,
+  payload           TEXT NOT NULL,
+  source_path       TEXT NOT NULL,
+  source_line_no    INTEGER NOT NULL,
+  collector_version INTEGER NOT NULL
+);
+
+CREATE INDEX idx_activity_session_ts ON agent_activity_raw(session_row_id, ts);
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "initial schema: raw + normalized layers, harvest watermark, capabilities", _V1),
+    (2, "agent activity log for sub-agent telemetry with no local token data", _V2),
 ]
 
 
