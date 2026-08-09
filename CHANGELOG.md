@@ -6,6 +6,64 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-08
+
+### Added
+
+- **Usage store bootstrap.** `flow setup machine` and `flow update` now create
+  and migrate `~/.flow/usage.db`, a SQLite store for harvested harness usage
+  data (Claude Code and Codex session transcripts). Two layers: raw turn
+  records in each harness's own semantics, and a normalized layer recomputable
+  from raw at any time — the split exists because Codex's `cached_input_tokens`
+  is a subset of `input_tokens` while Claude's cache buckets are disjoint and
+  additive, so a single shared column would make cross-harness totals quietly
+  wrong. `flow doctor` reports store state (absent / stale / empty / ok)
+  read-only; it never creates or repairs. No collector ships yet — nothing
+  writes turns.
+- **Capability seed data** at `data/harness_capabilities.json`, describing what
+  each harness's transcripts can report (context window, cache TTL semantics,
+  session lineage, etc.). Lives at the top level rather than under
+  `scaffolds/default/` because `setup_project()` copies everything under
+  `scaffolds/default/` into every project's `.flow/` overlay, which would leak
+  machine-level seed data into every repo.
+
+### Changed
+
+- **`cli/flow.py` split into eight modules.** It was 1,876 lines holding every
+  CLI concern; it is now 224 — argparse declaration and dispatch only.
+  `paths.py`, `flowtoml.py`, `fsutil.py`, `render.py`, `sync.py`, `setup.py`,
+  `lifecycle.py`, `diagnostics.py` hold everything else, in an acyclic
+  dependency graph. See `docs/file-structure.md` for what each module owns.
+  Verified as a pure move: of the 67 functions on the prior `flow.py`, 63
+  remain code-identical (one intentional deletion of dead code and two
+  intentional bug fixes below account for the rest).
+- **Release staging validation now resolves imports instead of guessing what
+  they are.** The prior check (`CLI_REQUIRED_SIBLINGS`) was a hand-maintained
+  tuple naming one required sibling file while `flow.py` actually needed six —
+  itself the same forward-compatibility gap the [0.6.1] roster blacklist fixed
+  for release *contents*, recurring for release *validation*. The replacement
+  reads required sibling names directly out of the staged `flow.py`'s imports,
+  transitively. An earlier version of this fix classified every non-stdlib
+  import as a required flow module, which would have made any future
+  third-party dependency unrecoverable from an older client (the rejecting
+  code being the installed code); it was corrected before release to instead
+  ask whether each import *resolves* — against the staged tree or the running
+  environment — which needs no forecast of what a later release might add.
+- **`quality-reviewer` and `security-reviewer` repinned `sonnet` → `opus`.**
+  Both sit where a wrong call cascades downstream, matching the rest of the
+  agent set.
+- **`flow-archive` records framework capability gaps.** A new required output
+  section captures what the *framework* was missing during a run — a step done
+  by hand that a command should own, a missing standard, an agent role that
+  would have fit — distinct from what the work itself left undone. "none
+  observed" is required rather than optional, since an omitted section is
+  indistinguishable from one never considered.
+- **`flow-implement`'s parallel investigation now writes to
+  `.flow/runs/<work-id>/research/`** instead of the working directory, and the
+  orchestrator is directed to collect the returned file paths rather than
+  synthesize from inline summaries alone, which discards the detail those
+  files exist to hold.
+
 ### Fixed
 
 - **Current Codex standalone-skill discovery.** Codex adapters now generate
@@ -14,6 +72,26 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   manifests that declare the former `.codex/skills` path migrate on their next
   sync; only previously managed legacy files are removed. Claude generation is
   unchanged.
+- **Installer Python selection hardened.** `install-flow.sh` now searches a
+  broader, deduplicated set of Python candidates (`FLOW_PYTHON`,
+  `FLOW_PYTHON_CANDIDATES`, versioned `python3.1x` on `PATH`, then Homebrew
+  prefixes) and rejects anything below the 3.10 floor with a clear error
+  instead of failing opaquely later.
+- **`desired_claude_outputs` / `desired_codex_outputs` no longer discard the
+  managed manifest's own first build.** Each function built the manifest,
+  appended the manifest's own entry to the entry list, then rebuilt and
+  discarded the first result — harmless (the builder is a pure string
+  function) but wasteful. The entry is now appended before the single build.
+- **Removed `render_skill` (`cli/render.py`).** Dead code with no callers
+  anywhere in the repo, predating this release.
+
+### Why this is 0.7.0 (minor)
+
+Two of the changes above alter runtime-visible behavior for existing users: the
+usage store adds a new artifact and a new `doctor` line, and the `flow-archive`
+/ `flow-implement` changes alter how agents engage at runtime per this file's
+own preamble on `scaffolds/default/` changes. The module split and the staging
+fix are internal and would be patch-level on their own.
 
 ## [0.6.1] — 2026-05-15
 
