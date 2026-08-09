@@ -33,6 +33,15 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   populated in 7.7% of rows on a 16,260-row corpus, not "null in every
   sample" as originally found. `_V1` and `_V2` untouched; `_V2` is already
   applied on real installs and could not be edited in place this time.
+- **`flow harvest claude`** (token-advisory chunk 5) — the second collector.
+  Incrementally reads `~/.claude/projects/**/*.jsonl`, deduplicating by
+  `requestId` (a single API response is written as several JSONL lines; the
+  natural key is `requestId` itself, no composite needed the way Codex's
+  `turn_id:source_line_no` was). `_EXTRACTORS["claude"]` added to
+  `normalize.py` in the same chunk — direct mapping, no subtraction, since
+  Claude's token fields are already disjoint. `cli/jsonl_watermark.py` and
+  `cli/session_lookup.py` extracted from `codex_collector.py` (both entirely
+  harness-agnostic) rather than duplicated into the new collector.
 
 ### Fixed
 
@@ -55,6 +64,22 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
     would previously vanish with no error and no count, rather than being
     reported like any other malformed line. Required fields are now checked
     explicitly before the insert is attempted.
+- **Corrected an `is_subagent` design decision within the same implementation
+  session that made it.** Planning for the Claude collector concluded
+  `isSidechain` was dead in current transcripts — a scan of every file found
+  by a non-recursive directory glob showed zero `isSidechain: true` records,
+  including in sessions known to have used subagents. Shipped as
+  `is_subagent = 0` always for Claude, documented as a finding. Harvesting the
+  real corpus mid-implementation surfaced the actual cause: current Claude
+  Code writes background/queued subagent transcripts to a nested
+  `subagents/<parent-session-uuid>/agent-<agent-id>.jsonl` path that a
+  non-recursive glob never reaches. Correctly scanned, `isSidechain: true`
+  appears on 19,139 real records across 362 of 714 files (over half the
+  corpus) — with complete, real `usage` blocks. `token-report`'s original
+  assumption was right; `is_subagent` is now read per record from
+  `isSidechain`, not derived from a session-level lookup the way Codex's is
+  (a subagent file shares its parent's own `sessionId` rather than declaring
+  a distinct one, so there is no separate child identity to look up).
 
 ## [0.7.0] — 2026-08-08
 
