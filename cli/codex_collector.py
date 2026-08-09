@@ -54,7 +54,7 @@ on, not inferred from documentation:
 ## Malformed-line rule
 
 A trailing line with no terminating `\\n` is a write in progress, not an
-error — `_read_new_lines` never returns it, and the next harvest picks it up
+error — `read_new_lines` never returns it, and the next harvest picks it up
 once it's complete. Everything else that keeps a line from becoming a row is
 genuine corruption and stops that file's harvest at the first one: failing to
 decode, failing to parse, parsing to something other than a JSON object, or

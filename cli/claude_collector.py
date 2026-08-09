@@ -50,10 +50,20 @@ existing behavior:
   turns land in the same session as the work they were spawned from, exactly
   matching Claude's own logical grouping. `session.source_path` may end up
   pointing at whichever of a session's several files (main plus any
-  subagents) is harvested first, not necessarily the main one; this only
-  affects the fallback path in `lookup_session_for_path` for a resumed batch
-  whose first record happens to lack `sessionId`, which real data shows is
-  rare and always degrades to a counted `skip`, never silent data loss.
+  subagents) is harvested first, not necessarily the main one — in practice
+  this means a subagent file's own `source_path` almost never resolves
+  anything, since `lookup_session_for_path` looks it up by *that file's own
+  path*, and a session's identity almost always got recorded against a
+  different file. Every subagent-file batch therefore falls back to
+  re-deriving identity from `sessionId` on its own records — which works,
+  because the one property this actually depends on is that *every* record
+  type this collector writes a row for (`assistant`, always) carries
+  `sessionId`. A record type that carries `usage` but not `sessionId` would
+  break this silently; none is known to exist. Records that lack `sessionId`
+  entirely (`file-history-snapshot`, `file-history-delta`, and a handful of
+  others) are counted as `skipped` rather than misattributed or lost — but
+  that is a property of those specific record types, not a general guarantee
+  that anything unresolvable degrades safely.
 - **`usage` carries more than `token-report` reads.** Beyond
   `input_tokens`/`cache_read_input_tokens`/`cache_creation_input_tokens`/
   `output_tokens`, real data now includes `cache_creation` (a breakdown of
@@ -207,7 +217,18 @@ def _harvest_lines(
             if ts is None:
                 raise _HardStop(line_no, "assistant record is missing timestamp")
 
-            natural_turn_id = request_id if request_id is not None else f"untracked:{line_no}"
+            # The fallback includes the filename, not just the line number.
+            # `untracked:{line_no}` was safe for Codex because one Codex
+            # session is exactly one file; for Claude, a session's own file
+            # and every subagents/<parent-uuid>/agent-*.jsonl file sharing
+            # that session_row_id each number their own lines from 1, and
+            # sibling agent files are similar enough in structure that two
+            # colliding on the same line number is a real, if rare,
+            # possibility — confirmed against real data: assistant records
+            # with a usage block but no requestId do occur, just uncommonly.
+            # Without the filename, a collision is a fully silent row drop:
+            # INSERT OR IGNORE no-ops, rowcount is 0, and nothing counts it.
+            natural_turn_id = request_id if request_id is not None else f"untracked:{path.name}:{line_no}"
             model = msg.get("model")
             # Per-record, not session-level: a subagent invocation is a
             # distinct file that shares the parent's sessionId rather than
@@ -216,7 +237,7 @@ def _harvest_lines(
             # the real, per-record signal here — confirmed against 19,139
             # real occurrences, not the near-zero a non-recursive directory
             # scan first suggested.
-            is_subagent_value = 1 if record.get("isSidechain") else 0
+            is_subagent_value = 1 if record.get("isSidechain") is True else 0
 
             cur = conn.execute(
                 "INSERT OR IGNORE INTO turn_raw"

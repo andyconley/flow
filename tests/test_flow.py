@@ -2230,6 +2230,12 @@ class ClaudeCollectorTests(unittest.TestCase):
         """A subagent file declares the parent's own sessionId, not a distinct
         one — confirmed against real data: session identity is shared, not
         linked via a parent_session_id back-reference the way Codex's is.
+
+        Asserts the actual attribution, not just that one session row exists:
+        both files' turns must land under that one session_row_id, and each
+        must carry its own correct is_subagent — proving the shared-session
+        design and the per-record is_subagent fix work together, not just
+        that neither one crashed.
         """
         main = self.write_session(
             "main.jsonl", _jsonl(_claude_user("sess-shared"), _claude_assistant("sess-shared", "req-main"))
@@ -2241,13 +2247,22 @@ class ClaudeCollectorTests(unittest.TestCase):
         self.claude_collector.harvest_file(self.conn, main)
         self.claude_collector.harvest_file(self.conn, subagent)
 
-        session_ids = {
-            r[0] for r in self.conn.execute("SELECT id FROM session WHERE session_id = 'sess-shared'")
-        }
-        self.assertEqual(len(session_ids), 1, "both files must resolve to the same session row")
-        self.assertIsNone(
-            self.conn.execute("SELECT parent_session_id FROM session WHERE session_id = 'sess-shared'").fetchone()[0]
+        sessions = self.conn.execute(
+            "SELECT id, parent_session_id FROM session WHERE session_id = 'sess-shared'"
+        ).fetchall()
+        self.assertEqual(len(sessions), 1, "both files must resolve to the same session row")
+        session_row_id, parent_session_id = sessions[0]
+        self.assertIsNone(parent_session_id)
+
+        rows = self.conn.execute(
+            "SELECT natural_turn_id, session_row_id, is_subagent FROM turn_raw ORDER BY natural_turn_id"
+        ).fetchall()
+        self.assertEqual(
+            {r[1] for r in rows}, {session_row_id}, "both turns must attribute to the one shared session row"
         )
+        by_id = {r[0]: r[2] for r in rows}
+        self.assertEqual(by_id["req-main"], 0)
+        self.assertEqual(by_id["req-sub"], 1)
 
     def test_model_extracted_from_message(self) -> None:
         path = self.write_session(
@@ -2750,17 +2765,30 @@ class NormalizeTests(unittest.TestCase):
     def test_unrecognized_harness_rows_are_not_reselected_every_run(self) -> None:
         """Filtered at the SQL level, not per-row — a row with no extractor
         must never appear in the candidate set at all, so it costs nothing on
-        repeated runs regardless of how many such rows accumulate. `_EXTRACTORS`
-        is emptied for the duration, per the note on the test above this one.
+        repeated runs regardless of how many such rows accumulate.
+
+        Patches `_EXTRACTORS` down to `codex` only rather than clearing it
+        entirely: with nothing left in the dict, `s.harness IN ()` matches
+        no row regardless of harness, and an implementation that dropped the
+        SQL filter in favor of a per-row `if harness not in _EXTRACTORS:
+        skip` check would pass this test identically. Keeping one real
+        extractor and giving both harnesses a row is what forces the SQL
+        filter itself to discriminate — `skipped == 0` is the assertion that
+        tells "never selected" apart from "selected, then skipped."
         """
         import unittest.mock
 
-        sess = self.insert_session(session_id="claude-sess", harness="claude")
-        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"type": "token_count"}})
-        with unittest.mock.patch.dict(self.normalize._EXTRACTORS, clear=True):
+        codex_sess = self.insert_session(session_id="codex-sess", harness="codex")
+        claude_sess = self.insert_session(session_id="claude-sess", harness="claude")
+        self.insert_turn_raw(codex_sess, {"timestamp": "x", "payload": {"type": "token_count"}})
+        self.insert_turn_raw(claude_sess, {"timestamp": "x", "payload": {"type": "token_count"}})
+        with unittest.mock.patch.dict(
+            self.normalize._EXTRACTORS, {"codex": self.normalize._normalize_codex_row}, clear=True
+        ):
             first = self.normalize.normalize_all(self.conn)
             second = self.normalize.normalize_all(self.conn)
-        self.assertEqual(first["normalized"], 0)
+        self.assertEqual(first["normalized"], 1, "only the codex row should ever be selected")
+        self.assertEqual(first["skipped"], 0, "the claude row must be filtered at the SQL level, not selected-then-skipped")
         self.assertEqual(second["normalized"], 0)
         self.assertEqual(first["failures"], [])
 
