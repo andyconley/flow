@@ -30,7 +30,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 STATE_ABSENT = "absent"
 STATE_OK = "ok"
@@ -175,9 +175,28 @@ CREATE TABLE agent_activity_raw (
 CREATE INDEX idx_activity_session_ts ON agent_activity_raw(session_row_id, ts);
 """
 
+_V3 = """
+-- turn_norm shipped with only capacity_primary_* columns on the documented
+-- assumption that Codex's `rate_limits.secondary` was unpopulated in
+-- practice (true of every sample the schema was designed against). A
+-- 16,260-row real-corpus check during the normalization pass that consumes
+-- this table found secondary populated in 7.7% of rows — not negligible.
+-- Columns named to mirror `capacity_primary_*` exactly, for the same reason
+-- those were named `primary` rather than assuming which window they meant:
+-- `rate_limits.primary` itself is not reliably "the weekly window" (real
+-- data shows both a 300-minute and a 10080-minute value under that name),
+-- so neither field is given interpretive meaning — both are stored verbatim
+-- under Codex's own naming, and a consumer distinguishes them by the
+-- window_minutes value actually stored, not by the column name alone.
+ALTER TABLE turn_norm ADD COLUMN capacity_secondary_used_pct REAL;
+ALTER TABLE turn_norm ADD COLUMN capacity_secondary_window_minutes INTEGER;
+ALTER TABLE turn_norm ADD COLUMN capacity_secondary_resets_at INTEGER;
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "initial schema: raw + normalized layers, harvest watermark, capabilities", _V1),
     (2, "agent activity log for sub-agent telemetry with no local token data", _V2),
+    (3, "secondary capacity window columns on turn_norm", _V3),
 ]
 
 
