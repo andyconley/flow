@@ -7,16 +7,18 @@ The main `flow` repo currently uses this structure:
 ```text
 flow/
   cli/
-    flow.py          entrypoint: argparse declaration and dispatch
-    diagnostics.py   doctor, help, bootstrap
-    flowtoml.py      TOML reading
-    fsutil.py        filesystem primitives
-    lifecycle.py     two-mode install, release staging, update
-    paths.py         machine paths and mode constants
-    render.py        generated-adapter rendering
-    setup.py         machine / project / user setup and refresh
-    sync.py          the sync engine
-    usage_store.py   SQLite store for harvested harness usage
+    flow.py            entrypoint: argparse declaration and dispatch
+    codex_collector.py Codex session transcripts -> usage store raw layer
+    diagnostics.py     doctor, help, bootstrap
+    flowtoml.py        TOML reading
+    fsutil.py          filesystem primitives
+    harvest.py         thin CLI wrapper around the harness collectors
+    lifecycle.py       two-mode install, release staging, update
+    paths.py           machine paths and mode constants
+    render.py          generated-adapter rendering
+    setup.py           machine / project / user setup and refresh
+    sync.py            the sync engine
+    usage_store.py     SQLite store for harvested harness usage
   data/
     harness_capabilities.json
   docs/
@@ -65,6 +67,11 @@ other by bare name.
 - `lifecycle.py` — two-mode install, release staging, and update.
 - `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; never writes.
 - `usage_store.py` — SQLite store for harvested harness usage.
+- `codex_collector.py` — reads Codex session transcripts into the store's raw
+  layer. Pure: no argparse, no printing, every path passed in explicitly.
+- `harvest.py` — the thin CLI wrapper around collector modules (`codex_collector.py`
+  today, a `claude_collector.py` sibling later). Argument resolution and
+  printing live here; parsing and persistence live in each collector.
 
 Edit the module that owns the behavior. `flow.py` changes only when a command
 is added, removed, or its arguments change.
