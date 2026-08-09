@@ -54,7 +54,7 @@ on, not inferred from documentation:
 ## Malformed-line rule
 
 A trailing line with no terminating `\\n` is a write in progress, not an
-error — `_read_new_lines` never returns it, and the next harvest picks it up
+error — `read_new_lines` never returns it, and the next harvest picks it up
 once it's complete. Everything else that keeps a line from becoming a row is
 genuine corruption and stops that file's harvest at the first one: failing to
 decode, failing to parse, parsing to something other than a JSON object, or
@@ -73,10 +73,13 @@ a fixed offset never becomes valid — the stop reproduces every run until
 someone looks at it, which is the intended behavior, not a bug.
 """
 
-import hashlib
 import json
 import sqlite3
 from pathlib import Path
+
+from jsonl_watermark import WatermarkAnomaly, line_byte_length, line_hash, read_new_lines
+from session_lookup import is_subagent as _shared_is_subagent
+from session_lookup import lookup_session_for_path
 
 COLLECTOR_VERSION = 1
 HARNESS = "codex"
@@ -86,63 +89,6 @@ def default_sessions_root(home: Path | None = None) -> Path:
     """Resolve Codex's session directory lazily. See module docstring for why."""
     base = home if home is not None else Path.home()
     return base / ".codex" / "sessions"
-
-
-class WatermarkAnomaly(Exception):
-    """The file is smaller than the recorded watermark. Never a silent no-op.
-
-    A file that shrank was not appended to — it was replaced or truncated.
-    Silently re-harvesting from 0 would either skip data or double-count it
-    depending on what actually happened, so this is raised rather than guessed
-    at.
-    """
-
-
-# --------------------------------------------------------------------------
-# line reading — bytes in, bytes out; decoding happens in the caller so a
-# decode failure and a JSON failure funnel through the same hard-stop path
-# --------------------------------------------------------------------------
-
-
-def _read_new_lines(path: Path, last_offset: int) -> tuple[list[bytes], int, int]:
-    """Read complete lines appended since `last_offset`, as raw bytes.
-
-    Returns `(lines, new_offset, current_size)`. `new_offset` is the byte
-    offset immediately after the last complete line — what the caller should
-    persist as `harvest.last_offset` once those lines are committed. A
-    trailing line with no terminating newline is left unread entirely; it is
-    neither returned nor counted toward `new_offset`.
-    """
-    current_size = path.stat().st_size
-    if current_size < last_offset:
-        raise WatermarkAnomaly(
-            f"{path}: size {current_size} < recorded offset {last_offset}"
-        )
-    if current_size == last_offset:
-        return [], last_offset, current_size
-
-    with path.open("rb") as fh:
-        fh.seek(last_offset)
-        chunk = fh.read()
-
-    lines: list[bytes] = []
-    start = 0
-    while True:
-        nl = chunk.find(b"\n", start)
-        if nl == -1:
-            break  # remainder, if any, is an incomplete trailing line
-        lines.append(chunk[start:nl])
-        start = nl + 1
-    new_offset = last_offset + start
-    return lines, new_offset, current_size
-
-
-def _line_byte_length(raw: bytes) -> int:
-    return len(raw) + 1  # +1 for the newline stripped during reading
-
-
-def _line_hash(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 # --------------------------------------------------------------------------
@@ -199,31 +145,7 @@ def _extract_parent_session_id(meta: dict) -> str | None:
 
 
 def _lookup_session_for_path(conn: sqlite3.Connection, path: Path) -> int | None:
-    """Find the session already associated with this file.
-
-    Used when a harvest batch resumes mid-file and does not include the
-    session_meta line — already processed and committed in an earlier run.
-    Looks up `session.source_path` directly rather than inferring the session
-    from a child row (`turn_raw` / `agent_activity_raw`): a file whose first
-    harvest stopped right after `session_meta` — a truncated write, or a
-    hard-stop on the very next line — has a session row but no child rows yet,
-    which made the child-row inference this replaced return None exactly when
-    it mattered most.
-    """
-    row = conn.execute(
-        "SELECT id FROM session WHERE harness = ? AND source_path = ?",
-        (HARNESS, str(path)),
-    ).fetchone()
-    return row[0] if row is not None else None
-
-
-def _is_subagent(conn: sqlite3.Connection, session_row_id: int | None) -> int:
-    if session_row_id is None:
-        return 0
-    row = conn.execute(
-        "SELECT parent_session_id FROM session WHERE id = ?", (session_row_id,)
-    ).fetchone()
-    return 1 if row is not None and row[0] is not None else 0
+    return lookup_session_for_path(conn, HARNESS, path)
 
 
 # --------------------------------------------------------------------------
@@ -335,7 +257,7 @@ def _harvest_lines(
     the ordering dependency entirely.
     """
     session_row_id: int | None = _lookup_session_for_path(conn, path)
-    is_subagent = _is_subagent(conn, session_row_id) if session_row_id is not None else 0
+    is_subagent = _shared_is_subagent(conn, session_row_id)
     state = _OpenTurnState()
     turns_written = 0
     activity_written = 0
@@ -372,7 +294,7 @@ def _harvest_lines(
                 sid = payload.get("id")
                 if sid is not None:
                     session_row_id = _get_or_create_session(conn, sid, payload, path)
-                    is_subagent = _is_subagent(conn, session_row_id)
+                    is_subagent = _shared_is_subagent(conn, session_row_id)
 
             elif session_row_id is None:
                 # Nothing to attach this record to — this file's own
@@ -481,7 +403,7 @@ def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dic
     ).fetchone()
     last_offset, last_line_no, prior_hash = row if row is not None else (0, 0, None)
 
-    raw_lines, new_offset, current_size = _read_new_lines(path, last_offset)
+    raw_lines, new_offset, current_size = read_new_lines(path, last_offset)
     if not raw_lines:
         return {"turns": 0, "activity": 0, "skipped": 0, "hard_stop": None}
 
@@ -508,12 +430,12 @@ def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dic
             for offset, raw in enumerate(raw_lines):
                 if last_line_no + 1 + offset > last_good_line_no:
                     break
-                committed_offset += _line_byte_length(raw)
+                committed_offset += line_byte_length(raw)
             watermark_offset = committed_offset
-            watermark_hash = _line_hash(raw_lines[last_good_line_no - last_line_no - 1])
+            watermark_hash = line_hash(raw_lines[last_good_line_no - last_line_no - 1])
         else:
             watermark_offset = new_offset
-            watermark_hash = _line_hash(raw_lines[-1])
+            watermark_hash = line_hash(raw_lines[-1])
 
         conn.execute(
             "INSERT INTO harvest"

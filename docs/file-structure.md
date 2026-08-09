@@ -8,15 +8,18 @@ The main `flow` repo currently uses this structure:
 flow/
   cli/
     flow.py            entrypoint: argparse declaration and dispatch
+    claude_collector.py Claude Code session transcripts -> usage store raw layer
     codex_collector.py Codex session transcripts -> usage store raw layer
     diagnostics.py     doctor, help, bootstrap
     flowtoml.py        TOML reading
     fsutil.py          filesystem primitives
     harvest.py         thin CLI wrapper around the harness collectors
+    jsonl_watermark.py incremental byte-level JSONL reading, shared by both collectors
     lifecycle.py       two-mode install, release staging, update
     normalize.py       turn_raw -> turn_norm, one convention across harnesses
     paths.py           machine paths and mode constants
     render.py          generated-adapter rendering
+    session_lookup.py  session-table lookups shared by both collectors
     setup.py           machine / project / user setup and refresh
     sync.py            the sync engine
     usage_store.py     SQLite store for harvested harness usage
@@ -68,15 +71,19 @@ other by bare name.
 - `lifecycle.py` — two-mode install, release staging, and update.
 - `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; never writes.
 - `usage_store.py` — SQLite store for harvested harness usage.
-- `codex_collector.py` — reads Codex session transcripts into the store's raw
-  layer. Pure: no argparse, no printing, every path passed in explicitly.
-- `harvest.py` — the thin CLI wrapper around collector modules (`codex_collector.py`
-  today, a `claude_collector.py` sibling later). Argument resolution and
-  printing live here; parsing and persistence live in each collector.
+- `codex_collector.py`, `claude_collector.py` — read each harness's session
+  transcripts into the store's raw layer. Pure: no argparse, no printing,
+  every path passed in explicitly.
+- `jsonl_watermark.py`, `session_lookup.py` — primitives shared by both
+  collectors (incremental byte-level line reading; session-table lookups).
+  Extracted rather than duplicated once a second collector needed them.
+- `harvest.py` — the thin CLI wrapper around both collector modules. Argument
+  resolution and printing live here; parsing and persistence live in each
+  collector.
 - `normalize.py` — projects `turn_raw` into `turn_norm` in one shared,
-  harness-neutral convention. A separate command from `harvest`: appending new
-  raw data and recomputing derived data have different cost profiles, and a
-  rule change can touch every row.
+  harness-neutral convention, dispatching per row by harness. A separate
+  command from `harvest`: appending new raw data and recomputing derived data
+  have different cost profiles, and a rule change can touch every row.
 
 Edit the module that owns the behavior. `flow.py` changes only when a command
 is added, removed, or its arguments change.

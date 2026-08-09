@@ -1471,15 +1471,18 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(
             victims,
             [
+                "claude_collector",
                 "codex_collector",
                 "diagnostics",
                 "flowtoml",
                 "fsutil",
                 "harvest",
+                "jsonl_watermark",
                 "lifecycle",
                 "normalize",
                 "paths",
                 "render",
+                "session_lookup",
                 "setup",
                 "sync",
                 "usage_store",
@@ -1537,6 +1540,34 @@ class FlowCliTests(unittest.TestCase):
         result = self.run_flow("harvest", "codex")
         self.assert_ok(result)
         self.assertIn("no Codex sessions found", result.stdout)
+
+    def test_harvest_claude_end_to_end_via_cli(self) -> None:
+        home = self.use_fake_home()
+        sessions_dir = home / ".claude" / "projects" / "-tmp-proj"
+        sessions_dir.mkdir(parents=True)
+        (sessions_dir / "sess-1.jsonl").write_text(
+            _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1"))
+        )
+        result = self.run_flow("harvest", "claude")
+        self.assert_ok(result)
+        self.assertIn("1 turns", result.stdout)
+
+        store = self._store_path(home)
+        import sqlite3
+
+        conn = sqlite3.connect(store)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM turn_raw").fetchone()[0], 1)
+        conn.close()
+
+        second = self.run_flow("harvest", "claude")
+        self.assert_ok(second)
+        self.assertIn("0 turns", second.stdout)
+
+    def test_harvest_claude_without_sessions_dir_is_a_clean_no_op(self) -> None:
+        self.use_fake_home()
+        result = self.run_flow("harvest", "claude")
+        self.assert_ok(result)
+        self.assertIn("no Claude Code sessions found", result.stdout)
 
     def test_normalize_end_to_end_via_cli(self) -> None:
         home = self.use_fake_home()
@@ -1635,6 +1666,43 @@ def _sub_agent_activity(agent_thread_id: str, agent_path: str, kind: str = "star
             "agent_thread_id": agent_thread_id,
             "agent_path": agent_path,
         },
+    }
+
+
+def _claude_user(session_id: str, cwd: str = "/tmp/proj") -> dict:
+    return {
+        "type": "user",
+        "sessionId": session_id,
+        "cwd": cwd,
+        "timestamp": "2026-01-01T00:00:00Z",
+        "message": {"content": "hello"},
+    }
+
+
+def _claude_assistant(
+    session_id: str,
+    request_id: str,
+    model: str = "claude-sonnet-5",
+    input_tokens: int = 100,
+    cache_read: int | None = 0,
+    cache_write: int | None = 0,
+    output_tokens: int = 10,
+    cwd: str = "/tmp/proj",
+    is_sidechain: bool = False,
+) -> dict:
+    usage = {"input_tokens": input_tokens, "output_tokens": output_tokens}
+    if cache_read is not None:
+        usage["cache_read_input_tokens"] = cache_read
+    if cache_write is not None:
+        usage["cache_creation_input_tokens"] = cache_write
+    return {
+        "type": "assistant",
+        "sessionId": session_id,
+        "cwd": cwd,
+        "requestId": request_id,
+        "isSidechain": is_sidechain,
+        "timestamp": "2026-01-01T00:00:01Z",
+        "message": {"model": model, "usage": usage},
     }
 
 
@@ -1921,7 +1989,7 @@ class CodexCollectorTests(unittest.TestCase):
         # Re-run the same batch directly against _harvest_lines, bypassing the
         # watermark, to prove the constraint — not just the watermark — is
         # what prevents a duplicate.
-        raw_lines, _, _ = self.codex_collector._read_new_lines(path, 0)
+        raw_lines, _, _ = self.codex_collector.read_new_lines(path, 0)
         self.codex_collector._harvest_lines(self.conn, path, raw_lines, 1)
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM agent_activity_raw").fetchone()[0], 1)
 
@@ -2064,6 +2132,236 @@ class CodexCollectorTests(unittest.TestCase):
         self.assertIn("shrunk.jsonl", second["failures"][0]["path"])
         # The unaffected file must not be reprocessed or double-counted.
         self.assertEqual(second["turns"], 0)
+
+
+class ClaudeCollectorTests(unittest.TestCase):
+    """Direct tests of cli/claude_collector.py, against an in-memory store.
+
+    Mirrors CodexCollectorTests's structure. Dedup here is by requestId, not
+    an open-turn state machine — several assistant lines legitimately share
+    one requestId (text, thinking, tool_use blocks of one API response), and
+    the schema's own UNIQUE(session_row_id, natural_turn_id) constraint is
+    the entire dedup mechanism; no extra bookkeeping needed.
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import claude_collector
+
+        self.usage_store = usage_store
+        self.claude_collector = claude_collector
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "claude_collector"):
+            sys.modules.pop(name, None)
+
+    def write_session(self, name: str, content: str) -> Path:
+        path = self.dir / name
+        path.write_text(content)
+        return path
+
+    def turn_raw_rows(self) -> list[tuple]:
+        return list(
+            self.conn.execute(
+                "SELECT natural_turn_id, turn_seq, is_subagent, model FROM turn_raw ORDER BY turn_seq"
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # dedup and attribution
+    # ------------------------------------------------------------------
+
+    def test_multiple_lines_sharing_a_request_id_dedupe_to_one_row(self) -> None:
+        """The core reason this collector exists: one API response, several JSONL lines."""
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_assistant("sess-1", "req-1"),  # text block
+                _claude_assistant("sess-1", "req-1"),  # thinking block, same call
+                _claude_assistant("sess-1", "req-1"),  # tool_use block, same call
+                _claude_assistant("sess-1", "req-2"),  # a genuinely different call
+            ),
+        )
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 2)
+        self.assertIsNone(result["hard_stop"])
+        rows = self.turn_raw_rows()
+        self.assertEqual({r[0] for r in rows}, {"req-1", "req-2"})
+
+    def test_is_subagent_derived_from_is_sidechain_per_record(self) -> None:
+        """isSidechain does flag subagent turns — confirmed against 19,139 real records
+        once the investigation actually looked inside subagents/ subdirectories.
+        Per-record, not a session-level lookup: two rows in the same session
+        can have different values.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_assistant("sess-1", "req-1", is_sidechain=False),
+                _claude_assistant("sess-1", "req-2", is_sidechain=True),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        rows = {r[0]: r[2] for r in self.turn_raw_rows()}
+        self.assertEqual(rows["req-1"], 0)
+        self.assertEqual(rows["req-2"], 1)
+
+    def test_subagent_file_shares_the_parents_session_id(self) -> None:
+        """A subagent file declares the parent's own sessionId, not a distinct
+        one — confirmed against real data: session identity is shared, not
+        linked via a parent_session_id back-reference the way Codex's is.
+
+        Asserts the actual attribution, not just that one session row exists:
+        both files' turns must land under that one session_row_id, and each
+        must carry its own correct is_subagent — proving the shared-session
+        design and the per-record is_subagent fix work together, not just
+        that neither one crashed.
+        """
+        main = self.write_session(
+            "main.jsonl", _jsonl(_claude_user("sess-shared"), _claude_assistant("sess-shared", "req-main"))
+        )
+        subagent = self.write_session(
+            "agent-x.jsonl",
+            _jsonl(_claude_assistant("sess-shared", "req-sub", is_sidechain=True)),
+        )
+        self.claude_collector.harvest_file(self.conn, main)
+        self.claude_collector.harvest_file(self.conn, subagent)
+
+        sessions = self.conn.execute(
+            "SELECT id, parent_session_id FROM session WHERE session_id = 'sess-shared'"
+        ).fetchall()
+        self.assertEqual(len(sessions), 1, "both files must resolve to the same session row")
+        session_row_id, parent_session_id = sessions[0]
+        self.assertIsNone(parent_session_id)
+
+        rows = self.conn.execute(
+            "SELECT natural_turn_id, session_row_id, is_subagent FROM turn_raw ORDER BY natural_turn_id"
+        ).fetchall()
+        self.assertEqual(
+            {r[1] for r in rows}, {session_row_id}, "both turns must attribute to the one shared session row"
+        )
+        by_id = {r[0]: r[2] for r in rows}
+        self.assertEqual(by_id["req-main"], 0)
+        self.assertEqual(by_id["req-sub"], 1)
+
+    def test_model_extracted_from_message(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1", model="claude-opus-5"))
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.turn_raw_rows()[0][3], "claude-opus-5")
+
+    def test_non_assistant_records_are_ordinary_content_not_skipped(self) -> None:
+        """user/system/etc. carry no usage data — expected, not a shape violation."""
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), {"type": "custom-title", "sessionId": "sess-1"})
+        )
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 0)
+        self.assertEqual(result["skipped"], 0)
+
+    def test_assistant_record_without_usage_block_is_not_written(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(_claude_user("sess-1"), {"type": "assistant", "sessionId": "sess-1", "message": {}}),
+        )
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["turns"], 0)
+        self.assertEqual(len(self.turn_raw_rows()), 0)
+
+    def test_first_record_without_session_id_is_skipped(self) -> None:
+        path = self.write_session("a.jsonl", _jsonl({"type": "mode", "mode": "normal"}))
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(result["turns"], 0)
+
+    # ------------------------------------------------------------------
+    # malformed-line rule — identical to Codex's, same underlying property
+    # ------------------------------------------------------------------
+
+    def test_malformed_line_before_the_last_stops_that_file_only(self) -> None:
+        path = self.write_session(
+            "bad.jsonl",
+            _jsonl(_claude_user("sess-1")) + "not json\n" + _jsonl(_claude_assistant("sess-1", "req-1")),
+        )
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertIsNotNone(result["hard_stop"])
+        self.assertEqual(result["hard_stop"]["line"], 2)
+        self.assertEqual(result["turns"], 0)
+
+    def test_truncated_trailing_line_is_not_an_error(self) -> None:
+        content = _jsonl(_claude_user("sess-1")) + '{"type": "assistant", "sessionId": "sess-1"'
+        path = self.write_session("live.jsonl", content)
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertIsNone(result["hard_stop"])
+        row = self.conn.execute(
+            "SELECT last_line_no FROM harvest WHERE source_path = ?", (str(path),)
+        ).fetchone()
+        self.assertEqual(row[0], 1)
+
+    def test_missing_timestamp_is_a_hard_stop(self) -> None:
+        bad = _claude_assistant("sess-1", "req-1")
+        del bad["timestamp"]
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), bad))
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertIsNotNone(result["hard_stop"])
+        self.assertIn("missing timestamp", result["hard_stop"]["reason"])
+
+    # ------------------------------------------------------------------
+    # idempotency and incremental append
+    # ------------------------------------------------------------------
+
+    def test_rerun_with_no_new_content_writes_nothing(self) -> None:
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1")))
+        self.claude_collector.harvest_file(self.conn, path)
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(result, {"turns": 0, "skipped": 0, "hard_stop": None})
+        self.assertEqual(len(self.turn_raw_rows()), 1)
+
+    def test_incremental_append_processes_only_new_lines(self) -> None:
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1")))
+        self.claude_collector.harvest_file(self.conn, path)
+        with path.open("a") as fh:
+            fh.write(_jsonl(_claude_assistant("sess-1", "req-2")))
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(len(self.turn_raw_rows()), 2)
+
+    # ------------------------------------------------------------------
+    # cross-file isolation via harvest_all
+    # ------------------------------------------------------------------
+
+    def test_one_files_hard_stop_does_not_affect_another(self) -> None:
+        sessions = self.dir / "sessions"
+        sessions.mkdir()
+        (sessions / "good.jsonl").write_text(
+            _jsonl(_claude_user("sess-good"), _claude_assistant("sess-good", "req-1"))
+        )
+        (sessions / "bad.jsonl").write_text(_jsonl(_claude_user("sess-bad")) + "not json\n")
+        summary = self.claude_collector.harvest_all(self.conn, sessions)
+        self.assertEqual(summary["files"], 2)
+        self.assertEqual(summary["turns"], 1)
+        self.assertEqual(len(summary["failures"]), 1)
+        self.assertIn("bad.jsonl", summary["failures"][0]["path"])
 
 
 class NormalizeTests(unittest.TestCase):
@@ -2234,11 +2532,80 @@ class NormalizeTests(unittest.TestCase):
         self.assertIsNone(row["capacity_secondary_window_minutes"])
         self.assertIsNone(row["capacity_secondary_resets_at"])
 
+    # ------------------------------------------------------------------
+    # Claude extraction — direct mapping, no subtraction
+    # ------------------------------------------------------------------
+
+    def test_claude_full_usage_extracts_direct_mapping(self) -> None:
+        """Claude's fields are already disjoint: fresh_input_tokens = input_tokens, no subtraction."""
+        sess = self.insert_session(session_id="claude-sess-1", harness="claude")
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "type": "assistant",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "requestId": "req-1",
+                "message": {
+                    "model": "claude-sonnet-5",
+                    "usage": {
+                        "input_tokens": 100,
+                        "cache_read_input_tokens": 40,
+                        "cache_creation_input_tokens": 20,
+                        "output_tokens": 10,
+                    },
+                },
+            },
+        )
+        result = self.normalize.normalize_all(self.conn)
+        self.assertEqual(result["normalized"], 1)
+        row = self.norm_row(tr_id)
+        self.assertEqual(row["fresh_input_tokens"], 100, "no subtraction — Claude's input_tokens is already fresh")
+        self.assertEqual(row["cache_read_tokens"], 40)
+        self.assertEqual(row["cache_write_tokens"], 20)
+        self.assertEqual(row["output_tokens"], 10)
+        self.assertIsNone(row["reasoning_tokens"], "Claude transcripts do not carry this")
+        self.assertIsNone(row["context_window"])
+        self.assertIsNone(row["capacity_primary_used_pct"])
+        self.assertIsNone(row["capacity_secondary_used_pct"])
+
+    def test_claude_non_assistant_record_returns_none_and_is_skipped(self) -> None:
+        sess = self.insert_session(session_id="claude-sess-2", harness="claude")
+        tr_id = self.insert_turn_raw(
+            sess, {"type": "user", "timestamp": "2026-01-01T00:00:01Z", "message": {"content": "hi"}}
+        )
+        result = self.normalize.normalize_all(self.conn)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(result["normalized"], 0)
+        self.assertIsNone(self.norm_row(tr_id))
+
+    def test_claude_missing_usage_block_leaves_token_columns_null(self) -> None:
+        """An assistant entry with no usage block — nothing to extract, still a valid row."""
+        sess = self.insert_session(session_id="claude-sess-3", harness="claude")
+        tr_id = self.insert_turn_raw(
+            sess, {"type": "assistant", "timestamp": "2026-01-01T00:00:01Z", "message": {"model": "x"}}
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertIsNotNone(row)
+        self.assertIsNone(row["fresh_input_tokens"])
+        self.assertIsNone(row["cache_read_tokens"])
+
     def test_unknown_harness_is_left_alone_not_raised(self) -> None:
-        """The seam chunk 5 (Claude collector) fills in without changing this function."""
+        """A harness with no extractor is skipped, never raised on.
+
+        Both real harnesses (`codex`, `claude`) have extractors as of this
+        chunk, and `session.harness` is schema-constrained to just those two
+        — there is no way to construct a genuinely unrecognized harness
+        through the real schema anymore. `_EXTRACTORS` is emptied for the
+        duration of this test to exercise the fallback directly, the way a
+        third harness with no extractor yet would hit it in the future.
+        """
+        import unittest.mock
+
         sess = self.insert_session(session_id="claude-sess", harness="claude")
         tr_id = self.insert_turn_raw(sess, {"timestamp": "2026-01-01T00:00:01Z", "payload": {}})
-        result = self.normalize.normalize_all(self.conn)
+        with unittest.mock.patch.dict(self.normalize._EXTRACTORS, clear=True):
+            result = self.normalize.normalize_all(self.conn)
         self.assertEqual(result["normalized"], 0)
         self.assertIsNone(self.norm_row(tr_id))
 
@@ -2399,12 +2766,29 @@ class NormalizeTests(unittest.TestCase):
         """Filtered at the SQL level, not per-row — a row with no extractor
         must never appear in the candidate set at all, so it costs nothing on
         repeated runs regardless of how many such rows accumulate.
+
+        Patches `_EXTRACTORS` down to `codex` only rather than clearing it
+        entirely: with nothing left in the dict, `s.harness IN ()` matches
+        no row regardless of harness, and an implementation that dropped the
+        SQL filter in favor of a per-row `if harness not in _EXTRACTORS:
+        skip` check would pass this test identically. Keeping one real
+        extractor and giving both harnesses a row is what forces the SQL
+        filter itself to discriminate — `skipped == 0` is the assertion that
+        tells "never selected" apart from "selected, then skipped."
         """
-        sess = self.insert_session(session_id="claude-sess", harness="claude")
-        self.insert_turn_raw(sess, {"timestamp": "x", "payload": {"type": "token_count"}})
-        first = self.normalize.normalize_all(self.conn)
-        second = self.normalize.normalize_all(self.conn)
-        self.assertEqual(first["normalized"], 0)
+        import unittest.mock
+
+        codex_sess = self.insert_session(session_id="codex-sess", harness="codex")
+        claude_sess = self.insert_session(session_id="claude-sess", harness="claude")
+        self.insert_turn_raw(codex_sess, {"timestamp": "x", "payload": {"type": "token_count"}})
+        self.insert_turn_raw(claude_sess, {"timestamp": "x", "payload": {"type": "token_count"}})
+        with unittest.mock.patch.dict(
+            self.normalize._EXTRACTORS, {"codex": self.normalize._normalize_codex_row}, clear=True
+        ):
+            first = self.normalize.normalize_all(self.conn)
+            second = self.normalize.normalize_all(self.conn)
+        self.assertEqual(first["normalized"], 1, "only the codex row should ever be selected")
+        self.assertEqual(first["skipped"], 0, "the claude row must be filtered at the SQL level, not selected-then-skipped")
         self.assertEqual(second["normalized"], 0)
         self.assertEqual(first["failures"], [])
 

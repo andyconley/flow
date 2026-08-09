@@ -55,12 +55,17 @@ def _num(value) -> int | float | None:
     return value if isinstance(value, (int, float)) else None
 
 
-def _normalize_codex_row(payload: dict) -> dict:
+def _normalize_codex_row(payload: dict) -> dict | None:
     """Extract turn_norm's token/capacity columns from one Codex turn_raw payload.
 
     `payload` is the full JSONL record as parsed JSON (what `codex_collector`
     stored verbatim), not just its `payload` sub-object — mirroring how the
     collector itself reads it.
+
+    Returns `None` if this record isn't a `token_count` event — dispatch is
+    by harness, not record type, so nothing structurally prevents a future
+    record type from reaching here. `normalize_all` counts a `None` as
+    skipped rather than treating it as a row to normalize.
 
     `info` and `rate_limits` are both nullable in real data (`info` is null in
     about 0.1% of rows on the corpus this was built against). Every field
@@ -69,6 +74,8 @@ def _normalize_codex_row(payload: dict) -> dict:
     identity field during harvest.
     """
     record_payload = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+    if record_payload.get("type") != "token_count":
+        return None
     info = record_payload.get("info") if isinstance(record_payload.get("info"), dict) else None
     rate_limits = (
         record_payload.get("rate_limits") if isinstance(record_payload.get("rate_limits"), dict) else None
@@ -139,8 +146,56 @@ def _compute_fresh_input_tokens(
     return fresh if fresh >= 0 else None
 
 
+def _normalize_claude_row(payload: dict) -> dict | None:
+    """Extract turn_norm's token columns from one Claude turn_raw payload.
+
+    Unlike Codex's payload (a wrapper record whose actual content sits one
+    level down under its own `payload` key), Claude's `turn_raw.payload` is
+    the JSONL line itself — the `usage` block lives at `message.usage`
+    directly, verified against real transcripts including this session's own.
+
+    Returns `None` for anything but `type: "assistant"` — `claude_collector.py`
+    only ever writes `turn_raw` rows for assistant entries with a `usage`
+    block today, but nothing structurally prevents that from changing, so
+    this checks rather than assumes, the same way the Codex extractor does.
+
+    Claude's fields are already disjoint (unlike Codex's, where
+    `cached_input_tokens` is a subset of `input_tokens`), so this is direct
+    mapping, no subtraction — `fresh_input_tokens = input_tokens` as
+    reported. `reasoning_tokens`, `context_window`, and both `capacity_*`
+    groups stay `NULL`: Claude transcripts do not carry them, matching
+    `data/harness_capabilities.json`'s existing claims for this harness.
+
+    Real data carries more than these four fields (`cache_creation`'s
+    1h/5m TTL split, `server_tool_use`, `service_tier`, `inference_geo`,
+    `iterations`, `speed`) — none of it extracted here. The raw payload holds
+    it verbatim regardless, so it can be picked up in a normalization
+    recompute later without a re-harvest.
+    """
+    if payload.get("type") != "assistant":
+        return None
+    message = payload.get("message") if isinstance(payload.get("message"), dict) else {}
+    usage = message.get("usage") if isinstance(message.get("usage"), dict) else None
+
+    return {
+        "fresh_input_tokens": _num(usage.get("input_tokens")) if usage else None,
+        "cache_read_tokens": _num(usage.get("cache_read_input_tokens")) if usage else None,
+        "cache_write_tokens": _num(usage.get("cache_creation_input_tokens")) if usage else None,
+        "output_tokens": _num(usage.get("output_tokens")) if usage else None,
+        "reasoning_tokens": None,
+        "context_window": None,
+        "capacity_primary_used_pct": None,
+        "capacity_primary_window_minutes": None,
+        "capacity_primary_resets_at": None,
+        "capacity_secondary_used_pct": None,
+        "capacity_secondary_window_minutes": None,
+        "capacity_secondary_resets_at": None,
+    }
+
+
 _EXTRACTORS = {
     "codex": _normalize_codex_row,
+    "claude": _normalize_claude_row,
 }
 
 
@@ -196,16 +251,16 @@ def normalize_all(conn: sqlite3.Connection) -> dict:
         try:
             extractor = _EXTRACTORS[harness]
             record = json.loads(payload_text)
-            record_payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
-            if record_payload.get("type") != "token_count":
-                # Dispatch is by harness, not record type — turn_raw holds
-                # only token_count records for Codex today, but nothing
-                # enforces that structurally. A future record type would
-                # otherwise silently become an all-NULL row indistinguishable
-                # from a legitimate info: null case.
+            fields = extractor(record)
+            if fields is None:
+                # The extractor itself decides what counts as a normalizable
+                # record for its harness — dispatch is by harness only, not
+                # record type, so nothing structurally prevents turn_raw from
+                # ever holding a row an extractor doesn't recognize. Counted
+                # as skipped rather than silently becoming an all-NULL row
+                # indistinguishable from a legitimate absence-of-data case.
                 skipped += 1
                 continue
-            fields = extractor(record)
             with conn:
                 conn.execute(
                     "INSERT INTO turn_norm"

@@ -16,7 +16,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
-from harvest import harvest_codex_command  # noqa: E402
+from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
 from setup import (  # noqa: E402
@@ -94,13 +94,18 @@ def main() -> int:
         help="incrementally read a harness's local session transcripts into the usage store",
         description="Read a harness's local session transcripts into ~/.flow/usage.db, resuming from the last-read position per file.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Example:\n  flow harvest codex\n",
+        epilog="Examples:\n  flow harvest codex\n  flow harvest claude\n",
     )
     harvest_sub = harvest.add_subparsers(dest="harvest_target", required=True, title="harvest targets")
     harvest_sub.add_parser(
         "codex",
         help="harvest ~/.codex/sessions/ into the usage store",
         description="Incrementally read Codex session transcripts, writing session and turn records into the usage store's raw layer.",
+    )
+    harvest_sub.add_parser(
+        "claude",
+        help="harvest ~/.claude/projects/ into the usage store",
+        description="Incrementally read Claude Code session transcripts, writing session and turn records into the usage store's raw layer.",
     )
 
     sub.add_parser(
@@ -229,6 +234,8 @@ def main() -> int:
         return refresh_project()
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
+    if args.command == "harvest" and args.harvest_target == "claude":
+        return harvest_claude_command()
     if args.command == "normalize":
         return normalize_command()
     if args.command == "help":
