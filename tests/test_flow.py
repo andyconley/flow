@@ -1274,7 +1274,15 @@ class FlowCliTests(unittest.TestCase):
 
         staging = self.repo / "staging"
         (staging / "cli").mkdir(parents=True)
-        (staging / "cli" / "flow.py").write_text("# entrypoint")
+        # The required sibling set is read out of the staged entrypoint itself,
+        # so the entrypoint has to declare something for there to be anything to
+        # miss. `os` is here to prove stdlib names are filtered rather than
+        # looked for under cli/.
+        (staging / "cli" / "flow.py").write_text(
+            "import os\n"
+            "import usage_store\n"
+            "from render import codex_skill_dir\n"
+        )
         (staging / "scaffolds" / "default").mkdir(parents=True)
         (staging / "scaffolds" / "default" / "flow.toml").write_text("")
         (staging / "data").mkdir(parents=True)
@@ -1287,10 +1295,77 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("usage_store.py", reason)
 
         (staging / "cli" / "usage_store.py").write_text("# sibling")
+        reason = flow_cli._validate_staging(staging)
+        self.assertIsNotNone(reason, "the second declared sibling is still missing")
+        self.assertIn("render.py", reason)
+
+        (staging / "cli" / "render.py").write_text("# sibling")
         self.assertIsNone(
             flow_cli._validate_staging(staging),
             "staging with all required files should validate",
         )
+        self.assertFalse(
+            (staging / "cli" / "os.py").exists(),
+            "stdlib imports must not be treated as cli siblings",
+        )
+
+    def test_release_staging_requires_every_real_cli_sibling(self) -> None:
+        """Regression guard: the check must reject the real tree minus any one module.
+
+        Two properties, and the second is the one that is easy to lose. First,
+        the hand-maintained roster this replaced named one file while flow.py
+        needed six, so the check has to derive its set rather than carry it.
+        Second, it has to follow imports transitively: flow.py imports only
+        four modules directly, and a depth-one check would happily accept a
+        release with cli/paths.py missing and then die on the first command.
+
+        Every module under cli/ is removed in turn, so a future module cannot
+        quietly fall outside the check.
+        """
+        import importlib.util
+
+        sys.path.insert(0, str(REPO_ROOT / "cli"))
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "flow_cli_staging_real", REPO_ROOT / "cli" / "lifecycle.py"
+            )
+            lifecycle = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+            assert spec and spec.loader
+            spec.loader.exec_module(lifecycle)  # type: ignore[union-attr]
+        finally:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+
+        staging = self.repo / "staging_real"
+        shutil.copytree(REPO_ROOT / "cli", staging / "cli")
+        (staging / "scaffolds" / "default").mkdir(parents=True)
+        (staging / "scaffolds" / "default" / "flow.toml").write_text("")
+        (staging / "data").mkdir(parents=True)
+        (staging / "data" / "harness_capabilities.json").write_text(
+            '{"capabilities": []}'
+        )
+
+        self.assertIsNone(
+            lifecycle._validate_staging(staging),
+            "a complete copy of cli/ must validate",
+        )
+
+        victims = sorted(
+            p.stem for p in (REPO_ROOT / "cli").glob("*.py") if p.stem != "flow"
+        )
+        self.assertGreaterEqual(len(victims), 8, "expected the full cli/ module set")
+        # paths/fsutil/render/flowtoml are reachable only through another
+        # module, so they are what proves the walk is transitive.
+        for indirect in ("paths", "fsutil", "render", "flowtoml"):
+            self.assertIn(indirect, victims)
+
+        for victim in victims:
+            path = staging / "cli" / f"{victim}.py"
+            body = path.read_text()
+            path.unlink()
+            reason = lifecycle._validate_staging(staging)
+            self.assertIsNotNone(reason, f"removing cli/{victim}.py must be rejected")
+            self.assertIn(f"{victim}.py", reason)
+            path.write_text(body)
 
 
 if __name__ == "__main__":

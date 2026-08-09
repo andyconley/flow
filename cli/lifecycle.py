@@ -16,10 +16,12 @@ lands so a new schema version applies without waiting for the next
 `flow setup machine`. Nothing in setup.py reaches back here.
 """
 
+import ast
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,7 +29,6 @@ from pathlib import Path
 from flowtoml import read_toml
 from fsutil import _remove_path, ensure_dir
 from paths import (
-    CLI_REQUIRED_SIBLINGS,
     DEFAULT_REMOTE,
     FLOW_CONFIG,
     FLOW_HOME,
@@ -279,6 +280,71 @@ def _stage_path(suffix: str) -> Path:
     return FLOW_HOME / f"source.{suffix}"
 
 
+def _module_scope_imports(path: Path, stdlib: frozenset) -> list[str]:
+    """Non-stdlib module names imported at module scope by one file.
+
+    Parsed, never imported. The staged tree is freshly downloaded content, and
+    running it to discover what it needs would be both circular and a poor idea.
+
+    Only module-scope imports count. An import nested inside a function or a
+    `try:`/`except ModuleNotFoundError:` guard is optional by construction — it
+    is not what makes the CLI fail to start, which is the failure this check
+    exists to catch.
+    """
+    try:
+        tree = ast.parse(path.read_text())
+    except (OSError, SyntaxError, ValueError):
+        return []
+
+    names: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            names.extend(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            names.append(node.module.split(".")[0])
+    return [n for n in dict.fromkeys(names) if n not in stdlib]
+
+
+def _declared_sibling_imports(cli_entry: Path) -> list[str]:
+    """Every sibling module a staged flow.py needs, following imports transitively.
+
+    Transitive, not one level. flow.py imports four modules directly, but those
+    four pull in paths, fsutil, render, and flowtoml. A release missing
+    cli/paths.py would satisfy a direct-imports-only check and then die on the
+    first command — the exact failure this validation exists to prevent, so
+    stopping at depth one would leave the check looking thorough while missing
+    most of the surface.
+
+    Standard-library names are filtered via `sys.stdlib_module_names`, present
+    on every interpreter flow supports (added in 3.10; the installer enforces
+    3.10 as the floor). If it is somehow absent, the sibling check is skipped
+    rather than guessed at: under-validating can only let a bad release through,
+    while guessing could reject a good one.
+
+    Modules that are named but absent are still reported. That is the point —
+    the caller turns them into the rejection reason.
+    """
+    stdlib = getattr(sys, "stdlib_module_names", None)
+    if stdlib is None:
+        return []
+
+    cli_dir = cli_entry.parent
+    required: list[str] = []
+    seen = {cli_entry.stem}
+    queue = _module_scope_imports(cli_entry, stdlib)
+
+    while queue:
+        name = queue.pop(0)
+        if name in seen:
+            continue
+        seen.add(name)
+        required.append(name)
+        candidate = cli_dir / f"{name}.py"
+        if candidate.is_file():
+            queue.extend(_module_scope_imports(candidate, stdlib))
+    return required
+
+
 def _validate_staging(staging: Path) -> str | None:
     """Return None when staging is well-formed, else a human-readable reason."""
     cli_entry = staging / "cli" / "flow.py"
@@ -286,11 +352,14 @@ def _validate_staging(staging: Path) -> str | None:
         return f"staging is missing cli/flow.py at {cli_entry}"
     # flow.py imports its siblings at module scope, so a release that ships the
     # launcher without them installs cleanly and then fails on every command.
-    # Validate the whole cli/ surface, not just the entrypoint.
-    for sibling in CLI_REQUIRED_SIBLINGS:
-        sibling_path = staging / "cli" / sibling
+    # The required set is read out of the staged entrypoint itself rather than
+    # from a roster maintained here: this code runs from the *old* install while
+    # validating a *newer* tree, so any hand-kept list is by definition behind.
+    # Same reasoning as the release roster's blacklist (see paths.py).
+    for sibling in _declared_sibling_imports(cli_entry):
+        sibling_path = staging / "cli" / f"{sibling}.py"
         if not sibling_path.is_file():
-            return f"staging is missing cli/{sibling} at {sibling_path}"
+            return f"staging is missing cli/{sibling}.py at {sibling_path}"
     capabilities = staging / "data" / "harness_capabilities.json"
     if not capabilities.is_file():
         return f"staging is missing data/harness_capabilities.json at {capabilities}"

@@ -42,10 +42,6 @@ RELEASE_EXCLUDE_TOP_LEVEL = (
     "install.sh",       # same — curl-able bootstrap, not part of the runtime
 )
 RELEASE_EXCLUDE_DIRS = ("__pycache__", ".agents", ".claude", ".codex", ".git")  # recursive cleanup
-# Sibling modules flow.py imports at module scope. A release missing one of
-# these installs cleanly and fails on the next command, so staging validates
-# them alongside the entrypoint.
-CLI_REQUIRED_SIBLINGS = ("usage_store.py",)
 RELEASE_EXCLUDE_FILE_PATTERNS = ("*.pyc", ".DS_Store")
 SEMVER_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:[-+][\w.-]+)?$")
 

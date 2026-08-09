@@ -25,72 +25,24 @@ import re
 import sys
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    tomllib = None
-
+import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_TOML = REPO_ROOT / "scaffolds" / "default" / "flow.toml"
 FLOW_HELP = REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-help.md"
 
 
-def _parse_simple_toml(text: str) -> dict:
-    """Minimal TOML parser — mirrors `cli/flow.py`'s `parse_simple_toml`.
-
-    Used only when the stdlib `tomllib` is unavailable (Python < 3.11).
-    Handles the subset flow.toml uses: tables, arrays of tables, double-quoted
-    strings, bools, integers.
-    """
-    def parse_value(raw: str):
-        raw = raw.strip()
-        if raw.startswith('"') and raw.endswith('"'):
-            return raw[1:-1]
-        if raw in {"true", "false"}:
-            return raw == "true"
-        if raw.isdigit():
-            return int(raw)
-        raise ValueError(f"unsupported TOML value: {raw}")
-
-    def assign_nested(container: dict, dotted_key: str, value) -> None:
-        parts = dotted_key.split(".")
-        current = container
-        for part in parts[:-1]:
-            current = current.setdefault(part, {})
-        current[parts[-1]] = value
-
-    root: dict = {}
-    current = root
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("[[") and line.endswith("]]"):
-            path = line[2:-2].strip().split(".")
-            current = root
-            for part in path[:-1]:
-                current = current.setdefault(part, {})
-            current = current.setdefault(path[-1], [])
-            current.append({})
-            current = current[-1]
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            path = line[1:-1].strip().split(".")
-            current = root
-            for part in path:
-                current = current.setdefault(part, {})
-            continue
-        key, value = line.split("=", 1)
-        assign_nested(current, key.strip(), parse_value(value))
-    return root
-
-
 def read_toml(path: Path) -> dict:
-    text = path.read_text()
-    if tomllib is not None:
-        return tomllib.loads(text)
-    return _parse_simple_toml(text)
+    """Read a manifest using stdlib tomllib.
+
+    Requires Python 3.11+, unlike the CLI, which supports 3.10 and carries a
+    fallback parser in `cli/flowtoml.py` for it. This is a dev-only tool that
+    rewrites files in `scaffolds/`; it never runs on an end user's machine, so
+    it does not have to honour the CLI's supported-interpreter floor. The copy
+    of that fallback parser that used to live here was dead code on every
+    interpreter that actually ran it.
+    """
+    return tomllib.loads(path.read_text())
 
 
 def render_table(rows: list[tuple[str, str]], headers: tuple[str, str]) -> str:
