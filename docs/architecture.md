@@ -61,7 +61,7 @@ Why a single path contract: everything downstream — `flow sync`, managed manif
 
 How it merges:
 
-- **Commands and agents are merged at sync time** by `merge_user_overlay` in `cli/flow.py`. When `flow sync claude --user` (or `flow sync codex --user`) runs, the framework's `flow.toml` is loaded and the user's `flow.toml` is layered on top:
+- **Commands and agents are merged at sync time** by `merge_user_overlay` in `cli/sync.py`. When `flow sync claude --user` (or `flow sync codex --user`) runs, the framework's `flow.toml` is loaded and the user's `flow.toml` is layered on top:
   - Entries in the user manifest with the same `name` as a framework entry **replace** it (override).
   - Entries with a new `name` are **appended** (addition).
   - The merged manifest drives adapter generation. Generated SKILLs and agent files embed the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.

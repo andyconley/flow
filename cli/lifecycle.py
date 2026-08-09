@@ -5,6 +5,10 @@ them. Develop mode points ~/.flow/source at a git clone via symlink; release
 mode makes it a real directory of copied content. `flow install --release` and
 `--develop` move between the two without ever deleting the clone.
 
+This is the only layer that needs to know which mode a machine is in.
+Everything downstream — sync, doctor, adapter generation — resolves through the
+shared path contract `~/.flow/source/`, so the rest of the CLI is mode-agnostic.
+
 Updating is deliberately staged rather than in-place: fetch the tag into a
 staging directory, validate that it is a well-formed install, then swap it into
 position with renames, restoring the old source if the swap fails. A partially
@@ -133,7 +137,7 @@ def _populate_release_dir(src_root: Path, dest_root: Path) -> None:
         install-flow.sh, install.sh)
 
     After the top-level copy, dev-only artifacts inside subdirectories
-    (`__pycache__`, `.claude`, `.codex`, `.git`, `*.pyc`, `.DS_Store`) are
+    (`__pycache__`, `.agents`, `.claude`, `.codex`, `.git`, `*.pyc`, `.DS_Store`) are
     cleaned up recursively.
 
     Blacklist semantics make the roster forward-compatible: any new top-level
@@ -292,8 +296,14 @@ def _module_scope_imports(path: Path, stdlib: frozenset) -> list[str]:
     exists to catch.
     """
     try:
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError, ValueError):
+        # A sibling that will not parse is a broken release, but not one this
+        # function can describe — it reports which files are *absent*. The
+        # entrypoint is checked separately by _validate_staging, where an
+        # unparseable file becomes a rejection rather than an empty result.
+        # UnicodeDecodeError subclasses ValueError; Python source is UTF-8 by
+        # definition, so decode it that way rather than by locale.
         return []
 
     names: list[str] = []
@@ -323,6 +333,15 @@ def _declared_sibling_imports(cli_entry: Path) -> list[str]:
 
     Modules that are named but absent are still reported. That is the point —
     the caller turns them into the rejection reason.
+
+    This treats every non-stdlib module-scope import as a required sibling,
+    which rests on cli/ having no third-party runtime dependencies. That is a
+    real invariant of this CLI — it runs straight off ~/.flow/source with no
+    virtualenv — and `test_cli_modules_import_only_stdlib_and_siblings` enforces
+    it. Taking a runtime dependency without changing this check first would make
+    every release after it unupdatable from an older client, because the code
+    doing the rejecting is the old code. If flow ever needs one, this function
+    has to learn about it in a release that ships *before* the dependency does.
     """
     stdlib = getattr(sys, "stdlib_module_names", None)
     if stdlib is None:
@@ -350,6 +369,15 @@ def _validate_staging(staging: Path) -> str | None:
     cli_entry = staging / "cli" / "flow.py"
     if not cli_entry.is_file():
         return f"staging is missing cli/flow.py at {cli_entry}"
+    # An entrypoint that will not parse must be rejected, not tolerated. The
+    # sibling walk returns an empty list for anything it cannot read, so without
+    # this a truncated or corrupt flow.py would validate clean and get swapped
+    # into ~/.flow/source — leaving the machine with no working flow, and the
+    # tool that would repair it living inside the tree that just broke.
+    try:
+        ast.parse(cli_entry.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError) as err:
+        return f"staged cli/flow.py does not parse: {err}"
     # flow.py imports its siblings at module scope, so a release that ships the
     # launcher without them installs cleanly and then fails on every command.
     # The required set is read out of the staged entrypoint itself rather than

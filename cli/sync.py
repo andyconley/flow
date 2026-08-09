@@ -444,16 +444,6 @@ def desired_outputs_for_target(
     raise ValueError(f"unsupported sync target: {target}")
 
 
-# ---------------------------------------------------------------------------
-# Install-mode helpers
-#
-# The install layer is the only code that needs to know which mode a machine is
-# in. Everything downstream (sync, doctor, adapter generation) resolves through
-# the shared path contract `~/.flow/source/`, so the rest of the CLI is
-# mode-agnostic.
-# ---------------------------------------------------------------------------
-
-
 def sync_target(target: str, check: bool = False, user_mode: bool = False) -> int:
     if user_mode:
         root = HOME

@@ -1254,23 +1254,39 @@ class FlowCliTests(unittest.TestCase):
         status = usage_store.store_status(store)
         self.assertEqual(status["state"], usage_store.STATE_EMPTY)
 
-    def test_release_staging_requires_cli_siblings(self) -> None:
-        """A release shipping the launcher without its siblings installs then breaks."""
+    def _load_cli_module(self, name: str):
+        """Import a cli/ module directly, leaving sys.path and sys.modules as found.
+
+        cli/ modules import each other by bare name, which only resolves with
+        cli/ on sys.path. flow.py arranges that for itself at import time; a
+        direct load does not, so this does it — and then puts everything back.
+
+        Restoring sys.modules matters as much as sys.path. Loading these binds
+        generic top-level names (`paths`, `setup`, `sync`, `render`) in the test
+        process, where they would shadow any same-named module a later import
+        wanted. Two tests already load modules this way and more will.
+        """
         import importlib.util
 
-        # lifecycle.py imports its siblings by bare name, which only resolves
-        # when cli/ is on sys.path. flow.py arranges that for itself at import
-        # time; loading a sibling directly does not, so the test arranges it.
-        sys.path.insert(0, str(REPO_ROOT / "cli"))
+        cli_dir = str(REPO_ROOT / "cli")
+        saved_modules = dict(sys.modules)
+        sys.path.insert(0, cli_dir)
         try:
             spec = importlib.util.spec_from_file_location(
-                "flow_cli_staging", REPO_ROOT / "cli" / "lifecycle.py"
+                f"flow_cli_{name}_under_test", REPO_ROOT / "cli" / f"{name}.py"
             )
-            flow_cli = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+            module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
             assert spec and spec.loader
-            spec.loader.exec_module(flow_cli)  # type: ignore[union-attr]
+            spec.loader.exec_module(module)  # type: ignore[union-attr]
+            return module
         finally:
-            sys.path.remove(str(REPO_ROOT / "cli"))
+            sys.path.remove(cli_dir)
+            for added in set(sys.modules) - set(saved_modules):
+                del sys.modules[added]
+
+    def test_release_staging_requires_cli_siblings(self) -> None:
+        """A release shipping the launcher without its siblings installs then breaks."""
+        lifecycle = self._load_cli_module("lifecycle")
 
         staging = self.repo / "staging"
         (staging / "cli").mkdir(parents=True)
@@ -1290,23 +1306,85 @@ class FlowCliTests(unittest.TestCase):
             '{"capabilities": []}'
         )
 
-        reason = flow_cli._validate_staging(staging)
+        # Assert on the derived set directly. Checking only the rejection
+        # message would pass or fail on which missing sibling happens to be
+        # reported first, and would say nothing about whether `os` was filtered.
+        self.assertEqual(
+            lifecycle._declared_sibling_imports(staging / "cli" / "flow.py"),
+            ["usage_store", "render"],
+            "stdlib names must be filtered; siblings must be kept in order",
+        )
+
+        reason = lifecycle._validate_staging(staging)
         self.assertIsNotNone(reason, "staging without cli siblings must be rejected")
         self.assertIn("usage_store.py", reason)
 
         (staging / "cli" / "usage_store.py").write_text("# sibling")
-        reason = flow_cli._validate_staging(staging)
+        reason = lifecycle._validate_staging(staging)
         self.assertIsNotNone(reason, "the second declared sibling is still missing")
         self.assertIn("render.py", reason)
 
         (staging / "cli" / "render.py").write_text("# sibling")
         self.assertIsNone(
-            flow_cli._validate_staging(staging),
+            lifecycle._validate_staging(staging),
             "staging with all required files should validate",
         )
-        self.assertFalse(
-            (staging / "cli" / "os.py").exists(),
-            "stdlib imports must not be treated as cli siblings",
+
+    def test_release_staging_rejects_unparseable_entrypoint(self) -> None:
+        """A corrupt flow.py must be rejected, not silently swapped into place."""
+        lifecycle = self._load_cli_module("lifecycle")
+
+        staging = self.repo / "staging_corrupt"
+        (staging / "cli").mkdir(parents=True)
+        # Truncated mid-statement — the shape a partial download leaves behind.
+        (staging / "cli" / "flow.py").write_text("from setup import (\n")
+        (staging / "scaffolds" / "default").mkdir(parents=True)
+        (staging / "scaffolds" / "default" / "flow.toml").write_text("")
+        (staging / "data").mkdir(parents=True)
+        (staging / "data" / "harness_capabilities.json").write_text(
+            '{"capabilities": []}'
+        )
+
+        reason = lifecycle._validate_staging(staging)
+        self.assertIsNotNone(reason, "an unparseable entrypoint must be rejected")
+        self.assertIn("does not parse", reason)
+
+    def test_cli_modules_import_only_stdlib_and_siblings(self) -> None:
+        """cli/ must stay dependency-free, because _validate_staging assumes it.
+
+        The staging check treats every non-stdlib module-scope import as a
+        required sibling. A third-party import would make every release after it
+        unrecoverable from an older client — the old code does the rejecting, so
+        there is no way to ship the fix. If flow ever takes a runtime
+        dependency, _declared_sibling_imports has to learn about it in a release
+        that ships first, and this test is what forces that conversation.
+        """
+        import ast
+
+        stdlib = getattr(sys, "stdlib_module_names", None)
+        if stdlib is None:
+            self.skipTest("sys.stdlib_module_names requires Python 3.10+")
+
+        cli_dir = REPO_ROOT / "cli"
+        siblings = {p.stem for p in cli_dir.glob("*.py")}
+        offenders: list[str] = []
+        for module in sorted(cli_dir.glob("*.py")):
+            tree = ast.parse(module.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                names: list[str] = []
+                if isinstance(node, ast.Import):
+                    names = [a.name.split(".")[0] for a in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    names = [node.module.split(".")[0]]
+                for name in names:
+                    if name not in stdlib and name not in siblings:
+                        offenders.append(f"{module.name}:{node.lineno} imports {name!r}")
+
+        self.assertEqual(
+            offenders,
+            [],
+            "cli/ must import only stdlib and its own siblings; see "
+            "_declared_sibling_imports in cli/lifecycle.py for why",
         )
 
     def test_release_staging_requires_every_real_cli_sibling(self) -> None:
@@ -1320,20 +1398,13 @@ class FlowCliTests(unittest.TestCase):
         release with cli/paths.py missing and then die on the first command.
 
         Every module under cli/ is removed in turn, so a future module cannot
-        quietly fall outside the check.
+        quietly fall outside the check. That is deliberate even though it means
+        a cli/ module reachable only from somewhere other than flow.py — a hook
+        entry point, say — would fail this test. Such a module would also be
+        omitted from staging validation, so the right response is to make it
+        reachable or teach the validator about it, not to weaken this loop.
         """
-        import importlib.util
-
-        sys.path.insert(0, str(REPO_ROOT / "cli"))
-        try:
-            spec = importlib.util.spec_from_file_location(
-                "flow_cli_staging_real", REPO_ROOT / "cli" / "lifecycle.py"
-            )
-            lifecycle = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-            assert spec and spec.loader
-            spec.loader.exec_module(lifecycle)  # type: ignore[union-attr]
-        finally:
-            sys.path.remove(str(REPO_ROOT / "cli"))
+        lifecycle = self._load_cli_module("lifecycle")
 
         staging = self.repo / "staging_real"
         shutil.copytree(REPO_ROOT / "cli", staging / "cli")
@@ -1352,11 +1423,24 @@ class FlowCliTests(unittest.TestCase):
         victims = sorted(
             p.stem for p in (REPO_ROOT / "cli").glob("*.py") if p.stem != "flow"
         )
-        self.assertGreaterEqual(len(victims), 8, "expected the full cli/ module set")
-        # paths/fsutil/render/flowtoml are reachable only through another
-        # module, so they are what proves the walk is transitive.
-        for indirect in ("paths", "fsutil", "render", "flowtoml"):
-            self.assertIn(indirect, victims)
+        # paths/fsutil/render/flowtoml reach flow.py only through another
+        # module, so they are what proves the walk is transitive rather than
+        # depth-one. Asserting the exact set means adding a cli/ module fails
+        # here until someone confirms it is covered.
+        self.assertEqual(
+            victims,
+            [
+                "diagnostics",
+                "flowtoml",
+                "fsutil",
+                "lifecycle",
+                "paths",
+                "render",
+                "setup",
+                "sync",
+                "usage_store",
+            ],
+        )
 
         for victim in victims:
             path = staging / "cli" / f"{victim}.py"

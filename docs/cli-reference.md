@@ -98,7 +98,7 @@ Behavior:
 - Resolves the symlink target as the source clone
 - Determines version via `git describe` in the clone (exact tag → base tag + dev sha → `main@<sha>`)
 - Copies the release roster (`cli/`, `scaffolds/`, `hooks/`, `scripts/`, `docs/`, `README.md`) into a staging directory under `~/.flow/`
-- Validates staging (must contain `cli/flow.py` and `scaffolds/default/flow.toml`)
+- Validates staging. It must contain `cli/flow.py` (which has to parse), `scaffolds/default/flow.toml`, `data/harness_capabilities.json`, and every `cli/` sibling the staged `flow.py` reaches through module-scope imports, followed transitively. That required set is read out of the staged entrypoint rather than kept as a list in the validator, because this check runs from the *installed* version against a *newer* tree — any hand-maintained roster would be behind by construction.
 - Atomically swaps the staging directory into `~/.flow/source/`
 - Updates `~/.flow/config.toml` with `mode = "release"`, version, remote, and installed_at
 
