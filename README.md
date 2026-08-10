@@ -72,6 +72,8 @@ flow cost summary
 flow cost summary --all --json
 flow cost sessions --days 30
 flow cost sessions --all --limit 0
+flow cost active
+flow cost active --within 180
 ```
 
 What they do:
@@ -103,7 +105,9 @@ What they do:
   - token totals by harness/model within a window (`--days N`, default 7; `--all` for everything), plus Codex's most recent capacity reading as a separate gauge line
 - `flow cost sessions`
   - token totals by session within a window, most recently active first; capped at the 20 most recent by default (`--limit N` to change, `--limit 0` for unlimited)
-- `--json` on either `flow cost` view prints the same structured result as JSON instead of an aligned table
+- `flow cost active`
+  - per-active-session context percentage, carry above session start, idle, and a `/clear`-or-`/compact` recommendation, worst carry first; runs the incremental Claude harvest and a normalize pass before answering (`--within N` minutes of liveness, default 60)
+- `--json` on any `flow cost` view prints the same structured result as JSON instead of an aligned table
 
 ### Runtime adapter generation
 

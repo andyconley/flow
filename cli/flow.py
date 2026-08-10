@@ -16,8 +16,10 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
 from cost import (  # noqa: E402
+    DEFAULT_ACTIVE_WITHIN_MINUTES,
     DEFAULT_SESSIONS_LIMIT,
     DEFAULT_WINDOW_DAYS,
+    cost_active_command,
     cost_sessions_command,
     cost_summary_command,
 )
@@ -128,9 +130,9 @@ def main() -> int:
     cost = sub.add_parser(
         "cost",
         help="read token usage back out of the usage store",
-        description="Read `~/.flow/usage.db`'s normalized layer (ensuring the store's schema exists first, like every other command). Never touches turn_raw, turn_norm, or session data.",
+        description="Read `~/.flow/usage.db`'s normalized layer (ensuring the store's schema exists first, like every other command). `summary` and `sessions` never touch turn_raw, turn_norm, or session data; `active` runs the incremental Claude harvest and a normalize pass first so its answer is current.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n",
+        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n  flow cost active\n  flow cost active --within 180\n",
     )
     cost_sub = cost.add_subparsers(dest="cost_target", required=True, title="cost views")
 
@@ -143,6 +145,23 @@ def main() -> int:
         "sessions",
         help="token totals by session, most recently active first",
         description="Token totals grouped by session, within the window, most recently active first.",
+    )
+    cost_active_parser = cost_sub.add_parser(
+        "active",
+        help="context status + /clear-or-/compact recommendation per active session",
+        description="Per-active-session context percentage, carry above session start, idle time, and a /clear-or-/compact recommendation — worst carry first. Harvests and normalizes incrementally before answering. Supersedes token-report --active.",
+    )
+    cost_active_parser.add_argument(
+        "--within",
+        type=int,
+        default=DEFAULT_ACTIVE_WITHIN_MINUTES,
+        metavar="N",
+        help=f"count a session as active if its latest turn is within N minutes (default: {DEFAULT_ACTIVE_WITHIN_MINUTES})",
+    )
+    cost_active_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print the same result as JSON instead of an aligned table",
     )
     for cost_parser in (cost_summary_parser, cost_sessions_parser):
         window = cost_parser.add_mutually_exclusive_group()
@@ -299,6 +318,8 @@ def main() -> int:
         return cost_summary_command(days=args.days, show_all=args.all, as_json=args.json)
     if args.command == "cost" and args.cost_target == "sessions":
         return cost_sessions_command(days=args.days, show_all=args.all, as_json=args.json, limit=args.limit)
+    if args.command == "cost" and args.cost_target == "active":
+        return cost_active_command(within=args.within, as_json=args.json)
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

@@ -8,6 +8,39 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **`flow cost active`** (token-advisory chunk 8) — per-active-session
+  context percentage, carry above session start, idle, and a
+  `/clear`-or-`/compact` recommendation, worst carry first. Supersedes
+  `~/bin/token-report --active` (that tool is now deprecated machine-side;
+  its one remaining consumer, the Stop hook's `--verdict`, migrates in a
+  later chunk). Store-backed instead of re-parsing transcripts: runs the
+  incremental Claude harvest AND a normalize pass before querying — the
+  normalize step is load-bearing, since a freshly harvested turn exists
+  only in `turn_raw` until projected. Semantics carried over from
+  token-report with two deliberate divergences: liveness/idle come from the
+  latest main-thread turn's timestamp rather than transcript file mtime
+  (misses a session where the user typed but no assistant turn landed yet —
+  bounded by one turn), and a session is one row even where its subagent
+  files would have surfaced as separate rows. Context math is main-thread
+  only (`is_subagent = 0`) — the store interleaves sidechain turns where
+  the old per-file read never did. The statusline's
+  `/tmp/claude-window-<sid>` files are still read for exact window sizes,
+  snapped to the two real windows; otherwise inferred (>190K observed ⇒
+  1M), marked `~` in the table. Validated side-by-side against
+  `token-report --active` on live sessions: identical ctx/carry/
+  recommendation on every commonly-visible session.
+
+### Fixed
+
+- **User-overlay skills' generated edit hint pointed at a file that doesn't
+  exist.** `render_skill_from_command` hardcoded
+  ``Edit `.flow/<source>` and run `flow sync claude`​`` regardless of
+  origin; a user-overlay command's source lives under `~/.flow/user/` and
+  only ever syncs in `--user` mode. Found while moving the first real
+  personal command (`session-hygiene`, machine-local, not in this repo)
+  onto the overlay mechanism. The three sibling render sites (codex
+  skills, both agent renderers) have the same defect but take bare string
+  arguments — deferred to a follow-up rather than folded in here.
 - **Genuine last-write-wins for repeated `ai-title` records** (token-advisory
   chunk 7). Chunk 6 shipped `ai-title` as "first one wins, forever"
   (`WHERE title IS NULL`) and documented the divergence from a true

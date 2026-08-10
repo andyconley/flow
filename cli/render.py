@@ -20,6 +20,7 @@ from paths import (
     CODEX_SKILL_DIR,
     GENERATED_MARKER,
     LEGACY_CODEX_SKILL_DIR,
+    MODE_PROJECT,
     MODE_USER,
 )
 
@@ -226,14 +227,26 @@ def build_skill_frontmatter(name: str, command: dict, skill_defaults: dict) -> l
     return lines
 
 
-def render_skill_from_command(command: dict, skill_defaults: dict, routing_hints: str = "") -> str:
+def render_skill_from_command(
+    command: dict, skill_defaults: dict, routing_hints: str = "", mode: str = MODE_PROJECT
+) -> str:
     source_path = command["source"]
     body = command["_body"]
+    # The edit hint must point at a file that actually exists, which depends
+    # on BOTH origin and sync mode: a user-overlay command's source lives
+    # under ~/.flow/user/; a framework command synced in --user mode lives
+    # under ~/.flow/source/scaffolds/default/ (there is no `.flow/` anywhere
+    # near ~/.claude/skills/); only project mode's `.flow/<source>` matches
+    # the classic hint. `source_ref_for` already encodes exactly this
+    # decision for the managed manifest — reuse it rather than restate it.
+    source_ref = source_ref_for(mode, source_path, command.get("_origin", "framework"))
+    resync = "flow sync claude --user" if mode == MODE_USER else "flow sync claude"
+    edit_hint = f"Edit `{source_ref}` and run `{resync}`."
     lines = build_skill_frontmatter(command["name"], command, skill_defaults)
     lines.extend(
         [
             "",
-            f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->",
+            f"<!-- {GENERATED_MARKER} {edit_hint} -->",
             "",
             body.rstrip(),
             "",
