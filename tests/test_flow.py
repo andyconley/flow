@@ -4549,6 +4549,7 @@ class OverlayVcsTests(unittest.TestCase):
         self.overlay = overlay
         self._tempdir = tempfile.TemporaryDirectory()
         self.dir = Path(self._tempdir.name)
+        (self.dir / "empty-bin").mkdir()
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
@@ -4590,14 +4591,74 @@ class OverlayVcsTests(unittest.TestCase):
         self.assertFalse(status["tracked"], "authored content with no history is the state this surfaces")
         self.assertIn("--overlay-repo", self.overlay.format_overlay_vcs(status))
 
-    def test_clean_repo_without_upstream_says_no_upstream(self) -> None:
+    def test_clean_repo_without_a_remote_says_so(self) -> None:
         d = self._repo_with_content()
         status = self.overlay.overlay_vcs_status(d)
         self.assertTrue(status["tracked"])
+        self.assertFalse(status["error"])
         self.assertEqual(status["dirty"], [])
         self.assertIsNone(status["unpushed"], "None means no upstream; 0 would mean level with one")
         self.assertEqual(status["branch"], "main")
-        self.assertIn("no upstream", self.overlay.format_overlay_vcs(status))
+        self.assertIn("no remote", self.overlay.format_overlay_vcs(status))
+
+    def test_unreadable_repo_reports_an_error_not_a_plausible_status(self) -> None:
+        """Review finding: when every git call failed, the old code synthesized
+        `no upstream (detached)` for what might be a clean, pushed repo. A
+        diagnostic that states a false condition is worse than one that admits
+        it cannot read. Simulates an unresolvable git via a PATH with no git.
+        """
+        import unittest.mock
+
+        d = self._repo_with_content()
+        broken = {k: v for k, v in os.environ.items() if k != "PATH"}
+        broken["PATH"] = str(self.dir / "empty-bin")
+        with unittest.mock.patch.object(self.overlay, "git_env", return_value=broken):
+            status = self.overlay.overlay_vcs_status(d)
+        self.assertTrue(status["tracked"], "the .git directory is still visible")
+        self.assertTrue(status["error"])
+        self.assertEqual(self.overlay.format_overlay_vcs(status), "unreadable (git error)")
+
+    def test_detached_head_is_not_reported_as_a_branch_named_head(self) -> None:
+        d = self._repo_with_content()
+        (d / "second.md").write_text("x\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "second")
+        first = subprocess.run(
+            ["git", "rev-list", "--max-parents=0", "HEAD"], cwd=d, capture_output=True, text=True
+        ).stdout.strip()
+        self._git(d, "checkout", first)
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertIsNone(status["branch"], "`rev-parse --abbrev-ref` would have said 'HEAD' here")
+        self.assertIn("detached", self.overlay.format_overlay_vcs(status))
+
+    def test_repo_with_no_commits_yet_reports_its_branch(self) -> None:
+        d = self.dir / "unborn"
+        d.mkdir()
+        self._git(d, "init", "-b", "main")
+        (d / "flow.toml").write_text("# staged nothing\n")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["branch"], "main", "an unborn branch still has a name")
+        self.assertFalse(status["error"])
+
+    def test_gitignore_actually_excludes_credential_shaped_files(self) -> None:
+        """Behavioral, not a constant mirror: writes the shipped ignore file and
+        asks git what it excludes. Catches pattern-semantics mistakes the old
+        substring assertion could not — `*.local.*` alone does not match a file
+        named `settings.local`.
+        """
+        d = self._repo_with_content()
+        (d / ".gitignore").write_text(self.overlay.OVERLAY_GITIGNORE)
+        for name in (".env", "settings.local", "settings.local.json", "app.pem", "my.token"):
+            (d / name).write_text("secret\n")
+        (d / "keys").mkdir()
+        (d / "keys" / "k.pub").write_text("k\n")
+
+        untracked = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=d, capture_output=True, text=True
+        ).stdout
+        for name in (".env", "settings.local", "settings.local.json", "app.pem", "my.token", "keys/"):
+            self.assertNotIn(name, untracked, f"{name} must be ignored")
+        self.assertIn(".gitignore", untracked, "the ignore file itself is tracked content")
 
     def test_dirty_files_are_counted(self) -> None:
         d = self._repo_with_content()
@@ -4731,12 +4792,56 @@ class SetupUserOverlayRepoTests(unittest.TestCase):
         ).stdout.strip()
         self.assertEqual(remotes, "git@example.com:me/other.git")
 
-    def test_gitignore_excludes_credential_shaped_files(self) -> None:
-        import overlay as overlay_mod
+    def test_clone_failure_writes_nothing_and_preserves_the_directory(self) -> None:
+        overlay_dir = self.dir / "user"
+        rc, out = self._attach(overlay_dir, str(self.dir / "does-not-exist.git"))
+        self.assertEqual(rc, 1)
+        self.assertIn("failed", out)
+        self.assertFalse((overlay_dir / ".gitignore").exists(), "a failed clone must write nothing")
+        self.assertFalse((overlay_dir / ".git").exists())
 
-        body = overlay_mod.OVERLAY_GITIGNORE
-        for pattern in (".env", "keys/", "*.pem", "*.local.*"):
-            self.assertIn(pattern, body)
+    def test_dotfile_only_overlay_still_takes_the_clone_path(self) -> None:
+        """Review finding: a lone .DS_Store made a fresh machine look occupied,
+        taking init-in-place and producing an unrelated history against a
+        seeded remote.
+        """
+        remote = self._seeded_remote()
+        overlay_dir = self.dir / "user"
+        overlay_dir.mkdir()
+        (overlay_dir / ".DS_Store").write_bytes(b"\x00")
+
+        rc, out = self._attach(overlay_dir, str(remote))
+        self.assertEqual(rc, 0)
+        self.assertIn("cloned", out, ".DS_Store must not count as overlay content")
+        self.assertEqual((overlay_dir / "flow.toml").read_text(), "# from remote\n")
+
+    def test_repo_without_a_remote_gets_one_added(self) -> None:
+        """A partial attach (init succeeded, remote add failed) previously left
+        the overlay permanently stuck reporting no remote. Re-running now
+        completes it.
+        """
+        overlay_dir = self.dir / "user"
+        overlay_dir.mkdir()
+        (overlay_dir / "flow.toml").write_text("# mine\n")
+        self._git(overlay_dir, "init", "-b", "main")
+
+        rc, out = self._attach(overlay_dir, "git@example.com:me/overlay.git")
+        self.assertEqual(rc, 0)
+        self.assertIn("added:", out)
+        remote = subprocess.run(
+            ["git", "config", "--get", "remote.origin.url"],
+            cwd=overlay_dir, capture_output=True, text=True,
+        ).stdout.strip()
+        self.assertEqual(remote, "git@example.com:me/overlay.git")
+
+    def test_credentials_in_a_url_are_not_echoed(self) -> None:
+        import setup
+
+        self.assertEqual(
+            setup._scrub_url("https://me:ghp_secret@github.com/me/r.git"),
+            "https://<credentials>@github.com/me/r.git",
+        )
+        self.assertEqual(setup._scrub_url("git@github.com:me/r.git"), "git@github.com:me/r.git")
 
 
 if __name__ == "__main__":

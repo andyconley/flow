@@ -265,9 +265,12 @@ The user overlay mirrors `scaffolds/default/`'s shape:
 
 ```text
 ~/.flow/user/
-  flow.toml              — registers user-authored commands and agents
+  .git/                  — optional; `flow setup user --overlay-repo <url>`
+  .gitignore             — shipped when the overlay becomes a repo
+  flow.toml              — registers user-authored commands, agents, and hooks
   agents/<name>.md       — overriding or new agents
   commands/<name>.md     — overriding or new commands
+  hooks/flow-<name>.sh   — overriding or new hook scripts (must be flow-*)
   standards/<name>.md    — overriding or new standards (runtime-resolved)
   templates/<name>.md    — overriding or new templates (runtime-resolved)
 ```

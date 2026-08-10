@@ -82,7 +82,7 @@ Use the Read tool to resolve. If a name is cited and the project overlay or user
 
 ### Committing user-overlay edits
 
-`~/.flow/user/` may be a git repo — `flow setup user --overlay-repo <url>` attaches one, and `flow doctor` reports whether it has history. When it does, **the agent that edits overlay content commits it in the same turn**: a personal command body, an agent override, a hook script, or the `flow.toml` registration. The person who owns that content is not the one typing in the directory, so waiting for them to notice pending changes leaves authored work uncommitted until something breaks. `flow doctor`'s `vcs:` line under `user overlay:` is the backstop for anything edited outside that path.
+`~/.flow/user/` may be a git repo — `flow setup user --overlay-repo <url>` attaches one, and `flow doctor` reports whether it has history. When it does, **the agent that edits overlay content commits it in the same turn**: a personal command body, an agent override, a hook script, or the `flow.toml` registration. The person who owns that content is not the one typing in the directory, so waiting for them to notice pending changes leaves authored work uncommitted until something breaks. Push in the same turn too when the branch has an upstream — `doctor` reports `N unpushed`, so committing without pushing produces exactly the state it flags. `flow doctor`'s `vcs:` line under `user overlay:` is the backstop for anything edited outside that path.
 
 ## Role provider model
 

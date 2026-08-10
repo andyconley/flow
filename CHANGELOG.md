@@ -28,7 +28,8 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   had never listed. New module `cli/overlay.py` holds the status query, kept
   out of `diagnostics.py` so `doctor` keeps holding presentation rather than
   git plumbing; two bounded git calls, skipped entirely when there is no
-  `.git`, and it never writes.
+  `.git`, and it never writes. A failed git call reports `unreadable (git
+  error)` rather than a synthesized clean-looking status.
 
 ## [0.8.0] — 2026-08-10
 
