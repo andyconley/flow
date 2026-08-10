@@ -8,6 +8,38 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **Genuine last-write-wins for repeated `ai-title` records** (token-advisory
+  chunk 7). Chunk 6 shipped `ai-title` as "first one wins, forever"
+  (`WHERE title IS NULL`) and documented the divergence from a true
+  last-write-wins as inert on real data. This chunk fixes it — and the first
+  design didn't survive contact with real data either: it assumed title
+  records carry their own `timestamp` to compare, and they don't (all 6,340
+  real `custom-title`/`ai-title` records sampled carry exactly
+  `{type, aiTitle|customTitle, sessionId}`, nothing else). What real data
+  does have is timestamps on *adjacent* records, and JSONL is append-only —
+  so schema v4 adds `session.last_seen_ts`, a running high-water mark
+  advanced from every timestamped record, and an `ai-title`'s *effective*
+  timestamp is that mark at the moment its line is processed, compared
+  against `title_ai_ts` (the effective timestamp of the currently-accepted
+  auto-title). `title_source` records whether `custom` or `ai` last won;
+  a `custom-title` locks out every future `ai-title` permanently. Known,
+  accepted limitation: back-to-back `ai-title` records with nothing
+  timestamped between them tie, and the first of the tied cluster wins —
+  this is not a full last-line-wins reconstruction, but it correctly
+  resolves genuine time-separated re-titling and the one real case of a
+  session's title records spanning two files. All three new columns are
+  NULL on migration; one `flow harvest claude --backfill` run re-derives
+  them for existing sessions.
+- **`cwd` now fills from any record type that carries it**, not just the
+  identity-establishing one. A file whose first record is a title line
+  (which carries no `cwd`) previously left `session.cwd` NULL forever,
+  silently weakening `flow cost sessions`' title→cwd→id label fallback for
+  that session. Repaired retroactively by the same `--backfill` replay.
+- **`--limit N` on `flow cost sessions`** (default 20, `--limit 0` for
+  unlimited), applied in the query itself so `--json` and the table always
+  see the identical capped set. `--all` alone now shows the 20 most recent
+  sessions ever; `--all --limit 0` is the explicit everything escape hatch.
+
 - **`flow harvest codex`** — the first collector for the usage store (token-advisory
   chunk 3). Incrementally reads `~/.codex/sessions/**/*.jsonl` into the raw
   layer (`session`, `turn_raw`, and a new `agent_activity_raw` table), resuming
@@ -72,6 +104,16 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   this reuses the whole validated harvest path rather than a narrower
   title-only scanner. Validated against the real local corpus: 162 of 352
   real Claude sessions picked up a title on the first backfill run.
+
+### Changed
+
+- **`flow harvest claude --backfill-titles` renamed to `--backfill`**
+  (token-advisory chunk 7) — breaking for anything invoking the old flag
+  name. The replay mechanism now repairs titles, `cwd`, and title
+  provenance in one pass, so the title-specific name stopped being honest.
+  `COLLECTOR_VERSION` bumped 1 → 2 (informational; nothing branches on it) —
+  this chunk is the first to change what the Claude collector derives from
+  already-committed lines.
 
 ### Fixed
 

@@ -15,7 +15,12 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # The `# noqa: E402` markers are load-bearing, not decoration: these imports
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
-from cost import DEFAULT_WINDOW_DAYS, cost_sessions_command, cost_summary_command  # noqa: E402
+from cost import (  # noqa: E402
+    DEFAULT_SESSIONS_LIMIT,
+    DEFAULT_WINDOW_DAYS,
+    cost_sessions_command,
+    cost_summary_command,
+)
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
@@ -109,9 +114,9 @@ def main() -> int:
         description="Incrementally read Claude Code session transcripts, writing session and turn records into the usage store's raw layer.",
     )
     harvest_claude_parser.add_argument(
-        "--backfill-titles",
+        "--backfill",
         action="store_true",
-        help="rewind every already-recorded file's watermark first, so sessions harvested before title capture existed pick up session.title retroactively",
+        help="rewind every already-recorded file's watermark first, so already-harvested sessions pick up session.title, cwd, and title provenance retroactively",
     )
 
     sub.add_parser(
@@ -158,6 +163,13 @@ def main() -> int:
             action="store_true",
             help="print the same result as JSON instead of an aligned table",
         )
+    cost_sessions_parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_SESSIONS_LIMIT,
+        metavar="N",
+        help=f"cap the number of sessions shown, most recently active first (default: {DEFAULT_SESSIONS_LIMIT}; 0 = unlimited)",
+    )
 
     sub.add_parser(
         "help",
@@ -280,13 +292,13 @@ def main() -> int:
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
     if args.command == "harvest" and args.harvest_target == "claude":
-        return harvest_claude_command(backfill_titles=args.backfill_titles)
+        return harvest_claude_command(backfill=args.backfill)
     if args.command == "normalize":
         return normalize_command()
     if args.command == "cost" and args.cost_target == "summary":
         return cost_summary_command(days=args.days, show_all=args.all, as_json=args.json)
     if args.command == "cost" and args.cost_target == "sessions":
-        return cost_sessions_command(days=args.days, show_all=args.all, as_json=args.json)
+        return cost_sessions_command(days=args.days, show_all=args.all, as_json=args.json, limit=args.limit)
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

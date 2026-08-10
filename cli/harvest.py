@@ -70,22 +70,27 @@ def harvest_codex_command() -> int:
 def _reset_claude_watermarks(conn: sqlite3.Connection) -> None:
     """Rewind every recorded Claude file to the start of the file.
 
-    Used by `--backfill-titles`: replaying an already-harvested file from
-    offset 0 is a free no-op for turns already in `turn_raw` (its natural key
-    makes `INSERT OR IGNORE` idempotent), but it is the first time any
-    `custom-title`/`ai-title` line in that file is seen by a collector new
-    enough to read it. `last_size` is deliberately left alone —
-    `harvest_file` recomputes it fresh from `path.stat()` on every run and
-    never trusts the stored value for anything but reporting.
+    Used by `--backfill`: replaying an already-harvested file from offset 0
+    is a free no-op for turns already in `turn_raw` (its natural key makes
+    `INSERT OR IGNORE` idempotent), but it is the first time any
+    `custom-title`/`ai-title`/`cwd`-bearing line in that file is seen by a
+    collector new enough to read it. Originally built for title capture
+    alone (hence the flag's old name, `--backfill-titles`) — now also the
+    mechanism that repairs `cwd` and title provenance (`title_source`,
+    `title_ai_ts`, `last_seen_ts`) on sessions that predate those columns,
+    since they all live in the same collector code path. `last_size` is
+    deliberately left alone — `harvest_file` recomputes it fresh from
+    `path.stat()` on every run and never trusts the stored value for
+    anything but reporting.
 
-    Two small, accepted costs of resetting rather than a narrower title-only
-    scan: every recorded file is fully re-read from byte 0 for the duration
-    of this one run (each file's own future incremental runs are unaffected),
+    Two small, accepted costs of resetting rather than a narrower scan:
+    every recorded file is fully re-read from byte 0 for the duration of
+    this one run (each file's own future incremental runs are unaffected),
     and `WatermarkAnomaly`'s rotation check (`current_size < last_offset`)
     can't fire against a file that shrank or was replaced between harvests,
     since the offset it would have compared against is now 0. Both are
     one-run costs against files this collector has already fully harvested
-    once; neither compounds across repeated `--backfill-titles` runs.
+    once; neither compounds across repeated `--backfill` runs.
     """
     conn.execute(
         "UPDATE harvest SET last_offset = 0, last_line_no = 0, last_line_hash = NULL"
@@ -94,12 +99,13 @@ def _reset_claude_watermarks(conn: sqlite3.Connection) -> None:
     )
 
 
-def harvest_claude_command(backfill_titles: bool = False) -> int:
+def harvest_claude_command(backfill: bool = False) -> int:
     """Harvest `~/.claude/projects/` into the usage store. Same contract as `harvest_codex_command`.
 
-    `backfill_titles=True` rewinds every already-recorded Claude file's
-    watermark first (see `_reset_claude_watermarks`), so sessions harvested
-    before title capture existed pick up `session.title` retroactively.
+    `backfill=True` rewinds every already-recorded Claude file's watermark
+    first (see `_reset_claude_watermarks`), so sessions harvested before
+    title capture, `cwd` capture, or schema v4's title-provenance columns
+    existed pick up all three retroactively.
     """
     store = usage_store.default_store_path(HOME)
     capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
@@ -112,7 +118,7 @@ def harvest_claude_command(backfill_titles: bool = False) -> int:
 
     conn = _connect(store)
     try:
-        if backfill_titles:
+        if backfill:
             _reset_claude_watermarks(conn)
             conn.commit()
         summary = claude_harvest_all(conn, sessions_root)
