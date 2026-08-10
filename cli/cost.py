@@ -1,12 +1,15 @@
 """`flow cost`: the first read surface over `turn_norm`.
 
-Every other module in `cli/` writes usage data to the store; this one reads
-it back out. It still calls `usage_store.ensure_store` before querying, the
-same convenience every other command module gives itself (see
-`harvest.py`'s own docstring) — a fresh machine gets a working `flow cost
-summary` rather than an error pointing at `flow setup machine`. What it
-never does is touch `turn_raw`, `turn_norm`, or `session`: schema creation
-and migration are the only writes this module can cause.
+The read/write split here is per-command, not module-wide. `summary` and
+`sessions` only read: beyond `usage_store.ensure_store` (the same
+schema-only convenience every command module gives itself — a fresh machine
+gets a working `flow cost summary` rather than an error pointing at
+`flow setup machine`), they never touch `turn_raw`, `turn_norm`, or
+`session`. `active` is deliberately different: it runs the incremental
+Claude harvest and a normalize pass before querying — writes to all three
+tables — because a `turn_norm`-only read would lag the newest turns and a
+"what needs attention right now" view that answers as-of-the-last-pipeline-
+run defeats its own purpose.
 
 `summary_rows`, `sessions_rows`, and `capacity_gauge` are pure query
 functions — a connection and an optional cutoff in, a list of dicts (or, for
@@ -47,6 +50,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import usage_store
+from claude_collector import HARNESS as CLAUDE_HARNESS
 from claude_collector import default_sessions_root as claude_sessions_root
 from claude_collector import harvest_all as claude_harvest_all
 from codex_collector import HARNESS as CODEX_HARNESS
@@ -235,30 +239,38 @@ def _parse_ts(value: str) -> datetime | None:
         return None
 
 
-def _infer_window(session_id: str, ctx: int, home: Path | None = None) -> tuple[int, bool]:
+# Where the statusline records each session's exact context window
+# (`claude-window-<session_id>`). Module-level so tests can point it at a
+# tmpdir instead of coupling to the host's real /tmp — the one place a
+# stray real file could otherwise flip a test's expected window.
+STATUSLINE_DIR = Path("/tmp")
+
+
+def _infer_window(session_id: str, ctx: int) -> tuple[int, bool]:
     """(window_tokens, exact) for a session's context window.
 
     The window isn't recorded in transcripts, so two sources, in order:
 
-    1. `/tmp/claude-window-<session_id>` — the statusline writes the exact
-       window it derived from its own payload. That derivation divides by an
-       integer percentage, so it carries a few percent of rounding error —
-       snap to the nearest real window (there are only two, 5x apart, so the
-       snap is exact). This is the one signal that can correctly identify a
-       1M-window session still under 190K context.
+    1. `STATUSLINE_DIR/claude-window-<session_id>` — the statusline writes
+       the exact window it derived from its own payload. That derivation
+       divides by an integer percentage, so it carries a few percent of
+       rounding error — snap to the nearest real window, but only when the
+       recorded value is within 15% of one: a corrupt or truncated file
+       snapping confidently to the wrong window would be worse than the
+       honest `~` inference, so anything further off falls through. This is
+       the one signal that can correctly identify a 1M-window session still
+       under 190K context.
     2. Inference: context observed above LONG_THRESHOLD must be the
        long-context variant; anything below is assumed standard, which
        overstates percentages for an unidentified 1M session — the `exact`
        flag is False so a renderer can mark the number as inferred.
-
-    `home` is accepted for tests but the statusline path is intentionally
-    /tmp-absolute, matching where the statusline actually writes.
     """
-    del home  # reserved; statusline files are /tmp-absolute today
     try:
-        raw = Path(f"/tmp/claude-window-{session_id}").read_text().strip()
-        window = int(raw)
-        return min((STD_WINDOW, LONG_WINDOW), key=lambda w: abs(w - window)), True
+        raw = (STATUSLINE_DIR / f"claude-window-{session_id}").read_text().strip()
+        recorded = int(raw)
+        nearest = min((STD_WINDOW, LONG_WINDOW), key=lambda w: abs(w - recorded))
+        if abs(recorded - nearest) <= nearest * 0.15:
+            return nearest, True
     except (OSError, ValueError):
         pass
     return (LONG_WINDOW if ctx > LONG_THRESHOLD else STD_WINDOW), False
@@ -280,12 +292,22 @@ def active_rows(
     """Per-active-session context status, worst carry first.
 
     Supersedes `token-report --active`, store-backed instead of re-parsing
-    transcripts. Semantics carried over with two deliberate divergences,
-    both documented in the run plan: liveness/idle come from the latest
+    transcripts. Semantics carried over with three deliberate divergences,
+    all documented in the run plan: liveness/idle come from the latest
     main-thread turn's `ts` rather than transcript file mtime (misses a
     session where the user typed but no assistant turn landed yet — bounded
-    by one turn), and a session is one row here even when its subagent
-    files would have surfaced as separate rows there.
+    by one turn); a session is one row here even when its subagent files
+    would have surfaced as separate rows there; and a session whose only
+    *recent* turns carry zero context (synthetic/empty-usage records) drops
+    out of the view rather than showing its last known context — no context
+    sample inside the window means no current context to report.
+
+    Carry is measured from the session's first-ever context sample, matching
+    token-report exactly — which means an already-/compact-ed session
+    understates carry (the base predates the compact) and can even read
+    negative right after one. Inherited deliberately rather than fixed;
+    basing the floor on the minimum observed ctx is the known alternative if
+    this ever misleads in practice.
 
     Context math is main-thread only (`is_subagent = 0`) on purpose: a
     sidechain turn's context is a different conversation's size, and the
@@ -306,12 +328,12 @@ def active_rows(
         FROM turn_norm tn
         JOIN turn_raw tr ON tr.id = tn.turn_raw_id
         JOIN session s ON s.id = tr.session_row_id
-        WHERE s.harness = 'claude' AND tn.is_subagent = 0 AND tn.ts >= ?
+        WHERE s.harness = ? AND tn.is_subagent = 0 AND tn.ts >= ?
           AND COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
               + COALESCE(tn.cache_write_tokens, 0) > 0
         GROUP BY s.id
         """,
-        (cutoff,),
+        (CLAUDE_HARNESS, cutoff),
     ).fetchall()
 
     result = []
@@ -330,7 +352,7 @@ def active_rows(
             WHERE tr.session_row_id = ? AND tn.is_subagent = 0
               AND COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
                   + COALESCE(tn.cache_write_tokens, 0) > 0
-            ORDER BY tn.ts DESC LIMIT 2
+            ORDER BY tn.ts DESC, tr.id DESC LIMIT 2
             """,
             (raw["session_row_id"],),
         ).fetchall()
@@ -343,7 +365,7 @@ def active_rows(
             WHERE tr.session_row_id = ? AND tn.is_subagent = 0
               AND COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
                   + COALESCE(tn.cache_write_tokens, 0) > 0
-            ORDER BY tn.ts ASC LIMIT 1
+            ORDER BY tn.ts ASC, tr.id ASC LIMIT 1
             """,
             (raw["session_row_id"],),
         ).fetchone()
@@ -362,7 +384,10 @@ def active_rows(
 
         window, exact = _infer_window(raw["session_id"], ctx)
         last = _parse_ts(raw["last_ts"])
-        idle_sec = max(0, int((now - last).total_seconds())) if last else 0
+        # None (not 0) when the timestamp is unparseable: 0 would render as
+        # "0s" — the most attention-grabbing state — for a session of
+        # genuinely unknown age.
+        idle_sec = max(0, int((now - last).total_seconds())) if last else None
         action = "clear" if gap >= TOPIC_GAP_SEC else "compact"
         carry_pct = carry / window * 100
 
@@ -497,25 +522,35 @@ def cost_sessions_command(
     return 0
 
 
+def _fmt_idle(idle_sec: int | None) -> str:
+    if idle_sec is None:
+        return "?"
+    if idle_sec >= 3600:
+        return f"{idle_sec // 3600}h{(idle_sec % 3600) // 60}m"
+    if idle_sec >= 60:
+        return f"{idle_sec // 60}m"
+    return f"{idle_sec}s"
+
+
 def _render_active_table(rows: list[dict]) -> str:
     """`active`'s table needs formatting the generic renderer can't do:
     percentage suffixes, the `~` inferred-window marker fused to the ctx
-    figure, and idle rendered as `35m`/`12s`. The JSON path still gets the
-    raw structured values — the formatting below is display-only.
+    figure, and idle rendered as `2h5m`/`35m`/`12s` (`?` when the latest
+    turn's timestamp couldn't be parsed). The JSON path still gets the raw
+    structured values — the formatting below is display-only.
     """
     if not rows:
         return "(no active sessions in range)"
     display = []
     for r in rows:
         marker = "" if r["window_exact"] else "~"
-        idle = f"{r['idle_sec'] // 60}m" if r["idle_sec"] >= 60 else f"{r['idle_sec']}s"
         display.append(
             {
                 "id": r["id"],
-                "session": r["label"][:40],
+                "session": r["label"][:39] + "…" if len(r["label"]) > 40 else r["label"],
                 "ctx": f"{marker}{r['ctx_pct']:.0f}%",
                 "carry": f"{r['carry_pct']:.0f}%",
-                "idle": idle,
+                "idle": _fmt_idle(r["idle_sec"]),
                 "recommend": r["recommend"],
             }
         )
@@ -560,7 +595,9 @@ def cost_active_command(
         if sessions_root.is_dir():
             summary = claude_harvest_all(conn, sessions_root)
             for failure in summary["failures"]:
-                print(f"note: skipped {failure['path']} — {failure['reason']}")
+                line = failure["line"]
+                where = f":{line}" if line is not None else ""
+                print(f"note: skipped {failure['path']}{where} — {failure['reason']}")
         norm_result = normalize_all(conn)
         for failure in norm_result["failures"]:
             print(f"note: could not normalize turn_raw id {failure['turn_raw_id']} — {failure['reason']}")

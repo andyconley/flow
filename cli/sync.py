@@ -253,7 +253,7 @@ def desired_claude_outputs(
         target = root / runtime["skill_dir"] / command["name"] / "SKILL.md"
         command_with_body = dict(command)
         command_with_body["_body"] = source_path.read_text()
-        content = render_skill_from_command(command_with_body, skill_defaults, routing_hints)
+        content = render_skill_from_command(command_with_body, skill_defaults, routing_hints, mode)
         outputs[target] = content
         managed_entries.append(
             {

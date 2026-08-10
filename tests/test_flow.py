@@ -430,12 +430,16 @@ class FlowCliTests(unittest.TestCase):
         self.assertTrue(skill.exists(), "user-added command must generate a SKILL.md")
         self.assertIn("user-defined Jira status", skill.read_text())
 
-    def test_user_overlay_command_edit_hint_points_at_the_overlay(self) -> None:
-        """A user-origin skill's generated marker must direct edits to
-        `~/.flow/user/<source>` and `flow sync claude --user` — the
-        framework-style `.flow/commands/...` hint would point at a file
-        that does not exist for an overlay command. Framework commands in
-        the same sync keep the framework-style hint.
+    def test_skill_edit_hint_matches_origin_and_mode(self) -> None:
+        """The generated marker must direct edits to a file that actually
+        exists, which depends on BOTH origin and sync mode: a user-overlay
+        command's source lives under `~/.flow/user/`; a framework command
+        synced in --user mode lives under the scaffold at
+        `~/.flow/source/scaffolds/default/` (there is no `.flow/` anywhere
+        near `~/.claude/skills/`); only project mode gets the classic
+        `.flow/<source>` hint. Review caught the first fix handling only
+        the user-origin case and a test pinning the wrong framework-in-
+        user-mode string — this asserts all three cells of the matrix.
         """
         fake_home = self.use_fake_home()
         self._write_user_overlay_command(
@@ -453,8 +457,19 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("flow sync claude --user", user_skill)
         self.assertNotIn("Edit `.flow/", user_skill)
 
-        framework_skill = (fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
-        self.assertIn("Edit `.flow/commands/flow-plan.md`", framework_skill)
+        framework_user = (fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
+        self.assertIn(
+            "Edit `~/.flow/source/scaffolds/default/commands/flow-plan.md`",
+            framework_user,
+            "a framework skill installed at user level cannot be edited via a nonexistent .flow/",
+        )
+        self.assertIn("flow sync claude --user", framework_user)
+
+        self.setup_project()
+        self.assert_ok(self.run_flow("sync", "claude"))
+        framework_project = (self.repo / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
+        self.assertIn("Edit `.flow/commands/flow-plan.md`", framework_project)
+        self.assertNotIn("--user", framework_project.split("-->")[0].split("<!--")[-1])
 
     def test_user_overlay_overrides_framework_agent(self) -> None:
         """User overlay can replace a framework agent's content."""
@@ -3873,20 +3888,39 @@ class CostTests(unittest.TestCase):
         """The statusline's derived window carries integer-percent rounding
         error — a recorded 980000 must snap to the real 1M window. This is
         the one signal that can identify a 1M session still under 190K.
+        Points STATUSLINE_DIR at a tmpdir rather than the host's real /tmp,
+        where a stray file could flip the expectation.
         """
-        import os
+        import tempfile
+        import unittest.mock
+        from pathlib import Path as _P
 
         sess = self.insert_session("statusline-test-sess", harness="claude")
         self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 100_000)
-        window_file = "/tmp/claude-window-statusline-test-sess"
-        with open(window_file, "w") as fh:
-            fh.write("980000")
-        try:
-            rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
-            self.assertEqual(rows[0]["ctx_pct"], 10.0, "100K of the snapped 1M window")
-            self.assertTrue(rows[0]["window_exact"])
-        finally:
-            os.unlink(window_file)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (_P(tmpdir) / "claude-window-statusline-test-sess").write_text("980000")
+            with unittest.mock.patch.object(self.cost, "STATUSLINE_DIR", _P(tmpdir)):
+                rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        self.assertEqual(rows[0]["ctx_pct"], 10.0, "100K of the snapped 1M window")
+        self.assertTrue(rows[0]["window_exact"])
+
+    def test_active_rows_statusline_file_too_far_from_any_real_window_is_ignored(self) -> None:
+        """A corrupt/truncated statusline value snapping confidently to the
+        wrong window would be worse than the honest ~ inference — anything
+        more than 15% from a real window falls through to inference.
+        """
+        import tempfile
+        import unittest.mock
+        from pathlib import Path as _P
+
+        sess = self.insert_session("statusline-junk-sess", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 100_000)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (_P(tmpdir) / "claude-window-statusline-junk-sess").write_text("600000")  # equidistant junk
+            with unittest.mock.patch.object(self.cost, "STATUSLINE_DIR", _P(tmpdir)):
+                rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        self.assertFalse(rows[0]["window_exact"])
+        self.assertEqual(rows[0]["ctx_pct"], 50.0, "must fall through to the 200K inference")
 
     def test_active_rows_gap_selects_clear_vs_compact(self) -> None:
         """The idle gap BEFORE the latest turn is what distinguishes 'came
@@ -3941,6 +3975,31 @@ class CostTests(unittest.TestCase):
     def test_active_rows_ignores_codex_sessions(self) -> None:
         sess = self.insert_session("codex-live", harness="codex")
         self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 100_000)
+        self.assertEqual(self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now()), [])
+
+    def test_active_rows_subagent_turn_older_than_session_start_does_not_corrupt_carry(self) -> None:
+        """The oldest-sample query needs its own is_subagent filter — a
+        sidechain turn that happens to be the session's earliest row would
+        otherwise become the carry baseline. Review flagged that the
+        newest-sample test alone would not catch this.
+        """
+        sess = self.insert_session("early-sub", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T10:00:00Z", 5_000, is_subagent=1)  # earliest overall
+        self.insert_ctx_turn(sess, "2026-01-10T10:30:00Z", 40_000)  # true main-thread start
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 120_000)
+
+        rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        self.assertEqual(rows[0]["carry_pct"], 40.0, "carry base must be the main thread's 40K, not the sidechain's 5K")
+
+    def test_active_rows_session_with_only_zero_context_recent_turns_drops_out(self) -> None:
+        """Documented third divergence from token-report: no context sample
+        inside the window means no current context to report, even when
+        older nonzero samples exist.
+        """
+        sess = self.insert_session("zero-recent", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T09:00:00Z", 80_000)  # nonzero but outside window
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 0)  # recent but zero-context
+
         self.assertEqual(self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now()), [])
 
     def test_render_active_table_marks_inferred_windows(self) -> None:
