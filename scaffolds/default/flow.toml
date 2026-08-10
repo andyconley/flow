@@ -248,6 +248,36 @@ script = "flow-managed-write-reminder.sh"
 # preserve-unmanaged contract as Claude's settings.json — config.toml is
 # never touched. matcher is optional for Codex: omitted means match-everything.
 
+[[claude.hooks]]
+name = "flow-token-verdict"
+event = "Stop"
+type = "command"
+script = "flow-token-verdict.sh"
+timeout = 15
+status_message = "checking context carry"
+
+[[claude.hooks]]
+name = "flow-context-warning"
+event = "UserPromptSubmit"
+type = "command"
+script = "flow-context-warning.sh"
+timeout = 10
+
+[[codex.hooks]]
+name = "flow-token-verdict"
+event = "Stop"
+type = "command"
+script = "flow-token-verdict.sh"
+timeout = 15
+status_message = "checking context carry"
+
+[[codex.hooks]]
+name = "flow-context-warning"
+event = "UserPromptSubmit"
+type = "command"
+script = "flow-context-warning.sh"
+timeout = 10
+
 [[codex.commands]]
 name = "flow-boot"
 source = "commands/flow-boot.md"

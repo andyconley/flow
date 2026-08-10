@@ -74,6 +74,7 @@ flow cost sessions --days 30
 flow cost sessions --all --limit 0
 flow cost active
 flow cost active --within 180
+flow cost verdict --transcript PATH
 ```
 
 What they do:
@@ -107,6 +108,10 @@ What they do:
   - token totals by session within a window, most recently active first; capped at the 20 most recent by default (`--limit N` to change, `--limit 0` for unlimited)
 - `flow cost active`
   - per-active-session context percentage, carry above session start, idle, and a `/clear`-or-`/compact` recommendation, worst carry first; runs the incremental Claude harvest and a normalize pass before answering (`--within N` minutes of liveness, default 60)
+- `flow cost verdict`
+  - live judgment for one session, the engine behind the Stop hooks on both runtimes: `--hook` reads the runtime's hook JSON on stdin and writes/removes `/tmp/<harness>-verdict-<session_id>` silently (the Claude statusline and the warn hook read the file for free); `--transcript PATH` prints the judgment line for manual inspection
+- `flow cost warn`
+  - the pre-execution warning behind the UserPromptSubmit hooks: reads the verdict file (no computation at prompt time) and prints one advisory line only when carry is heavy (100K+) and has grown 50K+ since the last warning; informational only, always exits 0
 - `--json` on any `flow cost` view prints the same structured result as JSON instead of an aligned table
 
 ### Runtime adapter generation

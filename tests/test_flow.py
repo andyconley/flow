@@ -532,20 +532,27 @@ class FlowCliTests(unittest.TestCase):
         self.assertTrue(script.stat().st_mode & stat.S_IXUSR, "hook script must be executable")
 
         doc = json.loads((codex_dir / "hooks.json").read_text())
-        groups = doc["hooks"]["Stop"]
-        self.assertEqual(len(groups), 1)
-        handler = groups[0]["hooks"][0]
+        # The framework registers its own codex Stop hook (flow-token-verdict),
+        # so filter to the overlay's handler rather than asserting a count.
+        mine = [
+            (g, h)
+            for g in doc["hooks"]["Stop"]
+            for h in g["hooks"]
+            if "flow-my-stop.sh" in h.get("command", "")
+        ]
+        self.assertEqual(len(mine), 1)
+        group, handler = mine[0]
         self.assertEqual(handler["type"], "command")
         self.assertIn('"$HOME"/.codex/hooks/flow-my-stop.sh', handler["command"])
         self.assertEqual(handler["timeout"], 15)
-        self.assertNotIn("matcher", groups[0], "omitted matcher must be omitted, not emitted empty")
+        self.assertNotIn("matcher", group, "omitted matcher must be omitted, not emitted empty")
 
         self.assertEqual((codex_dir / "config.toml").read_text(), config_before)
 
-        # Idempotent: second sync must not duplicate the handler.
+        # Idempotent: second sync must not duplicate any handler.
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
-        doc = json.loads((codex_dir / "hooks.json").read_text())
-        self.assertEqual(len(doc["hooks"]["Stop"]), 1)
+        doc2 = json.loads((codex_dir / "hooks.json").read_text())
+        self.assertEqual(doc2, doc, "a second sync must be a byte-identical no-op")
 
     def test_codex_hooks_preserve_unmanaged_handlers_on_the_same_event(self) -> None:
         fake_home = self.use_fake_home()
@@ -4197,6 +4204,161 @@ class CostTests(unittest.TestCase):
 
     def test_render_active_table_empty(self) -> None:
         self.assertEqual(self.cost._render_active_table([]), "(no active sessions in range)")
+
+
+class VerdictTests(unittest.TestCase):
+    """Direct tests of cost.py's verdict + warn engines, against an
+    in-memory store and real transcript fixtures on disk (the engine's
+    whole point is the harvest-then-judge pipeline, so these go through
+    the real collectors rather than hand-inserting turn_norm rows).
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import cost
+
+        self.usage_store = usage_store
+        self.cost = cost
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.row_factory = sqlite3.Row
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "cost"):
+            sys.modules.pop(name, None)
+
+    def _claude_transcript(self, name: str, turns: int, start_ctx: int, end_ctx: int, last_gap_min: int = 1) -> Path:
+        """A Claude transcript whose context grows linearly from start_ctx to
+        end_ctx across `turns` assistant turns, with `last_gap_min` minutes of
+        idle before the final turn (the /clear-vs-/compact signal).
+        """
+        records = [_claude_user("sess-v")]
+        for i in range(turns):
+            ctx = start_ctx + (end_ctx - start_ctx) * i // max(1, turns - 1)
+            rec = _claude_assistant("sess-v", f"req-{i}", input_tokens=ctx)
+            minute = i  # one turn per minute...
+            if i == turns - 1:
+                minute = (turns - 2) + last_gap_min  # ...except the last
+            rec["timestamp"] = f"2026-01-01T{10 + minute // 60:02d}:{minute % 60:02d}:00Z"
+            records.append(rec)
+        path = self.dir / name
+        path.write_text(_jsonl(*records))
+        return path
+
+    def test_verdict_below_carry_floor_is_silent(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=20_000)
+        self.assertIsNone(self.cost.verdict_for_transcript(self.conn, path))
+
+    def test_verdict_young_session_is_silent_despite_heavy_carry(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=5, start_ctx=10_000, end_ctx=150_000)
+        self.assertIsNone(self.cost.verdict_for_transcript(self.conn, path))
+
+    def test_verdict_compact_when_working_continuously(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=150_000, last_gap_min=2)
+        v = self.cost.verdict_for_transcript(self.conn, path)
+        self.assertIsNotNone(v)
+        self.assertEqual(v["action"], "compact")
+        self.assertEqual(v["carry"], 140_000)
+        self.assertEqual(v["ctx"], 150_000)
+        self.assertEqual(v["why"], "")
+
+    def test_verdict_clear_after_a_topic_gap(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=150_000, last_gap_min=45)
+        v = self.cost.verdict_for_transcript(self.conn, path)
+        self.assertIsNotNone(v)
+        self.assertEqual(v["action"], "clear")
+        self.assertIn("idle 45m", v["why"])
+
+    def test_verdict_works_for_codex_transcripts(self) -> None:
+        codex_dir = self.dir / ".codex" / "sessions" / "2026" / "01" / "01"
+        codex_dir.mkdir(parents=True)
+        records = [_session_meta("sess-cx")]
+        for i in range(20):
+            records.append(_task_started(f"turn-{i}"))
+            records.append(_turn_context(f"turn-{i}", "gpt-5.6"))
+            tc = _token_count(total=10_000 + i * 8_000)
+            tc["timestamp"] = f"2026-01-01T10:{i:02d}:00Z"
+            records.append(tc)
+            records.append(_task_complete(f"turn-{i}"))
+        path = codex_dir / "rollout-verdict.jsonl"
+        path.write_text(_jsonl(*records))
+
+        v = self.cost.verdict_for_transcript(self.conn, path)
+        self.assertIsNotNone(v)
+        self.assertEqual(v["harness"], "codex")
+        self.assertEqual(v["action"], "compact")
+        self.assertEqual(v["carry"], 8_000 * 19)
+
+    def test_verdict_session_id_takes_precedence_over_path_lookup(self) -> None:
+        """Hook mode passes the runtime's own session_id — a resumed session
+        whose transcript is a second file (source_path points at the first)
+        must still resolve.
+        """
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=150_000)
+        # Simulate the source_path pointing elsewhere.
+        self.cost.verdict_for_transcript(self.conn, path)  # harvest + create session
+        self.conn.execute("UPDATE session SET source_path = '/somewhere/else.jsonl'")
+        renamed = self.dir / "b.jsonl"
+        path.rename(renamed)
+        v = self.cost.verdict_for_transcript(self.conn, renamed, session_id="sess-v")
+        self.assertIsNotNone(v)
+
+    # ------------------------------------------------------------------
+    # warn engine
+    # ------------------------------------------------------------------
+
+    def _warn(self, sid: str, tpath: str = "/Users/x/.claude/projects/p/t.jsonl") -> str:
+        import contextlib
+        import io
+        import unittest.mock
+
+        stdin = io.StringIO(json.dumps({"session_id": sid, "transcript_path": tpath}))
+        out = io.StringIO()
+        with unittest.mock.patch.object(self.cost.sys, "stdin", stdin):
+            with contextlib.redirect_stdout(out):
+                rc = self.cost.cost_warn_command()
+        self.assertEqual(rc, 0)
+        return out.getvalue()
+
+    def test_warn_fires_once_and_throttles_until_carry_grows(self) -> None:
+        import unittest.mock
+
+        with unittest.mock.patch.object(self.cost, "VERDICT_DIR", self.dir):
+            (self.dir / "claude-verdict-sid1").write_text("/compact?\t120000\t150000\t\n")
+            first = self._warn("sid1")
+            self.assertIn("flow advisory", first)
+            self.assertIn("120K", first)
+
+            second = self._warn("sid1")
+            self.assertEqual(second, "", "same carry must not re-warn")
+
+            (self.dir / "claude-verdict-sid1").write_text("/compact?\t180000\t210000\t\n")
+            third = self._warn("sid1")
+            self.assertIn("180K", third, "carry grew past the re-warn step")
+
+    def test_warn_is_silent_below_the_floor_and_without_a_verdict(self) -> None:
+        import unittest.mock
+
+        with unittest.mock.patch.object(self.cost, "VERDICT_DIR", self.dir):
+            self.assertEqual(self._warn("sid-none"), "")
+            (self.dir / "claude-verdict-sid2").write_text("/compact?\t60000\t90000\t\n")
+            self.assertEqual(self._warn("sid2"), "")
 
 
 if __name__ == "__main__":

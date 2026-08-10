@@ -8,6 +8,33 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **Post-turn verdict and pre-execution warning on both harnesses**
+  (token-advisory chunks 11–12, board items E and F — the initiative's
+  last pieces). `flow cost verdict --hook` is the Stop-hook engine on both
+  runtimes: incrementally harvests the transcript that just stopped,
+  normalizes, and judges carry from the store — thresholds carried over
+  verbatim from `token-report --verdict` (25K carry floor, 15-request
+  minimum, 20-minute idle gap distinguishing /clear from /compact), same
+  verdict-file contract the Claude statusline already reads
+  (`/tmp/claude-verdict-<sid>`, `/{action}?\t{carry}\t{ctx}\t{why}`).
+  Prints nothing in hook mode on purpose — Stop-hook stdout feeds the
+  conversation on both runtimes. `flow cost warn --hook` is the
+  UserPromptSubmit engine: reads the verdict file (zero computation at
+  prompt time) and prints one advisory line only when carry ≥ 100K and
+  has grown ≥ 50K since the last warning — the line is injected as
+  context so the model and the user both see it before the next
+  expensive turn; every other case is silence, and it always exits 0.
+  Both hooks registered for both runtimes via `[[claude.hooks]]` and the
+  new `[[codex.hooks]]`; the scripts are trivial launchers (find flow,
+  hand over stdin) so all judgment stays in testable Python. Codex
+  limitation, documented not hidden: no statusline consumes its verdict
+  numbers, so only the window-agnostic absolute thresholds grade them.
+  With this, `~/bin/token-report` is fully retired: its last consumer
+  (the hand-authored `token-verdict.sh` Stop hook) is replaced, the old
+  settings.json entry removed, and the script deleted (backed up, with
+  its README, in the run's evidence directory — it was never version
+  controlled).
+
 - **`[[codex.hooks]]` — full-parity hook management for the Codex runtime**
   (token-advisory chunk 10). Codex now supports native lifecycle hooks
   (schema-compatible with Claude's: PreToolUse/PostToolUse/Stop/

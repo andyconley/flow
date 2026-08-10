@@ -22,6 +22,8 @@ from cost import (  # noqa: E402
     cost_active_command,
     cost_sessions_command,
     cost_summary_command,
+    cost_verdict_command,
+    cost_warn_command,
 )
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
@@ -162,6 +164,33 @@ def main() -> int:
         "--json",
         action="store_true",
         help="print the same result as JSON instead of an aligned table",
+    )
+    cost_verdict_parser = cost_sub.add_parser(
+        "verdict",
+        help="live /clear-or-/compact judgment for one transcript (Stop-hook engine)",
+        description="Live judgment for one session: incrementally harvests the transcript, normalizes, and judges carry from the store. --hook reads the runtime's hook JSON on stdin and writes/removes the verdict file silently; --transcript prints the judgment line. Supersedes token-report --verdict.",
+    )
+    verdict_mode = cost_verdict_parser.add_mutually_exclusive_group(required=True)
+    verdict_mode.add_argument(
+        "--transcript",
+        metavar="PATH",
+        help="print the judgment line for this transcript (silence = nothing to say)",
+    )
+    verdict_mode.add_argument(
+        "--hook",
+        action="store_true",
+        help="Stop-hook mode: read hook JSON from stdin, write/remove the verdict file, print nothing",
+    )
+    cost_warn_parser = cost_sub.add_parser(
+        "warn",
+        help="pre-execution context warning (UserPromptSubmit-hook engine)",
+        description="Reads the verdict file the Stop hook last wrote — no computation at prompt time — and prints a one-line advisory only when carry is heavy and has grown since the last warning. Informational only; always exits 0.",
+    )
+    cost_warn_parser.add_argument(
+        "--hook",
+        action="store_true",
+        required=True,
+        help="UserPromptSubmit-hook mode: read hook JSON from stdin",
     )
     for cost_parser in (cost_summary_parser, cost_sessions_parser):
         window = cost_parser.add_mutually_exclusive_group()
@@ -320,6 +349,10 @@ def main() -> int:
         return cost_sessions_command(days=args.days, show_all=args.all, as_json=args.json, limit=args.limit)
     if args.command == "cost" and args.cost_target == "active":
         return cost_active_command(within=args.within, as_json=args.json)
+    if args.command == "cost" and args.cost_target == "verdict":
+        return cost_verdict_command(transcript=args.transcript, hook=args.hook)
+    if args.command == "cost" and args.cost_target == "warn":
+        return cost_warn_command()
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

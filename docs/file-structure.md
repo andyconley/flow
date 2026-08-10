@@ -34,6 +34,8 @@ flow/
   hooks/
     flow-session-start.sh
     flow-managed-write-reminder.sh
+    flow-token-verdict.sh
+    flow-context-warning.sh
   scripts/
   scaffolds/
     default/
@@ -124,8 +126,10 @@ contracts align (they largely do: both pass `session_id`,
 
 Current hook scripts:
 
-- `flow-session-start.sh`
-- `flow-managed-write-reminder.sh`
+- `flow-session-start.sh` (Claude SessionStart — orientation context)
+- `flow-managed-write-reminder.sh` (Claude PostToolUse — managed-file edit nudge)
+- `flow-token-verdict.sh` (Stop, both runtimes — writes the verdict file via `flow cost verdict --hook`)
+- `flow-context-warning.sh` (UserPromptSubmit, both runtimes — one-line carry advisory via `flow cost warn --hook`)
 
 Edit here when changing generated runtime hook behavior.
 
