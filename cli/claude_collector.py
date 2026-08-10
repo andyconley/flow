@@ -78,31 +78,50 @@ existing behavior:
   `custom-title` always wins and last-one-wins on repeats; `ai-title` only
   fills in when no `custom-title` has ever appeared. This collector persists
   incrementally across separate runs instead, so the same precedence is
-  expressed as two idempotent, order-independent SQL statements rather than
-  in-memory state: a `custom-title` record unconditionally overwrites
-  `session.title` (a deliberate rename always wins, regardless of when it's
-  seen relative to any `ai-title`); an `ai-title` record only fills the
-  column when it is still `NULL` (a genuine gap, never a real title). Either
-  can be encountered first, in this batch or a future one, and the result is
-  the same — for the case of one `custom-title` and one `ai-title`. Where
-  this diverges from `token-report`'s in-memory pass: a session can carry
+  expressed as idempotent, order-independent SQL rather than in-memory
+  state: a `custom-title` record unconditionally overwrites `session.title`
+  (a deliberate rename always wins, and locks out every future `ai-title`
+  permanently — that's what `title_source = 'custom'` gates).
+  Genuine last-write-wins for repeated `ai-title` records needed a real
+  investigation, not just a second SQL statement. A session can carry
   *several* `ai-title` records (121 of 137 real files with any `ai-title`
-  have more than one), and `WHERE title IS NULL` means the first one wins
-  permanently, not the last, the way reassigning a local variable would. In
-  practice this never matters — every repeated `ai-title` sampled across
-  those 121 files carries the identical string, so first-wins and last-wins
-  agree — but if Claude Code ever starts regenerating a genuinely different
-  auto-title mid-session, this collector would keep the stale one. Not
-  fixed here: reproducing exact last-write-wins semantics needs to know
-  *which* record was last, which means either re-deriving it from `turn_raw`
-  on every batch or a new `title_source`/`title_seq` column — more schema
-  for a divergence real data doesn't currently exercise.
+  have more than one) — the first design here compared each record's own
+  timestamp, which turned out not to exist: all 6,340 real
+  `custom-title`/`ai-title` records sampled carry exactly
+  `{type, aiTitle|customTitle, sessionId}`, nothing else. What real data
+  *does* have: records adjacent to a title line (user/assistant/system/...)
+  usually carry a real `timestamp`, and JSONL is strictly append-only, so
+  the nearest preceding timestamped record bounds when the title event
+  actually happened. `last_seen_ts` (schema v4, see `usage_store.py`'s
+  migration comment for the full investigation) is a running high-water
+  mark advanced from every record type that carries a timestamp — that
+  value, read at the moment an `ai-title` line is processed, is that
+  record's effective timestamp for comparison against `title_ai_ts`, the
+  effective timestamp of the currently-accepted `ai-title`. Two title
+  records with nothing timestamped between them (common — several other
+  record types carry no timestamp either) share one effective timestamp, so
+  only the first of that tied cluster is accepted — this does not
+  reconstruct true last-line-wins for back-to-back repeats with no time
+  information between them, but it does correctly resolve genuine
+  time-separated re-titling and the one real case (1 of 163 real sessions
+  with any title records) where a session's title records are split across
+  more than one file, from a session-continuation event — a purely
+  in-memory or file-local-line-number ordinal would get both of those
+  wrong.
   A title record whose `session_row_id` cannot be resolved is
   counted as `skipped`, consistent with every other unresolvable record.
-  `flow harvest claude --backfill-titles` (see `cli/harvest.py`) resets the
+  `flow harvest claude --backfill` (see `cli/harvest.py`) resets the
   `harvest` watermark and replays already-harvested files so already-recorded
-  sessions pick up titles retroactively — safe because `turn_raw`'s natural
-  key makes replaying already-seen turns a free no-op.
+  sessions pick up titles, `cwd`, and title provenance retroactively — safe
+  because `turn_raw`'s natural key makes replaying already-seen turns a free
+  no-op, and every schema-v4 column is NULL on migration, so a session's
+  provenance genuinely needs one replay to be derived at all.
+- **`cwd` fills a gap on any record type that carries it, not just the
+  identity-establishing one.** `_get_or_create_session` runs exactly once
+  per file, so a file whose first record happens to be a `custom-title` or
+  `ai-title` line (neither carries `cwd`) would otherwise leave
+  `session.cwd` `NULL` forever — silently weakening `cost.py`'s
+  title-then-`cwd`-then-id label fallback for that session, permanently.
 """
 
 import json
@@ -112,7 +131,7 @@ from pathlib import Path
 from jsonl_watermark import WatermarkAnomaly, line_byte_length, line_hash, read_new_lines
 from session_lookup import lookup_session_for_path
 
-COLLECTOR_VERSION = 1
+COLLECTOR_VERSION = 2
 HARNESS = "claude"
 
 
@@ -152,6 +171,21 @@ def _get_or_create_session(conn: sqlite3.Connection, session_id: str, meta: dict
         ),
     )
     return cur.lastrowid
+
+
+def _current_last_seen_ts(conn: sqlite3.Connection, session_row_id: int) -> str | None:
+    """The session's current timestamp high-water mark, or `None` if never set.
+
+    Read fresh rather than trusted from an in-memory variable across batches
+    or files: a session created by one file can already have activity
+    recorded against it by a different file processed earlier (or, for the
+    one real multi-file-session case found in this machine's corpus, by an
+    earlier line in a file this same call hasn't reached yet on a resumed
+    harvest). See the module docstring's title-capture section for why this
+    exists at all.
+    """
+    row = conn.execute("SELECT last_seen_ts FROM session WHERE id = ?", (session_row_id,)).fetchone()
+    return row[0] if row is not None else None
 
 
 class _HardStop(Exception):
@@ -197,6 +231,13 @@ def _harvest_lines(
     constraint already gives for free.
     """
     session_row_id: int | None = lookup_session_for_path(conn, HARNESS, path)
+    last_seen_ts: str | None = _current_last_seen_ts(conn, session_row_id) if session_row_id is not None else None
+    # Once cwd is known to be set, skip the per-line gap-fill UPDATE — on a
+    # full backfill that statement would otherwise run for essentially every
+    # record in the corpus as a no-op. Deliberately starts False even when
+    # the session already exists: one extra no-op UPDATE on the first
+    # cwd-bearing line is cheaper than a second lookup query here.
+    cwd_known = False
 
     turns_written = 0
     skipped = 0
@@ -219,33 +260,86 @@ def _harvest_lines(
                 sid = record.get("sessionId")
                 if sid is not None:
                     session_row_id = _get_or_create_session(conn, sid, record, path)
+                    last_seen_ts = _current_last_seen_ts(conn, session_row_id)
                 else:
                     skipped += 1
                     last_good_line_no = line_no
                     continue
 
+            # Fills a gap only, on ANY record type carrying `cwd` — not just
+            # the identity-establishing one `_get_or_create_session` reads.
+            # That function runs exactly once per file, so a file whose
+            # first record happens to be a title record (no `cwd` field)
+            # would otherwise leave `session.cwd` NULL forever, weakening
+            # `cost.py`'s label fallback for that session permanently.
+            cwd = record.get("cwd")
+            if cwd and not cwd_known:
+                conn.execute("UPDATE session SET cwd = ? WHERE id = ? AND cwd IS NULL", (cwd, session_row_id))
+                cwd_known = True
+
+            # A running high-water mark of the most recent real `timestamp`
+            # observed anywhere in this session's stream — advanced from
+            # every record type that carries one, not just titles. This is
+            # the only reason an `ai-title` record (which carries none of
+            # its own) has any effective timestamp to compare against at
+            # all; see the schema v4 migration comment in `usage_store.py`
+            # for the real-data investigation that led here.
+            record_ts = record.get("timestamp")
+            if record_ts and (last_seen_ts is None or record_ts > last_seen_ts):
+                last_seen_ts = record_ts
+                conn.execute("UPDATE session SET last_seen_ts = ? WHERE id = ?", (last_seen_ts, session_row_id))
+
             if rtype == "custom-title":
-                # Unconditional — a deliberate rename always wins, and the
-                # last one seen (whether within this batch or a future one)
-                # is correct regardless of when this line is encountered
-                # relative to any ai-title.
+                # Unconditional — a deliberate rename always wins, regardless
+                # of when it's seen relative to any ai-title. Clears
+                # title_ai_ts too: once a real rename happens, no ai-title
+                # write is ever eligible again (the WHERE clause below checks
+                # title_source, not title_ai_ts, for that lockout — clearing
+                # it here is just hygiene, not load-bearing).
                 title = record.get("customTitle")
                 if title:
-                    conn.execute("UPDATE session SET title = ? WHERE id = ?", (title, session_row_id))
+                    conn.execute(
+                        "UPDATE session SET title = ?, title_source = 'custom', title_ai_ts = NULL WHERE id = ?",
+                        (title, session_row_id),
+                    )
                 last_good_line_no = line_no
                 continue
 
             if rtype == "ai-title":
-                # Fills a gap only. `AND title IS NULL` is what makes this
-                # order-independent across incremental runs without needing
-                # to remember "have I already seen a custom-title" in memory
-                # the way a single in-memory pass (token-report's approach)
-                # would: if a custom-title already set the title, this is a
-                # no-op forever, from any batch, in any order.
+                # Genuine last-write-wins, bounded by last_seen_ts (this
+                # record's own effective timestamp — it carries none of its
+                # own). Accepted when: no custom-title has ever locked this
+                # session out (title_source IS NULL or 'ai'), AND either (a)
+                # there is no time information anywhere yet for this session
+                # AND no title has ever been accepted (title_source IS NULL
+                # too — without that third leg, every untimed ai-title in a
+                # row would re-qualify and the LAST of an untimed cluster
+                # would win, the opposite of the documented first-wins tie
+                # rule; caught in review) or (b) last_seen_ts is real and
+                # strictly newer than the stored title_ai_ts. An unknown
+                # effective timestamp is never allowed to override a title
+                # that already has a real title_ai_ts.
+                #
+                # Known, accepted limitation: two ai-title records with no
+                # timestamped record between them (common — several other
+                # record types carry no timestamp either) share one
+                # effective timestamp, so only the first of that tied
+                # cluster is accepted. This is not a full last-line-wins
+                # reconstruction; it correctly resolves genuine
+                # time-separated re-titling and the rare multi-file-session
+                # case, which a purely in-memory or file-local-line-number
+                # ordinal would not.
                 title = record.get("aiTitle")
                 if title:
                     conn.execute(
-                        "UPDATE session SET title = ? WHERE id = ? AND title IS NULL", (title, session_row_id)
+                        "UPDATE session SET title = ?, title_source = 'ai', title_ai_ts = ?"
+                        " WHERE id = ?"
+                        "   AND (title_source IS NULL OR title_source = 'ai')"
+                        "   AND ("
+                        "     (title_ai_ts IS NULL AND ? IS NULL AND title_source IS NULL)"
+                        "     OR (? IS NOT NULL AND (title_ai_ts IS NULL OR ? > title_ai_ts))"
+                        "   )",
+                        (title, last_seen_ts, session_row_id, last_seen_ts, last_seen_ts, last_seen_ts),
                     )
                 last_good_line_no = line_no
                 continue

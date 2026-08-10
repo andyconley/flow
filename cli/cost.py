@@ -50,6 +50,7 @@ from codex_collector import HARNESS as CODEX_HARNESS
 from paths import HOME, SOURCE_DIR
 
 DEFAULT_WINDOW_DAYS = 7
+DEFAULT_SESSIONS_LIMIT = 20
 
 
 def _cutoff(days: int) -> str:
@@ -102,7 +103,7 @@ def _session_label(title: str | None, cwd: str | None, session_id: str) -> str:
     return f"session:{session_id[:8]}"
 
 
-def sessions_rows(conn: sqlite3.Connection, since: str | None) -> list[dict]:
+def sessions_rows(conn: sqlite3.Connection, since: str | None, limit: int | None = DEFAULT_SESSIONS_LIMIT) -> list[dict]:
     """Token totals grouped by session, most recently active first.
 
     `title` and `cwd` are queried but not returned as separate columns —
@@ -117,9 +118,18 @@ def sessions_rows(conn: sqlite3.Connection, since: str | None) -> list[dict]:
     sum fold in subagent (sidechain) turns alongside main-thread ones; this
     module makes no distinction, matching `turn_norm.is_subagent` being
     ordinary queryable data rather than a filter applied here.
+
+    `limit=None` means unlimited (the CLI maps `--limit 0` to this). The cap
+    is applied here, in the query, rather than by truncating the result in
+    either renderer — `--json` and the table must always see the identical
+    set, the same invariant that keeps `capacity_gauge` a query-level concern
+    rather than a rendering one.
     """
     where = "WHERE tn.ts >= ?" if since is not None else ""
+    limit_clause = "LIMIT ?" if limit is not None else ""
     params = (since,) if since is not None else ()
+    if limit is not None:
+        params = (*params, limit)
     rows = conn.execute(
         f"""
         SELECT s.id AS session_row_id, s.harness AS harness, s.title AS title,
@@ -135,6 +145,7 @@ def sessions_rows(conn: sqlite3.Connection, since: str | None) -> list[dict]:
         {where}
         GROUP BY s.id
         ORDER BY last_ts DESC, s.id DESC
+        {limit_clause}
         """,
         params,
     ).fetchall()
@@ -269,18 +280,29 @@ def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False
     return 0
 
 
-def cost_sessions_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False, as_json: bool = False) -> int:
-    """CLI entry point for `flow cost sessions`."""
+def cost_sessions_command(
+    days: int = DEFAULT_WINDOW_DAYS,
+    show_all: bool = False,
+    as_json: bool = False,
+    limit: int = DEFAULT_SESSIONS_LIMIT,
+) -> int:
+    """CLI entry point for `flow cost sessions`. `limit=0` means unlimited.
+
+    Negative limits also map to unlimited rather than reaching SQLite, where
+    `LIMIT -1` already silently means unlimited — mapping here makes that
+    behavior deliberate and documented instead of an accident of the engine.
+    """
     store = usage_store.default_store_path(HOME)
     capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
     usage_store.ensure_store(store, capabilities)
 
     since = None if show_all else _cutoff(days)
+    row_limit = None if limit <= 0 else limit
 
     conn = sqlite3.connect(store)
     conn.row_factory = sqlite3.Row
     try:
-        rows = sessions_rows(conn, since)
+        rows = sessions_rows(conn, since, row_limit)
     finally:
         conn.close()
 

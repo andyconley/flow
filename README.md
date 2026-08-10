@@ -66,11 +66,12 @@ flow sync codex --check
 flow sync codex --user
 flow harvest codex
 flow harvest claude
-flow harvest claude --backfill-titles
+flow harvest claude --backfill
 flow normalize
 flow cost summary
 flow cost summary --all --json
 flow cost sessions --days 30
+flow cost sessions --all --limit 0
 ```
 
 What they do:
@@ -94,14 +95,14 @@ What they do:
 - `--check` on any sync target reports drift without writing files
 - `flow harvest codex` / `flow harvest claude`
   - incrementally read `~/.codex/sessions/` / `~/.claude/projects/` into `~/.flow/usage.db`'s raw layer (creating the store on first run); safe to run repeatedly or on a schedule
-- `flow harvest claude --backfill-titles`
-  - rewinds every already-recorded Claude file's watermark first, so sessions harvested before title capture existed pick up `session.title` retroactively; safe to run repeatedly (already-seen turns are a no-op)
+- `flow harvest claude --backfill`
+  - rewinds every already-recorded Claude file's watermark first, so already-harvested sessions pick up `session.title`, `cwd`, and title provenance retroactively; safe to run repeatedly (already-seen turns are a no-op)
 - `flow normalize`
   - projects every harness's raw turn records into one shared token convention (`turn_norm`); only rows without a current-version normalized counterpart are recomputed
 - `flow cost summary`
   - token totals by harness/model within a window (`--days N`, default 7; `--all` for everything), plus Codex's most recent capacity reading as a separate gauge line
 - `flow cost sessions`
-  - token totals by session within a window, most recently active first
+  - token totals by session within a window, most recently active first; capped at the 20 most recent by default (`--limit N` to change, `--limit 0` for unlimited)
 - `--json` on either `flow cost` view prints the same structured result as JSON instead of an aligned table
 
 ### Runtime adapter generation

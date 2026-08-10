@@ -30,7 +30,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 STATE_ABSENT = "absent"
 STATE_OK = "ok"
@@ -193,10 +193,52 @@ ALTER TABLE turn_norm ADD COLUMN capacity_secondary_window_minutes INTEGER;
 ALTER TABLE turn_norm ADD COLUMN capacity_secondary_resets_at INTEGER;
 """
 
+_V4 = """
+-- Genuine last-write-wins for Claude's `ai-title` records, which chunk 6
+-- shipped as "first one wins, forever" (`WHERE title IS NULL`) because a
+-- real last-write-wins needs to know which of several repeats came last.
+-- A first design assumed the record itself carries a timestamp to compare —
+-- wrong: all 6,340 real `custom-title`/`ai-title` records sampled on the
+-- machine this was built on carry only `{type, aiTitle|customTitle,
+-- sessionId}`, nothing else. What real data DOES have: records immediately
+-- adjacent to a title line (user/assistant/system/...) usually carry a real
+-- `timestamp`, and JSONL is strictly append-only, so the nearest preceding
+-- timestamped record bounds when the title event actually happened.
+--
+-- `last_seen_ts` is a running high-water mark, advanced from every record
+-- type that carries a `timestamp` (not just titles) — this is what makes an
+-- `ai-title` record's *effective* timestamp available at all, despite having
+-- none of its own. `title_source` records which kind last won (`custom`
+-- always locks out every future `ai-title`, permanently, regardless of that
+-- future record's effective timestamp). `title_ai_ts` is the effective
+-- timestamp in force when the current title's `ai-title` write (if any) was
+-- accepted, so a later-arriving `ai-title` can be compared against it.
+--
+-- Two title records with nothing timestamped between them (common — several
+-- other record types carry no timestamp either) share one effective
+-- timestamp, so only the first of that tied cluster is accepted — this does
+-- not reconstruct a true last-line-wins for back-to-back repeats with no
+-- time information between them. It does correctly resolve genuine
+-- time-separated re-titling and the rare case of one session's title
+-- records spread across more than one file (1 of 163 real sessions with any
+-- title records, from a session-continuation event) — a purely in-memory or
+-- file-local-line-number ordinal would get both of those wrong.
+--
+-- All three columns are NULL on every session that predates this migration.
+-- This self-heals via `flow harvest claude --backfill`: replaying a file's
+-- lines in original order re-derives all three correctly, converging to the
+-- same terminal state chunk 6's tests already proved is order-independent —
+-- but the self-heal only happens once that backfill actually runs.
+ALTER TABLE session ADD COLUMN title_source TEXT CHECK (title_source IN ('custom', 'ai'));
+ALTER TABLE session ADD COLUMN title_ai_ts TEXT;
+ALTER TABLE session ADD COLUMN last_seen_ts TEXT;
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "initial schema: raw + normalized layers, harvest watermark, capabilities", _V1),
     (2, "agent activity log for sub-agent telemetry with no local token data", _V2),
     (3, "secondary capacity window columns on turn_norm", _V3),
+    (4, "title provenance and a session-level timestamp high-water mark", _V4),
 ]
 
 
@@ -226,9 +268,17 @@ def ensure_store(
     Returns (created, applied_versions). Idempotent: safe to run on every
     `flow setup machine` and every release update.
 
-    Each migration and its ledger row commit together. If the process dies
-    mid-migration the transaction rolls back, so `user_version` and the ledger
-    cannot disagree — `user_version` stays authoritative for what runs next.
+    Each migration's ledger row and `user_version` pragma commit together —
+    but the DDL itself does not, despite the comment on the `with` block
+    below suggesting so: `executescript` implicitly commits any open
+    transaction before running, so the ALTER/CREATE statements land outside
+    it. A crash in the narrow window between the DDL and the ledger commit
+    leaves the columns present with the old `user_version`, and the next
+    `ensure_store` fails on "duplicate column name" rather than resuming.
+    Known, accepted (flagged in chunk 7's review): present since v2, the
+    window is milliseconds on a local SQLite file, and the recovery is a
+    manual `PRAGMA user_version` bump — not worth reworking migrations to
+    per-statement `execute` calls for a personal tool.
     """
     created = not path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -238,7 +288,7 @@ def ensure_store(
     try:
         current = _user_version(conn)
         for version, description, sql in pending_migrations(current):
-            with conn:  # commits the DDL, the ledger row, and the pragma together
+            with conn:  # ledger row + pragma commit together; DDL precedes (see docstring)
                 conn.executescript(sql)
                 conn.execute(
                     "INSERT INTO schema_migration (version, applied_at, description)"

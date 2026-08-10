@@ -1685,6 +1685,29 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(payload["rows"][0]["label"], "My Renamed Session")
         self.assertEqual(payload["rows"][0]["harness"], "claude")
 
+    def test_cost_sessions_limit_end_to_end_via_cli(self) -> None:
+        home = self.use_fake_home()
+        claude_dir = home / ".claude" / "projects" / "-tmp-proj"
+        claude_dir.mkdir(parents=True)
+        for i in range(25):
+            (claude_dir / f"sess-{i}.jsonl").write_text(
+                _jsonl(_claude_user(f"sess-{i}"), _claude_assistant(f"sess-{i}", f"req-{i}"))
+            )
+        self.assert_ok(self.run_flow("harvest", "claude"))
+        self.assert_ok(self.run_flow("normalize"))
+
+        default = self.run_flow("cost", "sessions", "--all", "--json")
+        self.assert_ok(default)
+        self.assertEqual(len(json.loads(default.stdout)["rows"]), 20)
+
+        limited = self.run_flow("cost", "sessions", "--all", "--limit", "5", "--json")
+        self.assert_ok(limited)
+        self.assertEqual(len(json.loads(limited.stdout)["rows"]), 5)
+
+        unlimited = self.run_flow("cost", "sessions", "--all", "--limit", "0", "--json")
+        self.assert_ok(unlimited)
+        self.assertEqual(len(json.loads(unlimited.stdout)["rows"]), 25)
+
     def test_cost_summary_with_no_data_is_a_clean_empty_result(self) -> None:
         self.use_fake_home()
         table = self.run_flow("cost", "summary", "--all")
@@ -1833,21 +1856,16 @@ def _claude_assistant(
 
 
 def _claude_custom_title(session_id: str, title: str) -> dict:
-    return {
-        "type": "custom-title",
-        "sessionId": session_id,
-        "customTitle": title,
-        "timestamp": "2026-01-01T00:00:00Z",
-    }
+    # No `timestamp` field — matches real data exactly. All 6,340 real
+    # custom-title/ai-title records sampled while building schema v4 carry
+    # only {type, aiTitle|customTitle, sessionId}, nothing else. An earlier
+    # version of this fixture included a timestamp that no real record has,
+    # which would have made last_seen_ts tests pass for the wrong reason.
+    return {"type": "custom-title", "sessionId": session_id, "customTitle": title}
 
 
 def _claude_ai_title(session_id: str, title: str) -> dict:
-    return {
-        "type": "ai-title",
-        "sessionId": session_id,
-        "aiTitle": title,
-        "timestamp": "2026-01-01T00:00:00Z",
-    }
+    return {"type": "ai-title", "sessionId": session_id, "aiTitle": title}
 
 
 class CodexCollectorTests(unittest.TestCase):
@@ -2511,6 +2529,198 @@ class ClaudeCollectorTests(unittest.TestCase):
         self.assertEqual(result["turns"], 0)
 
     # ------------------------------------------------------------------
+    # ai-title genuine last-write-wins (schema v4)
+    #
+    # Title records carry no timestamp of their own — see _claude_ai_title's
+    # docstring note. These tests build raw dicts directly to control the
+    # timestamps on the *surrounding* records, since that's the only way
+    # last_seen_ts (and therefore an ai-title's effective timestamp) can be
+    # driven from a test.
+    # ------------------------------------------------------------------
+
+    def session_row(self, session_id: str) -> tuple:
+        return self.conn.execute(
+            "SELECT title, title_source, title_ai_ts, last_seen_ts FROM session WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+
+    def test_last_seen_ts_advances_from_any_timestamped_record(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-02T00:00:00Z"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_row("sess-1")[3], "2026-01-02T00:00:00Z")
+
+    def test_last_seen_ts_never_regresses(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-05T00:00:00Z"},
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_row("sess-1")[3], "2026-01-05T00:00:00Z")
+
+    def test_ai_title_genuine_last_write_wins_across_real_time_separation(self) -> None:
+        """The property chunk 6 shipped as "first wins forever" — two
+        ai-title records separated by a genuinely later timestamped record
+        in between must resolve to the SECOND ai-title, not the first. This
+        test must fail against `WHERE title IS NULL` (chunk 6's
+        implementation) to prove it is not vacuous.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "old title"},
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-02T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "new title"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        row = self.session_row("sess-1")
+        self.assertEqual(row[0], "new title")
+        self.assertEqual(row[2], "2026-01-02T00:00:00Z")
+
+    def test_ai_title_tied_cluster_keeps_the_first(self) -> None:
+        """Two ai-title records with nothing timestamped between them share
+        one effective timestamp — a documented, accepted limitation, not a
+        bug. Confirms the behavior is what the docstring claims, not silent.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "tied-a"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "tied-b"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_row("sess-1")[0], "tied-a")
+
+    def test_ai_title_untimed_cluster_with_no_timestamps_anywhere_keeps_the_first(self) -> None:
+        """The no-time-information-at-all variant of the tied cluster: not a
+        single timestamped record in the whole file. Review found the first
+        cut of the acceptance SQL let every untimed ai-title re-qualify
+        (last of the cluster won — the opposite of the documented rule);
+        the `title_source IS NULL` leg of the first branch is what makes
+        acceptance genuinely once-only in this state.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "untimed-a"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "untimed-b"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_row("sess-1")[0], "untimed-a")
+
+    def test_ai_title_last_write_wins_across_a_sessions_multiple_files(self) -> None:
+        """The case the persisted high-water mark exists FOR: one session's
+        title records split across two files (1 of 163 real sessions, from
+        a session-continuation event). File B's ai-title has a later
+        effective timestamp than file A's, carried across the file boundary
+        by session.last_seen_ts — an in-memory or file-local ordinal would
+        resolve this wrongly.
+        """
+        file_a = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "old title"},
+            ),
+        )
+        file_b = self.write_session(
+            "b.jsonl",
+            _jsonl(
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-02T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "new title"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, file_a)
+        self.claude_collector.harvest_file(self.conn, file_b)
+        row = self.session_row("sess-1")
+        self.assertEqual(row[0], "new title")
+        self.assertEqual(row[2], "2026-01-02T00:00:00Z")
+
+    def test_custom_title_locks_out_a_later_ai_title_even_with_a_newer_effective_timestamp(self) -> None:
+        """A genuinely later ai-title must still lose to an earlier custom-title
+        — the lockout is permanent and keyed on title_source, not on time.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "custom-title", "sessionId": "sess-1", "customTitle": "My Renamed Session"},
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-06-01T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "much later auto title"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        row = self.session_row("sess-1")
+        self.assertEqual(row[0], "My Renamed Session")
+        self.assertEqual(row[1], "custom")
+
+    def test_ai_title_with_no_timestamp_information_anywhere_is_still_accepted_once(self) -> None:
+        """The very first ai-title in a file with no timestamped record
+        before it (title_ai_ts and last_seen_ts both NULL) must still be
+        accepted — "unknown never overrides known" only blocks a *second*
+        ai-title once a real effective timestamp exists.
+        """
+        path = self.write_session(
+            "a.jsonl", _jsonl({"type": "ai-title", "sessionId": "sess-1", "aiTitle": "first ever"})
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_row("sess-1")[0], "first ever")
+
+    # ------------------------------------------------------------------
+    # cwd backfill
+    # ------------------------------------------------------------------
+
+    def test_cwd_fills_from_a_later_record_when_the_first_record_has_none(self) -> None:
+        """A file whose first record is a title line (no `cwd` field)
+        creates the session with cwd=NULL via `_get_or_create_session` —
+        this asserts a later cwd-bearing record fills the gap rather than
+        leaving it NULL forever.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "custom-title", "sessionId": "sess-1", "customTitle": "My Renamed Session"},
+                _claude_assistant("sess-1", "req-1", cwd="/tmp/real-proj"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        row = self.conn.execute("SELECT cwd FROM session WHERE session_id = 'sess-1'").fetchone()
+        self.assertEqual(row[0], "/tmp/real-proj")
+
+    def test_cwd_never_overwrites_an_already_set_value(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_assistant("sess-1", "req-1", cwd="/tmp/original"),
+                _claude_assistant("sess-1", "req-2", cwd="/tmp/different"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        row = self.conn.execute("SELECT cwd FROM session WHERE session_id = 'sess-1'").fetchone()
+        self.assertEqual(row[0], "/tmp/original")
+
+    def test_cwd_stays_null_when_no_record_ever_carries_it(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl({"type": "custom-title", "sessionId": "sess-1", "customTitle": "no cwd anywhere"})
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        row = self.conn.execute("SELECT cwd FROM session WHERE session_id = 'sess-1'").fetchone()
+        self.assertIsNone(row[0])
+
+    # ------------------------------------------------------------------
     # malformed-line rule — identical to Codex's, same underlying property
     # ------------------------------------------------------------------
 
@@ -2629,7 +2839,7 @@ class HarvestBackfillTests(unittest.TestCase):
         path.write_text(content)
         return path
 
-    def test_backfill_titles_populates_title_without_duplicating_turn_raw(self) -> None:
+    def test_backfill_populates_title_without_duplicating_turn_raw(self) -> None:
         path = self.write_session(
             "a.jsonl",
             _jsonl(
@@ -2660,6 +2870,115 @@ class HarvestBackfillTests(unittest.TestCase):
             turn_raw_count_before,
             "replaying an already-harvested file must not duplicate turn_raw rows",
         )
+
+    def test_backfill_derives_title_provenance_for_a_pre_schema_v4_session(self) -> None:
+        """Simulates a session that already has a title from before schema
+        v4 existed: `title` set, but `title_source`/`title_ai_ts`/
+        `last_seen_ts` all NULL — exactly what migrating an existing store
+        to v4 produces, since ALTER TABLE can't retroactively derive
+        provenance for rows that already exist. One `--backfill` replay
+        must re-derive `title_source` correctly by re-processing the file's
+        lines in their original order.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_custom_title("sess-1", "My Renamed Session"),
+                _claude_assistant("sess-1", "req-1"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        # Simulate the pre-v4 state: title survived a migration, but nothing
+        # about how it got there did.
+        self.conn.execute(
+            "UPDATE session SET title_source = NULL, title_ai_ts = NULL, last_seen_ts = NULL"
+            " WHERE session_id = 'sess-1'"
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT title_source FROM session WHERE session_id = 'sess-1'"
+            ).fetchone()[0],
+            None,
+        )
+
+        self.harvest._reset_claude_watermarks(self.conn)
+        self.claude_collector.harvest_all(self.conn, self.dir)
+
+        row = self.conn.execute(
+            "SELECT title, title_source FROM session WHERE session_id = 'sess-1'"
+        ).fetchone()
+        self.assertEqual(row[0], "My Renamed Session")
+        self.assertEqual(row[1], "custom")
+
+    def test_repeated_backfill_never_flips_a_title_backwards(self) -> None:
+        """Replay idempotency for the last-write-wins logic — the critical
+        review finding on this chunk. After a full pass, last_seen_ts holds
+        the file-wide maximum, normally GREATER than the accepted title's
+        title_ai_ts (any timestamped activity after the last ai-title — the
+        common shape). A replay starting from that state handed the file's
+        FIRST ai-title an effective timestamp newer than the stored
+        title_ai_ts, so it was re-accepted and the title silently flipped
+        backwards. `_reset_claude_watermarks` clearing last_seen_ts and
+        title_ai_ts alongside the watermark is the fix; this test is the
+        reproduction that confirmed the bug (it fails without that clear)
+        and now pins the fix across TWO backfill cycles, not one.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "old title"},
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-02T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "new title"},
+                # Timestamped activity after the last ai-title, genuinely
+                # LATER than the system record — this is what pushes
+                # last_seen_ts past title_ai_ts and armed the original bug.
+                # (The shared _claude_assistant fixture's fixed timestamp is
+                # 2026-01-01T00:00:01Z, EARLIER than the system record above,
+                # which would leave last_seen_ts == title_ai_ts and the
+                # strict-greater comparison would mask the bug.)
+                {
+                    "type": "assistant",
+                    "sessionId": "sess-1",
+                    "requestId": "req-1",
+                    "isSidechain": False,
+                    "timestamp": "2026-01-03T00:00:00Z",
+                    "message": {"model": "m", "usage": {"input_tokens": 1, "output_tokens": 1}},
+                },
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(
+            self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+            "new title",
+        )
+
+        for cycle in range(2):
+            self.harvest._reset_claude_watermarks(self.conn)
+            self.claude_collector.harvest_all(self.conn, self.dir)
+            self.assertEqual(
+                self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+                "new title",
+                f"backfill cycle {cycle + 1} must not flip the title backwards",
+            )
+
+    def test_backfill_fills_cwd_for_a_session_created_by_a_title_record(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_custom_title("sess-1", "My Renamed Session"),
+                _claude_assistant("sess-1", "req-1", cwd="/tmp/real-proj"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.conn.execute("UPDATE session SET cwd = NULL WHERE session_id = 'sess-1'")
+
+        self.harvest._reset_claude_watermarks(self.conn)
+        self.claude_collector.harvest_all(self.conn, self.dir)
+
+        row = self.conn.execute("SELECT cwd FROM session WHERE session_id = 'sess-1'").fetchone()
+        self.assertEqual(row[0], "/tmp/real-proj")
 
     def test_reset_only_touches_claude_watermarks(self) -> None:
         self.conn.execute(
@@ -3320,6 +3639,31 @@ class CostTests(unittest.TestCase):
 
         rows = self.cost.sessions_rows(self.conn, None)
         self.assertEqual([r["session_id"] for r in rows], ["s-newer", "s-older"])
+
+    def test_sessions_rows_defaults_to_20(self) -> None:
+        for i in range(25):
+            sess = self.insert_session(f"s-{i}")
+            self.insert_turn(sess, f"2026-01-{i + 1:02d}T00:00:00+00:00")
+
+        rows = self.cost.sessions_rows(self.conn, None)
+        self.assertEqual(len(rows), 20)
+        self.assertEqual(rows[0]["session_id"], "s-24", "the cap must keep the most recent, not an arbitrary 20")
+
+    def test_sessions_rows_limit_none_is_unlimited(self) -> None:
+        for i in range(25):
+            sess = self.insert_session(f"s-{i}")
+            self.insert_turn(sess, f"2026-01-{i + 1:02d}T00:00:00+00:00")
+
+        rows = self.cost.sessions_rows(self.conn, None, limit=None)
+        self.assertEqual(len(rows), 25)
+
+    def test_sessions_rows_limit_overrides_default(self) -> None:
+        for i in range(10):
+            sess = self.insert_session(f"s-{i}")
+            self.insert_turn(sess, f"2026-01-{i + 1:02d}T00:00:00+00:00")
+
+        rows = self.cost.sessions_rows(self.conn, None, limit=3)
+        self.assertEqual(len(rows), 3)
 
     # ------------------------------------------------------------------
     # renderers
