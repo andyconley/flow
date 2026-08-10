@@ -49,28 +49,29 @@ Inspect:
 4. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
 5. Read the auto-memory index at `~/.claude/projects/<project-id>/memory/MEMORY.md` and pull in any entries relevant to the current focus.
 6. Check for interrupted or active runs across all stacked overlay levels.
-7. Identify:
+7. **Usage advisory (informational only — never blocks orientation, never changes a recommendation by itself).** Run `flow cost summary --days 7`. If the output includes a Codex capacity line, report it verbatim in the advisory section — and if its `as of` timestamp is more than a day old, say so, since capacity only refreshes when a Codex harvest runs. If there is no capacity line, say nothing about capacity — absence of data is silence, not a warning. Then run `flow cost active`: surface any session the tool recommends acting on (`/clear` or `/compact`), with the tool's own recommendation, as information the user may act on. If `flow` or the usage store is unavailable, skip this step silently.
+8. Identify:
    - the project's operating model and any project-specific role assignments
    - the active standards and overlays that matter right now
    - active or interrupted work
    - memory caveats, blockers, or migration notes
-8. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay:
+9. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay:
    - Check for an explicit opt-out marker `.flow-skip` at the project root.
    - If `.flow-skip` exists, treat the absence as **"by design"** — the user has explicitly opted out. Do not recommend setup.
    - Otherwise, **recommend `flow setup project`**. Default to recommending — do not qualify it as "optional" or speculate that "this project doesn't need one." If the user wants to opt out for this repo, they can `touch .flow-skip` at the root; until that marker exists, recommend setup.
-9. Recommend the next command. Candidates depend on state. **Distinguish slash commands (invoked inside Claude as `/flow-XXX`) from CLI commands (run from the shell or asked of Claude):**
-   - `flow setup project` *(shell command — ask Claude to run it, or run it yourself from a terminal at the repo root)* — if no overlay exists and no `.flow-skip` marker is present
-   - `/flow-status` — if active work is unclear
-   - `/flow-resume` — if there is interrupted work to continue
-   - `/flow-plan` — if new work needs shaping
-   - `/flow-scout` — for small in-flight changes
-   - `/flow-implement` — for gated work already shaped
+10. Recommend the next command. Candidates depend on state. **Distinguish slash commands (invoked inside Claude as `/flow-XXX`) from CLI commands (run from the shell or asked of Claude):**
+    - `flow setup project` *(shell command — ask Claude to run it, or run it yourself from a terminal at the repo root)* — if no overlay exists and no `.flow-skip` marker is present
+    - `/flow-status` — if active work is unclear
+    - `/flow-resume` — if there is interrupted work to continue
+    - `/flow-plan` — if new work needs shaping
+    - `/flow-scout` — for small in-flight changes
+    - `/flow-implement` — for gated work already shaped
 
-   **When recommending `flow setup project`, the output must:**
-   - **Make it clear this is a shell command, not a slash command** — the user types `/flow-boot` to invoke a skill, but `flow setup project` is invoked via shell. The user can just ask Claude to run it (Claude has Bash), or run it themselves from a terminal at the repo root.
-   - **Surface the opt-out as a parallel option**: the user can tell Claude to opt out, at which point Claude `touch .flow-skip` at the repo root. The user may also run that shell command themselves.
+    **When recommending `flow setup project`, the output must:**
+    - **Make it clear this is a shell command, not a slash command** — the user types `/flow-boot` to invoke a skill, but `flow setup project` is invoked via shell. The user can just ask Claude to run it (Claude has Bash), or run it themselves from a terminal at the repo root.
+    - **Surface the opt-out as a parallel option**: the user can tell Claude to opt out, at which point Claude `touch .flow-skip` at the repo root. The user may also run that shell command themselves.
 
-   Phrase both options so the user knows they can simply *ask* — they don't need to context-switch to a terminal for either path. This pairing keeps the recommendation strong-by-default without nagging users who have decided flow's overlay isn't right for a particular repo.
+    Phrase both options so the user knows they can simply *ask* — they don't need to context-switch to a terminal for either path. This pairing keeps the recommendation strong-by-default without nagging users who have decided flow's overlay isn't right for a particular repo.
 
 ## Output Format
 
@@ -92,6 +93,10 @@ Inspect:
 
 ### Session Checkpoint
 - [Status: "current" | "superseded by commits since <date> — safe to discard" | "no checkpoint present"]
+
+### Usage Advisory (omit the section entirely when there is nothing to say)
+- [Codex capacity line verbatim, when present]
+- [Any active session the tool flags for /clear or /compact, with its recommendation — informational, the user decides]
 
 ### Sources of Truth
 - [Files that matter right now]
@@ -127,6 +132,7 @@ Before leaving `flow-boot`, confirm:
 - [ ] PROJECT.md and STATE.md were read across all stacked overlay levels
 - [ ] auto-memory MEMORY.md was consulted for relevant durable facts/decisions
 - [ ] interrupted or active runs were checked across all stacked overlay levels
+- [ ] the usage advisory ran (`flow cost summary --days 7` + `flow cost active`) — capacity verbatim with a staleness note past a day, sessions the tool flags surfaced, silent when there was nothing, skipped silently if flow was unavailable
 - [ ] overlay status was reported; `.flow-skip` marker was checked before classifying "by design"; default for missing overlay is "recommended", not "by design"
 - [ ] the next recommended command is explicit
 

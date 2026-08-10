@@ -81,6 +81,7 @@ Only enter this phase after the Phase 1 hard checkpoint passes.
 3. **Walk the architecture dimensions.** Apply the five dimensions from `architecture.md`: domain boundaries, interfaces/data flow, state/persistence, operational shape, decision durability.
 4. **Make tradeoffs explicit.** Complexity, reversibility, operational cost, time-to-deliver. Name the dimensions you're trading on.
 5. **Recommend or facilitate.** Offer a recommendation with rationale, or facilitate the engineer's choice when they have the context.
+6. **Cost posture check (informational only).** Run `flow cost active`. If the tool recommends acting on this session (`/clear` or `/compact`), note that when proposing chunks — a heavy session is a reason to *suggest* /clear before a long chunk starts, or to *suggest* that mechanical chunks could be routed to smaller-model agents; the suggestion rides alongside the chunk proposal and never reshapes it. If `flow cost summary --days 7` shows a Codex capacity line, note it verbatim — no interpretation. Nothing here blocks solutioning, changes which option is technically right, or alters the chunks the work itself calls for. If `flow` or the usage store is unavailable, skip this step silently.
 
 ### Phase 3 — Capture
 
@@ -182,6 +183,7 @@ Before leaving `flow-solution`, confirm:
 - [ ] proposed chunks are coherent for `flow-plan`
 - [ ] suggested artifacts named
 - [ ] next lane recommended with rationale
+- [ ] the cost posture check ran — mentioned alongside the chunk proposal when it surfaced anything, silent when it didn't, skipped silently if flow was unavailable
 
 ## Finish Criteria
 
