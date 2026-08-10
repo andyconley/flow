@@ -366,6 +366,40 @@ class FlowCliTests(unittest.TestCase):
         else:
             manifest.write_text(block)
 
+    def _write_user_overlay_hook(
+        self,
+        fake_home: Path,
+        name: str,
+        event: str,
+        script: str,
+        runtime: str = "codex",
+        matcher: str | None = None,
+        timeout: int | None = None,
+    ) -> None:
+        """Drop a user-overlay hook script + [[<runtime>.hooks]] registration."""
+        overlay_dir = fake_home / ".flow" / "user"
+        hooks_dir = overlay_dir / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        (hooks_dir / script).write_text("#!/bin/bash\nexit 0\n")
+
+        manifest = overlay_dir / "flow.toml"
+        block = (
+            "\n"
+            f"[[{runtime}.hooks]]\n"
+            f'name = "{name}"\n'
+            f'event = "{event}"\n'
+            'type = "command"\n'
+            f'script = "{script}"\n'
+        )
+        if matcher is not None:
+            block += f'matcher = "{matcher}"\n'
+        if timeout is not None:
+            block += f"timeout = {timeout}\n"
+        if manifest.exists():
+            manifest.write_text(manifest.read_text() + block)
+        else:
+            manifest.write_text(block)
+
     def _write_user_overlay_agent(
         self,
         fake_home: Path,
@@ -470,6 +504,147 @@ class FlowCliTests(unittest.TestCase):
         framework_project = (self.repo / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
         self.assertIn("Edit `.flow/commands/flow-plan.md`", framework_project)
         self.assertNotIn("--user", framework_project.split("-->")[0].split("<!--")[-1])
+
+    # ------------------------------------------------------------------
+    # [[codex.hooks]] — full-parity hook management for the Codex runtime
+    # ------------------------------------------------------------------
+
+    def test_codex_hooks_generate_script_and_hooks_json_without_touching_config_toml(self) -> None:
+        """A [[codex.hooks]] entry deploys its script to ~/.codex/hooks/ and
+        merges a handler into ~/.codex/hooks.json — and never touches
+        config.toml, which is user-owned (model, plugins, the desktop
+        app's own `notify` key). Also proves re-sync idempotency: the
+        handler must not duplicate.
+        """
+        fake_home = self.use_fake_home()
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir(parents=True)
+        config_before = 'model = "gpt-5.6-sol"\nnotify = ["someapp", "turn-ended"]\n'
+        (codex_dir / "config.toml").write_text(config_before)
+        self._write_user_overlay_hook(
+            fake_home, name="my-stop-hook", event="Stop", script="flow-my-stop.sh", timeout=15
+        )
+
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        script = codex_dir / "hooks" / "flow-my-stop.sh"
+        self.assertTrue(script.is_file())
+        self.assertTrue(script.stat().st_mode & stat.S_IXUSR, "hook script must be executable")
+
+        doc = json.loads((codex_dir / "hooks.json").read_text())
+        groups = doc["hooks"]["Stop"]
+        self.assertEqual(len(groups), 1)
+        handler = groups[0]["hooks"][0]
+        self.assertEqual(handler["type"], "command")
+        self.assertIn('"$HOME"/.codex/hooks/flow-my-stop.sh', handler["command"])
+        self.assertEqual(handler["timeout"], 15)
+        self.assertNotIn("matcher", groups[0], "omitted matcher must be omitted, not emitted empty")
+
+        self.assertEqual((codex_dir / "config.toml").read_text(), config_before)
+
+        # Idempotent: second sync must not duplicate the handler.
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+        doc = json.loads((codex_dir / "hooks.json").read_text())
+        self.assertEqual(len(doc["hooks"]["Stop"]), 1)
+
+    def test_codex_hooks_preserve_unmanaged_handlers_on_the_same_event(self) -> None:
+        fake_home = self.use_fake_home()
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir(parents=True)
+        (codex_dir / "hooks.json").write_text(
+            json.dumps(
+                {
+                    "description": "hand-authored",
+                    "hooks": {
+                        "Stop": [
+                            {"hooks": [{"type": "command", "command": "my-own-thing.sh"}]}
+                        ]
+                    },
+                }
+            )
+        )
+        self._write_user_overlay_hook(fake_home, name="my-stop-hook", event="Stop", script="flow-my-stop.sh")
+
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        doc = json.loads((codex_dir / "hooks.json").read_text())
+        self.assertEqual(doc["description"], "hand-authored", "unmanaged top-level keys must survive")
+        commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertIn("my-own-thing.sh", commands)
+        self.assertTrue(any("flow-my-stop.sh" in c for c in commands))
+
+    def test_codex_hooks_deregistration_removes_only_flow_handlers(self) -> None:
+        fake_home = self.use_fake_home()
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir(parents=True)
+        (codex_dir / "hooks.json").write_text(
+            json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "my-own-thing.sh"}]}]}})
+        )
+        self._write_user_overlay_hook(fake_home, name="my-stop-hook", event="Stop", script="flow-my-stop.sh")
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        # Deregister: rewrite the overlay manifest without the hook block.
+        manifest = fake_home / ".flow" / "user" / "flow.toml"
+        lines = manifest.read_text().splitlines(keepends=True)
+        kept = []
+        skip = False
+        for line in lines:
+            if line.startswith("[[codex.hooks]]"):
+                skip = True
+                continue
+            if skip and line.startswith("[["):
+                skip = False
+            if not skip:
+                kept.append(line)
+        manifest.write_text("".join(kept))
+
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        doc = json.loads((codex_dir / "hooks.json").read_text())
+        commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertIn("my-own-thing.sh", commands)
+        self.assertFalse(any("flow-my-stop.sh" in c for c in commands))
+        self.assertFalse((codex_dir / "hooks" / "flow-my-stop.sh").exists(), "deregistered script must be removed")
+
+    def test_codex_hooks_project_mode_uses_git_toplevel_path(self) -> None:
+        """Codex has no $CLAUDE_PROJECT_DIR equivalent — project-mode hook
+        commands use the git rev-parse idiom from Codex's own docs.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        flow_toml = self.repo / ".flow" / "flow.toml"
+        flow_toml.write_text(
+            flow_toml.read_text()
+            + "\n[[codex.hooks]]\n"
+            + 'name = "proj-hook"\nevent = "SessionStart"\ntype = "command"\nscript = "flow-proj.sh"\n'
+        )
+        # Project-mode hook scripts still come from the framework hooks/ dir;
+        # point at one that exists there.
+        flow_toml.write_text(flow_toml.read_text().replace("flow-proj.sh", "flow-session-start.sh"))
+
+        self.assert_ok(self.run_flow("sync", "codex"))
+
+        doc = json.loads((self.repo / ".codex" / "hooks.json").read_text())
+        handler = doc["hooks"]["SessionStart"][0]["hooks"][0]
+        self.assertIn('"$(git rev-parse --show-toplevel)"/.codex/hooks/flow-session-start.sh', handler["command"])
+        self.assertTrue((self.repo / ".codex" / "hooks" / "flow-session-start.sh").is_file())
+
+    def test_claude_hooks_merge_from_user_overlay(self) -> None:
+        """Full parity includes the overlay: a [[claude.hooks]] entry in
+        ~/.flow/user/flow.toml must land in ~/.claude/settings.json with
+        its script deployed from ~/.flow/user/hooks/.
+        """
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_hook(
+            fake_home, name="my-claude-hook", event="Stop", script="flow-my-claude.sh", runtime="claude"
+        )
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        self.assertTrue((fake_home / ".claude" / "hooks" / "flow-my-claude.sh").is_file())
+        settings = json.loads((fake_home / ".claude" / "settings.json").read_text())
+        commands = [h["command"] for g in settings["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertTrue(any("flow-my-claude.sh" in c for c in commands))
 
     def test_user_overlay_overrides_framework_agent(self) -> None:
         """User overlay can replace a framework agent's content."""

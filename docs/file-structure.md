@@ -116,7 +116,11 @@ Use this for:
 
 ### `hooks/`
 
-Reusable runtime hook scripts bundled by the framework repo.
+Reusable runtime hook scripts bundled by the framework repo. Deployed to
+`.claude/hooks/` via `[[claude.hooks]]` and to `.codex/hooks/` via
+`[[codex.hooks]]` — one script can serve both runtimes when their stdin
+contracts align (they largely do: both pass `session_id`,
+`transcript_path`, `cwd`, `hook_event_name` as JSON on stdin).
 
 Current hook scripts:
 

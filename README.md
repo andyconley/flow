@@ -124,9 +124,11 @@ What they do:
 `flow sync codex` and `flow sync codex --user` follow the same pattern but generate a narrower surface:
 
 - `.agents/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md` (or from the scaffold in user mode)
+- `.codex/hooks/*.sh` from `[[codex.hooks]]` entries (framework hooks or user-overlay hooks)
+- `.codex/hooks.json` with managed hook handlers merged in under the same preserve-unmanaged contract as `.claude/settings.json` — `~/.codex/config.toml` is never touched
 - `.codex/flow.managed.toml` machine-readable manifest of managed generated files
 
-The Codex target is intentionally narrower than Claude — it proves `flow` is not Claude-only while only generating surfaces that map cleanly to the current Codex runtime model.
+Codex hook support has full parity with Claude's: same manifest shape (`name`/`event`/`matcher`/`type`/`script`, optional `timeout`/`status_message`), same overlay merge, same managed-entry lifecycle. `matcher` is optional for Codex (omitted = match everything, per Codex's own hook semantics).
 
 ## Managed Boundaries
 

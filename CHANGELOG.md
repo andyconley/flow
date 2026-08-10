@@ -8,6 +8,20 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **`[[codex.hooks]]` — full-parity hook management for the Codex runtime**
+  (token-advisory chunk 10). Codex now supports native lifecycle hooks
+  (schema-compatible with Claude's: PreToolUse/PostToolUse/Stop/
+  SessionStart/UserPromptSubmit/... with the same stdin JSON contract), and
+  flow manages them the way it manages Claude's: `[[codex.hooks]]` manifest
+  entries deploy scripts to `.codex/hooks/` and merge handlers into
+  `.codex/hooks.json` under the preserve-unmanaged contract —
+  `~/.codex/config.toml` (model, plugins, the desktop app's own `notify`
+  key) is never touched. Full parity includes the user overlay:
+  `[[claude.hooks]]` and `[[codex.hooks]]` in `~/.flow/user/flow.toml` now
+  merge like commands and agents, with scripts from `~/.flow/user/hooks/`.
+  Both settings builders also gained optional `timeout`/`status_message`
+  passthrough, and `matcher` is optional (omitted = match everything).
+
 - **Usage advisory in the workflow commands** (token-advisory chunk 9) —
   the first place the usage store influences agent behavior rather than
   just answering queries. Doc-only, per this file's own convention that

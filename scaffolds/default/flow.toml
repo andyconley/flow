@@ -42,6 +42,8 @@ manage_settings_file = true
 [codex]
 skill_dir = ".agents/skills"
 agent_dir = ".codex/agents"
+hook_dir = ".codex/hooks"
+hooks_file = ".codex/hooks.json"
 managed_manifest = ".codex/flow.managed.toml"
 
 [codex.skill_defaults]
@@ -239,6 +241,12 @@ event = "PostToolUse"
 matcher = "Write|Edit"
 type = "command"
 script = "flow-managed-write-reminder.sh"
+
+# [[codex.hooks]] entries use the same shape (name/event/matcher/type/script,
+# optional timeout/status_message). They deploy scripts to hook_dir and merge
+# handler entries into hooks_file (.codex/hooks.json) under the same
+# preserve-unmanaged contract as Claude's settings.json — config.toml is
+# never touched. matcher is optional for Codex: omitted means match-everything.
 
 [[codex.commands]]
 name = "flow-boot"
