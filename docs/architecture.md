@@ -161,14 +161,18 @@ Current examples:
 
 ### Agents
 
-Agents currently sync near-verbatim for Claude.
+Agents are registered once and adapted per runtime.
 
 Reason:
 
-- `.flow/agents/*.md` are already close to Claude's usable project-agent shape
-- adding another wrapper layer now would mostly duplicate content and increase drift risk
+- `.flow/agents/*.md` are the durable role contracts
+- shared `[[agents]]` entries in `flow.toml` name the source file, summary, and semantic model tier
+- each runtime needs a different generated shape for model and effort controls
 
-This may change later if runtimes need materially different agent metadata or behavior.
+Current examples:
+
+- Claude receives generated `.claude/agents/*.md` files with manifest-resolved `model` and `effort`
+- Codex receives generated `.codex/agents/*.toml` files with `developer_instructions`, `model`, and `model_reasoning_effort`
 
 ## Managed vs Unmanaged Boundaries
 
@@ -204,12 +208,15 @@ This exists because Claude currently has the clearest runtime contract for all o
 
 ### Codex
 
-Current Codex generation is intentionally narrower:
+Current Codex generation targets native skill and agent surfaces:
 
 - skills
+- agents
 - managed manifest
 
-This proves `flow` is not Claude-only without inventing runtime features that are not yet well-defined for Codex in this framework.
+This keeps Flow as an adapter framework: Flow writes native Codex configuration
+files from the shared manifest, then `flow doctor` reports whether the static
+files are present and configured.
 
 ## Upgrade Model
 

@@ -7,7 +7,7 @@ Tables generated (each between `<!-- generated:<name>:begin -->` /
   - slash-commands-table — from `[[claude.commands]]` `summary` fields,
     in the order they appear in flow.toml
   - cli-commands-table — from `[[help.cli_commands]]` entries
-  - agents-table — from `[[claude.agents]]` `summary` fields, sorted by name
+  - agents-table — from shared `[[agents]]` `summary` fields, sorted by name
 
 Why: the hand-maintained tables drifted twice in successive feature commits
 during the v0.4.0 → v0.4.1 cycle. Generating from `flow.toml` makes the
@@ -85,14 +85,14 @@ def build_cli_commands_table(data: dict) -> str:
 
 
 def build_agents_table(data: dict) -> str:
-    agents = data.get("claude", {}).get("agents", [])
+    agents = data.get("agents", [])
     rows: list[tuple[str, str]] = []
     for agent in sorted(agents, key=lambda a: a.get("name", "")):
         name = agent.get("name", "")
         summary = agent.get("summary")
         if not summary:
             raise SystemExit(
-                f"flow.toml [[claude.agents]] entry missing `summary`: name={name!r}\n"
+                f"flow.toml [[agents]] entry missing `summary`: name={name!r}\n"
                 "add a one-line summary suitable for the flow-help agents table."
             )
         rows.append((name, summary))

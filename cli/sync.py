@@ -43,10 +43,12 @@ from render import (
     build_managed_manifest,
     codex_skill_dir,
     hook_command_for,
-    insert_generated_marker,
     manifest_ref_for,
+    render_claude_agent,
+    render_codex_agent,
     render_codex_skill,
     render_skill_from_command,
+    routing_hints_for,
     source_ref_for,
 )
 
@@ -63,7 +65,13 @@ def load_flow_manifest(flow_dir: Path) -> tuple[Path, dict]:
     manifest_path = flow_dir / "flow.toml"
     if not manifest_path.exists():
         raise FileNotFoundError(f"missing manifest: {manifest_path}")
-    return manifest_path, read_toml(manifest_path)
+    manifest = read_toml(manifest_path)
+    _tag_entries(manifest.get("agents", []), flow_dir, "framework")
+    if "claude" in manifest:
+        _tag_entries(manifest["claude"].get("commands", []), flow_dir, "framework")
+    if "codex" in manifest:
+        _tag_entries(manifest["codex"].get("commands", []), flow_dir, "framework")
+    return manifest_path, manifest
 
 
 def _tag_entries(entries: list, root: Path, origin: str) -> None:
@@ -73,10 +81,30 @@ def _tag_entries(entries: list, root: Path, origin: str) -> None:
         entry["_origin"] = origin
 
 
+def shared_agents(manifest: dict) -> list:
+    return manifest.get("agents", [])
+
+
+def runtime_policy_for_agent(manifest: dict, target: str, agent: dict) -> dict:
+    tiers = manifest.get("model_tiers", {})
+    tier = agent.get("model_tier")
+    policy = dict(tiers.get(tier, {}).get(target, {}))
+
+    runtime_override = agent.get(target)
+    if isinstance(runtime_override, dict):
+        policy.update(runtime_override)
+
+    for key in ("model", "effort", "model_reasoning_effort"):
+        if key in agent:
+            policy[key] = agent[key]
+
+    return policy
+
+
 def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     """Load the framework manifest and merge in `~/.flow/user/flow.toml` if it exists.
 
-    Each `[[claude.commands]]`, `[[claude.agents]]`, and `[[codex.commands]]`
+    Each `[[claude.commands]]`, `[[codex.commands]]`, and `[[agents]]`
     entry in the returned manifest carries two synthetic fields:
 
       `_root`   — Path the entry's `source` field is relative to
@@ -99,9 +127,9 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
         raise FileNotFoundError(f"missing manifest: {framework_manifest_path}")
     manifest = read_toml(framework_manifest_path)
 
+    _tag_entries(manifest.get("agents", []), framework_dir, "framework")
     if "claude" in manifest:
         _tag_entries(manifest["claude"].get("commands", []), framework_dir, "framework")
-        _tag_entries(manifest["claude"].get("agents", []), framework_dir, "framework")
     if "codex" in manifest:
         _tag_entries(manifest["codex"].get("commands", []), framework_dir, "framework")
 
@@ -137,15 +165,15 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
             manifest["claude"].get("commands", []),
             user_manifest.get("claude", {}).get("commands", []),
         )
-        manifest["claude"]["agents"] = merge_named(
-            manifest["claude"].get("agents", []),
-            user_manifest.get("claude", {}).get("agents", []),
-        )
     if "codex" in manifest:
         manifest["codex"]["commands"] = merge_named(
             manifest["codex"].get("commands", []),
             user_manifest.get("codex", {}).get("commands", []),
         )
+    manifest["agents"] = merge_named(
+        manifest.get("agents", []),
+        user_manifest.get("agents", []),
+    )
 
     return framework_manifest_path, manifest
 
@@ -211,6 +239,8 @@ def desired_claude_outputs(
     runtime = manifest["claude"]
     skill_defaults = runtime.get("skill_defaults", {})
     agent_defaults = runtime.get("agent_defaults", {})
+    agents = shared_agents(manifest)
+    routing_hints = routing_hints_for("claude", agents, manifest.get("model_tiers", {}))
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()
@@ -223,7 +253,7 @@ def desired_claude_outputs(
         target = root / runtime["skill_dir"] / command["name"] / "SKILL.md"
         command_with_body = dict(command)
         command_with_body["_body"] = source_path.read_text()
-        content = render_skill_from_command(command_with_body, skill_defaults)
+        content = render_skill_from_command(command_with_body, skill_defaults, routing_hints)
         outputs[target] = content
         managed_entries.append(
             {
@@ -234,7 +264,7 @@ def desired_claude_outputs(
             }
         )
 
-    for agent in runtime.get("agents", []):
+    for agent in agents:
         source_rel = agent["source"]
         entry_root = agent.get("_root", flow_dir)
         entry_origin = agent.get("_origin", "framework")
@@ -243,7 +273,11 @@ def desired_claude_outputs(
         generation_mode = agent.get("generation_mode", agent_defaults.get("generation_mode", "verbatim"))
         if generation_mode != "verbatim":
             raise ValueError(f"unsupported agent generation mode: {generation_mode}")
-        content = insert_generated_marker(source_rel, source_path.read_text())
+        content = render_claude_agent(
+            source_rel,
+            source_path.read_text(),
+            runtime_policy_for_agent(manifest, "claude", agent),
+        )
         outputs[target] = content
         managed_entries.append(
             {
@@ -300,6 +334,8 @@ def desired_codex_outputs(
     root: Path, flow_dir: Path, manifest: dict, manifest_rel: str, mode: str = MODE_PROJECT
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
     runtime = manifest["codex"]
+    agents = shared_agents(manifest)
+    routing_hints = routing_hints_for("codex", agents, manifest.get("model_tiers", {}))
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()
@@ -311,12 +347,33 @@ def desired_codex_outputs(
         source_path = entry_root / source_rel
         target = root / codex_skill_dir(runtime) / command["name"] / "SKILL.md"
         outputs[target] = render_codex_skill(
-            command["name"], command["description"], source_rel, source_path.read_text()
+            command["name"], command["description"], source_rel, source_path.read_text(), routing_hints
         )
         managed_entries.append(
             {
                 "path": rel_posix(target, root),
                 "kind": "skill",
+                "source": source_ref_for(mode, source_rel, entry_origin),
+                "sync_mode": "replace",
+            }
+        )
+
+    for agent in agents:
+        source_rel = agent["source"]
+        entry_root = agent.get("_root", flow_dir)
+        entry_origin = agent.get("_origin", "framework")
+        source_path = entry_root / source_rel
+        target = root / runtime["agent_dir"] / f'{agent["name"]}.toml'
+        outputs[target] = render_codex_agent(
+            agent["name"],
+            source_rel,
+            source_path.read_text(),
+            runtime_policy_for_agent(manifest, "codex", agent),
+        )
+        managed_entries.append(
+            {
+                "path": rel_posix(target, root),
+                "kind": "agent",
                 "source": source_ref_for(mode, source_rel, entry_origin),
                 "sync_mode": "replace",
             }
@@ -398,7 +455,7 @@ def sync_outputs(
     removed: list[Path] = []
 
     if conflicts:
-        print("sync claude found unmanaged conflicts:")
+        print(f"sync {target_name} found unmanaged conflicts:")
         for path in conflicts:
             print(f"- {path}")
         print("resolve them manually or move the source of truth into `.flow/` first")

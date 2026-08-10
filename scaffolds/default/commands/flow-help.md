@@ -125,7 +125,7 @@ The table above is derived from `[[help.cli_commands]]` in `flow.toml`.
 | ux-specialist | Interaction states, accessibility |
 <!-- generated:agents-table:end -->
 
-The table above is derived from `[[claude.agents]]` `summary` fields in `flow.toml` (agents are sorted by `name`).
+The table above is derived from shared `[[agents]]` `summary` fields in `flow.toml` (agents are sorted by `name`).
 
 ### How agents get invoked
 

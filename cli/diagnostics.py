@@ -31,7 +31,46 @@ from paths import (
     USER_OVERLAY_DIR,
 )
 from render import codex_skill_dir
-from sync import load_flow_manifest, merge_user_overlay, runtime_status
+from sync import load_flow_manifest, merge_user_overlay, runtime_status, shared_agents
+
+
+def agent_policy_status(root, manifest: dict, target: str) -> str:
+    agents = shared_agents(manifest)
+    if not agents:
+        return "n/a"
+
+    if target == "claude":
+        runtime = manifest.get("claude", {})
+        agent_dir = root / runtime.get("agent_dir", ".claude/agents")
+        extension = ".md"
+        required_fields = ("model:", "effort:")
+    elif target == "codex":
+        runtime = manifest.get("codex", {})
+        agent_dir = root / runtime.get("agent_dir", ".codex/agents")
+        extension = ".toml"
+        required_fields = ("model =", "model_reasoning_effort =")
+    else:
+        return "n/a"
+
+    expected = len(agents)
+    present = 0
+    configured = 0
+    for agent in agents:
+        path = agent_dir / f'{agent.get("name", "")}{extension}'
+        if not path.exists():
+            continue
+        present += 1
+        text = path.read_text()
+        if all(field in text for field in required_fields):
+            configured += 1
+
+    if present == expected and configured == expected:
+        return f"ok ({configured}/{expected} configured)"
+    return f"stale ({present}/{expected} present, {configured}/{expected} configured)"
+
+
+def print_smoke_test_hint(label: str) -> None:
+    print(f"{label} smoke:     manually invoke support-lead and confirm the runtime transcript/logs show the configured model and effort")
 
 
 def doctor() -> int:
@@ -45,6 +84,8 @@ def doctor() -> int:
     codex_skills_dir = root / CODEX_SKILL_DIR
     codex_managed_ok = False
     codex_drift = "n/a"
+    claude_agent_policy = "n/a"
+    codex_agent_policy = "n/a"
 
     if project_manifest_ok:
         try:
@@ -56,6 +97,8 @@ def doctor() -> int:
                 root, flow_dir, manifest_path, manifest, "codex", MODE_PROJECT
             )
             codex_skills_dir = root / codex_skill_dir(manifest["codex"])
+            claude_agent_policy = agent_policy_status(root, manifest, "claude")
+            codex_agent_policy = agent_policy_status(root, manifest, "codex")
         except Exception:
             claude_drift = "error"
             codex_drift = "error"
@@ -64,6 +107,8 @@ def doctor() -> int:
     user_claude_drift = "n/a"
     user_codex_managed_ok = False
     user_codex_drift = "n/a"
+    user_claude_agent_policy = "n/a"
+    user_codex_agent_policy = "n/a"
     user_skills_dir = HOME / ".claude" / "skills"
     user_agents_dir = HOME / ".claude" / "agents"
     user_codex_skills_dir = HOME / CODEX_SKILL_DIR
@@ -77,6 +122,8 @@ def doctor() -> int:
                 HOME, SCAFFOLD_DIR, user_manifest_path, user_manifest, "codex", MODE_USER
             )
             user_codex_skills_dir = HOME / codex_skill_dir(user_manifest["codex"])
+            user_claude_agent_policy = agent_policy_status(HOME, user_manifest, "claude")
+            user_codex_agent_policy = agent_policy_status(HOME, user_manifest, "codex")
         except Exception:
             user_claude_drift = "error"
             user_codex_drift = "error"
@@ -116,9 +163,13 @@ def doctor() -> int:
     print(f"claude drift:     {user_claude_drift}")
     print(f"skills dir:       {'ok' if user_skills_dir.exists() else 'missing'}")
     print(f"agents dir:       {'ok' if user_agents_dir.exists() else 'missing'}")
+    print(f"agent policy:     {user_claude_agent_policy}")
+    print_smoke_test_hint("claude")
     print(f"codex sync:       {'ok' if user_codex_managed_ok else 'missing'}")
     print(f"codex drift:      {user_codex_drift}")
     print(f"codex skills:     {'ok' if user_codex_skills_dir.exists() else 'missing'}")
+    print(f"codex agents:     {user_codex_agent_policy}")
+    print_smoke_test_hint("codex")
 
     # User overlay: report whether ~/.flow/user/flow.toml is present and what it
     # declares. Customizations apply at sync time via merge_user_overlay.
@@ -127,7 +178,7 @@ def doctor() -> int:
         try:
             overlay = read_toml(user_overlay_manifest)
             user_commands = overlay.get("claude", {}).get("commands", [])
-            user_agents = overlay.get("claude", {}).get("agents", [])
+            user_agents = overlay.get("agents", [])
             print(f"user overlay:     {user_overlay_manifest}")
             if user_commands:
                 names = ", ".join(c.get("name", "<unnamed>") for c in user_commands)
@@ -149,9 +200,13 @@ def doctor() -> int:
     print(f"claude drift:     {claude_drift}")
     print(f"skills dir:       {'ok' if skills_dir.exists() else 'missing'}")
     print(f"agents dir:       {'ok' if agents_dir.exists() else 'missing'}")
+    print(f"agent policy:     {claude_agent_policy}")
+    print_smoke_test_hint("claude")
     print(f"codex sync:       {'ok' if codex_managed_ok else 'missing'}")
     print(f"codex drift:      {codex_drift}")
     print(f"codex skills:     {'ok' if codex_skills_dir.exists() else 'missing'}")
+    print(f"codex agents:     {codex_agent_policy}")
+    print_smoke_test_hint("codex")
     return 0
 
 
