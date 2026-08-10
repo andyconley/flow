@@ -92,14 +92,14 @@ Only enter this phase after the Phase 1 hard checkpoint passes.
    - document structure (sections, audience, level of detail)
    - other contract types as relevant
 5. Define validation expectations.
-6. **Cost posture check (informational only).** Run `flow cost active`. If this session is carrying 25%+ of its window, or the Codex capacity gauge (`flow cost summary --days 7`) is running high, note it for the lane recommendation — nothing here blocks shaping or changes the recommended lane by itself.
+6. **Cost posture check (informational only).** Run `flow cost active`. If the tool recommends acting on this session (`/clear` or `/compact`), note that for the lane recommendation; if `flow cost summary --days 7` shows a Codex capacity line, note it verbatim — no interpretation, the engineer reads the number. Nothing here blocks shaping or changes the recommended lane by itself. If `flow` or the usage store is unavailable, skip this step silently.
 
 ### Phase 3 — Capture
 
 Only enter this phase after Phase 2's shaping work is complete and the engineer has either accepted it or fed back adjustments.
 
 1. **Capture.** Emit the Plan Summary (template below).
-2. **Recommend the lane.** `flow-scout` or `flow-implement`, with rationale. If the Phase 2 cost posture check surfaced anything, mention it *alongside* the recommendation — e.g. "this session is carrying 40%; consider /clear before a long implement run" or "capacity is high; route mechanical slices to smaller-model agents" — never *as* the recommendation. Cost never overrides the lane the work itself calls for.
+2. **Recommend the lane.** `flow-scout` or `flow-implement`, with rationale. If the Phase 2 cost posture check surfaced anything, mention it in the prose immediately after the Plan Summary template — e.g. "this session is carrying 40%; consider /clear before a long implement run" — *alongside* the recommendation, never *as* it. The template itself has no cost slot on purpose; cost never overrides the lane the work itself calls for.
 
 ## Output Format
 
@@ -179,6 +179,7 @@ Before leaving `flow-plan`, confirm:
 - [ ] required states and contracts are identified when relevant
 - [ ] validation expectations are defined
 - [ ] the recommended lane is clear and justified
+- [ ] the cost posture check ran — mentioned alongside the lane when it surfaced anything, silent when it didn't, skipped silently if flow was unavailable
 - [ ] another engineer or agent could implement from the plan alone
 
 ## Finish Criteria

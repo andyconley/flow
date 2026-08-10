@@ -38,7 +38,7 @@ This is a state-summary command, not a shaping or implementation command.
 2. Read current transient work state from STATE.md across stacked overlay levels. Surface project-level prominently; parent-overlay state appears under a separate parent-context heading.
 3. Pull any auto-memory entries relevant to the current focus (from `~/.claude/projects/<project-id>/memory/`). Mention them when they affect the current state readout.
 4. Summarize blockers, caveats, or unresolved decisions.
-5. **Session cost (informational only — never a blocker, never changes the next-command recommendation by itself).** Run `flow cost active` and identify the current session: match on this project's cwd — it is typically the least-idle row. If the match is ambiguous (several rows share the cwd), say so and show the candidates rather than guessing. Report the matched row's ctx/carry and the tool's recommendation as information; the user decides. The store has no concept of a run, so this is deliberately the *session's* cost, not the run's — say "this session," not "this run." If `flow` or the usage store is unavailable, skip this step silently.
+5. **Session cost (informational only — never a blocker, never changes the next-command recommendation by itself).** Run `flow cost active` and identify the current session. The `SESSION` column shows whatever label the tool has — a session title when one exists, otherwise a cwd — so match on that label (a title you recognize as this conversation, or this project's path) combined with the least-idle row, which is typically the session you are in. If you cannot match confidently, say so and show the candidates rather than guessing. Report the matched row's ctx/carry and the tool's recommendation as information; the user decides. The store has no concept of a run, so this is deliberately the *session's* cost, not the run's — say "this session," not "this run." If `flow` or the usage store is unavailable, skip this step silently.
 6. Recommend the next command based on the real current state.
 
 ## Output Format
@@ -89,7 +89,7 @@ Before leaving `flow-status`, confirm:
 - [ ] active or recent work is summarized
 - [ ] memory highlights are included
 - [ ] blockers or caveats are explicit
-- [ ] the session-cost check ran (`flow cost active`) — reported when the store had this session, silent when it didn't, ambiguity said aloud rather than guessed
+- [ ] the session-cost check ran (`flow cost active`) — matched by label + least-idle, reported when the store had this session, silent when it didn't, uncertainty said aloud rather than guessed
 - [ ] the next recommended command is explicit
 
 ## Finish Criteria
