@@ -6,6 +6,31 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+### Added
+
+- **`flow setup user --overlay-repo <url>`** — gives `~/.flow/user/` a git
+  home. The overlay is the one authored layer with no repo behind it: the
+  framework scaffold lives in this repo, project overlays live in theirs,
+  and the user overlay was hand-authored content in a machine-local
+  directory with no history and no backup. Three cases, none of which
+  discard content: already a repo, report and leave alone (re-pointing a
+  remote is deliberate, not a setup side effect); absent or empty, clone
+  (the new-machine path); has content but no `.git`, init in place and add
+  the remote. A `.gitignore` covering `.env`, `keys/`, `*.pem`, and
+  `*.local.*` ships into a fresh overlay so a future credential-bearing
+  file can't land by accident. Setup never commits — `FRAMEWORK.md` records
+  the convention instead: the agent that edits overlay content commits it
+  in the same turn, because the person who owns that content is not the one
+  editing it.
+- **`flow doctor` reports the overlay's version-control state** — untracked
+  (naming the fix), or clean / N uncommitted / N unpushed with the branch.
+  It also now reports overlay hooks alongside commands and agents, which it
+  had never listed. New module `cli/overlay.py` holds the status query, kept
+  out of `diagnostics.py` so `doctor` keeps holding presentation rather than
+  git plumbing; two bounded git calls, skipped entirely when there is no
+  `.git`, and it never writes. A failed git call reports `unreadable (git
+  error)` rather than a synthesized clean-looking status.
+
 ## [0.8.0] — 2026-08-10
 
 The usage-tracking release. flow measures what agent sessions cost. It says

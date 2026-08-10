@@ -79,10 +79,15 @@ def main() -> int:
         help="scaffold .flow into the current repository",
         description="Copy missing framework template files into repo/.flow without touching existing files.",
     )
-    setup_sub.add_parser(
+    setup_user_parser = setup_sub.add_parser(
         "user",
         help="install flow at the user level so it is active in every Claude session",
         description="Generate ~/.claude/ skills, agents, hooks, and managed settings from the framework scaffold.",
+    )
+    setup_user_parser.add_argument(
+        "--overlay-repo",
+        metavar="URL",
+        help="give ~/.flow/user/ a git home at URL: clone it when the overlay is absent, or init in place and add the remote when it already has content (never clobbers existing files, never commits)",
     )
 
     refresh = sub.add_parser(
@@ -334,7 +339,7 @@ def main() -> int:
     if args.command == "setup" and args.setup_target == "project":
         return setup_project()
     if args.command == "setup" and args.setup_target == "user":
-        return setup_user()
+        return setup_user(overlay_repo=args.overlay_repo)
     if args.command == "refresh" and args.refresh_target == "project":
         return refresh_project()
     if args.command == "harvest" and args.harvest_target == "codex":

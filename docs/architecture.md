@@ -69,6 +69,22 @@ How it merges:
 
 The user overlay is opt-in. Without `~/.flow/user/flow.toml`, sync behavior is identical to the framework-only baseline. `flow doctor` reports whether the overlay is present and what it declares.
 
+### Versioning the overlay
+
+Every other layer flow reads has a repo behind it: the framework scaffold lives in this repo, project overlays live in their own. The user overlay is the exception — it is hand-authored content in a machine-local directory, which means no history, no diff, and no way back after a lost machine.
+
+`flow setup user --overlay-repo <url>` closes that. Three cases, and none of them may discard content:
+
+- **already a repo** — report and leave alone. Re-pointing a remote is deliberate, not a side effect of setup.
+- **absent or empty** — clone. This is the new-machine path, and it is what makes the overlay portable.
+- **has content, no `.git`** — `git init` in place, add the remote. Never clone over existing work.
+
+Setup initializes; it does not commit. Who commits is a convention rather than a mechanism, documented in `FRAMEWORK.md`: the agent that edits overlay content commits it in the same turn, because the human who owns that content is not the one editing it.
+
+`cli/overlay.py` holds the status query, kept out of `diagnostics.py` so `doctor` stays a reporter and the status stays unit-testable. Two git calls, both local, both bounded at two seconds, skipped entirely when there is no `.git`: `status --porcelain --branch` carries the dirty list, the branch name, and the ahead-count together, and `config --get remote.origin.url` gets the remote. Reading the branch from that header rather than `rev-parse --abbrev-ref HEAD` is deliberate — rev-parse returns the literal string `HEAD` on a detached head and fails outright before the first commit, so both states would be reported wrongly.
+
+The environment for those calls strips ambient `GIT_DIR`/`GIT_WORK_TREE`-style variables (set inside git hooks, and by some tooling) so a cwd-relative command cannot be redirected at the wrong repository, but otherwise inherits the user's environment. An earlier version replaced the environment entirely; without `HOME`, git cannot read `~/.gitconfig`, so `core.excludesFile` goes unapplied and `status` reports files the user's own git would ignore. When a git call fails for any reason, the status says `unreadable (git error)` rather than synthesizing a plausible-looking clean or detached state — a diagnostic that states a false condition is worse than one that admits it does not know.
+
 ### Framework Repo (`scaffolds/default/`)
 
 The framework source. Contains:

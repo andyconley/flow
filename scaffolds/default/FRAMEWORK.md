@@ -80,6 +80,10 @@ Commands and agents cite standards by name (e.g., `standards/git-commits.md`) an
 
 Use the Read tool to resolve. If a name is cited and the project overlay or user overlay has its own version, use that and note the resolution in the role's output if the difference matters. Commands and agents are merged at sync time (see `merge_user_overlay` in `cli/sync.py`); standards and templates are resolved at runtime by this convention.
 
+### Committing user-overlay edits
+
+`~/.flow/user/` may be a git repo — `flow setup user --overlay-repo <url>` attaches one, and `flow doctor` reports whether it has history. When it does, **the agent that edits overlay content commits it in the same turn**: a personal command body, an agent override, a hook script, or the `flow.toml` registration. The person who owns that content is not the one typing in the directory, so waiting for them to notice pending changes leaves authored work uncommitted until something breaks. Push in the same turn too when the branch has an upstream — `doctor` reports `N unpushed`, so committing without pushing produces exactly the state it flags. `flow doctor`'s `vcs:` line under `user overlay:` is the backstop for anything edited outside that path.
+
 ## Role provider model
 
 The same workflow role may be provided by:
