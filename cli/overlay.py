@@ -85,14 +85,21 @@ def git_env() -> dict:
     return env
 
 
+# `_git` returns this when git never ran at all — a missing binary, a
+# timeout, a directory that vanished. Distinct from any real git exit code,
+# because "git is not here" and "git says this is not a repository" call for
+# opposite messages: one is a broken machine, the other is the ordinary
+# untracked state with a fix worth naming.
+_GIT_DID_NOT_RUN = -1
+
+
 def _git(overlay_dir: Path, *args: str) -> tuple[int, str]:
     """Run one git command in the overlay, returning (returncode, stdout).
 
     A failure is reported as a failure, never raised — an unreadable overlay
-    is a status to print, not a crash. Callers distinguish "git said no" from
-    "git never ran" by checking the returncode, so a missing git binary and a
-    corrupt repo both surface as an error rather than as an innocent-looking
-    default.
+    is a status to print, not a crash. `_GIT_DID_NOT_RUN` separates "git
+    never ran" from "git said no", so a missing git binary cannot be
+    mistaken for an innocent-looking untracked directory.
     """
     try:
         proc = subprocess.run(
@@ -104,8 +111,17 @@ def _git(overlay_dir: Path, *args: str) -> tuple[int, str]:
             env=git_env(),
         )
     except (OSError, subprocess.SubprocessError):
-        return 1, ""
+        return _GIT_DID_NOT_RUN, ""
     return proc.returncode, proc.stdout.strip()
+
+
+def display_path(path: Path) -> str:
+    """`~`-contracted for display. Never prints the account name, which is
+    the same reason nothing this framework writes hardcodes one."""
+    try:
+        return f"~/{path.relative_to(Path.home())}"
+    except ValueError:
+        return str(path)
 
 
 def _parse_status_branch(header: str) -> tuple[str | None, int | None]:
@@ -150,34 +166,74 @@ def _parse_status_branch(header: str) -> tuple[str | None, int | None]:
 def overlay_vcs_status(overlay_dir: Path) -> dict:
     """Version-control status for the overlay directory.
 
-    Returns `{"present", "tracked", "error", "branch", "remote", "dirty",
-    "unpushed"}`.
+    Returns `{"present", "tracked", "ignored", "error", "root", "is_root",
+    "branch", "remote", "dirty", "unpushed"}`.
 
     - `present` False means there is no overlay at all — the opt-in default,
       not a problem.
     - `tracked` False with `present` True is the state this whole feature
       exists to surface: authored content with no history and no backup.
+    - `ignored` True means the overlay sits inside a repository that
+      explicitly excludes it. `tracked` stays False, because content git has
+      been told to skip has no more history than content in no repo at all —
+      but the fix is different, so it gets its own state.
     - `error` True means git could not be read at all. Reported as such
       rather than synthesized into a plausible-looking clean/detached status,
       because a diagnostic that states a false condition is worse than one
       that admits it does not know.
+    - `root` is the work tree's top level, and `is_root` says whether that is
+      the overlay itself. When it is not, the overlay is a subdirectory or a
+      symlink into a larger repo — a dotfiles home, say — and `dirty` and
+      `unpushed` describe that whole repo, which is the intended reading:
+      uncommitted work next to the overlay is the same hazard.
     - `unpushed` is None when the branch has no upstream — distinct from 0,
       which means an upstream exists and is level.
 
-    Two git calls, both local, both bounded. `status --porcelain --branch`
-    carries the dirty list, the branch, and the ahead-count together.
+    Membership is asked of git, never inferred from a `.git` directory on
+    disk: `.git` exists only at a work tree's root, so the filesystem test
+    calls every nested or symlinked overlay untracked while it is fully
+    committed. Up to four bounded local calls.
     """
     status = {
         "present": overlay_dir.is_dir(),
         "tracked": False,
+        "ignored": False,
         "error": False,
+        "root": None,
+        "is_root": False,
         "branch": None,
         "remote": None,
         "dirty": [],
         "unpushed": None,
     }
-    if not status["present"] or not (overlay_dir / ".git").exists():
+    if not status["present"]:
         return status
+
+    rc, out = _git(overlay_dir, "rev-parse", "--show-toplevel")
+    if rc == _GIT_DID_NOT_RUN:
+        status["error"] = True
+        return status
+    if rc != 0:
+        # Git ran and said this is not a work tree. The ordinary untracked
+        # state, and the one `--overlay-repo` exists to fix.
+        return status
+
+    root = Path(out)
+    status["root"] = str(root)
+    try:
+        status["is_root"] = root.resolve() == overlay_dir.resolve()
+    except OSError:
+        status["is_root"] = False
+
+    # Inside a repo is not the same as kept by it. An overlay under an
+    # ignored path would otherwise report a clean, backed-up status while
+    # every file in it stays permanently uncommitted.
+    if not status["is_root"]:
+        rc_ignored, _ = _git(overlay_dir, "check-ignore", "--quiet", str(overlay_dir))
+        if rc_ignored == 0:
+            status["ignored"] = True
+            return status
+
     status["tracked"] = True
 
     rc, out = _git(overlay_dir, "status", "--porcelain", "--branch")
@@ -202,10 +258,13 @@ def format_overlay_vcs(status: dict) -> str:
     """One line for `doctor`. Names the fix when there is one to name."""
     if not status["present"]:
         return "n/a (no overlay)"
-    if not status["tracked"]:
-        return "untracked — run `flow setup user --overlay-repo <url>` to give it history"
     if status["error"]:
         return "unreadable (git error)"
+    if status["ignored"]:
+        root = display_path(Path(status["root"])) if status["root"] else "its repo"
+        return f"ignored by {root} — nothing here is committed despite the repo around it"
+    if not status["tracked"]:
+        return "untracked — run `flow setup user --overlay-repo <url>` to give it history"
 
     parts = []
     if status["dirty"]:
@@ -220,4 +279,9 @@ def format_overlay_vcs(status: dict) -> str:
         parts.append("clean")
 
     where = status["branch"] or "detached"
-    return f"{', '.join(parts)} ({where})"
+    line = f"{', '.join(parts)} ({where})"
+    if not status["is_root"] and status["root"]:
+        # Naming the repo matters once the overlay lives inside a bigger one:
+        # the counts above are the whole tree's, not this directory's.
+        line += f" — {display_path(Path(status['root']))}"
+    return line

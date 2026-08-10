@@ -4614,9 +4614,103 @@ class OverlayVcsTests(unittest.TestCase):
         broken["PATH"] = str(self.dir / "empty-bin")
         with unittest.mock.patch.object(self.overlay, "git_env", return_value=broken):
             status = self.overlay.overlay_vcs_status(d)
-        self.assertTrue(status["tracked"], "the .git directory is still visible")
+        self.assertFalse(
+            status["tracked"],
+            "with no git to ask, membership is unknown — claiming tracked would be the same "
+            "kind of fabrication this test exists to prevent",
+        )
         self.assertTrue(status["error"])
         self.assertEqual(self.overlay.format_overlay_vcs(status), "unreadable (git error)")
+
+    def test_missing_git_is_not_mistaken_for_an_untracked_overlay(self) -> None:
+        """A broken machine and an ordinary untracked directory need opposite
+        messages. Both used to leave `_git` with returncode 1; `_GIT_DID_NOT_RUN`
+        is what keeps `--overlay-repo` from being offered as the fix for a
+        missing git binary."""
+        import unittest.mock
+
+        d = self._repo_with_content()
+        broken = {k: v for k, v in os.environ.items() if k != "PATH"}
+        broken["PATH"] = str(self.dir / "empty-bin")
+        with unittest.mock.patch.object(self.overlay, "git_env", return_value=broken):
+            line = self.overlay.format_overlay_vcs(self.overlay.overlay_vcs_status(d))
+        self.assertNotIn("--overlay-repo", line, "installing a remote would not fix a missing git")
+
+    def test_overlay_in_a_subdirectory_of_a_repo_is_tracked(self) -> None:
+        """The bug this chunk exists to fix. `.git` lives only at a work
+        tree's root, so a filesystem test calls a committed subdirectory
+        untracked — and chunk 3 makes exactly that the normal arrangement."""
+        root = self._repo_with_content()
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# overlay\n")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "add overlay subtree")
+
+        status = self.overlay.overlay_vcs_status(nested)
+        self.assertTrue(status["tracked"], "committed content inside a repo is tracked")
+        self.assertFalse(status["is_root"])
+        self.assertEqual(Path(status["root"]).resolve(), root.resolve())
+        self.assertEqual(status["branch"], "main")
+
+    def test_symlinked_overlay_resolves_to_its_real_repo(self) -> None:
+        """`~/.flow/user` becomes a symlink into the dotfiles repo. Following
+        it must land on the repo, not report a rootless directory."""
+        root = self._repo_with_content()
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# overlay\n")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "add overlay subtree")
+
+        link = self.dir / "linked-user"
+        link.symlink_to(nested)
+        status = self.overlay.overlay_vcs_status(link)
+        self.assertTrue(status["tracked"])
+        self.assertFalse(status["is_root"], "the link target is a subdirectory, not the root")
+
+    def test_repo_root_overlay_still_reports_itself_as_root(self) -> None:
+        """The pre-existing arrangement must not regress: when the overlay is
+        the repo, `doctor` should not start appending a redundant path."""
+        d = self._repo_with_content()
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertTrue(status["is_root"])
+        self.assertNotIn("—", self.overlay.format_overlay_vcs(status))
+
+    def test_overlay_inside_a_repo_but_gitignored_is_not_called_tracked(self) -> None:
+        """Inside a repo is not the same as kept by it. Reporting `clean` here
+        would be the exact false-clean this chunk removes: every file stays
+        permanently uncommitted while `doctor` says it is backed up."""
+        root = self._repo_with_content()
+        (root / ".gitignore").write_text("flow-user-overlay/\n")
+        self._git(root, "add", ".gitignore")
+        self._git(root, "commit", "-m", "ignore the overlay")
+
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# never committed\n")
+
+        status = self.overlay.overlay_vcs_status(nested)
+        self.assertTrue(status["ignored"])
+        self.assertFalse(status["tracked"], "ignored content has no more history than untracked content")
+        line = self.overlay.format_overlay_vcs(status)
+        self.assertIn("ignored", line)
+        self.assertNotIn("--overlay-repo", line, "adding a remote would not un-ignore it")
+
+    def test_nested_overlay_reports_the_whole_repo_as_dirty(self) -> None:
+        """Whole-repo scoping is deliberate: uncommitted work beside the
+        overlay is the same hazard as uncommitted work in it."""
+        root = self._repo_with_content()
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# overlay\n")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "add overlay subtree")
+        (root / "bin-script.sh").write_text("#!/bin/sh\n")
+
+        status = self.overlay.overlay_vcs_status(nested)
+        self.assertEqual(len(status["dirty"]), 1, "a sibling's dirt counts")
+        self.assertIn("~", self.overlay.display_path(Path.home() / "x"))
 
     def test_detached_head_is_not_reported_as_a_branch_named_head(self) -> None:
         d = self._repo_with_content()
