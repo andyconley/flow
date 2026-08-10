@@ -62,6 +62,28 @@ def read_managed_paths(root: Path, path: Path) -> set[Path]:
     return {root / entry["path"] for entry in files if "path" in entry}
 
 
+def read_managed_merge_paths(root: Path, path: Path) -> set[Path]:
+    """Managed paths whose sync_mode is `merge` — files flow writes INTO
+    rather than owns (.claude/settings.json, .codex/hooks.json).
+
+    These must never be unlinked as "stale": dropping the runtime's
+    settings/hooks config from the manifest makes the file stop appearing
+    in `desired`, and treating that like any other stale managed file
+    would delete the user's own unmanaged content along with flow's —
+    directly violating the preserve-unmanaged contract the same manifest
+    advertises.
+    """
+    if not path.exists():
+        return set()
+    data = read_toml(path)
+    files = data.get("files", [])
+    return {
+        root / entry["path"]
+        for entry in files
+        if "path" in entry and entry.get("sync_mode") == "merge"
+    }
+
+
 def load_flow_manifest(flow_dir: Path) -> tuple[Path, dict]:
     manifest_path = flow_dir / "flow.toml"
     if not manifest_path.exists():
@@ -248,6 +270,9 @@ def build_claude_settings(root: Path, runtime: dict, mode: str = MODE_PROJECT) -
         group["hooks"] = [_hook_handler(hook, hook_command_for(mode, hook["script"]))]
         groups.append(group)
 
+    if not hooks:
+        settings.pop("hooks", None)
+
     return json.dumps(settings, indent=2, sort_keys=True) + "\n"
 
 
@@ -327,6 +352,24 @@ def build_codex_hooks_file(root: Path, runtime: dict, mode: str = MODE_PROJECT) 
     return json.dumps(doc, indent=2, sort_keys=True) + "\n"
 
 
+def validate_hook_script_name(hook: dict) -> None:
+    """Reject hook scripts not named `flow-*` before any output is built.
+
+    The preserve-unmanaged strip identifies flow's own handlers by the
+    `/.{claude,codex}/hooks/flow-` path marker. A script named outside
+    that convention would survive the strip and be re-appended on every
+    sync — duplicating its handler without bound — and deregistering it
+    would remove the script file while leaving the handler pointing at
+    nothing. Failing loudly at sync time is the cheap, permanent fix.
+    """
+    script = hook.get("script", "")
+    if not script.startswith("flow-"):
+        raise ValueError(
+            f"hook script {script!r} (hook {hook.get('name', '?')!r}) must be named flow-*: "
+            "the managed-handler contract identifies flow's handlers by that prefix"
+        )
+
+
 def hook_script_source(hook: dict) -> Path:
     """Where a hook entry's script actually lives, origin-aware.
 
@@ -334,7 +377,14 @@ def hook_script_source(hook: dict) -> Path:
     script lives beside its overlay manifest in `~/.flow/user/hooks/`.
     """
     if hook.get("_origin") == "user":
-        return USER_OVERLAY_DIR / "hooks" / hook["script"]
+        overlay = USER_OVERLAY_DIR / "hooks" / hook["script"]
+        if overlay.exists():
+            return overlay
+        # A user overlay entry may override a FRAMEWORK hook by name just
+        # to change its event/matcher/timeout — falling back to the
+        # framework script means the override doesn't force copying the
+        # script into the overlay.
+        return SOURCE_DIR / "hooks" / hook["script"]
     return SOURCE_DIR / "hooks" / hook["script"]
 
 
@@ -394,6 +444,7 @@ def desired_claude_outputs(
         )
 
     for hook in runtime.get("hooks", []):
+        validate_hook_script_name(hook)
         source = hook_script_source(hook)
         target = root / runtime["hook_dir"] / hook["script"]
         content = source.read_text()
@@ -493,6 +544,7 @@ def desired_codex_outputs(
     # them keep today's skill/agent-only surface untouched.
     if runtime.get("hook_dir") and runtime.get("hooks_file"):
         for hook in runtime.get("hooks", []):
+            validate_hook_script_name(hook)
             source = hook_script_source(hook)
             target = root / runtime["hook_dir"] / hook["script"]
             outputs[target] = source.read_text()
@@ -592,7 +644,9 @@ def sync_outputs(
     previous_managed: set[Path],
     mergeable_paths: set[Path],
     check: bool,
+    merge_protected: set[Path] | None = None,
 ) -> int:
+    merge_protected = merge_protected or set()
     conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
     removed: list[Path] = []
 
@@ -615,6 +669,13 @@ def sync_outputs(
         return 1
 
     for path in stale:
+        if path in merge_protected:
+            # A merge-mode file (settings.json, hooks.json) holds the
+            # user's own content alongside flow's; never delete it, just
+            # stop managing it. Flow's handlers remain until the user
+            # removes them or re-registers hooks.
+            print(f"- unmanaged (kept, contains user content): {rel_posix(path, root)}")
+            continue
         path.unlink()
         remove_empty_parents(path, root)
         removed.append(path)
@@ -681,10 +742,19 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False) -> in
 
     mode = MODE_USER if user_mode else MODE_PROJECT
     previous_managed = read_managed_paths(root, root / runtime["managed_manifest"])
-    desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
-        target, root, flow_dir, manifest, manifest_ref_for(mode, manifest_path, root), mode
+    merge_protected = read_managed_merge_paths(root, root / runtime["managed_manifest"])
+    try:
+        desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
+            target, root, flow_dir, manifest, manifest_ref_for(mode, manifest_path, root), mode
+        )
+    except (ValueError, FileNotFoundError) as err:
+        # A misnamed hook script (must be flow-*) or a hook script missing
+        # from its source dir — fail loudly before anything is written.
+        print(str(err))
+        return 1
+    result = sync_outputs(
+        root, target, desired, previous_managed, mergeable_paths, check=check, merge_protected=merge_protected
     )
-    result = sync_outputs(root, target, desired, previous_managed, mergeable_paths, check=check)
     if result == 0:
         verb = "check" if check else "sync"
         print(f"{scope_label} {target} {verb} complete from {manifest_path}")

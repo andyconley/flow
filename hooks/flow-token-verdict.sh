@@ -10,10 +10,16 @@
 # in `flow cost verdict --hook` (store-backed, incremental); this script
 # only locates the flow launcher and hands over stdin.
 #
-# Missing flow = silent no-op: the hook must never break a Stop.
+# NEVER exec, ALWAYS exit 0: exit code 2 means "block" on both runtimes,
+# and argparse exits 2 on any usage error — reachable innocently (an older
+# installed flow without this subcommand, or `flow` resolving to an
+# unrelated binary). An advisory hook must never block a Stop, so flow's
+# exit status and output are deliberately discarded.
 FLOW="$HOME/.local/bin/flow"
 if [ ! -x "$FLOW" ]; then
-    FLOW="$(command -v flow 2>/dev/null)" || exit 0
+    FLOW="$(command -v flow 2>/dev/null)"
 fi
-[ -n "$FLOW" ] && [ -x "$FLOW" ] || exit 0
-exec "$FLOW" cost verdict --hook
+if [ -n "$FLOW" ] && [ -x "$FLOW" ]; then
+    "$FLOW" cost verdict --hook >/dev/null 2>&1
+fi
+exit 0

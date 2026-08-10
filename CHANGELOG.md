@@ -48,6 +48,13 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   merge like commands and agents, with scripts from `~/.flow/user/hooks/`.
   Both settings builders also gained optional `timeout`/`status_message`
   passthrough, and `matcher` is optional (omitted = match everything).
+  Two contract rules enforced after review: hook scripts must be named
+  `flow-*` (the preserve-unmanaged strip identifies flow's handlers by
+  that path marker; a differently-named script would duplicate its
+  handler on every sync — sync now fails loudly instead), and merge-mode
+  files (settings.json, hooks.json) are never unlinked as "stale" when
+  dropped from the manifest — they hold user content, so they are
+  unmanaged in place rather than deleted.
 
 - **Usage advisory in the workflow commands** (token-advisory chunk 9) —
   the first place the usage store influences agent behavior rather than

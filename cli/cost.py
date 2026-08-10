@@ -762,6 +762,83 @@ def _read_hook_stdin() -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _safe_session_id(sid) -> bool:
+    """A session id fit to appear in a /tmp filename.
+
+    Session ids arrive on hook stdin, and while both runtimes generate
+    UUIDs, nothing guarantees that forever — a value containing a path
+    separator must never reach `Path(...)` construction or `unlink`.
+    """
+    import re
+
+    return isinstance(sid, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", sid) is not None
+
+
+def _log_hook_error(kind: str, exc: Exception) -> None:
+    """One breadcrumb line per swallowed hook error, so silent-by-design
+    doesn't become invisible-forever. Best-effort: logging must never make
+    the hook fail."""
+    try:
+        log_dir = HOME / ".flow" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with (log_dir / "hook-errors.log").open("a") as fh:
+            fh.write(f"{datetime.now(timezone.utc).isoformat()}\t{kind}\t{type(exc).__name__}: {exc}\n")
+    except OSError:
+        pass
+
+
+def _run_verdict_hook() -> int:
+    """The whole `--hook` body, guarded in one place by its caller.
+
+    Anything here may raise (a locked store past busy_timeout, a full
+    disk, the half-applied-migration state `ensure_store` refuses) — the
+    caller converts every failure to exit 0, because an advisory hook
+    erroring on every Stop of every session is the loudest possible
+    failure of a feature whose premise is silence.
+    """
+    payload = _read_hook_stdin()
+    if payload is None:
+        return 0
+    sid = payload.get("session_id")
+    tpath = payload.get("transcript_path")
+    if not _safe_session_id(sid) or not tpath or not Path(tpath).is_file():
+        return 0
+
+    store = usage_store.default_store_path(HOME)
+    capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
+    usage_store.ensure_store(store, capabilities)
+
+    conn = sqlite3.connect(store)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        v = verdict_for_transcript(conn, Path(tpath), session_id=sid)
+    finally:
+        conn.close()
+
+    harness = _harness_for_transcript(Path(tpath))
+    out = _verdict_path(harness, sid)
+    if v is not None:
+        # Atomic replace: the statusline reads this file on its own
+        # schedule and must never observe a truncated half-write.
+        import os
+
+        tmp = out.with_name(out.name + ".tmp")
+        tmp.write_text(f"/{v['action']}?\t{v['carry']}\t{v['ctx']}\t{v['why']}\n")
+        os.replace(tmp, out)
+    else:
+        # Below threshold or freshly cleared: remove the file so the
+        # statusline field (and any pending warning) disappears — and the
+        # warn hook's high-water marker with it, or a /compact that drops
+        # carry would leave re-warning suppressed until carry exceeded the
+        # PRE-compact high plus a step, giving the heaviest sessions the
+        # least warning.
+        out.unlink(missing_ok=True)
+        (VERDICT_DIR / f"{harness}-warned-{sid}").unlink(missing_ok=True)
+    return 0
+
+
 def cost_verdict_command(transcript: str | None = None, hook: bool = False) -> int:
     """CLI entry point for `flow cost verdict`.
 
@@ -771,48 +848,27 @@ def cost_verdict_command(transcript: str | None = None, hook: bool = False) -> i
       the verdict file. Prints NOTHING on purpose — Stop-hook stdout is
       fed back into the conversation on both runtimes, which would mean
       spending tokens to say you are spending too many; the statusline
-      and the warn hook read the file for free. Always exits 0: a broken
-      verdict must never block a Stop.
+      and the warn hook read the file for free. Exits 0 unconditionally,
+      including on internal errors (breadcrumbed to
+      ~/.flow/logs/hook-errors.log): a broken verdict must never block a
+      Stop, and exit code 2 actively would.
     - `--transcript PATH`: compute and print the same line
       `token-report --verdict` printed (`/{action}?\\t{carry}\\t{ctx}\\t{why}`,
       raw token counts — the statusline grades them against the window it
       alone knows). Manual/debug surface; silence when nothing to say.
     """
+    if hook:
+        try:
+            return _run_verdict_hook()
+        except Exception as exc:
+            # The verdict file is left as-is on an internal error rather
+            # than removed — stale beats flapping.
+            _log_hook_error("verdict", exc)
+            return 0
+
     store = usage_store.default_store_path(HOME)
     capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
     usage_store.ensure_store(store, capabilities)
-
-    if hook:
-        payload = _read_hook_stdin()
-        if payload is None:
-            return 0
-        sid = payload.get("session_id")
-        tpath = payload.get("transcript_path")
-        if not sid or not tpath or not Path(tpath).is_file():
-            return 0
-
-        conn = sqlite3.connect(store)
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA busy_timeout = 5000")
-        conn.row_factory = sqlite3.Row
-        try:
-            v = verdict_for_transcript(conn, Path(tpath), session_id=sid)
-        except Exception:
-            # A verdict is advisory telemetry; a Stop hook must never fail
-            # loudly because of it. The file is left as-is on an internal
-            # error rather than removed — stale beats flapping.
-            return 0
-        finally:
-            conn.close()
-
-        out = _verdict_path(_harness_for_transcript(Path(tpath)), sid)
-        if v is not None:
-            out.write_text(f"/{v['action']}?\t{v['carry']}\t{v['ctx']}\t{v['why']}\n")
-        else:
-            # Below threshold or freshly cleared: remove the file so the
-            # statusline field (and any pending warning) disappears.
-            out.unlink(missing_ok=True)
-        return 0
 
     if not transcript:
         print("usage: flow cost verdict --transcript PATH | --hook")
@@ -847,40 +903,48 @@ def cost_warn_command() -> int:
     or polluting a prompt over advisory telemetry would invert the
     feature's whole point.
     """
-    payload = _read_hook_stdin()
-    if payload is None:
-        return 0
-    sid = payload.get("session_id")
-    tpath = payload.get("transcript_path") or ""
-    if not sid:
-        return 0
-
-    harness = _harness_for_transcript(Path(tpath)) if tpath else CLAUDE_HARNESS
-    verdict_file = _verdict_path(harness, sid)
     try:
-        parts = verdict_file.read_text().strip().split("\t")
-        carry = int(parts[1])
-    except (OSError, ValueError, IndexError):
-        return 0
-    if carry < WARN_CARRY_FLOOR:
-        return 0
+        payload = _read_hook_stdin()
+        if payload is None:
+            return 0
+        sid = payload.get("session_id")
+        tpath = payload.get("transcript_path")
+        # Missing transcript_path = bail, matching the verdict command
+        # exactly — guessing a harness here would silently read a verdict
+        # file the other harness never writes, making the warn a permanent
+        # no-op with no signal.
+        if not _safe_session_id(sid) or not tpath:
+            return 0
 
-    marker = VERDICT_DIR / f"{harness}-warned-{sid}"
-    try:
-        last_warned = int(marker.read_text().strip())
-    except (OSError, ValueError):
-        last_warned = 0
-    if carry < last_warned + WARN_REWARN_STEP:
-        return 0
+        harness = _harness_for_transcript(Path(tpath))
+        verdict_file = _verdict_path(harness, sid)
+        try:
+            parts = verdict_file.read_text().strip().split("\t")
+            carry = int(parts[1])
+        except (OSError, ValueError, IndexError):
+            return 0
+        if carry < WARN_CARRY_FLOOR:
+            return 0
 
-    action = parts[0].strip("/?") or "compact"
-    print(
-        f"flow advisory: this session is carrying ~{carry // 1000}K tokens above its start, "
-        f"re-sent on every request. /{action} at the next natural break would cut per-request cost. "
-        "(Informational only — continue if the thread is still earning its context.)"
-    )
-    try:
-        marker.write_text(str(carry))
-    except OSError:
-        pass
-    return 0
+        marker = VERDICT_DIR / f"{harness}-warned-{sid}"
+        try:
+            last_warned = int(marker.read_text().strip())
+        except (OSError, ValueError):
+            last_warned = 0
+        if carry < last_warned + WARN_REWARN_STEP:
+            return 0
+
+        action = parts[0].strip("/?") or "compact"
+        print(
+            f"flow advisory: this session is carrying ~{carry // 1000}K tokens above its start, "
+            f"re-sent on every request. /{action} at the next natural break would cut per-request cost. "
+            "(Informational only — continue if the thread is still earning its context.)"
+        )
+        try:
+            marker.write_text(str(carry))
+        except OSError:
+            pass
+        return 0
+    except Exception as exc:
+        _log_hook_error("warn", exc)
+        return 0

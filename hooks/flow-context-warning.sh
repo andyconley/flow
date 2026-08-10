@@ -8,10 +8,15 @@
 # expensive turn; every other case prints nothing. Throttling, thresholds,
 # and all judgment live in `flow cost warn --hook`.
 #
-# Missing flow = silent no-op: the hook must never block a prompt.
+# NEVER exec, ALWAYS exit 0: exit code 2 means "block the prompt" on both
+# runtimes, and argparse exits 2 on any usage error. stdout is kept (it is
+# the advisory line); stderr and the exit status are discarded — an
+# advisory hook must never erase a prompt.
 FLOW="$HOME/.local/bin/flow"
 if [ ! -x "$FLOW" ]; then
-    FLOW="$(command -v flow 2>/dev/null)" || exit 0
+    FLOW="$(command -v flow 2>/dev/null)"
 fi
-[ -n "$FLOW" ] && [ -x "$FLOW" ] || exit 0
-exec "$FLOW" cost warn --hook
+if [ -n "$FLOW" ] && [ -x "$FLOW" ]; then
+    "$FLOW" cost warn --hook 2>/dev/null
+fi
+exit 0
