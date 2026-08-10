@@ -229,11 +229,19 @@ def build_skill_frontmatter(name: str, command: dict, skill_defaults: dict) -> l
 def render_skill_from_command(command: dict, skill_defaults: dict, routing_hints: str = "") -> str:
     source_path = command["source"]
     body = command["_body"]
+    # The edit hint must point at a file that actually exists: a user-overlay
+    # command's source lives under ~/.flow/user/, not under any repo's
+    # .flow/, and it only ever syncs in --user mode. Sending its edits to
+    # `.flow/commands/...` would direct them at a file that isn't there.
+    if command.get("_origin") == "user":
+        edit_hint = f"Edit `~/.flow/user/{source_path}` and run `flow sync claude --user`."
+    else:
+        edit_hint = f"Edit `.flow/{source_path}` and run `flow sync claude`."
     lines = build_skill_frontmatter(command["name"], command, skill_defaults)
     lines.extend(
         [
             "",
-            f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->",
+            f"<!-- {GENERATED_MARKER} {edit_hint} -->",
             "",
             body.rstrip(),
             "",

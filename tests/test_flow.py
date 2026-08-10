@@ -430,6 +430,32 @@ class FlowCliTests(unittest.TestCase):
         self.assertTrue(skill.exists(), "user-added command must generate a SKILL.md")
         self.assertIn("user-defined Jira status", skill.read_text())
 
+    def test_user_overlay_command_edit_hint_points_at_the_overlay(self) -> None:
+        """A user-origin skill's generated marker must direct edits to
+        `~/.flow/user/<source>` and `flow sync claude --user` — the
+        framework-style `.flow/commands/...` hint would point at a file
+        that does not exist for an overlay command. Framework commands in
+        the same sync keep the framework-style hint.
+        """
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_command(
+            fake_home,
+            name="flow-jira-status",
+            body="# flow-jira-status\n\nbody\n",
+            description="user-defined Jira status check",
+            summary="check Jira tickets",
+        )
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        user_skill = (fake_home / ".claude" / "skills" / "flow-jira-status" / "SKILL.md").read_text()
+        self.assertIn("Edit `~/.flow/user/commands/flow-jira-status.md`", user_skill)
+        self.assertIn("flow sync claude --user", user_skill)
+        self.assertNotIn("Edit `.flow/", user_skill)
+
+        framework_skill = (fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
+        self.assertIn("Edit `.flow/commands/flow-plan.md`", framework_skill)
+
     def test_user_overlay_overrides_framework_agent(self) -> None:
         """User overlay can replace a framework agent's content."""
         fake_home = self.use_fake_home()

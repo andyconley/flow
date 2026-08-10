@@ -29,6 +29,18 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   1M), marked `~` in the table. Validated side-by-side against
   `token-report --active` on live sessions: identical ctx/carry/
   recommendation on every commonly-visible session.
+
+### Fixed
+
+- **User-overlay skills' generated edit hint pointed at a file that doesn't
+  exist.** `render_skill_from_command` hardcoded
+  ``Edit `.flow/<source>` and run `flow sync claude`​`` regardless of
+  origin; a user-overlay command's source lives under `~/.flow/user/` and
+  only ever syncs in `--user` mode. Found while moving the first real
+  personal command (`session-hygiene`, machine-local, not in this repo)
+  onto the overlay mechanism. The three sibling render sites (codex
+  skills, both agent renderers) have the same defect but take bare string
+  arguments — deferred to a follow-up rather than folded in here.
 - **Genuine last-write-wins for repeated `ai-title` records** (token-advisory
   chunk 7). Chunk 6 shipped `ai-title` as "first one wins, forever"
   (`WHERE title IS NULL`) and documented the divergence from a true
