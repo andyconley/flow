@@ -18,6 +18,7 @@ flow/
     jsonl_watermark.py incremental byte-level JSONL reading, shared by both collectors
     lifecycle.py       two-mode install, release staging, update
     normalize.py       turn_raw -> turn_norm, one convention across harnesses
+    overlay.py         read-only VCS status for ~/.flow/user/
     paths.py           machine paths and mode constants
     render.py          generated-adapter rendering
     session_lookup.py  session-table lookups shared by both collectors
@@ -87,6 +88,11 @@ other by bare name.
   harness-neutral convention, dispatching per row by harness. A separate
   command from `harvest`: appending new raw data and recomputing derived data
   have different cost profiles, and a rule change can touch every row.
+- `overlay.py` — read-only version-control status for `~/.flow/user/`, plus
+  the `.gitignore` shipped into a fresh overlay repo. Separate from
+  `diagnostics.py` so `doctor` keeps holding presentation rather than git
+  plumbing, and so the status is testable against a tmpdir without shelling
+  through the CLI. Never inits, commits, or pushes.
 - `cost.py` — `flow cost`. `summary` and `sessions` only read `turn_norm`;
   `active` deliberately runs the incremental Claude harvest and a normalize
   pass first, since a "what needs attention right now" view must not lag

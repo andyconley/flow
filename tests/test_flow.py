@@ -1779,6 +1779,7 @@ class FlowCliTests(unittest.TestCase):
                 "jsonl_watermark",
                 "lifecycle",
                 "normalize",
+                "overlay",
                 "paths",
                 "render",
                 "session_lookup",
@@ -4527,6 +4528,215 @@ class VerdictHookModeTests(unittest.TestCase):
     def test_hook_missing_transcript_exits_zero(self) -> None:
         rc = self._run_hook({"session_id": "sess-h", "transcript_path": str(self.dir / "nope.jsonl")})
         self.assertEqual(rc, 0)
+
+
+class OverlayVcsTests(unittest.TestCase):
+    """cli/overlay.py — read-only VCS status for ~/.flow/user/.
+
+    Uses real git repos in a tmpdir (a local bare repo stands in for the
+    remote, so nothing here touches the network).
+    """
+
+    def setUp(self) -> None:
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import overlay
+
+        self.overlay = overlay
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        sys.modules.pop("overlay", None)
+
+    def _git(self, cwd: Path, *args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
+                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
+        )
+
+    def _repo_with_content(self) -> Path:
+        d = self.dir / "user"
+        d.mkdir()
+        (d / "flow.toml").write_text("# overlay\n")
+        self._git(d, "init", "-b", "main")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "initial")
+        return d
+
+    def test_absent_overlay_is_not_a_problem(self) -> None:
+        status = self.overlay.overlay_vcs_status(self.dir / "nope")
+        self.assertFalse(status["present"])
+        self.assertFalse(status["tracked"])
+        self.assertEqual(self.overlay.format_overlay_vcs(status), "n/a (no overlay)")
+
+    def test_untracked_overlay_names_the_fix(self) -> None:
+        d = self.dir / "user"
+        d.mkdir()
+        (d / "flow.toml").write_text("# overlay\n")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertTrue(status["present"])
+        self.assertFalse(status["tracked"], "authored content with no history is the state this surfaces")
+        self.assertIn("--overlay-repo", self.overlay.format_overlay_vcs(status))
+
+    def test_clean_repo_without_upstream_says_no_upstream(self) -> None:
+        d = self._repo_with_content()
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertTrue(status["tracked"])
+        self.assertEqual(status["dirty"], [])
+        self.assertIsNone(status["unpushed"], "None means no upstream; 0 would mean level with one")
+        self.assertEqual(status["branch"], "main")
+        self.assertIn("no upstream", self.overlay.format_overlay_vcs(status))
+
+    def test_dirty_files_are_counted(self) -> None:
+        d = self._repo_with_content()
+        (d / "commands").mkdir()
+        (d / "commands" / "new.md").write_text("# new\n")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(len(status["dirty"]), 1)
+        self.assertIn("1 uncommitted", self.overlay.format_overlay_vcs(status))
+
+    def test_unpushed_commits_are_counted_against_a_real_upstream(self) -> None:
+        remote = self.dir / "remote.git"
+        remote.mkdir()
+        self._git(remote, "init", "--bare", "-b", "main")
+        d = self._repo_with_content()
+        self._git(d, "remote", "add", "origin", str(remote))
+        self._git(d, "push", "-u", "origin", "main")
+
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["unpushed"], 0, "level with upstream is 0, not None")
+        self.assertIn("clean", self.overlay.format_overlay_vcs(status))
+        self.assertEqual(status["remote"], str(remote))
+
+        (d / "another.md").write_text("x\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "second")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["unpushed"], 1)
+        self.assertIn("1 unpushed", self.overlay.format_overlay_vcs(status))
+
+
+class SetupUserOverlayRepoTests(unittest.TestCase):
+    """`flow setup user --overlay-repo` — the three cases, none of which may
+    ever discard existing overlay content."""
+
+    def setUp(self) -> None:
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("setup", "overlay", "paths", "sync"):
+            sys.modules.pop(name, None)
+
+    def _git(self, cwd: Path, *args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
+                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
+        )
+
+    def _seeded_remote(self) -> Path:
+        """A bare repo with one commit, usable as a clone source."""
+        work = self.dir / "seed"
+        work.mkdir()
+        (work / "flow.toml").write_text("# from remote\n")
+        self._git(work, "init", "-b", "main")
+        self._git(work, "add", ".")
+        self._git(work, "commit", "-m", "seed")
+        bare = self.dir / "remote.git"
+        bare.mkdir()
+        self._git(bare, "init", "--bare", "-b", "main")
+        self._git(work, "remote", "add", "origin", str(bare))
+        self._git(work, "push", "-u", "origin", "main")
+        return bare
+
+    def _attach(self, overlay_dir: Path, url: str):
+        """Call _attach_overlay_repo with USER_OVERLAY_DIR pointed at a tmpdir."""
+        import contextlib
+        import io
+        import unittest.mock
+
+        import setup
+
+        with unittest.mock.patch.object(setup, "USER_OVERLAY_DIR", overlay_dir):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                rc = setup._attach_overlay_repo(url)
+        return rc, out.getvalue()
+
+    def test_empty_overlay_clones_the_remote(self) -> None:
+        remote = self._seeded_remote()
+        overlay_dir = self.dir / "user"
+        rc, out = self._attach(overlay_dir, str(remote))
+        self.assertEqual(rc, 0)
+        self.assertIn("cloned", out)
+        self.assertEqual((overlay_dir / "flow.toml").read_text(), "# from remote\n")
+
+    def test_existing_content_is_inited_in_place_never_clobbered(self) -> None:
+        remote = self._seeded_remote()
+        overlay_dir = self.dir / "user"
+        overlay_dir.mkdir()
+        (overlay_dir / "flow.toml").write_text("# MY LOCAL WORK\n")
+
+        rc, out = self._attach(overlay_dir, str(remote))
+        self.assertEqual(rc, 0)
+        self.assertIn("initialized", out)
+        self.assertEqual(
+            (overlay_dir / "flow.toml").read_text(),
+            "# MY LOCAL WORK\n",
+            "local overlay content must survive attachment",
+        )
+        self.assertTrue((overlay_dir / ".git").exists())
+        self.assertTrue((overlay_dir / ".gitignore").exists())
+
+    def test_already_a_repo_is_left_alone(self) -> None:
+        overlay_dir = self.dir / "user"
+        overlay_dir.mkdir()
+        (overlay_dir / "flow.toml").write_text("# existing\n")
+        self._git(overlay_dir, "init", "-b", "main")
+        self._git(overlay_dir, "add", ".")
+        self._git(overlay_dir, "commit", "-m", "mine")
+        self._git(overlay_dir, "remote", "add", "origin", "git@example.com:me/other.git")
+
+        rc, out = self._attach(overlay_dir, "git@example.com:me/DIFFERENT.git")
+        self.assertEqual(rc, 0)
+        self.assertIn("already a git repo", out)
+        self.assertIn("left as-is", out, "a differing remote must be reported, not silently changed")
+        remotes = subprocess.run(
+            ["git", "config", "--get", "remote.origin.url"],
+            cwd=overlay_dir, capture_output=True, text=True,
+        ).stdout.strip()
+        self.assertEqual(remotes, "git@example.com:me/other.git")
+
+    def test_gitignore_excludes_credential_shaped_files(self) -> None:
+        import overlay as overlay_mod
+
+        body = overlay_mod.OVERLAY_GITIGNORE
+        for pattern in (".env", "keys/", "*.pem", "*.local.*"):
+            self.assertIn(pattern, body)
 
 
 if __name__ == "__main__":

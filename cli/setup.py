@@ -13,6 +13,8 @@ function for the post-update path, which is the one edge from lifecycle into
 setup; nothing here reaches back into lifecycle, so the two stay acyclic.
 """
 
+import subprocess
+
 import usage_store
 from fsutil import (
     copy_if_missing,
@@ -21,6 +23,7 @@ from fsutil import (
     repo_root,
     sync_missing_tree,
 )
+from overlay import OVERLAY_GITIGNORE, format_overlay_vcs, overlay_vcs_status
 from paths import (
     FLOW_CONFIG,
     FLOW_HOME,
@@ -28,6 +31,7 @@ from paths import (
     SCAFFOLD_DIR,
     SOURCE_DIR,
     USER_BIN_DIR,
+    USER_OVERLAY_DIR,
 )
 from sync import sync_target
 
@@ -110,7 +114,72 @@ def setup_project() -> int:
     return 0
 
 
-def setup_user() -> int:
+def _attach_overlay_repo(url: str) -> int:
+    """Give `~/.flow/user/` a git home, without ever clobbering what is there.
+
+    Three cases, because the overlay may already exist with authored content
+    (the common case for anyone who has used it before this shipped):
+
+    - already a repo: report and leave alone. Re-pointing a remote is a
+      deliberate act, not something `setup user` should do behind your back.
+    - absent or empty: clone. The remote is the source of truth, which is
+      what makes this the new-machine path.
+    - has content, no `.git`: init in place and add the remote. Never clone
+      over it — that would either fail or discard local work. The first
+      commit is deliberately NOT made here; see the convention note below.
+
+    Setup initializes; it does not commit. Committing overlay content is the
+    job of whichever agent edits it, in the same turn as the edit — the
+    person who owns this content is not the one typing in the directory, so
+    a model that waits for them to notice pending changes would leave work
+    uncommitted indefinitely.
+    """
+    USER_OVERLAY_DIR.mkdir(parents=True, exist_ok=True)
+    gitignore = USER_OVERLAY_DIR / ".gitignore"
+
+    if (USER_OVERLAY_DIR / ".git").exists():
+        status = overlay_vcs_status(USER_OVERLAY_DIR)
+        print(f"user overlay:     already a git repo ({format_overlay_vcs(status)})")
+        if status["remote"] and status["remote"] != url:
+            print(f"  note:           remote is {status['remote']}, not {url} — left as-is")
+        if not gitignore.exists():
+            gitignore.write_text(OVERLAY_GITIGNORE)
+            print("  wrote:          .gitignore")
+        return 0
+
+    has_content = any(p.name != ".git" for p in USER_OVERLAY_DIR.iterdir())
+    if not has_content:
+        rc = subprocess.run(
+            ["git", "clone", url, str(USER_OVERLAY_DIR)],
+            capture_output=True,
+            text=True,
+        )
+        if rc.returncode != 0:
+            print(f"user overlay:     clone failed: {rc.stderr.strip()}")
+            return 1
+        print(f"user overlay:     cloned {url}")
+        if not gitignore.exists():
+            gitignore.write_text(OVERLAY_GITIGNORE)
+            print("  wrote:          .gitignore (commit it when convenient)")
+        return 0
+
+    for args, label in (
+        (["init"], "initialized"),
+        (["remote", "add", "origin", url], f"remote origin -> {url}"),
+    ):
+        rc = subprocess.run(["git", *args], cwd=USER_OVERLAY_DIR, capture_output=True, text=True)
+        if rc.returncode != 0:
+            print(f"user overlay:     git {args[0]} failed: {rc.stderr.strip()}")
+            return 1
+        print(f"user overlay:     {label}")
+    if not gitignore.exists():
+        gitignore.write_text(OVERLAY_GITIGNORE)
+        print("  wrote:          .gitignore")
+    print("  next:           commit the existing overlay content and push")
+    return 0
+
+
+def setup_user(overlay_repo: str | None = None) -> int:
     """Install flow at the user level: generate ~/.claude/ surfaces from the framework scaffold."""
     if not FLOW_HOME.exists():
         print("flow home missing; run `flow setup machine` first")
@@ -118,6 +187,11 @@ def setup_user() -> int:
     if not SCAFFOLD_DIR.exists():
         print("framework scaffold missing; re-run install-flow.sh from the flow repo")
         return 1
+
+    if overlay_repo:
+        if _attach_overlay_repo(overlay_repo) != 0:
+            return 1
+        print()
 
     print("Installing flow at user level…")
     print()

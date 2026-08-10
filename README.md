@@ -45,7 +45,8 @@ The framework template now includes:
 - project overlay templates under `.flow/project/`
 - memory, templates, and run scaffolding
 - a machine-readable framework manifest at `.flow/flow.toml` (also declares dependencies on upstream standards via `[standards.<name>]` blocks)
-- **user overlay support** at `~/.flow/user/` — drop your own commands, agents, standards, or templates here to override the framework defaults or add new ones, without forking. See `docs/architecture.md` "User Overlay" for the merge model.
+- **user overlay support** at `~/.flow/user/` — drop your own commands, agents, hooks, standards, or templates here to override the framework defaults or add new ones, without forking. See `docs/architecture.md` "User Overlay" for the merge model.
+- **overlay version control.** The overlay is the one authored layer with no home in any repo flow ships, so it starts with no history and no backup. `flow setup user --overlay-repo <url>` gives it one: clone when the overlay is absent (the new-machine path), or `git init` in place and add the remote when it already has content. It never clobbers existing files and never commits — `FRAMEWORK.md` holds the convention for who commits overlay edits. `flow doctor` reports the overlay's VCS state, uncommitted and unpushed work included.
 
 ### CLI lifecycle
 
@@ -55,6 +56,7 @@ Available commands:
 flow doctor
 flow setup machine
 flow setup user
+flow setup user --overlay-repo git@github.com:you/flow-user-overlay.git
 flow setup project
 flow refresh project
 flow bootstrap
@@ -83,6 +85,8 @@ What they do:
   - prepares `~/.flow/`, `~/.local/bin/flow`, and local config
 - `flow setup user`
   - installs the framework at user level so it is active in every Claude session (runs `flow sync claude --user` and `flow sync codex --user`)
+- `flow setup user --overlay-repo URL`
+  - additionally gives `~/.flow/user/` a git home at URL: clones when the overlay is absent, or `git init`s in place and adds the remote when it already has content. Never clobbers existing files, never commits.
 - `flow setup project`
   - scaffolds `.flow/` into the current repo (only needed when you want a project overlay)
 - `flow refresh project`

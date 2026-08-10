@@ -15,6 +15,7 @@ import usage_store
 from flowtoml import read_toml
 from fsutil import repo_root
 from lifecycle import read_install_config
+from overlay import format_overlay_vcs, overlay_vcs_status
 from paths import (
     CODEX_SKILL_DIR,
     DEFAULT_REMOTE,
@@ -179,6 +180,7 @@ def doctor() -> int:
             overlay = read_toml(user_overlay_manifest)
             user_commands = overlay.get("claude", {}).get("commands", [])
             user_agents = overlay.get("agents", [])
+            user_hooks = overlay.get("claude", {}).get("hooks", []) + overlay.get("codex", {}).get("hooks", [])
             print(f"user overlay:     {user_overlay_manifest}")
             if user_commands:
                 names = ", ".join(c.get("name", "<unnamed>") for c in user_commands)
@@ -186,12 +188,18 @@ def doctor() -> int:
             if user_agents:
                 names = ", ".join(a.get("name", "<unnamed>") for a in user_agents)
                 print(f"  agents:         {len(user_agents)} ({names})")
-            if not user_commands and not user_agents:
-                print("  entries:        (manifest present but declares no commands or agents)")
+            if user_hooks:
+                names = ", ".join(h.get("name", "<unnamed>") for h in user_hooks)
+                print(f"  hooks:          {len(user_hooks)} ({names})")
+            if not user_commands and not user_agents and not user_hooks:
+                print("  entries:        (manifest present but declares no commands, agents, or hooks)")
         except Exception as err:
             print(f"user overlay:     {user_overlay_manifest} (parse error: {err})")
     else:
         print(f"user overlay:     none ({user_overlay_manifest} absent)")
+    # The overlay is authored content with no home in any repo flow ships, so
+    # whether it has history at all is worth stating every time.
+    print(f"  vcs:            {format_overlay_vcs(overlay_vcs_status(USER_OVERLAY_DIR))}")
     print()
     print(f"-- project: {root} --")
     print(f"repo .flow:       {'ok' if flow_dir.exists() else 'missing'}")

@@ -69,6 +69,18 @@ How it merges:
 
 The user overlay is opt-in. Without `~/.flow/user/flow.toml`, sync behavior is identical to the framework-only baseline. `flow doctor` reports whether the overlay is present and what it declares.
 
+### Versioning the overlay
+
+Every other layer flow reads has a repo behind it: the framework scaffold lives in this repo, project overlays live in their own. The user overlay is the exception — it is hand-authored content in a machine-local directory, which means no history, no diff, and no way back after a lost machine.
+
+`flow setup user --overlay-repo <url>` closes that. Three cases, and none of them may discard content:
+
+- **already a repo** — report and leave alone. Re-pointing a remote is deliberate, not a side effect of setup.
+- **absent or empty** — clone. This is the new-machine path, and it is what makes the overlay portable.
+- **has content, no `.git`** — `git init` in place, add the remote. Never clone over existing work.
+
+Setup initializes; it does not commit. Who commits is a convention rather than a mechanism, documented in `FRAMEWORK.md`: the agent that edits overlay content commits it in the same turn, because the human who owns that content is not the one editing it. `cli/overlay.py` holds the status query, kept out of `diagnostics.py` so `doctor` stays a reporter and the status stays unit-testable; it shells out to git twice, both bounded, and skips entirely when there is no `.git`.
+
 ### Framework Repo (`scaffolds/default/`)
 
 The framework source. Contains:
