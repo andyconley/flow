@@ -1776,6 +1776,7 @@ class FlowCliTests(unittest.TestCase):
                 "flowtoml",
                 "fsutil",
                 "harvest",
+                "hookio",
                 "jsonl_watermark",
                 "lifecycle",
                 "normalize",
@@ -4781,6 +4782,203 @@ class OverlayVcsTests(unittest.TestCase):
         status = self.overlay.overlay_vcs_status(d)
         self.assertEqual(status["unpushed"], 1)
         self.assertIn("1 unpushed", self.overlay.format_overlay_vcs(status))
+
+
+class OverlayNudgeTests(unittest.TestCase):
+    """`flow overlay check --hook` — the code path that runs unattended on
+    every prompt and every Write/Edit of every session.
+
+    The bar is the same one the verdict hook is held to: silence unless there
+    is something to say, and exit 0 no matter what goes wrong. A nudge that
+    errors on every prompt would be the loudest possible failure of a feature
+    whose premise is staying quiet.
+    """
+
+    def setUp(self) -> None:
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import overlay
+
+        self.overlay = overlay
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        self.state = self.dir / "state"
+
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        sys.modules.pop("overlay", None)
+
+    def _git(self, cwd: Path, *args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
+                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
+        )
+
+    def _overlay_repo(self) -> Path:
+        d = self.dir / "user"
+        d.mkdir()
+        (d / "flow.toml").write_text("# overlay\n")
+        self._git(d, "init", "-b", "main")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "initial")
+        return d
+
+    def _run_hook(self, payload, overlay_dir: Path) -> tuple[int, str]:
+        import contextlib
+        import io
+        import unittest.mock
+
+        stdin = io.StringIO(payload if isinstance(payload, str) else json.dumps(payload))
+        with unittest.mock.patch.object(self.overlay, "USER_OVERLAY_DIR", overlay_dir):
+            with unittest.mock.patch.object(self.overlay, "NUDGE_STATE_DIR", self.state):
+                with unittest.mock.patch.object(self.overlay.hookio.sys, "stdin", stdin):
+                    with contextlib.redirect_stdout(io.StringIO()) as out:
+                        rc = self.overlay.overlay_check_command()
+        return rc, out.getvalue()
+
+    def test_clean_repo_says_nothing(self) -> None:
+        d = self._overlay_repo()
+        rc, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "", "a committed overlay has nothing to nudge about")
+
+    def test_untracked_overlay_is_left_to_doctor(self) -> None:
+        """Someone who never opted into an overlay repo must not be nagged on
+        every prompt. `doctor` is where that state belongs."""
+        d = self.dir / "plain"
+        d.mkdir()
+        (d / "flow.toml").write_text("# no repo here\n")
+        rc, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_dirty_repo_nudges_once_then_throttles(self) -> None:
+        d = self._overlay_repo()
+        (d / "new-command.md").write_text("# authored\n")
+
+        rc, first = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(rc, 0)
+        self.assertIn("1 uncommitted file", first)
+        self.assertIn("same turn", first, "the line has to name the convention it is enforcing")
+
+        _, second = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(second, "", "an unchanged outstanding set stays quiet")
+
+    def test_new_work_refires_the_prompt_nudge_before_the_window_expires(self) -> None:
+        """The throttle must not swallow work that piles up behind it."""
+        d = self._overlay_repo()
+        (d / "one.md").write_text("x\n")
+        _, first = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("1 uncommitted file", first)
+
+        (d / "two.md").write_text("y\n")
+        _, second = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("2 uncommitted files", second)
+
+    def test_edit_nudge_does_not_refire_per_file(self) -> None:
+        """PostToolUse is bounded by edits, so a ten-file burst should produce
+        one line, not ten. This is the opposite policy from the prompt nudge,
+        on purpose."""
+        d = self._overlay_repo()
+        (d / "one.md").write_text("x\n")
+        payload = {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(d / "one.md")}}
+        _, first = self._run_hook(payload, d)
+        self.assertIn("uncommitted", first)
+
+        (d / "two.md").write_text("y\n")
+        payload["tool_input"]["file_path"] = str(d / "two.md")
+        _, second = self._run_hook(payload, d)
+        self.assertEqual(second, "", "the edit nudge is an awareness ping, not a per-file alarm")
+
+    def test_edit_outside_the_repo_is_ignored(self) -> None:
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        outside = self.dir / "somewhere-else.py"
+        outside.write_text("# unrelated\n")
+        rc, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(outside)}}, d
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "", "editing an unrelated file is not an overlay event")
+
+    def test_edit_without_a_path_falls_back_instead_of_going_silent(self) -> None:
+        """Codex's PostToolUse payload shape is unverified. An absent
+        file_path must degrade to the plain outstanding-work check, not
+        disable the hook on that runtime."""
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        rc, out = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertEqual(rc, 0)
+        self.assertIn("uncommitted", out)
+
+    def test_unpushed_commits_are_worth_a_nudge_on_their_own(self) -> None:
+        """`doctor` reports `N unpushed`, so committing without pushing
+        produces exactly the state FRAMEWORK.md tells agents to avoid."""
+        d = self._overlay_repo()
+        bare = self.dir / "remote.git"
+        bare.mkdir()
+        self._git(bare, "init", "--bare", "-b", "main")
+        self._git(d, "remote", "add", "origin", str(bare))
+        self._git(d, "push", "-u", "origin", "main")
+        (d / "later.md").write_text("z\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "committed but not pushed")
+
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("1 unpushed commit", out)
+
+    def test_unrelated_events_are_ignored(self) -> None:
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        rc, out = self._run_hook({"hook_event_name": "SessionStart"}, d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_malformed_stdin_exits_zero_and_says_nothing(self) -> None:
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        rc, out = self._run_hook("not json at all", d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_internal_error_exits_zero_and_is_logged(self) -> None:
+        """Every failure is swallowed, but never silently: the breadcrumb log
+        is what keeps silent-by-design from becoming invisible-forever."""
+        import contextlib
+        import io
+        import unittest.mock
+
+        logged = []
+        stdin = io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit"}))
+        with unittest.mock.patch.object(
+            self.overlay, "overlay_vcs_status", side_effect=RuntimeError("boom")
+        ):
+            with unittest.mock.patch.object(
+                self.overlay.hookio, "log_hook_error", side_effect=lambda *a: logged.append(a)
+            ):
+                with unittest.mock.patch.object(self.overlay.hookio.sys, "stdin", stdin):
+                    with contextlib.redirect_stdout(io.StringIO()) as out:
+                        rc = self.overlay.overlay_check_command()
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue(), "")
+        self.assertEqual(len(logged), 1, "a swallowed error still leaves a breadcrumb")
+
+    def test_marker_filename_carries_no_account_name(self) -> None:
+        """Marker paths are derived from a hash of the repo root. Nothing this
+        framework writes should spell out whose machine it is."""
+        marker = self.overlay._marker_path("/Users/someone/dotfiles", "UserPromptSubmit")
+        self.assertNotIn("someone", marker.name)
+        self.assertNotIn("/", marker.name)
 
 
 class SetupUserOverlayRepoTests(unittest.TestCase):

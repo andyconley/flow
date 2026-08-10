@@ -29,6 +29,7 @@ from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
+from overlay import overlay_check_command, overlay_status_command  # noqa: E402
 from setup import (  # noqa: E402
     refresh_project,
     setup_machine,
@@ -197,6 +198,31 @@ def main() -> int:
         required=True,
         help="UserPromptSubmit-hook mode: read hook JSON from stdin",
     )
+    overlay_parser = sub.add_parser(
+        "overlay",
+        help="inspect the user overlay's version-control state",
+        description="Report and advise on `~/.flow/user/`'s version control. Read-only apart from the nudge's throttle marker; initialization lives in `flow setup user --overlay-repo`.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Examples:\n  flow overlay status\n",
+    )
+    overlay_sub = overlay_parser.add_subparsers(dest="overlay_target", required=True, title="overlay views")
+    overlay_sub.add_parser(
+        "status",
+        help="version-control state of the user overlay",
+        description="The `doctor` overlay line on its own, plus the remote and the uncommitted paths behind its counts.",
+    )
+    overlay_check_parser = overlay_sub.add_parser(
+        "check",
+        help="overlay-commit nudge (PostToolUse / UserPromptSubmit hook engine)",
+        description="Prints one advisory line when the overlay's repository has uncommitted or unpushed work, throttled per event. Silent when the overlay is untracked, clean, or absent. Informational only; always exits 0.",
+    )
+    overlay_check_parser.add_argument(
+        "--hook",
+        action="store_true",
+        required=True,
+        help="hook mode: read hook JSON from stdin and branch on hook_event_name",
+    )
+
     for cost_parser in (cost_summary_parser, cost_sessions_parser):
         window = cost_parser.add_mutually_exclusive_group()
         window.add_argument(
@@ -358,6 +384,10 @@ def main() -> int:
         return cost_verdict_command(transcript=args.transcript, hook=args.hook)
     if args.command == "cost" and args.cost_target == "warn":
         return cost_warn_command()
+    if args.command == "overlay" and args.overlay_target == "status":
+        return overlay_status_command()
+    if args.command == "overlay" and args.overlay_target == "check":
+        return overlay_check_command()
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

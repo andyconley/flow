@@ -57,6 +57,9 @@ from claude_collector import harvest_all as claude_harvest_all
 from claude_collector import harvest_file as claude_harvest_file
 from codex_collector import HARNESS as CODEX_HARNESS
 from codex_collector import harvest_file as codex_harvest_file
+from hookio import log_hook_error as _log_hook_error
+from hookio import read_hook_stdin as _read_hook_stdin
+from hookio import safe_key as _safe_session_id
 from normalize import normalize_all
 from paths import HOME, SOURCE_DIR
 from session_lookup import lookup_session_for_path
@@ -752,39 +755,6 @@ def verdict_for_transcript(conn: sqlite3.Connection, transcript: Path, session_i
 
 def _verdict_path(harness: str, session_id: str) -> Path:
     return VERDICT_DIR / f"{harness}-verdict-{session_id}"
-
-
-def _read_hook_stdin() -> dict | None:
-    try:
-        payload = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, OSError):
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-def _safe_session_id(sid) -> bool:
-    """A session id fit to appear in a /tmp filename.
-
-    Session ids arrive on hook stdin, and while both runtimes generate
-    UUIDs, nothing guarantees that forever — a value containing a path
-    separator must never reach `Path(...)` construction or `unlink`.
-    """
-    import re
-
-    return isinstance(sid, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", sid) is not None
-
-
-def _log_hook_error(kind: str, exc: Exception) -> None:
-    """One breadcrumb line per swallowed hook error, so silent-by-design
-    doesn't become invisible-forever. Best-effort: logging must never make
-    the hook fail."""
-    try:
-        log_dir = HOME / ".flow" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        with (log_dir / "hook-errors.log").open("a") as fh:
-            fh.write(f"{datetime.now(timezone.utc).isoformat()}\t{kind}\t{type(exc).__name__}: {exc}\n")
-    except OSError:
-        pass
 
 
 def _run_verdict_hook() -> int:

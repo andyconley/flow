@@ -82,7 +82,11 @@ Use the Read tool to resolve. If a name is cited and the project overlay or user
 
 ### Committing user-overlay edits
 
-`~/.flow/user/` may be a git repo — `flow setup user --overlay-repo <url>` attaches one, and `flow doctor` reports whether it has history. When it does, **the agent that edits overlay content commits it in the same turn**: a personal command body, an agent override, a hook script, or the `flow.toml` registration. The person who owns that content is not the one typing in the directory, so waiting for them to notice pending changes leaves authored work uncommitted until something breaks. Push in the same turn too when the branch has an upstream — `doctor` reports `N unpushed`, so committing without pushing produces exactly the state it flags. `flow doctor`'s `vcs:` line under `user overlay:` is the backstop for anything edited outside that path.
+`~/.flow/user/` may be a git repo — `flow setup user --overlay-repo <url>` attaches one, and `flow doctor` reports whether it has history. When it does, **the agent that edits overlay content commits it in the same turn**: a personal command body, an agent override, a hook script, or the `flow.toml` registration. The person who owns that content is not the one typing in the directory, so waiting for them to notice pending changes leaves authored work uncommitted until something breaks. Push in the same turn too when the branch has an upstream — `doctor` reports `N unpushed`, so committing without pushing produces exactly the state it flags.
+
+Two hooks watch for sessions that drift from this: one fires just after a write to versioned content, the other at the next prompt boundary while work is still outstanding. Both print a single advisory line and neither blocks anything — they exist because a convention that lives only in a document does not survive a compaction. `flow overlay status` answers the same question on demand, and `flow doctor`'s `vcs:` line under `user overlay:` remains the backstop for anything edited outside that path.
+
+The overlay may sit inside a larger repository — a dotfiles home, say — rather than being one itself. When it does, these reports describe that whole repository, which is the intended reading: uncommitted work beside the overlay is the same hazard as uncommitted work in it.
 
 ## Role provider model
 

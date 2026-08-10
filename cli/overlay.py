@@ -5,19 +5,27 @@ framework ships — it holds personal commands, agent overrides, hook scripts,
 and the manifest registering them. Making it a git repo is what gives that
 content history and a way back after a lost machine.
 
-This module only *reports*. It never inits, commits, or pushes: `doctor`
-consumes it, and `doctor`'s contract is to observe conditions rather than
-repair them (see the usage-store note there for the same reasoning). Setup
-handles initialization; the agent that edits overlay files commits them.
+This module reports and advises. It never inits, commits, or pushes: `doctor`
+consumes the status, and `doctor`'s contract is to observe conditions rather
+than repair them (see the usage-store note there for the same reasoning).
+Setup handles initialization; the agent that edits overlay files commits
+them. The only thing written here is a throttle marker under
+`~/.flow/state/`, so that the nudge below can stay quiet without forgetting
+that it already spoke.
 
 Kept separate from `diagnostics.py` so the status is unit-testable against a
 temporary directory without shelling through the CLI, and so `diagnostics.py`
 keeps holding presentation rather than git plumbing.
 """
 
+import hashlib
 import os
 import subprocess
+import time
 from pathlib import Path
+
+import hookio
+from paths import HOME, USER_OVERLAY_DIR
 
 # Shipped into a fresh overlay repo. The overlay holds hand-authored markdown
 # and shell, so the hazard is a file carrying a credential: an .env a hook
@@ -285,3 +293,184 @@ def format_overlay_vcs(status: dict) -> str:
         # the counts above are the whole tree's, not this directory's.
         line += f" — {display_path(Path(status['root']))}"
     return line
+
+
+# ---------------------------------------------------------------------------
+# The nudge
+#
+# `FRAMEWORK.md` says the agent that edits overlay content commits it in the
+# same turn. That convention had no detection: a compaction or a fresh
+# session regressed to accumulating uncommitted work, discovered only when
+# `doctor` happened to be run.
+#
+# Two triggers, both advisory, neither ever blocking:
+#
+#   PostToolUse       — right after a write, so the agent learns the file it
+#                       just touched is versioned while the edit is fresh.
+#   UserPromptSubmit  — the turn boundary that actually reaches the model.
+#                       Stop would be the intuitive choice and is the wrong
+#                       one: its stdout lands in the transcript, which is why
+#                       `flow-token-verdict.sh` writes a file there instead.
+#                       UserPromptSubmit's stdout is injected as context, so
+#                       the nudge arrives at the start of the next turn —
+#                       one turn later, but somewhere the agent can act on it.
+#
+# Silent unless the overlay is tracked AND has something outstanding. Someone
+# who never opted into an overlay repo must never see this.
+# ---------------------------------------------------------------------------
+
+# PostToolUse is bounded by edits, so it only needs to avoid firing once per
+# file across a ten-file burst. UserPromptSubmit fires on every prompt and
+# needs the longer quiet period.
+NUDGE_THROTTLE_EDIT_SEC = 10 * 60
+NUDGE_THROTTLE_PROMPT_SEC = 30 * 60
+
+NUDGE_STATE_DIR = HOME / ".flow" / "state"
+
+
+def nudge_fingerprint(status: dict) -> str:
+    """A stable digest of what there is to commit.
+
+    Lets the prompt-boundary nudge re-fire the moment the outstanding set
+    changes, rather than staying quiet for the rest of the throttle window
+    while new work piles up behind it.
+    """
+    parts = [status.get("branch") or "", str(status.get("unpushed"))]
+    parts.extend(sorted(status.get("dirty") or []))
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
+
+
+def _marker_path(root: str, event: str) -> Path:
+    """One marker per (repo, event). The repo is hashed rather than spelled
+    out: marker filenames should not carry an account name."""
+    key = hashlib.sha256(root.encode()).hexdigest()[:16]
+    return NUDGE_STATE_DIR / f"overlay-nudge-{event}-{key}"
+
+
+def should_nudge(
+    status: dict,
+    event: str,
+    *,
+    throttle_sec: int,
+    refire_on_change: bool,
+    now: float | None = None,
+) -> bool:
+    """Whether to speak, and record having spoken.
+
+    Fires when the throttle window has elapsed, or — for the prompt-boundary
+    nudge — as soon as the outstanding set differs from what was last
+    reported. An unreadable or unwritable marker degrades to firing, which is
+    the safe direction: a duplicated advisory costs a line, a suppressed one
+    costs the whole feature.
+    """
+    now = time.time() if now is None else now
+    marker = _marker_path(status["root"] or "", event)
+
+    raw = hookio.read_marker(marker)
+    fingerprint = nudge_fingerprint(status)
+    if raw:
+        stamp, _, seen = raw.partition("\t")
+        try:
+            elapsed = now - float(stamp)
+        except ValueError:
+            elapsed = throttle_sec  # unparseable marker: treat as expired
+        unchanged = seen == fingerprint
+        if elapsed < throttle_sec and (unchanged or not refire_on_change):
+            return False
+
+    hookio.write_marker(marker, f"{now}\t{fingerprint}")
+    return True
+
+
+def nudge_message(status: dict, event: str) -> str | None:
+    """The advisory line, or None when there is nothing worth saying."""
+    outstanding = []
+    if status["dirty"]:
+        n = len(status["dirty"])
+        outstanding.append(f"{n} uncommitted file{'s' if n != 1 else ''}")
+    if status["unpushed"]:
+        outstanding.append(f"{status['unpushed']} unpushed commit{'s' if status['unpushed'] != 1 else ''}")
+    if not outstanding:
+        return None
+
+    where = display_path(Path(status["root"])) if status["root"] else "the overlay repo"
+    lead = "just edited versioned content" if event == "PostToolUse" else "carrying uncommitted work"
+    return (
+        f"flow advisory: {where} is {lead} — {' and '.join(outstanding)}. "
+        "The convention is that the agent making the edit commits and pushes it in the same turn "
+        "(see FRAMEWORK.md, 'Committing user-overlay edits'). "
+        "(Informational only — nothing is blocked.)"
+    )
+
+
+def _edit_touches_repo(payload: dict, root: str) -> bool | None:
+    """Whether the edited path lies inside the repo.
+
+    None means the runtime did not say. Claude's PostToolUse payload carries
+    `tool_input.file_path`; Codex's shape is unverified, so an absent path
+    must degrade to the plain outstanding-work check rather than silently
+    disabling the hook on one runtime.
+    """
+    tool_input = payload.get("tool_input")
+    path = tool_input.get("file_path") if isinstance(tool_input, dict) else None
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        return Path(root).resolve() in Path(path).resolve().parents
+    except OSError:
+        return None
+
+
+def overlay_check_command() -> int:
+    """`flow overlay check --hook`. Always exits 0, prints at most one line.
+
+    Every failure mode here is swallowed on purpose. A hook that errors on
+    every prompt of every session is the loudest possible failure of a
+    feature whose whole premise is staying quiet.
+    """
+    try:
+        payload = hookio.read_hook_stdin()
+        if payload is None:
+            return 0
+        event = payload.get("hook_event_name")
+        if event not in ("PostToolUse", "UserPromptSubmit"):
+            return 0
+
+        status = overlay_vcs_status(USER_OVERLAY_DIR)
+        if not status["tracked"] or status["error"]:
+            # An untracked or unreadable overlay is `doctor`'s business.
+            # Repeating it on every prompt would be noise aimed at someone
+            # who may never have opted in.
+            return 0
+
+        if event == "PostToolUse" and _edit_touches_repo(payload, status["root"] or "") is False:
+            return 0
+
+        message = nudge_message(status, event)
+        if message is None:
+            return 0
+
+        if event == "PostToolUse":
+            throttle, refire = NUDGE_THROTTLE_EDIT_SEC, False
+        else:
+            throttle, refire = NUDGE_THROTTLE_PROMPT_SEC, True
+        if not should_nudge(status, event, throttle_sec=throttle, refire_on_change=refire):
+            return 0
+
+        print(message)
+        return 0
+    except Exception as exc:
+        hookio.log_hook_error("overlay-nudge", exc)
+        return 0
+
+
+def overlay_status_command() -> int:
+    """`flow overlay status`. The `doctor` line, standalone."""
+    status = overlay_vcs_status(USER_OVERLAY_DIR)
+    print(f"overlay:  {display_path(USER_OVERLAY_DIR)}")
+    print(f"vcs:      {format_overlay_vcs(status)}")
+    if status["remote"]:
+        print(f"remote:   {status['remote']}")
+    for path in status["dirty"]:
+        print(f"  dirty:  {path}")
+    return 0
