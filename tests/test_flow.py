@@ -1728,6 +1728,49 @@ class FlowCliTests(unittest.TestCase):
         self.assert_ok(unlimited)
         self.assertEqual(len(json.loads(unlimited.stdout)["rows"]), 25)
 
+    def test_cost_active_end_to_end_via_cli(self) -> None:
+        """`flow cost active` harvests AND normalizes internally — this test
+        deliberately never calls `flow harvest`/`flow normalize`, proving
+        the pipeline-first behavior end to end. Needs a near-now timestamp
+        (unlike every other fixture in this class) because `active` filters
+        on real wall-clock recency.
+        """
+        from datetime import datetime, timezone
+
+        home = self.use_fake_home()
+        claude_dir = home / ".claude" / "projects" / "-tmp-proj"
+        claude_dir.mkdir(parents=True)
+        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        fresh = _claude_assistant("sess-live", "req-1", input_tokens=100_000)
+        fresh["timestamp"] = now_iso
+        (claude_dir / "sess-live.jsonl").write_text(_jsonl(_claude_user("sess-live"), fresh))
+
+        as_json = self.run_flow("cost", "active", "--json")
+        self.assert_ok(as_json)
+        payload = json.loads(as_json.stdout)
+        self.assertEqual(len(payload["rows"]), 1)
+        row = payload["rows"][0]
+        self.assertEqual(row["session_id"], "sess-live")
+        self.assertEqual(row["ctx_pct"], 50.0)  # 100K of the assumed 200K window
+        self.assertEqual(row["recommend"], "fine")  # single turn: carry 0
+
+        table = self.run_flow("cost", "active")
+        self.assert_ok(table)
+        self.assertIn("RECOMMEND", table.stdout)
+        self.assertIn("fine", table.stdout)
+
+    def test_cost_active_with_only_stale_sessions_is_a_clean_empty_result(self) -> None:
+        home = self.use_fake_home()
+        claude_dir = home / ".claude" / "projects" / "-tmp-proj"
+        claude_dir.mkdir(parents=True)
+        # The shared fixture's fixed 2026-01-01 timestamp is guaranteed stale.
+        (claude_dir / "sess-old.jsonl").write_text(
+            _jsonl(_claude_user("sess-old"), _claude_assistant("sess-old", "req-1"))
+        )
+        result = self.run_flow("cost", "active")
+        self.assert_ok(result)
+        self.assertIn("no active sessions", result.stdout)
+
     def test_cost_summary_with_no_data_is_a_clean_empty_result(self) -> None:
         self.use_fake_home()
         table = self.run_flow("cost", "summary", "--all")
@@ -3727,6 +3770,173 @@ class CostTests(unittest.TestCase):
         line = self.cost._render_gauge_line(gauge)
         self.assertIn("300m window 41.0%", line)
         self.assertEqual(line.count("%"), 1)
+
+    # ------------------------------------------------------------------
+    # active_rows — `flow cost active`, superseding token-report --active
+    #
+    # `now` is injected everywhere for determinism. Timestamps use the Z
+    # suffix, matching what the collectors actually store.
+    # ------------------------------------------------------------------
+
+    def _active_now(self):
+        from datetime import datetime, timezone
+
+        return datetime(2026, 1, 10, 12, 0, 0, tzinfo=timezone.utc)
+
+    def insert_ctx_turn(self, session_row_id: int, ts: str, ctx: int, is_subagent: int = 0) -> None:
+        """One context sample: fresh+cache_read+cache_write = ctx."""
+        turn_raw_id = self._next_id
+        self._next_id += 1
+        self.conn.execute(
+            "INSERT INTO turn_raw (id, session_row_id, natural_turn_id, turn_seq, is_subagent,"
+            " ts, model, payload, source_path, source_line_no, collector_version)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'm', '{}', '/tmp/x', ?, 1)",
+            (turn_raw_id, session_row_id, f"t{turn_raw_id}", turn_raw_id, is_subagent, ts, turn_raw_id),
+        )
+        self.conn.execute(
+            "INSERT INTO turn_norm (turn_raw_id, ts, model, is_subagent, fresh_input_tokens,"
+            " cache_read_tokens, cache_write_tokens, output_tokens, norm_version)"
+            " VALUES (?, ?, 'm', ?, ?, 0, 0, 1, 1)",
+            (turn_raw_id, ts, is_subagent, ctx),
+        )
+
+    def test_active_rows_within_filter_and_ctx_carry_math(self) -> None:
+        sess = self.insert_session("active-1", harness="claude", title="live one")
+        self.insert_ctx_turn(sess, "2026-01-10T10:00:00Z", 40_000)  # session start
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 120_000)  # latest, 10 min ago
+        stale = self.insert_session("stale-1", harness="claude")
+        self.insert_ctx_turn(stale, "2026-01-10T09:00:00Z", 50_000)  # 3h ago — outside window
+
+        rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        self.assertEqual([r["session_id"] for r in rows], ["active-1"])
+        row = rows[0]
+        self.assertEqual(row["label"], "live one")
+        self.assertEqual(row["ctx_pct"], 60.0)  # 120K of the 200K standard window
+        self.assertEqual(row["carry_pct"], 40.0)  # (120K - 40K) of 200K
+        self.assertEqual(row["idle_sec"], 600)
+
+    def test_active_rows_excludes_subagent_turns_from_context_math(self) -> None:
+        """A sidechain turn's context is a different conversation's size — if
+        the newest turn overall is a subagent's, the main thread's own
+        newest must still be the one reported.
+        """
+        sess = self.insert_session("active-1", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:00:00Z", 40_000)
+        self.insert_ctx_turn(sess, "2026-01-10T11:30:00Z", 100_000)
+        self.insert_ctx_turn(sess, "2026-01-10T11:55:00Z", 15_000, is_subagent=1)  # newest overall
+
+        rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ctx_pct"], 50.0, "must report the main thread's 100K, not the sidechain's 15K")
+
+    def test_active_rows_window_inference_flips_above_threshold(self) -> None:
+        small = self.insert_session("small-ctx", harness="claude")
+        self.insert_ctx_turn(small, "2026-01-10T11:50:00Z", 100_000)
+        large = self.insert_session("large-ctx", harness="claude")
+        self.insert_ctx_turn(large, "2026-01-10T11:50:00Z", 400_000)  # impossible on 200K
+
+        by_id = {
+            r["session_id"]: r
+            for r in self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        }
+        self.assertEqual(by_id["small-ctx"]["ctx_pct"], 50.0)  # assumed 200K window
+        self.assertEqual(by_id["large-ctx"]["ctx_pct"], 40.0)  # inferred 1M window
+        self.assertFalse(by_id["small-ctx"]["window_exact"])
+
+    def test_active_rows_statusline_window_file_overrides_and_snaps(self) -> None:
+        """The statusline's derived window carries integer-percent rounding
+        error — a recorded 980000 must snap to the real 1M window. This is
+        the one signal that can identify a 1M session still under 190K.
+        """
+        import os
+
+        sess = self.insert_session("statusline-test-sess", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 100_000)
+        window_file = "/tmp/claude-window-statusline-test-sess"
+        with open(window_file, "w") as fh:
+            fh.write("980000")
+        try:
+            rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+            self.assertEqual(rows[0]["ctx_pct"], 10.0, "100K of the snapped 1M window")
+            self.assertTrue(rows[0]["window_exact"])
+        finally:
+            os.unlink(window_file)
+
+    def test_active_rows_gap_selects_clear_vs_compact(self) -> None:
+        """The idle gap BEFORE the latest turn is what distinguishes 'came
+        back to new work' (/clear) from 'same work, heavy context'
+        (/compact) — 20 minutes is the carried-over boundary.
+        """
+        clear_sess = self.insert_session("gap-clear", harness="claude")
+        self.insert_ctx_turn(clear_sess, "2026-01-10T11:20:00Z", 10_000)
+        self.insert_ctx_turn(clear_sess, "2026-01-10T11:50:00Z", 110_000)  # 30-min gap
+        compact_sess = self.insert_session("gap-compact", harness="claude")
+        self.insert_ctx_turn(compact_sess, "2026-01-10T11:45:00Z", 10_000)
+        self.insert_ctx_turn(compact_sess, "2026-01-10T11:50:00Z", 110_000)  # 5-min gap
+
+        by_id = {
+            r["session_id"]: r
+            for r in self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        }
+        self.assertIn("/clear", by_id["gap-clear"]["recommend"])
+        self.assertIn("/compact", by_id["gap-compact"]["recommend"])
+
+    def test_active_rows_recommendation_thresholds(self) -> None:
+        # carry 50% of 200K -> "/x now"; 30% -> "at next break"; 10% ->
+        # "fine". All with a small gap (compact path).
+        for sid, base, latest in (
+            ("carry-high", 10_000, 110_000),  # carry 100K = 50%
+            ("carry-mid", 10_000, 70_000),  # carry 60K = 30%
+            ("carry-low", 10_000, 30_000),  # carry 20K = 10%
+        ):
+            sess = self.insert_session(sid, harness="claude")
+            self.insert_ctx_turn(sess, "2026-01-10T11:45:00Z", base)
+            self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", latest)
+
+        by_id = {
+            r["session_id"]: r["recommend"]
+            for r in self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        }
+        self.assertEqual(by_id["carry-high"], "/compact now")
+        self.assertEqual(by_id["carry-mid"], "/compact at next break")
+        self.assertEqual(by_id["carry-low"], "fine")
+
+    def test_active_rows_sorted_worst_carry_first(self) -> None:
+        small = self.insert_session("carry-small", harness="claude")
+        self.insert_ctx_turn(small, "2026-01-10T11:00:00Z", 10_000)
+        self.insert_ctx_turn(small, "2026-01-10T11:50:00Z", 30_000)
+        big = self.insert_session("carry-big", harness="claude")
+        self.insert_ctx_turn(big, "2026-01-10T11:00:00Z", 10_000)
+        self.insert_ctx_turn(big, "2026-01-10T11:50:00Z", 150_000)
+
+        rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        self.assertEqual([r["session_id"] for r in rows], ["carry-big", "carry-small"])
+
+    def test_active_rows_ignores_codex_sessions(self) -> None:
+        sess = self.insert_session("codex-live", harness="codex")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 100_000)
+        self.assertEqual(self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now()), [])
+
+    def test_render_active_table_marks_inferred_windows(self) -> None:
+        rows = [
+            {
+                "id": "abc12345",
+                "label": "some session",
+                "ctx_pct": 46.0,
+                "carry_pct": 38.0,
+                "window_exact": False,
+                "idle_sec": 245,
+                "recommend": "/compact at next break",
+                "session_id": "abc12345-full",
+            }
+        ]
+        out = self.cost._render_active_table(rows)
+        self.assertIn("~46%", out)
+        self.assertIn("4m", out)
+        self.assertIn("window inferred", out)
+
+    def test_render_active_table_empty(self) -> None:
+        self.assertEqual(self.cost._render_active_table([]), "(no active sessions in range)")
 
 
 if __name__ == "__main__":
