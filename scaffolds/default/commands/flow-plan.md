@@ -92,13 +92,14 @@ Only enter this phase after the Phase 1 hard checkpoint passes.
    - document structure (sections, audience, level of detail)
    - other contract types as relevant
 5. Define validation expectations.
+6. **Cost posture check (informational only).** Run `flow cost active`. If this session is carrying 25%+ of its window, or the Codex capacity gauge (`flow cost summary --days 7`) is running high, note it for the lane recommendation — nothing here blocks shaping or changes the recommended lane by itself.
 
 ### Phase 3 — Capture
 
 Only enter this phase after Phase 2's shaping work is complete and the engineer has either accepted it or fed back adjustments.
 
 1. **Capture.** Emit the Plan Summary (template below).
-2. **Recommend the lane.** `flow-scout` or `flow-implement`, with rationale.
+2. **Recommend the lane.** `flow-scout` or `flow-implement`, with rationale. If the Phase 2 cost posture check surfaced anything, mention it *alongside* the recommendation — e.g. "this session is carrying 40%; consider /clear before a long implement run" or "capacity is high; route mechanical slices to smaller-model agents" — never *as* the recommendation. Cost never overrides the lane the work itself calls for.
 
 ## Output Format
 

@@ -49,16 +49,17 @@ Inspect:
 4. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
 5. Read the auto-memory index at `~/.claude/projects/<project-id>/memory/MEMORY.md` and pull in any entries relevant to the current focus.
 6. Check for interrupted or active runs across all stacked overlay levels.
-7. Identify:
+7. **Usage advisory (informational only — never blocks orientation, never changes a recommendation by itself).** Run `flow cost summary --days 7`. If the output includes a Codex capacity line, report it verbatim in the advisory section; if it doesn't, say nothing about capacity — absence of data is silence, not a warning. Then run `flow cost active`: if any session shows 25%+ carry, surface its row and the tool's recommendation as information the user may act on. If `flow` or the usage store is unavailable, skip this step silently.
+8. Identify:
    - the project's operating model and any project-specific role assignments
    - the active standards and overlays that matter right now
    - active or interrupted work
    - memory caveats, blockers, or migration notes
-8. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay:
+9. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay:
    - Check for an explicit opt-out marker `.flow-skip` at the project root.
    - If `.flow-skip` exists, treat the absence as **"by design"** — the user has explicitly opted out. Do not recommend setup.
    - Otherwise, **recommend `flow setup project`**. Default to recommending — do not qualify it as "optional" or speculate that "this project doesn't need one." If the user wants to opt out for this repo, they can `touch .flow-skip` at the root; until that marker exists, recommend setup.
-9. Recommend the next command. Candidates depend on state. **Distinguish slash commands (invoked inside Claude as `/flow-XXX`) from CLI commands (run from the shell or asked of Claude):**
+10. Recommend the next command. Candidates depend on state. **Distinguish slash commands (invoked inside Claude as `/flow-XXX`) from CLI commands (run from the shell or asked of Claude):**
    - `flow setup project` *(shell command — ask Claude to run it, or run it yourself from a terminal at the repo root)* — if no overlay exists and no `.flow-skip` marker is present
    - `/flow-status` — if active work is unclear
    - `/flow-resume` — if there is interrupted work to continue
@@ -92,6 +93,10 @@ Inspect:
 
 ### Session Checkpoint
 - [Status: "current" | "superseded by commits since <date> — safe to discard" | "no checkpoint present"]
+
+### Usage Advisory (omit the section entirely when there is nothing to say)
+- [Codex capacity line verbatim, when present]
+- [Any active session at 25%+ carry, with the tool's recommendation — informational, the user decides]
 
 ### Sources of Truth
 - [Files that matter right now]
@@ -127,6 +132,7 @@ Before leaving `flow-boot`, confirm:
 - [ ] PROJECT.md and STATE.md were read across all stacked overlay levels
 - [ ] auto-memory MEMORY.md was consulted for relevant durable facts/decisions
 - [ ] interrupted or active runs were checked across all stacked overlay levels
+- [ ] the usage advisory ran (`flow cost summary --days 7` + `flow cost active`) — reported when there was something to report, silent when there wasn't, skipped silently if flow was unavailable
 - [ ] overlay status was reported; `.flow-skip` marker was checked before classifying "by design"; default for missing overlay is "recommended", not "by design"
 - [ ] the next recommended command is explicit
 

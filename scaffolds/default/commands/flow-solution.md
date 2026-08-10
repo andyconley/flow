@@ -81,6 +81,7 @@ Only enter this phase after the Phase 1 hard checkpoint passes.
 3. **Walk the architecture dimensions.** Apply the five dimensions from `architecture.md`: domain boundaries, interfaces/data flow, state/persistence, operational shape, decision durability.
 4. **Make tradeoffs explicit.** Complexity, reversibility, operational cost, time-to-deliver. Name the dimensions you're trading on.
 5. **Recommend or facilitate.** Offer a recommendation with rationale, or facilitate the engineer's choice when they have the context.
+6. **Cost posture check (informational only).** Run `flow cost active`. If this session is carrying 25%+ of its window, or the Codex capacity gauge (`flow cost summary --days 7`) is running high, note it when proposing chunks — a heavy session is a reason to suggest /clear before a long chunk starts, or to shape mechanical chunks so smaller-model agents can carry them. Nothing here blocks solutioning or changes which option is technically right.
 
 ### Phase 3 — Capture
 

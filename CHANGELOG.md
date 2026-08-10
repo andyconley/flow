@@ -8,6 +8,20 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **Usage advisory in the workflow commands** (token-advisory chunk 9) —
+  the first place the usage store influences agent behavior rather than
+  just answering queries. Doc-only, per this file's own convention that
+  scaffold command docs *are* the behavior: `flow-boot` gains a usage
+  advisory step (Codex capacity verbatim when present; any session at
+  25%+ carry), `flow-status` gains a session-cost step (this session's
+  ctx/carry via `flow cost active`, matched by cwd, ambiguity said aloud
+  — deliberately the *session's* cost, since the store has no run
+  concept), and `flow-plan`/`flow-solution` gain a cost posture check in
+  their shaping phases (mentioned alongside the lane/chunk
+  recommendation, never as it). Posture is informational-only and stated
+  inline in every edit: advisory lines never block a phase, never change
+  a default, and absence of data means silence, not a warning.
+
 - **`flow cost active`** (token-advisory chunk 8) — per-active-session
   context percentage, carry above session start, idle, and a
   `/clear`-or-`/compact` recommendation, worst carry first. Supersedes
