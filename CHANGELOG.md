@@ -6,260 +6,95 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-10
+
+The usage-tracking release. flow now measures what your agent sessions cost,
+tells you when a session is carrying dead weight, and says so where you can
+act on it: the statusline, the prompt, and the workflow commands. Everything
+runs locally against transcripts already on disk. No API calls.
+
 ### Added
 
-- **Post-turn verdict and pre-execution warning on both harnesses**
-  (token-advisory chunks 11–12, board items E and F — the initiative's
-  last pieces). `flow cost verdict --hook` is the Stop-hook engine on both
-  runtimes: incrementally harvests the transcript that just stopped,
-  normalizes, and judges carry from the store — thresholds carried over
-  verbatim from `token-report --verdict` (25K carry floor, 15-request
-  minimum, 20-minute idle gap distinguishing /clear from /compact), same
-  verdict-file contract the Claude statusline already reads
-  (`/tmp/claude-verdict-<sid>`, `/{action}?\t{carry}\t{ctx}\t{why}`).
-  Prints nothing in hook mode on purpose — Stop-hook stdout feeds the
-  conversation on both runtimes. `flow cost warn --hook` is the
-  UserPromptSubmit engine: reads the verdict file (zero computation at
-  prompt time) and prints one advisory line only when carry ≥ 100K and
-  has grown ≥ 50K since the last warning — the line is injected as
-  context so the model and the user both see it before the next
-  expensive turn; every other case is silence, and it always exits 0.
-  Both hooks registered for both runtimes via `[[claude.hooks]]` and the
-  new `[[codex.hooks]]`; the scripts are trivial launchers (find flow,
-  hand over stdin) so all judgment stays in testable Python. Codex
-  limitation, documented not hidden: no statusline consumes its verdict
-  numbers, so only the window-agnostic absolute thresholds grade them.
-  With this, `~/bin/token-report` is fully retired: its last consumer
-  (the hand-authored `token-verdict.sh` Stop hook) is replaced, the old
-  settings.json entry removed, and the script deleted (backed up, with
-  its README, in the run's evidence directory — it was never version
-  controlled).
-
-- **`[[codex.hooks]]` — full-parity hook management for the Codex runtime**
-  (token-advisory chunk 10). Codex now supports native lifecycle hooks
-  (schema-compatible with Claude's: PreToolUse/PostToolUse/Stop/
-  SessionStart/UserPromptSubmit/... with the same stdin JSON contract), and
-  flow manages them the way it manages Claude's: `[[codex.hooks]]` manifest
-  entries deploy scripts to `.codex/hooks/` and merge handlers into
-  `.codex/hooks.json` under the preserve-unmanaged contract —
-  `~/.codex/config.toml` (model, plugins, the desktop app's own `notify`
-  key) is never touched. Full parity includes the user overlay:
-  `[[claude.hooks]]` and `[[codex.hooks]]` in `~/.flow/user/flow.toml` now
-  merge like commands and agents, with scripts from `~/.flow/user/hooks/`.
-  Both settings builders also gained optional `timeout`/`status_message`
-  passthrough, and `matcher` is optional (omitted = match everything).
-  Two contract rules enforced after review: hook scripts must be named
-  `flow-*` (the preserve-unmanaged strip identifies flow's handlers by
-  that path marker; a differently-named script would duplicate its
-  handler on every sync — sync now fails loudly instead), and merge-mode
-  files (settings.json, hooks.json) are never unlinked as "stale" when
-  dropped from the manifest — they hold user content, so they are
-  unmanaged in place rather than deleted.
-
-- **Usage advisory in the workflow commands** (token-advisory chunk 9) —
-  the first place the usage store influences agent behavior rather than
-  just answering queries. Doc-only, per this file's own convention that
-  scaffold command docs *are* the behavior: `flow-boot` gains a usage
-  advisory step (Codex capacity verbatim when present; any session at
-  25%+ carry), `flow-status` gains a session-cost step (this session's
-  ctx/carry via `flow cost active`, matched by cwd, ambiguity said aloud
-  — deliberately the *session's* cost, since the store has no run
-  concept), and `flow-plan`/`flow-solution` gain a cost posture check in
-  their shaping phases (mentioned alongside the lane/chunk
-  recommendation, never as it). Posture is informational-only and stated
-  inline in every edit: advisory lines never block a phase, never change
-  a default, and absence of data means silence, not a warning.
-
-- **`flow cost active`** (token-advisory chunk 8) — per-active-session
-  context percentage, carry above session start, idle, and a
-  `/clear`-or-`/compact` recommendation, worst carry first. Supersedes
-  `~/bin/token-report --active` (that tool is now deprecated machine-side;
-  its one remaining consumer, the Stop hook's `--verdict`, migrates in a
-  later chunk). Store-backed instead of re-parsing transcripts: runs the
-  incremental Claude harvest AND a normalize pass before querying — the
-  normalize step is load-bearing, since a freshly harvested turn exists
-  only in `turn_raw` until projected. Semantics carried over from
-  token-report with two deliberate divergences: liveness/idle come from the
-  latest main-thread turn's timestamp rather than transcript file mtime
-  (misses a session where the user typed but no assistant turn landed yet —
-  bounded by one turn), and a session is one row even where its subagent
-  files would have surfaced as separate rows. Context math is main-thread
-  only (`is_subagent = 0`) — the store interleaves sidechain turns where
-  the old per-file read never did. The statusline's
-  `/tmp/claude-window-<sid>` files are still read for exact window sizes,
-  snapped to the two real windows; otherwise inferred (>190K observed ⇒
-  1M), marked `~` in the table. Validated side-by-side against
-  `token-report --active` on live sessions: identical ctx/carry/
-  recommendation on every commonly-visible session.
-
-### Fixed
-
-- **User-overlay skills' generated edit hint pointed at a file that doesn't
-  exist.** `render_skill_from_command` hardcoded
-  ``Edit `.flow/<source>` and run `flow sync claude`​`` regardless of
-  origin; a user-overlay command's source lives under `~/.flow/user/` and
-  only ever syncs in `--user` mode. Found while moving the first real
-  personal command (`session-hygiene`, machine-local, not in this repo)
-  onto the overlay mechanism. The three sibling render sites (codex
-  skills, both agent renderers) have the same defect but take bare string
-  arguments — deferred to a follow-up rather than folded in here.
-- **Genuine last-write-wins for repeated `ai-title` records** (token-advisory
-  chunk 7). Chunk 6 shipped `ai-title` as "first one wins, forever"
-  (`WHERE title IS NULL`) and documented the divergence from a true
-  last-write-wins as inert on real data. This chunk fixes it — and the first
-  design didn't survive contact with real data either: it assumed title
-  records carry their own `timestamp` to compare, and they don't (all 6,340
-  real `custom-title`/`ai-title` records sampled carry exactly
-  `{type, aiTitle|customTitle, sessionId}`, nothing else). What real data
-  does have is timestamps on *adjacent* records, and JSONL is append-only —
-  so schema v4 adds `session.last_seen_ts`, a running high-water mark
-  advanced from every timestamped record, and an `ai-title`'s *effective*
-  timestamp is that mark at the moment its line is processed, compared
-  against `title_ai_ts` (the effective timestamp of the currently-accepted
-  auto-title). `title_source` records whether `custom` or `ai` last won;
-  a `custom-title` locks out every future `ai-title` permanently. Known,
-  accepted limitation: back-to-back `ai-title` records with nothing
-  timestamped between them tie, and the first of the tied cluster wins —
-  this is not a full last-line-wins reconstruction, but it correctly
-  resolves genuine time-separated re-titling and the one real case of a
-  session's title records spanning two files. All three new columns are
-  NULL on migration; one `flow harvest claude --backfill` run re-derives
-  them for existing sessions. Review caught two real defects in the first
-  cut, both fixed with reproduction tests: a repeated `--backfill` silently
-  flipped multi-`ai-title` sessions back to their *first* auto-title
-  (after a full pass `last_seen_ts` holds the file-wide maximum, so a
-  replay handed the first `ai-title` an effective timestamp newer than the
-  stored one — `_reset_claude_watermarks` now clears the derived title
-  state so every replay is a genuine first pass), and an all-untimed
-  cluster accepted the *last* `ai-title` rather than the documented first
-  (every untimed record re-qualified through the both-NULL branch; a
-  `title_source IS NULL` leg makes acceptance genuinely once-only there).
-- **`cwd` now fills from any record type that carries it**, not just the
-  identity-establishing one. A file whose first record is a title line
-  (which carries no `cwd`) previously left `session.cwd` NULL forever,
-  silently weakening `flow cost sessions`' title→cwd→id label fallback for
-  that session. Repaired retroactively by the same `--backfill` replay.
-- **`--limit N` on `flow cost sessions`** (default 20, `--limit 0` for
-  unlimited), applied in the query itself so `--json` and the table always
-  see the identical capped set. `--all` alone now shows the 20 most recent
-  sessions ever; `--all --limit 0` is the explicit everything escape hatch.
-
-- **`flow harvest codex`** — the first collector for the usage store (token-advisory
-  chunk 3). Incrementally reads `~/.codex/sessions/**/*.jsonl` into the raw
-  layer (`session`, `turn_raw`, and a new `agent_activity_raw` table), resuming
-  per file from the `harvest` table's watermark. Ensures the store on first
-  run rather than requiring `flow setup machine` first. No normalization, no
-  advisory behavior, no read surface — later chunks.
-- Schema migration v2: `agent_activity_raw` (coarse activity log for events
-  that carry no token usage — first observed as Codex's cloud/background-agent
-  telemetry, which has no local transcript to attach usage to) and
-  `session.source_path` (a direct pointer a resumed harvest needs to resolve
-  which session a batch belongs to, without inferring it from a child row that
-  may not exist yet).
-- **`flow normalize`** (token-advisory chunk 4) — projects every harness's raw
-  `turn_raw` records into `turn_norm`'s shared, disjoint-token convention, so
-  nothing above that layer needs to know Codex reports `cached_input_tokens`
-  as a *subset* of `input_tokens` while Claude's cache buckets are disjoint
-  and additive. Only rows with no current-version `turn_norm` counterpart are
-  (re)computed — a separate command from `flow harvest codex`, since appending
-  new raw data and recomputing derived data have different cost profiles and
-  a rule change can touch every row. Schema migration v3 adds
-  `capacity_secondary_*` columns to `turn_norm`, mirroring
-  `capacity_primary_*` — real data showed Codex's `rate_limits.secondary`
-  populated in 7.7% of rows on a 16,260-row corpus, not "null in every
-  sample" as originally found. `_V1` and `_V2` untouched; `_V2` is already
-  applied on real installs and could not be edited in place this time.
-- **`flow harvest claude`** (token-advisory chunk 5) — the second collector.
-  Incrementally reads `~/.claude/projects/**/*.jsonl`, deduplicating by
-  `requestId` (a single API response is written as several JSONL lines; the
-  natural key is `requestId` itself, no composite needed the way Codex's
-  `turn_id:source_line_no` was). `_EXTRACTORS["claude"]` added to
-  `normalize.py` in the same chunk — direct mapping, no subtraction, since
-  Claude's token fields are already disjoint. `cli/jsonl_watermark.py` and
-  `cli/session_lookup.py` extracted from `codex_collector.py` (both entirely
-  harness-agnostic) rather than duplicated into the new collector.
-- **`flow cost summary` / `flow cost sessions`** (token-advisory chunk 6) —
-  the first commands that read `turn_norm` instead of writing to it.
-  `summary` groups token totals by `(harness, model)` within a window
-  (`--days N`, default 7; `--all` for everything), plus Codex's most recent
-  capacity reading as a separate gauge line — a snapshot, not a sum, so it's
-  never blended into the token totals and is labeled by the window size
-  actually stored rather than by `primary`/`secondary` — `usage_store.py`'s
-  `_V3` migration documents that those names don't reliably mean "the short
-  window" and "the long window" (real data shows both a 300-minute and a
-  10080-minute value under the `primary` name alone).
-  `sessions` groups by session, most recently active first, with a
-  three-tier label fallback (`title` → `cwd` → a short id). Both views are
-  one pure query function returning a list of dicts, rendered two ways —
-  an aligned table by default, `--json` for the same result (`{"rows":
-  [...]}`, with `summary` adding a sibling `"capacity"` key) — rather than
-  two separate code paths that could drift from each other.
-- **Claude title capture and backfill**, in the same chunk. `custom-title`
-  and `ai-title` JSONL records now populate `session.title`, a column that
-  has existed since the schema's first version but that no collector wrote
-  to. Mirrors `token-report`'s precedence (`custom-title` always wins;
-  `ai-title` only fills a gap) but as two idempotent, order-independent SQL
-  `UPDATE`s instead of an in-memory single pass, since this collector runs
-  incrementally across many separate invocations rather than once per file.
-  `flow harvest claude --backfill-titles` rewinds every already-recorded
-  file's watermark and replays it through the normal pipeline so already-
-  harvested sessions pick up titles retroactively — `turn_raw`'s natural-key
-  uniqueness makes the replay a free no-op for turns already recorded, so
-  this reuses the whole validated harvest path rather than a narrower
-  title-only scanner. Validated against the real local corpus: 162 of 352
-  real Claude sessions picked up a title on the first backfill run.
+- **`flow harvest codex` and `flow harvest claude`** read each harness's
+  session transcripts into `~/.flow/usage.db`, resuming per file from a
+  byte watermark. Safe to run repeatedly or on a schedule. Both collectors
+  were validated against this machine's full real corpus, which overturned
+  several design assumptions fixtures alone had blessed: Codex writes a
+  second copy of the parent's `session_meta` into subagent files, one Codex
+  turn spans several token counts, Claude subagent transcripts live in
+  nested `subagents/` directories and share the parent's session id, and
+  `INSERT OR IGNORE` swallows every constraint violation rather than just
+  duplicates. `flow harvest claude --backfill` replays already-recorded
+  files so old sessions pick up titles, working directories, and title
+  provenance retroactively.
+- **`flow normalize`** projects raw turns into one token convention across
+  harnesses. The two disagree about their own numbers: Codex reports cached
+  input as a subset of input tokens, Claude's cache buckets are disjoint
+  and additive. A single shared column would make cross-harness totals
+  quietly wrong, so raw records keep each harness's meaning and the
+  normalized layer is recomputable whenever a rule changes. Schema v4 adds
+  title provenance and a per-session timestamp high-water mark, which is
+  how repeated auto-titles resolve to the newest one despite title records
+  carrying no timestamps of their own.
+- **`flow cost`** reads it back out:
+  - `summary` — totals by harness and model, plus the most recent Codex
+    capacity reading as a separate gauge line. A snapshot never sums, so it
+    never blends into the totals, and it is labeled by the window size
+    actually stored because `primary`/`secondary` don't reliably mean what
+    they sound like.
+  - `sessions` — per-session totals, most recently active first, capped at
+    the 20 most recent (`--limit 0` for everything).
+  - `active` — context percentage, carry above session start, idle time,
+    and a `/clear`-or-`/compact` recommendation per live session. Harvests
+    and normalizes before answering so the numbers are current. Supersedes
+    `token-report --active`; validated side by side against it on live
+    sessions with identical results.
+  - `verdict` and `warn` — the engines behind the new hooks, also callable
+    by hand for debugging.
+- **Post-turn verdict and pre-execution warning hooks, both runtimes.**
+  After every turn, a Stop hook judges whether the session should `/clear`
+  or `/compact` and writes the verdict file the Claude statusline already
+  reads. Before your next prompt, a UserPromptSubmit hook injects a
+  one-line advisory when carry passes 100K, then again only after another
+  50K of growth. Both are advisory to the bone: they print nothing else,
+  discard their own errors (breadcrumbed to `~/.flow/logs/hook-errors.log`),
+  and always exit 0, because exit code 2 blocks a Stop or erases a prompt
+  on both runtimes. With this, `~/bin/token-report` is fully retired.
+- **`[[codex.hooks]]`** brings Codex hook management to parity with
+  Claude's. Manifest entries deploy scripts to `.codex/hooks/` and merge
+  handlers into `.codex/hooks.json` under the preserve-unmanaged contract;
+  `config.toml` is never touched. Hook scripts must be named `flow-*` —
+  sync rejects anything else, because the unmanaged-content protection
+  identifies flow's handlers by that marker. The user overlay can add or
+  override hooks for both runtimes, with scripts from `~/.flow/user/hooks/`.
+- **Usage advisory in the workflow commands.** `flow-boot` reports Codex
+  capacity and any session the tools flag; `flow-status` reports the
+  current session's cost; `flow-plan` and `flow-solution` note cost posture
+  alongside their recommendations. Informational only, stated inline in
+  every edit: no advisory line blocks a phase or changes a default, and
+  absent data means silence.
+- **Agent model routing.** `flow.toml` model tiers map role agents to
+  runtime models per target; generated skills carry a routing table so
+  commands dispatch each role to the right model; `flow doctor` reports
+  the active policy and a manual smoke test.
 
 ### Changed
 
-- **`flow harvest claude --backfill-titles` renamed to `--backfill`**
-  (token-advisory chunk 7) — breaking for anything invoking the old flag
-  name. The replay mechanism now repairs titles, `cwd`, and title
-  provenance in one pass, so the title-specific name stopped being honest.
-  `COLLECTOR_VERSION` bumped 1 → 2 (informational; nothing branches on it) —
-  this chunk is the first to change what the Claude collector derives from
-  already-committed lines.
-- **`flow cost sessions` now caps at the 20 most recent sessions by
-  default** — previously unlimited. A behavior change to existing output
-  (including `--json`), not just a new flag: any consumer of the
-  uncapped listing needs `--limit 0` to keep it.
+- `flow harvest claude --backfill-titles` is now `--backfill` — it stopped
+  being title-specific once the same replay repaired `cwd` and title
+  provenance.
+- `flow cost sessions` caps at the 20 most recent sessions by default.
 
 ### Fixed
 
-- Two collector bugs found only by validating against a real 83-file, 6-month
-  Codex session corpus rather than synthetic fixtures alone, both silent —
-  neither raised an error or failed a test until the real-data counts were
-  cross-checked by hand:
-  - A subagent's session file carries a second `session_meta` record shortly
-    after its own — a verbatim copy of the *parent's*, injected so the
-    child's transcript is self-contained (confirmed on 35 of 83 real files).
-    Session identity now resolves once, up front, from the file itself
-    (`session.source_path`) rather than lazily from whichever `session_meta`
-    a given harvest batch happens to encounter first — the lazy version
-    worked within a single batch but reintroduced the bug across an
-    incremental resume, which is the only way this collector is ever
-    actually run.
-  - `INSERT OR IGNORE`, used to dedupe on the natural-key constraint, silently
-    swallows *every* constraint violation on that statement, not just the
-    intended duplicate — so a record missing a required field (`timestamp`)
-    would previously vanish with no error and no count, rather than being
-    reported like any other malformed line. Required fields are now checked
-    explicitly before the insert is attempted.
-- **Corrected an `is_subagent` design decision within the same implementation
-  session that made it.** Planning for the Claude collector concluded
-  `isSidechain` was dead in current transcripts — a scan of every file found
-  by a non-recursive directory glob showed zero `isSidechain: true` records,
-  including in sessions known to have used subagents. Shipped as
-  `is_subagent = 0` always for Claude, documented as a finding. Harvesting the
-  real corpus mid-implementation surfaced the actual cause: current Claude
-  Code writes background/queued subagent transcripts to a nested
-  `subagents/<parent-session-uuid>/agent-<agent-id>.jsonl` path that a
-  non-recursive glob never reaches. Correctly scanned, `isSidechain: true`
-  appears on 19,139 real records across 362 of 714 files (over half the
-  corpus) — with complete, real `usage` blocks. `token-report`'s original
-  assumption was right; `is_subagent` is now read per record from
-  `isSidechain`, not derived from a session-level lookup the way Codex's is
-  (a subagent file shares its parent's own `sessionId` rather than declaring
-  a distinct one, so there is no separate child identity to look up).
+- Generated skills' "Edit `...`" hint now points at a file that exists for
+  every origin and sync mode. User-overlay commands point at
+  `~/.flow/user/...`, framework commands installed at user level point at
+  the scaffold, and only project mode keeps the `.flow/...` form. The old
+  hint sent every non-project edit to a path that wasn't there.
+- Dropping a merge-mode file (`.claude/settings.json`, `.codex/hooks.json`)
+  from a manifest no longer deletes it. Those files hold your content
+  alongside flow's; they are now unmanaged in place.
 
 ## [0.7.0] — 2026-08-08
 
