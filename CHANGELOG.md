@@ -29,7 +29,16 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   resolves genuine time-separated re-titling and the one real case of a
   session's title records spanning two files. All three new columns are
   NULL on migration; one `flow harvest claude --backfill` run re-derives
-  them for existing sessions.
+  them for existing sessions. Review caught two real defects in the first
+  cut, both fixed with reproduction tests: a repeated `--backfill` silently
+  flipped multi-`ai-title` sessions back to their *first* auto-title
+  (after a full pass `last_seen_ts` holds the file-wide maximum, so a
+  replay handed the first `ai-title` an effective timestamp newer than the
+  stored one — `_reset_claude_watermarks` now clears the derived title
+  state so every replay is a genuine first pass), and an all-untimed
+  cluster accepted the *last* `ai-title` rather than the documented first
+  (every untimed record re-qualified through the both-NULL branch; a
+  `title_source IS NULL` leg makes acceptance genuinely once-only there).
 - **`cwd` now fills from any record type that carries it**, not just the
   identity-establishing one. A file whose first record is a title line
   (which carries no `cwd`) previously left `session.cwd` NULL forever,
@@ -114,6 +123,10 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   `COLLECTOR_VERSION` bumped 1 → 2 (informational; nothing branches on it) —
   this chunk is the first to change what the Claude collector derives from
   already-committed lines.
+- **`flow cost sessions` now caps at the 20 most recent sessions by
+  default** — previously unlimited. A behavior change to existing output
+  (including `--json`), not just a new flag: any consumer of the
+  uncapped listing needs `--limit 0` to keep it.
 
 ### Fixed
 

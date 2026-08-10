@@ -2603,6 +2603,52 @@ class ClaudeCollectorTests(unittest.TestCase):
         self.claude_collector.harvest_file(self.conn, path)
         self.assertEqual(self.session_row("sess-1")[0], "tied-a")
 
+    def test_ai_title_untimed_cluster_with_no_timestamps_anywhere_keeps_the_first(self) -> None:
+        """The no-time-information-at-all variant of the tied cluster: not a
+        single timestamped record in the whole file. Review found the first
+        cut of the acceptance SQL let every untimed ai-title re-qualify
+        (last of the cluster won — the opposite of the documented rule);
+        the `title_source IS NULL` leg of the first branch is what makes
+        acceptance genuinely once-only in this state.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "untimed-a"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "untimed-b"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self.session_row("sess-1")[0], "untimed-a")
+
+    def test_ai_title_last_write_wins_across_a_sessions_multiple_files(self) -> None:
+        """The case the persisted high-water mark exists FOR: one session's
+        title records split across two files (1 of 163 real sessions, from
+        a session-continuation event). File B's ai-title has a later
+        effective timestamp than file A's, carried across the file boundary
+        by session.last_seen_ts — an in-memory or file-local ordinal would
+        resolve this wrongly.
+        """
+        file_a = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "old title"},
+            ),
+        )
+        file_b = self.write_session(
+            "b.jsonl",
+            _jsonl(
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-02T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "new title"},
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, file_a)
+        self.claude_collector.harvest_file(self.conn, file_b)
+        row = self.session_row("sess-1")
+        self.assertEqual(row[0], "new title")
+        self.assertEqual(row[2], "2026-01-02T00:00:00Z")
+
     def test_custom_title_locks_out_a_later_ai_title_even_with_a_newer_effective_timestamp(self) -> None:
         """A genuinely later ai-title must still lose to an earlier custom-title
         — the lockout is permanent and keyed on title_source, not on time.
@@ -2864,6 +2910,58 @@ class HarvestBackfillTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(row[0], "My Renamed Session")
         self.assertEqual(row[1], "custom")
+
+    def test_repeated_backfill_never_flips_a_title_backwards(self) -> None:
+        """Replay idempotency for the last-write-wins logic — the critical
+        review finding on this chunk. After a full pass, last_seen_ts holds
+        the file-wide maximum, normally GREATER than the accepted title's
+        title_ai_ts (any timestamped activity after the last ai-title — the
+        common shape). A replay starting from that state handed the file's
+        FIRST ai-title an effective timestamp newer than the stored
+        title_ai_ts, so it was re-accepted and the title silently flipped
+        backwards. `_reset_claude_watermarks` clearing last_seen_ts and
+        title_ai_ts alongside the watermark is the fix; this test is the
+        reproduction that confirmed the bug (it fails without that clear)
+        and now pins the fix across TWO backfill cycles, not one.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "old title"},
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-02T00:00:00Z"},
+                {"type": "ai-title", "sessionId": "sess-1", "aiTitle": "new title"},
+                # Timestamped activity after the last ai-title, genuinely
+                # LATER than the system record — this is what pushes
+                # last_seen_ts past title_ai_ts and armed the original bug.
+                # (The shared _claude_assistant fixture's fixed timestamp is
+                # 2026-01-01T00:00:01Z, EARLIER than the system record above,
+                # which would leave last_seen_ts == title_ai_ts and the
+                # strict-greater comparison would mask the bug.)
+                {
+                    "type": "assistant",
+                    "sessionId": "sess-1",
+                    "requestId": "req-1",
+                    "isSidechain": False,
+                    "timestamp": "2026-01-03T00:00:00Z",
+                    "message": {"model": "m", "usage": {"input_tokens": 1, "output_tokens": 1}},
+                },
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(
+            self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+            "new title",
+        )
+
+        for cycle in range(2):
+            self.harvest._reset_claude_watermarks(self.conn)
+            self.claude_collector.harvest_all(self.conn, self.dir)
+            self.assertEqual(
+                self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+                "new title",
+                f"backfill cycle {cycle + 1} must not flip the title backwards",
+            )
 
     def test_backfill_fills_cwd_for_a_session_created_by_a_title_record(self) -> None:
         path = self.write_session(

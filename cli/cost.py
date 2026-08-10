@@ -286,13 +286,18 @@ def cost_sessions_command(
     as_json: bool = False,
     limit: int = DEFAULT_SESSIONS_LIMIT,
 ) -> int:
-    """CLI entry point for `flow cost sessions`. `limit=0` means unlimited."""
+    """CLI entry point for `flow cost sessions`. `limit=0` means unlimited.
+
+    Negative limits also map to unlimited rather than reaching SQLite, where
+    `LIMIT -1` already silently means unlimited — mapping here makes that
+    behavior deliberate and documented instead of an accident of the engine.
+    """
     store = usage_store.default_store_path(HOME)
     capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
     usage_store.ensure_store(store, capabilities)
 
     since = None if show_all else _cutoff(days)
-    row_limit = None if limit == 0 else limit
+    row_limit = None if limit <= 0 else limit
 
     conn = sqlite3.connect(store)
     conn.row_factory = sqlite3.Row

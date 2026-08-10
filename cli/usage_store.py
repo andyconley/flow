@@ -268,9 +268,17 @@ def ensure_store(
     Returns (created, applied_versions). Idempotent: safe to run on every
     `flow setup machine` and every release update.
 
-    Each migration and its ledger row commit together. If the process dies
-    mid-migration the transaction rolls back, so `user_version` and the ledger
-    cannot disagree — `user_version` stays authoritative for what runs next.
+    Each migration's ledger row and `user_version` pragma commit together —
+    but the DDL itself does not, despite the comment on the `with` block
+    below suggesting so: `executescript` implicitly commits any open
+    transaction before running, so the ALTER/CREATE statements land outside
+    it. A crash in the narrow window between the DDL and the ledger commit
+    leaves the columns present with the old `user_version`, and the next
+    `ensure_store` fails on "duplicate column name" rather than resuming.
+    Known, accepted (flagged in chunk 7's review): present since v2, the
+    window is milliseconds on a local SQLite file, and the recovery is a
+    manual `PRAGMA user_version` bump — not worth reworking migrations to
+    per-statement `execute` calls for a personal tool.
     """
     created = not path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -280,7 +288,7 @@ def ensure_store(
     try:
         current = _user_version(conn)
         for version, description, sql in pending_migrations(current):
-            with conn:  # commits the DDL, the ledger row, and the pragma together
+            with conn:  # ledger row + pragma commit together; DDL precedes (see docstring)
                 conn.executescript(sql)
                 conn.execute(
                     "INSERT INTO schema_migration (version, applied_at, description)"

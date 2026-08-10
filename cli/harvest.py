@@ -97,6 +97,24 @@ def _reset_claude_watermarks(conn: sqlite3.Connection) -> None:
         " WHERE harness = ?",
         (CLAUDE_HARNESS,),
     )
+    # Derived title state must reset alongside the watermark, or the replay
+    # is not idempotent: after a full pass, last_seen_ts holds the file-wide
+    # maximum, which is normally GREATER than the accepted title's
+    # title_ai_ts (any timestamped activity after the last ai-title — the
+    # common shape). A replay that starts from that state hands the file's
+    # FIRST ai-title an effective timestamp newer than the stored
+    # title_ai_ts, so it gets re-accepted and the title silently flips
+    # backwards — found by review tracing, confirmed by reproduction, and
+    # now pinned by a harvest→backfill→backfill test. Clearing these two
+    # makes every replay a genuine first pass for title derivation. `title`
+    # and `title_source` deliberately survive: the custom lockout is
+    # order-independent, and keeping `title` protects sessions whose source
+    # files no longer exist on disk (their rows would otherwise lose their
+    # title with nothing left to re-derive it from).
+    conn.execute(
+        "UPDATE session SET last_seen_ts = NULL, title_ai_ts = NULL WHERE harness = ?",
+        (CLAUDE_HARNESS,),
+    )
 
 
 def harvest_claude_command(backfill: bool = False) -> int:

@@ -232,6 +232,12 @@ def _harvest_lines(
     """
     session_row_id: int | None = lookup_session_for_path(conn, HARNESS, path)
     last_seen_ts: str | None = _current_last_seen_ts(conn, session_row_id) if session_row_id is not None else None
+    # Once cwd is known to be set, skip the per-line gap-fill UPDATE — on a
+    # full backfill that statement would otherwise run for essentially every
+    # record in the corpus as a no-op. Deliberately starts False even when
+    # the session already exists: one extra no-op UPDATE on the first
+    # cwd-bearing line is cheaper than a second lookup query here.
+    cwd_known = False
 
     turns_written = 0
     skipped = 0
@@ -267,8 +273,9 @@ def _harvest_lines(
             # would otherwise leave `session.cwd` NULL forever, weakening
             # `cost.py`'s label fallback for that session permanently.
             cwd = record.get("cwd")
-            if cwd:
+            if cwd and not cwd_known:
                 conn.execute("UPDATE session SET cwd = ? WHERE id = ? AND cwd IS NULL", (cwd, session_row_id))
+                cwd_known = True
 
             # A running high-water mark of the most recent real `timestamp`
             # observed anywhere in this session's stream — advanced from
@@ -304,12 +311,14 @@ def _harvest_lines(
                 # own). Accepted when: no custom-title has ever locked this
                 # session out (title_source IS NULL or 'ai'), AND either (a)
                 # there is no time information anywhere yet for this session
-                # (both title_ai_ts and last_seen_ts are NULL — genuinely the
-                # first comparison point) or (b) last_seen_ts is real and
+                # AND no title has ever been accepted (title_source IS NULL
+                # too — without that third leg, every untimed ai-title in a
+                # row would re-qualify and the LAST of an untimed cluster
+                # would win, the opposite of the documented first-wins tie
+                # rule; caught in review) or (b) last_seen_ts is real and
                 # strictly newer than the stored title_ai_ts. An unknown
                 # effective timestamp is never allowed to override a title
-                # that already has a real title_ai_ts — case (a) requires
-                # BOTH to be NULL, not just title_ai_ts.
+                # that already has a real title_ai_ts.
                 #
                 # Known, accepted limitation: two ai-title records with no
                 # timestamped record between them (common — several other
@@ -327,7 +336,7 @@ def _harvest_lines(
                         " WHERE id = ?"
                         "   AND (title_source IS NULL OR title_source = 'ai')"
                         "   AND ("
-                        "     (title_ai_ts IS NULL AND ? IS NULL)"
+                        "     (title_ai_ts IS NULL AND ? IS NULL AND title_source IS NULL)"
                         "     OR (? IS NOT NULL AND (title_ai_ts IS NULL OR ? > title_ai_ts))"
                         "   )",
                         (title, last_seen_ts, session_row_id, last_seen_ts, last_seen_ts, last_seen_ts),
