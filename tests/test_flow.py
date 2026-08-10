@@ -4824,13 +4824,22 @@ class OverlayNudgeTests(unittest.TestCase):
                  "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
         )
 
-    def _overlay_repo(self) -> Path:
+    def _overlay_repo(self, with_remote: bool = True) -> Path:
+        """A tracked overlay. `with_remote` is on by default because a repo
+        with nowhere to push is itself a nudge-worthy state, so a test that
+        wants "nothing to report" has to opt into being backed up."""
         d = self.dir / "user"
         d.mkdir()
         (d / "flow.toml").write_text("# overlay\n")
         self._git(d, "init", "-b", "main")
         self._git(d, "add", ".")
         self._git(d, "commit", "-m", "initial")
+        if with_remote:
+            bare = self.dir / "remote.git"
+            bare.mkdir()
+            self._git(bare, "init", "--bare", "-b", "main")
+            self._git(d, "remote", "add", "origin", str(bare))
+            self._git(d, "push", "-u", "origin", "main")
         return d
 
     def _run_hook(self, payload, overlay_dir: Path) -> tuple[int, str]:
@@ -4869,10 +4878,96 @@ class OverlayNudgeTests(unittest.TestCase):
         rc, first = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
         self.assertEqual(rc, 0)
         self.assertIn("1 uncommitted file", first)
-        self.assertIn("same turn", first, "the line has to name the convention it is enforcing")
+        self.assertIn("FRAMEWORK.md", first, "the line has to name the convention it points at")
 
         _, second = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
         self.assertEqual(second, "", "an unchanged outstanding set stays quiet")
+
+    def test_the_advisory_is_conditional_not_an_instruction(self) -> None:
+        """The reported state covers the whole repository, and the session
+        reading the line may have had nothing to do with it. A runtime that
+        pre-authorizes `git push` would otherwise be told, unconditionally,
+        to publish changes it did not make and cannot evaluate."""
+        d = self._overlay_repo()
+        (d / "someone-elses-work.md").write_text("x\n")
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("If this session made those changes", out)
+        self.assertIn("leave them alone", out)
+
+    def test_posttooluse_output_is_the_json_envelope(self) -> None:
+        """Only UserPromptSubmit and SessionStart add plain stdout to the
+        model's context. A PostToolUse line printed bare reaches the
+        transcript and nothing else — the hook would look like it worked
+        while being invisible to the agent it is trying to reach."""
+        d = self._overlay_repo()
+        (d / "edited.md").write_text("x\n")
+        _, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(d / "edited.md")}}, d
+        )
+        payload = json.loads(out)
+        self.assertEqual(payload["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+        self.assertIn("uncommitted", payload["hookSpecificOutput"]["additionalContext"])
+
+    def test_prompt_output_is_plain_text_not_json(self) -> None:
+        d = self._overlay_repo()
+        (d / "edited.md").write_text("x\n")
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(out)
+
+    def test_a_repo_with_nowhere_to_push_is_worth_saying(self) -> None:
+        """Fifty local commits and no remote means zero copies off this
+        machine — the literal scenario the overlay got a repo for. `unpushed`
+        is None rather than a count in that state, so a truthiness test alone
+        would stay silent about it."""
+        d = self._overlay_repo(with_remote=False)
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("no remote", out)
+
+    def test_sessions_do_not_silence_each_other(self) -> None:
+        """One marker per repo let whichever session fired first suppress
+        every other one for the whole window — including, most likely, the
+        session that actually made the edits."""
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        _, first = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-a"}, d)
+        self.assertIn("uncommitted", first)
+
+        _, second = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-b"}, d)
+        self.assertIn("uncommitted", second, "a second session has not been told yet")
+
+        _, repeat = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-a"}, d)
+        self.assertEqual(repeat, "", "but the first session is still throttled")
+
+    def test_a_backwards_clock_does_not_silence_the_nudge_forever(self) -> None:
+        """A marker timestamped in the future makes elapsed negative, which
+        reads as "inside the window" — and the suppressed branch never
+        rewrites the marker, so it would stay suppressed for as long as the
+        skew lasts."""
+        import time as _time
+
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        status = self.overlay.overlay_vcs_status(d)
+        marker = self.overlay._marker_path(status["root"], "UserPromptSubmit")
+        self.overlay.hookio.write_marker(
+            marker, f"{_time.time() + 86400}\t{self.overlay.nudge_fingerprint(status)}"
+        )
+        self.assertTrue(
+            self.overlay.should_nudge(
+                status, "UserPromptSubmit", throttle_sec=1800, refire_on_change=False
+            )
+        )
+
+    def test_relative_edit_path_falls_back_rather_than_guessing(self) -> None:
+        """A relative path would resolve against the hook process's cwd,
+        which is not necessarily the runtime's."""
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        _, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": "relative/path.md"}}, d
+        )
+        self.assertIn("uncommitted", out, "unknown location degrades to reporting, not to silence")
 
     def test_new_work_refires_the_prompt_nudge_before_the_window_expires(self) -> None:
         """The throttle must not swallow work that piles up behind it."""
@@ -4925,11 +5020,6 @@ class OverlayNudgeTests(unittest.TestCase):
         """`doctor` reports `N unpushed`, so committing without pushing
         produces exactly the state FRAMEWORK.md tells agents to avoid."""
         d = self._overlay_repo()
-        bare = self.dir / "remote.git"
-        bare.mkdir()
-        self._git(bare, "init", "--bare", "-b", "main")
-        self._git(d, "remote", "add", "origin", str(bare))
-        self._git(d, "push", "-u", "origin", "main")
         (d / "later.md").write_text("z\n")
         self._git(d, "add", ".")
         self._git(d, "commit", "-m", "committed but not pushed")

@@ -19,6 +19,7 @@ keeps holding presentation rather than git plumbing.
 """
 
 import hashlib
+import json
 import os
 import subprocess
 import time
@@ -237,7 +238,15 @@ def overlay_vcs_status(overlay_dir: Path) -> dict:
     # ignored path would otherwise report a clean, backed-up status while
     # every file in it stays permanently uncommitted.
     if not status["is_root"]:
-        rc_ignored, _ = _git(overlay_dir, "check-ignore", "--quiet", str(overlay_dir))
+        # The resolved path, not the symlink: `~/.flow/user` is a link into
+        # the dotfiles repo, and git answers "outside repository" (128) for a
+        # path that is not under the work tree it can see — which would leave
+        # this guard silently inert in exactly the topology it was added for.
+        try:
+            probe = str(overlay_dir.resolve())
+        except OSError:
+            probe = str(overlay_dir)
+        rc_ignored, _ = _git(overlay_dir, "check-ignore", "--quiet", probe)
         if rc_ignored == 0:
             status["ignored"] = True
             return status
@@ -321,9 +330,11 @@ def format_overlay_vcs(status: dict) -> str:
 
 # PostToolUse is bounded by edits, so it only needs to avoid firing once per
 # file across a ten-file burst. UserPromptSubmit fires on every prompt and
-# needs the longer quiet period.
+# needs the longer quiet period. A repo with no remote at all is a standing
+# condition rather than a per-turn one — worth saying, not worth saying often.
 NUDGE_THROTTLE_EDIT_SEC = 10 * 60
 NUDGE_THROTTLE_PROMPT_SEC = 30 * 60
+NUDGE_THROTTLE_STANDING_SEC = 24 * 60 * 60
 
 NUDGE_STATE_DIR = HOME / ".flow" / "state"
 
@@ -335,15 +346,26 @@ def nudge_fingerprint(status: dict) -> str:
     changes, rather than staying quiet for the rest of the throttle window
     while new work piles up behind it.
     """
-    parts = [status.get("branch") or "", str(status.get("unpushed"))]
+    parts = [status.get("branch") or "", str(status.get("unpushed")), str(status.get("remote"))]
     parts.extend(sorted(status.get("dirty") or []))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
 
-def _marker_path(root: str, event: str) -> Path:
-    """One marker per (repo, event). The repo is hashed rather than spelled
-    out: marker filenames should not carry an account name."""
+def _marker_path(root: str, event: str, session_id: str | None = None) -> Path:
+    """One marker per (repo, event, session).
+
+    Keying on the repo alone let whichever session fired first silence every
+    other one for the whole window — including, most likely, the session that
+    actually made the edits, which inverts the point of the nudge. Sessions
+    get their own markers; a payload without a usable id falls back to the
+    shared key rather than skipping the throttle entirely.
+
+    The repo path is hashed rather than spelled out: nothing this framework
+    writes should put an account name in a filename.
+    """
     key = hashlib.sha256(root.encode()).hexdigest()[:16]
+    if session_id and hookio.safe_key(session_id):
+        key = f"{key}-{session_id}"
     return NUDGE_STATE_DIR / f"overlay-nudge-{event}-{key}"
 
 
@@ -353,18 +375,23 @@ def should_nudge(
     *,
     throttle_sec: int,
     refire_on_change: bool,
+    session_id: str | None = None,
     now: float | None = None,
 ) -> bool:
     """Whether to speak, and record having spoken.
 
     Fires when the throttle window has elapsed, or — for the prompt-boundary
     nudge — as soon as the outstanding set differs from what was last
-    reported. An unreadable or unwritable marker degrades to firing, which is
-    the safe direction: a duplicated advisory costs a line, a suppressed one
-    costs the whole feature.
+    reported.
+
+    Every degenerate marker state resolves toward firing rather than toward
+    silence, deliberately: an unreadable marker, a partially-written one from
+    two sessions racing, a clock that moved backwards. A duplicated advisory
+    costs one line; a suppressed one costs the whole feature, and does so
+    invisibly.
     """
     now = time.time() if now is None else now
-    marker = _marker_path(status["root"] or "", event)
+    marker = _marker_path(status["root"] or "", event, session_id)
 
     raw = hookio.read_marker(marker)
     fingerprint = nudge_fingerprint(status)
@@ -374,6 +401,12 @@ def should_nudge(
             elapsed = now - float(stamp)
         except ValueError:
             elapsed = throttle_sec  # unparseable marker: treat as expired
+        if elapsed < 0:
+            # A clock that jumped backwards leaves a timestamp in the future.
+            # Left alone this suppresses the nudge until real time catches
+            # up, and the suppressed branch never rewrites the marker — so it
+            # would stay suppressed for as long as the skew lasts.
+            elapsed = throttle_sec
         unchanged = seen == fingerprint
         if elapsed < throttle_sec and (unchanged or not refire_on_change):
             return False
@@ -382,23 +415,50 @@ def should_nudge(
     return True
 
 
-def nudge_message(status: dict, event: str) -> str | None:
-    """The advisory line, or None when there is nothing worth saying."""
+def nudge_outstanding(status: dict) -> tuple[list[str], bool]:
+    """What is outstanding, and whether it is only the standing condition.
+
+    "No remote at all" belongs here even though it is not per-turn work: a
+    tracked repo with fifty local commits and nowhere to push them has zero
+    copies off this machine, which is the exact scenario the overlay got a
+    repo for. `unpushed` is None rather than a count in that state, so a
+    truthiness test alone stays silent about it.
+    """
     outstanding = []
     if status["dirty"]:
         n = len(status["dirty"])
         outstanding.append(f"{n} uncommitted file{'s' if n != 1 else ''}")
     if status["unpushed"]:
         outstanding.append(f"{status['unpushed']} unpushed commit{'s' if status['unpushed'] != 1 else ''}")
+
+    standing = []
+    if status["remote"] is None:
+        standing.append("no remote, so nothing here exists off this machine")
+    elif status["unpushed"] is None:
+        standing.append("no upstream branch, so nothing here is pushed")
+
+    return outstanding + standing, (bool(standing) and not outstanding)
+
+
+def nudge_message(status: dict, event: str) -> str | None:
+    """The advisory line, or None when there is nothing worth saying.
+
+    Phrased as a condition rather than an instruction, on purpose. The
+    reported state covers the whole repository, and the session reading this
+    line may have had nothing to do with it — a runtime that pre-authorizes
+    `git push` would otherwise be told, unconditionally, to publish changes
+    it did not make and cannot evaluate.
+    """
+    outstanding, _ = nudge_outstanding(status)
     if not outstanding:
         return None
 
     where = display_path(Path(status["root"])) if status["root"] else "the overlay repo"
-    lead = "just edited versioned content" if event == "PostToolUse" else "carrying uncommitted work"
     return (
-        f"flow advisory: {where} is {lead} — {' and '.join(outstanding)}. "
-        "The convention is that the agent making the edit commits and pushes it in the same turn "
-        "(see FRAMEWORK.md, 'Committing user-overlay edits'). "
+        f"flow advisory: {where} has {' and '.join(outstanding)}. "
+        "If this session made those changes, commit and push them before finishing "
+        "(see FRAMEWORK.md, 'Committing user-overlay edits'); if it did not, leave them alone — "
+        "the state covers the whole repository, and another session may own that work. "
         "(Informational only — nothing is blocked.)"
     )
 
@@ -414,6 +474,12 @@ def _edit_touches_repo(payload: dict, root: str) -> bool | None:
     tool_input = payload.get("tool_input")
     path = tool_input.get("file_path") if isinstance(tool_input, dict) else None
     if not isinstance(path, str) or not path:
+        return None
+    if not Path(path).is_absolute():
+        # A relative path would resolve against the hook process's cwd, which
+        # is not necessarily the runtime's. Claude always sends an absolute
+        # path; rather than guess for a runtime that might not, say "unknown"
+        # and let the caller fall back.
         return None
     try:
         return Path(root).resolve() in Path(path).resolve().parents
@@ -436,6 +502,19 @@ def overlay_check_command() -> int:
         if event not in ("PostToolUse", "UserPromptSubmit"):
             return 0
 
+        # PostToolUse fires after every qualifying tool call on the machine,
+        # most of which have nothing to do with the overlay. Resolve the repo
+        # root first — one cheap call — and discard irrelevant edits before
+        # paying for `status` and `config`. Codex registers this hook without
+        # a per-tool matcher, so this filter is what keeps the common case
+        # from costing three subprocesses.
+        if event == "PostToolUse":
+            rc, out = _git(USER_OVERLAY_DIR, "rev-parse", "--show-toplevel")
+            if rc != 0 or not out:
+                return 0
+            if _edit_touches_repo(payload, out) is False:
+                return 0
+
         status = overlay_vcs_status(USER_OVERLAY_DIR)
         if not status["tracked"] or status["error"]:
             # An untracked or unreadable overlay is `doctor`'s business.
@@ -443,21 +522,43 @@ def overlay_check_command() -> int:
             # who may never have opted in.
             return 0
 
-        if event == "PostToolUse" and _edit_touches_repo(payload, status["root"] or "") is False:
-            return 0
-
         message = nudge_message(status, event)
         if message is None:
             return 0
 
-        if event == "PostToolUse":
+        _, standing_only = nudge_outstanding(status)
+        if standing_only:
+            throttle, refire = NUDGE_THROTTLE_STANDING_SEC, False
+        elif event == "PostToolUse":
             throttle, refire = NUDGE_THROTTLE_EDIT_SEC, False
         else:
             throttle, refire = NUDGE_THROTTLE_PROMPT_SEC, True
-        if not should_nudge(status, event, throttle_sec=throttle, refire_on_change=refire):
+        if not should_nudge(
+            status,
+            event,
+            throttle_sec=throttle,
+            refire_on_change=refire,
+            session_id=payload.get("session_id"),
+        ):
             return 0
 
-        print(message)
+        # Only `UserPromptSubmit` and `SessionStart` add plain stdout to the
+        # model's context. A `PostToolUse` hook has to wrap its text in the
+        # JSON envelope or the line reaches the transcript and nothing else —
+        # see hooks/flow-managed-write-reminder.sh, which does the same.
+        if event == "PostToolUse":
+            print(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PostToolUse",
+                            "additionalContext": message,
+                        }
+                    }
+                )
+            )
+        else:
+            print(message)
         return 0
     except Exception as exc:
         hookio.log_hook_error("overlay-nudge", exc)
@@ -468,6 +569,11 @@ def overlay_status_command() -> int:
     """`flow overlay status`. The `doctor` line, standalone."""
     status = overlay_vcs_status(USER_OVERLAY_DIR)
     print(f"overlay:  {display_path(USER_OVERLAY_DIR)}")
+    if status["root"] and not status["is_root"]:
+        # Without this the dirty paths below look like overlay paths when
+        # they are the enclosing repository's, which is misleading in exactly
+        # the arrangement that makes this command worth having.
+        print(f"repo:     {display_path(Path(status['root']))}")
     print(f"vcs:      {format_overlay_vcs(status)}")
     if status["remote"]:
         print(f"remote:   {status['remote']}")

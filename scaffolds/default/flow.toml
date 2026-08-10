@@ -304,6 +304,7 @@ timeout = 10
 [[codex.hooks]]
 name = "flow-overlay-reminder"
 event = "PostToolUse"
+matcher = "Write|Edit"
 type = "command"
 script = "flow-overlay-reminder.sh"
 timeout = 10

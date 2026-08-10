@@ -11,9 +11,12 @@ that moved `jsonl_watermark` and `session_lookup` out of the collectors: two
 copies of an error-swallowing helper drift, and the copy that drifts is the
 one that stops writing the log nobody reads until something breaks.
 
-Deliberately dependency-free beyond `paths`, because `UserPromptSubmit`
-hooks run on every prompt of every session. Importing the usage store here
-would put a SQLite import on that path for hooks that never touch it.
+Deliberately dependency-free beyond `paths`. The intent is that a hook
+firing on every prompt should not drag the usage store in behind it — though
+today `cli/flow.py` imports every command module eagerly, so the SQLite
+import happens regardless of which subcommand runs. Keeping this module
+clean is what makes lazy dispatch a possible future change rather than a
+rewrite; it is not a saving that has been realized yet.
 """
 
 import json
