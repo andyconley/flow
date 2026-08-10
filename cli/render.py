@@ -133,6 +133,19 @@ def hook_command_for(mode: str, script: str) -> str:
     return f'"$CLAUDE_PROJECT_DIR"/.claude/hooks/{script}'
 
 
+def codex_hook_command_for(mode: str, script: str) -> str:
+    """Codex twin of `hook_command_for`.
+
+    Codex has no `$CLAUDE_PROJECT_DIR` equivalent; the official project-mode
+    idiom in its own hook docs is `$(git rev-parse --show-toplevel)`, which
+    resolves correctly because project hooks only load when the project
+    `.codex/` layer is trusted — i.e. inside that repo.
+    """
+    if mode == MODE_USER:
+        return f'"$HOME"/.codex/hooks/{script}'
+    return f'"$(git rev-parse --show-toplevel)"/.codex/hooks/{script}'
+
+
 def source_ref_for(mode: str, source_rel: str, origin: str = "framework") -> str:
     """Return the source-of-truth reference string used in managed manifests.
 

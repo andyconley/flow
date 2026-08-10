@@ -8,6 +8,54 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **Post-turn verdict and pre-execution warning on both harnesses**
+  (token-advisory chunks 11–12, board items E and F — the initiative's
+  last pieces). `flow cost verdict --hook` is the Stop-hook engine on both
+  runtimes: incrementally harvests the transcript that just stopped,
+  normalizes, and judges carry from the store — thresholds carried over
+  verbatim from `token-report --verdict` (25K carry floor, 15-request
+  minimum, 20-minute idle gap distinguishing /clear from /compact), same
+  verdict-file contract the Claude statusline already reads
+  (`/tmp/claude-verdict-<sid>`, `/{action}?\t{carry}\t{ctx}\t{why}`).
+  Prints nothing in hook mode on purpose — Stop-hook stdout feeds the
+  conversation on both runtimes. `flow cost warn --hook` is the
+  UserPromptSubmit engine: reads the verdict file (zero computation at
+  prompt time) and prints one advisory line only when carry ≥ 100K and
+  has grown ≥ 50K since the last warning — the line is injected as
+  context so the model and the user both see it before the next
+  expensive turn; every other case is silence, and it always exits 0.
+  Both hooks registered for both runtimes via `[[claude.hooks]]` and the
+  new `[[codex.hooks]]`; the scripts are trivial launchers (find flow,
+  hand over stdin) so all judgment stays in testable Python. Codex
+  limitation, documented not hidden: no statusline consumes its verdict
+  numbers, so only the window-agnostic absolute thresholds grade them.
+  With this, `~/bin/token-report` is fully retired: its last consumer
+  (the hand-authored `token-verdict.sh` Stop hook) is replaced, the old
+  settings.json entry removed, and the script deleted (backed up, with
+  its README, in the run's evidence directory — it was never version
+  controlled).
+
+- **`[[codex.hooks]]` — full-parity hook management for the Codex runtime**
+  (token-advisory chunk 10). Codex now supports native lifecycle hooks
+  (schema-compatible with Claude's: PreToolUse/PostToolUse/Stop/
+  SessionStart/UserPromptSubmit/... with the same stdin JSON contract), and
+  flow manages them the way it manages Claude's: `[[codex.hooks]]` manifest
+  entries deploy scripts to `.codex/hooks/` and merge handlers into
+  `.codex/hooks.json` under the preserve-unmanaged contract —
+  `~/.codex/config.toml` (model, plugins, the desktop app's own `notify`
+  key) is never touched. Full parity includes the user overlay:
+  `[[claude.hooks]]` and `[[codex.hooks]]` in `~/.flow/user/flow.toml` now
+  merge like commands and agents, with scripts from `~/.flow/user/hooks/`.
+  Both settings builders also gained optional `timeout`/`status_message`
+  passthrough, and `matcher` is optional (omitted = match everything).
+  Two contract rules enforced after review: hook scripts must be named
+  `flow-*` (the preserve-unmanaged strip identifies flow's handlers by
+  that path marker; a differently-named script would duplicate its
+  handler on every sync — sync now fails loudly instead), and merge-mode
+  files (settings.json, hooks.json) are never unlinked as "stale" when
+  dropped from the manifest — they hold user content, so they are
+  unmanaged in place rather than deleted.
+
 - **Usage advisory in the workflow commands** (token-advisory chunk 9) —
   the first place the usage store influences agent behavior rather than
   just answering queries. Doc-only, per this file's own convention that

@@ -366,6 +366,40 @@ class FlowCliTests(unittest.TestCase):
         else:
             manifest.write_text(block)
 
+    def _write_user_overlay_hook(
+        self,
+        fake_home: Path,
+        name: str,
+        event: str,
+        script: str,
+        runtime: str = "codex",
+        matcher: str | None = None,
+        timeout: int | None = None,
+    ) -> None:
+        """Drop a user-overlay hook script + [[<runtime>.hooks]] registration."""
+        overlay_dir = fake_home / ".flow" / "user"
+        hooks_dir = overlay_dir / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        (hooks_dir / script).write_text("#!/bin/bash\nexit 0\n")
+
+        manifest = overlay_dir / "flow.toml"
+        block = (
+            "\n"
+            f"[[{runtime}.hooks]]\n"
+            f'name = "{name}"\n'
+            f'event = "{event}"\n'
+            'type = "command"\n'
+            f'script = "{script}"\n'
+        )
+        if matcher is not None:
+            block += f'matcher = "{matcher}"\n'
+        if timeout is not None:
+            block += f"timeout = {timeout}\n"
+        if manifest.exists():
+            manifest.write_text(manifest.read_text() + block)
+        else:
+            manifest.write_text(block)
+
     def _write_user_overlay_agent(
         self,
         fake_home: Path,
@@ -470,6 +504,209 @@ class FlowCliTests(unittest.TestCase):
         framework_project = (self.repo / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
         self.assertIn("Edit `.flow/commands/flow-plan.md`", framework_project)
         self.assertNotIn("--user", framework_project.split("-->")[0].split("<!--")[-1])
+
+    # ------------------------------------------------------------------
+    # [[codex.hooks]] — full-parity hook management for the Codex runtime
+    # ------------------------------------------------------------------
+
+    def test_codex_hooks_generate_script_and_hooks_json_without_touching_config_toml(self) -> None:
+        """A [[codex.hooks]] entry deploys its script to ~/.codex/hooks/ and
+        merges a handler into ~/.codex/hooks.json — and never touches
+        config.toml, which is user-owned (model, plugins, the desktop
+        app's own `notify` key). Also proves re-sync idempotency: the
+        handler must not duplicate.
+        """
+        fake_home = self.use_fake_home()
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir(parents=True)
+        config_before = 'model = "gpt-5.6-sol"\nnotify = ["someapp", "turn-ended"]\n'
+        (codex_dir / "config.toml").write_text(config_before)
+        self._write_user_overlay_hook(
+            fake_home, name="my-stop-hook", event="Stop", script="flow-my-stop.sh", timeout=15
+        )
+
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        script = codex_dir / "hooks" / "flow-my-stop.sh"
+        self.assertTrue(script.is_file())
+        self.assertTrue(script.stat().st_mode & stat.S_IXUSR, "hook script must be executable")
+
+        doc = json.loads((codex_dir / "hooks.json").read_text())
+        # The framework registers its own codex Stop hook (flow-token-verdict),
+        # so filter to the overlay's handler rather than asserting a count.
+        mine = [
+            (g, h)
+            for g in doc["hooks"]["Stop"]
+            for h in g["hooks"]
+            if "flow-my-stop.sh" in h.get("command", "")
+        ]
+        self.assertEqual(len(mine), 1)
+        group, handler = mine[0]
+        self.assertEqual(handler["type"], "command")
+        self.assertIn('"$HOME"/.codex/hooks/flow-my-stop.sh', handler["command"])
+        self.assertEqual(handler["timeout"], 15)
+        self.assertNotIn("matcher", group, "omitted matcher must be omitted, not emitted empty")
+
+        self.assertEqual((codex_dir / "config.toml").read_text(), config_before)
+
+        # Idempotent: second sync must not duplicate any handler.
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+        doc2 = json.loads((codex_dir / "hooks.json").read_text())
+        self.assertEqual(doc2, doc, "a second sync must be a byte-identical no-op")
+
+    def test_codex_hooks_preserve_unmanaged_handlers_on_the_same_event(self) -> None:
+        fake_home = self.use_fake_home()
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir(parents=True)
+        (codex_dir / "hooks.json").write_text(
+            json.dumps(
+                {
+                    "description": "hand-authored",
+                    "hooks": {
+                        "Stop": [
+                            {"hooks": [{"type": "command", "command": "my-own-thing.sh"}]}
+                        ]
+                    },
+                }
+            )
+        )
+        self._write_user_overlay_hook(fake_home, name="my-stop-hook", event="Stop", script="flow-my-stop.sh")
+
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        doc = json.loads((codex_dir / "hooks.json").read_text())
+        self.assertEqual(doc["description"], "hand-authored", "unmanaged top-level keys must survive")
+        commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertIn("my-own-thing.sh", commands)
+        self.assertTrue(any("flow-my-stop.sh" in c for c in commands))
+
+    def test_codex_hooks_deregistration_removes_only_flow_handlers(self) -> None:
+        fake_home = self.use_fake_home()
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir(parents=True)
+        (codex_dir / "hooks.json").write_text(
+            json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "my-own-thing.sh"}]}]}})
+        )
+        self._write_user_overlay_hook(fake_home, name="my-stop-hook", event="Stop", script="flow-my-stop.sh")
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        # Deregister: rewrite the overlay manifest without the hook block.
+        manifest = fake_home / ".flow" / "user" / "flow.toml"
+        lines = manifest.read_text().splitlines(keepends=True)
+        kept = []
+        skip = False
+        for line in lines:
+            if line.startswith("[[codex.hooks]]"):
+                skip = True
+                continue
+            if skip and line.startswith("[["):
+                skip = False
+            if not skip:
+                kept.append(line)
+        manifest.write_text("".join(kept))
+
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        doc = json.loads((codex_dir / "hooks.json").read_text())
+        commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertIn("my-own-thing.sh", commands)
+        self.assertFalse(any("flow-my-stop.sh" in c for c in commands))
+        self.assertFalse((codex_dir / "hooks" / "flow-my-stop.sh").exists(), "deregistered script must be removed")
+
+    def test_codex_hooks_project_mode_uses_git_toplevel_path(self) -> None:
+        """Codex has no $CLAUDE_PROJECT_DIR equivalent — project-mode hook
+        commands use the git rev-parse idiom from Codex's own docs.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        flow_toml = self.repo / ".flow" / "flow.toml"
+        flow_toml.write_text(
+            flow_toml.read_text()
+            + "\n[[codex.hooks]]\n"
+            + 'name = "proj-hook"\nevent = "SessionStart"\ntype = "command"\nscript = "flow-proj.sh"\n'
+        )
+        # Project-mode hook scripts still come from the framework hooks/ dir;
+        # point at one that exists there.
+        flow_toml.write_text(flow_toml.read_text().replace("flow-proj.sh", "flow-session-start.sh"))
+
+        self.assert_ok(self.run_flow("sync", "codex"))
+
+        doc = json.loads((self.repo / ".codex" / "hooks.json").read_text())
+        handler = doc["hooks"]["SessionStart"][0]["hooks"][0]
+        self.assertIn('"$(git rev-parse --show-toplevel)"/.codex/hooks/flow-session-start.sh', handler["command"])
+        self.assertTrue((self.repo / ".codex" / "hooks" / "flow-session-start.sh").is_file())
+
+    def test_hook_script_not_named_flow_is_rejected_at_sync_time(self) -> None:
+        """The preserve-unmanaged strip identifies flow's handlers by the
+        `/.codex/hooks/flow-` marker — a script named outside that
+        convention would survive the strip and duplicate its handler on
+        every sync. Review demanded this fail loudly rather than corrupt.
+        """
+        fake_home = self.use_fake_home()
+        (fake_home / ".codex").mkdir(parents=True)
+        self._write_user_overlay_hook(fake_home, name="bad-hook", event="Stop", script="my-stop.sh")
+
+        result = self.run_flow("sync", "codex", "--user")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must be named flow-*", result.stdout + result.stderr)
+        self.assertFalse((fake_home / ".codex" / "hooks.json").exists(), "nothing may be written on rejection")
+
+    def test_dropping_hooks_config_never_deletes_the_merge_file(self) -> None:
+        """hooks.json (and settings.json) hold user content alongside
+        flow's. Removing hook_dir/hooks_file from the manifest makes the
+        file 'stale' — it must be unmanaged, never unlinked.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        flow_toml = self.repo / ".flow" / "flow.toml"
+        hooks_json = self.repo / ".codex" / "hooks.json"
+        hooks_json.parent.mkdir(parents=True, exist_ok=True)
+        hooks_json.write_text(
+            json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "user-owned.sh"}]}]}})
+        )
+
+        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assertTrue(hooks_json.exists())
+
+        # Drop the hooks surface from the manifest entirely.
+        content = flow_toml.read_text()
+        content = content.replace('hook_dir = ".codex/hooks"\n', "").replace(
+            'hooks_file = ".codex/hooks.json"\n', ""
+        )
+        # Also drop the [[codex.hooks]] entries so the runtime has no hooks.
+        lines, skip = [], False
+        for line in content.splitlines(keepends=True):
+            if line.startswith("[[codex.hooks]]"):
+                skip = True
+                continue
+            if skip and line.startswith("[["):
+                skip = False
+            if not skip:
+                lines.append(line)
+        flow_toml.write_text("".join(lines))
+
+        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assertTrue(hooks_json.exists(), "a merge-mode file must survive being dropped from the manifest")
+        doc = json.loads(hooks_json.read_text())
+        commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertIn("user-owned.sh", commands, "the user's own handler must survive")
+
+    def test_claude_hooks_merge_from_user_overlay(self) -> None:
+        """Full parity includes the overlay: a [[claude.hooks]] entry in
+        ~/.flow/user/flow.toml must land in ~/.claude/settings.json with
+        its script deployed from ~/.flow/user/hooks/.
+        """
+        fake_home = self.use_fake_home()
+        self._write_user_overlay_hook(
+            fake_home, name="my-claude-hook", event="Stop", script="flow-my-claude.sh", runtime="claude"
+        )
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+
+        self.assertTrue((fake_home / ".claude" / "hooks" / "flow-my-claude.sh").is_file())
+        settings = json.loads((fake_home / ".claude" / "settings.json").read_text())
+        commands = [h["command"] for g in settings["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertTrue(any("flow-my-claude.sh" in c for c in commands))
 
     def test_user_overlay_overrides_framework_agent(self) -> None:
         """User overlay can replace a framework agent's content."""
@@ -4022,6 +4259,274 @@ class CostTests(unittest.TestCase):
 
     def test_render_active_table_empty(self) -> None:
         self.assertEqual(self.cost._render_active_table([]), "(no active sessions in range)")
+
+
+class VerdictTests(unittest.TestCase):
+    """Direct tests of cost.py's verdict + warn engines, against an
+    in-memory store and real transcript fixtures on disk (the engine's
+    whole point is the harvest-then-judge pipeline, so these go through
+    the real collectors rather than hand-inserting turn_norm rows).
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import cost
+
+        self.usage_store = usage_store
+        self.cost = cost
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.row_factory = sqlite3.Row
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "cost"):
+            sys.modules.pop(name, None)
+
+    def _claude_transcript(self, name: str, turns: int, start_ctx: int, end_ctx: int, last_gap_min: int = 1) -> Path:
+        """A Claude transcript whose context grows linearly from start_ctx to
+        end_ctx across `turns` assistant turns, with `last_gap_min` minutes of
+        idle before the final turn (the /clear-vs-/compact signal).
+        """
+        records = [_claude_user("sess-v")]
+        for i in range(turns):
+            ctx = start_ctx + (end_ctx - start_ctx) * i // max(1, turns - 1)
+            rec = _claude_assistant("sess-v", f"req-{i}", input_tokens=ctx)
+            minute = i  # one turn per minute...
+            if i == turns - 1:
+                minute = (turns - 2) + last_gap_min  # ...except the last
+            rec["timestamp"] = f"2026-01-01T{10 + minute // 60:02d}:{minute % 60:02d}:00Z"
+            records.append(rec)
+        path = self.dir / name
+        path.write_text(_jsonl(*records))
+        return path
+
+    def test_verdict_below_carry_floor_is_silent(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=20_000)
+        self.assertIsNone(self.cost.verdict_for_transcript(self.conn, path))
+
+    def test_verdict_young_session_is_silent_despite_heavy_carry(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=5, start_ctx=10_000, end_ctx=150_000)
+        self.assertIsNone(self.cost.verdict_for_transcript(self.conn, path))
+
+    def test_verdict_compact_when_working_continuously(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=150_000, last_gap_min=2)
+        v = self.cost.verdict_for_transcript(self.conn, path)
+        self.assertIsNotNone(v)
+        self.assertEqual(v["action"], "compact")
+        self.assertEqual(v["carry"], 140_000)
+        self.assertEqual(v["ctx"], 150_000)
+        self.assertEqual(v["why"], "")
+
+    def test_verdict_clear_after_a_topic_gap(self) -> None:
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=150_000, last_gap_min=45)
+        v = self.cost.verdict_for_transcript(self.conn, path)
+        self.assertIsNotNone(v)
+        self.assertEqual(v["action"], "clear")
+        self.assertIn("idle 45m", v["why"])
+
+    def test_verdict_works_for_codex_transcripts(self) -> None:
+        codex_dir = self.dir / ".codex" / "sessions" / "2026" / "01" / "01"
+        codex_dir.mkdir(parents=True)
+        records = [_session_meta("sess-cx")]
+        for i in range(20):
+            records.append(_task_started(f"turn-{i}"))
+            records.append(_turn_context(f"turn-{i}", "gpt-5.6"))
+            tc = _token_count(total=10_000 + i * 8_000)
+            tc["timestamp"] = f"2026-01-01T10:{i:02d}:00Z"
+            records.append(tc)
+            records.append(_task_complete(f"turn-{i}"))
+        path = codex_dir / "rollout-verdict.jsonl"
+        path.write_text(_jsonl(*records))
+
+        v = self.cost.verdict_for_transcript(self.conn, path)
+        self.assertIsNotNone(v)
+        self.assertEqual(v["harness"], "codex")
+        self.assertEqual(v["action"], "compact")
+        self.assertEqual(v["carry"], 8_000 * 19)
+
+    def test_verdict_session_id_takes_precedence_over_path_lookup(self) -> None:
+        """Hook mode passes the runtime's own session_id — a resumed session
+        whose transcript is a second file (source_path points at the first)
+        must still resolve.
+        """
+        path = self._claude_transcript("a.jsonl", turns=20, start_ctx=10_000, end_ctx=150_000)
+        # Simulate the source_path pointing elsewhere.
+        self.cost.verdict_for_transcript(self.conn, path)  # harvest + create session
+        self.conn.execute("UPDATE session SET source_path = '/somewhere/else.jsonl'")
+        renamed = self.dir / "b.jsonl"
+        path.rename(renamed)
+        v = self.cost.verdict_for_transcript(self.conn, renamed, session_id="sess-v")
+        self.assertIsNotNone(v)
+
+    # ------------------------------------------------------------------
+    # warn engine
+    # ------------------------------------------------------------------
+
+    def _warn(self, sid: str, tpath: str = "/Users/x/.claude/projects/p/t.jsonl") -> str:
+        import contextlib
+        import io
+        import unittest.mock
+
+        stdin = io.StringIO(json.dumps({"session_id": sid, "transcript_path": tpath}))
+        out = io.StringIO()
+        with unittest.mock.patch.object(self.cost.sys, "stdin", stdin):
+            with contextlib.redirect_stdout(out):
+                rc = self.cost.cost_warn_command()
+        self.assertEqual(rc, 0)
+        return out.getvalue()
+
+    def test_warn_fires_once_and_throttles_until_carry_grows(self) -> None:
+        import unittest.mock
+
+        with unittest.mock.patch.object(self.cost, "VERDICT_DIR", self.dir):
+            (self.dir / "claude-verdict-sid1").write_text("/compact?\t120000\t150000\t\n")
+            first = self._warn("sid1")
+            self.assertIn("flow advisory", first)
+            self.assertIn("120K", first)
+
+            second = self._warn("sid1")
+            self.assertEqual(second, "", "same carry must not re-warn")
+
+            (self.dir / "claude-verdict-sid1").write_text("/compact?\t180000\t210000\t\n")
+            third = self._warn("sid1")
+            self.assertIn("180K", third, "carry grew past the re-warn step")
+
+    def test_warn_is_silent_below_the_floor_and_without_a_verdict(self) -> None:
+        import unittest.mock
+
+        with unittest.mock.patch.object(self.cost, "VERDICT_DIR", self.dir):
+            self.assertEqual(self._warn("sid-none"), "")
+            (self.dir / "claude-verdict-sid2").write_text("/compact?\t60000\t90000\t\n")
+            self.assertEqual(self._warn("sid2"), "")
+
+
+class VerdictHookModeTests(unittest.TestCase):
+    """cost_verdict_command in --hook mode — the code path that runs
+    unattended on every Stop of every session. Direct calls with patched
+    HOME/VERDICT_DIR/stdin; no subprocess, so failures are debuggable.
+    """
+
+    def setUp(self) -> None:
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import cost
+
+        self.cost = cost
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        self.home = self.dir / "home"
+        (self.home / ".flow").mkdir(parents=True)
+        self.verdicts = self.dir / "verdicts"
+        self.verdicts.mkdir()
+
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        sys.modules.pop("cost", None)
+
+    def _run_hook(self, payload) -> int:
+        import contextlib
+        import io
+        import unittest.mock
+
+        stdin = io.StringIO(payload if isinstance(payload, str) else json.dumps(payload))
+        with unittest.mock.patch.object(self.cost, "HOME", self.home):
+            with unittest.mock.patch.object(self.cost, "VERDICT_DIR", self.verdicts):
+                with unittest.mock.patch.object(self.cost.sys, "stdin", stdin):
+                    with contextlib.redirect_stdout(io.StringIO()) as out:
+                        rc = self.cost.cost_verdict_command(hook=True)
+        self.assertEqual(out.getvalue(), "", "hook mode must never print")
+        return rc
+
+    def _heavy_transcript(self, name: str = "t.jsonl", end_ctx: int = 150_000) -> Path:
+        records = [_claude_user("sess-h")]
+        for i in range(20):
+            ctx = 10_000 + (end_ctx - 10_000) * i // 19
+            rec = _claude_assistant("sess-h", f"req-{i}", input_tokens=ctx)
+            rec["timestamp"] = f"2026-01-01T10:{i:02d}:00Z"
+            records.append(rec)
+        path = self.dir / name
+        path.write_text(_jsonl(*records))
+        return path
+
+    def test_hook_writes_the_verdict_file(self) -> None:
+        path = self._heavy_transcript()
+        rc = self._run_hook({"session_id": "sess-h", "transcript_path": str(path)})
+        self.assertEqual(rc, 0)
+        content = (self.verdicts / "claude-verdict-sess-h").read_text()
+        self.assertTrue(content.startswith("/compact?\t140000\t150000"))
+
+    def test_hook_removes_verdict_and_warn_marker_when_below_floor(self) -> None:
+        """A /compact drops carry below the floor: BOTH the verdict file and
+        the warn hook's high-water marker must go, or re-warning stays
+        suppressed until carry exceeds the PRE-compact high + step.
+        """
+        (self.verdicts / "claude-verdict-sess-l").write_text("/compact?\t140000\t150000\t\n")
+        (self.verdicts / "claude-warned-sess-l").write_text("140000")
+        records = [_claude_user("sess-l")]
+        for i in range(20):
+            rec = _claude_assistant("sess-l", f"req-{i}", input_tokens=10_000 + i * 100)
+            rec["timestamp"] = f"2026-01-01T10:{i:02d}:00Z"
+            records.append(rec)
+        path = self.dir / "light.jsonl"
+        path.write_text(_jsonl(*records))
+
+        rc = self._run_hook({"session_id": "sess-l", "transcript_path": str(path)})
+        self.assertEqual(rc, 0)
+        self.assertFalse((self.verdicts / "claude-verdict-sess-l").exists())
+        self.assertFalse((self.verdicts / "claude-warned-sess-l").exists())
+
+    def test_hook_malformed_stdin_exits_zero_and_writes_nothing(self) -> None:
+        rc = self._run_hook("not json at all")
+        self.assertEqual(rc, 0)
+        self.assertEqual(list(self.verdicts.iterdir()), [])
+
+    def test_hook_hostile_session_id_exits_zero_and_writes_nothing(self) -> None:
+        path = self._heavy_transcript()
+        rc = self._run_hook({"session_id": "../../etc/evil", "transcript_path": str(path)})
+        self.assertEqual(rc, 0)
+        self.assertEqual(list(self.verdicts.iterdir()), [])
+
+    def test_hook_internal_error_exits_zero_and_leaves_existing_file(self) -> None:
+        import unittest.mock
+
+        (self.verdicts / "claude-verdict-sess-h").write_text("/compact?\t99\t100\t\n")
+        path = self._heavy_transcript()
+        with unittest.mock.patch.object(
+            self.cost, "verdict_for_transcript", side_effect=RuntimeError("store wedged")
+        ):
+            rc = self._run_hook({"session_id": "sess-h", "transcript_path": str(path)})
+        self.assertEqual(rc, 0, "a broken verdict must never block a Stop")
+        self.assertEqual(
+            (self.verdicts / "claude-verdict-sess-h").read_text(),
+            "/compact?\t99\t100\t\n",
+            "stale beats flapping: an internal error must not remove the file",
+        )
+
+    def test_hook_missing_transcript_exits_zero(self) -> None:
+        rc = self._run_hook({"session_id": "sess-h", "transcript_path": str(self.dir / "nope.jsonl")})
+        self.assertEqual(rc, 0)
 
 
 if __name__ == "__main__":

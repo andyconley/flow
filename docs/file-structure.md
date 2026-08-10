@@ -34,6 +34,8 @@ flow/
   hooks/
     flow-session-start.sh
     flow-managed-write-reminder.sh
+    flow-token-verdict.sh
+    flow-context-warning.sh
   scripts/
   scaffolds/
     default/
@@ -116,12 +118,18 @@ Use this for:
 
 ### `hooks/`
 
-Reusable runtime hook scripts bundled by the framework repo.
+Reusable runtime hook scripts bundled by the framework repo. Deployed to
+`.claude/hooks/` via `[[claude.hooks]]` and to `.codex/hooks/` via
+`[[codex.hooks]]` — one script can serve both runtimes when their stdin
+contracts align (they largely do: both pass `session_id`,
+`transcript_path`, `cwd`, `hook_event_name` as JSON on stdin).
 
 Current hook scripts:
 
-- `flow-session-start.sh`
-- `flow-managed-write-reminder.sh`
+- `flow-session-start.sh` (Claude SessionStart — orientation context)
+- `flow-managed-write-reminder.sh` (Claude PostToolUse — managed-file edit nudge)
+- `flow-token-verdict.sh` (Stop, both runtimes — writes the verdict file via `flow cost verdict --hook`)
+- `flow-context-warning.sh` (UserPromptSubmit, both runtimes — one-line carry advisory via `flow cost warn --hook`)
 
 Edit here when changing generated runtime hook behavior.
 

@@ -46,6 +46,7 @@ the real `~/.flow/usage.db`.
 
 import json
 import sqlite3
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -53,9 +54,12 @@ import usage_store
 from claude_collector import HARNESS as CLAUDE_HARNESS
 from claude_collector import default_sessions_root as claude_sessions_root
 from claude_collector import harvest_all as claude_harvest_all
+from claude_collector import harvest_file as claude_harvest_file
 from codex_collector import HARNESS as CODEX_HARNESS
+from codex_collector import harvest_file as codex_harvest_file
 from normalize import normalize_all
 from paths import HOME, SOURCE_DIR
+from session_lookup import lookup_session_for_path
 
 DEFAULT_WINDOW_DAYS = 7
 DEFAULT_SESSIONS_LIMIT = 20
@@ -77,6 +81,29 @@ LONG_THRESHOLD = 190_000
 TOPIC_GAP_SEC = 20 * 60
 CARRY_NOW_PCT = 45
 CARRY_NEXT_BREAK_PCT = 25
+
+# Verdict thresholds, also carried over verbatim from token-report:
+# - VERDICT_FLOOR: below this carry cannot matter on any window.
+# - VERDICT_MIN_REQUESTS: a young session probably ends before carry
+#   compounds; window-agnostic on purpose (the true window is only known
+#   to the Claude statusline, which grades severity itself from the raw
+#   numbers the verdict line carries).
+# - WARN_CARRY_FLOOR / WARN_REWARN_STEP tune the pre-execution warning
+#   (`flow cost warn --hook`): fire only above a carry heavy on ANY window
+#   (100K is 50% of the standard window, 10% of the long one), and re-warn
+#   only after carry grows another step — a warning that repeats on every
+#   prompt trains the reader to ignore it, and each firing costs real
+#   context tokens in the conversation it lands in.
+VERDICT_FLOOR = 25_000
+VERDICT_MIN_REQUESTS = 15
+WARN_CARRY_FLOOR = 100_000
+WARN_REWARN_STEP = 50_000
+
+# Where verdict files and warn-throttle markers live. The Claude statusline
+# reads /tmp/claude-verdict-<session_id> — the filename contract predates
+# flow and is preserved exactly; the codex- twin exists for symmetry and
+# for the warn hook, which reads whichever matches its own harness.
+VERDICT_DIR = Path("/tmp")
 
 
 def _cutoff(days: int) -> str:
@@ -607,3 +634,317 @@ def cost_active_command(
 
     print(render_json({"rows": rows}) if as_json else _render_active_table(rows))
     return 0
+
+
+def _harness_for_transcript(path: Path) -> str:
+    """Which harness owns this transcript, from its path.
+
+    `/.codex/` vs anything else (Claude transcripts live under
+    `~/.claude/projects/`, but a copied or symlinked path should still
+    default to Claude rather than fail — Claude is the richer contract and
+    the only wrong-guess consequence is a harvest that skips every line).
+    """
+    return CODEX_HARNESS if "/.codex/" in str(path) else CLAUDE_HARNESS
+
+
+def _session_context_samples(conn: sqlite3.Connection, session_row_id: int) -> tuple[list, dict | None, int]:
+    """(newest-two samples, oldest sample, main-thread turn count) for one session.
+
+    The same three queries `active_rows` runs per session, shared by the
+    verdict engine. Zero-context rows are skipped and sidechain turns are
+    excluded for the same reasons documented there.
+    """
+    ctx_expr = (
+        "COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)"
+        " + COALESCE(tn.cache_write_tokens, 0)"
+    )
+    recent = conn.execute(
+        f"""
+        SELECT {ctx_expr} AS ctx, tn.ts AS ts
+        FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        WHERE tr.session_row_id = ? AND tn.is_subagent = 0 AND {ctx_expr} > 0
+        ORDER BY tn.ts DESC, tr.id DESC LIMIT 2
+        """,
+        (session_row_id,),
+    ).fetchall()
+    first = conn.execute(
+        f"""
+        SELECT {ctx_expr} AS ctx
+        FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        WHERE tr.session_row_id = ? AND tn.is_subagent = 0 AND {ctx_expr} > 0
+        ORDER BY tn.ts ASC, tr.id ASC LIMIT 1
+        """,
+        (session_row_id,),
+    ).fetchone()
+    requests = conn.execute(
+        "SELECT COUNT(*) FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id"
+        " WHERE tr.session_row_id = ? AND tn.is_subagent = 0",
+        (session_row_id,),
+    ).fetchone()[0]
+    return [dict(r) for r in recent], (dict(first) if first is not None else None), requests
+
+
+def verdict_for_transcript(conn: sqlite3.Connection, transcript: Path, session_id: str | None = None) -> dict | None:
+    """Live judgment for one transcript: should this session /clear or /compact now?
+
+    Supersedes `token-report --verdict`. Store-backed: incrementally
+    harvests just this file, normalizes, then judges from `turn_norm` —
+    the per-Stop cost is one watermark check plus whatever lines the turn
+    just appended. Thresholds and semantics carried over verbatim:
+    absolute carry floor (the true window is only known to the statusline,
+    which grades severity itself from the raw numbers), minimum request
+    count, and the idle gap before the latest turn as the only live signal
+    that distinguishes /clear (came back to new work) from /compact (same
+    work, heavy context).
+
+    Returns None when there is nothing to say — below the floor, too
+    young, or the session can't be resolved. `session_id` (from the hook's
+    stdin JSON) is the primary session key when provided; the transcript
+    path is the fallback for manual invocations.
+
+    Codex limitation, documented not hidden: same math, but Codex has no
+    statusline consuming these numbers, so nothing downstream grades carry
+    against a real window — the warn hook applies the window-agnostic
+    absolute thresholds instead.
+    """
+    harness = _harness_for_transcript(transcript)
+    harvest = claude_harvest_file if harness == CLAUDE_HARNESS else codex_harvest_file
+    try:
+        harvest(conn, transcript)
+    except OSError:
+        return None
+    normalize_all(conn)
+
+    session_row_id = None
+    if session_id:
+        row = conn.execute(
+            "SELECT id FROM session WHERE harness = ? AND session_id = ?", (harness, session_id)
+        ).fetchone()
+        session_row_id = row[0] if row else None
+    if session_row_id is None:
+        session_row_id = lookup_session_for_path(conn, harness, transcript)
+    if session_row_id is None:
+        return None
+
+    recent, first, requests = _session_context_samples(conn, session_row_id)
+    if not recent or first is None:
+        return None
+
+    ctx = recent[0]["ctx"]
+    carry = ctx - first["ctx"]
+
+    gap = 0
+    if len(recent) == 2:
+        newer, older = _parse_ts(recent[0]["ts"]), _parse_ts(recent[1]["ts"])
+        if newer and older:
+            gap = max(0, int((newer - older).total_seconds()))
+
+    if carry < VERDICT_FLOOR or requests < VERDICT_MIN_REQUESTS:
+        return None
+
+    if gap >= TOPIC_GAP_SEC:
+        action, why = "clear", f"idle {gap // 60}m"
+    else:
+        action, why = "compact", ""  # the carry number already says it
+
+    return {"harness": harness, "action": action, "carry": carry, "ctx": ctx, "why": why}
+
+
+def _verdict_path(harness: str, session_id: str) -> Path:
+    return VERDICT_DIR / f"{harness}-verdict-{session_id}"
+
+
+def _read_hook_stdin() -> dict | None:
+    try:
+        payload = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _safe_session_id(sid) -> bool:
+    """A session id fit to appear in a /tmp filename.
+
+    Session ids arrive on hook stdin, and while both runtimes generate
+    UUIDs, nothing guarantees that forever — a value containing a path
+    separator must never reach `Path(...)` construction or `unlink`.
+    """
+    import re
+
+    return isinstance(sid, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", sid) is not None
+
+
+def _log_hook_error(kind: str, exc: Exception) -> None:
+    """One breadcrumb line per swallowed hook error, so silent-by-design
+    doesn't become invisible-forever. Best-effort: logging must never make
+    the hook fail."""
+    try:
+        log_dir = HOME / ".flow" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with (log_dir / "hook-errors.log").open("a") as fh:
+            fh.write(f"{datetime.now(timezone.utc).isoformat()}\t{kind}\t{type(exc).__name__}: {exc}\n")
+    except OSError:
+        pass
+
+
+def _run_verdict_hook() -> int:
+    """The whole `--hook` body, guarded in one place by its caller.
+
+    Anything here may raise (a locked store past busy_timeout, a full
+    disk, the half-applied-migration state `ensure_store` refuses) — the
+    caller converts every failure to exit 0, because an advisory hook
+    erroring on every Stop of every session is the loudest possible
+    failure of a feature whose premise is silence.
+    """
+    payload = _read_hook_stdin()
+    if payload is None:
+        return 0
+    sid = payload.get("session_id")
+    tpath = payload.get("transcript_path")
+    if not _safe_session_id(sid) or not tpath or not Path(tpath).is_file():
+        return 0
+
+    store = usage_store.default_store_path(HOME)
+    capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
+    usage_store.ensure_store(store, capabilities)
+
+    conn = sqlite3.connect(store)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        v = verdict_for_transcript(conn, Path(tpath), session_id=sid)
+    finally:
+        conn.close()
+
+    harness = _harness_for_transcript(Path(tpath))
+    out = _verdict_path(harness, sid)
+    if v is not None:
+        # Atomic replace: the statusline reads this file on its own
+        # schedule and must never observe a truncated half-write.
+        import os
+
+        tmp = out.with_name(out.name + ".tmp")
+        tmp.write_text(f"/{v['action']}?\t{v['carry']}\t{v['ctx']}\t{v['why']}\n")
+        os.replace(tmp, out)
+    else:
+        # Below threshold or freshly cleared: remove the file so the
+        # statusline field (and any pending warning) disappears — and the
+        # warn hook's high-water marker with it, or a /compact that drops
+        # carry would leave re-warning suppressed until carry exceeded the
+        # PRE-compact high plus a step, giving the heaviest sessions the
+        # least warning.
+        out.unlink(missing_ok=True)
+        (VERDICT_DIR / f"{harness}-warned-{sid}").unlink(missing_ok=True)
+    return 0
+
+
+def cost_verdict_command(transcript: str | None = None, hook: bool = False) -> int:
+    """CLI entry point for `flow cost verdict`.
+
+    Two modes:
+    - `--hook`: read the runtime's hook JSON from stdin (both harnesses
+      send `session_id` + `transcript_path`), compute, and write/remove
+      the verdict file. Prints NOTHING on purpose — Stop-hook stdout is
+      fed back into the conversation on both runtimes, which would mean
+      spending tokens to say you are spending too many; the statusline
+      and the warn hook read the file for free. Exits 0 unconditionally,
+      including on internal errors (breadcrumbed to
+      ~/.flow/logs/hook-errors.log): a broken verdict must never block a
+      Stop, and exit code 2 actively would.
+    - `--transcript PATH`: compute and print the same line
+      `token-report --verdict` printed (`/{action}?\\t{carry}\\t{ctx}\\t{why}`,
+      raw token counts — the statusline grades them against the window it
+      alone knows). Manual/debug surface; silence when nothing to say.
+    """
+    if hook:
+        try:
+            return _run_verdict_hook()
+        except Exception as exc:
+            # The verdict file is left as-is on an internal error rather
+            # than removed — stale beats flapping.
+            _log_hook_error("verdict", exc)
+            return 0
+
+    store = usage_store.default_store_path(HOME)
+    capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
+    usage_store.ensure_store(store, capabilities)
+
+    if not transcript:
+        print("usage: flow cost verdict --transcript PATH | --hook")
+        return 1
+
+    conn = sqlite3.connect(store)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        v = verdict_for_transcript(conn, Path(transcript))
+    finally:
+        conn.close()
+
+    if v is not None:
+        print(f"/{v['action']}?\t{v['carry']}\t{v['ctx']}\t{v['why']}")
+    return 0
+
+
+def cost_warn_command() -> int:
+    """CLI entry point for `flow cost warn --hook` (UserPromptSubmit, both harnesses).
+
+    The pre-execution warning: reads the verdict file the Stop hook last
+    wrote — zero computation at prompt time — and, when carry is heavy on
+    ANY window (>= WARN_CARRY_FLOOR) prints one line, which the runtime
+    injects as context so both the model and the user see it before the
+    next expensive turn. Throttled: re-warns only after carry grows
+    another WARN_REWARN_STEP since the last warning (marker file beside
+    the verdict), because a warning on every prompt is noise that costs
+    context tokens each time it fires. Always exits 0 and prints nothing
+    in every other case — including any internal error — because blocking
+    or polluting a prompt over advisory telemetry would invert the
+    feature's whole point.
+    """
+    try:
+        payload = _read_hook_stdin()
+        if payload is None:
+            return 0
+        sid = payload.get("session_id")
+        tpath = payload.get("transcript_path")
+        # Missing transcript_path = bail, matching the verdict command
+        # exactly — guessing a harness here would silently read a verdict
+        # file the other harness never writes, making the warn a permanent
+        # no-op with no signal.
+        if not _safe_session_id(sid) or not tpath:
+            return 0
+
+        harness = _harness_for_transcript(Path(tpath))
+        verdict_file = _verdict_path(harness, sid)
+        try:
+            parts = verdict_file.read_text().strip().split("\t")
+            carry = int(parts[1])
+        except (OSError, ValueError, IndexError):
+            return 0
+        if carry < WARN_CARRY_FLOOR:
+            return 0
+
+        marker = VERDICT_DIR / f"{harness}-warned-{sid}"
+        try:
+            last_warned = int(marker.read_text().strip())
+        except (OSError, ValueError):
+            last_warned = 0
+        if carry < last_warned + WARN_REWARN_STEP:
+            return 0
+
+        action = parts[0].strip("/?") or "compact"
+        print(
+            f"flow advisory: this session is carrying ~{carry // 1000}K tokens above its start, "
+            f"re-sent on every request. /{action} at the next natural break would cut per-request cost. "
+            "(Informational only — continue if the thread is still earning its context.)"
+        )
+        try:
+            marker.write_text(str(carry))
+        except OSError:
+            pass
+        return 0
+    except Exception as exc:
+        _log_hook_error("warn", exc)
+        return 0

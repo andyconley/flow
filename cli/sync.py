@@ -41,6 +41,7 @@ from paths import (
 )
 from render import (
     build_managed_manifest,
+    codex_hook_command_for,
     codex_skill_dir,
     hook_command_for,
     manifest_ref_for,
@@ -59,6 +60,28 @@ def read_managed_paths(root: Path, path: Path) -> set[Path]:
     data = read_toml(path)
     files = data.get("files", [])
     return {root / entry["path"] for entry in files if "path" in entry}
+
+
+def read_managed_merge_paths(root: Path, path: Path) -> set[Path]:
+    """Managed paths whose sync_mode is `merge` — files flow writes INTO
+    rather than owns (.claude/settings.json, .codex/hooks.json).
+
+    These must never be unlinked as "stale": dropping the runtime's
+    settings/hooks config from the manifest makes the file stop appearing
+    in `desired`, and treating that like any other stale managed file
+    would delete the user's own unmanaged content along with flow's —
+    directly violating the preserve-unmanaged contract the same manifest
+    advertises.
+    """
+    if not path.exists():
+        return set()
+    data = read_toml(path)
+    files = data.get("files", [])
+    return {
+        root / entry["path"]
+        for entry in files
+        if "path" in entry and entry.get("sync_mode") == "merge"
+    }
 
 
 def load_flow_manifest(flow_dir: Path) -> tuple[Path, dict]:
@@ -165,10 +188,18 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
             manifest["claude"].get("commands", []),
             user_manifest.get("claude", {}).get("commands", []),
         )
+        manifest["claude"]["hooks"] = merge_named(
+            manifest["claude"].get("hooks", []),
+            user_manifest.get("claude", {}).get("hooks", []),
+        )
     if "codex" in manifest:
         manifest["codex"]["commands"] = merge_named(
             manifest["codex"].get("commands", []),
             user_manifest.get("codex", {}).get("commands", []),
+        )
+        manifest["codex"]["hooks"] = merge_named(
+            manifest["codex"].get("hooks", []),
+            user_manifest.get("codex", {}).get("hooks", []),
         )
     manifest["agents"] = merge_named(
         manifest.get("agents", []),
@@ -210,6 +241,21 @@ def remove_managed_flow_hooks(settings: dict) -> dict:
     return settings
 
 
+def _hook_handler(hook: dict, command: str) -> dict:
+    """One handler entry for a settings/hooks file, shared by both runtimes.
+
+    `timeout` and `status_message` are optional manifest fields passed
+    through when present — both runtimes' hook schemas accept them and the
+    builders should not silently drop what the manifest declares.
+    """
+    handler = {"type": hook["type"], "command": command}
+    if hook.get("timeout") is not None:
+        handler["timeout"] = hook["timeout"]
+    if hook.get("status_message"):
+        handler["statusMessage"] = hook["status_message"]
+    return handler
+
+
 def build_claude_settings(root: Path, runtime: dict, mode: str = MODE_PROJECT) -> str:
     settings_path = root / runtime["settings_file"]
     settings = remove_managed_flow_hooks(read_json(settings_path))
@@ -218,19 +264,128 @@ def build_claude_settings(root: Path, runtime: dict, mode: str = MODE_PROJECT) -
     for hook in runtime.get("hooks", []):
         event = hook["event"]
         groups = hooks.setdefault(event, [])
-        groups.append(
-            {
-                "matcher": hook["matcher"],
-                "hooks": [
-                    {
-                        "type": hook["type"],
-                        "command": hook_command_for(mode, hook["script"]),
-                    }
-                ],
-            }
-        )
+        group: dict = {}
+        if hook.get("matcher") is not None:
+            group["matcher"] = hook["matcher"]
+        group["hooks"] = [_hook_handler(hook, hook_command_for(mode, hook["script"]))]
+        groups.append(group)
+
+    if not hooks:
+        settings.pop("hooks", None)
 
     return json.dumps(settings, indent=2, sort_keys=True) + "\n"
+
+
+def remove_managed_codex_hooks(doc: dict) -> dict:
+    """Strip flow-managed handlers from a Codex hooks.json document.
+
+    Same shape and same rule as `remove_managed_flow_hooks`, against the
+    Codex path marker: a handler whose command points into `/.codex/hooks/`
+    at a `flow-` script is flow's to manage; everything else — including
+    hand-authored handlers sharing an event with flow's — is preserved
+    verbatim. The two functions stay separate rather than parameterized on
+    the marker because their input documents genuinely differ (Claude's is
+    a whole settings file; Codex's is a dedicated hooks file with its own
+    top-level `hooks` key and optional `description`).
+    """
+    hooks = doc.get("hooks")
+    if not isinstance(hooks, dict):
+        return doc
+
+    cleaned_events: dict[str, list] = {}
+    for event, groups in hooks.items():
+        if not isinstance(groups, list):
+            continue
+        cleaned_groups = []
+        for group in groups:
+            handlers = group.get("hooks", [])
+            kept_handlers = []
+            for handler in handlers:
+                command = handler.get("command", "")
+                if handler.get("type") == "command" and "/.codex/hooks/flow-" in command:
+                    continue
+                kept_handlers.append(handler)
+            if kept_handlers:
+                updated = dict(group)
+                updated["hooks"] = kept_handlers
+                cleaned_groups.append(updated)
+        if cleaned_groups:
+            cleaned_events[event] = cleaned_groups
+
+    if cleaned_events:
+        doc["hooks"] = cleaned_events
+    else:
+        doc.pop("hooks", None)
+    return doc
+
+
+def build_codex_hooks_file(root: Path, runtime: dict, mode: str = MODE_PROJECT) -> str:
+    """Codex twin of `build_claude_settings`, against `.codex/hooks.json`.
+
+    hooks.json rather than config.toml on purpose: Codex loads hooks from
+    either, but config.toml is a dense, user-owned file (model, plugins,
+    MCP servers, the desktop app's own `notify` key) with no stdlib TOML
+    writer to round-trip it safely — while hooks.json is a dedicated JSON
+    file this module's existing read-merge-write machinery handles exactly
+    like Claude's settings. Flow never touches config.toml at all.
+    """
+    hooks_path = root / runtime["hooks_file"]
+    doc = remove_managed_codex_hooks(read_json(hooks_path))
+    hooks = doc.setdefault("hooks", {})
+
+    for hook in runtime.get("hooks", []):
+        event = hook["event"]
+        groups = hooks.setdefault(event, [])
+        group: dict = {}
+        if hook.get("matcher") is not None:
+            # Codex treats an absent matcher as match-everything; emitting
+            # an empty string instead would be equivalent but noisier.
+            group["matcher"] = hook["matcher"]
+        group["hooks"] = [_hook_handler(hook, codex_hook_command_for(mode, hook["script"]))]
+        groups.append(group)
+
+    if not hooks:
+        # No flow hooks registered and nothing unmanaged survived the strip:
+        # don't leave a dangling empty "hooks" key in the document.
+        doc.pop("hooks", None)
+
+    return json.dumps(doc, indent=2, sort_keys=True) + "\n"
+
+
+def validate_hook_script_name(hook: dict) -> None:
+    """Reject hook scripts not named `flow-*` before any output is built.
+
+    The preserve-unmanaged strip identifies flow's own handlers by the
+    `/.{claude,codex}/hooks/flow-` path marker. A script named outside
+    that convention would survive the strip and be re-appended on every
+    sync — duplicating its handler without bound — and deregistering it
+    would remove the script file while leaving the handler pointing at
+    nothing. Failing loudly at sync time is the cheap, permanent fix.
+    """
+    script = hook.get("script", "")
+    if not script.startswith("flow-"):
+        raise ValueError(
+            f"hook script {script!r} (hook {hook.get('name', '?')!r}) must be named flow-*: "
+            "the managed-handler contract identifies flow's handlers by that prefix"
+        )
+
+
+def hook_script_source(hook: dict) -> Path:
+    """Where a hook entry's script actually lives, origin-aware.
+
+    Framework hooks ship in the flow repo's `hooks/`; a user-overlay hook's
+    script lives beside its overlay manifest in `~/.flow/user/hooks/`.
+    """
+    if hook.get("_origin") == "user":
+        overlay = USER_OVERLAY_DIR / "hooks" / hook["script"]
+        if overlay.exists():
+            return overlay
+        # A user overlay entry may override a FRAMEWORK hook by name just
+        # to change its event/matcher/timeout — falling back to the
+        # framework script means the override doesn't force copying the
+        # script into the overlay.
+        return SOURCE_DIR / "hooks" / hook["script"]
+    return SOURCE_DIR / "hooks" / hook["script"]
 
 
 def desired_claude_outputs(
@@ -289,7 +444,8 @@ def desired_claude_outputs(
         )
 
     for hook in runtime.get("hooks", []):
-        source = SOURCE_DIR / "hooks" / hook["script"]
+        validate_hook_script_name(hook)
+        source = hook_script_source(hook)
         target = root / runtime["hook_dir"] / hook["script"]
         content = source.read_text()
         outputs[target] = content
@@ -297,7 +453,11 @@ def desired_claude_outputs(
             {
                 "path": rel_posix(target, root),
                 "kind": "hook-script",
-                "source": f'flow/hooks/{hook["script"]}',
+                "source": (
+                    f'~/.flow/user/hooks/{hook["script"]}'
+                    if hook.get("_origin") == "user"
+                    else f'flow/hooks/{hook["script"]}'
+                ),
                 "sync_mode": "replace",
             }
         )
@@ -379,6 +539,40 @@ def desired_codex_outputs(
             }
         )
 
+    # Hook support mirrors desired_claude_outputs exactly, gated on the
+    # runtime declaring hook_dir + hooks_file — older manifests without
+    # them keep today's skill/agent-only surface untouched.
+    if runtime.get("hook_dir") and runtime.get("hooks_file"):
+        for hook in runtime.get("hooks", []):
+            validate_hook_script_name(hook)
+            source = hook_script_source(hook)
+            target = root / runtime["hook_dir"] / hook["script"]
+            outputs[target] = source.read_text()
+            managed_entries.append(
+                {
+                    "path": rel_posix(target, root),
+                    "kind": "hook-script",
+                    "source": (
+                        f'~/.flow/user/hooks/{hook["script"]}'
+                        if hook.get("_origin") == "user"
+                        else f'flow/hooks/{hook["script"]}'
+                    ),
+                    "sync_mode": "replace",
+                }
+            )
+
+        hooks_path = root / runtime["hooks_file"]
+        outputs[hooks_path] = build_codex_hooks_file(root, runtime, mode)
+        mergeable_paths.add(hooks_path)
+        managed_entries.append(
+            {
+                "path": rel_posix(hooks_path, root),
+                "kind": "hooks-file",
+                "source": manifest_rel,
+                "sync_mode": "merge",
+            }
+        )
+
     # See the note in desired_claude_outputs: the manifest lists itself, so its
     # own entry is appended before the content is built.
     managed_manifest_path = root / runtime["managed_manifest"]
@@ -450,7 +644,9 @@ def sync_outputs(
     previous_managed: set[Path],
     mergeable_paths: set[Path],
     check: bool,
+    merge_protected: set[Path] | None = None,
 ) -> int:
+    merge_protected = merge_protected or set()
     conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
     removed: list[Path] = []
 
@@ -473,6 +669,13 @@ def sync_outputs(
         return 1
 
     for path in stale:
+        if path in merge_protected:
+            # A merge-mode file (settings.json, hooks.json) holds the
+            # user's own content alongside flow's; never delete it, just
+            # stop managing it. Flow's handlers remain until the user
+            # removes them or re-registers hooks.
+            print(f"- unmanaged (kept, contains user content): {rel_posix(path, root)}")
+            continue
         path.unlink()
         remove_empty_parents(path, root)
         removed.append(path)
@@ -539,10 +742,19 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False) -> in
 
     mode = MODE_USER if user_mode else MODE_PROJECT
     previous_managed = read_managed_paths(root, root / runtime["managed_manifest"])
-    desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
-        target, root, flow_dir, manifest, manifest_ref_for(mode, manifest_path, root), mode
+    merge_protected = read_managed_merge_paths(root, root / runtime["managed_manifest"])
+    try:
+        desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
+            target, root, flow_dir, manifest, manifest_ref_for(mode, manifest_path, root), mode
+        )
+    except (ValueError, FileNotFoundError) as err:
+        # A misnamed hook script (must be flow-*) or a hook script missing
+        # from its source dir — fail loudly before anything is written.
+        print(str(err))
+        return 1
+    result = sync_outputs(
+        root, target, desired, previous_managed, mergeable_paths, check=check, merge_protected=merge_protected
     )
-    result = sync_outputs(root, target, desired, previous_managed, mergeable_paths, check=check)
     if result == 0:
         verb = "check" if check else "sync"
         print(f"{scope_label} {target} {verb} complete from {manifest_path}")
