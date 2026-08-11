@@ -133,50 +133,84 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-def _parse_status_branch(header: str) -> tuple[str | None, int | None]:
-    """(branch, unpushed) from `git status --porcelain --branch`'s `##` line.
+# Space-separated fields that precede the path on each `--porcelain=v2` entry
+# line. Paths routinely contain spaces, so the path has to be split off by
+# field count rather than sliced at a fixed offset the way v1's fixed-width
+# `XY ` prefix allowed. `!` is absent because `--ignored` is never passed.
+_V2_ENTRY_FIELDS = {
+    "1": 8,  # 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
+    "2": 9,  # 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>\t<orig>
+    "u": 10,  # u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+    "?": 1,  # ? <path>
+}
 
-    One call covers branch name and ahead-count, and it answers correctly in
-    the two states `rev-parse --abbrev-ref HEAD` gets wrong: a repo with no
-    commits yet (where rev-parse fails outright) and a detached HEAD (where
-    rev-parse returns the literal string "HEAD" and would be reported as a
-    branch by that name).
 
-    Shapes:
-      `## main...origin/main [ahead 2]`  -> ("main", 2)
-      `## main...origin/main`            -> ("main", 0)
-      `## main`                          -> ("main", None)   no upstream
-      `## No commits yet on main`        -> ("main", None)   unborn branch
-      `## HEAD (no branch)`              -> (None, None)     detached
+def _v2_entry_path(line: str) -> str | None:
+    """The path an entry line refers to, or None if the line is not an entry.
+
+    A rename entry names two paths, tab-separated, new first. The new path is
+    the one that is uncommitted, so it is the one reported.
     """
-    body = header.removeprefix("## ").strip()
-    if body.startswith("HEAD (no branch)"):
-        return None, None
-    if body.startswith("No commits yet on "):
-        return body.removeprefix("No commits yet on ").split()[0], None
+    fields = _V2_ENTRY_FIELDS.get(line[:1])
+    if fields is None:
+        return None
+    parts = line.split(" ", fields)
+    if len(parts) <= fields:
+        return None
+    return parts[fields].split("\t", 1)[0] or None
 
+
+def _parse_status_v2(out: str) -> tuple[str | None, str | None, int | None, list[str]]:
+    """(branch, upstream, unpushed, dirty) from `status --porcelain=v2 --branch`.
+
+    The `--branch` header carries what three separate commands would otherwise
+    be spawned for — branch name, upstream ref, ahead count — and it answers
+    correctly in the two states `rev-parse --abbrev-ref HEAD` gets wrong: an
+    unborn branch, where rev-parse fails outright, and a detached HEAD, where
+    it returns the literal string "HEAD" and would be reported as a branch by
+    that name.
+
+    Header shapes, all verified against git rather than inferred:
+      `# branch.oid <sha>`            or `(initial)` on an unborn branch
+      `# branch.head main`            or `(detached)`
+      `# branch.upstream origin/main` omitted entirely when unset
+      `# branch.ab +2 -0`             omitted entirely when unset
+
+    `unpushed` stays None only when there is no upstream, so the caller can
+    read None as "nowhere to push" and 0 as "level". An `+N` that will not
+    parse is therefore treated as level, matching what the v1 parser did with
+    an unparseable `[ahead N]`.
+    """
+    branch = upstream = None
     unpushed = None
-    if "[" in body:
-        tracking = body[body.index("[") + 1 : body.rindex("]")] if "]" in body else ""
-        body = body[: body.index("[")].strip()
-        for part in tracking.split(","):
-            part = part.strip()
-            if part.startswith("ahead "):
-                count = part.removeprefix("ahead ").strip()
-                unpushed = int(count) if count.isdigit() else None
+    dirty = []
 
-    if "..." in body:
-        branch = body.split("...", 1)[0]
-        # An upstream exists; no `[ahead N]` means level with it.
-        return (branch or None), (unpushed if unpushed is not None else 0)
-    return (body or None), None
+    for line in out.splitlines():
+        if line.startswith("# "):
+            key, _, value = line[2:].partition(" ")
+            if key == "branch.head":
+                branch = None if value == "(detached)" else (value or None)
+            elif key == "branch.upstream":
+                upstream = value or None
+            elif key == "branch.ab":
+                for part in value.split():
+                    if part.startswith("+") and part[1:].isdigit():
+                        unpushed = int(part[1:])
+            continue
+        path = _v2_entry_path(line)
+        if path:
+            dirty.append(path)
+
+    if upstream is not None and unpushed is None:
+        unpushed = 0
+    return branch, upstream, unpushed, dirty
 
 
-def overlay_vcs_status(overlay_dir: Path, known_root: str | None = None) -> dict:
+def overlay_vcs_status(overlay_dir: Path, known_root: str | None = None, quick: bool = False) -> dict:
     """Version-control status for the overlay directory.
 
     Returns `{"present", "tracked", "ignored", "error", "root", "is_root",
-    "branch", "remote", "dirty", "unpushed"}`.
+    "branch", "upstream", "remote", "dirty", "unpushed"}`.
 
     - `present` False means there is no overlay at all — the opt-in default,
       not a problem.
@@ -196,12 +230,19 @@ def overlay_vcs_status(overlay_dir: Path, known_root: str | None = None) -> dict
       `unpushed` describe that whole repo, which is the intended reading:
       uncommitted work next to the overlay is the same hazard.
     - `unpushed` is None when the branch has no upstream — distinct from 0,
-      which means an upstream exists and is level.
+      which means an upstream exists and is level. `upstream` names that ref,
+      and is None in exactly the same cases.
+    - `remote` is the configured origin URL, and is the one field `quick`
+      omits. `quick` is for the per-prompt hook, which needs to know whether
+      anything is outstanding and pays for one fewer subprocess by asking
+      about the upstream instead of the remote; a caller that reads `remote`
+      must not pass it, because None then means "not asked" rather than
+      "not configured". `doctor` and `setup` use the full status.
 
     Membership is asked of git, never inferred from a `.git` directory on
     disk: `.git` exists only at a work tree's root, so the filesystem test
     calls every nested or symlinked overlay untracked while it is fully
-    committed. Up to four bounded local calls.
+    committed. Up to four bounded local calls, or three under `quick`.
     """
     status = {
         "present": overlay_dir.is_dir(),
@@ -211,6 +252,7 @@ def overlay_vcs_status(overlay_dir: Path, known_root: str | None = None) -> dict
         "root": None,
         "is_root": False,
         "branch": None,
+        "upstream": None,
         "remote": None,
         "dirty": [],
         "unpushed": None,
@@ -259,20 +301,22 @@ def overlay_vcs_status(overlay_dir: Path, known_root: str | None = None) -> dict
 
     status["tracked"] = True
 
-    rc, out = _git(overlay_dir, "status", "--porcelain", "--branch")
+    rc, out = _git(overlay_dir, "status", "--porcelain=v2", "--branch")
     if rc != 0:
         status["error"] = True
         return status
 
-    lines = out.splitlines()
-    if lines and lines[0].startswith("## "):
-        status["branch"], status["unpushed"] = _parse_status_branch(lines[0])
-        lines = lines[1:]
-    status["dirty"] = [line[3:] for line in lines if line.strip()]
+    (
+        status["branch"],
+        status["upstream"],
+        status["unpushed"],
+        status["dirty"],
+    ) = _parse_status_v2(out)
 
-    rc, out = _git(overlay_dir, "config", "--get", "remote.origin.url")
-    if rc == 0 and out:
-        status["remote"] = out
+    if not quick:
+        rc, out = _git(overlay_dir, "config", "--get", "remote.origin.url")
+        if rc == 0 and out:
+            status["remote"] = out
 
     return status
 
@@ -336,7 +380,7 @@ def format_overlay_vcs(status: dict) -> str:
 
 # PostToolUse is bounded by edits, so it only needs to avoid firing once per
 # file across a ten-file burst. UserPromptSubmit fires on every prompt and
-# needs the longer quiet period. A repo with no remote at all is a standing
+# needs the longer quiet period. A repo with nowhere to push is a standing
 # condition rather than a per-turn one — worth saying, not worth saying often.
 NUDGE_THROTTLE_EDIT_SEC = 10 * 60
 NUDGE_THROTTLE_PROMPT_SEC = 30 * 60
@@ -352,7 +396,9 @@ def nudge_fingerprint(status: dict) -> str:
     changes, rather than staying quiet for the rest of the throttle window
     while new work piles up behind it.
     """
-    parts = [status.get("branch") or "", str(status.get("unpushed")), str(status.get("remote"))]
+    # `upstream`, not `remote`: the hook path asks for a `quick` status, where
+    # `remote` is always None and so contributes nothing a change could move.
+    parts = [status.get("branch") or "", str(status.get("unpushed")), str(status.get("upstream"))]
     parts.extend(sorted(status.get("dirty") or []))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
@@ -468,11 +514,17 @@ def _prune_markers(now: float) -> None:
 def nudge_outstanding(status: dict) -> tuple[list[str], bool]:
     """What is outstanding, and whether it is only the standing condition.
 
-    "No remote at all" belongs here even though it is not per-turn work: a
-    tracked repo with fifty local commits and nowhere to push them has zero
-    copies off this machine, which is the exact scenario the overlay got a
-    repo for. `unpushed` is None rather than a count in that state, so a
-    truthiness test alone stays silent about it.
+    "Nowhere to push" belongs here even though it is not per-turn work: a
+    tracked repo with fifty local commits and no upstream has zero copies off
+    this machine, which is the exact scenario the overlay got a repo for.
+    `unpushed` is None rather than a count in that state, so a truthiness test
+    alone stays silent about it.
+
+    Keyed on `upstream` rather than `remote` so this reads correctly under the
+    hook's `quick` status, where `remote` is deliberately not asked for. It
+    costs a distinction `doctor` still makes: a repo with a remote configured
+    but no upstream set reads the same here as one with no remote at all. Both
+    mean nothing is pushed, which is the only thing this advisory acts on.
     """
     outstanding = []
     if status["dirty"]:
@@ -482,10 +534,8 @@ def nudge_outstanding(status: dict) -> tuple[list[str], bool]:
         outstanding.append(f"{status['unpushed']} unpushed commit{'s' if status['unpushed'] != 1 else ''}")
 
     standing = []
-    if status["remote"] is None:
-        standing.append("no remote, so nothing here exists off this machine")
-    elif status["unpushed"] is None:
-        standing.append("no upstream branch, so nothing here is pushed")
+    if status["upstream"] is None:
+        standing.append("no upstream branch, so nothing here exists off this machine")
 
     return outstanding + standing, (bool(standing) and not outstanding)
 
@@ -594,7 +644,12 @@ def overlay_check_command() -> int:
             if _within_throttle(root, event, payload.get("session_id"), NUDGE_THROTTLE_EDIT_SEC):
                 return 0
 
-        status = overlay_vcs_status(USER_OVERLAY_DIR, known_root=root)
+        # `quick`: the advisory acts on "is anything outstanding", which the
+        # `status` header answers via the upstream ref. Asking `config --get
+        # remote.origin.url` as well cost a fourth subprocess (~45ms) on every
+        # prompt to sharpen wording nobody reads at that moment — `doctor`
+        # still draws the full distinction.
+        status = overlay_vcs_status(USER_OVERLAY_DIR, known_root=root, quick=True)
         if not status["tracked"] or status["error"]:
             # An untracked or unreadable overlay is `doctor`'s business.
             # Repeating it on every prompt would be noise aimed at someone
@@ -607,7 +662,7 @@ def overlay_check_command() -> int:
 
         _, standing_only = nudge_outstanding(status)
         if standing_only:
-            # A repo with no remote is a property of the repo, not of any
+            # A repo with nowhere to push is a property of the repo, not of any
             # session's work — so it must NOT be keyed per session. Keyed
             # that way, every new session and every /clear starts markerless
             # and re-fires, turning a once-a-day note into two lines per

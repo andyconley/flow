@@ -4813,6 +4813,129 @@ class OverlayVcsTests(unittest.TestCase):
         self.assertEqual(status["unpushed"], 1)
         self.assertIn("1 unpushed", self.overlay.format_overlay_vcs(status))
 
+    # --- `--porcelain=v2` parsing -------------------------------------------
+    #
+    # v2 was adopted to retire the `config --get remote.origin.url` subprocess
+    # from the per-prompt hook: its `--branch` header names the upstream
+    # directly. But its entry lines are nothing like v1's fixed-width `XY `
+    # prefix, and the count these produce is the number the whole advisory is
+    # built on — so every line type gets a case.
+
+    def test_every_v2_entry_type_yields_exactly_one_path(self) -> None:
+        """Ordinary, rename, unmerged, and untracked entries, with spaces in
+        the paths. A fixed-offset slice of the kind v1 allowed would return
+        field soup for three of these four."""
+        branch, upstream, unpushed, dirty = self.overlay._parse_status_v2(
+            "# branch.oid abc123\n"
+            "# branch.head main\n"
+            "1 .M N... 100644 100644 100644 aaa bbb mod file.md\n"
+            "2 R. N... 100644 100644 100644 aaa bbb R100 new name.md\told name.md\n"
+            "u UU N... 100644 100644 100644 100644 aaa bbb ccc conflicted file.md\n"
+            "? un tracked.md\n"
+        )
+        self.assertEqual(branch, "main")
+        self.assertIsNone(upstream)
+        self.assertIsNone(unpushed)
+        self.assertEqual(
+            dirty,
+            ["mod file.md", "new name.md", "conflicted file.md", "un tracked.md"],
+            "one path per entry, spaces intact, rename reported at its new path",
+        )
+
+    def test_v2_header_reads_upstream_and_ahead_count(self) -> None:
+        branch, upstream, unpushed, dirty = self.overlay._parse_status_v2(
+            "# branch.oid abc123\n"
+            "# branch.head main\n"
+            "# branch.upstream origin/main\n"
+            "# branch.ab +2 -1\n"
+        )
+        self.assertEqual((branch, upstream, unpushed), ("main", "origin/main", 2))
+        self.assertEqual(dirty, [])
+
+    def test_v2_upstream_present_and_level_is_zero_not_none(self) -> None:
+        """None means "nowhere to push" everywhere downstream. An upstream
+        that exists and is level must not read as its absence."""
+        _, upstream, unpushed, _ = self.overlay._parse_status_v2(
+            "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n"
+        )
+        self.assertEqual(upstream, "origin/main")
+        self.assertEqual(unpushed, 0)
+
+    def test_v2_detached_head_is_not_a_branch_named_head(self) -> None:
+        branch, _, _, _ = self.overlay._parse_status_v2("# branch.oid abc\n# branch.head (detached)\n")
+        self.assertIsNone(branch)
+
+    def test_unborn_branch_is_readable_and_still_counts_its_files(self) -> None:
+        """A freshly initialized overlay: git prints `(initial)` for the oid
+        and `rev-parse HEAD` fails outright, so this state has to come from
+        the status header or not at all."""
+        d = self.dir / "user"
+        d.mkdir()
+        (d / "flow.toml").write_text("# overlay\n")
+        self._git(d, "init", "-b", "main")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertTrue(status["tracked"])
+        self.assertFalse(status["error"])
+        self.assertEqual(status["branch"], "main")
+        self.assertIsNone(status["upstream"])
+        self.assertEqual(status["dirty"], ["flow.toml"])
+
+    def test_real_repo_reports_a_spaced_path_verbatim(self) -> None:
+        """The parser above is fed literal strings; this proves the shape it
+        expects is the shape git actually emits. Asserting the path and not
+        just the count: a mangled path is still one entry, so a count
+        assertion alone survives a fixed-offset slice."""
+        d = self._repo_with_content()
+        (d / "two words.md").write_text("x\n")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["dirty"], ["two words.md"])
+
+    # --- `quick` -------------------------------------------------------------
+
+    def test_quick_skips_the_remote_lookup_and_full_mode_does_not(self) -> None:
+        """The whole point of `quick`: one fewer subprocess per prompt. The
+        full status is what `doctor` and `setup` read, and `setup` compares
+        `remote` against the URL it was given."""
+        remote = self.dir / "remote.git"
+        remote.mkdir()
+        self._git(remote, "init", "--bare", "-b", "main")
+        d = self._repo_with_content()
+        self._git(d, "remote", "add", "origin", str(remote))
+        self._git(d, "push", "-u", "origin", "main")
+
+        full = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(full["remote"], str(remote))
+
+        quick = self.overlay.overlay_vcs_status(d, quick=True)
+        self.assertIsNone(quick["remote"], "quick must not ask; None here means unasked")
+        self.assertEqual(quick["upstream"], "origin/main", "and the upstream covers what the nudge needs")
+        self.assertEqual(quick["unpushed"], 0)
+
+    def test_quick_status_costs_one_fewer_git_call(self) -> None:
+        """The saving, asserted rather than assumed — a `quick` that still
+        spawned `config` would pass every other test in this class."""
+        import unittest.mock
+
+        d = self._repo_with_content()
+        real = self.overlay._git
+
+        def counted(calls):
+            def wrapper(cwd, *args):
+                calls.append(args[0])
+                return real(cwd, *args)
+
+            return wrapper
+
+        full_calls, quick_calls = [], []
+        with unittest.mock.patch.object(self.overlay, "_git", counted(full_calls)):
+            self.overlay.overlay_vcs_status(d)
+        with unittest.mock.patch.object(self.overlay, "_git", counted(quick_calls)):
+            self.overlay.overlay_vcs_status(d, quick=True)
+
+        self.assertIn("config", full_calls)
+        self.assertNotIn("config", quick_calls)
+        self.assertEqual(len(quick_calls), len(full_calls) - 1)
+
 
 class OverlayNudgeTests(unittest.TestCase):
     """`flow overlay check --hook` — the code path that runs unattended on
@@ -4952,7 +5075,7 @@ class OverlayNudgeTests(unittest.TestCase):
         would stay silent about it."""
         d = self._overlay_repo(with_remote=False)
         _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
-        self.assertIn("no remote", out)
+        self.assertIn("no upstream branch", out)
 
     def test_sessions_do_not_silence_each_other(self) -> None:
         """One marker per repo let whichever session fired first suppress
@@ -5004,7 +5127,7 @@ class OverlayNudgeTests(unittest.TestCase):
         every /clear, turning a once-a-day note into permanent noise."""
         d = self._overlay_repo(with_remote=False)
         _, first = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-a"}, d)
-        self.assertIn("no remote", first)
+        self.assertIn("no upstream branch", first)
         _, other = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-b"}, d)
         self.assertEqual(other, "", "a different session must not restart the 24h window")
 
@@ -5029,7 +5152,7 @@ class OverlayNudgeTests(unittest.TestCase):
         window."""
         d = self._overlay_repo(with_remote=False)
         _, standing = self._run_hook({"hook_event_name": "PostToolUse"}, d)
-        self.assertIn("no remote", standing)
+        self.assertIn("no upstream branch", standing)
 
         (d / "real-work.md").write_text("x\n")
         _, edit = self._run_hook({"hook_event_name": "PostToolUse"}, d)

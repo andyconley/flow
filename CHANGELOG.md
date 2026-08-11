@@ -57,9 +57,27 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   It also now reports overlay hooks alongside commands and agents, which it
   had never listed. New module `cli/overlay.py` holds the status query, kept
   out of `diagnostics.py` so `doctor` keeps holding presentation rather than
-  git plumbing; two bounded git calls, skipped entirely when there is no
-  `.git`, and it never writes. A failed git call reports `unreadable (git
+  git plumbing; a few bounded local git calls, skipped entirely when there is
+  no overlay, and it never writes. A failed git call reports `unreadable (git
   error)` rather than a synthesized clean-looking status.
+
+### Changed
+
+- **The overlay advisory hook costs one fewer subprocess per prompt.** It
+  reads `git status --porcelain=v2 --branch`, whose header names the upstream
+  ref directly, so `config --get remote.origin.url` — ~45ms of process spawn
+  on every prompt — is no longer needed to answer "is anything unpushed".
+  `overlay_vcs_status` grew a `quick` flag for this; `doctor` and `setup`
+  still take the full status and behave exactly as before.
+
+  The hook gives up one distinction in exchange: a repo with a remote
+  configured but no upstream set now reads to it the same as a repo with no
+  remote at all, and both are reported as *no upstream branch, so nothing
+  here exists off this machine*. Both mean nothing is pushed, which is the
+  only thing the advisory acts on. `doctor` still separates them.
+
+  Porcelain v2 also changes how a rename appears in the dirty list: v1
+  reported `old -> new`, v2 reports the new path alone.
 
 ## [0.8.0] — 2026-08-10
 
