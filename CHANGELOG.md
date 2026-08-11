@@ -6,6 +6,18 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-11
+
+The overlay release. `~/.flow/user/` was the one authored layer with nothing
+behind it — hand-written content in a machine-local directory, no history, no
+backup. It gets a git home, a status query, and an advisory that notices when a
+session walks away without committing what it just edited.
+
+The convention that advisory enforces was already written down, and that turned
+out to be the problem. `FRAMEWORK.md` says the agent editing overlay content
+commits it in the same turn; a compaction or a fresh session quietly stopped
+honoring it, and nobody found out until the next `doctor` run.
+
 ### Added
 
 - **`flow overlay`** — `status` reports the user overlay's version-control
