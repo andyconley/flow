@@ -6,6 +6,24 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+### Fixed
+
+- **`docs/cli-reference.md` covers all twelve subcommands.** It documented
+  eight and was two releases behind: the entire v0.8.0 usage-tracking surface
+  (`harvest`, `normalize`, the five `cost` views) and the v0.9.0 overlay
+  surface were absent, as was `flow help`. Its Overview also claimed flow
+  manages three things and named neither. A reader learning the CLI from that
+  file would have concluded `flow cost` did not exist.
+
+  Also documents what `--help` cannot say: the harvest → normalize → cost
+  ordering and which views run it for you (`active` and `verdict` do, and only
+  for Claude — Codex totals go stale until `flow harvest codex` is run by
+  hand); the actual `/clear`-or-`/compact` thresholds; the verdict-file and
+  throttle-marker paths, which are what you inspect when an advisory
+  misbehaves; and five new failure modes, including the one all three hook
+  entry points share — silence by design looks exactly like breakage, so it
+  gets a diagnostic order starting at `~/.flow/logs/hook-errors.log`.
+
 ## [0.9.0] — 2026-08-11
 
 The overlay release. `~/.flow/user/` was the one authored layer with nothing
