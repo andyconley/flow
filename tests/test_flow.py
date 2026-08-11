@@ -4890,6 +4890,47 @@ class OverlayVcsTests(unittest.TestCase):
         status = self.overlay.overlay_vcs_status(d)
         self.assertEqual(status["dirty"], ["two words.md"])
 
+    def test_real_git_rename_reports_the_new_path(self) -> None:
+        """`2` entries have nine fields before the path and then a second,
+        tab-separated path. The literal-string test above encodes that belief;
+        this one checks it against git, because a field count that is off by
+        one either mangles the path or drops the entry, and both are silent."""
+        d = self._repo_with_content()
+        (d / "before.md").write_text("x\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "add")
+        self._git(d, "mv", "before.md", "after two.md")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["dirty"], ["after two.md"])
+
+    def test_real_git_merge_conflict_reports_one_path(self) -> None:
+        """`u` entries have ten fields before the path — the longest of the
+        four shapes, and the one nothing else in the suite exercises."""
+        d = self._repo_with_content()
+        (d / "c.md").write_text("base\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "base")
+        self._git(d, "checkout", "-b", "other")
+        (d / "c.md").write_text("other\n")
+        self._git(d, "commit", "-am", "other")
+        self._git(d, "checkout", "main")
+        (d / "c.md").write_text("main\n")
+        self._git(d, "commit", "-am", "main")
+        subprocess.run(["git", "merge", "other"], cwd=d, capture_output=True)
+
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["dirty"], ["c.md"], "a conflicted file is one entry, not field soup")
+
+    def test_upstream_set_with_no_ahead_behind_line_reads_as_level(self) -> None:
+        """`branch.ab` accompanies `branch.upstream` in practice, but the
+        contract downstream is that None means untracked. An upstream with no
+        countable divergence must not read as its absence."""
+        _, upstream, unpushed, _ = self.overlay._parse_status_v2(
+            "# branch.head main\n# branch.upstream origin/main\n"
+        )
+        self.assertEqual(upstream, "origin/main")
+        self.assertEqual(unpushed, 0, "an upstream exists, so this is level, not untracked")
+
     # --- `quick` -------------------------------------------------------------
 
     def test_quick_skips_the_remote_lookup_and_full_mode_does_not(self) -> None:
@@ -4910,6 +4951,41 @@ class OverlayVcsTests(unittest.TestCase):
         self.assertIsNone(quick["remote"], "quick must not ask; None here means unasked")
         self.assertEqual(quick["upstream"], "origin/main", "and the upstream covers what the nudge needs")
         self.assertEqual(quick["unpushed"], 0)
+
+    def test_quick_status_never_reports_no_remote(self) -> None:
+        """`format_overlay_vcs` reads `remote`, which a quick status never
+        populates. Without the `quick` flag in the dict it would report "no
+        remote" for a repo that has one — a false diagnostic, produced
+        silently, by a caller that did nothing obviously wrong."""
+        remote = self.dir / "remote.git"
+        remote.mkdir()
+        self._git(remote, "init", "--bare", "-b", "main")
+        d = self._repo_with_content()
+        self._git(d, "remote", "add", "origin", str(remote))
+        self._git(d, "push", "-u", "origin", "main")
+
+        line = self.overlay.format_overlay_vcs(self.overlay.overlay_vcs_status(d, quick=True))
+        self.assertNotIn("no remote", line)
+        self.assertIn("clean", line)
+
+    def test_remote_without_an_upstream_is_no_upstream_not_no_remote(self) -> None:
+        """`git push origin main` without `-u` is what `setup`'s init-in-place
+        path leaves behind: the content is on the remote and the branch tracks
+        nothing. `doctor` must keep those two apart — the whole reason the full
+        status still pays for the remote lookup."""
+        remote = self.dir / "remote.git"
+        remote.mkdir()
+        self._git(remote, "init", "--bare", "-b", "main")
+        d = self._repo_with_content()
+        self._git(d, "remote", "add", "origin", str(remote))
+        self._git(d, "push", "origin", "main")
+
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["remote"], str(remote), "a remote is configured")
+        self.assertIsNone(status["upstream"], "but nothing tracks the branch")
+        line = self.overlay.format_overlay_vcs(status)
+        self.assertIn("no upstream", line)
+        self.assertNotIn("no remote", line)
 
     def test_quick_status_costs_one_fewer_git_call(self) -> None:
         """The saving, asserted rather than assumed — a `quick` that still
@@ -4977,10 +5053,15 @@ class OverlayNudgeTests(unittest.TestCase):
                  "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
         )
 
-    def _overlay_repo(self, with_remote: bool = True) -> Path:
+    def _overlay_repo(self, with_remote: bool = True, set_upstream: bool = True) -> Path:
         """A tracked overlay. `with_remote` is on by default because a repo
         with nowhere to push is itself a nudge-worthy state, so a test that
-        wants "nothing to report" has to opt into being backed up."""
+        wants "nothing to report" has to opt into being backed up.
+
+        `set_upstream=False` pushes without `-u`: the content reaches the
+        remote and the branch tracks nothing. That is the state `setup`'s
+        init-in-place path produces, so anything the advisory says about it
+        has to be true of a repo that IS backed up."""
         d = self.dir / "user"
         d.mkdir()
         (d / "flow.toml").write_text("# overlay\n")
@@ -4992,7 +5073,7 @@ class OverlayNudgeTests(unittest.TestCase):
             bare.mkdir()
             self._git(bare, "init", "--bare", "-b", "main")
             self._git(d, "remote", "add", "origin", str(bare))
-            self._git(d, "push", "-u", "origin", "main")
+            self._git(d, "push", *(["-u"] if set_upstream else []), "origin", "main")
         return d
 
     def _run_hook(self, payload, overlay_dir: Path) -> tuple[int, str]:
@@ -5076,6 +5157,30 @@ class OverlayNudgeTests(unittest.TestCase):
         d = self._overlay_repo(with_remote=False)
         _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
         self.assertIn("no upstream branch", out)
+
+    def test_the_standing_line_does_not_claim_the_content_is_only_local(self) -> None:
+        """The hook reads `upstream`, which cannot tell "never pushed" from
+        "pushed without -u". Since it fires for both, it must not assert the
+        stronger of the two: this repo's content IS on the remote."""
+        d = self._overlay_repo(set_upstream=False)
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("no upstream branch", out, "an untracked branch is still worth one note")
+        self.assertNotIn(
+            "exists off this machine",
+            out,
+            "this content does exist off this machine — the remote has it",
+        )
+
+    def test_the_standing_line_does_not_refer_to_changes_that_do_not_exist(self) -> None:
+        """Nothing is dirty and nothing is ahead in this state, so the
+        commit-and-push clause would point at work that is not there. It also
+        must not tell a session to set an upstream, because doing that pushes
+        the whole branch — the hazard the conditional wording exists for."""
+        d = self._overlay_repo(with_remote=False)
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertNotIn("those changes", out)
+        self.assertNotIn("commit and push", out.lower())
+        self.assertIn("leave it to the person who owns the repo", out)
 
     def test_sessions_do_not_silence_each_other(self) -> None:
         """One marker per repo let whichever session fired first suppress

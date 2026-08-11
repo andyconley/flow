@@ -256,6 +256,12 @@ def overlay_vcs_status(overlay_dir: Path, known_root: str | None = None, quick: 
         "remote": None,
         "dirty": [],
         "unpushed": None,
+        # Carried in the dict so a reader can tell "not asked" from "not
+        # configured" without knowing which call produced it. Every caller of
+        # `format_overlay_vcs` passes a full status today; without this flag a
+        # future one that passes a quick status would print "no remote" for a
+        # repo that has one, and nothing would catch it.
+        "quick": quick,
     }
     if not status["present"]:
         return status
@@ -336,7 +342,12 @@ def format_overlay_vcs(status: dict) -> str:
     parts = []
     if status["dirty"]:
         parts.append(f"{len(status['dirty'])} uncommitted")
-    if status["remote"] is None:
+    if status.get("quick"):
+        # Under a quick status `remote` was never asked for, so "no remote"
+        # would be a claim about a field nobody read.
+        if status["upstream"] is None:
+            parts.append("no upstream")
+    elif status["remote"] is None:
         parts.append("no remote")
     elif status["unpushed"] is None:
         parts.append("no upstream")
@@ -514,17 +525,22 @@ def _prune_markers(now: float) -> None:
 def nudge_outstanding(status: dict) -> tuple[list[str], bool]:
     """What is outstanding, and whether it is only the standing condition.
 
-    "Nowhere to push" belongs here even though it is not per-turn work: a
-    tracked repo with fifty local commits and no upstream has zero copies off
-    this machine, which is the exact scenario the overlay got a repo for.
-    `unpushed` is None rather than a count in that state, so a truthiness test
-    alone stays silent about it.
+    A missing upstream belongs here even though it is not per-turn work: a
+    tracked branch with fifty commits and nothing tracking it is the scenario
+    the overlay got a repo for. `unpushed` is None rather than a count in that
+    state, so a truthiness test alone stays silent about it.
 
-    Keyed on `upstream` rather than `remote` so this reads correctly under the
-    hook's `quick` status, where `remote` is deliberately not asked for. It
-    costs a distinction `doctor` still makes: a repo with a remote configured
-    but no upstream set reads the same here as one with no remote at all. Both
-    mean nothing is pushed, which is the only thing this advisory acts on.
+    Keyed on `upstream` rather than `remote` so it reads correctly under the
+    hook's `quick` status, where `remote` is deliberately not asked for. That
+    merges two conditions v1 stated separately, so the wording has to hold for
+    both — and it must not claim more than the field supports. `git push
+    origin main` without `-u` leaves the content on the remote and the branch
+    untracked, which is the state `setup`'s init-in-place path produces and
+    what `FRAMEWORK.md` tells the agent to do; a detached HEAD cannot have an
+    upstream at all. Saying "nothing here exists off this machine" would be
+    flatly false in both. What the field actually establishes is that the
+    branch is untracked, so that is all this says. `doctor` still separates a
+    missing remote from a missing upstream.
     """
     outstanding = []
     if status["dirty"]:
@@ -535,7 +551,7 @@ def nudge_outstanding(status: dict) -> tuple[list[str], bool]:
 
     standing = []
     if status["upstream"] is None:
-        standing.append("no upstream branch, so nothing here exists off this machine")
+        standing.append("no upstream branch, so nothing here is tracked against a remote")
 
     return outstanding + standing, (bool(standing) and not outstanding)
 
@@ -551,12 +567,22 @@ def nudge_message(status: dict, event: str, edited: str | None = None) -> str | 
     edited, the line names it, so resolving the advisory does not mean
     `git add -A`.
     """
-    outstanding, _ = nudge_outstanding(status)
+    outstanding, standing_only = nudge_outstanding(status)
     if not outstanding:
         return None
 
     where = display_path(Path(status["root"])) if status["root"] else "the overlay repo"
-    if edited:
+    if standing_only:
+        # There are no changes in this state — nothing is dirty and nothing is
+        # ahead — so the commit-and-push clause below would refer to work that
+        # does not exist. And the fix is a push of the whole branch, which is
+        # exactly what a session that did not author it must not run.
+        what = (
+            "That is a property of the repo rather than of this session's work, and setting an "
+            "upstream pushes whatever is already on the branch — so leave it to the person who "
+            "owns the repo"
+        )
+    elif edited:
         what = (
             f"Commit and push just {display_path(Path(edited))} — the count above is the whole "
             "repository, so do not stage the rest of it"
@@ -727,6 +753,9 @@ def overlay_status_command() -> int:
     print(f"vcs:      {format_overlay_vcs(status)}")
     if status["remote"]:
         print(f"remote:   {status['remote']}")
+    # Named explicitly because this is the field the advisory hook turns on:
+    # a repo showing a remote but no upstream otherwise reads as a puzzle.
+    print(f"upstream: {status['upstream'] or 'none — this branch is not tracked'}")
     for path in status["dirty"]:
         print(f"  dirty:  {path}")
     return 0

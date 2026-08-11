@@ -72,9 +72,18 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
   The hook gives up one distinction in exchange: a repo with a remote
   configured but no upstream set now reads to it the same as a repo with no
-  remote at all, and both are reported as *no upstream branch, so nothing
-  here exists off this machine*. Both mean nothing is pushed, which is the
-  only thing the advisory acts on. `doctor` still separates them.
+  remote at all. Merging those two means the wording has to hold for both, so
+  it claims only what the field establishes — *no upstream branch, so nothing
+  here is tracked against a remote*. It deliberately does not say the content
+  is only on this machine: `git push origin main` without `-u` leaves the
+  content on the remote and the branch untracked, and that is the state
+  `setup`'s init-in-place path produces. `doctor` still separates the two.
+
+  In that standing-only state the advisory also stops telling the session to
+  commit and push. There is nothing dirty and nothing ahead, so there were no
+  changes to refer to, and the fix — setting an upstream — pushes the whole
+  branch, which is exactly what a session that did not author the repo must
+  not run. It now names the condition and leaves it to the repo's owner.
 
   Porcelain v2 also changes how a rename appears in the dirty list: v1
   reported `old -> new`, v2 reports the new path alone.

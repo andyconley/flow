@@ -11,12 +11,17 @@ that moved `jsonl_watermark` and `session_lookup` out of the collectors: two
 copies of an error-swallowing helper drift, and the copy that drifts is the
 one that stops writing the log nobody reads until something breaks.
 
-Deliberately dependency-free beyond `paths`. The intent is that a hook
-firing on every prompt should not drag the usage store in behind it — though
-today `cli/flow.py` imports every command module eagerly, so the SQLite
-import happens regardless of which subcommand runs. Keeping this module
-clean is what makes lazy dispatch a possible future change rather than a
-rewrite; it is not a saving that has been realized yet.
+Deliberately dependency-free beyond `paths`, so a hook firing on every prompt
+does not drag the usage store in behind it. Worth keeping that way on
+hygiene grounds — but not as groundwork for lazy dispatch in `cli/flow.py`,
+which was measured and rejected. Warm, all eight command modules import in
+75ms against 63ms for `overlay` alone, and a prototype that stripped every
+sibling but `cost` (whose constants the argument parser needs) moved the real
+`overlay check --hook` from 216ms to 210ms. Six milliseconds does not pay for
+restructuring the dispatch table, and it certainly does not pay for weakening
+the staging check in `cli/lifecycle.py` that stops `flow update` shipping a
+launcher whose modules are missing. The per-prompt cost that remains is three
+git subprocesses and interpreter startup, in that order.
 """
 
 import json
