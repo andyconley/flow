@@ -8,6 +8,36 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **`flow overlay`** — `status` reports the user overlay's version-control
+  state on demand; `check --hook` is the engine behind a new advisory that
+  catches sessions drifting from the commit-in-the-same-turn convention.
+  That convention previously lived only in `FRAMEWORK.md` and auto-memory,
+  so a compaction or a fresh session quietly went back to piling up
+  uncommitted work, discovered whenever someone happened to run `doctor`.
+
+  `flow-overlay-reminder.sh` registers on **PostToolUse** (the edit, while
+  it is fresh) and **UserPromptSubmit** (whatever is still outstanding at
+  the next turn boundary), on both runtimes. Not Stop, which is the
+  intuitive choice and the wrong one: Stop's stdout reaches the transcript
+  rather than the model, which is exactly why `flow-token-verdict.sh` writes
+  a file there instead. The nudge arrives one turn later than Stop would
+  have, but somewhere the agent can act on it.
+
+  Silent unless the overlay is a repository with something outstanding, so
+  it costs nothing for anyone who has not opted in. The prompt-boundary
+  advisory re-fires as soon as the outstanding set changes rather than
+  waiting out its window, so work piling up behind a throttle does not go
+  unmentioned; the edit-time one stays quiet across a burst, since a
+  ten-file change should produce one line rather than ten.
+
+- **`cli/hookio.py`** — defensive stdin reading, throttle markers, and the
+  swallowed-error breadcrumb log, shared by every runtime hook. Extracted
+  from `cost.py` rather than copied, on the reasoning that moved
+  `jsonl_watermark` and `session_lookup` out of the collectors. Depends on
+  nothing but `paths`, because `UserPromptSubmit` hooks run on every prompt
+  and importing the usage store there would put a SQLite import on that path
+  for hooks that never touch it.
+
 - **`flow setup user --overlay-repo <url>`** — gives `~/.flow/user/` a git
   home. The overlay is the one authored layer with no repo behind it: the
   framework scaffold lives in this repo, project overlays live in theirs,
@@ -27,9 +57,36 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   It also now reports overlay hooks alongside commands and agents, which it
   had never listed. New module `cli/overlay.py` holds the status query, kept
   out of `diagnostics.py` so `doctor` keeps holding presentation rather than
-  git plumbing; two bounded git calls, skipped entirely when there is no
-  `.git`, and it never writes. A failed git call reports `unreadable (git
+  git plumbing; a few bounded local git calls, skipped entirely when there is
+  no overlay, and it never writes. A failed git call reports `unreadable (git
   error)` rather than a synthesized clean-looking status.
+
+### Changed
+
+- **The overlay advisory hook costs one fewer subprocess per prompt.** It
+  reads `git status --porcelain=v2 --branch`, whose header names the upstream
+  ref directly, so `config --get remote.origin.url` — ~45ms of process spawn
+  on every prompt — is no longer needed to answer "is anything unpushed".
+  `overlay_vcs_status` grew a `quick` flag for this; `doctor` and `setup`
+  still take the full status and behave exactly as before.
+
+  The hook gives up one distinction in exchange: a repo with a remote
+  configured but no upstream set now reads to it the same as a repo with no
+  remote at all. Merging those two means the wording has to hold for both, so
+  it claims only what the field establishes — *no upstream branch, so nothing
+  here is tracked against a remote*. It deliberately does not say the content
+  is only on this machine: `git push origin main` without `-u` leaves the
+  content on the remote and the branch untracked, and that is the state
+  `setup`'s init-in-place path produces. `doctor` still separates the two.
+
+  In that standing-only state the advisory also stops telling the session to
+  commit and push. There is nothing dirty and nothing ahead, so there were no
+  changes to refer to, and the fix — setting an upstream — pushes the whole
+  branch, which is exactly what a session that did not author the repo must
+  not run. It now names the condition and leaves it to the repo's owner.
+
+  Porcelain v2 also changes how a rename appears in the dirty list: v1
+  reported `old -> new`, v2 reports the new path alone.
 
 ## [0.8.0] — 2026-08-10
 
@@ -120,6 +177,19 @@ on disk. No API calls.
 - `flow cost sessions` caps at the 20 most recent sessions by default.
 
 ### Fixed
+
+- Overlay version-control state is asked of git rather than inferred from a
+  `.git` directory on disk. `.git` exists only at a work tree's root, so the
+  filesystem test called every committed subdirectory and every symlinked
+  overlay untracked — the arrangement that results from keeping the overlay
+  inside a larger dotfiles repository. Three further corrections came with
+  it: a missing git binary is no longer reported as an untracked overlay
+  (with `--overlay-repo` offered as the fix for a broken machine); a
+  directory that is inside a repository but gitignored is no longer reported
+  as backed up, since `rev-parse` succeeds there while nothing ever gets
+  committed; and the unreadable-git case no longer claims `tracked`, because
+  with no git to ask, membership is unknown. `doctor` now names the
+  repository when the overlay is not its own root.
 
 - Generated skills' "Edit `...`" hint points at a file that exists, for every
   origin and sync mode. User-overlay commands point at `~/.flow/user/...`.

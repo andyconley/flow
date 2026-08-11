@@ -1776,6 +1776,7 @@ class FlowCliTests(unittest.TestCase):
                 "flowtoml",
                 "fsutil",
                 "harvest",
+                "hookio",
                 "jsonl_watermark",
                 "lifecycle",
                 "normalize",
@@ -4614,9 +4615,133 @@ class OverlayVcsTests(unittest.TestCase):
         broken["PATH"] = str(self.dir / "empty-bin")
         with unittest.mock.patch.object(self.overlay, "git_env", return_value=broken):
             status = self.overlay.overlay_vcs_status(d)
-        self.assertTrue(status["tracked"], "the .git directory is still visible")
+        self.assertFalse(
+            status["tracked"],
+            "with no git to ask, membership is unknown — claiming tracked would be the same "
+            "kind of fabrication this test exists to prevent",
+        )
         self.assertTrue(status["error"])
         self.assertEqual(self.overlay.format_overlay_vcs(status), "unreadable (git error)")
+
+    def test_missing_git_is_not_mistaken_for_an_untracked_overlay(self) -> None:
+        """A broken machine and an ordinary untracked directory need opposite
+        messages. Both used to leave `_git` with returncode 1; `_GIT_DID_NOT_RUN`
+        is what keeps `--overlay-repo` from being offered as the fix for a
+        missing git binary."""
+        import unittest.mock
+
+        d = self._repo_with_content()
+        broken = {k: v for k, v in os.environ.items() if k != "PATH"}
+        broken["PATH"] = str(self.dir / "empty-bin")
+        with unittest.mock.patch.object(self.overlay, "git_env", return_value=broken):
+            line = self.overlay.format_overlay_vcs(self.overlay.overlay_vcs_status(d))
+        self.assertNotIn("--overlay-repo", line, "installing a remote would not fix a missing git")
+
+    def test_overlay_in_a_subdirectory_of_a_repo_is_tracked(self) -> None:
+        """The bug this chunk exists to fix. `.git` lives only at a work
+        tree's root, so a filesystem test calls a committed subdirectory
+        untracked — and chunk 3 makes exactly that the normal arrangement."""
+        root = self._repo_with_content()
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# overlay\n")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "add overlay subtree")
+
+        status = self.overlay.overlay_vcs_status(nested)
+        self.assertTrue(status["tracked"], "committed content inside a repo is tracked")
+        self.assertFalse(status["is_root"])
+        self.assertEqual(Path(status["root"]).resolve(), root.resolve())
+        self.assertEqual(status["branch"], "main")
+
+    def test_symlinked_overlay_resolves_to_its_real_repo(self) -> None:
+        """`~/.flow/user` becomes a symlink into the dotfiles repo. Following
+        it must land on the repo, not report a rootless directory."""
+        root = self._repo_with_content()
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# overlay\n")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "add overlay subtree")
+
+        link = self.dir / "linked-user"
+        link.symlink_to(nested)
+        status = self.overlay.overlay_vcs_status(link)
+        self.assertTrue(status["tracked"])
+        self.assertFalse(status["is_root"], "the link target is a subdirectory, not the root")
+
+    def test_repo_root_overlay_still_reports_itself_as_root(self) -> None:
+        """The pre-existing arrangement must not regress: when the overlay is
+        the repo, `doctor` should not start appending a redundant path."""
+        d = self._repo_with_content()
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertTrue(status["is_root"])
+        self.assertNotIn("—", self.overlay.format_overlay_vcs(status))
+
+    def test_overlay_inside_a_repo_but_gitignored_is_not_called_tracked(self) -> None:
+        """Inside a repo is not the same as kept by it. Reporting `clean` here
+        would be the exact false-clean this chunk removes: every file stays
+        permanently uncommitted while `doctor` says it is backed up."""
+        root = self._repo_with_content()
+        (root / ".gitignore").write_text("flow-user-overlay/\n")
+        self._git(root, "add", ".gitignore")
+        self._git(root, "commit", "-m", "ignore the overlay")
+
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# never committed\n")
+
+        status = self.overlay.overlay_vcs_status(nested)
+        self.assertTrue(status["ignored"])
+        self.assertFalse(status["tracked"], "ignored content has no more history than untracked content")
+        line = self.overlay.format_overlay_vcs(status)
+        self.assertIn("ignored", line)
+        self.assertNotIn("--overlay-repo", line, "adding a remote would not un-ignore it")
+
+    def test_symlinked_overlay_inside_an_ignored_path_is_not_called_tracked(self) -> None:
+        """The production topology, and the one the `.resolve()` fix exists
+        for. Verified empirically that git returns 128 ("outside repository")
+        for the unresolved symlink path and 0 for the resolved one — so
+        without resolving, the guard is inert precisely here and `doctor`
+        reports a confident clean status for content that is never committed.
+
+        The pre-existing non-symlink case passes on macOS with or without the
+        fix only by accident of `/var` vs `/private/var`; on a platform where
+        tmpdirs are not symlinked it would not catch this at all.
+        """
+        root = self._repo_with_content()
+        (root / ".gitignore").write_text("flow-user-overlay/\n")
+        self._git(root, "add", ".gitignore")
+        self._git(root, "commit", "-m", "ignore the overlay")
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# never committed\n")
+
+        link = self.dir / "linked-ignored-user"
+        link.symlink_to(nested)
+
+        status = self.overlay.overlay_vcs_status(link)
+        self.assertTrue(status["ignored"], "reached through a symlink, git needs the resolved path")
+        self.assertFalse(status["tracked"])
+        self.assertIn("ignored", self.overlay.format_overlay_vcs(status))
+
+    def test_display_path_contracts_home(self) -> None:
+        self.assertEqual(self.overlay.display_path(Path.home() / "x"), "~/x")
+        self.assertEqual(self.overlay.display_path(Path("/etc/hosts")), "/etc/hosts")
+
+    def test_nested_overlay_reports_the_whole_repo_as_dirty(self) -> None:
+        """Whole-repo scoping is deliberate: uncommitted work beside the
+        overlay is the same hazard as uncommitted work in it."""
+        root = self._repo_with_content()
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# overlay\n")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "add overlay subtree")
+        (root / "bin-script.sh").write_text("#!/bin/sh\n")
+
+        status = self.overlay.overlay_vcs_status(nested)
+        self.assertEqual(len(status["dirty"]), 1, "a sibling's dirt counts")
 
     def test_detached_head_is_not_reported_as_a_branch_named_head(self) -> None:
         d = self._repo_with_content()
@@ -4687,6 +4812,649 @@ class OverlayVcsTests(unittest.TestCase):
         status = self.overlay.overlay_vcs_status(d)
         self.assertEqual(status["unpushed"], 1)
         self.assertIn("1 unpushed", self.overlay.format_overlay_vcs(status))
+
+    # --- `--porcelain=v2` parsing -------------------------------------------
+    #
+    # v2 was adopted to retire the `config --get remote.origin.url` subprocess
+    # from the per-prompt hook: its `--branch` header names the upstream
+    # directly. But its entry lines are nothing like v1's fixed-width `XY `
+    # prefix, and the count these produce is the number the whole advisory is
+    # built on — so every line type gets a case.
+
+    def test_every_v2_entry_type_yields_exactly_one_path(self) -> None:
+        """Ordinary, rename, unmerged, and untracked entries, with spaces in
+        the paths. A fixed-offset slice of the kind v1 allowed would return
+        field soup for three of these four."""
+        branch, upstream, unpushed, dirty = self.overlay._parse_status_v2(
+            "# branch.oid abc123\n"
+            "# branch.head main\n"
+            "1 .M N... 100644 100644 100644 aaa bbb mod file.md\n"
+            "2 R. N... 100644 100644 100644 aaa bbb R100 new name.md\told name.md\n"
+            "u UU N... 100644 100644 100644 100644 aaa bbb ccc conflicted file.md\n"
+            "? un tracked.md\n"
+        )
+        self.assertEqual(branch, "main")
+        self.assertIsNone(upstream)
+        self.assertIsNone(unpushed)
+        self.assertEqual(
+            dirty,
+            ["mod file.md", "new name.md", "conflicted file.md", "un tracked.md"],
+            "one path per entry, spaces intact, rename reported at its new path",
+        )
+
+    def test_v2_header_reads_upstream_and_ahead_count(self) -> None:
+        branch, upstream, unpushed, dirty = self.overlay._parse_status_v2(
+            "# branch.oid abc123\n"
+            "# branch.head main\n"
+            "# branch.upstream origin/main\n"
+            "# branch.ab +2 -1\n"
+        )
+        self.assertEqual((branch, upstream, unpushed), ("main", "origin/main", 2))
+        self.assertEqual(dirty, [])
+
+    def test_v2_upstream_present_and_level_is_zero_not_none(self) -> None:
+        """None means "nowhere to push" everywhere downstream. An upstream
+        that exists and is level must not read as its absence."""
+        _, upstream, unpushed, _ = self.overlay._parse_status_v2(
+            "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n"
+        )
+        self.assertEqual(upstream, "origin/main")
+        self.assertEqual(unpushed, 0)
+
+    def test_v2_detached_head_is_not_a_branch_named_head(self) -> None:
+        branch, _, _, _ = self.overlay._parse_status_v2("# branch.oid abc\n# branch.head (detached)\n")
+        self.assertIsNone(branch)
+
+    def test_unborn_branch_is_readable_and_still_counts_its_files(self) -> None:
+        """A freshly initialized overlay: git prints `(initial)` for the oid
+        and `rev-parse HEAD` fails outright, so this state has to come from
+        the status header or not at all."""
+        d = self.dir / "user"
+        d.mkdir()
+        (d / "flow.toml").write_text("# overlay\n")
+        self._git(d, "init", "-b", "main")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertTrue(status["tracked"])
+        self.assertFalse(status["error"])
+        self.assertEqual(status["branch"], "main")
+        self.assertIsNone(status["upstream"])
+        self.assertEqual(status["dirty"], ["flow.toml"])
+
+    def test_real_repo_reports_a_spaced_path_verbatim(self) -> None:
+        """The parser above is fed literal strings; this proves the shape it
+        expects is the shape git actually emits. Asserting the path and not
+        just the count: a mangled path is still one entry, so a count
+        assertion alone survives a fixed-offset slice."""
+        d = self._repo_with_content()
+        (d / "two words.md").write_text("x\n")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["dirty"], ["two words.md"])
+
+    def test_real_git_rename_reports_the_new_path(self) -> None:
+        """`2` entries have nine fields before the path and then a second,
+        tab-separated path. The literal-string test above encodes that belief;
+        this one checks it against git, because a field count that is off by
+        one either mangles the path or drops the entry, and both are silent."""
+        d = self._repo_with_content()
+        (d / "before.md").write_text("x\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "add")
+        self._git(d, "mv", "before.md", "after two.md")
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["dirty"], ["after two.md"])
+
+    def test_real_git_merge_conflict_reports_one_path(self) -> None:
+        """`u` entries have ten fields before the path — the longest of the
+        four shapes, and the one nothing else in the suite exercises."""
+        d = self._repo_with_content()
+        (d / "c.md").write_text("base\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "base")
+        self._git(d, "checkout", "-b", "other")
+        (d / "c.md").write_text("other\n")
+        self._git(d, "commit", "-am", "other")
+        self._git(d, "checkout", "main")
+        (d / "c.md").write_text("main\n")
+        self._git(d, "commit", "-am", "main")
+        subprocess.run(["git", "merge", "other"], cwd=d, capture_output=True)
+
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["dirty"], ["c.md"], "a conflicted file is one entry, not field soup")
+
+    def test_upstream_set_with_no_ahead_behind_line_reads_as_level(self) -> None:
+        """`branch.ab` accompanies `branch.upstream` in practice, but the
+        contract downstream is that None means untracked. An upstream with no
+        countable divergence must not read as its absence."""
+        _, upstream, unpushed, _ = self.overlay._parse_status_v2(
+            "# branch.head main\n# branch.upstream origin/main\n"
+        )
+        self.assertEqual(upstream, "origin/main")
+        self.assertEqual(unpushed, 0, "an upstream exists, so this is level, not untracked")
+
+    # --- `quick` -------------------------------------------------------------
+
+    def test_quick_skips_the_remote_lookup_and_full_mode_does_not(self) -> None:
+        """The whole point of `quick`: one fewer subprocess per prompt. The
+        full status is what `doctor` and `setup` read, and `setup` compares
+        `remote` against the URL it was given."""
+        remote = self.dir / "remote.git"
+        remote.mkdir()
+        self._git(remote, "init", "--bare", "-b", "main")
+        d = self._repo_with_content()
+        self._git(d, "remote", "add", "origin", str(remote))
+        self._git(d, "push", "-u", "origin", "main")
+
+        full = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(full["remote"], str(remote))
+
+        quick = self.overlay.overlay_vcs_status(d, quick=True)
+        self.assertIsNone(quick["remote"], "quick must not ask; None here means unasked")
+        self.assertEqual(quick["upstream"], "origin/main", "and the upstream covers what the nudge needs")
+        self.assertEqual(quick["unpushed"], 0)
+
+    def test_quick_status_never_reports_no_remote(self) -> None:
+        """`format_overlay_vcs` reads `remote`, which a quick status never
+        populates. Without the `quick` flag in the dict it would report "no
+        remote" for a repo that has one — a false diagnostic, produced
+        silently, by a caller that did nothing obviously wrong."""
+        remote = self.dir / "remote.git"
+        remote.mkdir()
+        self._git(remote, "init", "--bare", "-b", "main")
+        d = self._repo_with_content()
+        self._git(d, "remote", "add", "origin", str(remote))
+        self._git(d, "push", "-u", "origin", "main")
+
+        line = self.overlay.format_overlay_vcs(self.overlay.overlay_vcs_status(d, quick=True))
+        self.assertNotIn("no remote", line)
+        self.assertIn("clean", line)
+
+    def test_remote_without_an_upstream_is_no_upstream_not_no_remote(self) -> None:
+        """`git push origin main` without `-u` is what `setup`'s init-in-place
+        path leaves behind: the content is on the remote and the branch tracks
+        nothing. `doctor` must keep those two apart — the whole reason the full
+        status still pays for the remote lookup."""
+        remote = self.dir / "remote.git"
+        remote.mkdir()
+        self._git(remote, "init", "--bare", "-b", "main")
+        d = self._repo_with_content()
+        self._git(d, "remote", "add", "origin", str(remote))
+        self._git(d, "push", "origin", "main")
+
+        status = self.overlay.overlay_vcs_status(d)
+        self.assertEqual(status["remote"], str(remote), "a remote is configured")
+        self.assertIsNone(status["upstream"], "but nothing tracks the branch")
+        line = self.overlay.format_overlay_vcs(status)
+        self.assertIn("no upstream", line)
+        self.assertNotIn("no remote", line)
+
+    def test_quick_status_costs_one_fewer_git_call(self) -> None:
+        """The saving, asserted rather than assumed — a `quick` that still
+        spawned `config` would pass every other test in this class."""
+        import unittest.mock
+
+        d = self._repo_with_content()
+        real = self.overlay._git
+
+        def counted(calls):
+            def wrapper(cwd, *args):
+                calls.append(args[0])
+                return real(cwd, *args)
+
+            return wrapper
+
+        full_calls, quick_calls = [], []
+        with unittest.mock.patch.object(self.overlay, "_git", counted(full_calls)):
+            self.overlay.overlay_vcs_status(d)
+        with unittest.mock.patch.object(self.overlay, "_git", counted(quick_calls)):
+            self.overlay.overlay_vcs_status(d, quick=True)
+
+        self.assertIn("config", full_calls)
+        self.assertNotIn("config", quick_calls)
+        self.assertEqual(len(quick_calls), len(full_calls) - 1)
+
+
+class OverlayNudgeTests(unittest.TestCase):
+    """`flow overlay check --hook` — the code path that runs unattended on
+    every prompt and every Write/Edit of every session.
+
+    The bar is the same one the verdict hook is held to: silence unless there
+    is something to say, and exit 0 no matter what goes wrong. A nudge that
+    errors on every prompt would be the loudest possible failure of a feature
+    whose premise is staying quiet.
+    """
+
+    def setUp(self) -> None:
+        REPO_ROOT_CLI = REPO_ROOT / "cli"
+        if str(REPO_ROOT_CLI) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT_CLI))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import overlay
+
+        self.overlay = overlay
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tempdir.name)
+        self.state = self.dir / "state"
+
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        sys.modules.pop("overlay", None)
+
+    def _git(self, cwd: Path, *args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
+                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
+        )
+
+    def _overlay_repo(self, with_remote: bool = True, set_upstream: bool = True) -> Path:
+        """A tracked overlay. `with_remote` is on by default because a repo
+        with nowhere to push is itself a nudge-worthy state, so a test that
+        wants "nothing to report" has to opt into being backed up.
+
+        `set_upstream=False` pushes without `-u`: the content reaches the
+        remote and the branch tracks nothing. That is the state `setup`'s
+        init-in-place path produces, so anything the advisory says about it
+        has to be true of a repo that IS backed up."""
+        d = self.dir / "user"
+        d.mkdir()
+        (d / "flow.toml").write_text("# overlay\n")
+        self._git(d, "init", "-b", "main")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "initial")
+        if with_remote:
+            bare = self.dir / "remote.git"
+            bare.mkdir()
+            self._git(bare, "init", "--bare", "-b", "main")
+            self._git(d, "remote", "add", "origin", str(bare))
+            self._git(d, "push", *(["-u"] if set_upstream else []), "origin", "main")
+        return d
+
+    def _run_hook(self, payload, overlay_dir: Path) -> tuple[int, str]:
+        import contextlib
+        import io
+        import unittest.mock
+
+        stdin = io.StringIO(payload if isinstance(payload, str) else json.dumps(payload))
+        with unittest.mock.patch.object(self.overlay, "USER_OVERLAY_DIR", overlay_dir):
+            with unittest.mock.patch.object(self.overlay, "NUDGE_STATE_DIR", self.state):
+                with unittest.mock.patch.object(self.overlay.hookio.sys, "stdin", stdin):
+                    with contextlib.redirect_stdout(io.StringIO()) as out:
+                        rc = self.overlay.overlay_check_command()
+        return rc, out.getvalue()
+
+    def test_clean_repo_says_nothing(self) -> None:
+        d = self._overlay_repo()
+        rc, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "", "a committed overlay has nothing to nudge about")
+
+    def test_untracked_overlay_is_left_to_doctor(self) -> None:
+        """Someone who never opted into an overlay repo must not be nagged on
+        every prompt. `doctor` is where that state belongs."""
+        d = self.dir / "plain"
+        d.mkdir()
+        (d / "flow.toml").write_text("# no repo here\n")
+        rc, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_dirty_repo_nudges_once_then_throttles(self) -> None:
+        d = self._overlay_repo()
+        (d / "new-command.md").write_text("# authored\n")
+
+        rc, first = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(rc, 0)
+        self.assertIn("1 uncommitted file", first)
+        self.assertIn("FRAMEWORK.md", first, "the line has to name the convention it points at")
+
+        _, second = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertEqual(second, "", "an unchanged outstanding set stays quiet")
+
+    def test_the_advisory_is_conditional_not_an_instruction(self) -> None:
+        """The reported state covers the whole repository, and the session
+        reading the line may have had nothing to do with it. A runtime that
+        pre-authorizes `git push` would otherwise be told, unconditionally,
+        to publish changes it did not make and cannot evaluate."""
+        d = self._overlay_repo()
+        (d / "someone-elses-work.md").write_text("x\n")
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("If this session made those changes", out)
+        self.assertIn("leave them alone", out)
+
+    def test_posttooluse_output_is_the_json_envelope(self) -> None:
+        """Only UserPromptSubmit and SessionStart add plain stdout to the
+        model's context. A PostToolUse line printed bare reaches the
+        transcript and nothing else — the hook would look like it worked
+        while being invisible to the agent it is trying to reach."""
+        d = self._overlay_repo()
+        (d / "edited.md").write_text("x\n")
+        _, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(d / "edited.md")}}, d
+        )
+        payload = json.loads(out)
+        self.assertEqual(payload["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+        self.assertIn("uncommitted", payload["hookSpecificOutput"]["additionalContext"])
+
+    def test_prompt_output_is_plain_text_not_json(self) -> None:
+        d = self._overlay_repo()
+        (d / "edited.md").write_text("x\n")
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(out)
+
+    def test_a_repo_with_nowhere_to_push_is_worth_saying(self) -> None:
+        """Fifty local commits and no remote means zero copies off this
+        machine — the literal scenario the overlay got a repo for. `unpushed`
+        is None rather than a count in that state, so a truthiness test alone
+        would stay silent about it."""
+        d = self._overlay_repo(with_remote=False)
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("no upstream branch", out)
+
+    def test_the_standing_line_does_not_claim_the_content_is_only_local(self) -> None:
+        """The hook reads `upstream`, which cannot tell "never pushed" from
+        "pushed without -u". Since it fires for both, it must not assert the
+        stronger of the two: this repo's content IS on the remote."""
+        d = self._overlay_repo(set_upstream=False)
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("no upstream branch", out, "an untracked branch is still worth one note")
+        self.assertNotIn(
+            "exists off this machine",
+            out,
+            "this content does exist off this machine — the remote has it",
+        )
+
+    def test_the_standing_line_does_not_refer_to_changes_that_do_not_exist(self) -> None:
+        """Nothing is dirty and nothing is ahead in this state, so the
+        commit-and-push clause would point at work that is not there. It also
+        must not tell a session to set an upstream, because doing that pushes
+        the whole branch — the hazard the conditional wording exists for."""
+        d = self._overlay_repo(with_remote=False)
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertNotIn("those changes", out)
+        self.assertNotIn("commit and push", out.lower())
+        self.assertIn("leave it to the person who owns the repo", out)
+
+    def test_sessions_do_not_silence_each_other(self) -> None:
+        """One marker per repo let whichever session fired first suppress
+        every other one for the whole window — including, most likely, the
+        session that actually made the edits."""
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        _, first = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-a"}, d)
+        self.assertIn("uncommitted", first)
+
+        _, second = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-b"}, d)
+        self.assertIn("uncommitted", second, "a second session has not been told yet")
+
+        _, repeat = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-a"}, d)
+        self.assertEqual(repeat, "", "but the first session is still throttled")
+
+    def test_a_backwards_clock_does_not_silence_the_nudge_forever(self) -> None:
+        """A marker timestamped in the future makes elapsed negative, which
+        reads as "inside the window" — and the suppressed branch never
+        rewrites the marker, so it would stay suppressed for as long as the
+        skew lasts."""
+        import time as _time
+        import unittest.mock
+
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        status = self.overlay.overlay_vcs_status(d)
+        # Patched, unlike the original version of this test: every other case
+        # here reaches the state dir through `_run_hook`, which patches it.
+        # Calling `should_nudge` directly wrote into the developer's real
+        # ~/.flow/state/ — and since `write_marker` swallows OSError, an
+        # unwritable dir would mean no marker, which fires, which passes even
+        # with the guard reverted.
+        with unittest.mock.patch.object(self.overlay, "NUDGE_STATE_DIR", self.state):
+            marker = self.overlay._marker_path(status["root"], "UserPromptSubmit")
+            self.overlay.hookio.write_marker(
+                marker, f"{_time.time() + 86400}\t{self.overlay.nudge_fingerprint(status)}"
+            )
+            self.assertTrue(marker.exists(), "the future-dated marker must exist for this to test anything")
+            self.assertTrue(
+                self.overlay.should_nudge(
+                    status, "UserPromptSubmit", throttle_sec=1800, refire_on_change=False
+                )
+            )
+
+    def test_standing_condition_is_not_keyed_per_session(self) -> None:
+        """A repo with no remote is a property of the repo, not of anyone's
+        work. Keyed per session it would re-fire on every new session and
+        every /clear, turning a once-a-day note into permanent noise."""
+        d = self._overlay_repo(with_remote=False)
+        _, first = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-a"}, d)
+        self.assertIn("no upstream branch", first)
+        _, other = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-b"}, d)
+        self.assertEqual(other, "", "a different session must not restart the 24h window")
+
+    def test_edit_nudge_names_the_edited_path_not_the_whole_repo(self) -> None:
+        """The counts are whole-repo. Telling a session with `git push`
+        pre-authorized to 'commit and push them' invites `git add -A` over
+        files it does not own."""
+        d = self._overlay_repo()
+        (d / "mine.md").write_text("x\n")
+        (d / "someone-elses.md").write_text("y\n")
+        _, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(d / "mine.md")}}, d
+        )
+        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("mine.md", context)
+        self.assertIn("do not stage the rest", context)
+
+    def test_standing_marker_does_not_swallow_a_real_edit_nudge(self) -> None:
+        """`session=None` is both the standing key and the fallback when a
+        payload has no session_id — the Codex case. Sharing one key let a 24h
+        standing marker suppress genuine edit nudges for the whole edit
+        window."""
+        d = self._overlay_repo(with_remote=False)
+        _, standing = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertIn("no upstream branch", standing)
+
+        (d / "real-work.md").write_text("x\n")
+        _, edit = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertIn("uncommitted", edit, "the standing marker must not silence real work")
+
+    def test_edit_throttle_short_circuits_before_the_expensive_calls(self) -> None:
+        """Codex has no per-tool matcher and its tool calls carry no single
+        file_path, so every `exec` reached the full status. Measured at ~194ms
+        per call before this; the throttle now decides first."""
+        import unittest.mock
+
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        self._run_hook({"hook_event_name": "PostToolUse"}, d)  # arms the marker
+
+        real = self.overlay.overlay_vcs_status
+        calls = []
+
+        def counting(*a, **kw):
+            calls.append(1)
+            return real(*a, **kw)
+
+        with unittest.mock.patch.object(self.overlay, "overlay_vcs_status", counting):
+            _, out = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertEqual(out, "", "still throttled")
+        self.assertEqual(calls, [], "and it did not compute a status to find that out")
+
+    def test_stale_markers_are_pruned(self) -> None:
+        """`~/.flow/state/` is permanent, unlike the /tmp the verdict files
+        live in, and markers are per-session — so nothing bounds them without
+        this."""
+        import os as _os
+        import time as _time
+
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "recent"}, d)
+
+        ancient = self.state / "overlay-nudge-UserPromptSubmit-deadbeef-old"
+        ancient.write_text("0\tstale")
+        old = _time.time() - (self.overlay.NUDGE_MARKER_TTL_SEC + 60)
+        _os.utime(ancient, (old, old))
+
+        self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "another"}, d)
+        self.assertFalse(ancient.exists(), "a marker past its TTL should be gone")
+        self.assertTrue(
+            any(self.state.glob("overlay-nudge-*")), "fresh markers must survive the prune"
+        )
+
+    def test_relative_edit_path_falls_back_rather_than_guessing(self) -> None:
+        """A relative path would resolve against the hook process's cwd,
+        which is not necessarily the runtime's."""
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        _, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": "relative/path.md"}}, d
+        )
+        self.assertIn("uncommitted", out, "unknown location degrades to reporting, not to silence")
+
+    def test_new_work_refires_the_prompt_nudge_before_the_window_expires(self) -> None:
+        """The throttle must not swallow work that piles up behind it."""
+        d = self._overlay_repo()
+        (d / "one.md").write_text("x\n")
+        _, first = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("1 uncommitted file", first)
+
+        (d / "two.md").write_text("y\n")
+        _, second = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("2 uncommitted files", second)
+
+    def test_edit_nudge_does_not_refire_per_file(self) -> None:
+        """PostToolUse is bounded by edits, so a ten-file burst should produce
+        one line, not ten. This is the opposite policy from the prompt nudge,
+        on purpose."""
+        d = self._overlay_repo()
+        (d / "one.md").write_text("x\n")
+        payload = {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(d / "one.md")}}
+        _, first = self._run_hook(payload, d)
+        self.assertIn("uncommitted", first)
+
+        (d / "two.md").write_text("y\n")
+        payload["tool_input"]["file_path"] = str(d / "two.md")
+        _, second = self._run_hook(payload, d)
+        self.assertEqual(second, "", "the edit nudge is an awareness ping, not a per-file alarm")
+
+    def test_edit_outside_the_repo_is_ignored(self) -> None:
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        outside = self.dir / "somewhere-else.py"
+        outside.write_text("# unrelated\n")
+        rc, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(outside)}}, d
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "", "editing an unrelated file is not an overlay event")
+
+    def test_edit_without_a_path_falls_back_instead_of_going_silent(self) -> None:
+        """Codex's PostToolUse payload shape is unverified. An absent
+        file_path must degrade to the plain outstanding-work check, not
+        disable the hook on that runtime."""
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        rc, out = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertEqual(rc, 0)
+        self.assertIn("uncommitted", out)
+
+    def test_unpushed_commits_are_worth_a_nudge_on_their_own(self) -> None:
+        """`doctor` reports `N unpushed`, so committing without pushing
+        produces exactly the state FRAMEWORK.md tells agents to avoid."""
+        d = self._overlay_repo()
+        (d / "later.md").write_text("z\n")
+        self._git(d, "add", ".")
+        self._git(d, "commit", "-m", "committed but not pushed")
+
+        _, out = self._run_hook({"hook_event_name": "UserPromptSubmit"}, d)
+        self.assertIn("1 unpushed commit", out)
+
+    def test_unrelated_events_are_ignored(self) -> None:
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        rc, out = self._run_hook({"hook_event_name": "SessionStart"}, d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_malformed_stdin_exits_zero_and_says_nothing(self) -> None:
+        d = self._overlay_repo()
+        (d / "dirty.md").write_text("x\n")
+        rc, out = self._run_hook("not json at all", d)
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_internal_error_exits_zero_and_is_logged(self) -> None:
+        """Every failure is swallowed, but never silently: the breadcrumb log
+        is what keeps silent-by-design from becoming invisible-forever."""
+        import contextlib
+        import io
+        import unittest.mock
+
+        logged = []
+        stdin = io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit"}))
+        with unittest.mock.patch.object(
+            self.overlay, "overlay_vcs_status", side_effect=RuntimeError("boom")
+        ):
+            with unittest.mock.patch.object(
+                self.overlay.hookio, "log_hook_error", side_effect=lambda *a: logged.append(a)
+            ):
+                with unittest.mock.patch.object(self.overlay.hookio.sys, "stdin", stdin):
+                    with contextlib.redirect_stdout(io.StringIO()) as out:
+                        rc = self.overlay.overlay_check_command()
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue(), "")
+        self.assertEqual(len(logged), 1, "a swallowed error still leaves a breadcrumb")
+
+    def test_hook_script_never_execs_and_always_exits_zero(self) -> None:
+        """Exit code 2 means BLOCK on both runtimes, and argparse exits 2 on
+        any usage error — so an `exec` here would let a flag typo erase a
+        prompt or interrupt a tool call."""
+        script = REPO_ROOT / "hooks" / "flow-overlay-reminder.sh"
+
+        # A stub `flow` that exits 2, which is what argparse does on any usage
+        # error. Pointing PATH at nowhere instead — as the first version of
+        # this test did — leaves $FLOW empty, so the `if` body never runs and
+        # `exit 0` is reached no matter what the body says. Verified: an `exec`
+        # inserted into the script passed that version.
+        fake_bin = self.dir / "fakebin"
+        fake_bin.mkdir()
+        (fake_bin / "flow").write_text("#!/bin/sh\nexit 2\n")
+        (fake_bin / "flow").chmod(0o755)
+
+        proc = subprocess.run(
+            ["/bin/bash", str(script)],
+            input="",
+            capture_output=True,
+            text=True,
+            env={"PATH": f"{fake_bin}:/usr/bin:/bin", "HOME": str(self.dir)},
+        )
+        self.assertEqual(
+            proc.returncode, 0, "argparse's exit 2 must not reach the runtime as a block"
+        )
+
+        # And with no resolvable flow at all.
+        missing = subprocess.run(
+            ["/bin/bash", str(script)],
+            input="",
+            capture_output=True,
+            text=True,
+            env={"PATH": "/nonexistent", "HOME": "/nonexistent"},
+        )
+        self.assertEqual(missing.returncode, 0, "a missing flow must not block the runtime")
+        self.assertEqual(missing.stdout, "")
+
+    def test_marker_filename_carries_no_account_name(self) -> None:
+        """Marker paths are derived from a hash of the repo root. Nothing this
+        framework writes should spell out whose machine it is."""
+        marker = self.overlay._marker_path("/Users/someone/dotfiles", "UserPromptSubmit")
+        self.assertNotIn("someone", marker.name)
+        self.assertNotIn("/", marker.name)
 
 
 class SetupUserOverlayRepoTests(unittest.TestCase):

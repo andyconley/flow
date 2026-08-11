@@ -278,6 +278,49 @@ type = "command"
 script = "flow-context-warning.sh"
 timeout = 10
 
+# The overlay-commit nudge. Registered on UserPromptSubmit rather than Stop
+# because Stop's stdout reaches the transcript, not the model — the same
+# constraint that makes flow-token-verdict.sh write a file instead of print.
+# PostToolUse catches the edit while it is fresh; UserPromptSubmit catches
+# whatever is still outstanding at the next turn boundary. Silent unless the
+# overlay is a repo with something to commit, so this costs nothing for
+# anyone who has not opted in.
+
+[[claude.hooks]]
+name = "flow-overlay-reminder"
+event = "PostToolUse"
+matcher = "Write|Edit"
+type = "command"
+script = "flow-overlay-reminder.sh"
+timeout = 10
+
+[[claude.hooks]]
+name = "flow-overlay-reminder"
+event = "UserPromptSubmit"
+type = "command"
+script = "flow-overlay-reminder.sh"
+timeout = 10
+
+# No matcher on the Codex side, deliberately. Sampling real Codex transcripts
+# under ~/.codex/sessions shows its tool names are `exec` and friends, not
+# `Write`/`Edit` — a Claude-shaped matcher here would never match, and the
+# nudge would be silently dead on this runtime. Matching everything is the
+# safe direction because `flow overlay check --hook` resolves the repo root
+# first and exits after one cheap git call for anything irrelevant.
+[[codex.hooks]]
+name = "flow-overlay-reminder"
+event = "PostToolUse"
+type = "command"
+script = "flow-overlay-reminder.sh"
+timeout = 10
+
+[[codex.hooks]]
+name = "flow-overlay-reminder"
+event = "UserPromptSubmit"
+type = "command"
+script = "flow-overlay-reminder.sh"
+timeout = 10
+
 [[codex.commands]]
 name = "flow-boot"
 source = "commands/flow-boot.md"

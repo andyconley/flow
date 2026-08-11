@@ -15,6 +15,7 @@ flow/
     flowtoml.py        TOML reading
     fsutil.py          filesystem primitives
     harvest.py         thin CLI wrapper around the harness collectors
+    hookio.py          stdin/marker/error plumbing shared by the runtime hooks
     jsonl_watermark.py incremental byte-level JSONL reading, shared by both collectors
     lifecycle.py       two-mode install, release staging, update
     normalize.py       turn_raw -> turn_norm, one convention across harnesses
@@ -37,6 +38,7 @@ flow/
     flow-managed-write-reminder.sh
     flow-token-verdict.sh
     flow-context-warning.sh
+    flow-overlay-reminder.sh
   scripts/
   scaffolds/
     default/
@@ -81,6 +83,14 @@ other by bare name.
 - `jsonl_watermark.py`, `session_lookup.py` — primitives shared by both
   collectors (incremental byte-level line reading; session-table lookups).
   Extracted rather than duplicated once a second collector needed them.
+- `hookio.py` — the plumbing every runtime hook needs: defensive stdin
+  reading, throttle markers, and the swallowed-error breadcrumb log.
+  Extracted on the same reasoning as the collector primitives, once a second
+  hook family needed it — two copies of an error-swallowing helper drift,
+  and the copy that drifts is the one that quietly stops logging.
+  Deliberately depends on nothing but `paths`: `UserPromptSubmit` hooks run
+  on every prompt of every session, and importing the usage store here would
+  put a SQLite import on that path for hooks that never touch it.
 - `harvest.py` — the thin CLI wrapper around both collector modules. Argument
   resolution and printing live here; parsing and persistence live in each
   collector.
@@ -136,6 +146,12 @@ Current hook scripts:
 - `flow-managed-write-reminder.sh` (Claude PostToolUse — managed-file edit nudge)
 - `flow-token-verdict.sh` (Stop, both runtimes — writes the verdict file via `flow cost verdict --hook`)
 - `flow-context-warning.sh` (UserPromptSubmit, both runtimes — one-line carry advisory via `flow cost warn --hook`)
+- `flow-overlay-reminder.sh` (PostToolUse + UserPromptSubmit, both runtimes — overlay-commit nudge via `flow overlay check --hook`)
+
+Note what is *not* here: a Stop-registered advisory that prints. Stop's
+stdout reaches the transcript rather than the model, which is why
+`flow-token-verdict.sh` writes a file at Stop and the two advisories that
+need to be read register on `UserPromptSubmit` instead.
 
 Edit here when changing generated runtime hook behavior.
 
