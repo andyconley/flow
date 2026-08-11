@@ -24,6 +24,17 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   entry points share — silence by design looks exactly like breakage, so it
   gets a diagnostic order starting at `~/.flow/logs/hook-errors.log`.
 
+- **The CLI reference is now checked against the CLI.** A test asserts every
+  documented command resolves, every documented flag is accepted, every
+  documented default matches `--help`, every shipped subcommand appears in
+  some section, and the output literals the doc quotes as searchable symptoms
+  are what the CLI actually prints. It also guards its own parse, so a regex
+  that stops matching fails loudly instead of iterating over nothing.
+
+  In `tests/` rather than `scripts/` deliberately: it runs without anyone
+  remembering to run it, which is why the doc drifted, and `tests/` is
+  excluded from the release roster so a dev-only check does not ship.
+
 ## [0.9.0] — 2026-08-11
 
 The overlay release. `~/.flow/user/` was the one authored layer with nothing

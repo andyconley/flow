@@ -230,6 +230,9 @@ Current focus:
 - runtime sync behavior
 - drift detection
 - doctor output
+- usage store and cost views
+- overlay version control and the commit advisory
+- `docs/cli-reference.md` against the CLI it documents — command names, flags, defaults, coverage, and quoted output literals. It lives here rather than in `scripts/` so it runs without anyone remembering to, and because `tests/` is excluded from the release roster
 
 ### `install-flow.sh`
 

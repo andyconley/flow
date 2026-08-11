@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import stat
 import shutil
 import subprocess
@@ -5614,3 +5615,166 @@ class SetupUserOverlayRepoTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CliReferenceDocTests(unittest.TestCase):
+    """`docs/cli-reference.md` against the CLI it documents.
+
+    That doc fell two releases behind — eight of twelve subcommands, with the
+    whole usage-tracking and overlay surfaces missing — because nothing
+    checked it. A reference is the one kind of doc where being quietly wrong
+    is worse than being absent: a reader who finds no section knows to look
+    elsewhere, and a reader who finds a wrong default does not.
+
+    So this asserts the parts a machine can settle — command names, flags,
+    defaults, coverage, and the output literals the doc quotes — and leaves
+    prose to review. It lives in `tests/` rather than `scripts/` for two
+    reasons: it runs without anyone remembering to run it, which is the whole
+    point, and `tests/` is excluded from the release roster (see
+    `paths.RELEASE_EXCLUDE_TOP_LEVEL`), so a dev-only check does not ship to
+    people installing flow.
+    """
+
+    DOC = REPO_ROOT / "docs" / "cli-reference.md"
+
+    # Below these, assume the parse broke rather than that the doc shrank.
+    # A regex that silently stops matching turns every assertion below into a
+    # loop over nothing, which reports success.
+    MIN_SECTIONS = 20
+    MIN_FLAGS = 15
+    MIN_DEFAULTS = 4
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.text = cls.DOC.read_text()
+        cls._help_cache: dict[tuple[str, ...], str] = {}
+
+        # `### `flow cost sessions`` -> (("cost", "sessions"), body). Flags and
+        # `<placeholders>` are dropped from the invocation but kept for the
+        # flag check, since headings like `flow install --release` name a real
+        # flag that ought to be verified too.
+        cls.sections = []
+        parts_iter = re.split(r"^### `flow ([^`]+)`$", cls.text, flags=re.M)
+        for heading, body in zip(parts_iter[1::2], parts_iter[2::2]):
+            words = heading.split()
+            cmd = tuple(w for w in words if not w.startswith(("-", "<")))
+            if not cmd:
+                continue
+            # The last section's body otherwise runs on into `## Typical
+            # Sequences` and `## Failure Modes`, whose flag mentions belong to
+            # other commands entirely.
+            body = re.split(r"^## ", body, flags=re.M)[0]
+            heading_flags = {w for w in words if w.startswith("--")}
+            cls.sections.append((cmd, heading, body, heading_flags))
+
+    def _help(self, cmd: tuple[str, ...]) -> str:
+        """`--help` for one subcommand, cached across tests in this class.
+
+        Uses `_clean_env` because Python 3.14's argparse emits ANSI colour
+        when FORCE_COLOR is set, which would break a substring match on
+        `default: 7` in a way that looks like a documentation error.
+        """
+        if cmd not in self._help_cache:
+            result = subprocess.run(
+                [sys.executable, str(FLOW_CLI), *cmd, "--help"],
+                text=True,
+                capture_output=True,
+                env=_clean_env(),
+            )
+            self._help_cache[cmd] = result.stdout if result.returncode == 0 else ""
+        return self._help_cache[cmd]
+
+    def test_the_doc_parse_found_something_to_check(self) -> None:
+        """Guard on the guards. Every test below iterates over what the parse
+        produced, so a broken regex would make all of them vacuously pass."""
+        self.assertGreaterEqual(len(self.sections), self.MIN_SECTIONS)
+
+    def test_every_documented_command_resolves(self) -> None:
+        for cmd, heading, _, _ in self.sections:
+            with self.subTest(command=heading):
+                self.assertTrue(
+                    self._help(cmd),
+                    f"the doc has a section for `flow {heading}`, "
+                    f"but `flow {' '.join(cmd)} --help` does not succeed",
+                )
+
+    def test_every_documented_flag_is_accepted(self) -> None:
+        checked = 0
+        for cmd, heading, body, heading_flags in self.sections:
+            help_text = self._help(cmd)
+            if not help_text:
+                continue  # already reported by the resolution test
+            flags = set(re.findall(r"`(--[a-z-]+)", body)) | heading_flags
+            for flag in sorted(flags):
+                checked += 1
+                with self.subTest(command=heading, flag=flag):
+                    self.assertIn(
+                        flag,
+                        help_text,
+                        f"the doc names {flag} under `flow {heading}`, "
+                        f"but that subcommand does not accept it",
+                    )
+        self.assertGreaterEqual(checked, self.MIN_FLAGS, "flag extraction found almost nothing")
+
+    def test_every_documented_default_matches_the_cli(self) -> None:
+        """Defaults are read out of the DOC and checked against `--help`.
+
+        An earlier version of this check compared `--help` against literals
+        hardcoded in the test, which meant editing the doc could not fail it —
+        an assertion that looked like coverage and was not.
+        """
+        checked = 0
+        for cmd, heading, body, _ in self.sections:
+            help_text = self._help(cmd)
+            if not help_text:
+                continue
+            # `- `--limit N` — cap the sessions shown (default: 20; `0` = ...)`
+            for flag, value in re.findall(r"`(--[a-z-]+)[^`]*`[^\n]*?\(default: ([^;)]+)", body):
+                checked += 1
+                with self.subTest(command=heading, flag=flag):
+                    self.assertIn(
+                        f"default: {value}",
+                        help_text,
+                        f"the doc says `flow {heading}` {flag} defaults to {value!r}, "
+                        f"and the CLI disagrees",
+                    )
+        self.assertGreaterEqual(checked, self.MIN_DEFAULTS, "default extraction found almost nothing")
+
+    def test_every_subcommand_appears_in_the_reference(self) -> None:
+        """The failure this class exists for: a shipped subcommand nobody
+        documented."""
+        root_help = subprocess.run(
+            [sys.executable, str(FLOW_CLI), "--help"],
+            text=True, capture_output=True, env=_clean_env(),
+        ).stdout
+        match = re.search(r"\{([a-z,]+)\}", root_help)
+        self.assertIsNotNone(match, "could not read the subcommand list out of `flow --help`")
+        subcommands = match.group(1).split(",")
+        self.assertGreater(len(subcommands), 5, "suspiciously few subcommands parsed")
+        documented = {cmd[0] for cmd, _, _, _ in self.sections}
+        for name in subcommands:
+            with self.subTest(subcommand=name):
+                self.assertIn(
+                    name,
+                    documented,
+                    f"`flow {name}` exists but has no `### `flow {name} ...`` section",
+                )
+
+    def test_quoted_empty_store_output_is_what_the_cli_prints(self) -> None:
+        """The doc quotes two literals as searchable symptoms in Failure
+        Modes. A reader greps for them, so they have to be exact."""
+        with tempfile.TemporaryDirectory() as scratch:
+            home = Path(scratch)
+            env = _clean_env(home)
+            for cmd, literal in (
+                (["cost", "summary"], "(no data in range)"),
+                (["cost", "active"], "(no active sessions in range)"),
+            ):
+                with self.subTest(command=" ".join(cmd)):
+                    self.assertIn(literal, self.text, "the doc no longer quotes this literal")
+                    result = subprocess.run(
+                        [sys.executable, str(FLOW_CLI), *cmd],
+                        text=True, capture_output=True, env=env,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn(literal, result.stdout)
