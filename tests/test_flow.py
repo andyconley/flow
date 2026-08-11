@@ -4698,6 +4698,37 @@ class OverlayVcsTests(unittest.TestCase):
         self.assertIn("ignored", line)
         self.assertNotIn("--overlay-repo", line, "adding a remote would not un-ignore it")
 
+    def test_symlinked_overlay_inside_an_ignored_path_is_not_called_tracked(self) -> None:
+        """The production topology, and the one the `.resolve()` fix exists
+        for. Verified empirically that git returns 128 ("outside repository")
+        for the unresolved symlink path and 0 for the resolved one — so
+        without resolving, the guard is inert precisely here and `doctor`
+        reports a confident clean status for content that is never committed.
+
+        The pre-existing non-symlink case passes on macOS with or without the
+        fix only by accident of `/var` vs `/private/var`; on a platform where
+        tmpdirs are not symlinked it would not catch this at all.
+        """
+        root = self._repo_with_content()
+        (root / ".gitignore").write_text("flow-user-overlay/\n")
+        self._git(root, "add", ".gitignore")
+        self._git(root, "commit", "-m", "ignore the overlay")
+        nested = root / "flow-user-overlay"
+        nested.mkdir()
+        (nested / "flow.toml").write_text("# never committed\n")
+
+        link = self.dir / "linked-ignored-user"
+        link.symlink_to(nested)
+
+        status = self.overlay.overlay_vcs_status(link)
+        self.assertTrue(status["ignored"], "reached through a symlink, git needs the resolved path")
+        self.assertFalse(status["tracked"])
+        self.assertIn("ignored", self.overlay.format_overlay_vcs(status))
+
+    def test_display_path_contracts_home(self) -> None:
+        self.assertEqual(self.overlay.display_path(Path.home() / "x"), "~/x")
+        self.assertEqual(self.overlay.display_path(Path("/etc/hosts")), "/etc/hosts")
+
     def test_nested_overlay_reports_the_whole_repo_as_dirty(self) -> None:
         """Whole-repo scoping is deliberate: uncommitted work beside the
         overlay is the same hazard as uncommitted work in it."""
@@ -4711,7 +4742,6 @@ class OverlayVcsTests(unittest.TestCase):
 
         status = self.overlay.overlay_vcs_status(nested)
         self.assertEqual(len(status["dirty"]), 1, "a sibling's dirt counts")
-        self.assertIn("~", self.overlay.display_path(Path.home() / "x"))
 
     def test_detached_head_is_not_reported_as_a_branch_named_head(self) -> None:
         d = self._repo_with_content()
@@ -4945,18 +4975,73 @@ class OverlayNudgeTests(unittest.TestCase):
         rewrites the marker, so it would stay suppressed for as long as the
         skew lasts."""
         import time as _time
+        import unittest.mock
 
         d = self._overlay_repo()
         (d / "work.md").write_text("x\n")
         status = self.overlay.overlay_vcs_status(d)
-        marker = self.overlay._marker_path(status["root"], "UserPromptSubmit")
-        self.overlay.hookio.write_marker(
-            marker, f"{_time.time() + 86400}\t{self.overlay.nudge_fingerprint(status)}"
-        )
-        self.assertTrue(
-            self.overlay.should_nudge(
-                status, "UserPromptSubmit", throttle_sec=1800, refire_on_change=False
+        # Patched, unlike the original version of this test: every other case
+        # here reaches the state dir through `_run_hook`, which patches it.
+        # Calling `should_nudge` directly wrote into the developer's real
+        # ~/.flow/state/ — and since `write_marker` swallows OSError, an
+        # unwritable dir would mean no marker, which fires, which passes even
+        # with the guard reverted.
+        with unittest.mock.patch.object(self.overlay, "NUDGE_STATE_DIR", self.state):
+            marker = self.overlay._marker_path(status["root"], "UserPromptSubmit")
+            self.overlay.hookio.write_marker(
+                marker, f"{_time.time() + 86400}\t{self.overlay.nudge_fingerprint(status)}"
             )
+            self.assertTrue(marker.exists(), "the future-dated marker must exist for this to test anything")
+            self.assertTrue(
+                self.overlay.should_nudge(
+                    status, "UserPromptSubmit", throttle_sec=1800, refire_on_change=False
+                )
+            )
+
+    def test_standing_condition_is_not_keyed_per_session(self) -> None:
+        """A repo with no remote is a property of the repo, not of anyone's
+        work. Keyed per session it would re-fire on every new session and
+        every /clear, turning a once-a-day note into permanent noise."""
+        d = self._overlay_repo(with_remote=False)
+        _, first = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-a"}, d)
+        self.assertIn("no remote", first)
+        _, other = self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-b"}, d)
+        self.assertEqual(other, "", "a different session must not restart the 24h window")
+
+    def test_edit_nudge_names_the_edited_path_not_the_whole_repo(self) -> None:
+        """The counts are whole-repo. Telling a session with `git push`
+        pre-authorized to 'commit and push them' invites `git add -A` over
+        files it does not own."""
+        d = self._overlay_repo()
+        (d / "mine.md").write_text("x\n")
+        (d / "someone-elses.md").write_text("y\n")
+        _, out = self._run_hook(
+            {"hook_event_name": "PostToolUse", "tool_input": {"file_path": str(d / "mine.md")}}, d
+        )
+        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("mine.md", context)
+        self.assertIn("do not stage the rest", context)
+
+    def test_stale_markers_are_pruned(self) -> None:
+        """`~/.flow/state/` is permanent, unlike the /tmp the verdict files
+        live in, and markers are per-session — so nothing bounds them without
+        this."""
+        import os as _os
+        import time as _time
+
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "recent"}, d)
+
+        ancient = self.state / "overlay-nudge-UserPromptSubmit-deadbeef-old"
+        ancient.write_text("0\tstale")
+        old = _time.time() - (self.overlay.NUDGE_MARKER_TTL_SEC + 60)
+        _os.utime(ancient, (old, old))
+
+        self._run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "another"}, d)
+        self.assertFalse(ancient.exists(), "a marker past its TTL should be gone")
+        self.assertTrue(
+            any(self.state.glob("overlay-nudge-*")), "fresh markers must survive the prune"
         )
 
     def test_relative_edit_path_falls_back_rather_than_guessing(self) -> None:
@@ -5062,6 +5147,26 @@ class OverlayNudgeTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(out.getvalue(), "")
         self.assertEqual(len(logged), 1, "a swallowed error still leaves a breadcrumb")
+
+    def test_hook_script_never_execs_and_always_exits_zero(self) -> None:
+        """Exit code 2 means BLOCK on both runtimes, and argparse exits 2 on
+        any usage error — so an `exec` here would let a flag typo erase a
+        prompt or interrupt a tool call."""
+        script = REPO_ROOT / "hooks" / "flow-overlay-reminder.sh"
+        body = script.read_text()
+        self.assertNotIn("exec ", body, "exec would propagate argparse's exit 2 as a block")
+        self.assertIn("exit 0", body)
+
+        # With no resolvable `flow`, the launcher must still succeed.
+        proc = subprocess.run(
+            ["/bin/bash", str(script)],
+            input="",
+            capture_output=True,
+            text=True,
+            env={"PATH": "/nonexistent", "HOME": "/nonexistent"},
+        )
+        self.assertEqual(proc.returncode, 0, "a missing flow must not block the runtime")
+        self.assertEqual(proc.stdout, "")
 
     def test_marker_filename_carries_no_account_name(self) -> None:
         """Marker paths are derived from a hash of the repo root. Nothing this

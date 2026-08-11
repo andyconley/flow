@@ -412,7 +412,29 @@ def should_nudge(
             return False
 
     hookio.write_marker(marker, f"{now}\t{fingerprint}")
+    _prune_markers(now)
     return True
+
+
+# Markers are keyed per session, and `~/.flow/state/` is a permanent home
+# directory rather than a `/tmp` the OS reaps — so without this, two files
+# accumulate per session per repo forever. Pruning rides along on the write
+# that just happened: no scheduler, no separate command, and a failure to
+# prune costs disk rather than correctness.
+NUDGE_MARKER_TTL_SEC = 7 * 24 * 60 * 60
+
+
+def _prune_markers(now: float) -> None:
+    """Best-effort removal of markers older than their usefulness."""
+    try:
+        for stale in NUDGE_STATE_DIR.glob("overlay-nudge-*"):
+            try:
+                if now - stale.stat().st_mtime > NUDGE_MARKER_TTL_SEC:
+                    stale.unlink()
+            except OSError:
+                continue
+    except OSError:
+        pass
 
 
 def nudge_outstanding(status: dict) -> tuple[list[str], bool]:
@@ -440,25 +462,35 @@ def nudge_outstanding(status: dict) -> tuple[list[str], bool]:
     return outstanding + standing, (bool(standing) and not outstanding)
 
 
-def nudge_message(status: dict, event: str) -> str | None:
+def nudge_message(status: dict, event: str, edited: str | None = None) -> str | None:
     """The advisory line, or None when there is nothing worth saying.
 
-    Phrased as a condition rather than an instruction, on purpose. The
-    reported state covers the whole repository, and the session reading this
-    line may have had nothing to do with it — a runtime that pre-authorizes
-    `git push` would otherwise be told, unconditionally, to publish changes
-    it did not make and cannot evaluate.
+    Phrased as a condition, and scoped as narrowly as the trigger allows.
+    The counts describe the whole repository while the session reading this
+    line may own none of it — so an unconditional "commit and push" would
+    tell a runtime that pre-authorizes `git push` to publish files it did
+    not touch and cannot evaluate. When the trigger knows which path was
+    edited, the line names it, so resolving the advisory does not mean
+    `git add -A`.
     """
     outstanding, _ = nudge_outstanding(status)
     if not outstanding:
         return None
 
     where = display_path(Path(status["root"])) if status["root"] else "the overlay repo"
+    if edited:
+        what = (
+            f"Commit and push just {display_path(Path(edited))} — the count above is the whole "
+            "repository, so do not stage the rest of it"
+        )
+    else:
+        what = (
+            "If this session made those changes, commit and push only the paths it edited "
+            "before finishing; if it did not, leave them alone — another session may own that work"
+        )
     return (
         f"flow advisory: {where} has {' and '.join(outstanding)}. "
-        "If this session made those changes, commit and push them before finishing "
-        "(see FRAMEWORK.md, 'Committing user-overlay edits'); if it did not, leave them alone — "
-        "the state covers the whole repository, and another session may own that work. "
+        f"{what} (see FRAMEWORK.md, 'Committing user-overlay edits'). "
         "(Informational only — nothing is blocked.)"
     )
 
@@ -502,18 +534,24 @@ def overlay_check_command() -> int:
         if event not in ("PostToolUse", "UserPromptSubmit"):
             return 0
 
-        # PostToolUse fires after every qualifying tool call on the machine,
-        # most of which have nothing to do with the overlay. Resolve the repo
-        # root first — one cheap call — and discard irrelevant edits before
-        # paying for `status` and `config`. Codex registers this hook without
-        # a per-tool matcher, so this filter is what keeps the common case
-        # from costing three subprocesses.
+        # PostToolUse fires after every qualifying tool call, most of which
+        # have nothing to do with the overlay. Resolve the repo root first —
+        # one cheap call — and discard irrelevant edits before paying for
+        # `status` and `config`. Claude narrows to Write|Edit by matcher;
+        # Codex is registered without one, because its tool names are `exec`
+        # and friends rather than Claude's, so this filter is the only thing
+        # bounding the cost there.
+        edited = None
         if event == "PostToolUse":
             rc, out = _git(USER_OVERLAY_DIR, "rev-parse", "--show-toplevel")
             if rc != 0 or not out:
                 return 0
-            if _edit_touches_repo(payload, out) is False:
+            inside = _edit_touches_repo(payload, out)
+            if inside is False:
                 return 0
+            if inside is True:
+                tool_input = payload.get("tool_input") or {}
+                edited = tool_input.get("file_path") if isinstance(tool_input, dict) else None
 
         status = overlay_vcs_status(USER_OVERLAY_DIR)
         if not status["tracked"] or status["error"]:
@@ -522,23 +560,31 @@ def overlay_check_command() -> int:
             # who may never have opted in.
             return 0
 
-        message = nudge_message(status, event)
+        message = nudge_message(status, event, edited)
         if message is None:
             return 0
 
         _, standing_only = nudge_outstanding(status)
         if standing_only:
-            throttle, refire = NUDGE_THROTTLE_STANDING_SEC, False
+            # A repo with no remote is a property of the repo, not of any
+            # session's work — so it must NOT be keyed per session. Keyed
+            # that way, every new session and every /clear starts markerless
+            # and re-fires, turning a once-a-day note into two lines per
+            # session forever for anyone running a deliberately local-only
+            # overlay. That is the noise this module says belongs in `doctor`.
+            throttle, refire, session = NUDGE_THROTTLE_STANDING_SEC, False, None
         elif event == "PostToolUse":
             throttle, refire = NUDGE_THROTTLE_EDIT_SEC, False
+            session = payload.get("session_id")
         else:
             throttle, refire = NUDGE_THROTTLE_PROMPT_SEC, True
+            session = payload.get("session_id")
         if not should_nudge(
             status,
             event,
             throttle_sec=throttle,
             refire_on_change=refire,
-            session_id=payload.get("session_id"),
+            session_id=session,
         ):
             return 0
 

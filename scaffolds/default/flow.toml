@@ -301,10 +301,15 @@ type = "command"
 script = "flow-overlay-reminder.sh"
 timeout = 10
 
+# No matcher on the Codex side, deliberately. Sampling real Codex transcripts
+# under ~/.codex/sessions shows its tool names are `exec` and friends, not
+# `Write`/`Edit` — a Claude-shaped matcher here would never match, and the
+# nudge would be silently dead on this runtime. Matching everything is the
+# safe direction because `flow overlay check --hook` resolves the repo root
+# first and exits after one cheap git call for anything irrelevant.
 [[codex.hooks]]
 name = "flow-overlay-reminder"
 event = "PostToolUse"
-matcher = "Write|Edit"
 type = "command"
 script = "flow-overlay-reminder.sh"
 timeout = 10
