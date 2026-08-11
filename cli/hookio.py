@@ -54,7 +54,13 @@ def safe_key(value) -> bool:
     """
     import re
 
-    return isinstance(value, str) and re.fullmatch(_SAFE_KEY, value) is not None
+    if not isinstance(value, str) or value in (".", ".."):
+        # The charset alone admits both as whole values. Harmless where the
+        # result is only ever a filename suffix, but this function is sold as
+        # the guard against a value reaching path construction, and the next
+        # caller may use it as a whole component.
+        return False
+    return re.fullmatch(_SAFE_KEY, value) is not None
 
 
 def log_hook_error(kind: str, exc: Exception) -> None:

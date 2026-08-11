@@ -5022,6 +5022,41 @@ class OverlayNudgeTests(unittest.TestCase):
         self.assertIn("mine.md", context)
         self.assertIn("do not stage the rest", context)
 
+    def test_standing_marker_does_not_swallow_a_real_edit_nudge(self) -> None:
+        """`session=None` is both the standing key and the fallback when a
+        payload has no session_id — the Codex case. Sharing one key let a 24h
+        standing marker suppress genuine edit nudges for the whole edit
+        window."""
+        d = self._overlay_repo(with_remote=False)
+        _, standing = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertIn("no remote", standing)
+
+        (d / "real-work.md").write_text("x\n")
+        _, edit = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertIn("uncommitted", edit, "the standing marker must not silence real work")
+
+    def test_edit_throttle_short_circuits_before_the_expensive_calls(self) -> None:
+        """Codex has no per-tool matcher and its tool calls carry no single
+        file_path, so every `exec` reached the full status. Measured at ~194ms
+        per call before this; the throttle now decides first."""
+        import unittest.mock
+
+        d = self._overlay_repo()
+        (d / "work.md").write_text("x\n")
+        self._run_hook({"hook_event_name": "PostToolUse"}, d)  # arms the marker
+
+        real = self.overlay.overlay_vcs_status
+        calls = []
+
+        def counting(*a, **kw):
+            calls.append(1)
+            return real(*a, **kw)
+
+        with unittest.mock.patch.object(self.overlay, "overlay_vcs_status", counting):
+            _, out = self._run_hook({"hook_event_name": "PostToolUse"}, d)
+        self.assertEqual(out, "", "still throttled")
+        self.assertEqual(calls, [], "and it did not compute a status to find that out")
+
     def test_stale_markers_are_pruned(self) -> None:
         """`~/.flow/state/` is permanent, unlike the /tmp the verdict files
         live in, and markers are per-session — so nothing bounds them without
@@ -5153,20 +5188,38 @@ class OverlayNudgeTests(unittest.TestCase):
         any usage error — so an `exec` here would let a flag typo erase a
         prompt or interrupt a tool call."""
         script = REPO_ROOT / "hooks" / "flow-overlay-reminder.sh"
-        body = script.read_text()
-        self.assertNotIn("exec ", body, "exec would propagate argparse's exit 2 as a block")
-        self.assertIn("exit 0", body)
 
-        # With no resolvable `flow`, the launcher must still succeed.
+        # A stub `flow` that exits 2, which is what argparse does on any usage
+        # error. Pointing PATH at nowhere instead — as the first version of
+        # this test did — leaves $FLOW empty, so the `if` body never runs and
+        # `exit 0` is reached no matter what the body says. Verified: an `exec`
+        # inserted into the script passed that version.
+        fake_bin = self.dir / "fakebin"
+        fake_bin.mkdir()
+        (fake_bin / "flow").write_text("#!/bin/sh\nexit 2\n")
+        (fake_bin / "flow").chmod(0o755)
+
         proc = subprocess.run(
+            ["/bin/bash", str(script)],
+            input="",
+            capture_output=True,
+            text=True,
+            env={"PATH": f"{fake_bin}:/usr/bin:/bin", "HOME": str(self.dir)},
+        )
+        self.assertEqual(
+            proc.returncode, 0, "argparse's exit 2 must not reach the runtime as a block"
+        )
+
+        # And with no resolvable flow at all.
+        missing = subprocess.run(
             ["/bin/bash", str(script)],
             input="",
             capture_output=True,
             text=True,
             env={"PATH": "/nonexistent", "HOME": "/nonexistent"},
         )
-        self.assertEqual(proc.returncode, 0, "a missing flow must not block the runtime")
-        self.assertEqual(proc.stdout, "")
+        self.assertEqual(missing.returncode, 0, "a missing flow must not block the runtime")
+        self.assertEqual(missing.stdout, "")
 
     def test_marker_filename_carries_no_account_name(self) -> None:
         """Marker paths are derived from a hash of the repo root. Nothing this

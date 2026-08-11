@@ -172,7 +172,7 @@ def _parse_status_branch(header: str) -> tuple[str | None, int | None]:
     return (body or None), None
 
 
-def overlay_vcs_status(overlay_dir: Path) -> dict:
+def overlay_vcs_status(overlay_dir: Path, known_root: str | None = None) -> dict:
     """Version-control status for the overlay directory.
 
     Returns `{"present", "tracked", "ignored", "error", "root", "is_root",
@@ -218,14 +218,20 @@ def overlay_vcs_status(overlay_dir: Path) -> dict:
     if not status["present"]:
         return status
 
-    rc, out = _git(overlay_dir, "rev-parse", "--show-toplevel")
-    if rc == _GIT_DID_NOT_RUN:
-        status["error"] = True
-        return status
-    if rc != 0:
-        # Git ran and said this is not a work tree. The ordinary untracked
-        # state, and the one `--overlay-repo` exists to fix.
-        return status
+    if known_root is None:
+        rc, out = _git(overlay_dir, "rev-parse", "--show-toplevel")
+        if rc == _GIT_DID_NOT_RUN:
+            status["error"] = True
+            return status
+        if rc != 0:
+            # Git ran and said this is not a work tree. The ordinary untracked
+            # state, and the one `--overlay-repo` exists to fix.
+            return status
+    else:
+        # The hook path already resolved this to decide whether an edit was
+        # even relevant. Re-asking cost a second subprocess on the hottest
+        # code path in the module.
+        out = known_root
 
     root = Path(out)
     status["root"] = str(root)
@@ -369,6 +375,25 @@ def _marker_path(root: str, event: str, session_id: str | None = None) -> Path:
     return NUDGE_STATE_DIR / f"overlay-nudge-{event}-{key}"
 
 
+def _within_throttle(root: str, event: str, session_id: str | None, throttle_sec: int) -> bool:
+    """Whether this (repo, event, session) spoke recently enough to stay quiet.
+
+    Split out so a caller can consult the throttle before doing the expensive
+    work, rather than computing a full status and then discovering it had
+    nothing to say. Only sound for branches where `refire_on_change` is False;
+    where the fingerprint matters, the status is needed to compute it.
+    """
+    raw = hookio.read_marker(_marker_path(root, event, session_id))
+    if not raw:
+        return False
+    stamp, _, _ = raw.partition("\t")
+    try:
+        elapsed = time.time() - float(stamp)
+    except ValueError:
+        return False
+    return 0 <= elapsed < throttle_sec
+
+
 def should_nudge(
     status: dict,
     event: str,
@@ -429,7 +454,10 @@ def _prune_markers(now: float) -> None:
     try:
         for stale in NUDGE_STATE_DIR.glob("overlay-nudge-*"):
             try:
-                if now - stale.stat().st_mtime > NUDGE_MARKER_TTL_SEC:
+                # follow_symlinks=False so a dangling link is judged on its own
+                # mtime. Following it raises, which the `continue` below would
+                # swallow, leaving a broken link here permanently.
+                if now - stale.lstat().st_mtime > NUDGE_MARKER_TTL_SEC:
                     stale.unlink()
             except OSError:
                 continue
@@ -542,10 +570,12 @@ def overlay_check_command() -> int:
         # and friends rather than Claude's, so this filter is the only thing
         # bounding the cost there.
         edited = None
+        root = None
         if event == "PostToolUse":
             rc, out = _git(USER_OVERLAY_DIR, "rev-parse", "--show-toplevel")
             if rc != 0 or not out:
                 return 0
+            root = out
             inside = _edit_touches_repo(payload, out)
             if inside is False:
                 return 0
@@ -553,7 +583,18 @@ def overlay_check_command() -> int:
                 tool_input = payload.get("tool_input") or {}
                 edited = tool_input.get("file_path") if isinstance(tool_input, dict) else None
 
-        status = overlay_vcs_status(USER_OVERLAY_DIR)
+            # Check the throttle BEFORE paying for status. Codex has no
+            # per-tool matcher and its tool calls carry no single file_path,
+            # so `inside` is None for every `exec` and the old ordering fell
+            # through to four more git calls — measured at ~194ms per tool
+            # call, roughly 12s of added wall clock across a Codex session —
+            # only to decide it had nothing to say. `refire_on_change` is
+            # False on this branch, so elapsed time alone decides and this
+            # skips no advisory the full path would have produced.
+            if _within_throttle(root, event, payload.get("session_id"), NUDGE_THROTTLE_EDIT_SEC):
+                return 0
+
+        status = overlay_vcs_status(USER_OVERLAY_DIR, known_root=root)
         if not status["tracked"] or status["error"]:
             # An untracked or unreadable overlay is `doctor`'s business.
             # Repeating it on every prompt would be noise aimed at someone
@@ -572,16 +613,24 @@ def overlay_check_command() -> int:
             # and re-fires, turning a once-a-day note into two lines per
             # session forever for anyone running a deliberately local-only
             # overlay. That is the noise this module says belongs in `doctor`.
+            #
+            # Its own marker namespace, though: session=None is also the
+            # fallback key when a payload carries no session_id, which is the
+            # Codex case. Sharing it meant a 24h standing marker suppressed
+            # genuine edit nudges for the whole edit window.
+            marker_event = f"standing-{event}"
             throttle, refire, session = NUDGE_THROTTLE_STANDING_SEC, False, None
         elif event == "PostToolUse":
+            marker_event = event
             throttle, refire = NUDGE_THROTTLE_EDIT_SEC, False
             session = payload.get("session_id")
         else:
+            marker_event = event
             throttle, refire = NUDGE_THROTTLE_PROMPT_SEC, True
             session = payload.get("session_id")
         if not should_nudge(
             status,
-            event,
+            marker_event,
             throttle_sec=throttle,
             refire_on_change=refire,
             session_id=session,
