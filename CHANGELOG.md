@@ -6,7 +6,86 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+### Added
+
+- **`flow harvest claude --rescan`, with `--since`, `--session`, and
+  `--dry-run`.** A plain harvest only reads what is new, so a collector
+  improvement never reaches transcripts already on disk. `--rescan` re-reads
+  them. It supersedes `--backfill`, whose name described only the first thing
+  it ever did; `--backfill` still works and is hidden from help.
+
+  Rescanning the whole corpus re-reads every recorded transcript, so the
+  filters exist to rehearse it on a slice first. A filter resolves to whole
+  sessions rather than to literal file matches — the watermark is per file but
+  the derived title state is per session, and replaying only some of a
+  session's files while resetting all of its state leaves the un-replayed
+  files' titles unrecoverable.
+
+  Follow a rescan with `flow normalize`; the command says so.
+
+- **`turn_norm.cache_write_1h_tokens` / `cache_write_5m_tokens`** (schema v5).
+  Claude's `usage.cache_creation` carries the cache-TTL breakdown, which sums
+  exactly to `cache_creation_input_tokens` across 20,587 real turns. The
+  halves bill 60% apart — 2.0x base input for 1h, 1.25x for 5m — so one
+  collapsed column makes the write component of any cost estimate off by up to
+  that much, and writes are about a quarter of the bill. `cache_write_tokens`
+  stays the total; no consumer changes. Codex leaves both NULL. No re-harvest:
+  the fields were always in the raw payload, just unread.
+
+  One real turn out of 29,592 violates the sum, and it is the harness's own
+  inconsistency rather than an extraction bug: on a fallback turn (two entries
+  in `usage.iterations`, a model switch mid-turn) the top-level
+  `cache_creation_input_tokens` reflects the second iteration while
+  `cache_creation` reflects the first.
+
+- **`compact_boundary` events are captured** into `agent_activity_raw`, beside
+  Codex's `sub_agent_activity`. They are Claude's only explicit record of
+  context management and were dropped entirely. The payload is stored verbatim
+  because `compactMetadata.trigger` separates a deliberate `/compact` from
+  hitting the ceiling — opposite signals about a session's health that a
+  single tally would destroy. Recovered 29 events from the local corpus
+  (18 manual, 11 auto) on the first rescan.
+
 ### Fixed
+
+- **Claude turns stored a streamed response's *partial* output token count.**
+  A single API response is written as several assistant JSONL lines sharing
+  one `requestId`. Every input field repeats byte-identically; `output_tokens`
+  does not — it grows as the response streams and is final only on the line
+  carrying `stop_reason`. A real group reads [4, 4, 4, 4, 4, 487].
+
+  `INSERT OR IGNORE` kept the first line, so that turn was stored as 4 output
+  tokens. Measured against the Anthropic console for the same account and
+  period, first-wins recovered 67% of output. Replaced with an upsert guarded
+  on the output count: inputs from any line, output from the maximum. Summing
+  the group is the intuitive fix and is wrong — it triple-counts one request's
+  inputs and overshoots output by 51%.
+
+  `max` over `last` (they differ by 2 tokens across the whole corpus) because
+  it is order-independent, so replaying a file cannot corrupt a row. `ts` and
+  `turn_seq` keep the first line's values, so a response that finishes after
+  midnight does not migrate across a day boundary on re-harvest.
+
+  Recovering this on already-harvested transcripts needs one
+  `flow harvest claude --rescan` followed by `flow normalize`. On the corpus
+  this was built against that recovered 14.8% of output tokens. Transcripts
+  already pruned from disk cannot be reached — 298 of 29,437 stored turns
+  (1.0%) keep their partial counts permanently.
+
+- **A corrected turn did not reach the normalized layer.** `normalize_all`
+  selects stale rows by `norm_version` alone, and nothing marked a `turn_norm`
+  row stale when its `turn_raw` payload changed underneath it — until the
+  upsert existed, a payload never could. Since `flow cost active` harvests and
+  then normalizes, a turn stored mid-stream got stamped current and kept its
+  partial count forever, with both tables self-consistent and nothing
+  reporting it. Found on the real corpus, where raw held 31.90M output tokens
+  against 28.13M normalized.
+
+- **`--dry-run` wrote.** It ran `ensure_store` before the dry-run branch, so a
+  rehearsal applied pending schema migrations and re-seeded capabilities while
+  printing "nothing written". It now returns first and opens the store
+  read-only. It was also gated on `~/.claude/projects/` existing, so it
+  reported "no sessions found" with a full store to describe.
 
 - **`docs/cli-reference.md` covers all twelve subcommands.** It documented
   eight and was two releases behind: the entire v0.8.0 usage-tracking surface
