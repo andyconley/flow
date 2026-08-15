@@ -79,40 +79,13 @@ For framework development, use [Local Install](#local-install-for-maintainers-an
 
 For a repo that needs project-specific memory, roles, or run artifacts, use [Typical Flow](#typical-flow).
 
-### CLI lifecycle
+### CLI Command Categories
 
-Available commands:
+Use the CLI by intent. Most day-to-day work happens through `/flow-*` workflow commands; shell commands install, sync, inspect, and maintain the framework.
 
-```bash
-flow doctor
-flow setup machine
-flow setup user
-flow setup user --overlay-repo git@github.com:you/flow-user-overlay.git
-flow setup project
-flow refresh project
-flow bootstrap
-flow sync claude              # project-level
-flow sync claude --check
-flow sync claude --user       # user-level
-flow sync codex
-flow sync codex --check
-flow sync codex --user
-flow harvest codex
-flow harvest claude
-flow harvest claude --rescan
-flow harvest claude --rescan --since 2026-08-01 --dry-run
-flow normalize
-flow cost summary
-flow cost summary --all --json
-flow cost sessions --days 30
-flow cost trend --days 30 --bucket week
-flow cost sessions --all --limit 0
-flow cost active
-flow cost active --within 180
-flow cost verdict --transcript PATH
-```
+#### Install and Update
 
-What they do:
+Use these when setting up flow on a machine, connecting your user overlay to git, switching install modes, or updating a release install.
 
 - `flow setup machine`
   - prepares `~/.flow/`, `~/.local/bin/flow`, and local config
@@ -120,25 +93,85 @@ What they do:
   - installs the framework at user level so it is active in every supported runtime session (runs `flow sync claude --user` and `flow sync codex --user`)
 - `flow setup user --overlay-repo URL`
   - gives `~/.flow/user/` a git home at URL. It clones when the overlay is absent, or runs `git init` in place and adds the remote when content already exists. It never clobbers existing files and never commits.
+- `flow install --release`
+  - converts the local install to release mode by copying framework content into `~/.flow/source/`
+- `flow install --develop PATH`
+  - converts the local install to develop mode by pointing `~/.flow/source` at a checkout
+- `flow update [--check] [--resync]`
+  - rolls a release install forward to the latest tagged release; `--check` reports only, and `--resync` updates generated user-level adapters after the install
+
+#### Project Setup
+
+Use these when a repo needs a `.flow/` overlay for project-specific roles, memory, standards, or run artifacts.
+
 - `flow setup project`
   - scaffolds `.flow/` into the current repo; use this only when you want a project overlay
 - `flow refresh project`
   - adds newly introduced framework files into an existing `.flow/` without overwriting local edits
 - `flow bootstrap`
   - validates that the required `.flow/` structure exists in the current repo
+
+#### Runtime Sync
+
+Use these after changing framework content, user overlays, project overlays, commands, agents, or hooks.
+
+- `flow sync claude`
+  - generates Claude adapters from the repo's `.flow/` into the repo's runtime locations
+- `flow sync claude --user`
+  - generates Claude adapters from the framework scaffold directly into user-level runtime locations
+- `flow sync codex`
+  - generates Codex adapters from the repo's `.flow/` into the repo's runtime locations
+- `flow sync codex --user`
+  - generates Codex adapters from the framework scaffold directly into user-level runtime locations
+- `--check`
+  - reports drift without writing files; use it with any sync target
+
+Typical user-level sync:
+
+```bash
+flow sync claude --user
+flow sync codex --user
+flow sync claude --user --check
+flow sync codex --user --check
+```
+
+#### Health Checks
+
+Use these to inspect install state, generated runtime surfaces, drift, and command help.
+
 - `flow doctor`
   - reports machine, user-level, and project-level state in separate sections
-- `flow sync claude` / `flow sync codex`
-  - generate adapters from the repo's `.flow/` into the repo's runtime locations
-- `flow sync claude --user` / `flow sync codex --user`
-  - generate adapters from the framework scaffold directly into user-level runtime locations
-- `--check` on any sync target reports drift without writing files
-- `flow harvest codex` / `flow harvest claude`
-  - incrementally read `~/.codex/sessions/` / `~/.claude/projects/` into `~/.flow/usage.db`'s raw layer, creating the store on first run. Safe to run repeatedly or on a schedule.
+- `flow help`
+  - renders the framework overview at the shell
+
+#### Usage Store Maintenance
+
+Most usage capture happens through Flow commands and hooks. Use these commands when you need to backfill, refresh historical data, or make summary views current before reading them.
+
+Normal path:
+
+- `flow cost active`
+  - harvests Claude sessions and normalizes before it answers
+- `flow cost verdict --hook`
+  - is called by runtime Stop hooks and harvests the current transcript
+- `flow cost warn --hook`
+  - reads the verdict file; it does not harvest at prompt time
+
+Manual maintenance:
+
+- `flow harvest claude`
+  - refreshes Claude usage data when you want `flow cost summary` or `flow cost sessions` to include the latest completed sessions
 - `flow harvest claude --rescan`
   - rewinds already-recorded Claude file watermarks and re-reads them from the start. Already-harvested sessions can then pick up corrected output token counts, compaction events, `session.title`, `cwd`, and title provenance. `--since` and `--session` narrow the scope; `--dry-run` rehearses it. Safe to run repeatedly because the output-token rule is highest-wins.
+- `flow harvest codex`
+  - sweeps Codex session files into the usage store; broader Codex history is not swept by `flow cost active`
 - `flow normalize`
-  - projects every harness's raw turn records into one shared token convention (`turn_norm`). Only rows without a current-version normalized counterpart are recomputed.
+  - rebuilds the normalized layer after a manual harvest; only rows without a current-version normalized counterpart are recomputed
+
+#### Usage Analysis
+
+Use these to read cost, context growth, active sessions, and token trends.
+
 - `flow cost summary`
   - shows token totals by harness/model within a window (`--days N`, default 7; `--all` for everything), plus Codex's most recent capacity reading as a separate gauge line
 - `flow cost sessions`
