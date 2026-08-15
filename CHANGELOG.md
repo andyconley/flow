@@ -6,6 +6,43 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-15
+
+The measurement release. `flow cost` could say which sessions need attention
+right now. It could not say whether anything you changed was working, and three
+of its inputs were lossy in ways no surface disclosed.
+
+The largest of those was not a rounding error. A streamed Claude response is
+written as several transcript lines sharing one request id, and only the last
+carries the final `output_tokens`; the collector kept the first. Measured
+against the Anthropic console, that recovered 67% of output — and the intuitive
+fix, summing the group, triple-counts one request's inputs and overshoots by
+51%. The rule that is actually right is asymmetric: inputs from any line,
+output from the maximum.
+
+Two of the defects behind this release were invisible by construction rather
+than merely unnoticed. A corrected raw payload did not mark its normalized row
+stale, so the fix reached the store and stopped one layer short of every view
+that reads it — raw held 31.90M output tokens against 28.13M normalized, both
+tables internally consistent, nothing reporting the gap. And the Codex capacity
+gauge rendered a percentage without the expiry it had stored all along, so a
+six-day-old reading described the present with a straight face. Both are the
+same shape: a number that is locally true and globally misleading, with no
+mechanism that would ever say so.
+
+So the theme is disclosure. `trend` shows whether efficiency is moving.
+Context windows resolve at read time and say which of four sources produced
+each one, with an honest blank where none did. Coverage gaps are labelled
+instead of truncated. Compactions are split by trigger and never summed,
+because a deliberate `/compact` and hitting the ceiling are opposite signals.
+An expired gauge is absent rather than dimmed.
+
+Recovering the capture fixes on transcripts already on disk takes one
+`flow harvest claude --rescan` followed by `flow normalize`. On the corpus this
+was built against that recovered 14.4% of output tokens and 29 compaction
+events. Transcripts already pruned from disk keep their partial counts — 1.0%
+of stored turns, and no re-read can reach them.
+
 ### Added
 
 - **`flow cost trend`** — efficiency per time bucket, the view that answers "is
@@ -613,7 +650,12 @@ The patch trajectory (0.4.x) was about install/update mechanics — getting the 
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/andyconley/flow/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/andyconley/flow/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/andyconley/flow/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/andyconley/flow/compare/v0.6.2...v0.7.0
+[0.6.2]: https://github.com/andyconley/flow/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/andyconley/flow/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/andyconley/flow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/andyconley/flow/compare/v0.4.5...v0.5.0
