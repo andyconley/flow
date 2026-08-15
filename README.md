@@ -74,6 +74,7 @@ flow normalize
 flow cost summary
 flow cost summary --all --json
 flow cost sessions --days 30
+flow cost trend --days 30 --bucket week
 flow cost sessions --all --limit 0
 flow cost active
 flow cost active --within 180
@@ -111,6 +112,8 @@ What they do:
   - token totals by harness/model within a window (`--days N`, default 7; `--all` for everything), plus Codex's most recent capacity reading as a separate gauge line
 - `flow cost sessions`
   - token totals by session within a window, most recently active first; capped at the 20 most recent by default (`--limit N` to change, `--limit 0` for unlimited)
+- `flow cost trend`
+  - efficiency per time bucket (`--bucket day|week`, `--harness claude|codex`): main-agent turns, sessions, context per turn, input:output, weighted tokens per 1,000 output, subagent share, and compaction events split by manual vs auto. Weighted columns are Claude-only and their multipliers live in `data/token_weights.json`
 - `flow cost active`
   - per-active-session context percentage, carry above session start, idle, and a `/clear`-or-`/compact` recommendation, worst carry first; runs the incremental Claude harvest and a normalize pass before answering (`--within N` minutes of liveness, default 60)
 - `flow cost verdict`

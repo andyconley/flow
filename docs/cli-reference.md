@@ -276,6 +276,45 @@ Flags:
 
 Reads only the normalized layer — it does not harvest, so what it shows is as current as your last `flow harvest`. Prints `(no data in range)` when the window is empty.
 
+**The capacity line is a snapshot with an expiry.** It renders the reading's own `resets at` time beside `as of`, and it disappears entirely once that time passes — an expired gauge is absent, not dimmed. Primary and secondary expire independently. A reading sampled more than halfway through its own window is still shown, with a note: it is valid, but usage has had most of the window to move since.
+
+### `flow cost trend`
+
+Efficiency per time bucket — the view that answers "is my session hygiene actually working," which the level-reporting views cannot.
+
+One row per **bucket and harness**, not per bucket. Blending them would mean summing token classes whose semantics differ: Codex's cached input is a subset of its input, where Claude's cache buckets are disjoint and additive.
+
+Flags:
+
+- `--days N` — show the last N days (default: 7)
+- `--all` — every row ever normalized; cannot be combined with `--days`
+- `--bucket day|week` — bucket size (default: day)
+- `--harness claude|codex` — restrict to one harness (default: both)
+- `--json` — JSON instead of an aligned table
+
+Columns:
+
+| Column | Meaning |
+|---|---|
+| `turns` | main-agent turns (sidechains excluded) |
+| `sessions` | distinct sessions with a main-agent turn in the bucket |
+| `ctx/turn` | mean context per main-agent turn |
+| `in:out` | total input over total output |
+| `wt/1k out` | **weighted tokens per 1,000 output** — the headline |
+| `sub%` | subagent share of weighted tokens |
+| `cmpct man` / `cmpct auto` | compaction events, split by trigger |
+| `med pre man` | median context at the point of a manual `/compact` |
+
+`wt/1k out` collapses the input classes by billing multiplier (uncached 1.0, cache read 0.1, 5m write 1.25, 1h write 2.0) and divides by output. Dividing by output is what makes it an efficiency number rather than a busyness number — raw daily burn conflates working less with working leaner. The multipliers live in `data/token_weights.json`, so a pricing change is a data edit rather than a release.
+
+`wt/1k out` and `sub%` are blank for Codex. The weights are Anthropic cache multipliers, Codex reports no cache writes at all, and its cache-read semantics differ — the same arithmetic would not mean the same thing.
+
+Manual and auto compactions are never summed. A manual `/compact` is deliberate hygiene; an auto one is hitting the ceiling. They are opposite signals about a session's health, and `med pre man` is the useful companion: how full the context typically was when you chose to cut.
+
+Read-only, and it does not harvest first — a trend over completed periods does not become wrong for want of the last few minutes.
+
+**Coverage is labelled, never silently truncated.** If the window reaches back before the earliest harvested turn for a harness, a note says so. Absent buckets and empty buckets are different facts, and hiding the difference turns a coverage gap into a false trend.
+
 ### `flow cost sessions`
 
 Token totals grouped by session, most recently active first.
@@ -304,6 +343,15 @@ Flags:
 - `--json` — JSON instead of an aligned table
 
 A session is recommended for `/clear` or `/compact` once its carry clears `25,000` tokens and it has at least `15` requests behind it — the request minimum exists so a young session with one huge turn is not graded on a single sample. Both are fixed constants in `cli/cost.py`, not configurable.
+
+**How the context window is resolved**, best source first:
+
+1. the statusline's exact record for that session
+2. `preTokens` at an **auto** compaction in that same session — auto fires at the ceiling, so it is a direct observation of what the session held. Scoped to that session and never generalised to the model: the same models run in 200K sessions constantly, so a model-wide rule would divide every one of those percentages by five
+3. `data/model_context_windows.json`, marked `~` — a model string carries no window suffix, so a 1M session under the threshold reads as standard and its percentage is overstated
+4. nothing — for a model absent from that file, `ctx` and `carry` show `?` and no recommendation is given. An honest blank beats a confident wrong number, and it is the signal that the file needs a new entry
+
+The `sub` column is the subagent share of that session's weighted tokens. `ctx` and `carry` measure the main thread only, so work moved into subagents leaves both looking better without costing less — the two are shown together so that improvement can be told apart from a real one.
 
 Use this as the interactive view; it is also what the workflow commands consult for their cost posture check.
 

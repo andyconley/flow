@@ -8,6 +8,55 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ### Added
 
+- **`flow cost trend`** — efficiency per time bucket, the view that answers "is
+  my session hygiene actually working." Every other `cost` view reports a
+  level; this reports the shape of the levels over time. One row per bucket
+  *and* harness (`--bucket day|week`, `--harness claude|codex`): main-agent
+  turns, distinct sessions, context per turn, input:output, weighted tokens per
+  1,000 output, subagent share, and compaction events split by trigger with the
+  median context at manual cuts.
+
+  `wt/1k out` is the headline. It collapses the input classes by billing
+  multiplier and divides by output, which is what makes it an efficiency
+  number — raw daily burn conflates working less with working leaner. The
+  multipliers live in `data/token_weights.json`, so a pricing change is a data
+  edit rather than a release.
+
+  Weighted columns are blank for Codex, never zero. The weights are Anthropic
+  cache multipliers, Codex reports no cache writes at all, and its cache-read
+  semantics differ — the same arithmetic would not mean the same thing.
+
+  Coverage is labelled rather than silently truncated: a window reaching before
+  a harness's earliest harvested turn says so, because absent buckets and empty
+  buckets are different facts and hiding the difference turns a coverage gap
+  into a false trend.
+
+- **Context windows resolve at read time**, from `data/model_context_windows.json`
+  and from the transcript. `turn_norm.context_window` is NULL for every Claude
+  turn and deliberately stays that way — that column means "the harness
+  reported this," and filling it with a lookup would destroy the
+  measured-versus-inferred distinction the `~` marker depends on.
+
+  Best source first: the statusline's exact record; then `preTokens` at an
+  **auto** compaction in that same session, which fires at the ceiling and so
+  observes what the session actually held; then the model table, marked `~`;
+  then nothing. The compaction signal is scoped to its own session and never
+  generalised to the model — every model that has auto-compacted also runs in
+  200K sessions constantly, so a model-wide rule would divide all of those
+  percentages by five.
+
+  A model absent from the table now reports `?` and no recommendation instead
+  of assuming 200K. An honest blank beats a confident wrong number in a tool
+  whose purpose is measurement, and it is the signal that the file needs an
+  entry.
+
+- **`flow cost active` shows subagent share** per session. `ctx` and `carry`
+  measure the main thread only, so work moved into subagents leaves both
+  looking better without costing less. Subagent share moved 4.8% → 12.9% over a
+  window in which main-agent context fell 41%; a metric that improves when work
+  is *moved* eventually gets optimised the wrong way, so the two are shown
+  together.
+
 - **`flow harvest claude --rescan`, with `--since`, `--session`, and
   `--dry-run`.** A plain harvest only reads what is new, so a collector
   improvement never reaches transcripts already on disk. `--rescan` re-reads
@@ -47,6 +96,26 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   (18 manual, 11 auto) on the first rescan.
 
 ### Fixed
+
+- **The Codex capacity gauge had no expiry.** `flow cost summary --days 7`
+  reported `10080m window 96.0%` on 2026-08-15 from a reading taken 2026-08-09
+  that expired 97 minutes after the run — still literally true when taken,
+  wholly misleading when shown. The capacity window is 10,080 minutes, exactly
+  the length of the default summary window, so a reading anywhere in range can
+  describe a period with almost no overlap with the present.
+
+  `resets_at` was stored all along and never rendered. The gauge now shows it
+  beside `as of`, and drops each field once its own reset time passes — an
+  expired gauge is absent, not dimmed. Primary and secondary expire
+  independently, since neither name reliably means "the short window." A
+  reading sampled more than halfway through its own window is still shown, with
+  a note.
+
+  `scaffolds/default/commands/flow-plan.md` told the agent to report that line
+  "verbatim — no interpretation." For a field carrying its own expiry, verbatim
+  is the wrong contract, and that instruction is what produced the misleading
+  report. It now requires the expiry alongside, and silence when the line is
+  absent.
 
 - **Claude turns stored a streamed response's *partial* output token count.**
   A single API response is written as several assistant JSONL lines sharing
