@@ -13,6 +13,7 @@ Use it when you want an agent to:
 - keep implementation work gated and reviewable
 - use the same role expectations across Claude and Codex
 - leave behind useful state, requirements, notes, and handoffs
+- get feedback on session size, token usage, and when a session should be compacted or cleared
 
 Flow is not the project itself. It is the operating model around the project: the commands, agents, standards, templates, hooks, and local CLI that keep AI-assisted work from turning into one long unstructured chat.
 
@@ -74,6 +75,8 @@ The framework template includes:
 - [memory and run scaffolding](scaffolds/default/) for transient state and durable artifacts
 - [flow.toml](scaffolds/default/flow.toml), the machine-readable manifest for commands, agents, hooks, model hints, and standard dependencies
 - user overlays at `~/.flow/user/` for personal commands, agents, hooks, standards, or templates without forking this repo
+
+A user overlay is your personal layer on top of the default framework. Put files in `~/.flow/user/` when you want your own command, agent, hook, standard, or template to override or extend what flow ships. It applies at user level, so it can follow you across projects without changing this repo.
 
 User overlays are optional. Use `flow setup user --overlay-repo URL` if you want that overlay backed by your own git repo. Flow can clone an absent overlay or attach a remote to an existing one, but it does not clobber files or commit for you. For the merge model and ownership rules, see [architecture.md](docs/architecture.md).
 
