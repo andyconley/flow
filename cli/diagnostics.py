@@ -159,7 +159,7 @@ def doctor() -> int:
     else:
         print("note:             install metadata missing; re-run install-flow.sh to stamp")
     print()
-    print("-- user-level (active in every Claude session) --")
+    print("-- user-level (active in every supported runtime session) --")
     print(f"claude sync:      {'ok' if user_claude_managed_ok else 'missing'}")
     print(f"claude drift:     {user_claude_drift}")
     print(f"skills dir:       {'ok' if user_skills_dir.exists() else 'missing'}")
@@ -178,7 +178,7 @@ def doctor() -> int:
     if user_overlay_manifest.exists():
         try:
             overlay = read_toml(user_overlay_manifest)
-            user_commands = overlay.get("claude", {}).get("commands", [])
+            user_commands = overlay.get("claude", {}).get("commands", []) + overlay.get("codex", {}).get("commands", [])
             user_agents = overlay.get("agents", [])
             user_hooks = overlay.get("claude", {}).get("hooks", []) + overlay.get("codex", {}).get("hooks", [])
             print(f"user overlay:     {user_overlay_manifest}")

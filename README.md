@@ -103,7 +103,7 @@ flow setup machine
 flow setup user                  # installs flow at user level — active in every supported runtime session
 ```
 
-`./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and either symlinks (develop) or copies (release) the framework into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates Claude surfaces under `~/.claude/`, Codex skills under `~/.agents/skills/`, and the Codex managed manifest under `~/.codex/`.
+`./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and either symlinks (develop) or copies (release) the framework into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates Claude surfaces under `~/.claude/`, shared Codex skills under `~/.agents/skills/`, and Codex agents, hooks, and managed manifests under `~/.codex/`.
 
 ## Choosing an Install Mode
 
@@ -373,4 +373,4 @@ The framework is usable, but not finished. Main gaps:
 
 ## Current Recommendation
 
-`main` is the active branch. Both `main` and `develop` track the same content as of the most recent release; future work can branch from either, but `main` is what user-level installs reference.
+`main` is the active development branch. Develop installs point `~/.flow/source` at a checkout; release installs follow tagged releases and can lag behind `main` until a new tag is cut.

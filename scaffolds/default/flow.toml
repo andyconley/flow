@@ -410,7 +410,7 @@ summary = "First-time machine setup — creates `~/.flow/` support directories"
 
 [[help.cli_commands]]
 invocation = "flow setup user"
-summary = "Install flow at user level (active in every Claude session)"
+summary = "Install flow at user level (active in every supported runtime session)"
 
 [[help.cli_commands]]
 invocation = "flow setup project"

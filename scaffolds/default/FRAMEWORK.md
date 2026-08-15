@@ -12,7 +12,7 @@ Portable workflow contract.
 
 This framework has two distinct layers:
 
-- **Framework** lives at the user level (installed into `~/.claude/`, sourced from this scaffold). Defines the workflow vocabulary (commands), the role agents, and the shared standards library. Active in every Claude session regardless of cwd.
+- **Framework** lives at the user level (installed into `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`, sourced from this scaffold). Defines the workflow vocabulary (commands), the role agents, hooks, and the shared standards library. Active in every supported runtime session regardless of cwd.
 - **Project overlays** live per-project in `<repo>/.flow/`. Hold project-specific role assignments, sources of truth, durable memory, and run artifacts. Overlays stack — when working in a nested project, the workspace overlay (e.g., `~/KB/.flow/`) and the project overlay (e.g., `~/KB/repos/path-nexus/.flow/`) merge.
 
 When stacked overlays merge, the more-specific overlay overrides on conflicts. Memory writes always go to the most-specific overlay; reads merge across all stacked levels.

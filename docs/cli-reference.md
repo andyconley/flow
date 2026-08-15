@@ -48,6 +48,7 @@ Behavior:
 
 - runs `flow sync claude --user` and `flow sync codex --user` in sequence
 - generates `~/.claude/skills/flow-*/`, `~/.claude/agents/*.md`, `~/.claude/hooks/flow-*.sh`
+- generates `~/.agents/skills/flow-*/`, `~/.codex/agents/*.toml`, `~/.codex/hooks/flow-*.sh`
 - merges flow hook entries into `~/.claude/settings.json` (preserves unmanaged settings)
 - writes `~/.claude/flow.managed.toml`, `~/.codex/hooks.json`, and `~/.codex/flow.managed.toml` for hook registration and drift tracking
 

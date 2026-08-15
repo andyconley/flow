@@ -275,7 +275,7 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("Generate runtime-facing adapters", result.stdout)
         self.assertIn("--user", result.stdout)
         self.assertIn("claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.", result.stdout)
-        self.assertIn("codex   Generate .agents skills, .codex agents, and a .codex managed manifest.", result.stdout)
+        self.assertIn("codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.", result.stdout)
         self.assertIn("flow sync claude --user", result.stdout)
 
     def test_sync_claude_user_writes_to_user_home(self) -> None:
@@ -856,6 +856,25 @@ class FlowCliTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertIn("user overlay:", result.stdout)
         self.assertIn("flow-personal", result.stdout)
+
+    def test_doctor_reports_codex_only_user_overlay_command(self) -> None:
+        fake_home = self.use_fake_home()
+        overlay_dir = fake_home / ".flow" / "user"
+        (overlay_dir / "commands").mkdir(parents=True)
+        (overlay_dir / "commands" / "flow-codex-personal.md").write_text("# codex personal\n")
+        (overlay_dir / "flow.toml").write_text(
+            "\n"
+            "[[codex.commands]]\n"
+            'name = "flow-codex-personal"\n'
+            'source = "commands/flow-codex-personal.md"\n'
+            'description = "codex personal command"\n'
+            'summary = "codex personal summary"\n'
+        )
+
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        self.assertIn("user overlay:", result.stdout)
+        self.assertIn("flow-codex-personal", result.stdout)
 
     def test_doctor_reports_no_user_overlay_when_absent(self) -> None:
         fake_home = self.use_fake_home()

@@ -57,8 +57,8 @@ Conditional roles (invoked when relevant):
 4. **Write the updated `.flow/PROJECT.md`.** Edit the file in place — don't make the user copy-paste.
 5. **Project-level sync check.** Determine whether `flow sync claude` (and `flow sync codex`) at the project level is actually needed:
    - Compare `.flow/agents/*.md`, `.flow/commands/*.md`, and `.flow/standards/*.md` against the framework scaffold at `~/.flow/source/scaffolds/default/`
-   - If NO divergence (all files match the scaffold), project-level sync is **not needed**. The user-level install (`flow setup user`) already covers the framework surfaces in every Claude session. Tell the user explicitly: "No project-level sync needed — your user-level install handles the framework's Claude surfaces."
-   - If YES divergence (this project has customized agents, commands, or standards), recommend running `flow sync claude` to regenerate this project's `.claude/` adapters. Offer to run it.
+   - If NO divergence (all files match the scaffold), project-level sync is **not needed**. The user-level install (`flow setup user`) already covers the framework surfaces in every supported runtime session. Tell the user explicitly: "No project-level sync needed — your user-level install handles the framework's runtime surfaces."
+   - If YES divergence (this project has customized agents, commands, or standards), recommend running `flow sync claude` and `flow sync codex` as appropriate to regenerate this project's runtime adapters. Offer to run them.
 6. **Optional follow-up.** Offer to also walk through:
    - which `.flow/standards/*.md` files to keep vs delete (only override framework defaults where the project actually differs)
    - which `.flow/project/*.md` overlay files to populate now vs defer
@@ -84,7 +84,7 @@ Conditional roles (invoked when relevant):
 - Asked the user: [sections]
 
 ### Project-level sync status
-- [One of: "Not needed — no divergence from framework scaffold; user-level install covers Claude surfaces" | "Needed — project has customized {agents/commands/standards}; recommend `flow sync claude` to regenerate `.claude/`"]
+- [One of: "Not needed — no divergence from framework scaffold; user-level install covers runtime surfaces" | "Needed — project has customized {agents/commands/standards}; recommend `flow sync claude` and/or `flow sync codex` to regenerate runtime adapters"]
 
 ### Follow-up offered
 - [What you offered to do next — standards trim, project overlay population, etc.]

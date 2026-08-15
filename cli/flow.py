@@ -86,8 +86,8 @@ def main() -> int:
     )
     setup_user_parser = setup_sub.add_parser(
         "user",
-        help="install flow at the user level so it is active in every Claude session",
-        description="Generate ~/.claude/ skills, agents, hooks, and managed settings from the framework scaffold.",
+        help="install flow at the user level so it is active in every supported runtime session",
+        description="Generate user-level Claude and Codex skills, agents, hooks, and managed manifests from the framework scaffold.",
     )
     setup_user_parser.add_argument(
         "--overlay-repo",
@@ -323,7 +323,7 @@ def main() -> int:
         epilog=(
             "Targets:\n"
             "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
-            "  codex   Generate .agents skills, .codex agents, and a .codex managed manifest.\n\n"
+            "  codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.\n\n"
             "Examples:\n"
             "  flow sync claude\n"
             "  flow sync claude --check\n"

@@ -43,7 +43,7 @@ Use this command when:
 ```md
 ## flow Framework
 
-Personal AI workflow framework. It defines HOW Claude operates with you, not WHAT you work on. Active in every Claude session through the user-level install.
+Personal AI workflow framework. It defines HOW Claude and Codex operate with you, not WHAT you work on. Active in every supported runtime session through the user-level install.
 
 ## Phase machine
 
@@ -59,9 +59,9 @@ boot ──┬─→ scout (XS/S, narrow) ────────────�
 
 Flow has **two distinct command surfaces** — invoke each differently:
 
-### Slash commands (invoked inside Claude as `/flow-XXX`)
+### Workflow commands
 
-These are *workflow* commands: the things you do during work.
+These are the commands you use during work. Claude exposes them as slash commands (`/flow-XXX`). Codex receives the same command bodies as skills.
 
 <!-- generated:slash-commands-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Command | Use when |
@@ -80,7 +80,7 @@ These are *workflow* commands: the things you do during work.
 | /flow-help | This help output |
 <!-- generated:slash-commands-table:end -->
 
-The table above is derived from `[[claude.commands]]` `summary` fields in `flow.toml`.
+The table above is derived from `[[claude.commands]]` `summary` fields in `flow.toml`; the Codex adapter uses matching `[[codex.commands]]` entries for its skill surface.
 
 ### CLI commands (run from the shell, or ask Claude to run them)
 
@@ -91,7 +91,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 |---|---|
 | `flow help` | This overview, but rendered at the shell (same content as `/flow-help`) |
 | `flow setup machine` | First-time machine setup — creates `~/.flow/` support directories |
-| `flow setup user` | Install flow at user level (active in every Claude session) |
+| `flow setup user` | Install flow at user level (active in every supported runtime session) |
 | `flow setup project` | Scaffold `.flow/` overlay into the current repo |
 | `flow refresh project` | Pull missing framework files into an existing project overlay |
 | `flow sync claude [--user] [--check]` | Generate or check Claude adapters |
@@ -131,17 +131,17 @@ The table above is derived from shared `[[agents]]` `summary` fields in `flow.to
 ### How agents get invoked
 
 - **By commands**: `flow-define`, `flow-solution`, `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents from their composition. See each command's "Composition" section for which agents are core vs conditional.
-- **Directly**: ask Claude to engage a specific role for a focused task, for example "@architect look at this boundary decision" or "use the quality-reviewer to check this PR".
+- **Directly**: ask the runtime to engage a specific role for a focused task, for example "have the architect look at this boundary decision" or "use the quality-reviewer to check this PR".
 
 ### Agent vs distribution-tool distinction
 
-These agents are **personal working agents**. They define how Claude works with you when it plays a specific role. They are NOT distribution outputs designed for others to install. Project-specific review tools, such as path-nexus's review agents in `tools/agents/`, live in their project's own distribution surface.
+These agents are **personal working agents**. They define how Claude or Codex works with you when it plays a specific role. They are NOT distribution outputs designed for others to install. Project-specific review tools, such as path-nexus's review agents in `tools/agents/`, live in their project's own distribution surface.
 
 ## Architecture
 
-- **Framework** (commands, agents) lives universally at `~/.claude/` through the user-level install, active in every session
-- **Project overlays** at `<repo>/.flow/` are opt-in per repo. Use them only where you want project-specific role assignments, memory, or run artifacts. `/flow-boot` recommends `flow setup project` by default in any repo without an overlay. To silence that recommendation for a repo permanently, ask Claude to opt out; Claude will `touch .flow-skip` at the repo root. You can also run that shell command yourself.
-- **Durable facts and decisions** → auto-memory at `~/.claude/projects/<project-id>/memory/`
+- **Framework** (commands, agents, hooks, and standards) lives in user-level runtime surfaces through `flow setup user`: `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`. It is active in every supported runtime session.
+- **Project overlays** at `<repo>/.flow/` are opt-in per repo. Use them only where you want project-specific role assignments, memory, or run artifacts. `/flow-boot` recommends `flow setup project` by default in any repo without an overlay. To silence that recommendation for a repo permanently, ask the runtime to opt out; it will `touch .flow-skip` at the repo root. You can also run that shell command yourself.
+- **Durable facts and decisions** → the runtime's durable memory surface; for Claude Code, that is auto-memory at `~/.claude/projects/<project-id>/memory/`
 - **Transient work state** → `.flow/memory/STATE.md` (only when an overlay exists)
 - **Run artifacts** → `.flow/runs/<work-id>/` (only when an overlay exists)
 - Overlays stack. In nested projects, such as `~/KB/repos/path-nexus/` inside `~/KB/`, more-specific overlays override on conflicts. Memory writes go to the most-specific overlay.
@@ -156,8 +156,8 @@ These agents are **personal working agents**. They define how Claude works with 
 - "Approved requirements, shape implementation" → `/flow-plan`
 - "Build something durable" → `/flow-define` → `/flow-plan` → `/flow-implement` → `/flow-review` → `/flow-archive`
 - "Where do we stand?" → `/flow-status`
-- "Set up flow for a new repo" → `flow setup project` (shell — ask Claude or run from terminal)
-- "Skip flow for a specific repo" → ask Claude to opt out (will `touch .flow-skip` at repo root)
+- "Set up flow for a new repo" → `flow setup project` (shell — ask the runtime or run from terminal)
+- "Skip flow for a specific repo" → ask the runtime to opt out (will `touch .flow-skip` at repo root)
 - "Read the framework operating model" → `~/.flow/source/scaffolds/default/FRAMEWORK.md`
 - "Deeper maintainer docs" → `~/.flow/source/docs/`
 ```
