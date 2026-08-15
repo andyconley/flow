@@ -71,6 +71,14 @@ The main slash-command skills are:
 - `/flow-resume` and `/flow-status` — recover or summarize current work state
 - `/flow-help` and `/flow-init-project` — orient to Flow or initialize project overlay context
 
+### Start here
+
+For a new machine, use [Quick Install](#quick-install-recommended-for-consumers).
+
+For framework development, use [Local Install](#local-install-for-maintainers-and-contributors).
+
+For a repo that needs project-specific memory, roles, or run artifacts, use [Typical Flow](#typical-flow).
+
 ### CLI lifecycle
 
 Available commands:
@@ -177,6 +185,9 @@ Codex hook support has full parity with Claude's: same manifest shape (`name`/`e
 - managed hook entries inside `.claude/settings.json`
 - `.claude/flow.managed.toml`
 - `.agents/skills/...`
+- `.codex/agents/...`
+- `.codex/hooks/flow-*.sh`
+- managed hook entries inside `.codex/hooks.json`
 - `.codex/flow.managed.toml`
 
 Rules:
@@ -185,7 +196,7 @@ Rules:
 - edit `.flow/agents/*` to change generated agents
 - edit framework hook sources in this repo to change generated hook scripts
 - rerun `flow sync claude` after changing the source of truth
-- rerun `flow sync codex` after changing Codex-managed command surfaces
+- rerun `flow sync codex` after changing Codex-managed surfaces
 
 `flow sync claude` preserves unmanaged Claude files and only removes files that were previously marked as flow-managed and are no longer desired.
 `flow sync codex` follows the same managed-manifest pattern for Codex skills.

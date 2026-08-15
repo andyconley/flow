@@ -53,7 +53,7 @@ boot ──┬─→ scout (XS/S, narrow) ────────────�
                                                      ↑
                                                      └── resume (recover from interruption)
 
-`define` turns early feature or architectural-capability ideas into approved requirements. `[solution]` is an optional pre-plan step after definition — use it when multiple approaches exist, architectural decisions are needed, or the work needs chunking before `plan` can shape it.
+`define` turns early feature or architectural-capability ideas into approved requirements. `[solution]` is an optional pre-plan step after definition — use it when multiple approaches exist, architectural decisions are needed, or the work needs chunking before `plan` can shape it. Bug-shaped work can go directly to `/flow-plan`.
 
 ## Command surfaces
 
