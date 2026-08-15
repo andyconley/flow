@@ -29,10 +29,12 @@ Each project overlay defines:
 The standard flow is:
 
 1. boot
-2. plan
-3. implement
-4. review
-5. archive or resume
+2. define
+3. solution (optional)
+4. plan
+5. implement
+6. review
+7. archive or resume
 
 Not every task needs every phase. Small work should stay small.
 
@@ -40,6 +42,8 @@ Not every task needs every phase. Small work should stay small.
 
 - `/flow-boot`
 - `/flow-scout`
+- `/flow-define`
+- `/flow-solution`
 - `/flow-plan`
 - `/flow-implement`
 - `/flow-review`
@@ -104,6 +108,7 @@ Projects should declare who provides shaping, implementation, and acceptance rev
 The framework standards directory is expected to hold reusable operating guidance for areas such as:
 
 - collaboration
+- definition and research evidence
 - architecture
 - patterns
 - testing

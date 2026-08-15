@@ -5,13 +5,16 @@ This standard defines how work types map onto the available `flow` lanes.
 ## Command mapping
 
 - small change -> `/flow-scout`
+- vague feature or architectural capability -> `/flow-define`
+- approved requirements needing technical options -> `/flow-solution`
 - shaped implementation -> `/flow-implement`
 - planning-heavy change -> `/flow-plan`
 
 ## Default guidance
 
 - use `/flow-boot` at the start of a session or before resuming interrupted work
-- use `/flow-plan` when the task is not yet implementation-ready
+- use `/flow-define` when feature or capability requirements are not yet approved
+- use `/flow-plan` when approved requirements or bug-shaped work need implementation shaping
 - use `/flow-scout` for small work that should stay narrow
 - use `/flow-implement` for durable, reviewable execution
 

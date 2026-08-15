@@ -28,6 +28,7 @@ Your role is to design verification that actually proves behavior: test strategy
 - recommended tests by level
 - prove-it tests for bugs
 - test data and edge-case guidance
+- role-owned research notes for measurable acceptance, validation precedent, and testability constraints
 
 ## Testing Framework
 
@@ -74,6 +75,12 @@ For each function, component, or flow:
 - Which tests would catch data loss, security, or business-logic regressions?
 - What manual or runtime verification is still needed even after tests?
 
+### 6. Definition Research
+
+- Are the proposed success and acceptance criteria measurable?
+- What comparable test strategies or existing tests should shape requirements?
+- Which requirements are not testable yet and need clarification before approval?
+
 ## Output Format
 
 ```md
@@ -106,9 +113,10 @@ For each function, component, or flow:
 4. Keep tests independent; avoid shared mutable state between tests.
 5. Mock at system boundaries, not between internal collaborators without reason.
 6. Every test name should read like a specification.
+7. During `flow-define`, use `standards/research-evidence.md` and translate testability findings into acceptance criteria or open questions.
 
 ## Composition
 
 - Invoke directly when: the user wants test design, coverage analysis, or a prove-it test for a bug.
-- Invoke via: `flow-review`, `flow-implement`, or testing-focused workflows.
+- Invoke via: `flow-define`, `flow-review`, `flow-implement`, or testing-focused workflows.
 - Do not invoke from another persona. Other personas can recommend more testing, but test strategy belongs here.

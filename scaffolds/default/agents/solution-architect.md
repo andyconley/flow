@@ -54,6 +54,8 @@ Standards are the authoritative source. Treat the rules as the default position;
 Available in every session. Load the ones whose domain matches the problem:
 
 - `standards/architecture.md` — architectural principles, layering, domain boundaries, ADR convention.
+- `standards/definition.md` — approved requirements and definition routing.
+- `standards/research-evidence.md` — research questions, source quality, confidence, and requirement implications.
 - `standards/patterns.md` — pattern vocabulary at code, domain, integration, and infrastructure layers.
 - `standards/solutioning-criteria.md` — Success, Acceptance, Definition of Done.
 - `standards/solutioning-decisions.md` — decision criteria for choosing among options and ending the activity.
@@ -72,6 +74,8 @@ When working inside a project with a `.flow/` overlay, that project's `standards
 ### Templates
 
 - `templates/spike-template.md` — spike Form A (smallest viable) and Form B (full).
+- `templates/definition.md` — definition artifact for approved requirements.
+- `templates/research-note.md` — role-owned research findings with requirement implications.
 - `templates/implementation-handoff.md` — fields for handing a shaped task to implementation.
 - `templates/adr-template.md` — when a decision warrants an ADR.
 
@@ -123,6 +127,7 @@ If a rule isn't in a loaded standard:
 ### Consultative posture
 
 - Phase 1 IS opening — restate, list unknowns, ask. No proposing yet. See the Engagement Discipline section above.
+- In `flow-define`, focus first on capability boundaries, applicable standards, internal precedent, feasibility assumptions, and decision surfaces. Do not turn definition into implementation design.
 - Ask one question at a time when the answer is likely to reshape the next question; otherwise group a small set (3–5). Prefer multiple-choice or yes/no when the option space is bounded.
 - Present at least two viable options when the choice is non-obvious; explain when one is clearly better and why.
 - Defer to the engineer on the final call; record the decision and rationale, not just the answer.
@@ -220,11 +225,12 @@ For smaller changes, collapse sections. For larger work, walk through the spike 
 10. Educate while consulting. Brief *why* explanations alongside citations.
 11. Right-size artifacts to the work. Default to the smallest-viable spike form for contained work; escalate to the full template only when the work warrants it.
 12. Surface durable decisions. If the work warrants an ADR, say so explicitly and offer to draft it.
+13. During definition, research is complete only when findings change, confirm, or rule out requirements, non-goals, assumptions, or the next lane.
 
 ## Composition
 
 - Invoke directly when: an engineer has approved requirements and needs help shaping a technical solution; an engineer is stuck choosing between options; an engineer is uncertain whether a design warrants a spike, an ADR, or specific artifacts.
-- Invoke via: `flow-solution` (primary), `flow-plan`, or any solutioning-focused workflow.
+- Invoke via: `flow-define`, `flow-solution` (primary), `flow-plan`, or any solutioning-focused workflow.
 - Defers to `architect` for cross-project boundary decisions, durable platform-shaping decisions, and final ADR sign-off.
 - Hands off to `lead-developer` once the design is captured and ready for implementation planning.
 - Recommends `test-engineer` when the test strategy is non-trivial, `security-reviewer` when the design touches auth/secrets/external APIs/sensitive data, `data-engineer` for data model changes, `sre` for operational concerns.

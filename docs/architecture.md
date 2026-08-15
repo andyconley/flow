@@ -179,6 +179,8 @@ Current examples:
 - Claude receives generated `SKILL.md` files with explicit frontmatter
 - Codex receives generated `SKILL.md` files with a narrower wrapper surface
 
+`flow-define` is the early requirements lane: it turns feature or architectural-capability ideas into approved requirements, with research and adversarial review before routing to `flow-solution` or `flow-plan`. Bug-shaped work remains in `flow-plan` until Flow grows a separate defect-definition lane.
+
 ### Agents
 
 Agents are registered once and adapted per runtime.

@@ -91,6 +91,13 @@ argument_hint = "[focus]"
 summary = "XS/S changes — single primary file, no new abstractions, validates in <5min"
 
 [[claude.commands]]
+name = "flow-define"
+source = "commands/flow-define.md"
+description = "Defines early feature or architectural-capability scope through discovery, research, adversarial review, and approved requirements before planning or solutioning."
+argument_hint = "[focus]"
+summary = "Early ideas or capabilities → approved requirements for plan or solution"
+
+[[claude.commands]]
 name = "flow-solution"
 source = "commands/flow-solution.md"
 description = "Turns approved requirements into a recommended technical approach. Optional pre-plan step when multiple approaches exist, architectural decisions are needed, or work needs to be broken into chunks before planning."
@@ -325,6 +332,12 @@ timeout = 10
 name = "flow-boot"
 source = "commands/flow-boot.md"
 description = "Orients to the project before planning or implementation work. Use when starting a session, resuming interrupted work, or when context feels stale."
+
+[[codex.commands]]
+name = "flow-define"
+source = "commands/flow-define.md"
+description = "Defines early feature or architectural-capability scope through discovery, research, adversarial review, and approved requirements before planning or solutioning."
+argument_hint = "[focus]"
 
 [[codex.commands]]
 name = "flow-solution"

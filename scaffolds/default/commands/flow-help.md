@@ -68,6 +68,7 @@ These are *workflow* commands — the things you do during work:
 |---|---|
 | /flow-boot | Starting a session, resuming, or context feels stale |
 | /flow-scout | XS/S changes — single primary file, no new abstractions, validates in <5min |
+| /flow-define | Early ideas or capabilities → approved requirements for plan or solution |
 | /flow-solution | Optional pre-plan step when multiple approaches exist or architectural decisions are needed |
 | /flow-plan | Idea / bug / request → implementation-ready plan |
 | /flow-implement | Gated multi-phase work; runs land under `.flow/runs/<work-id>/` |
@@ -105,7 +106,7 @@ The table above is derived from `[[help.cli_commands]]` in `flow.toml`.
 
 ## Agents
 
-13 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (solution, plan, implement, review, archive) invoke a **core trio + conditional specialists** pattern — core agents always engage, conditional agents activate when their concern applies.
+13 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (define, solution, plan, implement, review, archive) invoke a **core trio + conditional specialists** pattern — core agents always engage, conditional agents activate when their concern applies.
 
 <!-- generated:agents-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Agent | Role |
@@ -129,7 +130,7 @@ The table above is derived from shared `[[agents]]` `summary` fields in `flow.to
 
 ### How agents get invoked
 
-- **By commands**: `flow-solution`, `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents per their composition. See each command's "Composition" section for which agents are core vs conditional.
+- **By commands**: `flow-define`, `flow-solution`, `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents per their composition. See each command's "Composition" section for which agents are core vs conditional.
 - **Directly**: ask Claude to engage a specific role for a focused task — e.g., "@architect look at this boundary decision" or "use the quality-reviewer to check this PR".
 
 ### Agent vs distribution-tool distinction
@@ -150,9 +151,10 @@ These agents are **personal working agents** — they define how Claude engages 
 - "Start a fresh session" → `/flow-boot`
 - "Where do I pick up?" → `/flow-resume`
 - "Quick fix" → `/flow-scout`
-- "Multiple approaches, need to choose" → `/flow-solution` → `/flow-plan`
-- "I have an idea, shape it" → `/flow-plan`
-- "Build something durable" → `/flow-plan` → `/flow-implement` → `/flow-review` → `/flow-archive`
+- "I have an idea, define the outcome" → `/flow-define`
+- "Multiple approaches, need to choose" → `/flow-define` → `/flow-solution` → `/flow-plan`
+- "Approved requirements, shape implementation" → `/flow-plan`
+- "Build something durable" → `/flow-define` → `/flow-plan` → `/flow-implement` → `/flow-review` → `/flow-archive`
 - "Where do we stand?" → `/flow-status`
 - "Set up flow for a new repo" → `flow setup project` (shell — ask Claude or run from terminal)
 - "Skip flow for a specific repo" → ask Claude to opt out (will `touch .flow-skip` at repo root)

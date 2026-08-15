@@ -22,6 +22,8 @@ Use this command to:
 - define validation expectations
 - decide whether the work belongs in `flow-scout` or `flow-implement`
 
+If feature or architectural-capability requirements are not yet approved, route to `flow-define` first. Bug-shaped work can stay in `flow-plan`.
+
 If the work cannot be understood without chat history, the plan is not done yet.
 
 **When NOT to use:** trivial, obvious XS changes that already fit cleanly inside `flow-scout`, or post-implementation review work that belongs in `flow-review`.
@@ -29,6 +31,7 @@ If the work cannot be understood without chat history, the plan is not done yet.
 ## Primary inputs
 
 - feature idea, bug, request, or initiative
+- approved requirements from `flow-define` when the work is feature or capability shaped
 - relevant project context
 - existing standards and overlays
 - any current discovery or support evidence
@@ -165,6 +168,7 @@ The most common failure mode of this command is jumping straight to scope and co
 ## Escalation Rules
 
 - Escalate to `flow-scout` if the work is truly narrow and self-contained.
+- Escalate to `flow-define` if the outcome, users, scope, success criteria, or approval are still undefined.
 - Escalate to `flow-implement` if it spans multiple files, sessions, states, or decision surfaces.
 - Do not let implementation start until the plan is understandable without private chat context.
 

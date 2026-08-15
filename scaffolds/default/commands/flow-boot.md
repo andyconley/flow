@@ -63,7 +63,9 @@ Inspect:
     - `flow setup project` *(shell command — ask Claude to run it, or run it yourself from a terminal at the repo root)* — if no overlay exists and no `.flow-skip` marker is present
     - `/flow-status` — if active work is unclear
     - `/flow-resume` — if there is interrupted work to continue
-    - `/flow-plan` — if new work needs shaping
+    - `/flow-define` — if the user has a vague idea, new feature concept, architectural capability request, or project-scope question that needs agreed requirements
+    - `/flow-plan` — if new work already has approved requirements or is bug-shaped and needs implementation shaping
+    - `/flow-solution` — if approved requirements need technical options, architecture tradeoffs, or chunking before planning
     - `/flow-scout` — for small in-flight changes
     - `/flow-implement` — for gated work already shaped
 

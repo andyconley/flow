@@ -1,6 +1,6 @@
 # flow-solution
 
-Use `flow-solution` for the activity that turns approved requirements into a recommended technical approach. It is an **optional pre-plan step** — appropriate when multiple approaches exist, architectural decisions need to be made, or the work needs to be broken into chunks before `flow-plan` can shape it.
+Use `flow-solution` for the activity that turns approved requirements into a recommended technical approach. It is an **optional pre-plan step** after `flow-define` when multiple approaches exist, architectural decisions need to be made, or the work needs to be broken into chunks before `flow-plan` can shape it.
 
 <HARD-GATE>
 Do NOT produce options, recommendations, design artifacts, or the structured "Solutioning Summary" output until you have completed the Engagement Phase: restated the problem in your own words, surfaced your explicit unknowns, and the engineer has confirmed your understanding. This applies regardless of how well-specified the request seems. A confidently-drafted design built on assumed context is worse than asking and being told.
@@ -27,6 +27,7 @@ Use this command when:
 ## Primary inputs
 
 - approved requirements (feature definition + acceptance criteria + high-level success criteria)
+- definition artifacts or research notes from `flow-define` when available
 - engineer's initial understanding of the problem
 - existing context (code, prior tickets, related designs, ADRs)
 
@@ -169,7 +170,7 @@ The most common failure mode of this role is jumping straight to options and arc
 
 - Escalate to `architect` for cross-project or platform-shaping decisions.
 - Escalate to `flow-plan` once the approach is chosen and the work is ready to be shaped.
-- Escalate back to `business-analyst` or `product-manager` if requirements turn out to be under-specified.
+- Escalate back to `flow-define` if requirements, outcome, evidence, or approval turn out to be under-specified.
 
 ## Verification
 
