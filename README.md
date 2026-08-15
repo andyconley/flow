@@ -4,20 +4,21 @@ Portable workflow framework for AI-assisted development.
 
 ## What It Is
 
-`flow` is a local framework for working with AI coding agents in a more deliberate way. It gives you a shared workflow, role definitions, standards, and durable artifacts so sessions do not depend on whatever context happens to be in the chat.
+`flow` is a local workflow layer for Claude and Codex. It installs shared commands, agent roles, standards, hooks, and templates so AI-assisted work follows a repeatable path instead of living only in chat.
+
+Flow helps you move work through definition, solutioning, planning, implementation, review, and archive. It also tracks session size and token usage so it can warn when a session is getting heavy and should be compacted or cleared.
+
+Use it when you want to:
+
+- turn an early idea into approved requirements
+- choose an approach before implementation starts
+- keep implementation work gated and reviewable
+- give agents consistent role expectations across projects
+- leave behind useful state, requirements, notes, and handoffs
 
 Flow is extensible. You can add your own commands, agents, hooks, standards, templates, and project notes without forking the framework. User overlays apply across your machine; project overlays apply only inside the repo that owns them.
 
-Use it when you want an agent to:
-
-- define work before planning it
-- choose an approach before implementation starts
-- keep implementation work gated and reviewable
-- use the same role expectations across Claude and Codex
-- leave behind useful state, requirements, notes, and handoffs
-- get feedback on session size, token usage, and when a session should be compacted or cleared
-
-Flow is not the project itself. It is the operating model around the project: the commands, agents, standards, templates, hooks, and local CLI that keep AI-assisted work from turning into one long unstructured chat.
+Flow is not the project itself. It is the operating model around the project.
 
 For the internal architecture, see [architecture.md](docs/architecture.md).
 
@@ -48,11 +49,16 @@ The main workflow commands are:
 
 ### Framework content
 
-The framework template includes:
+Start with commands and agents. The other files support customization, project overlays, and repeatable delivery.
+
+Main surfaces:
 
 - [command contracts](scaffolds/default/commands/) under `.flow/commands/`
 - [agent role definitions](scaffolds/default/agents/) under `.flow/agents/`
 - [standards](scaffolds/default/standards/) under `.flow/standards/`
+
+Customization and project files:
+
 - [templates](scaffolds/default/templates/) for definitions, research notes, adversarial reviews, ADRs, spikes, runs, and handoffs
 - [project overlay starter files](scaffolds/default/project/) under `.flow/project/`
 - [memory and run scaffolding](scaffolds/default/) for transient state and durable artifacts
@@ -71,7 +77,7 @@ For a new machine, use [Quick Install](#quick-install-recommended-for-most-users
 
 For framework development, use [Local Install](#local-install-for-maintainers-and-contributors).
 
-For a repo that needs project-specific memory, roles, or run artifacts, use [Typical Flow](#typical-flow).
+For a repo that needs project-specific memory, roles, or run artifacts, use [After Install](#after-install).
 
 ## Quick Install (recommended for most users)
 
@@ -104,7 +110,7 @@ flow setup user                  # installs flow at user level — active in eve
 | Mode | Storage | When to use |
 |---|---|---|
 | **Develop** (`--develop`, default) | `~/.flow/source` → symlink to this checkout | Maintainers and contributors editing framework content. Edits in the clone go live immediately. |
-| **Release** (`--release`) | `~/.flow/source/` → real directory of copied content | Consumers who want flow installed without keeping a clone around. The clone is disposable after install. Use `flow update` to roll forward to newer tags. |
+| **Release** (`--release`) | `~/.flow/source/` → real directory of copied content | Most users who want flow installed without keeping a clone around. The clone is disposable after install. Use `flow update` to roll forward to newer tags. |
 
 The mode and installed version are stamped into `~/.flow/config.toml` and reported by `flow doctor`.
 
@@ -156,15 +162,12 @@ flow install --develop ~/personal/flow          # copied directory → symlink t
 
 `flow doctor` reports the current install mode, version (release) or symlink target (develop), and how to check for updates.
 
-## Typical Flow
+## After Install
 
-**First-time install (once per machine):**
+**Check the install:**
 
 ```bash
-cd ~/personal/flow
-./install-flow.sh
-flow setup machine
-flow setup user
+flow doctor
 ```
 
 **Optional: per-project overlay** (only for repos that need project-specific roles, durable memory, or run artifacts):
@@ -178,7 +181,7 @@ flow sync codex
 flow doctor
 ```
 
-**After framework changes** (when this repo updates):
+**After framework changes or overlay edits:**
 
 ```bash
 flow sync claude --user
@@ -189,48 +192,50 @@ flow sync codex --user
 
 Use the CLI by intent. Most day-to-day work happens through `/flow-*` workflow commands; shell commands install, sync, inspect, and maintain the framework.
 
+This is the command map, not the full reference. For detailed flags and behavior, see [cli-reference.md](docs/cli-reference.md).
+
 ### Install and Update
 
 Use these when setting up flow on a machine, connecting your user overlay to git, switching install modes, or updating a release install.
 
 - `flow setup machine`
-  - prepares `~/.flow/`, `~/.local/bin/flow`, and local config
+  - prepare `~/.flow/`, `~/.local/bin/flow`, and local config
 - `flow setup user`
-  - installs the framework at user level so it is active in every supported runtime session (runs `flow sync claude --user` and `flow sync codex --user`)
+  - install the framework at user level so it is active in every supported runtime session
 - `flow setup user --overlay-repo URL`
-  - gives `~/.flow/user/` a git home at URL. It clones when the overlay is absent, or runs `git init` in place and adds the remote when content already exists. It never clobbers existing files and never commits.
+  - give `~/.flow/user/` a git home without clobbering files or committing for you
 - `flow install --release`
-  - converts the local install to release mode by copying framework content into `~/.flow/source/`
+  - convert the local install to release mode
 - `flow install --develop PATH`
-  - converts the local install to develop mode by pointing `~/.flow/source` at a checkout
+  - convert the local install to develop mode
 - `flow update [--check] [--resync]`
-  - rolls a release install forward to the latest tagged release; `--check` reports only, and `--resync` updates generated user-level adapters after the install
+  - roll a release install forward to the latest tagged release
 
 ### Project Setup
 
 Use these when a repo needs a `.flow/` overlay for project-specific roles, memory, standards, or run artifacts.
 
 - `flow setup project`
-  - scaffolds `.flow/` into the current repo; use this only when you want a project overlay
+  - scaffold `.flow/` into the current repo
 - `flow refresh project`
-  - adds newly introduced framework files into an existing `.flow/` without overwriting local edits
+  - add newly introduced framework files without overwriting local edits
 - `flow bootstrap`
-  - validates that the required `.flow/` structure exists in the current repo
+  - validate that the required `.flow/` structure exists
 
 ### Runtime Sync
 
 Use these after changing framework content, user overlays, project overlays, commands, agents, or hooks.
 
 - `flow sync claude`
-  - generates Claude adapters from the repo's `.flow/` into the repo's runtime locations
+  - generate Claude runtime files for the current repo
 - `flow sync claude --user`
-  - generates Claude adapters from the framework scaffold directly into user-level runtime locations
+  - generate Claude runtime files at user level
 - `flow sync codex`
-  - generates Codex adapters from the repo's `.flow/` into the repo's runtime locations
+  - generate Codex runtime files for the current repo
 - `flow sync codex --user`
-  - generates Codex adapters from the framework scaffold directly into user-level runtime locations
+  - generate Codex runtime files at user level
 - `--check`
-  - reports drift without writing files; use it with any sync target
+  - report drift without writing files; use it with any sync target
 
 Typical user-level sync:
 
@@ -246,9 +251,9 @@ flow sync codex --user --check
 Use these to inspect install state, generated runtime surfaces, drift, and command help.
 
 - `flow doctor`
-  - reports machine, user-level, and project-level state in separate sections
+  - report machine, user-level, and project-level state
 - `flow help`
-  - renders the framework overview at the shell
+  - render the framework overview at the shell
 
 ### Usage Store Maintenance
 
@@ -257,42 +262,45 @@ Most usage capture happens through Flow commands and hooks. Use these commands w
 Normal path:
 
 - `flow cost active`
-  - harvests Claude sessions and normalizes before it answers
+  - harvest Claude sessions and normalize before it answers
 - `flow cost verdict --hook`
-  - is called by runtime Stop hooks and harvests the current transcript
+  - harvest the current transcript from runtime Stop hooks
 - `flow cost warn --hook`
-  - reads the verdict file; it does not harvest at prompt time
+  - read the verdict file without harvesting at prompt time
 
 Manual maintenance:
 
 - `flow harvest claude`
-  - refreshes Claude usage data when you want `flow cost summary` or `flow cost sessions` to include the latest completed sessions
+  - refresh Claude usage data for summary views
 - `flow harvest claude --rescan`
-  - rewinds already-recorded Claude file watermarks and re-reads them from the start. Already-harvested sessions can then pick up corrected output token counts, compaction events, `session.title`, `cwd`, and title provenance. `--since` and `--session` narrow the scope; `--dry-run` rehearses it. Safe to run repeatedly because the output-token rule is highest-wins.
+  - re-read already-harvested Claude transcripts after collector improvements or historical-data fixes
 - `flow harvest codex`
-  - sweeps Codex session files into the usage store; broader Codex history is not swept by `flow cost active`
+  - sweep Codex session files into the usage store
 - `flow normalize`
-  - rebuilds the normalized layer after a manual harvest; only rows without a current-version normalized counterpart are recomputed
+  - rebuild the normalized layer after a manual harvest
 
 ### Usage Analysis
 
 Use these to read cost, context growth, active sessions, and token trends.
 
 - `flow cost summary`
-  - shows token totals by harness/model within a window (`--days N`, default 7; `--all` for everything), plus Codex's most recent capacity reading as a separate gauge line
+  - show token totals by harness/model
 - `flow cost sessions`
-  - shows token totals by session within a window, most recently active first; capped at the 20 most recent by default (`--limit N` to change, `--limit 0` for unlimited)
+  - show token totals by session
 - `flow cost trend`
-  - shows efficiency per time bucket (`--bucket day|week`, `--harness claude|codex`): main-agent turns, sessions, context per turn, input:output, weighted tokens per 1,000 output, subagent share, and compaction events split by manual vs auto. Weighted columns are Claude-only and their multipliers live in `data/token_weights.json`.
+  - show usage trends by day or week
 - `flow cost active`
-  - shows per-active-session context percentage, carry above session start, idle time, and a `/clear` or `/compact` recommendation, worst carry first. Runs incremental Claude harvest and normalize before answering (`--within N` minutes of liveness, default 60).
+  - show active-session context percentage and compact/clear guidance
 - `flow cost verdict`
-  - gives live judgment for one session. This is the engine behind the Stop hooks on both runtimes: `--hook` reads the runtime's hook JSON on stdin and writes/removes `/tmp/<harness>-verdict-<session_id>` silently. The Claude statusline and warn hook read the file for free. `--transcript PATH` prints the judgment line for manual inspection.
+  - judge one session for runtime hooks or manual inspection
 - `flow cost warn`
-  - powers the UserPromptSubmit pre-execution warning. It reads the verdict file without recomputing at prompt time, then prints one advisory line only when carry is heavy (100K+) and has grown 50K+ since the last warning. Informational only; always exits 0.
-- `--json` on any `flow cost` view prints the same structured result as JSON instead of an aligned table
+  - print the pre-execution warning when carry is heavy
+- `--json`
+  - print structured output for any `flow cost` view
 
 ## How Flow Manages Runtime Files
+
+Most users only need to know that flow writes the Claude and Codex files each runtime expects. For the full adapter model and file list, see [runtime-adapters.md](docs/runtime-adapters.md).
 
 ### What Gets Installed
 
@@ -305,54 +313,16 @@ At user level, flow installs the pieces each runtime needs:
 
 Claude and Codex do not read the same configuration format. Flow keeps one source of truth under `.flow/`, then generates the shape each runtime expects.
 
-That keeps commands, agents, and hooks portable without asking you to hand-maintain parallel Claude and Codex copies. For the full adapter model, see [runtime-adapters.md](docs/runtime-adapters.md).
-
-### How Flow Reaches Claude and Codex
-
-Flow keeps its source files under `.flow/`, then writes the runtime-specific files Claude and Codex need.
-
-`flow sync claude` (project mode) writes into the repo's `.claude/`:
-
-- `.claude/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md`
-- `.claude/agents/*.md` from `.flow/agents/*.md`
-- `.claude/hooks/*.sh` from reusable hook scripts in this repo
-- `.claude/settings.json` with managed hook configuration merged into existing settings
-- `.claude/flow.managed.toml` machine-readable manifest of managed generated files
-
-`flow sync claude --user` (user mode) generates the same surfaces into `~/.claude/`, with `$HOME`-based hook commands and manifest entries that reference the framework scaffold path. The session-start hook fires in every Claude Code session and detects project-level `.flow/` overlays automatically.
-
-`flow sync codex` and `flow sync codex --user` do the same for Codex:
-
-- `.agents/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md` (or from the scaffold in user mode)
-- `.codex/agents/*.toml` from `.flow/agents/*.md`, including model and reasoning-effort hints from `flow.toml`
-- `.codex/hooks/*.sh` from `[[codex.hooks]]` entries (framework hooks or user-overlay hooks)
-- `.codex/hooks.json` with managed hook handlers merged in under the same preserve-unmanaged contract as `.claude/settings.json` — `~/.codex/config.toml` is never touched
-- `.codex/flow.managed.toml` machine-readable manifest of managed generated files
-
-Codex hook support has parity with Claude's: same manifest shape (`name`/`event`/`matcher`/`type`/`script`, optional `timeout`/`status_message`), same overlay merge, same managed-entry lifecycle. `matcher` is optional for Codex; omitted means match everything, per Codex's own hook semantics.
+That keeps commands, agents, and hooks portable without asking you to hand-maintain parallel Claude and Codex copies.
 
 ### Files Flow Owns
 
-These files are generated. Change the `.flow/` source files instead of editing the generated copies directly.
-
-- `.claude/skills/...`
-- `.claude/agents/...`
-- `.claude/hooks/flow-*.sh`
-- managed hook entries inside `.claude/settings.json`
-- `.claude/flow.managed.toml`
-- `.agents/skills/...`
-- `.codex/agents/...`
-- `.codex/hooks/flow-*.sh`
-- managed hook entries inside `.codex/hooks.json`
-- `.codex/flow.managed.toml`
-
-Where to make changes:
+Flow-managed files are generated. Change the `.flow/` source files instead of editing generated copies directly:
 
 - edit `.flow/commands/*` to change generated skills
 - edit `.flow/agents/*` to change generated agents
 - edit framework hook sources in this repo to change generated hook scripts
-- rerun `flow sync claude` after changing the source of truth
-- rerun `flow sync codex` after changing Codex-managed surfaces
+- rerun `flow sync claude` and `flow sync codex` after changing the source of truth
 
 Flow preserves unmanaged Claude and Codex files. It only removes files that were previously marked as flow-managed and are no longer part of the generated surface.
 
@@ -375,9 +345,9 @@ For maintainer-oriented documentation, start with:
 - `scripts/` - reserved for framework maintenance helpers
 - `tests/` - CLI-level regression tests
 
-## Smoke-Tested Behavior
+## Validation
 
-The current implementation has been smoke-tested for:
+Current validation covers setup, sync, generated files, drift detection, refresh behavior, and CLI regression tests.
 
 - `flow setup project`
 - `flow bootstrap`
