@@ -37,7 +37,7 @@ import sqlite3
 import usage_store
 from paths import HOME, SOURCE_DIR
 
-NORM_VERSION = 1
+NORM_VERSION = 2
 
 
 def _num(value) -> int | float | None:
@@ -100,6 +100,12 @@ def _normalize_codex_row(payload: dict) -> dict | None:
         # measurements, not one derived from the other.
         "cache_read_tokens": cached_tokens,
         "cache_write_tokens": _num(usage.get("cache_write_input_tokens")) if usage else None,
+        # Codex reports no cache-TTL split at all — `harness_capability` has
+        # said `cache_ttl_split: 0` for this harness since v1. NULL, not 0:
+        # "this harness cannot report it" and "it reported nothing cached"
+        # are different facts and turn_norm keeps them apart everywhere else.
+        "cache_write_1h_tokens": None,
+        "cache_write_5m_tokens": None,
         "output_tokens": _num(usage.get("output_tokens")) if usage else None,
         "reasoning_tokens": _num(usage.get("reasoning_output_tokens")) if usage else None,
         "context_window": _num(info.get("model_context_window")) if info else None,
@@ -166,21 +172,46 @@ def _normalize_claude_row(payload: dict) -> dict | None:
     groups stay `NULL`: Claude transcripts do not carry them, matching
     `data/harness_capabilities.json`'s existing claims for this harness.
 
-    Real data carries more than these four fields (`cache_creation`'s
-    1h/5m TTL split, `server_tool_use`, `service_tier`, `inference_geo`,
-    `iterations`, `speed`) — none of it extracted here. The raw payload holds
-    it verbatim regardless, so it can be picked up in a normalization
-    recompute later without a re-harvest.
+    `usage.cache_creation` splits the cache write by TTL —
+    `ephemeral_1h_input_tokens` and `ephemeral_5m_input_tokens` — and the two
+    sum to `cache_creation_input_tokens` exactly, verified across 20,587 real
+    turns with no rounding. Both are extracted as of NORM_VERSION 2, and this
+    is exactly the recompute-without-re-harvest case the module docstring
+    promises: the fields were in the raw payload from the first harvest, just
+    unread. `cache_write_tokens` stays the total rather than being replaced,
+    because it is what Codex reports and what existing callers read.
+    Extracted independently rather than deriving one from the other and the
+    total — if a future release ever adds a third TTL bucket, two independent
+    reads degrade into an under-report that the sum check catches, while a
+    subtraction would silently attribute the new bucket to an existing one.
+    `cache_creation` absent (older transcripts, before the field existed)
+    leaves both NULL, distinct from a reported zero.
+
+    Real data carries more still (`server_tool_use`, `service_tier`,
+    `inference_geo`, `iterations`, `speed`) — none of it extracted here. The
+    raw payload holds it verbatim regardless, so it can be picked up in a
+    later recompute the same way these two were.
     """
     if payload.get("type") != "assistant":
         return None
     message = payload.get("message") if isinstance(payload.get("message"), dict) else {}
     usage = message.get("usage") if isinstance(message.get("usage"), dict) else None
+    cache_creation = (
+        usage.get("cache_creation")
+        if usage and isinstance(usage.get("cache_creation"), dict)
+        else None
+    )
 
     return {
         "fresh_input_tokens": _num(usage.get("input_tokens")) if usage else None,
         "cache_read_tokens": _num(usage.get("cache_read_input_tokens")) if usage else None,
         "cache_write_tokens": _num(usage.get("cache_creation_input_tokens")) if usage else None,
+        "cache_write_1h_tokens": (
+            _num(cache_creation.get("ephemeral_1h_input_tokens")) if cache_creation else None
+        ),
+        "cache_write_5m_tokens": (
+            _num(cache_creation.get("ephemeral_5m_input_tokens")) if cache_creation else None
+        ),
         "output_tokens": _num(usage.get("output_tokens")) if usage else None,
         "reasoning_tokens": None,
         "context_window": None,
@@ -265,11 +296,12 @@ def normalize_all(conn: sqlite3.Connection) -> dict:
                 conn.execute(
                     "INSERT INTO turn_norm"
                     " (turn_raw_id, ts, model, is_subagent, fresh_input_tokens, cache_read_tokens,"
-                    "  cache_write_tokens, output_tokens, reasoning_tokens, context_window,"
+                    "  cache_write_tokens, cache_write_1h_tokens, cache_write_5m_tokens,"
+                    "  output_tokens, reasoning_tokens, context_window,"
                     "  capacity_primary_used_pct, capacity_primary_window_minutes, capacity_primary_resets_at,"
                     "  capacity_secondary_used_pct, capacity_secondary_window_minutes, capacity_secondary_resets_at,"
                     "  norm_version)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     " ON CONFLICT(turn_raw_id) DO UPDATE SET"
                     "   ts = excluded.ts,"
                     "   model = excluded.model,"
@@ -277,6 +309,8 @@ def normalize_all(conn: sqlite3.Connection) -> dict:
                     "   fresh_input_tokens = excluded.fresh_input_tokens,"
                     "   cache_read_tokens = excluded.cache_read_tokens,"
                     "   cache_write_tokens = excluded.cache_write_tokens,"
+                    "   cache_write_1h_tokens = excluded.cache_write_1h_tokens,"
+                    "   cache_write_5m_tokens = excluded.cache_write_5m_tokens,"
                     "   output_tokens = excluded.output_tokens,"
                     "   reasoning_tokens = excluded.reasoning_tokens,"
                     "   context_window = excluded.context_window,"
@@ -295,6 +329,8 @@ def normalize_all(conn: sqlite3.Connection) -> dict:
                         fields["fresh_input_tokens"],
                         fields["cache_read_tokens"],
                         fields["cache_write_tokens"],
+                        fields["cache_write_1h_tokens"],
+                        fields["cache_write_5m_tokens"],
                         fields["output_tokens"],
                         fields["reasoning_tokens"],
                         fields["context_window"],
