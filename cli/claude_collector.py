@@ -489,6 +489,14 @@ def _harvest_lines(
             # streamed-output finding. The first line of a group wins for
             # every field except the one that grows.
             #
+            # `source_path` moves with `source_line_no` because the two are
+            # only meaningful as a pair. A group cannot span files in
+            # practice — one requestId is one API call, written to one
+            # transcript — but main and subagent files do share a
+            # `session_row_id`, so a conflict across two files is
+            # structurally reachable, and resolving it to file A's path with
+            # file B's line number would be a silently wrong pointer.
+            #
             # `ts` and `turn_seq` are deliberately absent from the SET list:
             # they keep the first line's values, which is when the turn
             # started. That is stable under re-harvest, and it stops a turn
@@ -512,6 +520,7 @@ def _harvest_lines(
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (session_row_id, natural_turn_id) DO UPDATE SET"
                 "   payload           = excluded.payload,"
+                "   source_path       = excluded.source_path,"
                 "   source_line_no    = excluded.source_line_no,"
                 "   collector_version = excluded.collector_version"
                 " WHERE COALESCE(json_extract(excluded.payload, '$.message.usage.output_tokens'), -1)"
@@ -537,6 +546,36 @@ def _harvest_lines(
             # only happen for a group split across two batches.
             if cur.rowcount:
                 turns_written += 1
+                # A changed payload must invalidate its normalized row, and
+                # this belongs here rather than in the rescan path because
+                # the corruption it prevents needs no rescan to happen.
+                #
+                # `normalize_all` selects stale rows by `norm_version` alone.
+                # Nothing else marks a `turn_norm` row stale, because until
+                # this upsert existed a stored payload could never change.
+                # So: `flow cost active` harvests and then normalizes. Run it
+                # while a response is still streaming and the partial group is
+                # stored at output 4 AND stamped with the current version. The
+                # next harvest corrects `turn_raw` to 487 — the split-batch
+                # case the tests pin — and `turn_norm` keeps 4 forever. That
+                # is the same loss this collector version exists to fix,
+                # reappearing in the layer every read surface actually queries,
+                # with both tables self-consistent and nothing reporting it.
+                #
+                # `norm_version = -1` rather than DELETE: `turn_norm` is
+                # disposable, but a delete would cascade into anything that
+                # ever gains `REFERENCES turn_norm(...) ON DELETE CASCADE` —
+                # the same hazard that made `normalize_all` prefer
+                # `DO UPDATE` over `INSERT OR REPLACE`. -1 is below every real
+                # version, so the ordinary staleness query selects it.
+                #
+                # A no-op for the common case: a freshly inserted turn has no
+                # `turn_norm` counterpart yet, so this updates nothing.
+                conn.execute(
+                    "UPDATE turn_norm SET norm_version = -1 WHERE turn_raw_id ="
+                    " (SELECT id FROM turn_raw WHERE session_row_id = ? AND natural_turn_id = ?)",
+                    (session_row_id, natural_turn_id),
+                )
             last_good_line_no = line_no
     except _HardStop as stop:
         return turns_written, activity_written, skipped, last_good_line_no, stop.reason, stop.line_no
