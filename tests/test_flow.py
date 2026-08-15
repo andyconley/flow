@@ -1895,6 +1895,12 @@ class FlowCliTests(unittest.TestCase):
         before = conn.execute("SELECT source_path, last_offset FROM harvest").fetchall()
         conn.close()
 
+        conn = sqlite3.connect(store)
+        schema_before = conn.execute("PRAGMA user_version").fetchone()[0]
+        conn.execute("PRAGMA user_version = 4")  # simulate a store one migration behind
+        conn.commit()
+        conn.close()
+
         result = self.run_flow("harvest", "claude", "--rescan", "--dry-run")
         self.assert_ok(result)
         self.assertIn("would rewind 1 files", result.stdout)
@@ -1906,7 +1912,21 @@ class FlowCliTests(unittest.TestCase):
             before,
             "a dry run must not move any watermark",
         )
+        # A schema migration is a write. `ensure_store` runs before every
+        # other command here on purpose; a rehearsal must return before it.
+        self.assertEqual(
+            conn.execute("PRAGMA user_version").fetchone()[0],
+            4,
+            "a dry run must not apply pending migrations",
+        )
         conn.close()
+        self.assertGreater(schema_before, 4, "guard: the store was ahead of v4 to begin with")
+
+    def test_dry_run_on_an_absent_store_says_so(self) -> None:
+        self.use_fake_home()
+        result = self.run_flow("harvest", "claude", "--rescan", "--dry-run")
+        self.assert_ok(result)
+        self.assertIn("no usage store", result.stdout)
 
     def test_narrowing_flags_without_rescan_are_refused(self) -> None:
         """Silently ignoring them would run a plain incremental harvest while
@@ -3856,6 +3876,190 @@ class HarvestBackfillTests(unittest.TestCase):
         self.assertEqual(
             self.conn.execute("SELECT source_path, last_offset, last_line_no FROM harvest").fetchall(),
             before,
+        )
+
+    def test_a_rescan_marks_the_normalized_layer_stale(self) -> None:
+        """The corrections must reach a read surface, not just the raw layer.
+
+        `normalize_all` selects rows whose `norm_version` is older than the
+        current one, and nothing marked a `turn_norm` row stale when its
+        `turn_raw` payload changed underneath it — until the upsert existed, a
+        payload never could. So the NORM_VERSION bump only picks up corrected
+        payloads if it runs AFTER the rescan, and the likely order is the
+        opposite: `flow cost active` normalizes, and hooks run it constantly.
+
+        Caught on the real corpus, where raw held 31.90M output tokens against
+        28.13M normalized — the whole 12% recovery stranded one layer down,
+        with both tables individually self-consistent and nothing reporting it.
+        """
+        import normalize
+
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                *[_claude_assistant("sess-1", "req-1", output_tokens=o) for o in (4, 4, 487)],
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        # Rewind raw to the partial count AND normalize it, so the stale row
+        # is stamped with the current version — the order that hides the bug.
+        partial = json.dumps(_claude_assistant("sess-1", "req-1", output_tokens=4))
+        self.conn.execute("UPDATE turn_raw SET payload = ? WHERE natural_turn_id = 'req-1'", (partial,))
+        normalize.normalize_all(self.conn)
+        self.assertEqual(
+            self.conn.execute("SELECT output_tokens FROM turn_norm").fetchone()[0],
+            4,
+            "precondition: the normalized layer holds the partial count",
+        )
+
+        self.harvest._reset_claude_watermarks(self.conn)
+        self.claude_collector.harvest_all(self.conn, self.dir)
+        result = normalize.normalize_all(self.conn)
+
+        self.assertEqual(result["normalized"], 1, "the corrected row must be reprocessed")
+        self.assertEqual(
+            self.conn.execute("SELECT output_tokens FROM turn_norm").fetchone()[0],
+            487,
+            "a rescan whose corrections never reach turn_norm changes no visible number",
+        )
+
+    def test_an_incremental_correction_reaches_the_normalized_layer(self) -> None:
+        """The same loss, with no rescan involved at all.
+
+        `flow cost active` harvests and then normalizes. Run it while a
+        response is still streaming and the partial group is stored at output
+        4 AND stamped with the current norm_version. The next harvest corrects
+        `turn_raw` to 487 — and without the collector invalidating the
+        normalized row, `turn_norm` keeps 4 permanently.
+
+        This is the raw-layer test's missing counterpart: the raw layer was
+        already proven to converge, and every read surface queries the other
+        one.
+        """
+        import normalize
+
+        group = [
+            _claude_assistant("sess-1", "req-1", output_tokens=o) for o in (4, 4, 487)
+        ]
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), *group[:2]))
+        self.claude_collector.harvest_file(self.conn, path)
+        normalize.normalize_all(self.conn)
+        self.assertEqual(
+            self.conn.execute("SELECT output_tokens FROM turn_norm").fetchone()[0], 4
+        )
+
+        with path.open("a") as fh:
+            fh.write(_jsonl(group[2]))
+        self.claude_collector.harvest_file(self.conn, path)
+        normalize.normalize_all(self.conn)
+
+        self.assertEqual(
+            self.conn.execute("SELECT output_tokens FROM turn_norm").fetchone()[0],
+            487,
+            "a correction that never reaches turn_norm changes no visible number",
+        )
+
+    def test_rescanning_one_file_of_a_multi_file_session_replays_the_whole_session(self) -> None:
+        """Why the filter is widened to whole sessions before anything writes.
+
+        A session's derived title state is per session; the watermark is per
+        file. Reset them over different sets and a partial replay re-accepts
+        the replayed file's title against a cleared `title_ai_ts`, while the
+        file carrying the newer title is never replayed to win it back — so
+        the title is wrong permanently, not just until the next harvest.
+        """
+        # One session across two files. `b-main` carries the older ai-title;
+        # `a-cont` carries the newer one, which is the accepted title.
+        b_main = self.write_session(
+            "b-main.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-07-01T00:00:00Z"},
+                _claude_ai_title("sess-1", "old title"),
+                _claude_assistant("sess-1", "req-b"),
+            ),
+        )
+        a_cont = self.write_session(
+            "a-cont.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-1", "timestamp": "2026-08-10T00:00:00Z"},
+                _claude_ai_title("sess-1", "new title"),
+                _claude_assistant("sess-1", "req-a"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, b_main)
+        self.claude_collector.harvest_file(self.conn, a_cont)
+        self.assertEqual(
+            self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+            "new title",
+        )
+
+        # Filter names only one of the session's two files.
+        paths, session_ids = self.harvest._claude_rescan_closure(self.conn, session="b-main")
+        self.assertEqual(
+            len(paths), 2, "the closure must expand to every file of the touched session"
+        )
+        self.assertEqual(len(session_ids), 1)
+
+        self.harvest._reset_claude_watermarks(self.conn, session="b-main")
+        self.claude_collector.harvest_all(self.conn, self.dir)
+
+        self.assertEqual(
+            self.conn.execute("SELECT title FROM session WHERE session_id = 'sess-1'").fetchone()[0],
+            "new title",
+            "a partial replay must not strand the session on the older title",
+        )
+
+    def test_the_dry_run_reports_the_widened_scope(self) -> None:
+        """A rehearsal whose numbers understate the real blast radius is
+        worse than no rehearsal."""
+        for name, ts in (("b-main.jsonl", "2026-07-01"), ("a-cont.jsonl", "2026-08-10")):
+            self.claude_collector.harvest_file(
+                self.conn,
+                self.write_session(
+                    name,
+                    _jsonl(
+                        {"type": "user", "sessionId": "sess-1", "timestamp": f"{ts}T00:00:00Z"},
+                        _claude_assistant("sess-1", f"req-{name[0]}"),
+                    ),
+                ),
+            )
+
+        scope = self.harvest._claude_rescan_scope(self.conn, session="b-main")
+        self.assertEqual(scope, {"files": 2, "turns": 2})
+
+    def test_a_filtered_rescan_leaves_other_sessions_normalized_rows_alone(self) -> None:
+        """Invalidating the normalized layer follows the same scope as the
+        watermark reset — a session not being replayed must not be left with
+        a stale row and no pass coming to recompute it."""
+        import normalize
+
+        in_scope = self.write_session(
+            "in-scope.jsonl",
+            _jsonl(_claude_user("sess-in"), _claude_assistant("sess-in", "req-in")),
+        )
+        out_of_scope = self.write_session(
+            "out-of-scope.jsonl",
+            _jsonl(_claude_user("sess-out"), _claude_assistant("sess-out", "req-out")),
+        )
+        self.claude_collector.harvest_file(self.conn, in_scope)
+        self.claude_collector.harvest_file(self.conn, out_of_scope)
+        normalize.normalize_all(self.conn)
+
+        self.harvest._reset_claude_watermarks(self.conn, session="in-scope")
+
+        versions = {
+            row[0]: row[1]
+            for row in self.conn.execute(
+                "SELECT tr.natural_turn_id, tn.norm_version FROM turn_norm tn"
+                " JOIN turn_raw tr ON tr.id = tn.turn_raw_id"
+            )
+        }
+        self.assertEqual(versions["req-in"], -1, "replayed rows are marked stale")
+        self.assertEqual(
+            versions["req-out"],
+            normalize.NORM_VERSION,
+            "a row outside the rescan's scope stays current",
         )
 
     def test_a_rescan_corrects_a_partial_output_count_end_to_end(self) -> None:
