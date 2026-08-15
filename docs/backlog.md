@@ -4,7 +4,7 @@
 
 This backlog tracks the work still needed before `flow` can be adopted confidently in two scenarios:
 
-1. as a **personal workflow framework** installed at user level and used across every Claude session
+1. as a **personal workflow framework** installed at user level and used across every supported runtime session
 2. as a **project-adoption framework** brought into existing repos with prior local conventions
 
 The adoption bar is higher for existing repos because they already have:
@@ -16,7 +16,7 @@ The adoption bar is higher for existing repos because they already have:
 
 ## Recently Completed
 
-- **User-level install support** (`flow setup user`, `flow sync <target> --user`) — the framework can now be installed at `~/.claude/` so it is active in every Claude session regardless of cwd. `flow doctor` reports user-level and project-level state in distinct sections.
+- **User-level install support** (`flow setup user`, `flow sync <target> --user`) — the framework can now be installed into Claude and Codex user-level surfaces so it is active in every supported runtime session regardless of cwd. `flow doctor` reports user-level and project-level state in distinct sections.
 - **Scaffold customization for personal use** — light commands (boot, scout, resume, status) drop role casting; heavier commands restructure into core + conditional roles; flow-plan generalized beyond UI/frontend bias; flow-scout gets explicit size criteria and a hard checkpoint; flow-implement language sharpened to be domain-agnostic.
 - **`code-reviewer` → `quality-reviewer` rename** — agent broadened to handle any deliverable (code, docs, analyses, runbooks, configurations).
 - **Stacked overlay semantics in command contracts** — boot, status, resume, and archive describe how to traverse ancestor `.flow/` overlays. (Note: the CLI itself doesn't yet enforce stacked-overlay traversal — see item below.)
@@ -25,7 +25,7 @@ The adoption bar is higher for existing repos because they already have:
 - **Solutioning workflow** (v0.4.0) — new `/flow-solution` command (optional pre-plan step for option exploration), new `solution-architect` agent, three new standards (`solutioning-criteria.md`, `solutioning-decisions.md`, `solutioning-risks.md`), and a `spike-template.md` (Form A / Form B / Investigation variants).
 - **Engagement-discipline hardening** (v0.4.1) — `<HARD-GATE>` blocks + three-phase structure (Engagement → Shaping → Capture) applied to `flow-solution`, `flow-plan`, `flow-implement` (Phase 1), `flow-review`, and the `solution-architect` agent. Adopts the pattern from the superpowers `brainstorming` skill without taking a dependency. Fixes the observed failure mode where agents jumped straight to structured output without clarifying problem framing first.
 - **flow-help.md drift class eliminated** (v0.4.3) — `scripts/regenerate-flow-help.py` derives the three flow-help tables (slash commands, CLI commands, agents) from `flow.toml`. New `summary` fields on commands/agents and `[[help.cli_commands]]` array carry the short labels. Drift-detection test catches forgotten regeneration. Resolves P6.
-- **Portable bootstrap installer** (v0.4.4) — `install.sh` at the repo root, curl-able from `raw.githubusercontent.com`. Single-command install for consumers: queries the configured remote for the latest semver tag, shallow-clones it, runs `install-flow.sh --release`, cleans up. Removes the clone-first adoption barrier. Resolves P5.
+- **Portable bootstrap installer** (v0.4.4) — `install.sh` at the repo root, curl-able from `raw.githubusercontent.com`. Single-command install for most users: queries the configured remote for the latest semver tag, shallow-clones it, runs `install-flow.sh --release`, cleans up. Removes the clone-first adoption barrier. Resolves P5.
 - **User-level overlay at `~/.flow/user/`** (v0.6.0) — personal overrides and additions that survive framework updates. Commands and agents merge at sync time via `merge_user_overlay`; standards and templates follow a runtime resolution convention (project > user > framework, documented in FRAMEWORK.md). `flow doctor` reports overlay state. Resolves P2.
 - **Blacklist-based release roster** (v0.6.1) — `_populate_release_dir` and `install-flow.sh` now copy every non-dotfile top-level entry except an explicit exclude list (`tests/`, `install-flow.sh`, `install.sh`). New top-level files added in future versions are picked up automatically by older clients doing the swap. Resolves P8 by eliminating the need for a "two-phase update."
 
@@ -151,16 +151,16 @@ Why it matters:
 
 ### 7. Runtime-specific agent strategy for non-Claude targets
 
-Status: partial
+Status: completed for Codex, open for future runtimes
 
 Current:
 
 - Claude gets generated agents
-- Codex currently gets skills only
+- Codex gets generated native agents
 
 Need:
 
-- decide whether other runtimes should:
+- decide whether future runtimes should:
   - receive generated agents
   - receive adapted role prompts
   - stay command-skill-only

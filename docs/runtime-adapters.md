@@ -30,9 +30,9 @@ Mode-specific differences:
 
 ## Current Targets
 
-## Claude
+### Claude
 
-Claude is currently the richer runtime target.
+Claude is a native skill, agent, hook, and settings target.
 
 `flow sync claude` generates:
 
@@ -102,14 +102,16 @@ Managed behavior:
 
 This is why the Claude settings file is tracked as `sync_mode = "merge"` in the managed manifest.
 
-## Codex
+### Codex
 
-Codex is currently a native skill and agent target.
+Codex is a native skill, agent, and hook target.
 
 `flow sync codex` generates:
 
 - `.agents/skills/<flow-command>/SKILL.md`
 - `.codex/agents/*.toml`
+- `.codex/hooks/*.sh`
+- `.codex/hooks.json`
 - `.codex/flow.managed.toml`
 
 Generated Codex skills include the required `name` and `description` YAML

@@ -1,6 +1,11 @@
 # Agent Model Routing Research
 
-Status: research note for `codex/codex-agent-model-policy`
+Status: historical research note for the shipped Codex agent model-policy work
+
+Implementation note: the core recommendation has shipped. Flow now uses shared
+`[[agents]]` entries, semantic model tiers, generated Claude agents, generated
+Codex agents, and generated routing tables. Keep this document as the research
+record and failure-mode background, not as the current implementation plan.
 
 ## Problem
 
@@ -22,10 +27,9 @@ This means Flow does not need to wrap Codex through the Agents SDK to get
 role-specific model control. Flow can remain a runtime adapter and generate
 Codex-native agent configuration.
 
-Recommended Codex shape:
+Recommended Codex shape, now implemented in the core adapter:
 
-- Add `[[codex.agents]]` to `flow.toml`, mirroring the existing Claude agent
-  manifest shape.
+- Use shared `[[agents]]` entries in `flow.toml`.
 - Generate `.codex/agents/<agent>.toml` for project-level sync and
   `~/.codex/agents/<agent>.toml` for user-level sync.
 - Preserve the Flow agent body as Codex `developer_instructions`.
@@ -44,7 +48,7 @@ Preferred policy model:
   agent's assignment.
 - Let commands define composition; let agents define model/effort defaults.
 
-Initial default tier mapping proposal:
+Initial default tier mapping proposal, now represented in `flow.toml`:
 
 ```toml
 [codex.model_tiers.judgment]
@@ -60,7 +64,7 @@ model = "gpt-5.6-luna"
 model_reasoning_effort = "low"
 ```
 
-Initial role mapping proposal:
+Initial role mapping proposal, now represented in shared `[[agents]]` entries:
 
 - `judgment`: `architect`, `solution-architect`, `security-reviewer`,
   `quality-reviewer`

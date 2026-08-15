@@ -28,11 +28,17 @@ flow/
     usage_store.py     SQLite store for harvested harness usage
   data/
     harness_capabilities.json
+    model_context_windows.json
+    token_weights.json
   docs/
+    agent-model-routing-research.md
     architecture.md
+    backlog.md
     cli-reference.md
     file-structure.md
     runtime-adapters.md
+    specs/
+      2026-08-15-flow-cost-capture-design.md
   hooks/
     flow-session-start.sh
     flow-managed-write-reminder.sh
@@ -131,6 +137,14 @@ Use this for:
 - file-structure contract
 - CLI usage details
 - runtime adapter behavior
+
+### `data/`
+
+Small checked-in data files used by CLI read surfaces.
+
+- `harness_capabilities.json` — declares which token fields each harness can report
+- `model_context_windows.json` — fallback context-window map used when transcripts do not report the window directly
+- `token_weights.json` — weighting multipliers for cost-efficiency views
 
 ### `hooks/`
 

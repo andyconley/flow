@@ -8,6 +8,8 @@ Portable workflow framework for AI-assisted development.
 
 Flow helps you move work through definition, solutioning, planning, implementation, review, and archive. It also tracks session size and token usage so it can warn when a session is getting heavy and should be compacted or cleared.
 
+Flow keeps its data local. Usage records, session-derived metadata, project overlays, and generated runtime files stay on your machine unless you choose to commit, push, or share them yourself.
+
 Use it when you want to:
 
 - turn an early idea into approved requirements
@@ -257,7 +259,7 @@ Use these to inspect install state, generated runtime surfaces, drift, and comma
 
 ### Usage Store Maintenance
 
-Most usage capture happens through Flow commands and hooks. Use these commands when you need to backfill, refresh historical data, or make summary views current before reading them.
+Most usage capture happens through Flow commands and hooks. Use these commands when you need to backfill, refresh historical data, or make summary views current before reading them. The design is explained in [flow cost capture design](docs/specs/2026-08-15-flow-cost-capture-design.md).
 
 Normal path:
 
@@ -281,7 +283,7 @@ Manual maintenance:
 
 ### Usage Analysis
 
-Use these to read cost, context growth, active sessions, and token trends.
+Use these to read cost, context growth, active sessions, and token trends. For the capture model, normalization rules, and hook behavior, see [flow cost capture design](docs/specs/2026-08-15-flow-cost-capture-design.md).
 
 - `flow cost summary`
   - show token totals by harness/model

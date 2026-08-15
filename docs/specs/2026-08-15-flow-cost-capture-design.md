@@ -1,15 +1,16 @@
 # `flow cost` capture fidelity — design
 
 **Date:** 2026-08-15
-**Repo:** `andyconley/flow`, branch `feat/cost-capture-fidelity` off `main` at `1b8408e`
-**Status:** design approved, pending implementation plan
+**Repo:** `andyconley/flow`
+**Status:** implemented in `v0.10.0`; retained as the design record for the cost-capture work
 
 ## Why
 
-`flow cost` answers "which sessions need attention right now" well. It cannot answer
-"is my session hygiene actually working," and three of its inputs are lossy or
-inferred in ways the read surfaces do not disclose. A one-week adoption review had
-to be done in hand-written SQL against `turn_norm` because no trend surface exists.
+Before this work, `flow cost` answered "which sessions need attention right now"
+well. It could not answer "is my session hygiene actually working," and three of
+its inputs were lossy or inferred in ways the read surfaces did not disclose. A
+one-week adoption review had to be done in hand-written SQL against `turn_norm`
+because no trend surface existed.
 
 Measured against the Anthropic console for `2026-05-21 → 2026-08-14`, same account:
 
@@ -73,6 +74,8 @@ Staged. This spec covers items 1-5. Item 6 is recorded for shape only.
 | 5 | Context-window resolution at read time | `cost.py`, `data/` | No |
 | 6 | Multi-host capture | deferred | — |
 
+Items 1-5 have shipped. Item 6 remains out of scope; `flow cost` measures local transcripts on this machine.
+
 ## 1. Output upsert
 
 `claude_collector.py` currently issues `INSERT OR IGNORE INTO turn_raw (...)`.
@@ -133,7 +136,7 @@ the write component, and writes are a quarter of the bill.
 - Schema `_V5`: add `cache_write_1h_tokens`, `cache_write_5m_tokens` to `turn_norm`,
   both nullable INTEGER.
 - `cache_write_tokens` stays as the total. It is not redundant — it is what Codex
-  reports, and it is what existing callers read. No consumer changes.
+  reports, and it is what existing callers read. No caller changes.
 - Codex leaves both new columns NULL; update `data/harness_capabilities.json` to
   declare the split unsupported for that harness.
 - `NORM_VERSION` goes 1 → 2, which makes every existing row stale and triggers the
@@ -161,7 +164,7 @@ One row per bucket:
 **Weighted tokens** collapse the input classes by billing multiplier: uncached 1.0,
 cache read 0.1, 5m write 1.25, 1h write 2.0. These live in
 `data/token_weights.json` so a pricing change is a data edit, not a code change.
-Until item 2 lands there is no 1h/5m split to weight, so `trend` depends on item 2.
+The shipped `trend` command depends on the 1h/5m cache-write split from item 2.
 
 **Context cuts** are the compaction signal: a turn whose context is below 60% of the
 previous turn in the same session, from a base above 100K. This is a heuristic for
@@ -235,6 +238,6 @@ is exactly why the partial-output bug survived. Add:
 - Changing `carry` or the 25%/45% bands. Personalized thresholds are a plausible
   follow-up but need a trend baseline to exist first, which is item 3.
 - Model-routing advice. The largest single cost lever observed was model mix, and
-  nothing in `flow cost` addresses it — worth a separate design, not this one.
+  `flow cost` does not yet turn that into routing advice. That belongs in a separate design.
 - Dollar figures. Weighted tokens are the anchor here; converting to currency needs
   plan and rate data that the local store has no access to.

@@ -42,14 +42,14 @@ Use this when bootstrapping a repo for the first time.
 
 ### `flow setup user`
 
-Install flow at the **user level** so it is active in every Claude session regardless of cwd.
+Install flow at the **user level** so it is active in every supported runtime session regardless of cwd.
 
 Behavior:
 
 - runs `flow sync claude --user` and `flow sync codex --user` in sequence
 - generates `~/.claude/skills/flow-*/`, `~/.claude/agents/*.md`, `~/.claude/hooks/flow-*.sh`
 - merges flow hook entries into `~/.claude/settings.json` (preserves unmanaged settings)
-- writes `~/.claude/flow.managed.toml` and `~/.codex/flow.managed.toml` for drift tracking
+- writes `~/.claude/flow.managed.toml`, `~/.codex/hooks.json`, and `~/.codex/flow.managed.toml` for hook registration and drift tracking
 
 Use this once per machine, then again whenever the framework scaffold changes and you want the user-level surface to follow.
 
@@ -181,6 +181,8 @@ Current outputs:
 
 - `.agents/skills/...`
 - `.codex/agents/...`
+- `.codex/hooks/...`
+- `.codex/hooks.json`
 - `.codex/flow.managed.toml`
 
 ### `flow sync codex --check`
@@ -421,7 +423,7 @@ cd ~/personal/flow
 ./install-flow.sh                  # develop mode (default)
 # or: ./install-flow.sh --release  # release mode — clone is disposable after install
 flow setup machine
-flow setup user        # installs flow at user level — active in every Claude session
+flow setup user        # installs flow at user level — active in every supported runtime session
 ```
 
 ### Release-mode framework roll-forward
@@ -604,10 +606,10 @@ Fix:
 
 flow ships two install scripts at the repo root:
 
-- `install.sh` — portable curl-able bootstrap, primary consumer path
+- `install.sh` — portable curl-able bootstrap, primary path for most users
 - `install-flow.sh` — direct installer used by the bootstrap (and by maintainers running from a clone)
 
-### `install.sh` (portable bootstrap, consumer path)
+### `install.sh` (portable bootstrap)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash
@@ -622,10 +624,10 @@ This script (added in v0.4.4):
 
 Use this when:
 
-- a first-time install where the consumer doesn't want to keep a clone
+- a first-time install where the user doesn't want to keep a clone
 - you want the latest released version without thinking about it
 
-Requires `git` on the consumer's `PATH`. Public hosting of the curl URL requires the flow repo to be publicly readable; against a private repo, run `bash install.sh` from a local clone instead (the script's logic works either way once it can reach the remote).
+Requires `git` on the user's `PATH`. Public hosting of the curl URL requires the flow repo to be publicly readable; against a private repo, run `bash install.sh` from a local clone instead (the script's logic works either way once it can reach the remote).
 
 ### `./install-flow.sh [--develop|--release]`
 
