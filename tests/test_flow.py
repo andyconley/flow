@@ -2188,6 +2188,30 @@ class FlowCliTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertIn("no active sessions", result.stdout)
 
+    def test_cost_active_recovers_initial_schema_without_ledger(self) -> None:
+        """A replayed v1 migration must not fail on `schema_migration` already existing."""
+        home = self.use_fake_home()
+        store = self._store_path(home)
+        store.parent.mkdir(parents=True, exist_ok=True)
+
+        import sqlite3
+
+        usage_store = self._load_store_module()
+        conn = sqlite3.connect(store)
+        try:
+            conn.executescript(usage_store._V1)
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = self.run_flow("cost", "active")
+        self.assert_ok(result)
+        self.assertIn("no active sessions", result.stdout)
+
+        status = usage_store.store_status(store)
+        self.assertEqual(status["state"], usage_store.STATE_EMPTY)
+        self.assertEqual(status["user_version"], usage_store.SCHEMA_VERSION)
+
     def test_cost_summary_with_no_data_is_a_clean_empty_result(self) -> None:
         self.use_fake_home()
         table = self.run_flow("cost", "summary", "--all")

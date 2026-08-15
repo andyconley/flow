@@ -59,20 +59,20 @@ def default_capabilities_path(source_dir: Path) -> Path:
 # --------------------------------------------------------------------------
 
 _V1 = """
-CREATE TABLE schema_migration (
+CREATE TABLE IF NOT EXISTS schema_migration (
   version     INTEGER PRIMARY KEY,
   applied_at  TEXT NOT NULL,
   description TEXT NOT NULL
 );
 
-CREATE TABLE harness_capability (
+CREATE TABLE IF NOT EXISTS harness_capability (
   harness   TEXT NOT NULL,
   field     TEXT NOT NULL,
   supported INTEGER NOT NULL CHECK (supported IN (0, 1)),
   PRIMARY KEY (harness, field)
 );
 
-CREATE TABLE harvest (
+CREATE TABLE IF NOT EXISTS harvest (
   harness           TEXT NOT NULL,
   source_path       TEXT NOT NULL,
   host_id           TEXT NOT NULL DEFAULT '',
@@ -86,7 +86,7 @@ CREATE TABLE harvest (
   PRIMARY KEY (harness, source_path, host_id)
 );
 
-CREATE TABLE session (
+CREATE TABLE IF NOT EXISTS session (
   id                INTEGER PRIMARY KEY,
   harness           TEXT NOT NULL CHECK (harness IN ('claude', 'codex')),
   session_id        TEXT NOT NULL,
@@ -97,7 +97,7 @@ CREATE TABLE session (
   UNIQUE (harness, session_id)
 );
 
-CREATE TABLE turn_raw (
+CREATE TABLE IF NOT EXISTS turn_raw (
   id                INTEGER PRIMARY KEY,
   session_row_id    INTEGER NOT NULL REFERENCES session(id),
   natural_turn_id   TEXT,
@@ -112,7 +112,7 @@ CREATE TABLE turn_raw (
   UNIQUE (session_row_id, natural_turn_id)
 );
 
-CREATE TABLE turn_norm (
+CREATE TABLE IF NOT EXISTS turn_norm (
   turn_raw_id                     INTEGER PRIMARY KEY
                                   REFERENCES turn_raw(id) ON DELETE CASCADE,
   ts                              TEXT NOT NULL,
@@ -130,9 +130,9 @@ CREATE TABLE turn_norm (
   norm_version                    INTEGER NOT NULL
 );
 
-CREATE INDEX idx_turn_raw_session_ts ON turn_raw(session_row_id, ts);
-CREATE INDEX idx_norm_ts             ON turn_norm(ts);
-CREATE INDEX idx_norm_model_ts       ON turn_norm(model, ts);
+CREATE INDEX IF NOT EXISTS idx_turn_raw_session_ts ON turn_raw(session_row_id, ts);
+CREATE INDEX IF NOT EXISTS idx_norm_ts             ON turn_norm(ts);
+CREATE INDEX IF NOT EXISTS idx_norm_model_ts       ON turn_norm(model, ts);
 """
 
 _V2 = """
@@ -287,6 +287,18 @@ def _user_version(conn: sqlite3.Connection) -> int:
     return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
+def _ledger_version(conn: sqlite3.Connection) -> int:
+    """Highest migration ledger entry present, or 0 when no ledger exists yet."""
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migration'"
+    ).fetchone()
+    if exists is None:
+        return 0
+    return int(
+        conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migration").fetchone()[0]
+    )
+
+
 def pending_migrations(current: int) -> list[tuple[int, str, str]]:
     return [m for m in MIGRATIONS if m[0] > current]
 
@@ -304,12 +316,10 @@ def ensure_store(
     below suggesting so: `executescript` implicitly commits any open
     transaction before running, so the ALTER/CREATE statements land outside
     it. A crash in the narrow window between the DDL and the ledger commit
-    leaves the columns present with the old `user_version`, and the next
-    `ensure_store` fails on "duplicate column name" rather than resuming.
-    Known, accepted (flagged in chunk 7's review): present since v2, the
-    window is milliseconds on a local SQLite file, and the recovery is a
-    manual `PRAGMA user_version` bump — not worth reworking migrations to
-    per-statement `execute` calls for a personal tool.
+    leaves the columns present with the old `user_version`. Recovery below
+    trusts committed ledger rows when they are ahead of `user_version`, and
+    v1 is safe to replay so a store with the initial tables but no ledger row
+    can resume instead of failing on "table already exists."
     """
     created = not path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -318,11 +328,16 @@ def ensure_store(
     conn = _connect(path)
     try:
         current = _user_version(conn)
+        ledger_current = _ledger_version(conn)
+        if ledger_current > current:
+            with conn:
+                conn.execute(f"PRAGMA user_version = {ledger_current}")
+            current = ledger_current
         for version, description, sql in pending_migrations(current):
             with conn:  # ledger row + pragma commit together; DDL precedes (see docstring)
                 conn.executescript(sql)
                 conn.execute(
-                    "INSERT INTO schema_migration (version, applied_at, description)"
+                    "INSERT OR IGNORE INTO schema_migration (version, applied_at, description)"
                     " VALUES (?, ?, ?)",
                     (version, _now(), description),
                 )
