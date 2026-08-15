@@ -23,7 +23,56 @@ existing behavior:
   the natural key needed the line number appended (`turn_id:source_line_no`)
   because one `turn_id` legitimately spans several real model calls,
   `requestId` alone is already the right granularity here — one real API
-  call has one clean identity.
+  call has one clean identity. Confirmed the strong way: zero `requestId`
+  groups span more than one `message.id` across 13,286 groups checked, so
+  one `requestId` is exactly one `message.id` is exactly one API call.
+- **Those repeated `usage` blocks are not actually identical, and the first
+  version of this collector lost output because of it.** Every input field
+  is byte-identical on every line of a group. `output_tokens` is not — it
+  grows as the response streams, reaching its final value only on the line
+  carrying `stop_reason`. A real group: `[4, 4, 4, 4, 4, 487]`. The original
+  `INSERT OR IGNORE` kept the first line, so that turn was stored as 4
+  output tokens instead of 487.
+  The rule this implies is asymmetric — **inputs from any line, output from
+  the maximum** — and both halves of it were measured against the Anthropic
+  console for the same account and period before being believed:
+
+  | strategy | cache_read vs console | output vs console |
+  |---|---|---|
+  | first (what shipped) | 49% | 67% |
+  | last | 49% | 76% |
+  | max | 49% | 76% |
+  | sum | 88% | 151% |
+
+  `sum` overshoots output by half because summing a group triple-counts one
+  request's inputs; it is the intuitive fix and it is wrong. `max` is
+  preferred over `last` — the two differ by 2 tokens across the whole corpus,
+  but `max` is order-independent, which is what makes replaying a file
+  incapable of corrupting a row and therefore what makes `--rescan` safe to
+  run repeatedly. The residual 49% on cache_read is not a defect of this
+  collector: it is traffic that never touched this machine (Claude Code on
+  the Web, other hosts), which `harvest.host_id` exists to address and
+  nothing yet populates.
+- **`system` records with `subtype: "compact_boundary"` are the only explicit
+  record of context management**, and they were dropped entirely by the
+  non-assistant fallthrough until collector v3. All 29 in this machine's
+  corpus carry `timestamp`, `sessionId`, and `cwd`, so they attach to a
+  session by the ordinary path. `compactMetadata` carries `trigger`
+  (`manual` | `auto`), `preTokens`, `postTokens`, `cumulativeDroppedTokens`,
+  and `durationMs`. `trigger` is the field that matters and the reason the
+  payload is stored verbatim rather than tallied: `manual` is deliberate
+  hygiene and `auto` is hitting the ceiling, opposite signals about a
+  session's health that a single count would destroy. They land in
+  `agent_activity_raw`, not `turn_raw` — a compaction burns tokens but
+  reports none of its own, and `turn_raw` is what every token sum reads.
+  All 29 sit in main transcripts, none in `subagents/` files, none with
+  `isSidechain: true`; compaction is a main-thread event. That matters
+  because `agent_activity_raw`'s `UNIQUE (session_row_id, source_line_no)`
+  was designed for Codex, where one session is exactly one file — for Claude
+  a session's main file and its subagent files each number lines from 1 under
+  one `session_row_id`, so a compact event in a subagent file could silently
+  collide with one in the main file. Measured at zero occurrences and left
+  documented rather than fixed, since the constraint is shared with Codex.
 - **`isSidechain` does flag subagent turns — `token-report`'s original
   assumption was right.** A first pass concluded otherwise (zero
   `isSidechain: true` across a scan of every file this collector's own
@@ -131,7 +180,7 @@ from pathlib import Path
 from jsonl_watermark import WatermarkAnomaly, line_byte_length, line_hash, read_new_lines
 from session_lookup import lookup_session_for_path
 
-COLLECTOR_VERSION = 2
+COLLECTOR_VERSION = 3
 HARNESS = "claude"
 
 
@@ -205,13 +254,15 @@ def _harvest_lines(
     path: Path,
     raw_lines: list[bytes],
     starting_line_no: int,
-) -> tuple[int, int, int, str | None, int | None]:
+) -> tuple[int, int, int, int, str | None, int | None]:
     """Process one batch of already-read raw lines.
 
-    Returns `(turns_written, skipped, last_good_line_no, hard_stop_reason,
-    hard_stop_line_no)`. No `activity_written` — Claude has nothing analogous
-    to Codex's `sub_agent_activity` telemetry, so there is no `agent_activity_raw`
-    counterpart to populate here.
+    Returns `(turns_written, activity_written, skipped, last_good_line_no,
+    hard_stop_reason, hard_stop_line_no)`. `activity_written` counts
+    `compact_boundary` records — Claude's own context-management telemetry,
+    which carries no token usage of its own and so lands in
+    `agent_activity_raw` beside Codex's `sub_agent_activity` rather than in
+    `turn_raw`.
 
     Session identity resolves once, up front, via `lookup_session_for_path` —
     not lazily on first need inside the loop. This is the same fix
@@ -223,12 +274,16 @@ def _harvest_lines(
     `natural_turn_id = requestId`, and `turn_raw`'s own
     `UNIQUE (session_row_id, natural_turn_id)` constraint is exactly the
     dedup rule — several assistant lines share one `requestId`, the first
-    insert lands, every later one for the same call is an `INSERT OR IGNORE`
-    no-op. This is much simpler than Codex's open-turn state machine, since
-    one `requestId` here is already the right row identity with no
-    correlation across separate record types required; a pre-check against an
-    in-memory set of already-seen ids would only duplicate protection the
-    constraint already gives for free.
+    insert lands, every later one for the same call resolves through the
+    upsert's conflict clause. This is much simpler than Codex's open-turn
+    state machine, since one `requestId` here is already the right row
+    identity with no correlation across separate record types required; a
+    pre-check against an in-memory set of already-seen ids would only
+    duplicate protection the constraint already gives for free.
+
+    What the conflict clause does with the later lines is the part that took
+    a measurement to get right — see the module docstring's streamed-output
+    finding. The rule is: inputs from any line, output from the maximum.
     """
     session_row_id: int | None = lookup_session_for_path(conn, HARNESS, path)
     last_seen_ts: str | None = _current_last_seen_ts(conn, session_row_id) if session_row_id is not None else None
@@ -240,6 +295,7 @@ def _harvest_lines(
     cwd_known = False
 
     turns_written = 0
+    activity_written = 0
     skipped = 0
     last_good_line_no = starting_line_no - 1
 
@@ -344,6 +400,46 @@ def _harvest_lines(
                 last_good_line_no = line_no
                 continue
 
+            if rtype == "system" and record.get("subtype") == "compact_boundary":
+                # Keyed on `subtype`, not on `type == "system"` alone — other
+                # system records exist and carry no compaction data.
+                #
+                # This is the one context-management event Claude records
+                # explicitly, and it was being dropped at the fallthrough
+                # below. `compactMetadata.trigger` is the field that matters:
+                # `manual` is a deliberate /compact, `auto` is hitting the
+                # ceiling. They are opposite signals about a session's health
+                # and must never be summed into one count, which is why the
+                # verbatim payload is stored rather than a single tally.
+                #
+                # agent_activity_raw rather than turn_raw: a compaction burns
+                # tokens but reports none of its own, and turn_raw rows are
+                # what every token sum reads. A row here cannot pollute a
+                # total by construction — which is the same reason Codex's
+                # `sub_agent_activity` lands in this table.
+                ts = record.get("timestamp")
+                if ts is None:
+                    raise _HardStop(line_no, "compact_boundary record is missing timestamp")
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO agent_activity_raw"
+                    " (session_row_id, ts, kind, agent_thread_id, agent_path, payload,"
+                    "  source_path, source_line_no, collector_version)"
+                    " VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?)",
+                    (
+                        session_row_id,
+                        ts,
+                        "compact_boundary",
+                        text,
+                        str(path),
+                        line_no,
+                        COLLECTOR_VERSION,
+                    ),
+                )
+                if cur.rowcount:
+                    activity_written += 1
+                last_good_line_no = line_no
+                continue
+
             if rtype != "assistant":
                 # Every other record type (user, system, agent-name,
                 # attachment, ...) carries no usage data. Not counted as
@@ -389,11 +485,37 @@ def _harvest_lines(
             # scan first suggested.
             is_subagent_value = 1 if record.get("isSidechain") is True else 0
 
+            # Upsert, not INSERT OR IGNORE — see the module docstring's
+            # streamed-output finding. The first line of a group wins for
+            # every field except the one that grows.
+            #
+            # `ts` and `turn_seq` are deliberately absent from the SET list:
+            # they keep the first line's values, which is when the turn
+            # started. That is stable under re-harvest, and it stops a turn
+            # migrating across a day boundary in a time-bucketed read surface
+            # because the response happened to finish after midnight.
+            #
+            # COALESCE(..., -1) rather than a bare comparison: NULL loses every
+            # comparison in SQL, so without it a stored row with no usage could
+            # never be beaten by a row with a real count. -1 is below every
+            # legal token count, so any real number wins over absent, and two
+            # absent-usage rows do not update each other.
+            #
+            # The comparison runs in SQL rather than Python because its right
+            # operand is the *stored* payload, which this function does not
+            # hold — reading it back first would be a second query per line
+            # across the whole corpus.
             cur = conn.execute(
-                "INSERT OR IGNORE INTO turn_raw"
+                "INSERT INTO turn_raw"
                 " (session_row_id, natural_turn_id, turn_seq, is_subagent, ts, model,"
                 "  payload, source_path, source_line_no, collector_version)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT (session_row_id, natural_turn_id) DO UPDATE SET"
+                "   payload           = excluded.payload,"
+                "   source_line_no    = excluded.source_line_no,"
+                "   collector_version = excluded.collector_version"
+                " WHERE COALESCE(json_extract(excluded.payload, '$.message.usage.output_tokens'), -1)"
+                "     > COALESCE(json_extract(turn_raw.payload, '$.message.usage.output_tokens'), -1)",
                 (
                     session_row_id,
                     natural_turn_id,
@@ -407,26 +529,29 @@ def _harvest_lines(
                     COLLECTOR_VERSION,
                 ),
             )
-            # rowcount, not an unconditional increment — INSERT OR IGNORE
-            # silently no-ops on the duplicate-requestId case above, and
-            # counting the attempt instead of the outcome would hide the
-            # same class of miscount chunk 3's review caught for Codex.
+            # rowcount counts inserts AND corrections, which is the honest
+            # number for "rows this batch changed" but is no longer the same
+            # as "new turns discovered" — on a --rescan the two diverge
+            # sharply. The CLI wording says "turns" for both; that is
+            # accurate for a normal incremental run, where a correction can
+            # only happen for a group split across two batches.
             if cur.rowcount:
                 turns_written += 1
             last_good_line_no = line_no
     except _HardStop as stop:
-        return turns_written, skipped, last_good_line_no, stop.reason, stop.line_no
+        return turns_written, activity_written, skipped, last_good_line_no, stop.reason, stop.line_no
 
-    return turns_written, skipped, last_good_line_no, None, None
+    return turns_written, activity_written, skipped, last_good_line_no, None, None
 
 
 def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dict:
     """Incrementally harvest one file. Returns a summary dict.
 
-    `{"turns": n, "skipped": n, "hard_stop": None | {"line": n, "reason": str}}`.
-    Mirrors `codex_collector.harvest_file`'s contract exactly — see there for
-    the reasoning on returning a hard stop rather than raising it, and on the
-    watermark-preservation logic for a batch that commits nothing.
+    `{"turns": n, "activity": n, "skipped": n, "hard_stop": None | {"line": n,
+    "reason": str}}`. Mirrors `codex_collector.harvest_file`'s contract exactly
+    — see there for the reasoning on returning a hard stop rather than raising
+    it, and on the watermark-preservation logic for a batch that commits
+    nothing.
     """
     row = conn.execute(
         "SELECT last_offset, last_line_no, last_line_hash FROM harvest"
@@ -437,10 +562,10 @@ def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dic
 
     raw_lines, new_offset, current_size = read_new_lines(path, last_offset)
     if not raw_lines:
-        return {"turns": 0, "skipped": 0, "hard_stop": None}
+        return {"turns": 0, "activity": 0, "skipped": 0, "hard_stop": None}
 
     with conn:
-        turns, skipped, last_good_line_no, reason, bad_line_no = _harvest_lines(
+        turns, activity, skipped, last_good_line_no, reason, bad_line_no = _harvest_lines(
             conn, path, raw_lines, last_line_no + 1
         )
 
@@ -486,7 +611,7 @@ def harvest_file(conn: sqlite3.Connection, path: Path, host_id: str = "") -> dic
         )
 
     hard_stop = {"line": bad_line_no, "reason": reason} if reason is not None else None
-    return {"turns": turns, "skipped": skipped, "hard_stop": hard_stop}
+    return {"turns": turns, "activity": activity, "skipped": skipped, "hard_stop": hard_stop}
 
 
 def harvest_all(conn: sqlite3.Connection, sessions_root: Path, host_id: str = "") -> dict:
@@ -498,6 +623,7 @@ def harvest_all(conn: sqlite3.Connection, sessions_root: Path, host_id: str = ""
     """
     files = sorted(sessions_root.glob("**/*.jsonl")) if sessions_root.is_dir() else []
     total_turns = 0
+    total_activity = 0
     total_skipped = 0
     failures: list[dict] = []
 
@@ -508,6 +634,7 @@ def harvest_all(conn: sqlite3.Connection, sessions_root: Path, host_id: str = ""
             failures.append({"path": str(path), "line": None, "reason": str(exc)})
             continue
         total_turns += result["turns"]
+        total_activity += result["activity"]
         total_skipped += result["skipped"]
         if result["hard_stop"] is not None:
             failures.append({"path": str(path), **result["hard_stop"]})
@@ -515,6 +642,7 @@ def harvest_all(conn: sqlite3.Connection, sessions_root: Path, host_id: str = ""
     return {
         "files": len(files),
         "turns": total_turns,
+        "activity": total_activity,
         "skipped": total_skipped,
         "failures": failures,
     }
