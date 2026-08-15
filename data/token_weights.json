@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "Billing multipliers used to collapse the input token classes into one",
+    "comparable number, `weighted tokens`. Relative to uncached input at 1.0.",
+    "",
+    "These live in data rather than in code so a pricing change is an edit",
+    "here, not a release. `flow cost trend` reads them at run time.",
+    "",
+    "They are Anthropic's cache multipliers and are applied to Claude rows",
+    "only. Codex reports no cache-write tokens at all (zero across 16,260 rows",
+    "on the corpus this was built against) and its `cached_input_tokens` is a",
+    "SUBSET of `input_tokens` where Claude's cache buckets are disjoint and",
+    "additive — the same arithmetic would mean something different per",
+    "harness, so the weighted columns are blank for Codex rather than wrong.",
+    "",
+    "cache_write_unsplit is the fallback for a row harvested before Claude's",
+    "`usage.cache_creation` TTL breakdown existed, where only the write total",
+    "is known. It is deliberately the 5m rate — the cheaper of the two — so an",
+    "unknown split under-weights rather than over-weights. Zero such rows exist",
+    "on this corpus after the schema v5 backfill; it is here so a restored old",
+    "store degrades honestly instead of silently counting every legacy write at",
+    "the 1h price.",
+    "",
+    "Verified against Anthropic's published cache pricing 2026-08-15."
+  ],
+  "weights": {
+    "uncached_input": 1.0,
+    "cache_read": 0.1,
+    "cache_write_5m": 1.25,
+    "cache_write_1h": 2.0,
+    "cache_write_unsplit": 1.25
+  }
+}
