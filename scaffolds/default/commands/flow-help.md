@@ -1,10 +1,10 @@
 # flow-help
 
-Show the flow framework overview — phase machine, command catalog, agent roster, and architecture summary.
+Show the flow framework overview: phase machine, command catalog, agent roster, and architecture summary.
 
 ## Overview
 
-This command is the framework's discoverable entry point. It exists so a session can answer "what does flow do?" and "which command/agent fits this task?" without re-reading every command's full contract.
+This command is the framework's discoverable entry point. Use it to answer "what does flow do?" and "which command or agent fits this task?" without re-reading every command contract.
 
 ## When to Use
 
@@ -13,14 +13,14 @@ Use this command when:
 - you want to remember which command does what
 - you're new to flow and want orientation
 - you want to look up an agent role without re-reading the framework docs
-- you want to point a collaborator at the framework's shape
+- you want to show a collaborator how the framework is shaped
 
-**When NOT to use:** to learn the deep workflow inside a specific command — those phases live in each command's own contract. `flow-help` is the orientation surface, not the manual.
+**When NOT to use:** to learn the full workflow inside a specific command. Those phases live in each command's own contract. `flow-help` is the orientation surface.
 
 ## Primary inputs
 
 - the framework's own identity (this file + FRAMEWORK.md)
-- no project state required — `flow-help` is intentionally project-agnostic
+- no project state required; `flow-help` is intentionally project-agnostic
 
 ## Primary outputs
 
@@ -43,7 +43,7 @@ Use this command when:
 ```md
 ## flow Framework
 
-Personal AI workflow framework — defines HOW Claude operates with you, not WHAT you work on. Active in every Claude session via the user-level install.
+Personal AI workflow framework. It defines HOW Claude operates with you, not WHAT you work on. Active in every Claude session through the user-level install.
 
 ## Phase machine
 
@@ -53,7 +53,7 @@ boot ──┬─→ scout (XS/S, narrow) ────────────�
                                                      ↑
                                                      └── resume (recover from interruption)
 
-`define` turns early feature or architectural-capability ideas into approved requirements. `[solution]` is an optional pre-plan step after definition — use it when multiple approaches exist, architectural decisions are needed, or the work needs chunking before `plan` can shape it. Bug-shaped work can go directly to `/flow-plan`.
+`define` turns early feature or architectural-capability ideas into approved requirements. `[solution]` is an optional pre-plan step after definition; use it when multiple approaches exist, architectural decisions are needed, or the work needs chunking before `plan` can shape it. Bug-shaped work can go directly to `/flow-plan`.
 
 ## Command surfaces
 
@@ -61,7 +61,7 @@ Flow has **two distinct command surfaces** — invoke each differently:
 
 ### Slash commands (invoked inside Claude as `/flow-XXX`)
 
-These are *workflow* commands — the things you do during work:
+These are *workflow* commands: the things you do during work.
 
 <!-- generated:slash-commands-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Command | Use when |
@@ -84,7 +84,7 @@ The table above is derived from `[[claude.commands]]` `summary` fields in `flow.
 
 ### CLI commands (run from the shell, or ask Claude to run them)
 
-These are *lifecycle* commands — the things you do to install, sync, or check flow itself. Invoke from a terminal as `flow XXX YYY` — or just ask Claude (it has Bash). They are NOT slash commands and won't work as `/flow XXX`.
+These are *lifecycle* commands: the things you do to install, sync, or check flow itself. Invoke them from a terminal as `flow XXX YYY`, or ask Claude to run them. They are NOT slash commands and won't work as `/flow XXX`.
 
 <!-- generated:cli-commands-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Command | Use when |
@@ -106,7 +106,7 @@ The table above is derived from `[[help.cli_commands]]` in `flow.toml`.
 
 ## Agents
 
-13 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (define, solution, plan, implement, review, archive) invoke a **core trio + conditional specialists** pattern — core agents always engage, conditional agents activate when their concern applies.
+13 working agents. Light commands (boot, scout, resume, status, help) skip them. Heavier commands (define, solution, plan, implement, review, archive) use a **core trio + conditional specialists** pattern: core agents always engage, and conditional agents join when their concern applies.
 
 <!-- generated:agents-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Agent | Role |
@@ -130,21 +130,21 @@ The table above is derived from shared `[[agents]]` `summary` fields in `flow.to
 
 ### How agents get invoked
 
-- **By commands**: `flow-define`, `flow-solution`, `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents per their composition. See each command's "Composition" section for which agents are core vs conditional.
-- **Directly**: ask Claude to engage a specific role for a focused task — e.g., "@architect look at this boundary decision" or "use the quality-reviewer to check this PR".
+- **By commands**: `flow-define`, `flow-solution`, `flow-plan`, `flow-implement`, `flow-review`, and `flow-archive` invoke agents from their composition. See each command's "Composition" section for which agents are core vs conditional.
+- **Directly**: ask Claude to engage a specific role for a focused task, for example "@architect look at this boundary decision" or "use the quality-reviewer to check this PR".
 
 ### Agent vs distribution-tool distinction
 
-These agents are **personal working agents** — they define how Claude engages with you when playing a specific role. They are NOT distribution outputs designed for others to install. Project-specific review tools (e.g., path-nexus's review agents in `tools/agents/`) live in their project's own distribution surface, not in this framework.
+These agents are **personal working agents**. They define how Claude works with you when it plays a specific role. They are NOT distribution outputs designed for others to install. Project-specific review tools, such as path-nexus's review agents in `tools/agents/`, live in their project's own distribution surface.
 
 ## Architecture
 
-- **Framework** (commands, agents) lives universally at `~/.claude/` (user-level install — active in every session)
-- **Project overlays** at `<repo>/.flow/` are opt-in per repo (only where you want project-specific role assignments, memory, or run artifacts). `/flow-boot` recommends `flow setup project` by default in any repo without an overlay; to silence that recommendation for a specific repo permanently, ask Claude to opt out (Claude will `touch .flow-skip` at the repo root) — or run that shell command yourself if you prefer.
+- **Framework** (commands, agents) lives universally at `~/.claude/` through the user-level install, active in every session
+- **Project overlays** at `<repo>/.flow/` are opt-in per repo. Use them only where you want project-specific role assignments, memory, or run artifacts. `/flow-boot` recommends `flow setup project` by default in any repo without an overlay. To silence that recommendation for a repo permanently, ask Claude to opt out; Claude will `touch .flow-skip` at the repo root. You can also run that shell command yourself.
 - **Durable facts and decisions** → auto-memory at `~/.claude/projects/<project-id>/memory/`
 - **Transient work state** → `.flow/memory/STATE.md` (only when an overlay exists)
 - **Run artifacts** → `.flow/runs/<work-id>/` (only when an overlay exists)
-- Overlays stack: in nested projects (e.g., `~/KB/repos/path-nexus/` inside `~/KB/`), more-specific overlays override on conflicts; memory writes go to the most-specific overlay.
+- Overlays stack. In nested projects, such as `~/KB/repos/path-nexus/` inside `~/KB/`, more-specific overlays override on conflicts. Memory writes go to the most-specific overlay.
 
 ## Common entry points
 
