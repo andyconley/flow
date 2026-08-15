@@ -92,7 +92,7 @@ Only enter this phase after the Phase 1 hard checkpoint passes.
    - document structure (sections, audience, level of detail)
    - other contract types as relevant
 5. Define validation expectations.
-6. **Cost posture check (informational only).** Run `flow cost active`. If the tool recommends acting on this session (`/clear` or `/compact`), note that for the lane recommendation; if `flow cost summary --days 7` shows a Codex capacity line, note it verbatim — no interpretation, the engineer reads the number. Nothing here blocks shaping or changes the recommended lane by itself. If `flow` or the usage store is unavailable, skip this step silently.
+6. **Cost posture check (informational only).** Run `flow cost active`. If the tool recommends acting on this session (`/clear` or `/compact`), note that for the lane recommendation. If `flow cost summary --days 7` prints a Codex capacity line, report it **with the `resets at` time it carries** — the percentage alone is not a fact about now, and quoting it without its expiry is what once presented a six-day-old reading as current. If no capacity line appears, say nothing about capacity: the command omits an expired reading on purpose, and "absent" is the answer, not a gap to fill from memory. A line marked as sampled late in its own window should be passed on with that caveat attached. Nothing here blocks shaping or changes the recommended lane by itself. If `flow` or the usage store is unavailable, skip this step silently.
 
 ### Phase 3 — Capture
 

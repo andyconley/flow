@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Sibling modules. The launcher runs cli/flow.py directly, which puts cli/ on
@@ -16,12 +17,15 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
 from cost import (  # noqa: E402
+    BUCKET_DAY,
+    BUCKET_WEEK,
     DEFAULT_ACTIVE_WITHIN_MINUTES,
     DEFAULT_SESSIONS_LIMIT,
     DEFAULT_WINDOW_DAYS,
     cost_active_command,
     cost_sessions_command,
     cost_summary_command,
+    cost_trend_command,
     cost_verdict_command,
     cost_warn_command,
 )
@@ -110,7 +114,13 @@ def main() -> int:
         help="incrementally read a harness's local session transcripts into the usage store",
         description="Read a harness's local session transcripts into ~/.flow/usage.db, resuming from the last-read position per file.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Examples:\n  flow harvest codex\n  flow harvest claude\n",
+        epilog=(
+            "Examples:\n"
+            "  flow harvest codex\n"
+            "  flow harvest claude\n"
+            "  flow harvest claude --rescan --since 2026-08-01 --dry-run\n"
+            "  flow harvest claude --rescan --since 2026-08-01\n"
+        ),
     )
     harvest_sub = harvest.add_subparsers(dest="harvest_target", required=True, title="harvest targets")
     harvest_sub.add_parser(
@@ -124,9 +134,33 @@ def main() -> int:
         description="Incrementally read Claude Code session transcripts, writing session and turn records into the usage store's raw layer.",
     )
     harvest_claude_parser.add_argument(
+        "--rescan",
+        action="store_true",
+        help="rewind already-recorded files' watermarks first and re-read them from the start, so already-harvested sessions pick up corrected output token counts, compaction events, titles, cwd, and title provenance retroactively",
+    )
+    harvest_claude_parser.add_argument(
+        # The original name for this flag, from when title capture was all it
+        # did. Kept working rather than removed: it is in muscle memory and
+        # possibly in scripts, and the behaviour it names is a strict subset
+        # of what --rescan now does. Hidden so help output teaches one name.
         "--backfill",
         action="store_true",
-        help="rewind every already-recorded file's watermark first, so already-harvested sessions pick up session.title, cwd, and title provenance retroactively",
+        help=argparse.SUPPRESS,
+    )
+    harvest_claude_parser.add_argument(
+        "--since",
+        metavar="DATE",
+        help="with --rescan, only rewind files modified on or after DATE (YYYY-MM-DD or a full ISO timestamp)",
+    )
+    harvest_claude_parser.add_argument(
+        "--session",
+        metavar="ID",
+        help="with --rescan, only rewind files whose path contains ID — a session uuid reaches that session's main transcript and its subagent files together",
+    )
+    harvest_claude_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with --rescan, report how many files and stored turns are in scope and exit without writing anything",
     )
 
     sub.add_parser(
@@ -140,7 +174,7 @@ def main() -> int:
         help="read token usage back out of the usage store",
         description="Read `~/.flow/usage.db`'s normalized layer (ensuring the store's schema exists first, like every other command). `summary` and `sessions` never touch turn_raw, turn_norm, or session data; `active` runs the incremental Claude harvest and a normalize pass first so its answer is current.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n  flow cost active\n  flow cost active --within 180\n",
+        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n  flow cost active\n  flow cost active --within 180\n  flow cost trend --days 30 --bucket week\n",
     )
     cost_sub = cost.add_subparsers(dest="cost_target", required=True, title="cost views")
 
@@ -153,6 +187,22 @@ def main() -> int:
         "sessions",
         help="token totals by session, most recently active first",
         description="Token totals grouped by session, within the window, most recently active first.",
+    )
+    cost_trend_parser = cost_sub.add_parser(
+        "trend",
+        help="efficiency per time bucket — is session hygiene actually working",
+        description="One row per time bucket and harness: main-agent turns, distinct sessions, mean context per turn, input:output, weighted tokens per 1,000 output, subagent share, and compaction events split by trigger. Weighted columns are Claude-only; see data/token_weights.json.",
+    )
+    cost_trend_parser.add_argument(
+        "--bucket",
+        choices=(BUCKET_DAY, BUCKET_WEEK),
+        default=BUCKET_DAY,
+        help=f"bucket size (default: {BUCKET_DAY})",
+    )
+    cost_trend_parser.add_argument(
+        "--harness",
+        choices=("claude", "codex"),
+        help="restrict to one harness (default: both, one row per bucket per harness)",
     )
     cost_active_parser = cost_sub.add_parser(
         "active",
@@ -223,7 +273,7 @@ def main() -> int:
         help="hook mode: read hook JSON from stdin and branch on hook_event_name",
     )
 
-    for cost_parser in (cost_summary_parser, cost_sessions_parser):
+    for cost_parser in (cost_summary_parser, cost_sessions_parser, cost_trend_parser):
         window = cost_parser.add_mutually_exclusive_group()
         window.add_argument(
             "--days",
@@ -371,13 +421,44 @@ def main() -> int:
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
     if args.command == "harvest" and args.harvest_target == "claude":
-        return harvest_claude_command(backfill=args.backfill)
+        rescan = args.rescan or args.backfill
+        # The narrowing flags do nothing without a rescan to narrow, so
+        # accepting them alone would silently run a plain incremental harvest
+        # while the caller believed they had scoped something — including
+        # `--dry-run`, which would then write. Refused rather than ignored.
+        if not rescan and (args.since or args.session or args.dry_run):
+            parser.error("--since, --session, and --dry-run require --rescan")
+        if args.since is not None:
+            # Parsed here rather than left to blow up inside the command: an
+            # unparseable date is a usage error, and a raw ValueError
+            # traceback reads as a crash in the tool rather than a typo.
+            try:
+                datetime.fromisoformat(args.since)
+            except ValueError:
+                parser.error(
+                    f"--since: {args.since!r} is not a date — "
+                    f"use YYYY-MM-DD or a full ISO timestamp"
+                )
+        return harvest_claude_command(
+            rescan=rescan,
+            since=args.since,
+            session=args.session,
+            dry_run=args.dry_run,
+        )
     if args.command == "normalize":
         return normalize_command()
     if args.command == "cost" and args.cost_target == "summary":
         return cost_summary_command(days=args.days, show_all=args.all, as_json=args.json)
     if args.command == "cost" and args.cost_target == "sessions":
         return cost_sessions_command(days=args.days, show_all=args.all, as_json=args.json, limit=args.limit)
+    if args.command == "cost" and args.cost_target == "trend":
+        return cost_trend_command(
+            days=args.days,
+            show_all=args.all,
+            bucket=args.bucket,
+            harness=args.harness,
+            as_json=args.json,
+        )
     if args.command == "cost" and args.cost_target == "active":
         return cost_active_command(within=args.within, as_json=args.json)
     if args.command == "cost" and args.cost_target == "verdict":

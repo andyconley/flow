@@ -6,7 +6,199 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-15
+
+The measurement release. `flow cost` could say which sessions need attention
+right now. It could not say whether anything you changed was working, and three
+of its inputs were lossy in ways no surface disclosed.
+
+The largest of those was not a rounding error. A streamed Claude response is
+written as several transcript lines sharing one request id, and only the last
+carries the final `output_tokens`; the collector kept the first. Measured
+against the Anthropic console, that recovered 67% of output — and the intuitive
+fix, summing the group, triple-counts one request's inputs and overshoots by
+51%. The rule that is actually right is asymmetric: inputs from any line,
+output from the maximum.
+
+Two of the defects behind this release were invisible by construction rather
+than merely unnoticed. A corrected raw payload did not mark its normalized row
+stale, so the fix reached the store and stopped one layer short of every view
+that reads it — raw held 31.90M output tokens against 28.13M normalized, both
+tables internally consistent, nothing reporting the gap. And the Codex capacity
+gauge rendered a percentage without the expiry it had stored all along, so a
+six-day-old reading described the present with a straight face. Both are the
+same shape: a number that is locally true and globally misleading, with no
+mechanism that would ever say so.
+
+So the theme is disclosure. `trend` shows whether efficiency is moving.
+Context windows resolve at read time and say which of four sources produced
+each one, with an honest blank where none did. Coverage gaps are labelled
+instead of truncated. Compactions are split by trigger and never summed,
+because a deliberate `/compact` and hitting the ceiling are opposite signals.
+An expired gauge is absent rather than dimmed.
+
+Recovering the capture fixes on transcripts already on disk takes one
+`flow harvest claude --rescan` followed by `flow normalize`. On the corpus this
+was built against that recovered 14.4% of output tokens and 29 compaction
+events. Transcripts already pruned from disk keep their partial counts — 1.0%
+of stored turns, and no re-read can reach them.
+
+### Added
+
+- **`flow cost trend`** — efficiency per time bucket, the view that answers "is
+  my session hygiene actually working." Every other `cost` view reports a
+  level; this reports the shape of the levels over time. One row per bucket
+  *and* harness (`--bucket day|week`, `--harness claude|codex`): main-agent
+  turns, distinct sessions, context per turn, input:output, weighted tokens per
+  1,000 output, subagent share, and compaction events split by trigger with the
+  median context at manual cuts.
+
+  `wt/1k out` is the headline. It collapses the input classes by billing
+  multiplier and divides by output, which is what makes it an efficiency
+  number — raw daily burn conflates working less with working leaner. The
+  multipliers live in `data/token_weights.json`, so a pricing change is a data
+  edit rather than a release.
+
+  Weighted columns are blank for Codex, never zero. The weights are Anthropic
+  cache multipliers, Codex reports no cache writes at all, and its cache-read
+  semantics differ — the same arithmetic would not mean the same thing.
+
+  Coverage is labelled rather than silently truncated: a window reaching before
+  a harness's earliest harvested turn says so, because absent buckets and empty
+  buckets are different facts and hiding the difference turns a coverage gap
+  into a false trend.
+
+  Buckets follow the **local** calendar. Stored timestamps are UTC and every
+  window comparison stays UTC, but a bucket is a label on a human day —
+  bucketing by UTC split an evening across two rows and moved 7% of a week's
+  turns off the day they happened. Weeks are keyed by their Monday's date
+  rather than a week number, since `%W` counts weeks within a calendar year and
+  would split a week spanning New Year into two partial buckets.
+
+- **Context windows resolve at read time**, from `data/model_context_windows.json`
+  and from the transcript. `turn_norm.context_window` is NULL for every Claude
+  turn and deliberately stays that way — that column means "the harness
+  reported this," and filling it with a lookup would destroy the
+  measured-versus-inferred distinction the `~` marker depends on.
+
+  Best source first: the statusline's exact record; then `preTokens` at an
+  **auto** compaction in that same session, which fires at the ceiling and so
+  observes what the session actually held; then the model table, marked `~`;
+  then nothing. The compaction signal is scoped to its own session and never
+  generalised to the model — every model that has auto-compacted also runs in
+  200K sessions constantly, so a model-wide rule would divide all of those
+  percentages by five.
+
+  A model absent from the table now reports `?` and no recommendation instead
+  of assuming 200K. An honest blank beats a confident wrong number in a tool
+  whose purpose is measurement, and it is the signal that the file needs an
+  entry.
+
+- **`flow cost active` shows subagent share** per session. `ctx` and `carry`
+  measure the main thread only, so work moved into subagents leaves both
+  looking better without costing less. Subagent share moved 4.8% → 12.9% over a
+  window in which main-agent context fell 41%; a metric that improves when work
+  is *moved* eventually gets optimised the wrong way, so the two are shown
+  together.
+
+- **`flow harvest claude --rescan`, with `--since`, `--session`, and
+  `--dry-run`.** A plain harvest only reads what is new, so a collector
+  improvement never reaches transcripts already on disk. `--rescan` re-reads
+  them. It supersedes `--backfill`, whose name described only the first thing
+  it ever did; `--backfill` still works and is hidden from help.
+
+  Rescanning the whole corpus re-reads every recorded transcript, so the
+  filters exist to rehearse it on a slice first. A filter resolves to whole
+  sessions rather than to literal file matches — the watermark is per file but
+  the derived title state is per session, and replaying only some of a
+  session's files while resetting all of its state leaves the un-replayed
+  files' titles unrecoverable.
+
+  Follow a rescan with `flow normalize`; the command says so.
+
+- **`turn_norm.cache_write_1h_tokens` / `cache_write_5m_tokens`** (schema v5).
+  Claude's `usage.cache_creation` carries the cache-TTL breakdown, which sums
+  exactly to `cache_creation_input_tokens` across 20,587 real turns. The
+  halves bill 60% apart — 2.0x base input for 1h, 1.25x for 5m — so one
+  collapsed column makes the write component of any cost estimate off by up to
+  that much, and writes are about a quarter of the bill. `cache_write_tokens`
+  stays the total; no consumer changes. Codex leaves both NULL. No re-harvest:
+  the fields were always in the raw payload, just unread.
+
+  One real turn out of 29,592 violates the sum, and it is the harness's own
+  inconsistency rather than an extraction bug: on a fallback turn (two entries
+  in `usage.iterations`, a model switch mid-turn) the top-level
+  `cache_creation_input_tokens` reflects the second iteration while
+  `cache_creation` reflects the first.
+
+- **`compact_boundary` events are captured** into `agent_activity_raw`, beside
+  Codex's `sub_agent_activity`. They are Claude's only explicit record of
+  context management and were dropped entirely. The payload is stored verbatim
+  because `compactMetadata.trigger` separates a deliberate `/compact` from
+  hitting the ceiling — opposite signals about a session's health that a
+  single tally would destroy. Recovered 29 events from the local corpus
+  (18 manual, 11 auto) on the first rescan.
+
 ### Fixed
+
+- **The Codex capacity gauge had no expiry.** `flow cost summary --days 7`
+  reported `10080m window 96.0%` on 2026-08-15 from a reading taken 2026-08-09
+  that expired 97 minutes after the run — still literally true when taken,
+  wholly misleading when shown. The capacity window is 10,080 minutes, exactly
+  the length of the default summary window, so a reading anywhere in range can
+  describe a period with almost no overlap with the present.
+
+  `resets_at` was stored all along and never rendered. The gauge now shows it
+  beside `as of`, and drops each field once its own reset time passes — an
+  expired gauge is absent, not dimmed. Primary and secondary expire
+  independently, since neither name reliably means "the short window." A
+  reading sampled more than halfway through its own window is still shown, with
+  a note.
+
+  `scaffolds/default/commands/flow-plan.md` told the agent to report that line
+  "verbatim — no interpretation." For a field carrying its own expiry, verbatim
+  is the wrong contract, and that instruction is what produced the misleading
+  report. It now requires the expiry alongside, and silence when the line is
+  absent.
+
+- **Claude turns stored a streamed response's *partial* output token count.**
+  A single API response is written as several assistant JSONL lines sharing
+  one `requestId`. Every input field repeats byte-identically; `output_tokens`
+  does not — it grows as the response streams and is final only on the line
+  carrying `stop_reason`. A real group reads [4, 4, 4, 4, 4, 487].
+
+  `INSERT OR IGNORE` kept the first line, so that turn was stored as 4 output
+  tokens. Measured against the Anthropic console for the same account and
+  period, first-wins recovered 67% of output. Replaced with an upsert guarded
+  on the output count: inputs from any line, output from the maximum. Summing
+  the group is the intuitive fix and is wrong — it triple-counts one request's
+  inputs and overshoots output by 51%.
+
+  `max` over `last` (they differ by 2 tokens across the whole corpus) because
+  it is order-independent, so replaying a file cannot corrupt a row. `ts` and
+  `turn_seq` keep the first line's values, so a response that finishes after
+  midnight does not migrate across a day boundary on re-harvest.
+
+  Recovering this on already-harvested transcripts needs one
+  `flow harvest claude --rescan` followed by `flow normalize`. On the corpus
+  this was built against that recovered 14.8% of output tokens. Transcripts
+  already pruned from disk cannot be reached — 298 of 29,437 stored turns
+  (1.0%) keep their partial counts permanently.
+
+- **A corrected turn did not reach the normalized layer.** `normalize_all`
+  selects stale rows by `norm_version` alone, and nothing marked a `turn_norm`
+  row stale when its `turn_raw` payload changed underneath it — until the
+  upsert existed, a payload never could. Since `flow cost active` harvests and
+  then normalizes, a turn stored mid-stream got stamped current and kept its
+  partial count forever, with both tables self-consistent and nothing
+  reporting it. Found on the real corpus, where raw held 31.90M output tokens
+  against 28.13M normalized.
+
+- **`--dry-run` wrote.** It ran `ensure_store` before the dry-run branch, so a
+  rehearsal applied pending schema migrations and re-seeded capabilities while
+  printing "nothing written". It now returns first and opens the store
+  read-only. It was also gated on `~/.claude/projects/` existing, so it
+  reported "no sessions found" with a full store to describe.
 
 - **`docs/cli-reference.md` covers all twelve subcommands.** It documented
   eight and was two releases behind: the entire v0.8.0 usage-tracking surface
@@ -458,7 +650,12 @@ The patch trajectory (0.4.x) was about install/update mechanics — getting the 
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/andyconley/flow/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/andyconley/flow/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/andyconley/flow/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/andyconley/flow/compare/v0.6.2...v0.7.0
+[0.6.2]: https://github.com/andyconley/flow/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/andyconley/flow/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/andyconley/flow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/andyconley/flow/compare/v0.4.5...v0.5.0

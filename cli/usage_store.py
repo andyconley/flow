@@ -30,7 +30,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 STATE_ABSENT = "absent"
 STATE_OK = "ok"
@@ -234,11 +234,42 @@ ALTER TABLE session ADD COLUMN title_ai_ts TEXT;
 ALTER TABLE session ADD COLUMN last_seen_ts TEXT;
 """
 
+_V5 = """
+-- Claude's `usage.cache_creation` carries the cache-TTL breakdown
+-- (`ephemeral_1h_input_tokens`, `ephemeral_5m_input_tokens`) that
+-- `data/harness_capabilities.json` has claimed as supported for this harness
+-- since v1 while nothing extracted it. The two sum exactly to
+-- `cache_creation_input_tokens` — verified across 20,587 real turns, exact
+-- match, no rounding — so this is not new measurement, it is a split of a
+-- number already stored.
+--
+-- It matters because the halves bill 60% apart: a 1h write costs 2.0x base
+-- input, a 5m write 1.25x. Collapsing them into one column makes the write
+-- component of any cost estimate off by up to that much, and writes are about
+-- a quarter of the bill.
+--
+-- `cache_write_tokens` deliberately stays as the total rather than being
+-- superseded. It is what Codex reports (that harness has no TTL split at all,
+-- and `harness_capability` already says so), and it is what every existing
+-- consumer reads. Both new columns are nullable INTEGER precisely so "Codex,
+-- which cannot report this" and "Claude, which reported zero" stay
+-- distinguishable — the same NULL-versus-zero rule the rest of turn_norm keeps.
+--
+-- No re-harvest. The raw payload has always held these fields verbatim, so
+-- bumping NORM_VERSION 1 -> 2 is the whole backfill mechanism; see
+-- `cli/normalize.py`. That same bump also re-reads the payloads corrected by
+-- collector v3's output upsert, so the two changes compose into one pass
+-- rather than needing a mechanism each.
+ALTER TABLE turn_norm ADD COLUMN cache_write_1h_tokens INTEGER;
+ALTER TABLE turn_norm ADD COLUMN cache_write_5m_tokens INTEGER;
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "initial schema: raw + normalized layers, harvest watermark, capabilities", _V1),
     (2, "agent activity log for sub-agent telemetry with no local token data", _V2),
     (3, "secondary capacity window columns on turn_norm", _V3),
     (4, "title provenance and a session-level timestamp high-water mark", _V4),
+    (5, "cache-TTL split columns on turn_norm", _V5),
 ]
 
 

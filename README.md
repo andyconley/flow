@@ -68,11 +68,13 @@ flow sync codex --check
 flow sync codex --user
 flow harvest codex
 flow harvest claude
-flow harvest claude --backfill
+flow harvest claude --rescan
+flow harvest claude --rescan --since 2026-08-01 --dry-run
 flow normalize
 flow cost summary
 flow cost summary --all --json
 flow cost sessions --days 30
+flow cost trend --days 30 --bucket week
 flow cost sessions --all --limit 0
 flow cost active
 flow cost active --within 180
@@ -102,14 +104,16 @@ What they do:
 - `--check` on any sync target reports drift without writing files
 - `flow harvest codex` / `flow harvest claude`
   - incrementally read `~/.codex/sessions/` / `~/.claude/projects/` into `~/.flow/usage.db`'s raw layer (creating the store on first run); safe to run repeatedly or on a schedule
-- `flow harvest claude --backfill`
-  - rewinds every already-recorded Claude file's watermark first, so already-harvested sessions pick up `session.title`, `cwd`, and title provenance retroactively; safe to run repeatedly (already-seen turns are a no-op)
+- `flow harvest claude --rescan`
+  - rewinds already-recorded Claude files' watermarks and re-reads them from the start, so already-harvested sessions pick up corrected output token counts, compaction events, `session.title`, `cwd`, and title provenance retroactively; `--since` / `--session` narrow the scope and `--dry-run` rehearses it; safe to run repeatedly (the output-token rule is highest-wins, so a rescan cannot un-correct a row)
 - `flow normalize`
   - projects every harness's raw turn records into one shared token convention (`turn_norm`); only rows without a current-version normalized counterpart are recomputed
 - `flow cost summary`
   - token totals by harness/model within a window (`--days N`, default 7; `--all` for everything), plus Codex's most recent capacity reading as a separate gauge line
 - `flow cost sessions`
   - token totals by session within a window, most recently active first; capped at the 20 most recent by default (`--limit N` to change, `--limit 0` for unlimited)
+- `flow cost trend`
+  - efficiency per time bucket (`--bucket day|week`, `--harness claude|codex`): main-agent turns, sessions, context per turn, input:output, weighted tokens per 1,000 output, subagent share, and compaction events split by manual vs auto. Weighted columns are Claude-only and their multipliers live in `data/token_weights.json`
 - `flow cost active`
   - per-active-session context percentage, carry above session start, idle, and a `/clear`-or-`/compact` recommendation, worst carry first; runs the incremental Claude harvest and a normalize pass before answering (`--within N` minutes of liveness, default 60)
 - `flow cost verdict`
