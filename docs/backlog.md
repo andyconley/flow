@@ -2,64 +2,76 @@
 
 ## Purpose
 
-This backlog tracks remaining work that would make `flow` easier to adopt,
-maintain, and trust across supported runtime sessions.
+This file tracks open work only. It should help a maintainer choose the next
+flow capability to define, plan, or build.
 
-Keep this file focused on open work. Completed release history belongs in
-`CHANGELOG.md`. Project-specific migration notes belong in that project's own
-overlay or in a dedicated adoption case study, not in the general flow backlog.
+Completed work belongs in `CHANGELOG.md`. Project-specific migration notes
+belong in that project's overlay or in a separate adoption case study.
 
-## Current Priorities
+The active list is ordered. Move an item when its priority changes.
+
+## Active Priorities
 
 ### 1. Existing-Project Adoption Playbook
 
 Status: not started
 
-Need:
+Build a playbook for adopting flow in a repo that already has local workflow
+rules, runtime folders, and project memory.
 
-- document the step-by-step path for adopting flow in a repo that already has
-  local workflow conventions, runtime folders, and project memory
-- cover inventory, source-of-truth classification, `.flow` scaffolding,
-  migration of canonical materials, adapter generation, and validation
-- include when to use a structured chat summary versus a durable migration
-  artifact
+Include:
+
+- inventory of existing project and runtime content
+- source-of-truth classification
+- `.flow` scaffolding
+- migration of canonical materials
+- runtime adapter generation
+- adoption verification
+- guidance on structured chat summaries versus durable migration artifacts
+
+The verification checklist belongs in this playbook. Adoption is done only when
+the repo has evidence that:
+
+- `.flow` contains the source of truth
+- generated runtime files match the expected surfaces
+- unmanaged files are intentionally preserved
+- collaborators know where to edit
+- README, help, and docs describe the adopted runtime model
 
 Why it matters:
 
-- fresh-project setup and existing-project adoption are different jobs
-- without a playbook, every adoption depends on the current agent remembering
-  the right sequence
+- fresh-project setup and existing-project adoption are different workflows
+- agents should not have to reconstruct the adoption sequence from memory
 
 Next step:
 
-- write `docs/adoption-playbook.md` for existing projects, then link it from
-  README and this backlog
+- write `docs/adoption-playbook.md`, then link it from README and this backlog
 
 ### 2. Runtime Surface Inventory and Reconciliation
 
 Status: not started
 
-Need:
+Create a read-only inventory for existing runtime surfaces before flow writes
+generated files beside them.
 
-- inspect existing runtime surfaces before flow generates over or beside them
-- classify files across `.claude/`, `.agents/skills/`, and `.codex/` as:
-  - should become `.flow` source
-  - should stay runtime-local and unmanaged
-  - should be replaced by generated flow output
-  - should be removed after migration
-- detect overlaps between generated flow paths and existing unmanaged files
+Classify files across `.claude/`, `.agents/skills/`, and `.codex/` as:
+
+- move into `.flow` source
+- keep runtime-local and unmanaged
+- replace with generated flow output
+- remove after migration
+
+Also detect overlaps between generated flow paths and existing unmanaged files.
 
 Why it matters:
 
-- generation alone is not enough for repos that already have runtime-specific
-  content
-- a runtime-neutral inventory keeps adoption from being Claude-shaped by
-  accident
+- generation is not enough for repos that already have runtime-specific content
+- a runtime-neutral inventory keeps adoption from being anchored to one runtime
 
 Next step:
 
-- start with a read-only `flow adopt inventory` or equivalent report; defer
-  writes/imports until the classification output is useful
+- define a read-only `flow adopt inventory` command or an equivalent report;
+  defer import/write behavior until the report is useful
 
 ### 3. Content-Aware Project Refresh
 
@@ -67,25 +79,24 @@ Status: partial
 
 Current:
 
-- `flow refresh project` only copies missing scaffold files
+- `flow refresh project` copies only missing scaffold files
 
 Need:
 
-- detect when framework templates changed materially after a project copied
-  them
+- detect framework template changes after a project copied the templates
 - compare project files to newer template versions without overwriting local
   edits
-- surface recommended merges, conflicts, or "leave local" decisions
+- surface recommended merges, conflicts, and "leave local" decisions
 
 Why it matters:
 
-- project overlays will drift from the framework over time
-- missing-file refresh is safe but not enough once copied files have evolved
+- project overlays drift from the framework over time
+- missing-file refresh is safe, but it does not help when copied files change
 
 Next step:
 
-- define the comparison model first: baseline metadata, content hashes,
-  three-way diff, or advisory-only heuristics
+- define the comparison model: baseline metadata, content hashes, three-way
+  diff, or advisory-only heuristics
 
 ### 4. Drift Reporting With Next Actions
 
@@ -98,89 +109,67 @@ Current:
 
 Need:
 
-- explain why drift exists where flow can know it
+- explain known drift causes
 - distinguish source-changed updates, stale managed files, merge-protected
   runtime config, and unmanaged conflicts
 - print the likely next command or manual action
 
 Why it matters:
 
-- existing-project adoption needs operator guidance, not just red/green state
-- clearer drift output reduces the chance that someone edits generated files
-  or deletes runtime-local configuration
+- existing-project adoption needs operator guidance beyond status labels
+- clear drift output reduces edits to generated files and accidental deletion
+  of runtime-local configuration
 
 Next step:
 
 - improve `--check` output before adding new adoption commands; it is already
-  the user's first diagnostic surface
+  the first diagnostic surface
 
 ### 5. Project Override and Exclusion Model
 
 Status: not started
 
-Need:
+Let a project opt out of generated surface area:
 
-- let a project explicitly opt out of generated surface area, such as:
-  - do not generate this command
-  - do not generate this agent
-  - do not register this hook
-  - generate only selected runtime targets
-- make exclusions visible in doctor/check output
+- do not generate this command
+- do not generate this agent
+- do not register this hook
+- generate only selected runtime targets
+
+Make exclusions visible in doctor and check output.
 
 Why it matters:
 
 - existing projects may not want the full framework surface
-- explicit exclusions are safer than deleting generated files and letting drift
-  reports rediscover them forever
+- explicit exclusions are safer than deleting generated files and rediscovering
+  the same drift forever
 
 Next step:
 
 - define the manifest shape and precedence rules before implementation
 
-### 6. Adoption Verification Checklist
-
-Status: not started
-
-Need:
-
-- define how an adopter proves the migration is complete:
-  - `.flow` contains the real source of truth
-  - generated runtime files match expected surfaces
-  - unmanaged files are intentionally preserved
-  - collaborators know where to edit
-  - README/help/docs reflect the adopted runtime model
-- include this checklist in the adoption playbook
-
-Why it matters:
-
-- adoption should end with evidence, not a vague sense that the files look
-  right
-
-Next step:
-
-- draft the checklist as part of `docs/adoption-playbook.md`
-
-### 7. Agent and Standards Review
+### 6. Agent and Standards Review
 
 Status: deferred from initial scaffold review
 
-Need:
+Review the role agents and standards against current flow behavior.
 
-- review each role agent against current flow behavior and personal working
-  preferences
-- review standards for practical usefulness: keep, simplify, merge, or remove
-- pay special attention to `flow-define`, research behavior, review behavior,
-  and cross-runtime wording
+Focus on:
+
+- whether each role prompt still matches how the role should work
+- which standards are useful, too broad, duplicated, or stale
+- `flow-define`, research behavior, review behavior, and cross-runtime wording
 
 Why it matters:
 
-- the command surface has matured faster than the full role/standard library
-- real usage should shape which prompts stay heavy and which can be simpler
+- the command surface has matured faster than the full role and standard
+  library
+- real usage should decide which prompts stay detailed and which should be
+  simpler
 
 Next step:
 
-- review agents and standards in small batches rather than trying to redesign
-  the whole library at once
+- review agents and standards in small batches
 
 ## Deferred / Watch
 
@@ -201,8 +190,7 @@ Keep watching because:
 
 Do not prioritize until:
 
-- a concrete workflow needs the CLI, rather than the command contracts, to own
-  stacked overlay resolution
+- a concrete workflow needs the CLI to own stacked overlay resolution
 
 ### Engagement-Discipline Abstraction
 
