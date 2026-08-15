@@ -1871,6 +1871,82 @@ class FlowCliTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertIn("no Claude Code sessions found", result.stdout)
 
+    def _seed_claude_transcript(self, outputs: tuple[int, ...] = (4, 4, 487)) -> Path:
+        home = self.use_fake_home()
+        sessions_dir = home / ".claude" / "projects" / "-tmp-proj"
+        sessions_dir.mkdir(parents=True)
+        (sessions_dir / "sess-1.jsonl").write_text(
+            _jsonl(
+                _claude_user("sess-1"),
+                *[_claude_assistant("sess-1", "req-1", output_tokens=o) for o in outputs],
+                _claude_compact("sess-1", "manual"),
+            )
+        )
+        return home
+
+    def test_rescan_dry_run_reports_scope_and_writes_nothing(self) -> None:
+        home = self._seed_claude_transcript()
+        self.assert_ok(self.run_flow("harvest", "claude"))
+
+        import sqlite3
+
+        store = self._store_path(home)
+        conn = sqlite3.connect(store)
+        before = conn.execute("SELECT source_path, last_offset FROM harvest").fetchall()
+        conn.close()
+
+        result = self.run_flow("harvest", "claude", "--rescan", "--dry-run")
+        self.assert_ok(result)
+        self.assertIn("would rewind 1 files", result.stdout)
+        self.assertIn("nothing written", result.stdout)
+
+        conn = sqlite3.connect(store)
+        self.assertEqual(
+            conn.execute("SELECT source_path, last_offset FROM harvest").fetchall(),
+            before,
+            "a dry run must not move any watermark",
+        )
+        conn.close()
+
+    def test_narrowing_flags_without_rescan_are_refused(self) -> None:
+        """Silently ignoring them would run a plain incremental harvest while
+        the caller believed they had scoped something — and for `--dry-run`
+        that means a rehearsal that writes."""
+        self.use_fake_home()
+        for flag in (["--dry-run"], ["--since", "2026-08-01"], ["--session", "abc"]):
+            with self.subTest(flag=flag[0]):
+                result = self.run_flow("harvest", "claude", *flag)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("require --rescan", result.stderr)
+
+    def test_backfill_is_a_working_hidden_alias_for_rescan(self) -> None:
+        self._seed_claude_transcript()
+        self.assert_ok(self.run_flow("harvest", "claude"))
+        result = self.run_flow("harvest", "claude", "--backfill")
+        self.assert_ok(result)
+        self.assertNotIn("--backfill", self.run_flow("harvest", "claude", "--help").stdout)
+
+    def test_rescan_reports_compaction_events(self) -> None:
+        home = self._seed_claude_transcript()
+        result = self.run_flow("harvest", "claude")
+        self.assert_ok(result)
+        self.assertIn("1 compaction events", result.stdout)
+
+        import sqlite3
+
+        conn = sqlite3.connect(self._store_path(home))
+        self.assertEqual(
+            conn.execute("SELECT COUNT(*) FROM agent_activity_raw").fetchone()[0], 1
+        )
+        # The streamed group is one turn, stored at its final output count.
+        self.assertEqual(
+            conn.execute(
+                "SELECT json_extract(payload, '$.message.usage.output_tokens') FROM turn_raw"
+            ).fetchall(),
+            [(487,)],
+        )
+        conn.close()
+
     def test_normalize_end_to_end_via_cli(self) -> None:
         home = self.use_fake_home()
         sessions_dir = home / ".codex" / "sessions" / "2026" / "01" / "01"
@@ -2210,6 +2286,44 @@ def _claude_custom_title(session_id: str, title: str) -> dict:
 
 def _claude_ai_title(session_id: str, title: str) -> dict:
     return {"type": "ai-title", "sessionId": session_id, "aiTitle": title}
+
+
+def _claude_compact(
+    session_id: str,
+    trigger: str = "auto",
+    pre: int = 180000,
+    post: int = 25000,
+    cwd: str = "/tmp/proj",
+) -> dict:
+    """A `compact_boundary` record, shaped from real data.
+
+    All 29 on the machine this was written against carry `timestamp`,
+    `sessionId`, and `cwd` at the top level — so these attach to a session by
+    the ordinary path, with no special handling. `type` is `system` and the
+    discriminator is `subtype`; other system records exist and carry no
+    compaction data, which is why the collector keys on the latter.
+
+    `compactMetadata` carries more in real data (`preCompactDiscoveredTools`,
+    `preservedSegment`, `preservedMessages`) — omitted here because nothing
+    reads it, and the raw payload is what preserves it either way.
+    """
+    return {
+        "type": "system",
+        "subtype": "compact_boundary",
+        "content": "Conversation compacted",
+        "level": "info",
+        "isSidechain": False,
+        "sessionId": session_id,
+        "cwd": cwd,
+        "timestamp": "2026-01-01T00:00:02Z",
+        "compactMetadata": {
+            "trigger": trigger,
+            "preTokens": pre,
+            "postTokens": post,
+            "cumulativeDroppedTokens": pre - post,
+            "durationMs": 12345,
+        },
+    }
 
 
 class CodexCollectorTests(unittest.TestCase):
@@ -3104,7 +3218,7 @@ class ClaudeCollectorTests(unittest.TestCase):
         path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1")))
         self.claude_collector.harvest_file(self.conn, path)
         result = self.claude_collector.harvest_file(self.conn, path)
-        self.assertEqual(result, {"turns": 0, "skipped": 0, "hard_stop": None})
+        self.assertEqual(result, {"turns": 0, "activity": 0, "skipped": 0, "hard_stop": None})
         self.assertEqual(len(self.turn_raw_rows()), 1)
 
     def test_incremental_append_processes_only_new_lines(self) -> None:
@@ -3114,6 +3228,246 @@ class ClaudeCollectorTests(unittest.TestCase):
             fh.write(_jsonl(_claude_assistant("sess-1", "req-2")))
         self.claude_collector.harvest_file(self.conn, path)
         self.assertEqual(len(self.turn_raw_rows()), 2)
+
+    # ------------------------------------------------------------------
+    # streamed output: several assistant lines share one requestId, and only
+    # the last carries the final output_tokens
+    # ------------------------------------------------------------------
+
+    def _streamed_group(self, session_id: str = "sess-1", request_id: str = "req-1") -> list[dict]:
+        """A real streamed response's shape: identical inputs, growing output.
+
+        Modelled on `req_011Cbux7QgYTa5qSx5m2Y2f9` in this machine's corpus,
+        whose six lines carry output_tokens [4, 4, 4, 4, 4, 487]. The repo had
+        no fixture with more than one line per requestId, which is precisely
+        why the partial-output defect survived to be found against the console
+        rather than in the suite.
+        """
+        return [
+            _claude_assistant(
+                session_id, request_id, input_tokens=860, cache_read=21424,
+                cache_write=14692, output_tokens=out,
+            )
+            for out in (4, 4, 487)
+        ]
+
+    def test_streamed_group_stores_final_output_and_counts_inputs_once(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), *self._streamed_group())
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+
+        rows = self.turn_raw_rows()
+        self.assertEqual(len(rows), 1, "one requestId is one API call is one row")
+        usage = json.loads(
+            self.conn.execute("SELECT payload FROM turn_raw").fetchone()[0]
+        )["message"]["usage"]
+        self.assertEqual(usage["output_tokens"], 487, "output must be the group's maximum")
+        # The whole reason `sum` is the wrong fix: inputs repeat verbatim on
+        # every line, so summing the group would triple-count them.
+        self.assertEqual(usage["input_tokens"], 860)
+        self.assertEqual(usage["cache_read_input_tokens"], 21424)
+        self.assertEqual(usage["cache_creation_input_tokens"], 14692)
+
+    def test_streamed_group_split_across_two_harvests_still_converges(self) -> None:
+        """The case a `last`-wins rule would get wrong.
+
+        An incremental harvest can land anywhere, including mid-group. Here
+        the batch boundary falls after the two partial lines, so the first
+        pass stores 4 and the second must correct it to 487 — a plain
+        `INSERT OR IGNORE` leaves it at 4 forever.
+        """
+        group = self._streamed_group()
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), *group[:2]))
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self._stored_output("req-1"), 4, "precondition: partial count stored")
+
+        with path.open("a") as fh:
+            fh.write(_jsonl(group[2]))
+        self.claude_collector.harvest_file(self.conn, path)
+
+        self.assertEqual(self._stored_output("req-1"), 487)
+        self.assertEqual(len(self.turn_raw_rows()), 1, "correcting must not add a row")
+
+    def test_replaying_a_file_is_byte_identical(self) -> None:
+        """Idempotence — the property `--rescan` rests on.
+
+        Asserted on the full row rather than on output alone: a rescan
+        rewinds every recorded file, so anything that drifted per replay
+        would compound across runs.
+        """
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), *self._streamed_group())
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        before = self.conn.execute(
+            "SELECT natural_turn_id, turn_seq, ts, model, payload, source_line_no"
+            " FROM turn_raw ORDER BY id"
+        ).fetchall()
+
+        for _ in range(2):
+            self.conn.execute("UPDATE harvest SET last_offset = 0, last_line_no = 0")
+            self.claude_collector.harvest_file(self.conn, path)
+
+        after = self.conn.execute(
+            "SELECT natural_turn_id, turn_seq, ts, model, payload, source_line_no"
+            " FROM turn_raw ORDER BY id"
+        ).fetchall()
+        self.assertEqual(before, after)
+
+    def test_a_lower_output_count_never_overwrites_a_higher_one(self) -> None:
+        """Max-wins, not last-wins, stated directly.
+
+        The corpus cannot tell these apart — the two rules differ by 2 tokens
+        across every turn on this machine — so the property that makes replay
+        safe has to be pinned by construction rather than by measurement.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_assistant("sess-1", "req-1", output_tokens=487),
+                _claude_assistant("sess-1", "req-1", output_tokens=4),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self._stored_output("req-1"), 487)
+
+    def test_a_row_with_no_usage_loses_to_a_row_with_a_real_count(self) -> None:
+        """What COALESCE(..., -1) is for.
+
+        NULL loses every SQL comparison, so without the coalesce a stored row
+        whose payload has no output_tokens could never be corrected — the
+        guard would compare against NULL and refuse every update.
+        """
+        no_usage = _claude_assistant("sess-1", "req-1")
+        del no_usage["message"]["usage"]["output_tokens"]
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                no_usage,
+                _claude_assistant("sess-1", "req-1", output_tokens=42),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(self._stored_output("req-1"), 42)
+
+    def test_ts_and_turn_seq_keep_the_first_lines_values(self) -> None:
+        """A corrected turn must not migrate in time.
+
+        `ts` is what every time-bucketed read surface groups on. If the
+        correction carried the last line's timestamp, a response that started
+        at 23:59 and finished after midnight would move to the next day on
+        re-harvest — the same turn landing in different buckets depending on
+        when it was harvested.
+        """
+        first = _claude_assistant("sess-1", "req-1", output_tokens=4)
+        first["timestamp"] = "2026-01-01T23:59:00Z"
+        last = _claude_assistant("sess-1", "req-1", output_tokens=487)
+        last["timestamp"] = "2026-01-02T00:00:30Z"
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), first, last))
+        self.claude_collector.harvest_file(self.conn, path)
+
+        row = self.conn.execute("SELECT ts, turn_seq, source_line_no FROM turn_raw").fetchone()
+        self.assertEqual(row[0], "2026-01-01T23:59:00Z", "ts keeps the first line's value")
+        self.assertEqual(row[1], 2, "turn_seq keeps the first line's value")
+        self.assertEqual(row[2], 3, "source_line_no advances to the corrected line")
+        self.assertEqual(self._stored_output("req-1"), 487)
+
+    def _stored_output(self, request_id: str) -> int | None:
+        row = self.conn.execute(
+            "SELECT json_extract(payload, '$.message.usage.output_tokens')"
+            " FROM turn_raw WHERE natural_turn_id = ?",
+            (request_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    # ------------------------------------------------------------------
+    # compact_boundary — Claude's own context-management telemetry
+    # ------------------------------------------------------------------
+
+    def test_compact_boundary_records_land_in_agent_activity_raw(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_compact("sess-1", "manual", pre=150000, post=30000),
+                _claude_assistant("sess-1", "req-1"),
+                _claude_compact("sess-1", "auto", pre=190000, post=25000),
+            ),
+        )
+        result = self.claude_collector.harvest_file(self.conn, path)
+
+        self.assertEqual(result["activity"], 2)
+        self.assertEqual(result["turns"], 1, "a compaction is not a turn")
+        rows = self.conn.execute(
+            "SELECT kind, ts, payload FROM agent_activity_raw ORDER BY source_line_no"
+        ).fetchall()
+        self.assertEqual([r[0] for r in rows], ["compact_boundary", "compact_boundary"])
+        # trigger is the field that matters: manual is deliberate hygiene,
+        # auto is hitting the ceiling. Summing them into one count would
+        # destroy the distinction, so the verbatim payload is what's stored.
+        triggers = [json.loads(r[2])["compactMetadata"]["trigger"] for r in rows]
+        self.assertEqual(triggers, ["manual", "auto"])
+        pre_tokens = [json.loads(r[2])["compactMetadata"]["preTokens"] for r in rows]
+        self.assertEqual(pre_tokens, [150000, 190000])
+
+    def test_compact_boundary_does_not_reach_turn_raw(self) -> None:
+        """A compaction burns tokens and reports none, so it must not appear
+        in the table every token sum reads."""
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), _claude_compact("sess-1", "auto"))
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(len(self.turn_raw_rows()), 0)
+
+    def test_other_system_records_are_still_ignored(self) -> None:
+        """The branch keys on `subtype`, not on `type == "system"`."""
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                {"type": "system", "sessionId": "sess-1", "timestamp": "2026-01-01T00:00:02Z"},
+            ),
+        )
+        result = self.claude_collector.harvest_file(self.conn, path)
+        self.assertEqual(result["activity"], 0)
+        self.assertEqual(result["skipped"], 0, "an ordinary system record is not a shape violation")
+
+    def test_replaying_compact_records_does_not_duplicate_them(self) -> None:
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                _claude_compact("sess-1", "manual"),
+                _claude_compact("sess-1", "auto"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.conn.execute("UPDATE harvest SET last_offset = 0, last_line_no = 0")
+        result = self.claude_collector.harvest_file(self.conn, path)
+
+        self.assertEqual(result["activity"], 0, "a replayed compaction is a no-op")
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM agent_activity_raw").fetchone()[0], 2
+        )
+
+    def test_compact_boundary_without_a_timestamp_hard_stops(self) -> None:
+        """`agent_activity_raw.ts` is NOT NULL, and this insert is
+        `INSERT OR IGNORE` — which applies its conflict resolution to every
+        constraint on the statement, not just the uniqueness one it was
+        written for. A NULL timestamp would no-op there, indistinguishable
+        from a legitimate duplicate, and nothing would report the drop. So it
+        is checked before the insert, matching the assistant path.
+        """
+        bad = _claude_compact("sess-1", "manual")
+        del bad["timestamp"]
+        path = self.write_session("a.jsonl", _jsonl(_claude_user("sess-1"), bad))
+        result = self.claude_collector.harvest_file(self.conn, path)
+
+        self.assertIsNotNone(result["hard_stop"])
+        self.assertIn("timestamp", result["hard_stop"]["reason"])
 
     # ------------------------------------------------------------------
     # cross-file isolation via harvest_all
@@ -3345,6 +3699,195 @@ class HarvestBackfillTests(unittest.TestCase):
         self.assertEqual(codex_row, (100, 5), "resetting Claude watermarks must not touch Codex's")
         self.assertEqual(claude_row, (0, 0))
 
+    # ------------------------------------------------------------------
+    # --rescan scoping: --since, --session, --dry-run
+    # ------------------------------------------------------------------
+
+    def _recorded(self, path: str, mtime: float) -> None:
+        self.conn.execute(
+            "INSERT INTO harvest (harness, source_path, host_id, last_size, last_offset,"
+            " last_line_no, last_line_hash, file_mtime, harvested_at, collector_version)"
+            " VALUES ('claude', ?, '', 100, 100, 5, 'h', ?, '2026-01-01T00:00:00Z', 2)",
+            (path, mtime),
+        )
+
+    @staticmethod
+    def _mtime(date: str) -> float:
+        from datetime import datetime as _dt
+
+        return _dt.fromisoformat(date).timestamp()
+
+    def _offsets(self) -> dict:
+        return {
+            row[0]: row[1]
+            for row in self.conn.execute(
+                "SELECT source_path, last_offset FROM harvest WHERE harness = 'claude'"
+            )
+        }
+
+    def test_since_rewinds_only_files_modified_on_or_after_the_date(self) -> None:
+        """`--since` filters on the transcript's mtime, not on when we last
+        harvested it. "Rescan recently active sessions" is a property of the
+        file; filtering on `harvested_at` would select by our own bookkeeping
+        and sweep in long-dead sessions that happened to be picked up late.
+        """
+        self._recorded("/tmp/old.jsonl", self._mtime("2026-07-01"))
+        self._recorded("/tmp/new.jsonl", self._mtime("2026-08-10"))
+        self._recorded("/tmp/boundary.jsonl", self._mtime("2026-08-01"))
+
+        self.harvest._reset_claude_watermarks(self.conn, since="2026-08-01")
+
+        offsets = self._offsets()
+        self.assertEqual(offsets["/tmp/old.jsonl"], 100, "outside the window, untouched")
+        self.assertEqual(offsets["/tmp/new.jsonl"], 0)
+        self.assertEqual(offsets["/tmp/boundary.jsonl"], 0, "on the date is inside the window")
+
+    def test_session_matches_subagent_files_alongside_the_main_transcript(self) -> None:
+        """A session uuid must reach the whole session.
+
+        Claude's subagent files live under `subagents/<parent-uuid>/` and
+        declare the parent's own sessionId, so the uuid appears in every one
+        of that session's paths. Matching `source_path` by substring reaches
+        them together — which is required, because subagent turns have the
+        same partial-output defect and an exact join on `session.source_path`
+        would reach only whichever file was harvested first.
+        """
+        uuid = "51de70eb-0429-4b1f-a8e1-611a54bd7894"
+        self._recorded(f"/tmp/projects/{uuid}.jsonl", self._mtime("2026-08-10"))
+        self._recorded(f"/tmp/projects/subagents/{uuid}/agent-abc.jsonl", self._mtime("2026-08-10"))
+        self._recorded("/tmp/projects/other-session.jsonl", self._mtime("2026-08-10"))
+
+        self.harvest._reset_claude_watermarks(self.conn, session=uuid)
+
+        offsets = self._offsets()
+        self.assertEqual(offsets[f"/tmp/projects/{uuid}.jsonl"], 0)
+        self.assertEqual(offsets[f"/tmp/projects/subagents/{uuid}/agent-abc.jsonl"], 0)
+        self.assertEqual(offsets["/tmp/projects/other-session.jsonl"], 100)
+
+    def test_filters_compose(self) -> None:
+        uuid = "aaaa1111"
+        self._recorded(f"/tmp/{uuid}-old.jsonl", self._mtime("2026-07-01"))
+        self._recorded(f"/tmp/{uuid}-new.jsonl", self._mtime("2026-08-10"))
+        self._recorded("/tmp/other-new.jsonl", self._mtime("2026-08-10"))
+
+        self.harvest._reset_claude_watermarks(self.conn, since="2026-08-01", session=uuid)
+
+        offsets = self._offsets()
+        self.assertEqual(offsets[f"/tmp/{uuid}-new.jsonl"], 0, "both filters match")
+        self.assertEqual(offsets[f"/tmp/{uuid}-old.jsonl"], 100, "wrong date")
+        self.assertEqual(offsets["/tmp/other-new.jsonl"], 100, "wrong session")
+
+    def test_a_filtered_rescan_clears_title_state_only_for_sessions_it_replays(self) -> None:
+        """The bug that narrowing the reset would otherwise reintroduce.
+
+        Clearing `title_ai_ts` for a session whose files are NOT being
+        rewound leaves it with derived state gone and no replay coming to
+        re-derive it — so the next ordinary incremental harvest hands an
+        ai-title an effective timestamp with nothing to compare against and
+        can flip that title backwards. That is exactly what the unfiltered
+        reset was written to prevent.
+        """
+        in_scope = self.write_session(
+            "in-scope.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-in", "timestamp": "2026-01-01T00:00:00Z"},
+                _claude_ai_title("sess-in", "in title"),
+            ),
+        )
+        out_of_scope = self.write_session(
+            "out-of-scope.jsonl",
+            _jsonl(
+                {"type": "user", "sessionId": "sess-out", "timestamp": "2026-01-01T00:00:00Z"},
+                _claude_ai_title("sess-out", "out title"),
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, in_scope)
+        self.claude_collector.harvest_file(self.conn, out_of_scope)
+
+        self.harvest._reset_claude_watermarks(self.conn, session="in-scope")
+
+        state = {
+            row[0]: (row[1], row[2])
+            for row in self.conn.execute("SELECT session_id, last_seen_ts, title_ai_ts FROM session")
+        }
+        self.assertEqual(state["sess-in"], (None, None), "replayed session is reset to a first pass")
+        self.assertNotEqual(
+            state["sess-out"],
+            (None, None),
+            "a session not being replayed must keep the derived state it still needs",
+        )
+
+    def test_dry_run_scope_counts_files_and_stored_turns(self) -> None:
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1"))
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        self.conn.execute(
+            "UPDATE harvest SET file_mtime = ? WHERE harness = 'claude'",
+            (self._mtime("2026-08-10"),),
+        )
+
+        self.assertEqual(
+            self.harvest._claude_rescan_scope(self.conn), {"files": 1, "turns": 1}
+        )
+        self.assertEqual(
+            self.harvest._claude_rescan_scope(self.conn, since="2026-08-01"),
+            {"files": 1, "turns": 1},
+        )
+        self.assertEqual(
+            self.harvest._claude_rescan_scope(self.conn, since="2026-09-01"),
+            {"files": 0, "turns": 0},
+            "a filter matching nothing must report nothing, not everything",
+        )
+
+    def test_dry_run_scope_writes_nothing(self) -> None:
+        """A dry run that writes is worse than no dry run — it looks like a
+        rehearsal and behaves like a commit."""
+        path = self.write_session(
+            "a.jsonl", _jsonl(_claude_user("sess-1"), _claude_assistant("sess-1", "req-1"))
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        before = self.conn.execute(
+            "SELECT source_path, last_offset, last_line_no FROM harvest"
+        ).fetchall()
+
+        self.harvest._claude_rescan_scope(self.conn)
+
+        self.assertEqual(
+            self.conn.execute("SELECT source_path, last_offset, last_line_no FROM harvest").fetchall(),
+            before,
+        )
+
+    def test_a_rescan_corrects_a_partial_output_count_end_to_end(self) -> None:
+        """The whole point of the mechanism, through the real entry points.
+
+        Simulates a file harvested by the pre-v3 collector — the stored row
+        holds the first line's partial `output_tokens` — and asserts one
+        rescan reaches 487 without duplicating the row.
+        """
+        path = self.write_session(
+            "a.jsonl",
+            _jsonl(
+                _claude_user("sess-1"),
+                *[
+                    _claude_assistant("sess-1", "req-1", output_tokens=out)
+                    for out in (4, 4, 487)
+                ],
+            ),
+        )
+        self.claude_collector.harvest_file(self.conn, path)
+        # Rewind the stored payload to what INSERT OR IGNORE would have left.
+        partial = json.dumps(_claude_assistant("sess-1", "req-1", output_tokens=4))
+        self.conn.execute("UPDATE turn_raw SET payload = ? WHERE natural_turn_id = 'req-1'", (partial,))
+
+        self.harvest._reset_claude_watermarks(self.conn)
+        self.claude_collector.harvest_all(self.conn, self.dir)
+
+        rows = self.conn.execute(
+            "SELECT json_extract(payload, '$.message.usage.output_tokens') FROM turn_raw"
+        ).fetchall()
+        self.assertEqual(rows, [(487,)])
+
 
 class NormalizeTests(unittest.TestCase):
     """Direct tests of cli/normalize.py, against an in-memory store.
@@ -3549,6 +4092,142 @@ class NormalizeTests(unittest.TestCase):
         self.assertIsNone(row["context_window"])
         self.assertIsNone(row["capacity_primary_used_pct"])
         self.assertIsNone(row["capacity_secondary_used_pct"])
+
+    # ------------------------------------------------------------------
+    # cache-TTL split — the halves bill 60% apart
+    # ------------------------------------------------------------------
+
+    def test_claude_cache_ttl_split_sums_to_the_total(self) -> None:
+        """The migration's invariant, on real-shaped input.
+
+        `ephemeral_1h + ephemeral_5m == cache_creation_input_tokens` held
+        exactly across 20,587 real turns. `cache_write_tokens` stays the
+        total rather than being replaced by the halves — it is what Codex
+        reports and what existing callers read.
+        """
+        sess = self.insert_session(session_id="claude-ttl-1", harness="claude")
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "type": "assistant",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "requestId": "req-ttl-1",
+                "message": {
+                    "model": "claude-sonnet-5",
+                    "usage": {
+                        "input_tokens": 860,
+                        "cache_read_input_tokens": 21424,
+                        "cache_creation_input_tokens": 14692,
+                        "cache_creation": {
+                            "ephemeral_1h_input_tokens": 4692,
+                            "ephemeral_5m_input_tokens": 10000,
+                        },
+                        "output_tokens": 487,
+                    },
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertEqual(row["cache_write_1h_tokens"], 4692)
+        self.assertEqual(row["cache_write_5m_tokens"], 10000)
+        self.assertEqual(row["cache_write_tokens"], 14692, "the total is kept, not replaced")
+        self.assertEqual(
+            row["cache_write_1h_tokens"] + row["cache_write_5m_tokens"],
+            row["cache_write_tokens"],
+        )
+
+    def test_codex_reports_no_ttl_split_so_both_columns_are_null(self) -> None:
+        """NULL, not 0 — `harness_capability` says Codex cannot report this,
+        and turn_norm keeps "cannot report" distinct from "reported zero"
+        everywhere else."""
+        sess = self.insert_session()
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "timestamp": "2026-01-01T00:00:01Z",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {
+                            "input_tokens": 10,
+                            "cached_input_tokens": 2,
+                            "cache_write_input_tokens": 5,
+                        }
+                    },
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertEqual(row["cache_write_tokens"], 5)
+        self.assertIsNone(row["cache_write_1h_tokens"])
+        self.assertIsNone(row["cache_write_5m_tokens"])
+
+    def test_claude_without_cache_creation_leaves_the_split_null(self) -> None:
+        """Older transcripts predate the field. Absent is not zero."""
+        sess = self.insert_session(session_id="claude-ttl-2", harness="claude")
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "type": "assistant",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "requestId": "req-ttl-2",
+                "message": {
+                    "model": "claude-sonnet-5",
+                    "usage": {"input_tokens": 100, "cache_creation_input_tokens": 20, "output_tokens": 10},
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        row = self.norm_row(tr_id)
+        self.assertEqual(row["cache_write_tokens"], 20)
+        self.assertIsNone(row["cache_write_1h_tokens"])
+        self.assertIsNone(row["cache_write_5m_tokens"])
+
+    def test_a_norm_version_bump_recomputes_an_existing_row(self) -> None:
+        """The whole backfill mechanism for the split — no re-harvest.
+
+        The fields were in the raw payload from the first harvest, just
+        unread. Simulates a row normalized under version 1 and asserts the
+        current pass picks it up and fills the new columns.
+        """
+        sess = self.insert_session(session_id="claude-ttl-3", harness="claude")
+        tr_id = self.insert_turn_raw(
+            sess,
+            {
+                "type": "assistant",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "requestId": "req-ttl-3",
+                "message": {
+                    "model": "claude-sonnet-5",
+                    "usage": {
+                        "input_tokens": 100,
+                        "cache_creation_input_tokens": 30,
+                        "cache_creation": {
+                            "ephemeral_1h_input_tokens": 10,
+                            "ephemeral_5m_input_tokens": 20,
+                        },
+                        "output_tokens": 10,
+                    },
+                },
+            },
+        )
+        self.normalize.normalize_all(self.conn)
+        # Rewind this row to the pre-split convention: normalized, but by
+        # code that never read cache_creation.
+        self.conn.execute(
+            "UPDATE turn_norm SET norm_version = 1,"
+            " cache_write_1h_tokens = NULL, cache_write_5m_tokens = NULL"
+            " WHERE turn_raw_id = ?",
+            (tr_id,),
+        )
+        result = self.normalize.normalize_all(self.conn)
+
+        self.assertEqual(result["normalized"], 1, "a stale row is reprocessed")
+        row = self.norm_row(tr_id)
+        self.assertEqual(row["cache_write_1h_tokens"], 10)
+        self.assertEqual(row["cache_write_5m_tokens"], 20)
 
     def test_claude_non_assistant_record_returns_none_and_is_skipped(self) -> None:
         sess = self.insert_session(session_id="claude-sess-2", harness="claude")
@@ -5698,6 +6377,38 @@ class CliReferenceDocTests(unittest.TestCase):
                     f"but `flow {' '.join(cmd)} --help` does not succeed",
                 )
 
+    def _rejects_flag(self, cmd: tuple[str, ...], flag: str) -> bool:
+        """Does the parser actually reject `flag` for this subcommand?
+
+        `--help` is the cheap oracle for "is this flag real," but it is the
+        wrong one for a flag registered with `argparse.SUPPRESS` — a
+        deliberately hidden alias is accepted and absent from help at the
+        same time, and a help-only check calls that a documentation error.
+
+        So this asks argparse directly, and does it without running anything:
+        appending a flag that certainly does not exist guarantees a parse
+        error before dispatch, and argparse names *every* unrecognized
+        argument in that one message. A flag missing from the list was
+        accepted; a flag present in it was not. Nothing is harvested, no
+        store is created, and the real HOME is never touched.
+        """
+        result = subprocess.run(
+            [sys.executable, str(FLOW_CLI), *cmd, flag, "--zz-not-a-real-flag"],
+            text=True,
+            capture_output=True,
+            env=_clean_env(),
+        )
+        unrecognized = re.search(r"unrecognized arguments: (.*)", result.stderr + result.stdout)
+        if unrecognized is None:
+            # The probe flag should always produce this error. If it didn't,
+            # the assumption behind this check no longer holds — say so rather
+            # than silently reporting "accepted."
+            self.fail(
+                f"probing `flow {' '.join(cmd)} {flag}` did not produce an "
+                f"argparse error; this check's mechanism has broken"
+            )
+        return flag in unrecognized.group(1).split()
+
     def test_every_documented_flag_is_accepted(self) -> None:
         checked = 0
         for cmd, heading, body, heading_flags in self.sections:
@@ -5708,9 +6419,12 @@ class CliReferenceDocTests(unittest.TestCase):
             for flag in sorted(flags):
                 checked += 1
                 with self.subTest(command=heading, flag=flag):
-                    self.assertIn(
-                        flag,
-                        help_text,
+                    if flag in help_text:
+                        continue
+                    # Absent from help — either a hidden alias the doc is
+                    # right to mention, or a flag that does not exist.
+                    self.assertFalse(
+                        self._rejects_flag(cmd, flag),
                         f"the doc names {flag} under `flow {heading}`, "
                         f"but that subcommand does not accept it",
                     )
