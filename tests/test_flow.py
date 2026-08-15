@@ -1946,6 +1946,35 @@ class FlowCliTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertNotIn("--backfill", self.run_flow("harvest", "claude", "--help").stdout)
 
+    def test_cost_trend_end_to_end_via_cli(self) -> None:
+        self._seed_claude_transcript()
+        self.assert_ok(self.run_flow("harvest", "claude"))
+        self.assert_ok(self.run_flow("normalize"))
+
+        table = self.run_flow("cost", "trend", "--all")
+        self.assert_ok(table)
+        self.assertIn("BUCKET", table.stdout)
+        self.assertIn("WT/1K OUT", table.stdout)
+        self.assertIn("CMPCT MAN", table.stdout)
+
+        weekly = self.run_flow("cost", "trend", "--all", "--bucket", "week")
+        self.assert_ok(weekly)
+        self.assertIn("-W", weekly.stdout, "week buckets read YYYY-Www")
+
+        as_json = self.run_flow("cost", "trend", "--all", "--json")
+        self.assert_ok(as_json)
+        payload = json.loads(as_json.stdout)
+        self.assertIn("rows", payload)
+        # Coverage rides alongside rows: it is a property of the store, not of
+        # any bucket, and a caller checking whether its window was covered
+        # should not have to infer that from which rows happen to be present.
+        self.assertIn("coverage", payload)
+        self.assertIn("claude", payload["coverage"])
+
+        filtered = self.run_flow("cost", "trend", "--all", "--harness", "codex")
+        self.assert_ok(filtered)
+        self.assertNotIn("claude", filtered.stdout)
+
     def test_rescan_reports_compaction_events(self) -> None:
         home = self._seed_claude_transcript()
         result = self.run_flow("harvest", "claude")
@@ -2022,8 +2051,8 @@ class FlowCliTests(unittest.TestCase):
                 _turn_context("turn-1", "gpt-5.6"),
                 _token_count(
                     rate_limits={
-                        "primary": {"used_percent": 41.0, "window_minutes": 300, "resets_at": 123},
-                        "secondary": {"used_percent": 12.0, "window_minutes": 10080, "resets_at": 456},
+                        "primary": {"used_percent": 41.0, "window_minutes": 300, "resets_at": _FUTURE_RESET},
+                        "secondary": {"used_percent": 12.0, "window_minutes": 10080, "resets_at": _FUTURE_RESET + 1},
                     }
                 ),
                 _task_complete("turn-1"),
@@ -2229,6 +2258,16 @@ def _task_complete(turn_id: str) -> dict:
         "type": "event_msg",
         "payload": {"type": "task_complete", "turn_id": turn_id},
     }
+
+
+# A capacity reading's `resets_at`, far enough ahead that no test run reaches
+# it. The original fixtures used 123 and 456 — epoch seconds in 1970, i.e. a
+# reading that expired 56 years before the test ran. That went unnoticed while
+# nothing checked expiry; once `capacity_gauge` started suppressing expired
+# fields, every one of those fixtures correctly rendered nothing. Expiry now
+# has its own tests, which pass the boundary explicitly rather than relying on
+# what a literal happens to mean relative to now.
+_FUTURE_RESET = 4_102_444_800  # 2100-01-01T00:00:00Z
 
 
 def _token_count(total: int = 100, rate_limits: dict | None = None) -> dict:
@@ -4195,8 +4234,8 @@ class NormalizeTests(unittest.TestCase):
                         "model_context_window": 200000,
                     },
                     "rate_limits": {
-                        "primary": {"used_percent": 5.0, "window_minutes": 300, "resets_at": 123},
-                        "secondary": {"used_percent": 10.0, "window_minutes": 10080, "resets_at": 456},
+                        "primary": {"used_percent": 5.0, "window_minutes": 300, "resets_at": _FUTURE_RESET},
+                        "secondary": {"used_percent": 10.0, "window_minutes": 10080, "resets_at": _FUTURE_RESET + 1},
                     },
                 },
             },
@@ -4212,10 +4251,10 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(row["context_window"], 200000)
         self.assertEqual(row["capacity_primary_used_pct"], 5.0)
         self.assertEqual(row["capacity_primary_window_minutes"], 300)
-        self.assertEqual(row["capacity_primary_resets_at"], 123)
+        self.assertEqual(row["capacity_primary_resets_at"], _FUTURE_RESET)
         self.assertEqual(row["capacity_secondary_used_pct"], 10.0)
         self.assertEqual(row["capacity_secondary_window_minutes"], 10080)
-        self.assertEqual(row["capacity_secondary_resets_at"], 456)
+        self.assertEqual(row["capacity_secondary_resets_at"], _FUTURE_RESET + 1)
         self.assertEqual(row["model"], "gpt-5.6", "ts/model/is_subagent copy through from turn_raw")
         self.assertEqual(row["norm_version"], self.normalize.NORM_VERSION)
 
@@ -4229,7 +4268,7 @@ class NormalizeTests(unittest.TestCase):
                 "payload": {
                     "type": "token_count",
                     "info": None,
-                    "rate_limits": {"primary": {"used_percent": 1.0, "window_minutes": 300, "resets_at": 1}},
+                    "rate_limits": {"primary": {"used_percent": 1.0, "window_minutes": 300, "resets_at": _FUTURE_RESET}},
                 },
             },
         )
@@ -4251,7 +4290,7 @@ class NormalizeTests(unittest.TestCase):
                 "payload": {
                     "type": "token_count",
                     "info": {"last_token_usage": {"input_tokens": 10, "cached_input_tokens": 2}},
-                    "rate_limits": {"primary": {"used_percent": 1.0, "window_minutes": 300, "resets_at": 1}},
+                    "rate_limits": {"primary": {"used_percent": 1.0, "window_minutes": 300, "resets_at": _FUTURE_RESET}},
                 },
             },
         )
@@ -4947,21 +4986,38 @@ class CostTests(unittest.TestCase):
 
         return datetime(2026, 1, 10, 12, 0, 0, tzinfo=timezone.utc)
 
-    def insert_ctx_turn(self, session_row_id: int, ts: str, ctx: int, is_subagent: int = 0) -> None:
-        """One context sample: fresh+cache_read+cache_write = ctx."""
+    def insert_ctx_turn(
+        self,
+        session_row_id: int,
+        ts: str,
+        ctx: int,
+        is_subagent: int = 0,
+        model: str = "claude-sonnet-5",
+    ) -> None:
+        """One context sample: fresh+cache_read+cache_write = ctx.
+
+        `model` defaults to a real id rather than the placeholder `'m'` this
+        helper used to write. Once window resolution started consulting
+        `data/model_context_windows.json`, a placeholder resolved to "unknown
+        model" and correctly suppressed every percentage — which is the right
+        behaviour and the wrong fixture: these tests are about the ctx/carry
+        arithmetic, so they need a model whose window is knowable. The
+        unknown-model path has its own test rather than being the accidental
+        default for all of them.
+        """
         turn_raw_id = self._next_id
         self._next_id += 1
         self.conn.execute(
             "INSERT INTO turn_raw (id, session_row_id, natural_turn_id, turn_seq, is_subagent,"
             " ts, model, payload, source_path, source_line_no, collector_version)"
-            " VALUES (?, ?, ?, ?, ?, ?, 'm', '{}', '/tmp/x', ?, 1)",
-            (turn_raw_id, session_row_id, f"t{turn_raw_id}", turn_raw_id, is_subagent, ts, turn_raw_id),
+            " VALUES (?, ?, ?, ?, ?, ?, ?, '{}', '/tmp/x', ?, 1)",
+            (turn_raw_id, session_row_id, f"t{turn_raw_id}", turn_raw_id, is_subagent, ts, model, turn_raw_id),
         )
         self.conn.execute(
             "INSERT INTO turn_norm (turn_raw_id, ts, model, is_subagent, fresh_input_tokens,"
             " cache_read_tokens, cache_write_tokens, output_tokens, norm_version)"
-            " VALUES (?, ?, 'm', ?, ?, 0, 0, 1, 1)",
-            (turn_raw_id, ts, is_subagent, ctx),
+            " VALUES (?, ?, ?, ?, ?, 0, 0, 1, 1)",
+            (turn_raw_id, ts, model, is_subagent, ctx),
         )
 
     def test_active_rows_within_filter_and_ctx_carry_math(self) -> None:
@@ -5125,26 +5181,401 @@ class CostTests(unittest.TestCase):
 
         self.assertEqual(self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now()), [])
 
+    def _active_row(self, **overrides) -> dict:
+        """One `active_rows`-shaped row. Keyed access in the renderer is
+        deliberate — a row missing a field is shape drift, not a default."""
+        row = {
+            "id": "abc12345",
+            "label": "some session",
+            "ctx_pct": 46.0,
+            "carry_pct": 38.0,
+            "window_exact": False,
+            "window_source": "model",
+            "sub_pct": None,
+            "idle_sec": 245,
+            "recommend": "/compact at next break",
+            "session_id": "abc12345-full",
+        }
+        row.update(overrides)
+        return row
+
     def test_render_active_table_marks_inferred_windows(self) -> None:
-        rows = [
-            {
-                "id": "abc12345",
-                "label": "some session",
-                "ctx_pct": 46.0,
-                "carry_pct": 38.0,
-                "window_exact": False,
-                "idle_sec": 245,
-                "recommend": "/compact at next break",
-                "session_id": "abc12345-full",
-            }
-        ]
-        out = self.cost._render_active_table(rows)
+        out = self.cost._render_active_table([self._active_row()])
         self.assertIn("~46%", out)
         self.assertIn("4m", out)
         self.assertIn("window inferred", out)
 
+    def test_render_active_table_suppresses_an_unknown_window(self) -> None:
+        """`?`, not a blank: a blank cell reads as zero at a glance, and this
+        is the opposite claim — not computable, not small."""
+        out = self.cost._render_active_table(
+            [
+                self._active_row(
+                    ctx_pct=None, carry_pct=None, window_source="unknown", recommend=None
+                )
+            ]
+        )
+        self.assertIn("?", out)
+        self.assertIn("window unknown", out)
+        self.assertIn("model_context_windows.json", out)
+        self.assertNotIn("~", out, "an unknown window is not an inferred one")
+
+    def test_render_active_table_shows_subagent_share(self) -> None:
+        out = self.cost._render_active_table([self._active_row(sub_pct=12.9)])
+        self.assertIn("13%", out)
+        self.assertIn("subagent share", out)
+
     def test_render_active_table_empty(self) -> None:
         self.assertEqual(self.cost._render_active_table([]), "(no active sessions in range)")
+
+    # ------------------------------------------------------------------
+    # window resolution: statusline > this session's auto compaction > model
+    # ------------------------------------------------------------------
+
+    def _auto_compaction(self, session_row_id: int, pre_tokens: int, trigger: str = "auto") -> None:
+        self.conn.execute(
+            "INSERT INTO agent_activity_raw (session_row_id, ts, kind, payload,"
+            " source_path, source_line_no, collector_version)"
+            " VALUES (?, '2026-01-10T11:00:00Z', 'compact_boundary', ?, '/tmp/x', ?, 3)",
+            (
+                session_row_id,
+                json.dumps({"compactMetadata": {"trigger": trigger, "preTokens": pre_tokens}}),
+                self._next_id,
+            ),
+        )
+        self._next_id += 1
+
+    def test_auto_compaction_resolves_that_sessions_window(self) -> None:
+        """An auto compaction fires at the ceiling, so its `preTokens` is a
+        direct observation of how much the session actually held — better
+        than any lookup, and measured rather than inferred.
+
+        The real corpus reads 1,000,069–1,004,282 on 8 of 11 auto events;
+        the value below is from that cluster.
+        """
+        sess = self.insert_session("compacted-1", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 120_000)
+        self._auto_compaction(sess, 1_001_651)
+
+        rows = self.cost.active_rows(self.conn, within_minutes=60, now=self._active_now())
+        row = rows[0]
+        self.assertEqual(row["window_source"], "compaction")
+        self.assertTrue(row["window_exact"], "an observation from the transcript is not an inference")
+        # 120K of 1M, not of the 200K the model table would have assumed.
+        self.assertEqual(row["ctx_pct"], 12.0)
+
+    def test_an_auto_compaction_does_not_leak_to_another_session_on_the_same_model(self) -> None:
+        """The confirmed scope rule, in the direction that would do damage.
+
+        Every model that has auto-compacted also runs in 200K sessions
+        constantly. A model-scoped rule would silently relabel all of them as
+        1M and divide every percentage by five.
+        """
+        compacted = self.insert_session("compacted-1", harness="claude")
+        self.insert_ctx_turn(compacted, "2026-01-10T11:50:00Z", 120_000)
+        self._auto_compaction(compacted, 1_001_651)
+        plain = self.insert_session("plain-1", harness="claude")
+        self.insert_ctx_turn(plain, "2026-01-10T11:50:00Z", 120_000)
+
+        rows = {r["session_id"]: r for r in self.cost.active_rows(self.conn, 60, self._active_now())}
+        self.assertEqual(rows["compacted-1"]["window_source"], "compaction")
+        self.assertEqual(rows["plain-1"]["window_source"], "model")
+        self.assertEqual(rows["plain-1"]["ctx_pct"], 60.0, "same model, same ctx, unaffected window")
+
+    def test_a_manual_compaction_says_nothing_about_the_window(self) -> None:
+        """A deliberate `/compact` records where the user chose to cut, which
+        is unrelated to the ceiling."""
+        sess = self.insert_session("manual-1", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 120_000)
+        self._auto_compaction(sess, 1_001_651, trigger="manual")
+
+        row = self.cost.active_rows(self.conn, 60, self._active_now())[0]
+        self.assertEqual(row["window_source"], "model")
+
+    def test_an_unknown_model_suppresses_the_percentage(self) -> None:
+        """An honest blank beats a confident wrong number in a tool whose
+        purpose is measurement — and it is the signal that the table needs an
+        entry."""
+        sess = self.insert_session("mystery-1", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 120_000, model="claude-not-a-real-model")
+
+        row = self.cost.active_rows(self.conn, 60, self._active_now())[0]
+        self.assertEqual(row["window_source"], "unknown")
+        self.assertIsNone(row["ctx_pct"])
+        self.assertIsNone(row["carry_pct"])
+        self.assertIsNone(row["recommend"], "no window means no judgment, not a passing grade")
+
+    def test_a_model_suffix_resolves_via_the_longest_prefix(self) -> None:
+        sess = self.insert_session("suffixed-1", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 100_000, model="claude-haiku-4-5-20251001")
+
+        row = self.cost.active_rows(self.conn, 60, self._active_now())[0]
+        self.assertEqual(row["window_source"], "model")
+        self.assertEqual(row["ctx_pct"], 50.0, "100K of the 200K haiku window")
+
+    def test_an_out_of_range_compaction_reading_falls_through(self) -> None:
+        """A reading too far from any known window is not snapped — a
+        confident wrong window would be worse than the honest inference."""
+        sess = self.insert_session("weird-1", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 120_000)
+        self._auto_compaction(sess, 500_000)
+
+        row = self.cost.active_rows(self.conn, 60, self._active_now())[0]
+        self.assertEqual(row["window_source"], "model")
+
+    # ------------------------------------------------------------------
+    # capacity gauge expiry
+    # ------------------------------------------------------------------
+
+    def _capacity_turn(self, primary_reset: int | None, secondary_reset: int | None = None) -> None:
+        sess = self.insert_session("codex-cap", harness="codex")
+        turn_raw_id = self._next_id
+        self._next_id += 1
+        self.conn.execute(
+            "INSERT INTO turn_raw (id, session_row_id, natural_turn_id, turn_seq, is_subagent,"
+            " ts, model, payload, source_path, source_line_no, collector_version)"
+            " VALUES (?, ?, ?, ?, 0, '2026-01-10T11:00:00Z', 'gpt-5.6-sol', '{}', '/tmp/x', ?, 1)",
+            (turn_raw_id, sess, f"t{turn_raw_id}", turn_raw_id, turn_raw_id),
+        )
+        self.conn.execute(
+            "INSERT INTO turn_norm (turn_raw_id, ts, model, is_subagent, norm_version,"
+            " capacity_primary_used_pct, capacity_primary_window_minutes, capacity_primary_resets_at,"
+            " capacity_secondary_used_pct, capacity_secondary_window_minutes, capacity_secondary_resets_at)"
+            " VALUES (?, '2026-01-10T11:00:00Z', 'gpt-5.6-sol', 0, 2, 96.0, 10080, ?, ?, 300, ?)",
+            (
+                turn_raw_id,
+                primary_reset,
+                None if secondary_reset is None else 42.0,
+                secondary_reset,
+            ),
+        )
+
+    @staticmethod
+    def _at(epoch: int):
+        from datetime import datetime as _dt
+        from datetime import timezone as _tz
+
+        return _dt.fromtimestamp(epoch, _tz.utc)
+
+    def test_gauge_is_absent_once_its_window_has_reset(self) -> None:
+        """The defect this fixes: `flow cost summary --days 7` reported a
+        96.0% reading taken six days earlier that expired 97 minutes after
+        the run. The capacity window is 10,080 minutes — exactly the default
+        summary window — so a reading in range can describe a period with
+        almost no overlap with the present. An expired gauge is absent, not
+        dimmed.
+        """
+        self._capacity_turn(primary_reset=1_000_000)
+        self.assertIsNotNone(
+            self.cost.capacity_gauge(self.conn, None, now=self._at(999_999)),
+            "one second before the reset it is still true",
+        )
+        self.assertIsNone(
+            self.cost.capacity_gauge(self.conn, None, now=self._at(1_000_000)),
+            "at the reset it describes nothing",
+        )
+
+    def test_a_live_secondary_outlives_an_expired_primary(self) -> None:
+        """Suppressed per field, against each field's own `resets_at`.
+        Primary and secondary are independent windows — neither name reliably
+        means "the short one" — so a live reading must not disappear because
+        an unrelated window rolled.
+        """
+        self._capacity_turn(primary_reset=1_000_000, secondary_reset=2_000_000)
+        gauge = self.cost.capacity_gauge(self.conn, None, now=self._at(1_500_000))
+        self.assertIsNotNone(gauge)
+        self.assertIsNone(gauge["capacity_primary_used_pct"], "expired field is dropped")
+        self.assertEqual(gauge["capacity_secondary_used_pct"], 42.0)
+        line = self.cost._render_gauge_line(gauge)
+        self.assertNotIn("96.0%", line)
+        self.assertIn("42.0%", line)
+
+    def test_the_gauge_line_shows_when_the_reading_resets(self) -> None:
+        """`as of` says how old a reading is; only `resets at` says whether it
+        still describes anything. It was stored all along and never shown."""
+        self._capacity_turn(primary_reset=_FUTURE_RESET)
+        gauge = self.cost.capacity_gauge(self.conn, None, now=self._at(1_000_000))
+        line = self.cost._render_gauge_line(gauge)
+        self.assertIn("as of 2026-01-10T11:00:00Z", line)
+        self.assertIn("resets at 2100-01-01T00:00:00+00:00", line)
+
+    def test_a_reading_sampled_late_in_its_own_window_is_labelled(self) -> None:
+        """The observed shape of the defect: a sample taken six days into a
+        seven-day window, unexpired and therefore shown, describing usage that
+        has had almost the whole window to move since.
+
+        Note this is *not* what the plan specified — it said to label a
+        reading that predates the summary window, which cannot happen: the
+        `since` filter is applied in the query, so such a reading is never
+        selected. This measures the hazard that actually occurs.
+        """
+        from datetime import timedelta as _td
+
+        self._capacity_turn(primary_reset=_FUTURE_RESET)  # 10080-minute window
+        taken = self._at(0).replace(year=2026, month=1, day=10, hour=11)
+
+        fresh = self.cost.capacity_gauge(self.conn, None, now=taken + _td(minutes=100))
+        self.assertFalse(fresh["stale"], "a fresh sample is not labelled")
+
+        old = self.cost.capacity_gauge(self.conn, None, now=taken + _td(minutes=6000))
+        self.assertTrue(old["stale"])
+        self.assertIn("more than halfway through its own window", self.cost._render_gauge_line(old))
+
+    def test_a_reading_with_no_reset_time_survives(self) -> None:
+        """It cannot be shown to have expired, so it is not dropped."""
+        self._capacity_turn(primary_reset=None)
+        gauge = self.cost.capacity_gauge(self.conn, None, now=self._at(_FUTURE_RESET))
+        self.assertIsNotNone(gauge)
+        self.assertIn("resets at unknown", self.cost._render_gauge_line(gauge))
+
+    # ------------------------------------------------------------------
+    # flow cost trend
+    # ------------------------------------------------------------------
+
+    def _trend_turn(
+        self,
+        session_row_id: int,
+        ts: str,
+        fresh: int = 0,
+        read: int = 0,
+        write_1h: int = 0,
+        write_5m: int = 0,
+        output: int = 0,
+        is_subagent: int = 0,
+        model: str = "claude-sonnet-5",
+    ) -> None:
+        turn_raw_id = self._next_id
+        self._next_id += 1
+        self.conn.execute(
+            "INSERT INTO turn_raw (id, session_row_id, natural_turn_id, turn_seq, is_subagent,"
+            " ts, model, payload, source_path, source_line_no, collector_version)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, '{}', '/tmp/x', ?, 3)",
+            (turn_raw_id, session_row_id, f"t{turn_raw_id}", turn_raw_id, is_subagent, ts, model, turn_raw_id),
+        )
+        self.conn.execute(
+            "INSERT INTO turn_norm (turn_raw_id, ts, model, is_subagent, fresh_input_tokens,"
+            " cache_read_tokens, cache_write_tokens, cache_write_1h_tokens, cache_write_5m_tokens,"
+            " output_tokens, norm_version)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2)",
+            (
+                turn_raw_id, ts, model, is_subagent, fresh, read,
+                write_1h + write_5m, write_1h, write_5m, output,
+            ),
+        )
+
+    def test_weighted_tokens_match_a_hand_computed_figure(self) -> None:
+        """The headline number, checked against arithmetic done by hand from
+        the weights file — an error here is invisible in every other way."""
+        sess = self.insert_session("trend-1", harness="claude")
+        self._trend_turn(
+            sess, "2026-01-10T10:00:00Z",
+            fresh=1_000, read=100_000, write_1h=10_000, write_5m=20_000, output=500,
+        )
+        rows = self.cost.trend_rows(self.conn, None)
+        # 1,000*1.0 + 100,000*0.1 + 10,000*2.0 + 20,000*1.25 = 56,000
+        # per 1,000 output over 500 output = 112,000
+        self.assertEqual(rows[0]["wt_per_1k_out"], 112_000.0)
+
+    def test_the_weights_file_is_the_source_of_truth(self) -> None:
+        """A pricing change must be a data edit, which is the file's entire
+        justification for existing."""
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        source = Path(tempdir.name)
+        (source / "data").mkdir(parents=True)
+        (source / "data" / "token_weights.json").write_text(
+            json.dumps({"weights": {"cache_read": 1.0}})
+        )
+        sess = self.insert_session("trend-1", harness="claude")
+        self._trend_turn(sess, "2026-01-10T10:00:00Z", read=100_000, output=1_000)
+
+        baseline = self.cost.trend_rows(self.conn, None)[0]["wt_per_1k_out"]
+        original_source_dir = self.cost.SOURCE_DIR
+        try:
+            self.cost.SOURCE_DIR = source
+            edited = self.cost.trend_rows(self.conn, None)[0]["wt_per_1k_out"]
+        finally:
+            self.cost.SOURCE_DIR = original_source_dir
+
+        self.assertEqual(baseline, 10_000.0, "shipped rate: 100,000 read at 0.1")
+        self.assertEqual(edited, 100_000.0, "edited rate: 100,000 read at 1.0")
+
+    def test_codex_rows_have_no_weighted_columns(self) -> None:
+        """NULL, not 0 — a zero would read as "nothing weighted" rather than
+        "this arithmetic does not apply here"."""
+        sess = self.insert_session("codex-1", harness="codex")
+        self._trend_turn(sess, "2026-01-10T10:00:00Z", fresh=1_000, output=100, model="gpt-5.6-sol")
+        row = self.cost.trend_rows(self.conn, None)[0]
+        self.assertEqual(row["harness"], "codex")
+        self.assertEqual(row["turns"], 1, "every non-weighted column still populates")
+        self.assertIsNone(row["wt_per_1k_out"])
+        self.assertIsNone(row["sub_pct"])
+        self.assertIsNone(row["compact_manual"])
+
+    def test_day_and_week_buckets_agree_on_totals(self) -> None:
+        """Bucketing must partition the data, not resample it."""
+        sess = self.insert_session("trend-1", harness="claude")
+        for day in ("12", "13", "14"):
+            self._trend_turn(sess, f"2026-01-{day}T10:00:00Z", fresh=1_000, output=100)
+
+        by_day = self.cost.trend_rows(self.conn, None, bucket="day")
+        by_week = self.cost.trend_rows(self.conn, None, bucket="week")
+        self.assertEqual(len(by_day), 3)
+        self.assertEqual(len(by_week), 1, "all three days fall in one week")
+        self.assertEqual(sum(r["turns"] for r in by_day), sum(r["turns"] for r in by_week))
+
+    def test_an_unknown_bucket_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            self.cost.trend_rows(self.conn, None, bucket="fortnight")
+
+    def test_main_agent_only_columns_exclude_subagent_turns(self) -> None:
+        sess = self.insert_session("trend-1", harness="claude")
+        self._trend_turn(sess, "2026-01-10T10:00:00Z", fresh=100_000, output=100)
+        self._trend_turn(sess, "2026-01-10T11:00:00Z", fresh=300_000, output=100, is_subagent=1)
+
+        row = self.cost.trend_rows(self.conn, None)[0]
+        self.assertEqual(row["turns"], 1, "turns counts main-agent turns only")
+        self.assertEqual(row["ctx_per_turn"], 100_000, "a sidechain's context is another conversation's size")
+        # sub% spans both, which is the entire point of showing it beside them.
+        self.assertEqual(row["sub_pct"], 75.0)
+
+    def test_compaction_events_are_split_by_trigger_never_summed(self) -> None:
+        """manual is deliberate hygiene, auto is hitting the ceiling. One
+        combined count would say nothing about either."""
+        sess = self.insert_session("trend-1", harness="claude")
+        self._trend_turn(sess, "2026-01-10T10:00:00Z", fresh=1_000, output=100)
+        for trigger, pre in (("manual", 300_000), ("manual", 500_000), ("auto", 900_000)):
+            self.conn.execute(
+                "INSERT INTO agent_activity_raw (session_row_id, ts, kind, payload,"
+                " source_path, source_line_no, collector_version)"
+                " VALUES (?, '2026-01-10T12:00:00Z', 'compact_boundary', ?, '/tmp/x', ?, 3)",
+                (sess, json.dumps({"compactMetadata": {"trigger": trigger, "preTokens": pre}}), self._next_id),
+            )
+            self._next_id += 1
+
+        row = self.cost.trend_rows(self.conn, None)[0]
+        self.assertEqual(row["compact_manual"], 2)
+        self.assertEqual(row["compact_auto"], 1)
+        self.assertEqual(row["median_pre_manual"], 400_000, "median of the manual cuts only")
+
+    def test_coverage_floor_labels_a_window_reaching_before_the_data(self) -> None:
+        """Absent buckets and empty buckets are different facts. Truncating
+        silently would make the earliest visible bucket look like the start of
+        the record, which turns a coverage gap into a false trend."""
+        sess = self.insert_session("trend-1", harness="claude")
+        self._trend_turn(sess, "2026-05-21T10:00:00Z", fresh=1_000, output=100)
+
+        floor = self.cost.coverage_floor(self.conn)
+        self.assertEqual(floor["claude"], "2026-05-21T10:00:00Z")
+        notes = self.cost._coverage_notes(floor, "2026-05-17T00:00:00Z", None)
+        self.assertEqual(len(notes), 1)
+        self.assertIn("coverage begins 2026-05-21", notes[0])
+        self.assertIn("absent from the store, not empty", notes[0])
+        self.assertEqual(
+            self.cost._coverage_notes(floor, "2026-05-22T00:00:00Z", None),
+            [],
+            "a window inside coverage needs no label",
+        )
 
 
 class VerdictTests(unittest.TestCase):
