@@ -6,6 +6,8 @@ Portable workflow framework for AI-assisted development.
 
 `flow` is a local framework for working with AI coding agents in a more deliberate way. It gives you a shared workflow, role definitions, standards, and durable artifacts so sessions do not depend on whatever context happens to be in the chat.
 
+Flow is extensible. You can add your own commands, agents, hooks, standards, templates, and project notes without forking the framework. User overlays apply across your machine; project overlays apply only inside the repo that owns them.
+
 Use it when you want an agent to:
 
 - define work before planning it
@@ -76,7 +78,7 @@ The framework template includes:
 - [flow.toml](scaffolds/default/flow.toml), the machine-readable manifest for commands, agents, hooks, model hints, and standard dependencies
 - user overlays at `~/.flow/user/` for personal commands, agents, hooks, standards, or templates without forking this repo
 
-A user overlay is your personal layer on top of the default framework. Put files in `~/.flow/user/` when you want your own command, agent, hook, standard, or template to override or extend what flow ships. It applies at user level, so it can follow you across projects without changing this repo.
+A user overlay is your personal layer on top of the default framework. Put files in `~/.flow/user/` when you want an override or extension to follow you across projects.
 
 User overlays are optional. Use `flow setup user --overlay-repo URL` if you want that overlay backed by your own git repo. Flow can clone an absent overlay or attach a remote to an existing one, but it does not clobber files or commit for you. For the merge model and ownership rules, see [architecture.md](docs/architecture.md).
 
