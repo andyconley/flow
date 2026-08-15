@@ -55,16 +55,17 @@ Why a single path contract: everything downstream — `flow sync`, managed manif
   flow.toml              — explicit registration of overrides/additions
   agents/<name>.md       — user-authored or overriding agents
   commands/<name>.md     — user-authored or overriding commands
+  hooks/flow-<name>.sh   — user-authored or overriding hook scripts
   standards/<name>.md    — user-authored or overriding standards (runtime-resolved)
   templates/<name>.md    — user-authored or overriding templates (runtime-resolved)
 ```
 
 How it merges:
 
-- **Commands and agents are merged at sync time** by `merge_user_overlay` in `cli/sync.py`. When `flow sync claude --user` (or `flow sync codex --user`) runs, the framework's `flow.toml` is loaded and the user's `flow.toml` is layered on top:
+- **Commands, agents, and hooks are merged at sync time** by `merge_user_overlay` in `cli/sync.py`. When `flow sync claude --user` (or `flow sync codex --user`) runs, the framework's `flow.toml` is loaded and the user's `flow.toml` is layered on top:
   - Entries in the user manifest with the same `name` as a framework entry **replace** it (override).
   - Entries with a new `name` are **appended** (addition).
-  - The merged manifest drives adapter generation. Generated SKILLs and agent files embed the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.
+  - The merged manifest drives adapter generation. Generated SKILLs, agent files, and hook registrations embed or point at the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.
 - **Standards and templates are *not* merged at sync time** — they're not embedded into adapters; they're referenced by name at runtime. The runtime resolution order is documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates": project overlay > user overlay > framework default.
 
 The user overlay is opt-in. Without `~/.flow/user/flow.toml`, sync behavior is identical to the framework-only baseline. `flow doctor` reports whether the overlay is present and what it declares.

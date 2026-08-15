@@ -26,7 +26,7 @@ Mode-specific differences:
 - **Hook command paths**: user-mode uses `$HOME/.claude/hooks/flow-*.sh`; project-mode uses `$CLAUDE_PROJECT_DIR/.claude/hooks/flow-*.sh`
 - **Managed manifest `source` fields**: user-mode references the scaffold path (`~/.flow/source/scaffolds/default/commands/flow-boot.md`); project-mode references `.flow/commands/flow-boot.md`. User-overlay entries in user mode reference `~/.flow/user/...` so origin is auditable.
 - **Settings merge target**: user-mode merges into `~/.claude/settings.json`; project-mode merges into `<repo>/.claude/settings.json`
-- **User overlay** (user mode only, v0.6.0+): if `~/.flow/user/flow.toml` exists, its `[[claude.commands]]`, `[[codex.commands]]`, and shared `[[agents]]` entries layer on top of the framework manifest before adapter generation. Same-name entries override; new names append. See `docs/architecture.md` "User Overlay" for the merge semantics. Standards and templates aren't merged at sync time — they follow the runtime resolution convention documented in `FRAMEWORK.md`.
+- **User overlay** (user mode only, v0.6.0+): if `~/.flow/user/flow.toml` exists, its `[[claude.commands]]`, `[[codex.commands]]`, `[[claude.hooks]]`, `[[codex.hooks]]`, and shared `[[agents]]` entries layer on top of the framework manifest before adapter generation. Same-name entries override; new names append. See `docs/architecture.md` "User Overlay" for the merge semantics. Standards and templates aren't merged at sync time — they follow the runtime resolution convention documented in `FRAMEWORK.md`.
 
 ## Current Targets
 
