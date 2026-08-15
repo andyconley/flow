@@ -4,14 +4,19 @@ Portable workflow framework for AI-assisted development.
 
 ## What It Is
 
-`flow` has four layers:
+`flow` is a local framework for working with AI coding agents in a more deliberate way. It gives you a shared workflow, role definitions, standards, and durable artifacts so sessions do not depend on whatever context happens to be in the chat.
 
-1. **Machine support** at `~/.flow/` — install state, config, the source symlink
-2. **Framework source** in this repo (`scaffolds/default/`) — the canonical workflow vocabulary
-3. **User-level install** at `~/.claude/`, `~/.agents/skills/`, and `~/.codex/` — generated adapters active in every supported runtime session, regardless of cwd
-4. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/`, `<repo>/.agents/skills/`, and `<repo>/.codex/` — per-project, opt-in, only where you want project-specific role assignments / memory / run artifacts
+Use it when you want an agent to:
 
-Framework content is the source of truth: commands, agents, and standards. Runtime-facing files in `.claude/`, `.agents/skills/`, and `.codex/` are generated adapters at user-level and project-level scopes.
+- define work before planning it
+- choose an approach before implementation starts
+- keep implementation work gated and reviewable
+- use the same role expectations across Claude and Codex
+- leave behind useful state, requirements, notes, and handoffs
+
+Flow is not the project itself. It is the operating model around the project: the commands, agents, standards, templates, hooks, and local CLI that keep AI-assisted work from turning into one long unstructured chat.
+
+For the internal architecture, see [architecture.md](docs/architecture.md).
 
 ## Current Repo Layout
 
@@ -34,20 +39,6 @@ For maintainer-oriented documentation, start with:
 
 ## What Exists Now
 
-### Framework content
-
-The framework template includes:
-
-- a broad standards library under `.flow/standards/`
-- vendored upstream specs (verbatim mirrors of external standards flow depends on) under `.flow/standards/vendor/` — e.g., the Conventional Commits v1.0.0 spec
-- richer command contracts under `.flow/commands/`
-- richer role definitions under `.flow/agents/`
-- project overlay templates under `.flow/project/`
-- memory, templates, and run scaffolding
-- a machine-readable framework manifest at `.flow/flow.toml` (including upstream-standard dependencies declared through `[standards.<name>]` blocks)
-- **user overlay support** at `~/.flow/user/` — drop your own commands, agents, hooks, standards, or templates here to override the framework defaults or add new ones, without forking. See `docs/architecture.md` "User Overlay" for the merge model.
-- **overlay version control.** The overlay is the authored layer that does not live in a repo shipped by flow, so it starts with no history and no backup. `flow setup user --overlay-repo <url>` gives it one: clone when the overlay is absent, or `git init` in place and add the remote when it already has content. It never clobbers existing files and never commits. `FRAMEWORK.md` holds the convention for who commits overlay edits. `flow doctor` reports the overlay's VCS state, including uncommitted and unpushed work.
-
 ### Workflow lanes
 
 The default Flow lane is:
@@ -58,22 +49,37 @@ boot -> define -> solution (optional) -> plan -> implement -> review -> archive
 
 Small, narrow work can go straight to `scout`. Interrupted work resumes through `resume`.
 
-The main slash-command skills are:
+The main workflow commands are:
 
-- `/flow-boot` — orient to project state, overlays, memory, and active work
-- `/flow-define` — turn early feature or architectural-capability ideas into approved requirements
-- `/flow-solution` — choose a technical approach for approved requirements when options, architecture decisions, or chunking matter
-- `/flow-plan` — shape approved requirements or bug-shaped work into an implementation-ready plan
-- `/flow-implement` — run gated implementation with durable artifacts
-- `/flow-review` — judge implementation against intent and validation evidence
-- `/flow-archive` — close accepted work and update durable memory
-- `/flow-scout` — handle small focused changes that meet the scout-size criteria
-- `/flow-resume` and `/flow-status` — recover or summarize current work state
-- `/flow-help` and `/flow-init-project` — orient to Flow or initialize project-overlay context
+- [`/flow-boot`](scaffolds/default/commands/flow-boot.md) — orient to project state, overlays, memory, and active work
+- [`/flow-define`](scaffolds/default/commands/flow-define.md) — turn early feature or architectural-capability ideas into approved requirements
+- [`/flow-solution`](scaffolds/default/commands/flow-solution.md) — choose a technical approach for approved requirements when options, architecture decisions, or chunking matter
+- [`/flow-plan`](scaffolds/default/commands/flow-plan.md) — shape approved requirements or bug-shaped work into an implementation-ready plan
+- [`/flow-implement`](scaffolds/default/commands/flow-implement.md) — run gated implementation with durable artifacts
+- [`/flow-review`](scaffolds/default/commands/flow-review.md) — judge implementation against intent and validation evidence
+- [`/flow-archive`](scaffolds/default/commands/flow-archive.md) — close accepted work and update durable memory
+- [`/flow-scout`](scaffolds/default/commands/flow-scout.md) — handle small focused changes that meet the scout-size criteria
+- [`/flow-resume`](scaffolds/default/commands/flow-resume.md) and [`/flow-status`](scaffolds/default/commands/flow-status.md) — recover or summarize current work state
+- [`/flow-help`](scaffolds/default/commands/flow-help.md) and [`/flow-init-project`](scaffolds/default/commands/flow-init-project.md) — orient to Flow or initialize project-overlay context
 
-### Start here
+### Framework content
 
-For a new machine, use [Quick Install](#quick-install-recommended-for-consumers).
+The framework template includes:
+
+- [command contracts](scaffolds/default/commands/) under `.flow/commands/`
+- [agent role definitions](scaffolds/default/agents/) under `.flow/agents/`
+- [standards](scaffolds/default/standards/) under `.flow/standards/`
+- [templates](scaffolds/default/templates/) for definitions, research notes, adversarial reviews, ADRs, spikes, runs, and handoffs
+- [project overlay starter files](scaffolds/default/project/) under `.flow/project/`
+- [memory and run scaffolding](scaffolds/default/) for transient state and durable artifacts
+- [flow.toml](scaffolds/default/flow.toml), the machine-readable manifest for commands, agents, hooks, model hints, and standard dependencies
+- user overlays at `~/.flow/user/` for personal commands, agents, hooks, standards, or templates without forking this repo
+
+User overlays are optional. Use `flow setup user --overlay-repo URL` if you want that overlay backed by your own git repo. Flow can clone an absent overlay or attach a remote to an existing one, but it does not clobber files or commit for you. For the merge model and ownership rules, see [architecture.md](docs/architecture.md).
+
+### Want to install?
+
+For a new machine, use [Quick Install](#quick-install-recommended-for-most-users).
 
 For framework development, use [Local Install](#local-install-for-maintainers-and-contributors).
 
@@ -186,9 +192,24 @@ Use these to read cost, context growth, active sessions, and token trends.
   - powers the UserPromptSubmit pre-execution warning. It reads the verdict file without recomputing at prompt time, then prints one advisory line only when carry is heavy (100K+) and has grown 50K+ since the last warning. Informational only; always exits 0.
 - `--json` on any `flow cost` view prints the same structured result as JSON instead of an aligned table
 
-### Runtime adapter generation
+## What Gets Installed
 
-`flow sync claude` (project mode) generates into the repo's `.claude/`:
+At user level, flow installs the pieces each runtime needs:
+
+- Claude gets `flow-*` skills, project subagents, and hooks that add flow context and warn when generated files are edited directly.
+- Codex gets flow skills, native agent definitions, hooks, and a managed-file manifest.
+
+## Why Generated Files Exist
+
+Claude and Codex do not read the same configuration format. Flow keeps one source of truth under `.flow/`, then generates the shape each runtime expects.
+
+That keeps commands, agents, and hooks portable without asking you to hand-maintain parallel Claude and Codex copies. For the full adapter model, see [runtime-adapters.md](docs/runtime-adapters.md).
+
+### How Flow Reaches Claude and Codex
+
+Flow keeps its source files under `.flow/`, then writes the runtime-specific files Claude and Codex need.
+
+`flow sync claude` (project mode) writes into the repo's `.claude/`:
 
 - `.claude/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md`
 - `.claude/agents/*.md` from `.flow/agents/*.md`
@@ -198,7 +219,7 @@ Use these to read cost, context growth, active sessions, and token trends.
 
 `flow sync claude --user` (user mode) generates the same surfaces into `~/.claude/`, with `$HOME`-based hook commands and manifest entries that reference the framework scaffold path. The session-start hook fires in every Claude Code session and detects project-level `.flow/` overlays automatically.
 
-`flow sync codex` and `flow sync codex --user` follow the same pattern for Codex-native surfaces:
+`flow sync codex` and `flow sync codex --user` do the same for Codex:
 
 - `.agents/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md` (or from the scaffold in user mode)
 - `.codex/agents/*.toml` from `.flow/agents/*.md`, including model and reasoning-effort hints from `flow.toml`
@@ -208,9 +229,9 @@ Use these to read cost, context growth, active sessions, and token trends.
 
 Codex hook support has parity with Claude's: same manifest shape (`name`/`event`/`matcher`/`type`/`script`, optional `timeout`/`status_message`), same overlay merge, same managed-entry lifecycle. `matcher` is optional for Codex; omitted means match everything, per Codex's own hook semantics.
 
-## Managed Boundaries
+## Files Flow Owns
 
-`flow` treats these as generated, managed surfaces:
+These files are generated. Change the `.flow/` source files instead of editing the generated copies directly.
 
 - `.claude/skills/...`
 - `.claude/agents/...`
@@ -223,7 +244,7 @@ Codex hook support has parity with Claude's: same manifest shape (`name`/`event`
 - managed hook entries inside `.codex/hooks.json`
 - `.codex/flow.managed.toml`
 
-Rules:
+Where to make changes:
 
 - edit `.flow/commands/*` to change generated skills
 - edit `.flow/agents/*` to change generated agents
@@ -231,34 +252,7 @@ Rules:
 - rerun `flow sync claude` after changing the source of truth
 - rerun `flow sync codex` after changing Codex-managed surfaces
 
-`flow sync claude` preserves unmanaged Claude files and only removes files that were previously marked as flow-managed and are no longer desired.
-`flow sync codex` follows the same managed-manifest pattern for Codex skills.
-
-## Claude Runtime Behavior
-
-The generated Claude runtime currently includes:
-
-- slash-command style skills for `flow-*`
-- project subagents from `.flow/agents`
-- a `SessionStart` hook that injects flow orientation context
-- a `PostToolUse` reminder hook that nudges edits back to `.flow/` when generated Claude files are modified directly
-
-## Adapter Decisions
-
-The adapter strategy is deliberate:
-
-- commands are generated per runtime
-  - `.flow/commands/*.md` are generic workflow contracts, so each runtime can wrap them in its own shape
-- agents are declared once, then adapted per runtime
-  - Claude receives agent Markdown with `model` and `effort`
-  - Codex receives native TOML agents with `model`, `model_reasoning_effort`, and generated developer instructions
-- hooks are registered through each runtime's managed configuration surface
-
-That gives flow three useful properties:
-
-- Claude gets the richer full adapter surface
-- Codex gets native skills, agents, hooks, and managed manifests
-- the source of truth stays in `.flow/`, away from runtime-specific folders
+Flow preserves unmanaged Claude and Codex files. It only removes files that were previously marked as flow-managed and are no longer part of the generated surface.
 
 ## Smoke-Tested Behavior
 
@@ -276,7 +270,7 @@ The current implementation has been smoke-tested for:
 - missing-file restoration in `flow refresh project`
 - automated CLI tests for setup, sync, and drift behavior
 
-## Quick Install (recommended for consumers)
+## Quick Install (recommended for most users)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash
