@@ -311,6 +311,8 @@ Columns:
 
 Manual and auto compactions are never summed. A manual `/compact` is deliberate hygiene; an auto one is hitting the ceiling. They are opposite signals about a session's health, and `med pre man` is the useful companion: how full the context typically was when you chose to cut.
 
+**Buckets follow your local calendar, not UTC.** Stored timestamps are UTC and every window comparison stays UTC, but a bucket is a label on a human day: bucketing by UTC splits an evening across two rows for anyone west of Greenwich, and on the corpus this was built against that moved 7% of a week's turns off the day they happened. A week is keyed by its **Monday's date** rather than a week number — `%W` counts weeks within a calendar year, so a week spanning New Year would otherwise split into two partial buckets and skew every volume column.
+
 Read-only, and it does not harvest first — a trend over completed periods does not become wrong for want of the last few minutes.
 
 **Coverage is labelled, never silently truncated.** If the window reaches back before the earliest harvested turn for a harness, a note says so. Absent buckets and empty buckets are different facts, and hiding the difference turns a coverage gap into a false trend.

@@ -1957,9 +1957,20 @@ class FlowCliTests(unittest.TestCase):
         self.assertIn("WT/1K OUT", table.stdout)
         self.assertIn("CMPCT MAN", table.stdout)
 
-        weekly = self.run_flow("cost", "trend", "--all", "--bucket", "week")
+        weekly = self.run_flow("cost", "trend", "--all", "--bucket", "week", "--json")
         self.assert_ok(weekly)
-        self.assertIn("-W", weekly.stdout, "week buckets read YYYY-Www")
+        # Keyed by the week's Monday rather than `%Y-W%W`, which splits a week
+        # across the calendar-year boundary. Asserted as "is a Monday" rather
+        # than against a literal, because the bucket is a local-time date and
+        # the literal would only hold in the timezone it was written in.
+        from datetime import datetime as _dt
+
+        for row in json.loads(weekly.stdout)["rows"]:
+            self.assertEqual(
+                _dt.strptime(row["bucket"], "%Y-%m-%d").weekday(),
+                0,
+                f"week bucket {row['bucket']} should be a Monday",
+            )
 
         as_json = self.run_flow("cost", "trend", "--all", "--json")
         self.assert_ok(as_json)
@@ -4697,6 +4708,35 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(first["failures"], [])
 
 
+def _pin_tz(test: unittest.TestCase, name: str = "UTC") -> None:
+    """Pin the process timezone for one test, restoring it afterwards.
+
+    `flow cost trend` buckets by LOCAL calendar day — a trend meant to show
+    whether a working habit is changing has to follow the days the work
+    happened in, and UTC buckets split an evening across two rows for anyone
+    west of Greenwich. That makes bucket output timezone-dependent, so tests
+    that assert on bucket labels have to say which zone they mean rather than
+    inheriting the machine's and passing only where they were written.
+
+    SQLite's `localtime` modifier reads the same `TZ` this sets, so pinning it
+    here covers both the Python and the SQL side.
+    """
+    import time
+
+    original = os.environ.get("TZ")
+    os.environ["TZ"] = name
+    time.tzset()
+
+    def restore() -> None:
+        if original is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original
+        time.tzset()
+
+    test.addCleanup(restore)
+
+
 class CostTests(unittest.TestCase):
     """Direct tests of cli/cost.py's query functions, against a small
     constructed turn_norm/session dataset — no collector or normalize
@@ -4706,6 +4746,12 @@ class CostTests(unittest.TestCase):
 
     def setUp(self) -> None:
         import sqlite3
+
+        # Bucket labels are local-time, so they are only deterministic against
+        # a stated zone. UTC keeps the Z-suffixed fixtures reading as their
+        # own date; `test_buckets_follow_the_local_day` pins a real offset
+        # instead, to prove the localtime conversion is actually applied.
+        _pin_tz(self)
 
         REPO_ROOT_CLI = REPO_ROOT / "cli"
         if str(REPO_ROOT_CLI) not in sys.path:
@@ -5313,6 +5359,31 @@ class CostTests(unittest.TestCase):
         self.assertEqual(row["window_source"], "model")
         self.assertEqual(row["ctx_pct"], 50.0, "100K of the 200K haiku window")
 
+    def test_a_context_larger_than_the_observed_window_discards_the_observation(self) -> None:
+        """A point-in-time observation can be outgrown, and believing it is
+        worse than the inference it displaced.
+
+        Switch to the 1M variant with `/model` after a 200K auto compaction and
+        context keeps climbing. Without the guard the view reports 200% and
+        marks it *measured*; the model source would have self-corrected via
+        `long_threshold` and shown 40%.
+        """
+        sess = self.insert_session("outgrown-1", harness="claude")
+        self.insert_ctx_turn(sess, "2026-01-10T11:50:00Z", 400_000)
+        self._auto_compaction(sess, 200_069)
+
+        row = self.cost.active_rows(self.conn, 60, self._active_now())[0]
+        self.assertEqual(row["window_source"], "model", "the stale observation is discarded")
+        self.assertEqual(row["ctx_pct"], 40.0, "1M via long_threshold, not 200% of a dead window")
+
+    def test_a_window_size_only_named_in_the_model_table_can_still_be_snapped_to(self) -> None:
+        """`_render_active_table` tells the reader that adding a model to the
+        table resolves its window. That is only true if the table's sizes are
+        also the ones an observation can snap to — a hardcoded (200K, 1M) pair
+        would reject every real reading for a 272K model."""
+        self.assertIn(272_000, self.cost._known_windows())
+        self.assertEqual(self.cost._snap_to_known_window(270_000), 272_000)
+
     def test_an_out_of_range_compaction_reading_falls_through(self) -> None:
         """A reading too far from any known window is not snapped — a
         confident wrong window would be worse than the honest inference."""
@@ -5327,23 +5398,32 @@ class CostTests(unittest.TestCase):
     # capacity gauge expiry
     # ------------------------------------------------------------------
 
-    def _capacity_turn(self, primary_reset: int | None, secondary_reset: int | None = None) -> None:
-        sess = self.insert_session("codex-cap", harness="codex")
+    def _capacity_turn(
+        self,
+        primary_reset: int | None,
+        secondary_reset: int | None = None,
+        ts: str = "2026-01-10T11:00:00Z",
+    ) -> None:
+        existing = self.conn.execute(
+            "SELECT id FROM session WHERE harness = 'codex' AND session_id = 'codex-cap'"
+        ).fetchone()
+        sess = existing[0] if existing else self.insert_session("codex-cap", harness="codex")
         turn_raw_id = self._next_id
         self._next_id += 1
         self.conn.execute(
             "INSERT INTO turn_raw (id, session_row_id, natural_turn_id, turn_seq, is_subagent,"
             " ts, model, payload, source_path, source_line_no, collector_version)"
-            " VALUES (?, ?, ?, ?, 0, '2026-01-10T11:00:00Z', 'gpt-5.6-sol', '{}', '/tmp/x', ?, 1)",
-            (turn_raw_id, sess, f"t{turn_raw_id}", turn_raw_id, turn_raw_id),
+            " VALUES (?, ?, ?, ?, 0, ?, 'gpt-5.6-sol', '{}', '/tmp/x', ?, 1)",
+            (turn_raw_id, sess, f"t{turn_raw_id}", turn_raw_id, ts, turn_raw_id),
         )
         self.conn.execute(
             "INSERT INTO turn_norm (turn_raw_id, ts, model, is_subagent, norm_version,"
             " capacity_primary_used_pct, capacity_primary_window_minutes, capacity_primary_resets_at,"
             " capacity_secondary_used_pct, capacity_secondary_window_minutes, capacity_secondary_resets_at)"
-            " VALUES (?, '2026-01-10T11:00:00Z', 'gpt-5.6-sol', 0, 2, 96.0, 10080, ?, ?, 300, ?)",
+            " VALUES (?, ?, 'gpt-5.6-sol', 0, 2, 96.0, 10080, ?, ?, 300, ?)",
             (
                 turn_raw_id,
+                ts,
                 primary_reset,
                 None if secondary_reset is None else 42.0,
                 secondary_reset,
@@ -5420,6 +5500,36 @@ class CostTests(unittest.TestCase):
         old = self.cost.capacity_gauge(self.conn, None, now=taken + _td(minutes=6000))
         self.assertTrue(old["stale"])
         self.assertIn("more than halfway through its own window", self.cost._render_gauge_line(old))
+
+    def test_a_live_secondary_in_an_older_row_is_not_lost(self) -> None:
+        """Each field resolves from its own most-recent non-NULL row.
+
+        Codex populates `secondary` in 7.7% of rows on the real corpus, so a
+        single-row query almost always lands on one with a NULL secondary —
+        making "a live secondary should not disappear" false in the common
+        case rather than the edge one.
+        """
+        self._capacity_turn(primary_reset=_FUTURE_RESET, secondary_reset=_FUTURE_RESET, ts="2026-01-10T10:00:00Z")
+        # A newer reading that carries no secondary at all.
+        self._capacity_turn(primary_reset=_FUTURE_RESET, secondary_reset=None, ts="2026-01-10T12:00:00Z")
+
+        gauge = self.cost.capacity_gauge(self.conn, None, now=self._at(1_000_000))
+        self.assertEqual(gauge["capacity_primary_ts"], "2026-01-10T12:00:00Z", "newest primary")
+        self.assertEqual(gauge["capacity_secondary_used_pct"], 42.0, "older but live secondary survives")
+        self.assertEqual(gauge["capacity_secondary_ts"], "2026-01-10T10:00:00Z")
+
+    def test_staleness_is_judged_per_field_against_its_own_window(self) -> None:
+        """A 300-minute reading four hours old is 80% through its window and
+        must be labelled, even beside a fresh 10,080-minute one. Judging both
+        against the longest window would let it pass."""
+        from datetime import timedelta as _td
+
+        self._capacity_turn(
+            primary_reset=_FUTURE_RESET, secondary_reset=_FUTURE_RESET, ts="2026-01-10T10:00:00Z"
+        )
+        taken = self._at(0).replace(year=2026, month=1, day=10, hour=10)
+        gauge = self.cost.capacity_gauge(self.conn, None, now=taken + _td(hours=4))
+        self.assertTrue(gauge["stale"], "the 300m field is 80% through its own window")
 
     def test_a_reading_with_no_reset_time_survives(self) -> None:
         """It cannot be shown to have expired, so it is not dropped."""
@@ -5527,6 +5637,64 @@ class CostTests(unittest.TestCase):
     def test_an_unknown_bucket_is_refused(self) -> None:
         with self.assertRaises(ValueError):
             self.cost.trend_rows(self.conn, None, bucket="fortnight")
+
+    def test_buckets_follow_the_local_day(self) -> None:
+        """An evening's work belongs to the evening, not to tomorrow.
+
+        On the corpus this was built against, 7% of a week's turns fell on the
+        wrong side of a UTC boundary — a single evening session split across
+        two rows, in the view whose whole job is day-over-day comparison.
+        """
+        _pin_tz(self, "America/New_York")  # UTC-4 in July
+        sess = self.insert_session("trend-1", harness="claude")
+        # 01:30 UTC on the 11th is 21:30 on the 10th, local.
+        self._trend_turn(sess, "2026-07-11T01:30:00Z", fresh=1_000, output=100)
+
+        rows = self.cost.trend_rows(self.conn, None)
+        self.assertEqual(rows[0]["bucket"], "2026-07-10")
+
+    def test_a_week_spanning_new_year_stays_one_bucket(self) -> None:
+        """`%Y-W%W` would split it: `%W` numbers weeks within a calendar year,
+        so Mon 2026-12-28 → Sun 2027-01-03 becomes a 4-day `2026-W52` and a
+        3-day `2027-W00`, and every volume column then compares two partial
+        weeks against full ones. Keyed by the week's Monday instead.
+        """
+        sess = self.insert_session("trend-1", harness="claude")
+        for ts in ("2026-12-28T12:00:00Z", "2026-12-31T12:00:00Z", "2027-01-02T12:00:00Z"):
+            self._trend_turn(sess, ts, fresh=1_000, output=100)
+
+        rows = self.cost.trend_rows(self.conn, None, bucket="week")
+        self.assertEqual(len(rows), 1, "one calendar week is one bucket")
+        self.assertEqual(rows[0]["bucket"], "2026-12-28", "keyed by the week's Monday")
+        self.assertEqual(rows[0]["turns"], 3)
+
+    def test_a_non_finite_weight_falls_back_instead_of_crashing(self) -> None:
+        """`json.loads` accepts the bare literals NaN and Infinity. Both pass
+        an isinstance check and then render as `nan`/`inf` in the SQL, which
+        SQLite parses as identifiers — "no such column: nan" — killing the
+        command that this function's docstring promises will not crash.
+        """
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        source = Path(tempdir.name)
+        (source / "data").mkdir()
+        (source / "data" / "token_weights.json").write_text(
+            '{"weights": {"cache_read": NaN, "cache_write_1h": Infinity,'
+            ' "uncached_input": -5, "cache_write_5m": true}}'
+        )
+        sess = self.insert_session("trend-1", harness="claude")
+        self._trend_turn(sess, "2026-01-10T10:00:00Z", read=100_000, output=1_000)
+
+        original = self.cost.SOURCE_DIR
+        try:
+            self.cost.SOURCE_DIR = source
+            weights = self.cost.token_weights()
+            rows = self.cost.trend_rows(self.conn, None)
+        finally:
+            self.cost.SOURCE_DIR = original
+
+        self.assertEqual(weights, self.cost._DEFAULT_WEIGHTS, "every unusable value falls back")
+        self.assertEqual(rows[0]["wt_per_1k_out"], 10_000.0)
 
     def test_main_agent_only_columns_exclude_subagent_turns(self) -> None:
         sess = self.insert_session("trend-1", harness="claude")

@@ -31,6 +31,13 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
   buckets are different facts and hiding the difference turns a coverage gap
   into a false trend.
 
+  Buckets follow the **local** calendar. Stored timestamps are UTC and every
+  window comparison stays UTC, but a bucket is a label on a human day —
+  bucketing by UTC split an evening across two rows and moved 7% of a week's
+  turns off the day they happened. Weeks are keyed by their Monday's date
+  rather than a week number, since `%W` counts weeks within a calendar year and
+  would split a week spanning New Year into two partial buckets.
+
 - **Context windows resolve at read time**, from `data/model_context_windows.json`
   and from the transcript. `turn_norm.context_window` is NULL for every Claude
   turn and deliberately stays that way — that column means "the harness
