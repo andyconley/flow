@@ -213,9 +213,35 @@ Behavior:
 
 Flags:
 
-- `--backfill` — rewind every already-recorded file's watermark first, so already-harvested sessions pick up `session.title`, `cwd`, and title provenance retroactively
+- `--rescan` — rewind already-recorded files' watermarks first and re-read them from the start
+- `--since DATE` — with `--rescan`, only rewind files modified on or after `DATE` (`YYYY-MM-DD` or a full ISO timestamp)
+- `--session ID` — with `--rescan`, only rewind files whose path contains `ID`
+- `--dry-run` — with `--rescan`, report the scope and exit without writing anything
 
 Use this when you want the store current before a `summary` or `sessions` read. `flow cost active` and `flow cost verdict` run it for you.
+
+#### When you need `--rescan`
+
+A plain harvest only reads what is new since last time, so a collector improvement never reaches transcripts already on disk. `--rescan` re-reads them. Three things only it can recover:
+
+- **full output-token counts.** A streamed response is written as several transcript lines that share one request id, and only the last carries the final `output_tokens`. Collectors before v3 kept the first, storing a partial count — about a third of the real output, measured against the console.
+- **compaction events.** `compact_boundary` records were dropped entirely before collector v3.
+- **titles, `cwd`, and title provenance** for sessions harvested before those were captured.
+
+Safe to run repeatedly. The output-token rule is highest-wins, which is order-independent, so a rescan cannot un-correct a row it already fixed.
+
+Rescanning the whole corpus re-reads every recorded transcript. Rehearse the filters first:
+
+```
+flow harvest claude --rescan --since 2026-08-01 --dry-run
+flow harvest claude --rescan --since 2026-08-01
+```
+
+`--session` takes a session uuid and matches it against file paths, which reaches that session's main transcript and its subagent files together.
+
+A transcript deleted from disk cannot be rescanned — its stored turns keep whatever the collector recorded at the time, permanently.
+
+`--backfill` is the former name of `--rescan` and still works. It is hidden from `--help`; prefer `--rescan`.
 
 ### `flow harvest codex`
 

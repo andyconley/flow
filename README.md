@@ -68,7 +68,8 @@ flow sync codex --check
 flow sync codex --user
 flow harvest codex
 flow harvest claude
-flow harvest claude --backfill
+flow harvest claude --rescan
+flow harvest claude --rescan --since 2026-08-01 --dry-run
 flow normalize
 flow cost summary
 flow cost summary --all --json
@@ -102,8 +103,8 @@ What they do:
 - `--check` on any sync target reports drift without writing files
 - `flow harvest codex` / `flow harvest claude`
   - incrementally read `~/.codex/sessions/` / `~/.claude/projects/` into `~/.flow/usage.db`'s raw layer (creating the store on first run); safe to run repeatedly or on a schedule
-- `flow harvest claude --backfill`
-  - rewinds every already-recorded Claude file's watermark first, so already-harvested sessions pick up `session.title`, `cwd`, and title provenance retroactively; safe to run repeatedly (already-seen turns are a no-op)
+- `flow harvest claude --rescan`
+  - rewinds already-recorded Claude files' watermarks and re-reads them from the start, so already-harvested sessions pick up corrected output token counts, compaction events, `session.title`, `cwd`, and title provenance retroactively; `--since` / `--session` narrow the scope and `--dry-run` rehearses it; safe to run repeatedly (the output-token rule is highest-wins, so a rescan cannot un-correct a row)
 - `flow normalize`
   - projects every harness's raw turn records into one shared token convention (`turn_norm`); only rows without a current-version normalized counterpart are recomputed
 - `flow cost summary`
