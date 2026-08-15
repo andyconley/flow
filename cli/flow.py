@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Sibling modules. The launcher runs cli/flow.py directly, which puts cli/ on
@@ -408,6 +409,17 @@ def main() -> int:
         # `--dry-run`, which would then write. Refused rather than ignored.
         if not rescan and (args.since or args.session or args.dry_run):
             parser.error("--since, --session, and --dry-run require --rescan")
+        if args.since is not None:
+            # Parsed here rather than left to blow up inside the command: an
+            # unparseable date is a usage error, and a raw ValueError
+            # traceback reads as a crash in the tool rather than a typo.
+            try:
+                datetime.fromisoformat(args.since)
+            except ValueError:
+                parser.error(
+                    f"--since: {args.since!r} is not a date — "
+                    f"use YYYY-MM-DD or a full ISO timestamp"
+                )
         return harvest_claude_command(
             rescan=rescan,
             since=args.since,

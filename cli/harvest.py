@@ -109,26 +109,96 @@ def _claude_rescan_filters(
     return where, params
 
 
+def _claude_rescan_closure(
+    conn: sqlite3.Connection, since: str | None = None, session: str | None = None
+) -> tuple[list[str], list[int]]:
+    """Resolve the filters to whole sessions: `(source_paths, session_row_ids)`.
+
+    A filter selects *files*, but the state a rescan resets — `last_seen_ts`
+    and `title_ai_ts` — is per *session*, and a Claude session can span
+    several files (its main transcript plus each `subagents/*.jsonl`, and
+    occasionally a continuation file). Resetting a session's derived state
+    while replaying only some of its files is not a smaller version of the
+    same operation, it is a broken one:
+
+      A session spans `a-cont.jsonl` (ai-title "new", effective ts 2026-08-10)
+      and `b-main.jsonl` (ai-title "old", effective 2026-07-01). Rewind only
+      `b-main.jsonl` but clear the session's state, and the replay re-accepts
+      "old" against a now-NULL `title_ai_ts`. `a-cont.jsonl` is never
+      replayed, so "new" is never re-derived. The title is wrong permanently.
+
+    So the file set is expanded to the closure: every recorded file of every
+    session the filter touches. "Rescan this session" then means the whole
+    session, which is also what the flag reads as. `--since` widens the same
+    way — a session with one recently-modified file has all of its files
+    replayed, which is the correct unit even though it is more than the date
+    literally selected.
+
+    Resolved in Python rather than as one nested SQL statement: the corpus is
+    a few hundred files, and the parameter bookkeeping for a three-level
+    correlated subquery is exactly the kind of thing that is wrong in a way
+    tests do not notice.
+    """
+    where, params = _claude_rescan_filters(since, session)
+    seeds = [row[0] for row in conn.execute(f"SELECT source_path FROM harvest WHERE {where}", params)]
+    if not seeds:
+        return [], []
+
+    placeholders = ",".join("?" for _ in seeds)
+    # A session is touched if the filter hit the file that established its
+    # identity, or any file that contributed a turn to it. Both are checked
+    # because `session.source_path` points at whichever of a session's files
+    # was harvested first, which for a session with subagents is frequently
+    # not the one carrying its titles.
+    session_ids = [
+        row[0]
+        for row in conn.execute(
+            "SELECT id FROM session WHERE harness = ?"
+            f"   AND (source_path IN ({placeholders})"
+            f"        OR id IN (SELECT session_row_id FROM turn_raw WHERE source_path IN ({placeholders})))",
+            [CLAUDE_HARNESS, *seeds, *seeds],
+        )
+    ]
+    if not session_ids:
+        # Harvest rows whose files produced no session at all — an empty or
+        # entirely unattributable transcript. Still rewindable, nothing to
+        # expand to.
+        return sorted(set(seeds)), []
+
+    ids = ",".join("?" for _ in session_ids)
+    paths = {
+        row[0]
+        for row in conn.execute(
+            "SELECT source_path FROM harvest WHERE harness = ?"
+            f"   AND (source_path IN (SELECT source_path FROM session WHERE id IN ({ids}))"
+            f"        OR source_path IN (SELECT source_path FROM turn_raw WHERE session_row_id IN ({ids})))",
+            [CLAUDE_HARNESS, *session_ids, *session_ids],
+        )
+    }
+    return sorted(paths | set(seeds)), session_ids
+
+
 def _claude_rescan_scope(
     conn: sqlite3.Connection, since: str | None = None, session: str | None = None
 ) -> dict:
     """Count what a rescan with these filters would touch, changing nothing.
 
-    Backs `--dry-run`. Reports files (matching `harvest` rows) and the
-    `turn_raw` rows currently attributed to those files — the second number
-    being the one that says how much stored data is in the blast radius,
-    which the file count alone does not convey for a corpus whose files
-    range from a handful of turns to thousands.
+    Backs `--dry-run`, and reports the *closure* rather than the literal
+    filter match — a dry run whose numbers understate the real blast radius
+    is worse than no dry run. The turn count is the one that says how much
+    stored data is affected; the file count alone does not convey it for a
+    corpus whose files range from a handful of turns to thousands.
     """
-    where, params = _claude_rescan_filters(since, session)
-    files = conn.execute(f"SELECT COUNT(*) FROM harvest WHERE {where}", params).fetchone()[0]
+    paths, _session_ids = _claude_rescan_closure(conn, since=since, session=session)
+    if not paths:
+        return {"files": 0, "turns": 0}
+    placeholders = ",".join("?" for _ in paths)
     turns = conn.execute(
         "SELECT COUNT(*) FROM turn_raw tr JOIN session s ON s.id = tr.session_row_id"
-        " WHERE s.harness = ? AND tr.source_path IN ("
-        f"  SELECT source_path FROM harvest WHERE {where})",
-        [CLAUDE_HARNESS, *params],
+        f" WHERE s.harness = ? AND tr.source_path IN ({placeholders})",
+        [CLAUDE_HARNESS, *paths],
     ).fetchone()[0]
-    return {"files": files, "turns": turns}
+    return {"files": len(paths), "turns": turns}
 
 
 def _reset_claude_watermarks(
@@ -149,7 +219,13 @@ def _reset_claude_watermarks(
 
     Filters narrow which rows are zeroed; unfiltered, this is every recorded
     Claude file, the original behaviour. See `_claude_rescan_filters` for what
-    each one selects on and why.
+    each one selects on, and `_claude_rescan_closure` for why the selection is
+    then widened to whole sessions before anything is written.
+
+    All three resets below share that one scope. They have to: the watermark
+    is per file and the title state is per session, and resetting them over
+    different sets is what turns a partial replay into a permanently wrong
+    title.
 
     Two small, accepted costs of resetting rather than a narrower scan:
     every matching file is fully re-read from byte 0 for the duration of
@@ -162,11 +238,14 @@ def _reset_claude_watermarks(
     guard is order-independent, so a correction pass cannot un-correct a row
     it already fixed.
     """
-    where, params = _claude_rescan_filters(since, session)
+    paths, session_ids = _claude_rescan_closure(conn, since=since, session=session)
+    if not paths:
+        return
+    path_ph = ",".join("?" for _ in paths)
     conn.execute(
         "UPDATE harvest SET last_offset = 0, last_line_no = 0, last_line_hash = NULL"
-        f" WHERE {where}",
-        params,
+        f" WHERE harness = ? AND source_path IN ({path_ph})",
+        [CLAUDE_HARNESS, *paths],
     )
     # Derived title state must reset alongside the watermark, or the replay
     # is not idempotent: after a full pass, last_seen_ts holds the file-wide
@@ -183,24 +262,40 @@ def _reset_claude_watermarks(
     # files no longer exist on disk (their rows would otherwise lose their
     # title with nothing left to re-derive it from).
     #
-    # Scoped to the sessions actually being replayed, and this is load-bearing
-    # once filters exist: clearing derived state for a session whose files are
-    # NOT being rewound leaves it with title_ai_ts NULL and no replay coming
-    # to re-derive it, so the next ordinary incremental harvest sees an
-    # ai-title with nothing to compare against and can flip that title
-    # backwards — the exact bug the unfiltered reset was written to prevent,
-    # reintroduced by narrowing only half of it. A session is in scope if
-    # either its own source_path or any of its turns' source_path is a file
-    # being rewound; both are checked because session.source_path points at
-    # whichever of a session's several files was harvested first, which for a
-    # session with subagents is frequently not the one carrying its titles.
+    # Scoped to exactly the sessions whose every file is being replayed —
+    # which the closure guarantees, and which is the whole reason it exists.
+    # Clearing a session's derived state while replaying only some of its
+    # files leaves the un-replayed files' titles unrecoverable, so the replay
+    # re-accepts whichever title the replayed file happens to carry and the
+    # session keeps it permanently.
+    if session_ids:
+        id_ph = ",".join("?" for _ in session_ids)
+        conn.execute(
+            f"UPDATE session SET last_seen_ts = NULL, title_ai_ts = NULL WHERE id IN ({id_ph})",
+            session_ids,
+        )
+    # The normalized layer is invalidated for the whole scope as well.
+    #
+    # The collector already marks each individual row it corrects (see the
+    # upsert in `claude_collector._harvest_lines`), which is what covers the
+    # no-rescan case. This is the coarser sweep for the rescan path: a rescan
+    # exists precisely because the collector's *rules* changed, so rows whose
+    # payload happens to come out byte-identical can still normalize
+    # differently, and those produce no `rowcount` for the collector to notice.
+    #
+    # Measured on the real corpus before this existed: raw held 31.90M output
+    # tokens against 28.13M in turn_norm, the whole 12% recovery stranded one
+    # layer down, with every table individually self-consistent and nothing
+    # reporting it.
+    #
+    # `norm_version = -1` rather than DELETE, for the same cascade reason as
+    # in the collector. -1 is below every real version, so
+    # `COALESCE(norm_version, -1) < ?` selects it.
     conn.execute(
-        "UPDATE session SET last_seen_ts = NULL, title_ai_ts = NULL"
-        " WHERE harness = ?"
-        f"   AND (source_path IN (SELECT source_path FROM harvest WHERE {where})"
-        "        OR id IN (SELECT tr.session_row_id FROM turn_raw tr"
-        f"                  WHERE tr.source_path IN (SELECT source_path FROM harvest WHERE {where})))",
-        [CLAUDE_HARNESS, *params, *params],
+        "UPDATE turn_norm SET norm_version = -1"
+        " WHERE turn_raw_id IN (SELECT id FROM turn_raw"
+        f"   WHERE source_path IN ({path_ph}))",
+        paths,
     )
 
 
@@ -225,13 +320,46 @@ def harvest_claude_command(
     recorded transcript, so rehearsing the filters first is the intended
     workflow rather than a nicety.
 
+    **Run `flow normalize` afterwards.** A rescan corrects the raw layer only;
+    the corrections do not reach any read surface until the normalized layer
+    is recomputed from them. `_reset_claude_watermarks` marks the affected
+    `turn_norm` rows stale so that pass has something to find.
+
     `dry_run` returns 0 without harvesting at all — not even the ordinary
     incremental pass. A dry run that harvested would be a dry run that writes,
     which is worse than having no dry run: it would look like a rehearsal and
     behave like a commit.
+
+    It also returns before `ensure_store`, and opens the store read-only. Every
+    other command here ensures the store first, deliberately — they write data
+    on purpose, so creating their own target is a convenience rather than
+    scope creep. A dry run does not, and `ensure_store` applies pending schema
+    migrations: caught in practice when a dry run silently migrated a live
+    store to v5 while printing "nothing written". A schema change is a write,
+    and a rehearsal that performs one is lying about the only thing it claims.
     """
     store = usage_store.default_store_path(HOME)
     capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
+
+    if dry_run:
+        # Path check before connect: sqlite3.connect() would create the file,
+        # so an absent store cannot be reported by a function that opens one.
+        # Same reasoning as `usage_store.store_status`.
+        if not store.exists():
+            print(f"no usage store at {store} — nothing to rescan")
+            return 0
+        conn = sqlite3.connect(f"file:{store}?mode=ro", uri=True)
+        try:
+            scope = _claude_rescan_scope(conn, since=since, session=session)
+        finally:
+            conn.close()
+        print(
+            f"claude rescan (dry run): would rewind {scope['files']} files"
+            f" covering {scope['turns']} stored turns{_describe_rescan_scope(since, session)}"
+        )
+        print("  nothing written — drop --dry-run to run it")
+        return 0
+
     usage_store.ensure_store(store, capabilities)
 
     sessions_root = claude_sessions_root(HOME)
@@ -241,15 +369,6 @@ def harvest_claude_command(
 
     conn = _connect(store)
     try:
-        if dry_run:
-            scope = _claude_rescan_scope(conn, since=since, session=session)
-            scope_desc = _describe_rescan_scope(since, session)
-            print(
-                f"claude rescan (dry run): would rewind {scope['files']} files"
-                f" covering {scope['turns']} stored turns{scope_desc}"
-            )
-            print("  nothing written — drop --dry-run to run it")
-            return 0
         if rescan:
             _reset_claude_watermarks(conn, since=since, session=session)
             conn.commit()
@@ -261,6 +380,13 @@ def harvest_claude_command(
         f"claude harvest: {summary['files']} files, {summary['turns']} turns,"
         f" {summary['activity']} compaction events"
     )
+    if rescan:
+        # Not decoration. A rescan's corrections live in the raw layer until
+        # something recomputes the normalized one, and every read surface
+        # reads the normalized one — so a rescan that is never followed by a
+        # normalize changes no number the user can see, while both tables stay
+        # individually self-consistent and silent about it.
+        print("  run `flow normalize` to recompute the normalized layer from the corrected rows")
     if summary["skipped"]:
         print(f"  skipped {summary['skipped']} records with no resolvable session")
     for failure in summary["failures"]:
