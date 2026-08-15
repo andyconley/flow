@@ -17,12 +17,15 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
 from cost import (  # noqa: E402
+    BUCKET_DAY,
+    BUCKET_WEEK,
     DEFAULT_ACTIVE_WITHIN_MINUTES,
     DEFAULT_SESSIONS_LIMIT,
     DEFAULT_WINDOW_DAYS,
     cost_active_command,
     cost_sessions_command,
     cost_summary_command,
+    cost_trend_command,
     cost_verdict_command,
     cost_warn_command,
 )
@@ -171,7 +174,7 @@ def main() -> int:
         help="read token usage back out of the usage store",
         description="Read `~/.flow/usage.db`'s normalized layer (ensuring the store's schema exists first, like every other command). `summary` and `sessions` never touch turn_raw, turn_norm, or session data; `active` runs the incremental Claude harvest and a normalize pass first so its answer is current.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n  flow cost active\n  flow cost active --within 180\n",
+        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n  flow cost active\n  flow cost active --within 180\n  flow cost trend --days 30 --bucket week\n",
     )
     cost_sub = cost.add_subparsers(dest="cost_target", required=True, title="cost views")
 
@@ -184,6 +187,22 @@ def main() -> int:
         "sessions",
         help="token totals by session, most recently active first",
         description="Token totals grouped by session, within the window, most recently active first.",
+    )
+    cost_trend_parser = cost_sub.add_parser(
+        "trend",
+        help="efficiency per time bucket — is session hygiene actually working",
+        description="One row per time bucket and harness: main-agent turns, distinct sessions, mean context per turn, input:output, weighted tokens per 1,000 output, subagent share, and compaction events split by trigger. Weighted columns are Claude-only; see data/token_weights.json.",
+    )
+    cost_trend_parser.add_argument(
+        "--bucket",
+        choices=(BUCKET_DAY, BUCKET_WEEK),
+        default=BUCKET_DAY,
+        help=f"bucket size (default: {BUCKET_DAY})",
+    )
+    cost_trend_parser.add_argument(
+        "--harness",
+        choices=("claude", "codex"),
+        help="restrict to one harness (default: both, one row per bucket per harness)",
     )
     cost_active_parser = cost_sub.add_parser(
         "active",
@@ -254,7 +273,7 @@ def main() -> int:
         help="hook mode: read hook JSON from stdin and branch on hook_event_name",
     )
 
-    for cost_parser in (cost_summary_parser, cost_sessions_parser):
+    for cost_parser in (cost_summary_parser, cost_sessions_parser, cost_trend_parser):
         window = cost_parser.add_mutually_exclusive_group()
         window.add_argument(
             "--days",
@@ -432,6 +451,14 @@ def main() -> int:
         return cost_summary_command(days=args.days, show_all=args.all, as_json=args.json)
     if args.command == "cost" and args.cost_target == "sessions":
         return cost_sessions_command(days=args.days, show_all=args.all, as_json=args.json, limit=args.limit)
+    if args.command == "cost" and args.cost_target == "trend":
+        return cost_trend_command(
+            days=args.days,
+            show_all=args.all,
+            bucket=args.bucket,
+            harness=args.harness,
+            as_json=args.json,
+        )
     if args.command == "cost" and args.cost_target == "active":
         return cost_active_command(within=args.within, as_json=args.json)
     if args.command == "cost" and args.cost_target == "verdict":

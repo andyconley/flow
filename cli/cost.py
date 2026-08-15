@@ -108,6 +108,89 @@ WARN_REWARN_STEP = 50_000
 # for the warn hook, which reads whichever matches its own harness.
 VERDICT_DIR = Path("/tmp")
 
+# Known context windows, used only to snap a measured observation to the
+# nearest real size. Distinct from `data/model_context_windows.json`, which
+# says which windows a *model* has; this is the set of sizes that exist at all.
+KNOWN_WINDOWS = (STD_WINDOW, LONG_WINDOW)
+
+# How far a recorded or observed context value may sit from a known window and
+# still snap to it. A corrupt statusline file or a stray compaction reading
+# that snapped confidently to the wrong window would be worse than the honest
+# `~` inference, so anything further off falls through to the next source.
+WINDOW_SNAP_TOLERANCE = 0.15
+
+
+def _data_file(name: str) -> dict:
+    """Load one JSON file from the release's `data/` directory.
+
+    Not cached and not resolved at import time, matching every other path in
+    this module: a test points `SOURCE_DIR` somewhere else, and a cache would
+    make the second test in a process see the first one's file. These are a
+    few hundred bytes read once per command.
+    """
+    path = SOURCE_DIR / "data" / name
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def token_weights() -> dict:
+    """Billing multipliers for the input token classes, from `data/token_weights.json`.
+
+    Falls back to the shipped values if the file is missing or malformed —
+    a weighted number computed from a default is still comparable across
+    buckets, which is what `trend` is for, whereas a crashed command reports
+    nothing at all. See the file's own comment for why these are Claude-only.
+    """
+    weights = _data_file("token_weights.json").get("weights")
+    if not isinstance(weights, dict):
+        return dict(_DEFAULT_WEIGHTS)
+    merged = dict(_DEFAULT_WEIGHTS)
+    for key, value in weights.items():
+        if key in merged and isinstance(value, (int, float)):
+            merged[key] = float(value)
+    return merged
+
+
+_DEFAULT_WEIGHTS = {
+    "uncached_input": 1.0,
+    "cache_read": 0.1,
+    "cache_write_5m": 1.25,
+    "cache_write_1h": 2.0,
+    "cache_write_unsplit": 1.25,
+}
+
+
+def _model_windows() -> dict:
+    return _data_file("model_context_windows.json").get("models") or {}
+
+
+def _model_entry(model: str | None, models: dict) -> dict | None:
+    """The table entry for a model id: exact match, else longest prefix.
+
+    Real ids carry release-date suffixes (`claude-haiku-4-5-20251001`) that the
+    table should not have to chase. Longest prefix rather than any prefix so a
+    future `claude-opus-5-1` entry wins over `claude-opus-5` rather than tying
+    with it and resolving by dict order.
+    """
+    if not model:
+        return None
+    if model in models:
+        return models[model]
+    candidates = [key for key in models if model.startswith(key)]
+    if not candidates:
+        return None
+    return models[max(candidates, key=len)]
+
+
+def _snap_to_known_window(observed: int) -> int | None:
+    """The known window `observed` is closest to, if it is close enough."""
+    nearest = min(KNOWN_WINDOWS, key=lambda w: abs(w - observed))
+    if abs(observed - nearest) <= nearest * WINDOW_SNAP_TOLERANCE:
+        return nearest
+    return None
+
 
 def _cutoff(days: int) -> str:
     """UTC ISO8601 cutoff string for "the last `days` days."
@@ -227,14 +310,45 @@ def sessions_rows(conn: sqlite3.Connection, since: str | None, limit: int | None
     return result
 
 
-def capacity_gauge(conn: sqlite3.Connection, since: str | None) -> dict | None:
-    """The single most recent Codex capacity reading in the window, or `None`.
+def capacity_gauge(
+    conn: sqlite3.Connection, since: str | None, now: datetime | None = None
+) -> dict | None:
+    """The most recent Codex capacity reading in the window, expired fields dropped.
 
     A snapshot, not a sum — see the module docstring for why this is kept
     out of `summary_rows` entirely rather than joined in as extra columns.
-    `ts` is included specifically so a renderer can show how stale the
-    reading is, since "most recent in the window" can still be days old.
+
+    **Expiry is the point of the `now` parameter.** A capacity percentage
+    describes a window that rolls, and `resets_at` says when. This view once
+    reported `10080m window 96.0%` as of a reading taken six days earlier that
+    expired 97 minutes after the run — still literally true when taken, wholly
+    misleading when shown. The capacity window here is 10,080 minutes, exactly
+    the length of the default `--days 7` summary window, so a reading anywhere
+    in range can describe a period with almost no overlap with the present.
+
+    The original docstring anticipated this ("most recent in the window can
+    still be days old") and accepted it. That was the wrong call for a value
+    that carries its own expiry: an expired gauge is absent, not dimmed.
+
+    Suppressed **per field**, each against its own `resets_at`, rather than
+    dropping the whole reading — primary and secondary are independent windows
+    (see `usage_store._V3`: neither name reliably means "the short one"), and
+    a live secondary should not disappear because an unrelated window rolled.
+    Returns `None` only when nothing survives.
+
+    `stale` marks a reading that is old relative to **its own** capacity
+    window — more than half of it has elapsed since the sample was taken.
+
+    The plan for this fix said to label a reading that "predates the summary
+    window." That case cannot occur: the `since` filter is applied in the
+    query, so a reading older than the window is never selected in the first
+    place. The real hazard is the one actually observed — a sample taken six
+    days into a seven-day window, unexpired and therefore shown, but
+    describing usage that has had almost the whole window to move since. That
+    is what this measures instead.
     """
+    if now is None:
+        now = datetime.now(timezone.utc)
     where = "AND tn.ts >= ?" if since is not None else ""
     params = (since,) if since is not None else ()
     row = conn.execute(
@@ -251,7 +365,241 @@ def capacity_gauge(conn: sqlite3.Connection, since: str | None) -> dict | None:
         """,
         (CODEX_HARNESS, *params),
     ).fetchone()
-    return dict(row) if row is not None else None
+    if row is None:
+        return None
+
+    gauge = dict(row)
+    epoch_now = now.timestamp()
+    surviving = 0
+    for field in ("primary", "secondary"):
+        used = gauge.get(f"capacity_{field}_used_pct")
+        resets_at = gauge.get(f"capacity_{field}_resets_at")
+        if used is None:
+            continue
+        # A reading with no reset time cannot be shown to have expired, so it
+        # survives — but it is exactly the case the old behaviour got wrong,
+        # so it is not given the benefit of looking current either; the
+        # renderer says the reset time is unknown.
+        if resets_at is not None and epoch_now >= resets_at:
+            gauge[f"capacity_{field}_used_pct"] = None
+            gauge[f"capacity_{field}_window_minutes"] = None
+            gauge[f"capacity_{field}_resets_at"] = None
+            continue
+        surviving += 1
+    if not surviving:
+        return None
+
+    gauge["stale"] = _gauge_is_stale(gauge, now)
+    return gauge
+
+
+def _gauge_is_stale(gauge: dict, now: datetime) -> bool:
+    """Has more than half of this reading's own window elapsed since it was taken?
+
+    Measured against the longest surviving window on the reading, so a gauge
+    carrying both a 300-minute and a 10,080-minute field is judged by the one
+    that can drift furthest. `False` when nothing is measurable — a claim of
+    staleness needs evidence too.
+    """
+    taken = _parse_ts(gauge.get("ts") or "")
+    if taken is None:
+        return False
+    windows = [
+        gauge.get(f"capacity_{field}_window_minutes")
+        for field in ("primary", "secondary")
+        if gauge.get(f"capacity_{field}_used_pct") is not None
+    ]
+    windows = [w for w in windows if isinstance(w, (int, float)) and w > 0]
+    if not windows:
+        return False
+    age_minutes = (now - taken).total_seconds() / 60
+    return age_minutes > max(windows) / 2
+
+
+BUCKET_DAY = "day"
+BUCKET_WEEK = "week"
+_BUCKET_FORMATS = {BUCKET_DAY: "%Y-%m-%d", BUCKET_WEEK: "%Y-W%W"}
+
+
+def coverage_floor(conn: sqlite3.Connection) -> dict:
+    """Earliest normalized turn per harness: `{harness: ts}`.
+
+    A trend window reaching before this is showing absence of data, not
+    absence of work, and the two are different facts. Derived at read time
+    from the store rather than recorded anywhere — the floor moves whenever a
+    transcript is pruned from disk or a new harness is harvested, so a stored
+    value would be a second thing to keep true.
+    """
+    rows = conn.execute(
+        """
+        SELECT s.harness AS harness, MIN(tn.ts) AS first_ts
+        FROM turn_norm tn
+        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        JOIN session s ON s.id = tr.session_row_id
+        GROUP BY s.harness
+        """
+    ).fetchall()
+    return {row["harness"]: row["first_ts"] for row in rows if row["first_ts"]}
+
+
+def _median(values: list) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return float(ordered[mid])
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def trend_rows(
+    conn: sqlite3.Connection,
+    since: str | None,
+    bucket: str = BUCKET_DAY,
+    harness: str | None = None,
+) -> list[dict]:
+    """Efficiency per time bucket. One row per `(bucket, harness)`.
+
+    Answers "is my session hygiene actually working," which `summary`,
+    `sessions`, and `active` all cannot: they report levels, and this reports
+    the shape of the levels over time.
+
+    **One row per bucket AND harness, not per bucket.** Blending them would
+    force either dropping the weighted columns or summing token classes whose
+    semantics differ across harnesses — Codex's `cached_input_tokens` is a
+    subset of its input where Claude's cache buckets are disjoint. Keeping
+    them apart is the same reason the store has a normalized layer at all.
+
+    `turns`, `sessions`, and `ctx_per_turn` are **main-agent only**
+    (`is_subagent = 0`): a sidechain turn's context is a different
+    conversation's size, so averaging it into a per-turn context figure
+    measures nothing. `sub_pct` is precisely the subagent counterpart, and
+    the weighted totals behind it span both.
+
+    `wt_per_1k_out` is the headline. Raw burn per day conflates working less
+    with working leaner; dividing by output normalizes for how busy the
+    period was, so the number moves when efficiency moves.
+
+    Weighted columns are Claude-only — `None` for Codex, never 0. See
+    `data/token_weights.json`.
+    """
+    fmt = _BUCKET_FORMATS.get(bucket)
+    if fmt is None:
+        raise ValueError(f"unknown bucket {bucket!r}; expected one of {sorted(_BUCKET_FORMATS)}")
+
+    weights = token_weights()
+    weighted = _weighted_tokens_sql(weights)
+    filters = ["1 = 1"]
+    params: list = []
+    if since is not None:
+        filters.append("tn.ts >= ?")
+        params.append(since)
+    if harness is not None:
+        filters.append("s.harness = ?")
+        params.append(harness)
+    where = " AND ".join(filters)
+
+    rows = conn.execute(
+        f"""
+        SELECT strftime('{fmt}', tn.ts) AS bucket, s.harness AS harness,
+               SUM(CASE WHEN tn.is_subagent = 0 THEN 1 ELSE 0 END) AS turns,
+               COUNT(DISTINCT CASE WHEN tn.is_subagent = 0 THEN s.id END) AS sessions,
+               SUM(CASE WHEN tn.is_subagent = 0 THEN
+                     COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
+                     + COALESCE(tn.cache_write_tokens, 0) ELSE 0 END) AS main_ctx,
+               SUM(COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
+                   + COALESCE(tn.cache_write_tokens, 0)) AS total_input,
+               SUM(COALESCE(tn.output_tokens, 0)) AS total_output,
+               SUM({weighted}) AS weighted_total,
+               SUM(CASE WHEN tn.is_subagent = 1 THEN {weighted} ELSE 0 END) AS weighted_sub
+        FROM turn_norm tn
+        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        JOIN session s ON s.id = tr.session_row_id
+        WHERE {where}
+        GROUP BY bucket, s.harness
+        ORDER BY bucket, s.harness
+        """,
+        params,
+    ).fetchall()
+
+    compactions = _compactions_by_bucket(conn, fmt, since)
+
+    result = []
+    for row in rows:
+        raw = dict(row)
+        is_claude = raw["harness"] == CLAUDE_HARNESS
+        turns = raw["turns"] or 0
+        output = raw["total_output"] or 0
+        events = compactions.get((raw["bucket"], raw["harness"]), {})
+        result.append(
+            {
+                "bucket": raw["bucket"],
+                "harness": raw["harness"],
+                "turns": turns,
+                "sessions": raw["sessions"] or 0,
+                # None rather than 0 for a bucket with only subagent turns:
+                # "no main-agent turns to average" is not "zero context".
+                "ctx_per_turn": round(raw["main_ctx"] / turns) if turns else None,
+                # Input over output. None when nothing was output — a ratio
+                # with a zero denominator is undefined, not infinite.
+                "in_out": round((raw["total_input"] or 0) / output, 1) if output else None,
+                "wt_per_1k_out": (
+                    round((raw["weighted_total"] or 0) / output * 1000, 1)
+                    if is_claude and output
+                    else None
+                ),
+                "sub_pct": (
+                    round((raw["weighted_sub"] or 0) / raw["weighted_total"] * 100, 1)
+                    if is_claude and raw["weighted_total"]
+                    else None
+                ),
+                "compact_manual": events.get("manual", 0) if is_claude else None,
+                "compact_auto": events.get("auto", 0) if is_claude else None,
+                "median_pre_manual": events.get("median_pre_manual") if is_claude else None,
+            }
+        )
+    return result
+
+
+def _compactions_by_bucket(conn: sqlite3.Connection, fmt: str, since: str | None) -> dict:
+    """`compact_boundary` counts per `(bucket, harness)`, split by trigger.
+
+    Split, never summed. `manual` is deliberate hygiene and `auto` is hitting
+    the ceiling — opposite signals about a session's health, and one combined
+    count would say nothing about either. The median `preTokens` at *manual*
+    compaction is the useful companion: it is how full the context typically
+    was when the user chose to cut, which is the number that says whether the
+    habit is forming early or late.
+
+    Read from `agent_activity_raw` rather than `turn_norm` because a
+    compaction reports no tokens of its own and must never reach a token sum.
+    """
+    where = "AND a.ts >= ?" if since is not None else ""
+    params = (since,) if since is not None else ()
+    rows = conn.execute(
+        f"""
+        SELECT strftime('{fmt}', a.ts) AS bucket, s.harness AS harness,
+               json_extract(a.payload, '$.compactMetadata.trigger') AS trigger,
+               json_extract(a.payload, '$.compactMetadata.preTokens') AS pre_tokens
+        FROM agent_activity_raw a
+        JOIN session s ON s.id = a.session_row_id
+        WHERE a.kind = 'compact_boundary' {where}
+        """,
+        params,
+    ).fetchall()
+
+    buckets: dict = {}
+    for row in rows:
+        key = (row["bucket"], row["harness"])
+        entry = buckets.setdefault(key, {"manual": 0, "auto": 0, "_manual_pre": []})
+        trigger = row["trigger"]
+        if trigger in ("manual", "auto"):
+            entry[trigger] += 1
+        if trigger == "manual" and isinstance(row["pre_tokens"], int):
+            entry["_manual_pre"].append(row["pre_tokens"])
+    for entry in buckets.values():
+        entry["median_pre_manual"] = _median(entry.pop("_manual_pre"))
+    return buckets
 
 
 def _parse_ts(value: str) -> datetime | None:
@@ -276,34 +624,109 @@ def _parse_ts(value: str) -> datetime | None:
 STATUSLINE_DIR = Path("/tmp")
 
 
-def _infer_window(session_id: str, ctx: int) -> tuple[int, bool]:
-    """(window_tokens, exact) for a session's context window.
+def _statusline_window(session_id: str) -> int | None:
+    """The exact window the statusline recorded for this session, if any.
 
-    The window isn't recorded in transcripts, so two sources, in order:
-
-    1. `STATUSLINE_DIR/claude-window-<session_id>` — the statusline writes
-       the exact window it derived from its own payload. That derivation
-       divides by an integer percentage, so it carries a few percent of
-       rounding error — snap to the nearest real window, but only when the
-       recorded value is within 15% of one: a corrupt or truncated file
-       snapping confidently to the wrong window would be worse than the
-       honest `~` inference, so anything further off falls through. This is
-       the one signal that can correctly identify a 1M-window session still
-       under 190K context.
-    2. Inference: context observed above LONG_THRESHOLD must be the
-       long-context variant; anything below is assumed standard, which
-       overstates percentages for an unidentified 1M session — the `exact`
-       flag is False so a renderer can mark the number as inferred.
+    The statusline derives it by dividing by an integer percentage, so the
+    value carries a few percent of rounding error — hence the snap.
     """
     try:
-        raw = (STATUSLINE_DIR / f"claude-window-{session_id}").read_text().strip()
-        recorded = int(raw)
-        nearest = min((STD_WINDOW, LONG_WINDOW), key=lambda w: abs(w - recorded))
-        if abs(recorded - nearest) <= nearest * 0.15:
-            return nearest, True
+        recorded = int((STATUSLINE_DIR / f"claude-window-{session_id}").read_text().strip())
     except (OSError, ValueError):
-        pass
-    return (LONG_WINDOW if ctx > LONG_THRESHOLD else STD_WINDOW), False
+        return None
+    return _snap_to_known_window(recorded)
+
+
+def _compaction_window(conn: sqlite3.Connection, session_row_id: int) -> int | None:
+    """This session's window, from the largest `preTokens` at an auto compaction.
+
+    An auto compaction fires when the context hits the ceiling, so its
+    `preTokens` is a direct observation of how much this session actually
+    held — measured from the session's own transcript rather than looked up.
+    On the corpus this was built against, 8 of 11 auto compactions read
+    1,000,069–1,004,282 (auto fires just *past* the nominal 1M), and the
+    remaining 3 read 857K–934K; all eleven snap to 1M.
+
+    Deliberately scoped to one session, never generalized to the model. Every
+    model that has auto-compacted here also runs in 200K sessions constantly,
+    so a model-scoped rule would mislabel those — the observation says
+    something about the session, not about the model.
+
+    `manual` compactions are excluded: a deliberate `/compact` says where the
+    user chose to cut, which is unrelated to the ceiling.
+    """
+    row = conn.execute(
+        """
+        SELECT MAX(json_extract(payload, '$.compactMetadata.preTokens'))
+        FROM agent_activity_raw
+        WHERE session_row_id = ? AND kind = 'compact_boundary'
+          AND json_extract(payload, '$.compactMetadata.trigger') = 'auto'
+        """,
+        (session_row_id,),
+    ).fetchone()
+    observed = row[0] if row is not None else None
+    if not isinstance(observed, int) or observed <= 0:
+        return None
+    return _snap_to_known_window(observed)
+
+
+def _model_window(model: str | None, ctx: int) -> int | None:
+    """The window `data/model_context_windows.json` implies for this model.
+
+    `None` for a model the table does not know — the caller suppresses the
+    percentage rather than guessing. That blank is also the signal that the
+    file needs a new entry.
+    """
+    entry = _model_entry(model, _model_windows())
+    if not isinstance(entry, dict):
+        return None
+    window = entry.get("window")
+    long_window = entry.get("long_window")
+    threshold = entry.get("long_threshold")
+    if long_window is not None and threshold is not None and ctx > threshold:
+        return long_window
+    return window if isinstance(window, int) else None
+
+
+def _resolve_window(
+    conn: sqlite3.Connection,
+    session_row_id: int,
+    session_id: str,
+    model: str | None,
+    ctx: int,
+) -> tuple[int | None, str]:
+    """`(window_tokens, source)` for a session's context window.
+
+    `turn_norm.context_window` is NULL for every Claude turn and stays that
+    way: that column means "the harness reported this," and filling it with a
+    lookup would destroy the measured-versus-inferred distinction the `~`
+    marker depends on, and silently change the meaning of historical rows. So
+    resolution happens here, at read time, with the source carried alongside
+    the number.
+
+    Four sources, best first:
+
+    1. `statusline` — the exact window, recorded by the Claude statusline from
+       its own payload. The one signal that identifies a 1M session still
+       under 190K context.
+    2. `compaction` — `preTokens` at an auto compaction *in this session*. A
+       real observation from the transcript, not a lookup.
+    3. `model` — the table, with its long-variant threshold. Inferred: a model
+       string carries no window suffix, so a 1M session under the threshold
+       reads as standard and its percentage is overstated.
+    4. `unknown` — the model is not in the table. Window `None`; the caller
+       suppresses the percentage rather than guessing.
+    """
+    window = _statusline_window(session_id)
+    if window is not None:
+        return window, "statusline"
+    window = _compaction_window(conn, session_row_id)
+    if window is not None:
+        return window, "compaction"
+    window = _model_window(model, ctx)
+    if window is not None:
+        return window, "model"
+    return None, "unknown"
 
 
 def _recommendation(carry_pct: float, action: str) -> str:
@@ -351,6 +774,7 @@ def active_rows(
         now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(minutes=within_minutes)).isoformat()
 
+    weights = token_weights()
     sessions = conn.execute(
         f"""
         SELECT s.id AS session_row_id, s.session_id AS session_id,
@@ -412,29 +836,106 @@ def active_rows(
             if newer and older:
                 gap = max(0, int((newer - older).total_seconds()))
 
-        window, exact = _infer_window(raw["session_id"], ctx)
+        model = conn.execute(
+            "SELECT tn.model FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id"
+            " WHERE tr.session_row_id = ? AND tn.is_subagent = 0 AND tn.model IS NOT NULL"
+            " ORDER BY tn.ts DESC LIMIT 1",
+            (raw["session_row_id"],),
+        ).fetchone()
+        window, window_source = _resolve_window(
+            conn, raw["session_row_id"], raw["session_id"], model[0] if model else None, ctx
+        )
         last = _parse_ts(raw["last_ts"])
         # None (not 0) when the timestamp is unparseable: 0 would render as
         # "0s" — the most attention-grabbing state — for a session of
         # genuinely unknown age.
         idle_sec = max(0, int((now - last).total_seconds())) if last else None
         action = "clear" if gap >= TOPIC_GAP_SEC else "compact"
-        carry_pct = carry / window * 100
+        # An unknown window suppresses both percentages rather than guessing.
+        # The recommendation goes with them: every threshold it grades against
+        # is a percentage of the window, so with no window there is no
+        # judgment to render — and "fine" for an unmeasurable session would be
+        # a confident answer to a question that was never computed.
+        carry_pct = carry / window * 100 if window else None
 
         result.append(
             {
                 "id": raw["session_id"][:8],
                 "label": _session_label(raw["title"], raw["cwd"], raw["session_id"]),
-                "ctx_pct": round(ctx / window * 100, 1),
-                "carry_pct": round(carry_pct, 1),
-                "window_exact": exact,
+                "ctx_pct": round(ctx / window * 100, 1) if window else None,
+                "carry_pct": round(carry_pct, 1) if carry_pct is not None else None,
+                # Kept as the renderer's `~` gate, now derived from the source
+                # rather than tracked separately: statusline and compaction are
+                # both real observations, the model table is a lookup.
+                "window_exact": window_source in ("statusline", "compaction"),
+                "window_source": window_source,
+                "sub_pct": _subagent_share(conn, raw["session_row_id"], weights),
                 "idle_sec": idle_sec,
-                "recommend": _recommendation(carry_pct, action),
+                "recommend": _recommendation(carry_pct, action) if carry_pct is not None else None,
                 "session_id": raw["session_id"],
             }
         )
-    result.sort(key=lambda r: (-r["carry_pct"], r["session_id"]))
+    # Unknown-window sessions sort last rather than first: `-carry_pct` on a
+    # None would raise, and a session whose carry could not be computed is not
+    # evidence of a problem.
+    result.sort(key=lambda r: (r["carry_pct"] is None, -(r["carry_pct"] or 0), r["session_id"]))
     return result
+
+
+def _weighted_tokens_sql(weights: dict, prefix: str = "tn.") -> str:
+    """SQL summing one row's input classes into weighted tokens.
+
+    Collapses the classes by billing multiplier so periods of different shapes
+    are comparable. The write component prefers the TTL split and falls back to
+    whatever part of the write total the split does not account for — which is
+    the whole write for a row harvested before `usage.cache_creation` existed,
+    and exactly zero for every row after the schema v5 backfill, since the
+    halves sum to the total.
+
+    Claude only. See `data/token_weights.json` for why applying these to Codex
+    would be arithmetic without meaning.
+    """
+    w = weights
+    return (
+        f"COALESCE({prefix}fresh_input_tokens, 0) * {w['uncached_input']}"
+        f" + COALESCE({prefix}cache_read_tokens, 0) * {w['cache_read']}"
+        f" + COALESCE({prefix}cache_write_1h_tokens, 0) * {w['cache_write_1h']}"
+        f" + COALESCE({prefix}cache_write_5m_tokens, 0) * {w['cache_write_5m']}"
+        f" + MAX(0, COALESCE({prefix}cache_write_tokens, 0)"
+        f"         - COALESCE({prefix}cache_write_1h_tokens, 0)"
+        f"         - COALESCE({prefix}cache_write_5m_tokens, 0)) * {w['cache_write_unsplit']}"
+    )
+
+
+def _subagent_share(conn: sqlite3.Connection, session_row_id: int, weights: dict) -> float | None:
+    """Subagent share of this session's weighted tokens, as a percentage.
+
+    `carry` and `ctx` measure the main thread's window only, so a session that
+    moves work into subagents looks like it improved. Subagent share moved
+    4.8% → 12.9% over a window in which main-agent context fell 41% — part of
+    that apparent improvement was work relocating rather than disappearing.
+    A metric that improves when work is *moved* eventually gets optimized the
+    wrong way, and the fix is to show both numbers side by side.
+
+    Subagent turns carry the parent's own `sessionId`, so attribution needs no
+    identity work beyond the flag already on the row. `None` when the session
+    has no weighted tokens at all, rather than 0 — a share of nothing is not
+    a share of zero.
+    """
+    weighted = _weighted_tokens_sql(weights)
+    row = conn.execute(
+        f"""
+        SELECT SUM(CASE WHEN tn.is_subagent = 1 THEN {weighted} ELSE 0 END) AS sub,
+               SUM({weighted}) AS total
+        FROM turn_norm tn
+        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        WHERE tr.session_row_id = ?
+        """,
+        (session_row_id,),
+    ).fetchone()
+    if row is None or not row["total"]:
+        return None
+    return round(row["sub"] / row["total"] * 100, 1)
 
 
 def _fmt_cell(value) -> str:
@@ -480,13 +981,39 @@ def _render_gauge_field(used_pct: float, window_minutes: int | None) -> str:
     return f"{window} {used_pct:.1f}%"
 
 
+def _fmt_epoch(value) -> str:
+    """A stored `resets_at` epoch as a readable UTC timestamp."""
+    try:
+        return datetime.fromtimestamp(value, timezone.utc).isoformat(timespec="seconds")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return "unknown"
+
+
 def _render_gauge_line(gauge: dict) -> str:
-    parts = [_render_gauge_field(gauge["capacity_primary_used_pct"], gauge.get("capacity_primary_window_minutes"))]
-    if gauge.get("capacity_secondary_used_pct") is not None:
-        parts.append(
-            _render_gauge_field(gauge["capacity_secondary_used_pct"], gauge.get("capacity_secondary_window_minutes"))
+    """The gauge with both timestamps it needs to be believable.
+
+    `as of` alone was the defect: it says how old the reading is but not
+    whether it still describes anything. `resets at` is the field that
+    answers that, and it was stored all along and never shown. Expired
+    fields never reach here — `capacity_gauge` drops them.
+    """
+    parts = []
+    for field in ("primary", "secondary"):
+        used = gauge.get(f"capacity_{field}_used_pct")
+        if used is None:
+            continue
+        rendered = _render_gauge_field(used, gauge.get(f"capacity_{field}_window_minutes"))
+        parts.append(f"{rendered} (resets at {_fmt_epoch(gauge.get(f'capacity_{field}_resets_at'))})")
+    line = f"codex capacity (as of {gauge['ts']}): " + ", ".join(parts)
+    if gauge.get("stale"):
+        # Real and unexpired, but sampled long enough ago that usage has had
+        # most of the window to move since. Saying so beats letting a six-day-
+        # old sample of a seven-day window read as a current measurement.
+        line += (
+            "\n  note: sampled more than halfway through its own window — still valid,"
+            " but usage may have moved since"
         )
-    return f"codex capacity (as of {gauge['ts']}): " + ", ".join(parts)
+    return line
 
 
 def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False, as_json: bool = False) -> int:
@@ -552,6 +1079,102 @@ def cost_sessions_command(
     return 0
 
 
+def _coverage_notes(floor: dict, since: str | None, harness: str | None) -> list[str]:
+    """One note per harness whose data starts after the window does.
+
+    A window reaching before coverage shows absence of data, not absence of
+    work. Labelled rather than silently truncated: truncating would make the
+    earliest visible bucket look like the beginning of the record, which is
+    the one reading that turns a coverage gap into a false trend.
+    """
+    if since is None:
+        return []
+    notes = []
+    for name in sorted(floor):
+        if harness is not None and name != harness:
+            continue
+        if floor[name] > since:
+            notes.append(
+                f"{name} coverage begins {floor[name][:10]} — this window reaches"
+                f" back to {since[:10]}, and the buckets before that first date are"
+                " absent from the store, not empty."
+            )
+    return notes
+
+
+def _render_trend_table(rows: list[dict], notes: list[str]) -> str:
+    if not rows:
+        body = "(no data in range)"
+    else:
+        display = []
+        for r in rows:
+            display.append(
+                {
+                    "bucket": r["bucket"],
+                    "harness": r["harness"],
+                    "turns": r["turns"],
+                    "sessions": r["sessions"],
+                    "ctx/turn": "" if r["ctx_per_turn"] is None else f"{r['ctx_per_turn']:,}",
+                    "in:out": "" if r["in_out"] is None else f"{r['in_out']:.1f}:1",
+                    "wt/1k out": "" if r["wt_per_1k_out"] is None else f"{r['wt_per_1k_out']:,.0f}",
+                    "sub%": "" if r["sub_pct"] is None else f"{r['sub_pct']:.1f}%",
+                    "cmpct man": "" if r["compact_manual"] is None else r["compact_manual"],
+                    "cmpct auto": "" if r["compact_auto"] is None else r["compact_auto"],
+                    "med pre man": (
+                        "" if not r["median_pre_manual"] else f"{r['median_pre_manual']:,.0f}"
+                    ),
+                }
+            )
+        body = render_table(display)
+    if any(r["wt_per_1k_out"] is None and r["harness"] != CLAUDE_HARNESS for r in rows):
+        notes = notes + [
+            "wt/1k out and sub% are blank for codex: the weights are Anthropic cache"
+            " multipliers, and codex reports no cache writes and a different cache-read"
+            " semantics, so the same arithmetic would not mean the same thing."
+        ]
+    return body + ("\n\n" + "\n\n".join(notes) if notes else "")
+
+
+def cost_trend_command(
+    days: int = DEFAULT_WINDOW_DAYS,
+    show_all: bool = False,
+    bucket: str = BUCKET_DAY,
+    harness: str | None = None,
+    as_json: bool = False,
+) -> int:
+    """CLI entry point for `flow cost trend`.
+
+    Read-only, like `summary` and `sessions` — it answers from whatever the
+    store holds. Unlike `active`, it does not harvest first: a trend over
+    completed periods does not become wrong for want of the last few minutes,
+    and paying a harvest to render history would be the wrong trade.
+    """
+    store = usage_store.default_store_path(HOME)
+    capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
+    usage_store.ensure_store(store, capabilities)
+
+    since = None if show_all else _cutoff(days)
+
+    conn = sqlite3.connect(store)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = trend_rows(conn, since, bucket=bucket, harness=harness)
+        floor = coverage_floor(conn)
+    finally:
+        conn.close()
+
+    notes = _coverage_notes(floor, since, harness)
+    if as_json:
+        # `coverage` rides alongside `rows` rather than being folded into
+        # them: it is a property of the store, not of any bucket, and a
+        # caller checking whether its window was fully covered should not
+        # have to infer that from which rows happen to be present.
+        print(render_json({"rows": rows, "coverage": floor}))
+    else:
+        print(_render_trend_table(rows, notes))
+    return 0
+
+
 def _fmt_idle(idle_sec: int | None) -> str:
     if idle_sec is None:
         return "?"
@@ -574,25 +1197,43 @@ def _render_active_table(rows: list[dict]) -> str:
     display = []
     for r in rows:
         marker = "" if r["window_exact"] else "~"
+        unknown = r["ctx_pct"] is None
         display.append(
             {
                 "id": r["id"],
                 "session": r["label"][:39] + "…" if len(r["label"]) > 40 else r["label"],
-                "ctx": f"{marker}{r['ctx_pct']:.0f}%",
-                "carry": f"{r['carry_pct']:.0f}%",
+                # "?" rather than a blank: a blank cell reads as zero at a
+                # glance, and this is the opposite claim — the number was not
+                # computable, not small.
+                "ctx": "?" if unknown else f"{marker}{r['ctx_pct']:.0f}%",
+                "carry": "?" if r["carry_pct"] is None else f"{r['carry_pct']:.0f}%",
+                "sub": "" if r["sub_pct"] is None else f"{r['sub_pct']:.0f}%",
                 "idle": _fmt_idle(r["idle_sec"]),
-                "recommend": r["recommend"],
+                "recommend": r["recommend"] or "window unknown",
             }
         )
     out = render_table(display)
-    if any(not r["window_exact"] for r in rows):
-        out += (
-            "\n\n~ = context window inferred, not measured: a session under"
+    notes = []
+    if any(r["window_source"] == "model" for r in rows):
+        notes.append(
+            f"~ = context window inferred from the model, not measured: a session under"
             f" {LONG_THRESHOLD // 1000}K context is assumed to be on the"
             f" {STD_WINDOW // 1000}K window, which overstates percentages if"
             " it is actually running the 1M variant."
         )
-    return out
+    if any(r["window_source"] == "unknown" for r in rows):
+        notes.append(
+            "? = this model is not in data/model_context_windows.json, so there is"
+            " no window to measure against. Percentages are suppressed rather than"
+            " guessed; add the model to that file to resolve it."
+        )
+    if any(r["sub_pct"] for r in rows):
+        notes.append(
+            "sub = subagent share of the session's weighted tokens. ctx and carry"
+            " measure the main thread only, so work moved into subagents leaves"
+            " them looking better without costing less."
+        )
+    return out + ("\n\n" + "\n\n".join(notes) if notes else "")
 
 
 def cost_active_command(
