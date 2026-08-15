@@ -49,11 +49,11 @@ Personal AI workflow framework — defines HOW Claude operates with you, not WHA
 
 boot ──┬─→ scout (XS/S, narrow) ────────────────────────────→ archive
        │                                                      ↑
-       └─→ [solution] ──→ plan ──→ implement (gated) ──→ review ┘
-                                          ↑
-                                          └── resume (recover from interruption)
+       └─→ define ──→ [solution] ──→ plan ──→ implement (gated) ──→ review ┘
+                                                     ↑
+                                                     └── resume (recover from interruption)
 
-`[solution]` is an optional pre-plan step — use it when multiple approaches exist, architectural decisions are needed, or the work needs chunking before `plan` can shape it.
+`define` turns early feature or architectural-capability ideas into approved requirements. `[solution]` is an optional pre-plan step after definition — use it when multiple approaches exist, architectural decisions are needed, or the work needs chunking before `plan` can shape it.
 
 ## Command surfaces
 

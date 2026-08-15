@@ -48,6 +48,29 @@ The framework template now includes:
 - **user overlay support** at `~/.flow/user/` — drop your own commands, agents, hooks, standards, or templates here to override the framework defaults or add new ones, without forking. See `docs/architecture.md` "User Overlay" for the merge model.
 - **overlay version control.** The overlay is the one authored layer with no home in any repo flow ships, so it starts with no history and no backup. `flow setup user --overlay-repo <url>` gives it one: clone when the overlay is absent (the new-machine path), or `git init` in place and add the remote when it already has content. It never clobbers existing files and never commits — `FRAMEWORK.md` holds the convention for who commits overlay edits. `flow doctor` reports the overlay's VCS state, uncommitted and unpushed work included.
 
+### Workflow lanes
+
+The default Flow lane is:
+
+```text
+boot -> define -> solution (optional) -> plan -> implement -> review -> archive
+```
+
+Small, narrow work can use `scout` directly. Interrupted work resumes through `resume`.
+
+The main slash-command skills are:
+
+- `/flow-boot` — orient to project state, overlays, memory, and active work
+- `/flow-define` — turn early feature or architectural-capability ideas into approved requirements through discovery, research, adversarial review, and explicit approval
+- `/flow-solution` — choose a technical approach for approved requirements when options, architecture decisions, or chunking matter
+- `/flow-plan` — shape approved requirements or bug-shaped work into an implementation-ready plan
+- `/flow-implement` — run gated implementation with durable artifacts
+- `/flow-review` — judge implementation against intent and validation evidence
+- `/flow-archive` — close accepted work and update durable memory
+- `/flow-scout` — handle small focused changes that meet the scout-size criteria
+- `/flow-resume` and `/flow-status` — recover or summarize current work state
+- `/flow-help` and `/flow-init-project` — orient to Flow or initialize project overlay context
+
 ### CLI lifecycle
 
 Available commands:
@@ -134,9 +157,10 @@ What they do:
 
 `flow sync claude --user` (user mode) generates the same surfaces into `~/.claude/` instead, with `$HOME`-based hook commands and manifest entries that reference the framework scaffold path. The session-start hook then fires in every Claude Code session and detects project-level `.flow/` overlays automatically.
 
-`flow sync codex` and `flow sync codex --user` follow the same pattern but generate a narrower surface:
+`flow sync codex` and `flow sync codex --user` follow the same pattern for Codex-native surfaces:
 
 - `.agents/skills/<flow-command>/SKILL.md` from `.flow/commands/*.md` (or from the scaffold in user mode)
+- `.codex/agents/*.toml` from `.flow/agents/*.md`, including model and reasoning-effort hints from `flow.toml`
 - `.codex/hooks/*.sh` from `[[codex.hooks]]` entries (framework hooks or user-overlay hooks)
 - `.codex/hooks.json` with managed hook handlers merged in under the same preserve-unmanaged contract as `.claude/settings.json` — `~/.codex/config.toml` is never touched
 - `.codex/flow.managed.toml` machine-readable manifest of managed generated files
@@ -181,17 +205,15 @@ The current adapter strategy is intentional:
 
 - commands are adapter-generated per runtime
   - `.flow/commands/*.md` are generic workflow contracts, so each runtime can wrap them differently
-- agents currently sync as near-verbatim copies for Claude
-  - the source agent files are already close to Claude's usable shape
-  - keeping them direct avoids duplicate bodies and reduces drift risk
-- Codex currently gets command skills only
-  - skills map cleanly to the Codex runtime
-  - hooks, settings, and agent generation are not emitted there yet because that runtime contract is not as clearly defined
+- agents are declared once and adapted per runtime
+  - Claude receives agent Markdown with `model` and `effort`
+  - Codex receives native TOML agents with `model`, `model_reasoning_effort`, and generated developer instructions
+- hooks are registered through each runtime's managed configuration surface
 
 The practical result is:
 
 - Claude gets the richer full adapter surface
-- Codex gets a narrower but real skill surface
+- Codex gets native skills, agents, hooks, and managed manifests
 - the source of truth stays in `.flow/`, not in runtime-specific folders
 
 ## Smoke-Tested Behavior
@@ -205,7 +227,7 @@ The current implementation has been smoke-tested for:
 - generated skill and agent output
 - generated hook scripts and executable bits
 - managed settings generation
-- generated Codex skill output
+- generated Codex skill, agent, and hook output
 - drift detection in `flow doctor`
 - missing-file restoration in `flow refresh project`
 - automated CLI tests for setup, sync, and drift behavior
@@ -328,8 +350,6 @@ The framework is now usable, but it is not finished. Main gaps:
 
 - no content-aware upgrade path for existing project files beyond missing-file refresh
 - no finer-grained managed-settings metadata beyond generated hook merging
-- no richer non-Claude runtime surface yet beyond Codex skill generation
-- no runtime-specific agent adapter layer beyond Claude verbatim sync
 - no project-specific migration helpers beyond the generic framework lifecycle
 
 ## Current Recommendation
