@@ -524,9 +524,28 @@ def trend_rows(
 
     compactions = _compactions_by_bucket(conn, fmt, since)
 
+    # A compaction can fall in a bucket that has no turns — a session that
+    # compacts just after midnight and then ends contributes an event to that
+    # day and no rows to it. Building buckets from `turn_norm` alone would
+    # drop the event silently, which is the exact failure mode this view
+    # exists to make visible. Zero occurrences in the corpus today; the union
+    # is cheap and the alternative is a loss nothing reports.
+    raw_rows = [dict(row) for row in rows]
+    present = {(r["bucket"], r["harness"]) for r in raw_rows}
+    for bucket_key, harness_key in sorted(compactions.keys() - present):
+        if harness is not None and harness_key != harness:
+            continue
+        raw_rows.append(
+            {
+                "bucket": bucket_key, "harness": harness_key, "turns": 0, "sessions": 0,
+                "main_ctx": 0, "total_input": 0, "total_output": 0,
+                "weighted_total": 0, "weighted_sub": 0,
+            }
+        )
+    raw_rows.sort(key=lambda r: (r["bucket"], r["harness"]))
+
     result = []
-    for row in rows:
-        raw = dict(row)
+    for raw in raw_rows:
         is_claude = raw["harness"] == CLAUDE_HARNESS
         turns = raw["turns"] or 0
         output = raw["total_output"] or 0

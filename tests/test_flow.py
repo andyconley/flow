@@ -5558,6 +5558,28 @@ class CostTests(unittest.TestCase):
         self.assertEqual(row["compact_auto"], 1)
         self.assertEqual(row["median_pre_manual"], 400_000, "median of the manual cuts only")
 
+    def test_a_compaction_in_a_bucket_with_no_turns_still_appears(self) -> None:
+        """A session that compacts just after midnight and then ends
+        contributes an event to that day and no turns to it. Building buckets
+        from `turn_norm` alone would drop the event silently — the exact
+        failure this view exists to make visible.
+        """
+        sess = self.insert_session("trend-1", harness="claude")
+        self._trend_turn(sess, "2026-01-10T23:59:00Z", fresh=1_000, output=100)
+        self.conn.execute(
+            "INSERT INTO agent_activity_raw (session_row_id, ts, kind, payload,"
+            " source_path, source_line_no, collector_version)"
+            " VALUES (?, '2026-01-11T00:01:00Z', 'compact_boundary', ?, '/tmp/x', ?, 3)",
+            (sess, json.dumps({"compactMetadata": {"trigger": "auto", "preTokens": 900_000}}), self._next_id),
+        )
+        self._next_id += 1
+
+        rows = {r["bucket"]: r for r in self.cost.trend_rows(self.conn, None)}
+        self.assertIn("2026-01-11", rows, "the event's own bucket must exist")
+        self.assertEqual(rows["2026-01-11"]["compact_auto"], 1)
+        self.assertEqual(rows["2026-01-11"]["turns"], 0)
+        self.assertIsNone(rows["2026-01-11"]["ctx_per_turn"], "no turns to average is not zero context")
+
     def test_coverage_floor_labels_a_window_reaching_before_the_data(self) -> None:
         """Absent buckets and empty buckets are different facts. Truncating
         silently would make the earliest visible bucket look like the start of
