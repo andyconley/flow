@@ -82,7 +82,7 @@ def main() -> int:
     setup_sub.add_parser(
         "project",
         help="scaffold .flow into the current repository",
-        description="Copy missing framework template files into repo/.flow without touching existing files.",
+        description="Copy the project overlay scaffold into repo/.flow without touching existing files.",
     )
     setup_user_parser = setup_sub.add_parser(
         "user",
@@ -97,16 +97,25 @@ def main() -> int:
 
     refresh = sub.add_parser(
         "refresh",
-        help="add newly introduced framework files into an existing repo/.flow",
-        description="Refresh an existing repo-local .flow by copying only files that are missing.",
+        help="repair missing files in an existing repo/.flow",
+        description="Refresh an existing repo-local .flow without overwriting local edits.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Example:\n  flow refresh project\n",
     )
     refresh_sub = refresh.add_subparsers(dest="refresh_target", required=True, title="refresh targets")
-    refresh_sub.add_parser(
+    refresh_project_parser = refresh_sub.add_parser(
         "project",
-        help="copy missing files from the framework template into repo/.flow",
-        description="Bring an existing project forward to the latest template surface without overwriting local edits.",
+        help="copy missing overlay files into repo/.flow",
+        description=(
+            "Bring an existing project overlay forward without overwriting local edits. "
+            "By default this refreshes only overlay core files plus command, agent, "
+            "and standard sources registered in .flow/flow.toml."
+        ),
+    )
+    refresh_project_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="backfill the full framework scaffold, including commands, agents, standards, and templates",
     )
 
     harvest = sub.add_parser(
@@ -418,7 +427,7 @@ def main() -> int:
     if args.command == "setup" and args.setup_target == "user":
         return setup_user(overlay_repo=args.overlay_repo)
     if args.command == "refresh" and args.refresh_target == "project":
-        return refresh_project()
+        return refresh_project(all_files=args.all)
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
     if args.command == "harvest" and args.harvest_target == "claude":

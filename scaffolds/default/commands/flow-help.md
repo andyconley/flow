@@ -93,7 +93,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow setup machine` | First-time machine setup — creates `~/.flow/` support directories |
 | `flow setup user` | Install flow at user level (active in every supported runtime session) |
 | `flow setup project` | Scaffold `.flow/` overlay into the current repo |
-| `flow refresh project` | Pull missing framework files into an existing project overlay |
+| `flow refresh project` | Repair overlay core files and registered local sources |
 | `flow sync claude [--user] [--check]` | Generate or check Claude adapters |
 | `flow sync codex [--user] [--check]` | Generate or check Codex adapters |
 | `flow install --release / flow install --develop <path>` | Convert the local install between modes (symlink ↔ copy) |

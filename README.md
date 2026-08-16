@@ -220,7 +220,9 @@ Use these when a repo needs a `.flow/` overlay for project-specific roles, memor
 - `flow setup project`
   - scaffold `.flow/` into the current repo
 - `flow refresh project`
-  - add newly introduced framework files without overwriting local edits
+  - repair missing overlay core files and registered local sources without overwriting local edits
+- `flow refresh project --all`
+  - backfill the full framework scaffold into the project overlay
 - `flow bootstrap`
   - validate that the required `.flow/` structure exists
 
@@ -360,7 +362,7 @@ Current validation covers setup, sync, generated files, drift detection, refresh
 - managed settings generation
 - generated Codex skill, agent, and hook output
 - drift detection in `flow doctor`
-- missing-file restoration in `flow refresh project`
+- conservative missing-file restoration in `flow refresh project`
 - automated CLI tests for setup, sync, and drift behavior
 
 ## What’s Left

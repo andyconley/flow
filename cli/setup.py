@@ -1,9 +1,9 @@
 """Machine, project, and user-level setup, plus the project refresh path.
 
-Every function here is additive by design. `setup project` and `refresh project`
-copy only files that are missing, so re-running them on a repo with hand-edited
-.flow content never overwrites the edits — that is the whole reason `refresh`
-exists as a separate verb from a hypothetical re-scaffold.
+Every function here is additive by design. `setup project` copies the project
+overlay scaffold. `refresh project` copies only missing overlay-core files and
+registered local sources by default; `refresh project --all` is the explicit
+full-scaffold backfill. None of these overwrite hand-edited `.flow` content.
 
 `_ensure_usage_store` lives here rather than in usage_store.py because it is the
 flow-layout-aware wrapper: it knows where ~/.flow/usage.db and the shipped
@@ -17,6 +17,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import flowtoml
 import usage_store
 from fsutil import (
     copy_if_missing,
@@ -279,7 +280,51 @@ def setup_user(overlay_repo: str | None = None) -> int:
     return 0
 
 
-def refresh_project() -> int:
+_REFRESH_CORE_PATHS = [
+    Path("flow.toml"),
+    Path("FRAMEWORK.md"),
+    Path("PROJECT.md"),
+    Path("memory/STATE.md"),
+    Path("runs/.gitkeep"),
+]
+
+
+def _registered_manifest_paths(manifest: dict) -> set[Path]:
+    paths: set[Path] = set()
+    for runtime_name in ("claude", "codex"):
+        runtime = manifest.get(runtime_name, {})
+        for entry in runtime.get("commands", []):
+            source = entry.get("source")
+            if isinstance(source, str):
+                paths.add(Path(source))
+
+    for entry in manifest.get("agents", []):
+        source = entry.get("source")
+        if isinstance(source, str):
+            paths.add(Path(source))
+
+    for standard in manifest.get("standards", {}).values():
+        if not isinstance(standard, dict):
+            continue
+        for key in ("flow_standard", "vendored_path"):
+            source = standard.get(key)
+            if isinstance(source, str):
+                paths.add(Path(source))
+
+    return paths
+
+
+def _safe_scaffold_rel_paths(paths: set[Path]) -> list[Path]:
+    safe: list[Path] = []
+    for rel in paths:
+        if rel.is_absolute() or ".." in rel.parts:
+            continue
+        if (SCAFFOLD_DIR / rel).exists():
+            safe.append(rel)
+    return sorted(safe, key=lambda path: path.as_posix())
+
+
+def refresh_project(all_files: bool = False) -> int:
     root = repo_root()
     target = root / ".flow"
     if not target.exists():
@@ -288,12 +333,27 @@ def refresh_project() -> int:
 
     added = 0
     skipped = 0
-    for item in SCAFFOLD_DIR.iterdir():
-        item_added, item_skipped = sync_missing_tree(item, target / item.name)
-        added += item_added
-        skipped += item_skipped
+    if all_files:
+        for item in SCAFFOLD_DIR.iterdir():
+            item_added, item_skipped = sync_missing_tree(item, target / item.name)
+            added += item_added
+            skipped += item_skipped
+        mode = "full scaffold"
+    else:
+        manifest_path = target / "flow.toml"
+        manifest = flowtoml.read_toml(manifest_path) if manifest_path.exists() else {}
+        rel_paths = set(_REFRESH_CORE_PATHS)
+        rel_paths.update(_registered_manifest_paths(manifest))
+        for rel in _safe_scaffold_rel_paths(rel_paths):
+            item_added, item_skipped = sync_missing_tree(SCAFFOLD_DIR / rel, target / rel)
+            added += item_added
+            skipped += item_skipped
+        mode = "overlay core and registered sources"
 
     print(f"project refresh complete: {target}")
+    print(f"mode: {mode}")
     print(f"added missing files: {added}")
     print(f"left existing files unchanged: {skipped}")
+    if not all_files:
+        print("tip: use `flow refresh project --all` to backfill the full framework scaffold")
     return 0

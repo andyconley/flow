@@ -257,12 +257,7 @@ def bootstrap() -> int:
         flow_dir / "flow.toml",
         flow_dir / "FRAMEWORK.md",
         flow_dir / "PROJECT.md",
-        flow_dir / "commands",
-        flow_dir / "agents",
-        flow_dir / "standards",
-        flow_dir / "project",
         flow_dir / "memory",
-        flow_dir / "templates",
     ]
     missing = [str(p) for p in required if not p.exists()]
     if missing:
@@ -271,6 +266,17 @@ def bootstrap() -> int:
             print(f"- {path}")
         return 1
 
+    optional = [
+        flow_dir / "commands",
+        flow_dir / "agents",
+        flow_dir / "standards",
+        flow_dir / "project",
+        flow_dir / "templates",
+    ]
+    missing_optional = [p.name for p in optional if not p.exists()]
     print(f"bootstrap ok: {flow_dir}")
+    if missing_optional:
+        print(f"optional framework dirs absent: {', '.join(missing_optional)}")
+        print("user-level install provides framework commands and agents unless this project overrides them")
     print("next: run `flow doctor` or `flow sync claude`")
     return 0

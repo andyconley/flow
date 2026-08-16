@@ -418,7 +418,7 @@ summary = "Scaffold `.flow/` overlay into the current repo"
 
 [[help.cli_commands]]
 invocation = "flow refresh project"
-summary = "Pull missing framework files into an existing project overlay"
+summary = "Repair overlay core files and registered local sources"
 
 [[help.cli_commands]]
 invocation = "flow sync claude [--user] [--check]"

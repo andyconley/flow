@@ -173,6 +173,71 @@ class FlowCliTests(unittest.TestCase):
         self.assertTrue((self.repo / ".flow" / "commands" / "flow-define.md").exists())
         self.assertTrue((self.repo / ".flow" / "agents" / "architect.md").exists())
 
+    def test_refresh_project_default_does_not_backfill_unregistered_framework_dirs(self) -> None:
+        flow_dir = self.repo / ".flow"
+        flow_dir.mkdir()
+        (flow_dir / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
+        )
+
+        result = self.run_flow("refresh", "project")
+        self.assert_ok(result)
+
+        self.assertIn("mode: overlay core and registered sources", result.stdout)
+        self.assertTrue((flow_dir / "FRAMEWORK.md").exists())
+        self.assertTrue((flow_dir / "PROJECT.md").exists())
+        self.assertTrue((flow_dir / "memory" / "STATE.md").exists())
+        self.assertTrue((flow_dir / "runs" / ".gitkeep").exists())
+        self.assertFalse((flow_dir / "commands").exists())
+        self.assertFalse((flow_dir / "agents").exists())
+        self.assertFalse((flow_dir / "standards").exists())
+        self.assertFalse((flow_dir / "templates").exists())
+
+        bootstrap = self.run_flow("bootstrap")
+        self.assert_ok(bootstrap)
+        self.assertIn("optional framework dirs absent", bootstrap.stdout)
+
+    def test_refresh_project_default_repairs_registered_sources_only(self) -> None:
+        flow_dir = self.repo / ".flow"
+        flow_dir.mkdir()
+        (flow_dir / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
+            '\n[[claude.commands]]\n'
+            'name = "flow-define"\n'
+            'source = "commands/flow-define.md"\n'
+            'description = "define"\n'
+            '\n[[agents]]\n'
+            'name = "architect"\n'
+            'source = "agents/architect.md"\n'
+        )
+
+        result = self.run_flow("refresh", "project")
+        self.assert_ok(result)
+
+        self.assertTrue((flow_dir / "commands" / "flow-define.md").exists())
+        self.assertTrue((flow_dir / "agents" / "architect.md").exists())
+        self.assertFalse((flow_dir / "commands" / "flow-plan.md").exists())
+        self.assertFalse((flow_dir / "agents" / "lead-developer.md").exists())
+
+    def test_refresh_project_all_backfills_full_scaffold(self) -> None:
+        flow_dir = self.repo / ".flow"
+        flow_dir.mkdir()
+        (flow_dir / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
+        )
+
+        result = self.run_flow("refresh", "project", "--all")
+        self.assert_ok(result)
+
+        self.assertIn("mode: full scaffold", result.stdout)
+        self.assertTrue((flow_dir / "commands" / "flow-plan.md").exists())
+        self.assertTrue((flow_dir / "agents" / "architect.md").exists())
+        self.assertTrue((flow_dir / "standards" / "git-commits.md").exists())
+        self.assertTrue((flow_dir / "templates" / "definition.md").exists())
+
     def test_sync_claude_generates_runtime_surface(self) -> None:
         self.setup_project()
 

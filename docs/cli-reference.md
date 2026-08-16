@@ -56,14 +56,16 @@ Use this once per machine, then again whenever the framework scaffold changes an
 
 ### `flow refresh project`
 
-Copy only missing files from the current framework template into an existing `repo/.flow`.
+Repair missing files in an existing `repo/.flow`.
 
 Behavior:
 
-- adds newly introduced framework files
+- adds missing overlay core files: `flow.toml`, `FRAMEWORK.md`, `PROJECT.md`, `memory/STATE.md`, and `runs/.gitkeep`
+- adds missing command, agent, and standard files only when they are registered in `.flow/flow.toml`
 - leaves existing project files untouched
+- use `flow refresh project --all` to backfill the full framework scaffold, including commands, agents, standards, templates, and project starter files
 
-Use this when the framework has grown new files and a project should pick them up without replacing local edits.
+Use this to repair an incomplete overlay or restore registered project-local sources without importing framework content that the user-level install already provides.
 
 ### `flow bootstrap`
 
@@ -74,12 +76,9 @@ Checks for:
 - `flow.toml`
 - `FRAMEWORK.md`
 - `PROJECT.md`
-- `commands/`
-- `agents/`
-- `standards/`
-- `project/`
 - `memory/`
-- `templates/`
+
+It reports absent `commands/`, `agents/`, `standards/`, `project/`, and `templates/` directories as optional. The user-level install provides framework commands and agents unless the project overlay registers local replacements.
 
 Use this after scaffold or when diagnosing a broken repo state.
 
@@ -452,8 +451,8 @@ flow doctor
 cd /path/to/project
 flow refresh project
 flow bootstrap
-flow sync claude
-flow sync codex
+flow sync claude     # only when the project overlay has registered local runtime surfaces
+flow sync codex      # only when the project overlay has registered local runtime surfaces
 ```
 
 ### Drift-only check
