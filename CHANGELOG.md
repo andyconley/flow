@@ -6,6 +6,62 @@ flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agent
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-08-16
+
+The definition and overlay-refresh release. Flow now has a real front door for
+early scope work, and project refresh no longer assumes every repo wants a
+project-local copy of the whole framework.
+
+The important product change is `/flow-define`: discovery, research,
+adversarial review, and approved requirements now have a first-class stage
+before `/flow-solution` or `/flow-plan`. That gives product, architecture, and
+business-analysis roles a place to turn an idea or capability into agreed
+requirements before implementation planning starts.
+
+The operational fix is narrower but just as important. `flow refresh project`
+used to copy every missing file from the framework scaffold. In repos that
+intentionally rely on the user-level install for commands and agents, that
+backfilled inert duplicate framework files and created future drift. Refresh is
+now conservative by default: it adds missing overlay core files and registered
+local sources, reports same-name files whose content differs, and leaves those
+files alone unless the user chooses an interactive update. The old broad
+backfill remains available through `flow refresh project --all`.
+
+### Added
+
+- **`/flow-define`** — a definition stage for early feature or architectural
+  capability work. It covers discovery, research, adversarial questioning, and
+  approved requirements before planning or solutioning.
+- **Definition artifacts and guidance** — templates and standards for
+  requirements, research notes, adversarial review, and definition-stage
+  evidence.
+- **Community health files** — MIT license metadata, contribution guidance,
+  security policy, issue templates, and pull request template.
+
+### Changed
+
+- **`flow refresh project` is conservative by default.** It repairs overlay
+  core files and registered local sources without importing every framework
+  command, agent, standard, template, and project starter file.
+- **`flow refresh project --interactive` reports and prompts on update
+  candidates.** Existing same-name files whose content differs from the
+  framework are not overwritten in normal runs.
+- **`flow refresh project --all` keeps the old broad backfill path** for repos
+  that intentionally want a full project-local framework scaffold.
+- **`flow bootstrap` treats framework directories as optional.** Missing
+  `commands/`, `agents/`, `standards/`, `project/`, and `templates/` no longer
+  fail bootstrap when the overlay core is present.
+- **README, CLI reference, help, and backlog docs now match the current
+  install/update and overlay model.**
+
+### Fixed
+
+- **Usage-store setup recovers from partial migration state** instead of
+  leaving a develop install unable to repair the local usage database.
+- **Project refresh no longer creates duplicate inert framework content** in
+  overlays whose manifests intentionally declare no project-local commands or
+  agents.
+
 ## [0.10.0] — 2026-08-15
 
 The measurement release. `flow cost` could say which sessions need attention
@@ -650,7 +706,8 @@ The patch trajectory (0.4.x) was about install/update mechanics — getting the 
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/andyconley/flow/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/andyconley/flow/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/andyconley/flow/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/andyconley/flow/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/andyconley/flow/compare/v0.7.0...v0.8.0
