@@ -62,6 +62,10 @@ fix: preserve user overlay files during setup
 feat: add definition-stage research artifacts
 ```
 
+Release automation reads those commit messages. `feat:` produces a minor release, `fix:` produces a patch release, and breaking-change markers produce a major release. `docs:` also produces a patch release. Use `docs(framework):`, `docs(commands):`, `docs(agents):`, or `docs(standards):` when a documentation change materially changes Flow behavior; those scopes produce a minor release.
+
+The changelog is generated from commits. Put longer design context in the docs, specs, or architecture notes changed by the work.
+
 ## Generated Files
 
 Edit the source files that Flow owns, then regenerate or resync. Do not hand-edit generated Claude or Codex runtime files as the source of truth.
