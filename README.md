@@ -374,3 +374,7 @@ The framework is usable, but not finished. Main gaps:
 ## Current Recommendation
 
 `main` is the active development branch. Develop installs point `~/.flow/source` at a checkout; release installs follow tagged releases and can lag behind `main` until a new tag is cut.
+
+## License
+
+Flow is released under the [MIT License](LICENSE).
