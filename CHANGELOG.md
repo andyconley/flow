@@ -6,7 +6,7 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Documentation
 
-- clarify release-impacting documentation ([cc16fcf](https://github.com/andyconley/flow/commit/cc16fcf147d4172e8700fe3e0b8e1402e8af738c))
+- clarify release-impacting documentation ([cc16fcf](https://github.com/andyconley/flow/commit/cc16fcf125016d475b2b1d96129016dbde359b3d))
 
 ## [0.11.0] — 2026-08-16
 
