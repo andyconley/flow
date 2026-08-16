@@ -75,13 +75,13 @@ User overlays are optional. Use `flow setup user --overlay-repo URL` if you want
 
 ### Want to install?
 
-For a new machine, use [Quick Install](#quick-install-recommended-for-most-users).
+For a new machine, use [First Install](#first-install-recommended-for-most-users).
 
-For framework development, use [Local Install](#local-install-for-maintainers-and-contributors).
+For framework development, use [Maintainer Install](#maintainer-install).
 
 For a repo that needs project-specific memory, roles, or run artifacts, use [After Install](#after-install).
 
-## Quick Install (recommended for most users)
+## First Install (recommended for most users)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash
@@ -91,7 +91,7 @@ flow setup user
 
 That command queries the flow remote for the latest tagged release, shallow-clones it to a temporary directory, installs the framework into `~/.flow/source/` in release mode, then cleans up. After it runs, the temp clone is disposable. The install is self-contained, and `flow update` rolls it forward to newer tagged releases later.
 
-## Local Install (for maintainers and contributors)
+## Maintainer Install
 
 To edit framework content yourself, clone the repo and use the maintainer flow:
 
@@ -105,18 +105,18 @@ flow setup user                  # installs flow at user level — active in eve
 
 `./install-flow.sh` writes a `flow` launcher at `~/.local/bin/flow` and either symlinks (develop) or copies (release) the framework into `~/.flow/source`. `flow setup machine` creates the support directories under `~/.flow/`. `flow setup user` generates Claude surfaces under `~/.claude/`, shared Codex skills under `~/.agents/skills/`, and Codex agents, hooks, and managed manifests under `~/.codex/`.
 
-## Choosing an Install Mode
+## Install Modes
 
 `install-flow.sh` supports two install modes. Both use the same path contract: `~/.flow/source/`.
 
 | Mode | Storage | When to use |
 |---|---|---|
 | **Develop** (`--develop`, default) | `~/.flow/source` → symlink to this checkout | Maintainers and contributors editing framework content. Edits in the clone go live immediately. |
-| **Release** (`--release`) | `~/.flow/source/` → real directory of copied content | Most users who want flow installed without keeping a clone around. The clone is disposable after install. Use `flow update` to roll forward to newer tags. |
+| **Release** (`install.sh`, or `install-flow.sh --release` from a clone) | `~/.flow/source/` → real directory of copied content | Most users who want flow installed without keeping a clone around. The clone is disposable after install. Use `flow update` to roll forward to newer tags. |
 
 The mode and installed version are stamped into `~/.flow/config.toml` and reported by `flow doctor`.
 
-### Develop install (current behavior)
+### Develop Mode
 
 ```bash
 cd ~/personal/flow
@@ -133,7 +133,7 @@ flow sync claude --user
 flow sync codex --user
 ```
 
-### Release install
+### Release Mode From A Clone
 
 ```bash
 cd /tmp/flow-clone
@@ -155,7 +155,7 @@ flow update --resync              # apply + re-run `flow sync claude --user` / `
 
 `flow update` stages the new content first, validates it, then atomically renames it into place. A failed update cannot leave a half-installed framework.
 
-### Converting between modes
+### Mode Conversion
 
 ```bash
 flow install --release                          # symlink → copied directory (clone preserved)
@@ -198,7 +198,7 @@ This is the command map, not the full reference. For detailed flags and behavior
 
 ### Install and Update
 
-Use these when setting up flow on a machine, connecting your user overlay to git, switching install modes, or updating a release install.
+Most users only need the bootstrap installer once, then `flow update --resync` later. Use the other commands when setting up a machine, connecting your user overlay to git, or converting an existing install between modes.
 
 - `flow setup machine`
   - prepare `~/.flow/`, `~/.local/bin/flow`, and local config
@@ -207,11 +207,11 @@ Use these when setting up flow on a machine, connecting your user overlay to git
 - `flow setup user --overlay-repo URL`
   - give `~/.flow/user/` a git home without clobbering files or committing for you
 - `flow install --release`
-  - convert the local install to release mode
+  - convert an existing develop install to release mode
 - `flow install --develop PATH`
-  - convert the local install to develop mode
+  - convert an existing release install to develop mode
 - `flow update [--check] [--resync]`
-  - roll a release install forward to the latest tagged release
+  - update a release install to the latest tagged release
 
 ### Project Setup
 

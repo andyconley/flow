@@ -38,13 +38,13 @@ Installation and local execution support, not project truth.
 | Mode | Storage | Use |
 |---|---|---|
 | **Develop** (`install-flow.sh --develop`, default) | symlink to the user's clone | Maintainers editing framework content; edits in the clone go live immediately |
-| **Release** (`install-flow.sh --release`) | real directory of copied content | Consumers who want flow installed without keeping a clone; rolled forward via `flow update` |
+| **Release** (`install.sh`, or `install-flow.sh --release` from a clone) | real directory of copied content | Most users; rolled forward via `flow update` |
 
 Why a single path contract: everything downstream — `flow sync`, managed manifests, hook commands, scaffold references like `~/.flow/source/scaffolds/default/commands/flow-boot.md` — resolves through `~/.flow/source/` regardless of mode. Install-mode awareness lives entirely in the install layer (`install-flow.sh`, `flow install`, `flow update`, `flow doctor`). The rest of the CLI never branches on mode.
 
 `flow update` rolls forward a release install by staging the new tree, validating it, and atomically swapping it into `~/.flow/source/`. A failed update — at any point before the swap — leaves the existing install untouched. The window between renaming the old install aside and renaming the staging into place is a single syscall pair; failures during the swap attempt rollback.
 
-`flow install --release` / `flow install --develop <path>` converts between modes in place. The clone is never deleted by either direction; the user controls its lifecycle.
+`flow install --release` / `flow install --develop <path>` converts an existing install between modes. The clone is never deleted by either direction; the user controls its lifecycle.
 
 #### User Overlay
 

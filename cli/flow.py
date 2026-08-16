@@ -351,11 +351,12 @@ def main() -> int:
 
     install_parser = sub.add_parser(
         "install",
-        help="convert the current install between develop (symlink) and release (copy) modes",
+        help="convert an existing install between develop and release modes",
         description=(
-            "Convert ~/.flow/source between develop mode (symlink to a clone) and "
-            "release mode (real directory of copied content). The clone is never "
-            "deleted; switching to release mode is non-destructive to the source repo."
+            "Mode conversion for an existing install. Convert ~/.flow/source between "
+            "develop mode (symlink to a clone) and release mode (real directory of "
+            "copied content). The clone is never deleted; switching to release mode "
+            "is non-destructive to the source repo."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -378,7 +379,7 @@ def main() -> int:
 
     update_parser = sub.add_parser(
         "update",
-        help="roll forward a release install to the latest tagged release",
+        help="update a release install to the latest tagged release",
         description=(
             "In release mode: fetch the latest semver tag from the configured remote, "
             "stage it, and atomically swap into ~/.flow/source. In develop mode: print "

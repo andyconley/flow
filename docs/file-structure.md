@@ -248,14 +248,18 @@ Current focus:
 - overlay version control and the commit advisory
 - `docs/cli-reference.md` against the CLI it documents — command names, flags, defaults, coverage, and quoted output literals. It lives here rather than in `scripts/` so it runs without anyone remembering to, and because `tests/` is excluded from the release roster
 
-### `install-flow.sh`
+### `install.sh` and `install-flow.sh`
 
-Machine-local install helper.
+Install entry points.
 
-It:
+- `install.sh` is the bootstrap installer for first install from the remote.
+- `install-flow.sh` is the local installer used by the bootstrap and by maintainers running from a clone.
 
-- links the framework repo into `~/.flow/source`
-- writes a launcher to `~/.local/bin/flow`
+They:
+
+- create `~/.flow/source` as either a develop-mode symlink or a release-mode copy
+- write a launcher to `~/.local/bin/flow`
+- stamp install metadata in `~/.flow/config.toml`
 
 Edit here when installation or launcher behavior changes.
 

@@ -104,7 +104,7 @@ Use this as the main diagnostics command.
 
 ### `flow install --release`
 
-Convert the current install from develop mode (symlink) to release mode (real copied directory). The clone is **not** deleted — the user controls its lifecycle.
+Convert an existing develop install from symlink mode to release mode. This is mode conversion, not the normal first-install path. The clone is **not** deleted — the user controls its lifecycle.
 
 Behavior:
 
@@ -115,7 +115,7 @@ Behavior:
 - Atomically swaps the staging directory into `~/.flow/source/`
 - Updates `~/.flow/config.toml` with `mode = "release"`, version, remote, and installed_at
 
-Use this when a contributor's machine is ready to switch off development mode and pin to a specific version.
+Use this when a contributor's machine is ready to switch off development mode and pin to copied release content.
 
 ### `flow install --develop <clone-path>`
 
@@ -417,7 +417,7 @@ Use this only through the generated `PostToolUse` and `UserPromptSubmit` hooks, 
 
 ## Typical Sequences
 
-### First-time local install
+### Maintainer Install From A Clone
 
 ```bash
 cd ~/personal/flow
@@ -427,7 +427,7 @@ flow setup machine
 flow setup user        # installs flow at user level — active in every supported runtime session
 ```
 
-### Release-mode framework roll-forward
+### Release Update
 
 ```bash
 flow update --check    # see what's available
@@ -607,10 +607,10 @@ Fix:
 
 flow ships two install scripts at the repo root:
 
-- `install.sh` — portable curl-able bootstrap, primary path for most users
-- `install-flow.sh` — direct installer used by the bootstrap (and by maintainers running from a clone)
+- `install.sh` — bootstrap installer; the first-install path for most users
+- `install-flow.sh` — local installer; used by the bootstrap and by maintainers running from a clone
 
-### `install.sh` (portable bootstrap)
+### `install.sh` (bootstrap installer)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash
@@ -630,7 +630,7 @@ Use this when:
 
 Requires `git` on the user's `PATH`. Public hosting of the curl URL requires the flow repo to be publicly readable; against a private repo, run `bash install.sh` from a local clone instead (the script's logic works either way once it can reach the remote).
 
-### `./install-flow.sh [--develop|--release]`
+### `./install-flow.sh [--develop|--release]` (local installer)
 
 This script:
 
@@ -650,4 +650,4 @@ Use this when:
 - repairing the local launcher
 - switching to release mode for a non-contributor install
 
-After install, `flow update` is the canonical roll-forward path for release mode. `flow install --release` / `flow install --develop <path>` converts between modes without re-running `install-flow.sh`.
+After first install, `flow update` is the release update path. `flow install --release` and `flow install --develop <path>` are mode-conversion commands; they convert an existing install without re-running `install-flow.sh`.
