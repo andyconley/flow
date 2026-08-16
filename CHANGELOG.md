@@ -1,5 +1,11 @@
 # Changelog
 
+All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
+
+## [0.11.1](https://github.com/andyconley/flow/compare/v0.11.0...v0.11.1) (2026-08-16)
+
+# Changelog
+
 All notable changes to flow are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agents, standards). Doc-only commits to those files that materially change how agents engage at runtime are treated as MINOR bumps even though they are `docs(...)` by Conventional Commits type — the docs *are* the behavior.
