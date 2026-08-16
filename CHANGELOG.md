@@ -4,13 +4,9 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ## [0.11.1](https://github.com/andyconley/flow/compare/v0.11.0...v0.11.1) (2026-08-16)
 
-# Changelog
+### Documentation
 
-All notable changes to flow are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-flow's behavioral source-of-truth lives in `scaffolds/default/` (commands, agents, standards). Doc-only commits to those files that materially change how agents engage at runtime are treated as MINOR bumps even though they are `docs(...)` by Conventional Commits type — the docs *are* the behavior.
-
-## [Unreleased]
+- clarify release-impacting documentation ([cc16fcf](https://github.com/andyconley/flow/commit/cc16fcf147d4172e8700fe3e0b8e1402e8af738c))
 
 ## [0.11.0] — 2026-08-16
 
@@ -712,7 +708,6 @@ The patch trajectory (0.4.x) was about install/update mechanics — getting the 
 
 Commits before `v0.4.0` predate the CHANGELOG. The git log is the authoritative record for those.
 
-[Unreleased]: https://github.com/andyconley/flow/compare/v0.11.0...HEAD
 [0.11.0]: https://github.com/andyconley/flow/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/andyconley/flow/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/andyconley/flow/compare/v0.8.0...v0.9.0

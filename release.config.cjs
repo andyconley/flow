@@ -22,15 +22,15 @@ module.exports = {
         preset: "conventionalcommits",
         presetConfig: {
           types: [
-            { type: "feat", section: "Features" },
-            { type: "fix", section: "Bug Fixes" },
-            { type: "docs", section: "Documentation" },
-            { type: "perf", section: "Performance" },
-            { type: "refactor", section: "Code Refactoring" },
-            { type: "test", section: "Tests" },
-            { type: "build", section: "Build System" },
-            { type: "ci", section: "Continuous Integration" },
-            { type: "chore", section: "Maintenance" }
+            { type: "feat", section: "Features", hidden: false },
+            { type: "fix", section: "Bug Fixes", hidden: false },
+            { type: "docs", section: "Documentation", hidden: false },
+            { type: "perf", section: "Performance", hidden: false },
+            { type: "refactor", section: "Code Refactoring", hidden: false },
+            { type: "test", section: "Tests", hidden: false },
+            { type: "build", section: "Build System", hidden: false },
+            { type: "ci", section: "Continuous Integration", hidden: false },
+            { type: "chore", section: "Maintenance", hidden: false }
           ]
         }
       }
