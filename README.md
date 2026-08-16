@@ -381,6 +381,8 @@ The framework is usable, but not finished. Main gaps:
 
 Releases are automated from Conventional Commits on `main`. The release workflow updates `CHANGELOG.md`, tags the new version, and creates the GitHub release.
 
+For a release-impacting documentation change, use a Conventional Commit type and scope that matches the behavior being described.
+
 ## License
 
 Flow is released under the [MIT License](LICENSE).
