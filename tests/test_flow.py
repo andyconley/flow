@@ -49,6 +49,16 @@ class FlowCliTests(unittest.TestCase):
             env=_clean_env(self._fake_home),
         )
 
+    def run_flow_with_input(self, stdin: str, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(FLOW_CLI), *args],
+            cwd=self.repo,
+            text=True,
+            input=stdin,
+            capture_output=True,
+            env=_clean_env(self._fake_home),
+        )
+
     def assert_ok(self, result: subprocess.CompletedProcess[str]) -> None:
         if result.returncode != 0:
             self.fail(
@@ -220,6 +230,50 @@ class FlowCliTests(unittest.TestCase):
         self.assertTrue((flow_dir / "agents" / "architect.md").exists())
         self.assertFalse((flow_dir / "commands" / "flow-plan.md").exists())
         self.assertFalse((flow_dir / "agents" / "lead-developer.md").exists())
+
+    def test_refresh_project_reports_changed_existing_files_without_overwriting(self) -> None:
+        flow_dir = self.repo / ".flow"
+        flow_dir.mkdir()
+        (flow_dir / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
+            '\n[[claude.commands]]\n'
+            'name = "flow-define"\n'
+            'source = "commands/flow-define.md"\n'
+            'description = "define"\n'
+        )
+        command = flow_dir / "commands" / "flow-define.md"
+        command.parent.mkdir()
+        command.write_text("# local define override\n")
+
+        result = self.run_flow("refresh", "project")
+        self.assert_ok(result)
+
+        self.assertIn("update available: .flow/commands/flow-define.md", result.stdout)
+        self.assertIn("update available: .flow/flow.toml", result.stdout)
+        self.assertIn("left changed files unchanged: 2", result.stdout)
+        self.assertEqual(command.read_text(), "# local define override\n")
+
+    def test_refresh_project_interactive_can_update_changed_files(self) -> None:
+        flow_dir = self.repo / ".flow"
+        flow_dir.mkdir()
+        (flow_dir / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
+            '\n[[claude.commands]]\n'
+            'name = "flow-define"\n'
+            'source = "commands/flow-define.md"\n'
+            'description = "define"\n'
+        )
+        command = flow_dir / "commands" / "flow-define.md"
+        command.parent.mkdir()
+        command.write_text("# local define override\n")
+
+        result = self.run_flow_with_input("y\n", "refresh", "project", "--interactive")
+        self.assert_ok(result)
+
+        self.assertIn("updated from framework: 1", result.stdout)
+        self.assertEqual(command.read_text(), (REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-define.md").read_text())
 
     def test_refresh_project_all_backfills_full_scaffold(self) -> None:
         flow_dir = self.repo / ".flow"

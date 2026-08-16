@@ -109,13 +109,19 @@ def main() -> int:
         description=(
             "Bring an existing project overlay forward without overwriting local edits. "
             "By default this refreshes only overlay core files plus command, agent, "
-            "and standard sources registered in .flow/flow.toml."
+            "and standard sources registered in .flow/flow.toml. Existing files whose "
+            "content differs are reported as update candidates; use --interactive to choose updates."
         ),
     )
     refresh_project_parser.add_argument(
         "--all",
         action="store_true",
         help="backfill the full framework scaffold, including commands, agents, standards, and templates",
+    )
+    refresh_project_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="prompt before replacing existing files whose content differs from the framework",
     )
 
     harvest = sub.add_parser(
@@ -427,7 +433,7 @@ def main() -> int:
     if args.command == "setup" and args.setup_target == "user":
         return setup_user(overlay_repo=args.overlay_repo)
     if args.command == "refresh" and args.refresh_target == "project":
-        return refresh_project(all_files=args.all)
+        return refresh_project(all_files=args.all, interactive=args.interactive)
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
     if args.command == "harvest" and args.harvest_target == "claude":

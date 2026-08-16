@@ -3,7 +3,8 @@
 Every function here is additive by design. `setup project` copies the project
 overlay scaffold. `refresh project` copies only missing overlay-core files and
 registered local sources by default; `refresh project --all` is the explicit
-full-scaffold backfill. None of these overwrite hand-edited `.flow` content.
+full-scaffold backfill. Existing files whose content differs become update
+candidates; none are overwritten without an explicit interactive choice.
 
 `_ensure_usage_store` lives here rather than in usage_store.py because it is the
 flow-layout-aware wrapper: it knows where ~/.flow/usage.db and the shipped
@@ -15,6 +16,7 @@ setup; nothing here reaches back into lifecycle, so the two stay acyclic.
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import flowtoml
@@ -24,7 +26,6 @@ from fsutil import (
     ensure_dir,
     ensure_file,
     repo_root,
-    sync_missing_tree,
 )
 from overlay import OVERLAY_GITIGNORE, format_overlay_vcs, git_env, overlay_vcs_status
 from paths import (
@@ -324,36 +325,117 @@ def _safe_scaffold_rel_paths(paths: set[Path]) -> list[Path]:
     return sorted(safe, key=lambda path: path.as_posix())
 
 
-def refresh_project(all_files: bool = False) -> int:
+def _iter_scaffold_files(rel_paths: list[Path]) -> list[Path]:
+    files: list[Path] = []
+    for rel in rel_paths:
+        src = SCAFFOLD_DIR / rel
+        if src.is_dir():
+            for child in src.rglob("*"):
+                if child.is_file():
+                    files.append(child.relative_to(SCAFFOLD_DIR))
+        elif src.is_file():
+            files.append(rel)
+    return sorted(files, key=lambda path: path.as_posix())
+
+
+def _prompt_update(rel: Path, prompt: bool, update_all: bool) -> tuple[bool, bool]:
+    if update_all:
+        return True, True
+    if not prompt:
+        return False, False
+
+    prompt_text = f"Update .flow/{rel.as_posix()} from framework? [y/N/a/q] "
+    answer = ""
+    try:
+        with open("/dev/tty", "r+", encoding="utf-8") as tty:
+            tty.write(prompt_text)
+            tty.flush()
+            answer = tty.readline().strip().lower()
+    except OSError:
+        try:
+            answer = input(prompt_text).strip().lower()
+        except EOFError:
+            answer = ""
+
+    if answer in {"q", "quit"}:
+        raise KeyboardInterrupt
+    if answer in {"a", "all"}:
+        return True, True
+    if answer in {"y", "yes"}:
+        return True, False
+    return False, False
+
+
+def _refresh_scaffold_files(rel_paths: list[Path], target: Path, prompt: bool) -> dict[str, int]:
+    counts = {
+        "added": 0,
+        "current": 0,
+        "updated": 0,
+        "changed": 0,
+        "conflicts": 0,
+    }
+    update_all = False
+    for rel in _iter_scaffold_files(rel_paths):
+        src = SCAFFOLD_DIR / rel
+        dest = target / rel
+        if not dest.exists():
+            ensure_dir(dest.parent)
+            shutil.copy2(src, dest)
+            counts["added"] += 1
+            continue
+        if not dest.is_file():
+            counts["conflicts"] += 1
+            print(f"conflict: .flow/{rel.as_posix()} exists but is not a file")
+            continue
+        if dest.read_bytes() == src.read_bytes():
+            counts["current"] += 1
+            continue
+
+        try:
+            should_update, update_all = _prompt_update(rel, prompt, update_all)
+        except KeyboardInterrupt:
+            print()
+            print("refresh stopped by user")
+            break
+        if should_update:
+            shutil.copy2(src, dest)
+            counts["updated"] += 1
+        else:
+            counts["changed"] += 1
+            print(f"update available: .flow/{rel.as_posix()}")
+    return counts
+
+
+def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
     root = repo_root()
     target = root / ".flow"
     if not target.exists():
         print("repo is missing .flow; run `flow setup project` first")
         return 1
 
-    added = 0
-    skipped = 0
     if all_files:
-        for item in SCAFFOLD_DIR.iterdir():
-            item_added, item_skipped = sync_missing_tree(item, target / item.name)
-            added += item_added
-            skipped += item_skipped
+        rel_paths = [item.relative_to(SCAFFOLD_DIR) for item in SCAFFOLD_DIR.iterdir()]
         mode = "full scaffold"
     else:
         manifest_path = target / "flow.toml"
         manifest = flowtoml.read_toml(manifest_path) if manifest_path.exists() else {}
         rel_paths = set(_REFRESH_CORE_PATHS)
         rel_paths.update(_registered_manifest_paths(manifest))
-        for rel in _safe_scaffold_rel_paths(rel_paths):
-            item_added, item_skipped = sync_missing_tree(SCAFFOLD_DIR / rel, target / rel)
-            added += item_added
-            skipped += item_skipped
+        rel_paths = _safe_scaffold_rel_paths(rel_paths)
         mode = "overlay core and registered sources"
+
+    prompt = interactive or sys.stdin.isatty()
+    counts = _refresh_scaffold_files(rel_paths, target, prompt=prompt)
 
     print(f"project refresh complete: {target}")
     print(f"mode: {mode}")
-    print(f"added missing files: {added}")
-    print(f"left existing files unchanged: {skipped}")
+    print(f"added missing files: {counts['added']}")
+    print(f"already current: {counts['current']}")
+    print(f"updated from framework: {counts['updated']}")
+    print(f"left changed files unchanged: {counts['changed']}")
+    print(f"conflicts: {counts['conflicts']}")
     if not all_files:
         print("tip: use `flow refresh project --all` to backfill the full framework scaffold")
+    if counts["changed"] and not prompt:
+        print("tip: rerun with `flow refresh project --interactive` to choose updates")
     return 0

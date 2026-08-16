@@ -221,6 +221,8 @@ Use these when a repo needs a `.flow/` overlay for project-specific roles, memor
   - scaffold `.flow/` into the current repo
 - `flow refresh project`
   - repair missing overlay core files and registered local sources without overwriting local edits
+- `flow refresh project --interactive`
+  - review same-name files whose framework content differs and choose whether to update them
 - `flow refresh project --all`
   - backfill the full framework scaffold into the project overlay
 - `flow bootstrap`
