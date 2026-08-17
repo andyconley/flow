@@ -8,7 +8,10 @@
     "supported=0 means the harness cannot report the field at all. In turn_norm",
     "that field is NULL, which is distinct from a reported zero.",
     "",
-    "Verified 2026-08-08 against ~/.codex/sessions and ~/.claude/projects."
+    "Verified 2026-08-08 against ~/.codex/sessions and ~/.claude/projects.",
+    "compact_boundary added and verified 2026-08-17: Claude records these as",
+    "agent_activity_raw.kind='compact_boundary'; Codex has no equivalent event,",
+    "so a Codex population cannot be filtered for compaction."
   ],
   "capabilities": [
     { "harness": "codex",  "field": "input_tokens",        "supported": 1 },
@@ -21,6 +24,7 @@
     { "harness": "codex",  "field": "cache_ttl_split",     "supported": 0 },
     { "harness": "codex",  "field": "sub_turn_detail",     "supported": 0 },
     { "harness": "codex",  "field": "session_lineage",     "supported": 1 },
+    { "harness": "codex",  "field": "compact_boundary",    "supported": 0 },
 
     { "harness": "claude", "field": "input_tokens",        "supported": 1 },
     { "harness": "claude", "field": "cache_read_tokens",   "supported": 1 },
@@ -31,6 +35,7 @@
     { "harness": "claude", "field": "capacity_primary",    "supported": 0 },
     { "harness": "claude", "field": "cache_ttl_split",     "supported": 1 },
     { "harness": "claude", "field": "sub_turn_detail",     "supported": 1 },
-    { "harness": "claude", "field": "session_lineage",     "supported": 0 }
+    { "harness": "claude", "field": "session_lineage",     "supported": 0 },
+    { "harness": "claude", "field": "compact_boundary",    "supported": 1 }
   ]
 }
