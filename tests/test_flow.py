@@ -1935,6 +1935,7 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(
             victims,
             [
+                "baseline",
                 "claude_collector",
                 "codex_collector",
                 "cost",
@@ -7506,3 +7507,333 @@ class CliReferenceDocTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn(literal, result.stdout)
+
+
+class BaselineTests(unittest.TestCase):
+    """Direct tests of cli/baseline.py against a constructed store.
+
+    Seeded straight into `turn_raw`/`turn_norm` rather than replayed through
+    the collector: every test here turns on an exact `turn_seq`,
+    `source_line_no`, or `cache_read_tokens`, and a transcript fixture cannot
+    pin those without also encoding collector behaviour that is not what is
+    under test.
+    """
+
+    # The measured floor series from the real corpus, minus its one genuine
+    # move. Every remaining step is sampling wander: +4.8%, -2.5%, +9.3%,
+    # +0.5%, -3.4%, 0.0%. Used verbatim rather than as invented "noisy
+    # numbers" so the negative test is traceable to observed data.
+    REAL_NOISE_SERIES = [20131, 21094, 20568, 22489, 22595, 21830, 21830]
+
+    # Mondays, so each timestamp lands in its own week bucket under the
+    # Monday-keyed expression `cost.trend` already uses.
+    WEEKS = [
+        "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26",
+        "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23",
+    ]
+
+    def setUp(self) -> None:
+        import sqlite3
+
+        _pin_tz(self)
+        repo_cli = REPO_ROOT / "cli"
+        if str(repo_cli) not in sys.path:
+            sys.path.insert(0, str(repo_cli))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import baseline
+
+        self.baseline = baseline
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.row_factory = sqlite3.Row
+        for _version, _description, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+        # Seeded explicitly: MIGRATIONS create harness_capability but leave it
+        # empty, and rule 3 is gated on it.
+        self.conn.executemany(
+            "INSERT INTO harness_capability (harness, field, supported) VALUES (?, ?, ?)",
+            [("claude", "compact_boundary", 1), ("codex", "compact_boundary", 0)],
+        )
+        self._next_id = 1
+
+    def tearDown(self) -> None:
+        self.conn.close()
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("usage_store", "baseline", "cost"):
+            sys.modules.pop(name, None)
+
+    def seed(
+        self,
+        cache_read: int,
+        week: str = "2026-01-05",
+        harness: str = "claude",
+        cwd: str | None = "/w",
+        turn_seq: int | None = None,
+        source_line_no: int = 5,
+        is_subagent: int = 0,
+        session_row_id: int | None = None,
+    ) -> int:
+        """One turn, with every field the population rules read exposed."""
+        turn_raw_id = self._next_id
+        self._next_id += 1
+        if session_row_id is None:
+            cur = self.conn.execute(
+                "INSERT INTO session (harness, session_id, cwd, source_path)"
+                " VALUES (?, ?, ?, ?)",
+                (harness, f"s{turn_raw_id}", cwd, f"/tmp/s{turn_raw_id}.jsonl"),
+            )
+            session_row_id = cur.lastrowid
+        ts = f"{week}T12:00:00Z"
+        self.conn.execute(
+            "INSERT INTO turn_raw"
+            " (id, session_row_id, natural_turn_id, turn_seq, is_subagent, ts, model,"
+            "  payload, source_path, source_line_no, collector_version)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'm', '{}', '/tmp/x', ?, 1)",
+            (
+                turn_raw_id, session_row_id, f"t{turn_raw_id}",
+                turn_seq if turn_seq is not None else source_line_no,
+                is_subagent, ts, source_line_no,
+            ),
+        )
+        self.conn.execute(
+            "INSERT INTO turn_norm"
+            " (turn_raw_id, ts, model, is_subagent, fresh_input_tokens,"
+            "  cache_read_tokens, cache_write_tokens, output_tokens, norm_version)"
+            " VALUES (?, ?, 'm', ?, 0, ?, 0, 0, 1)",
+            (turn_raw_id, ts, is_subagent, cache_read),
+        )
+        return session_row_id
+
+    def seed_week(self, week: str, value: int, count: int = 5, **kw) -> None:
+        for _ in range(count):
+            self.seed(value, week=week, **kw)
+
+    def compact_boundary(self, session_row_id: int, ts: str) -> None:
+        self.conn.execute(
+            "INSERT INTO agent_activity_raw"
+            " (session_row_id, ts, kind, payload, source_path, source_line_no,"
+            "  collector_version)"
+            " VALUES (?, ?, 'compact_boundary', '{}', '/tmp/x', 1, 1)",
+            (session_row_id, ts),
+        )
+
+    def observations(self, harness: str = "claude") -> list:
+        return self.baseline.qualifying_observations(self.conn, harness)
+
+    # ------------------------------------------------------------------
+    # estimator
+    # ------------------------------------------------------------------
+
+    def test_floor_is_low_quantile_not_median(self) -> None:
+        """The floor is the leanest prefix observed, not the typical one.
+
+        Prefix readings are repeated plateaus, so a mid-range quantile tracks
+        the mix between configurations rather than the floor itself. This
+        fixture is deliberately bimodal, the shape that made p25 misreport a
+        35% spike on real data.
+        """
+        for value in (20000, 20000, 30000, 30000, 30000):
+            self.seed(value)
+        rows = self.baseline.weekly_floor(self.observations())
+        self.assertEqual(rows[0]["floor"], 20000)
+        self.assertEqual(rows[0]["n"], 5)
+
+    def test_percentile_is_nearest_rank_and_returns_a_real_observation(self) -> None:
+        self.assertEqual(self.baseline._percentile([10, 20, 30, 40], 0.10), 10)
+        self.assertEqual(self.baseline._percentile([7], 0.10), 7)
+        self.assertIsNone(self.baseline._percentile([], 0.10))
+
+    # ------------------------------------------------------------------
+    # population rules
+    # ------------------------------------------------------------------
+
+    def test_rule1_takes_first_non_subagent_turn(self) -> None:
+        """A subagent turn earlier in the file must not become the first turn."""
+        sid = self.seed(9999, turn_seq=3, source_line_no=3, is_subagent=1)
+        self.seed(21000, turn_seq=9, source_line_no=9, session_row_id=sid)
+        self.seed(55555, turn_seq=40, source_line_no=40, session_row_id=sid)
+        rows = self.observations()
+        self.assertEqual([r["cache_read_tokens"] for r in rows], [21000])
+
+    def test_rule2_excludes_collector_attached_mid_file(self) -> None:
+        """A high first line number means the earliest row held is mid-conversation."""
+        self.seed(21000, source_line_no=4000)
+        self.assertEqual(self.observations(), [])
+
+    def test_rule3_excludes_compaction_at_or_before_the_turn(self) -> None:
+        sid = self.seed(21000, week="2026-01-05")
+        self.compact_boundary(sid, "2026-01-05T11:00:00Z")
+        self.assertEqual(self.observations(), [])
+
+    def test_rule3_admits_compaction_after_the_turn(self) -> None:
+        """The rule is "at or before", not "anywhere in the session"."""
+        sid = self.seed(21000, week="2026-01-05")
+        self.compact_boundary(sid, "2026-01-05T13:00:00Z")
+        self.assertEqual(len(self.observations()), 1)
+
+    def test_rule3_not_applied_when_harness_cannot_report_compaction(self) -> None:
+        """Codex records no boundary; the row must not be silently filtered."""
+        sid = self.seed(21000, harness="codex")
+        self.compact_boundary(sid, "2026-01-05T11:00:00Z")
+        self.assertEqual(len(self.observations("codex")), 1)
+
+    def test_rule4_excludes_cache_miss_rather_than_reporting_zero(self) -> None:
+        """cache_read=0 is a miss carrying no reading, not an empty prefix."""
+        self.seed(0)
+        rows = self.baseline.weekly_floor(self.observations())
+        self.assertEqual(rows, [])
+
+    # ------------------------------------------------------------------
+    # changepoints
+    # ------------------------------------------------------------------
+
+    def test_changepoint_ignores_real_world_noise(self) -> None:
+        """THE load-bearing test.
+
+        These are measured values from the real corpus with its one genuine
+        move removed. If a future change loosens either threshold, one of
+        these steps starts firing and this fails. Asserting on the constants
+        as well means loosening them without noticing breaks the suite twice.
+        """
+        for week, value in zip(self.WEEKS, self.REAL_NOISE_SERIES):
+            self.seed_week(week, value)
+        weekly = self.baseline.weekly_floor(self.observations())
+        self.assertEqual(
+            self.baseline.detect_changepoints(weekly),
+            [],
+            "measured week-to-week wander must not register as a change",
+        )
+        limits = self.baseline.thresholds()
+        self.assertGreaterEqual(limits["min_pct"], 0.10, "largest observed wander is 9.3%")
+        self.assertGreaterEqual(limits["min_abs"], 2000, "largest observed wander is 1,921 tokens")
+
+    def test_changepoint_detects_a_real_move(self) -> None:
+        self.seed_week(self.WEEKS[0], 21000)
+        self.seed_week(self.WEEKS[1], 13200)
+        weekly = self.baseline.weekly_floor(self.observations())
+        history = self.baseline.detect_changepoints(weekly)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["delta"], -7800)
+        self.assertEqual(history[0]["previous"], 21000)
+        self.assertEqual(history[0]["floor"], 13200)
+
+    def test_changepoint_requires_both_thresholds(self) -> None:
+        """A big percentage on a tiny floor is not a finding."""
+        self.seed_week(self.WEEKS[0], 3000)
+        self.seed_week(self.WEEKS[1], 5000)  # +66% but only +2,000 tokens
+        weekly = self.baseline.weekly_floor(self.observations())
+        self.assertEqual(self.baseline.detect_changepoints(weekly), [])
+
+    def test_thin_bucket_does_not_manufacture_a_change(self) -> None:
+        """A blanked week is skipped, not treated as a drop to zero."""
+        self.seed_week(self.WEEKS[0], 21000)
+        self.seed_week(self.WEEKS[1], 21000, count=2)  # below min_n
+        self.seed_week(self.WEEKS[2], 21000)
+        weekly = self.baseline.weekly_floor(self.observations())
+        self.assertIsNone(weekly[1]["floor"])
+        self.assertEqual(self.baseline.detect_changepoints(weekly), [])
+
+    # ------------------------------------------------------------------
+    # reporting contract
+    # ------------------------------------------------------------------
+
+    def test_insufficient_sample_blanks_rather_than_reporting_a_number(self) -> None:
+        self.seed_week(self.WEEKS[0], 21000, count=2)
+        rows = self.baseline.weekly_floor(self.observations())
+        self.assertEqual(rows[0]["n"], 2)
+        self.assertIsNone(rows[0]["floor"], "a thin week must not report a quantile")
+
+    def test_empty_population_reports_zero_not_a_floor(self) -> None:
+        payload = self.baseline.baseline_rows(self.conn, "claude")
+        self.assertEqual(payload["n"], 0)
+        self.assertIsNone(payload["current_floor"])
+        self.assertEqual(payload["history"], [])
+
+    def test_codex_payload_declares_compaction_filtering_unsupported(self) -> None:
+        self.seed_week(self.WEEKS[0], 11000, harness="codex")
+        payload = self.baseline.baseline_rows(self.conn, "codex")
+        self.assertFalse(payload["compaction_filtered"])
+        rendered = self.baseline.render_baseline_table(payload)
+        self.assertIn("compaction filtering: unsupported", rendered)
+
+    def test_claude_payload_declares_compaction_filtering_applied(self) -> None:
+        self.seed_week(self.WEEKS[0], 21000)
+        payload = self.baseline.baseline_rows(self.conn, "claude")
+        self.assertTrue(payload["compaction_filtered"])
+        self.assertIn("compaction filtering: applied", self.baseline.render_baseline_table(payload))
+
+    def test_render_states_the_detection_limit(self) -> None:
+        """What the surface cannot see is part of its answer."""
+        self.seed_week(self.WEEKS[0], 21000)
+        payload = self.baseline.baseline_rows(self.conn, "claude")
+        self.assertIn("smaller drift is not visible", self.baseline.render_baseline_table(payload))
+        self.assertIn("measured on this machine only", self.baseline.render_baseline_table(payload))
+
+    def test_render_never_marks_measured_values_as_inferred(self) -> None:
+        """`~` means "the harness did not report this". Nothing here qualifies."""
+        self.seed_week(self.WEEKS[0], 21000)
+        payload = self.baseline.baseline_rows(self.conn, "claude")
+        self.assertNotIn("~", self.baseline.render_baseline_table(payload))
+
+    def test_by_cwd_does_not_pool_across_projects(self) -> None:
+        self.seed_week(self.WEEKS[0], 18000, cwd="/a")
+        self.seed_week(self.WEEKS[0], 26000, cwd="/b")
+        rows = self.baseline.weekly_floor(self.observations(), by_cwd=True)
+        self.assertEqual(
+            sorted((r["cwd"], r["floor"]) for r in rows), [("/a", 18000), ("/b", 26000)]
+        )
+
+    def test_pooled_is_the_default(self) -> None:
+        self.seed_week(self.WEEKS[0], 18000, cwd="/a")
+        self.seed_week(self.WEEKS[0], 26000, cwd="/b")
+        rows = self.baseline.weekly_floor(self.observations())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["n"], 10)
+
+    def test_repeated_reads_are_identical_and_write_nothing(self) -> None:
+        self.seed_week(self.WEEKS[0], 21000)
+        self.seed_week(self.WEEKS[1], 13200)
+        before = self.conn.execute("SELECT COUNT(*) FROM turn_norm").fetchone()[0]
+        first = self.baseline.baseline_rows(self.conn, "claude")
+        second = self.baseline.baseline_rows(self.conn, "claude")
+        self.assertEqual(first, second)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM turn_norm").fetchone()[0], before)
+
+    def test_shipped_thresholds_stay_above_measured_wander(self) -> None:
+        """Guards the data file, which no other test here reaches.
+
+        `thresholds()` resolves through SOURCE_DIR, which points at the
+        install rather than the checkout, so in every test environment it
+        falls back to DEFAULT_THRESHOLDS and the shipped JSON is never read.
+        Without this, loosening the file would leave the suite green.
+
+        Both bounds are checked against the largest wander measured on the
+        real corpus: 9.3%, 1,921 tokens. A value at or below either would
+        make ordinary sampling noise register as a configuration change.
+        """
+        import json
+
+        shipped = json.loads((REPO_ROOT / "data" / "baseline_thresholds.json").read_text())
+        self.assertGreater(shipped["min_pct"], 0.093, "would fire on measured wander")
+        self.assertGreater(shipped["min_abs"], 1921, "would fire on measured wander")
+        self.assertGreaterEqual(shipped["min_n"], 5, "a quantile over fewer is noise")
+        self.assertEqual(
+            {k: v for k, v in shipped.items() if not k.startswith("_")}.keys(),
+            self.baseline.DEFAULT_THRESHOLDS.keys(),
+            "file and in-code fallback must cover the same keys",
+        )
+
+    def test_thresholds_fall_back_per_key(self) -> None:
+        """A data file that lost a key still yields a usable surface."""
+        import cost
+
+        original = cost.SOURCE_DIR
+        try:
+            cost.SOURCE_DIR = REPO_ROOT / "tests" / "does-not-exist"
+            self.assertEqual(self.baseline.thresholds(), self.baseline.DEFAULT_THRESHOLDS)
+        finally:
+            cost.SOURCE_DIR = original
