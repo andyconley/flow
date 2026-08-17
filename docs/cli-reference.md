@@ -12,7 +12,7 @@
 
 Three **hook entry points** exist only to be called by generated hooks — `flow cost verdict --hook`, `flow cost warn --hook`, and `flow overlay check --hook`. They read hook JSON on stdin and are documented here for anyone reading a `settings.json` entry and wondering what it invokes, not because there is a reason to type them. (`flow cost verdict` also has an interactive `--transcript` mode, which is worth typing.)
 
-The usage-tracking commands form a pipeline, and the order matters: **`harvest` writes raw records → `normalize` projects them into one token convention → `cost` reads the normalized layer.** `flow cost active` and `flow cost verdict` run the first two steps for you; `flow cost summary` and `flow cost sessions` do not, so they show whatever the last harvest left behind.
+The usage-tracking commands form a pipeline, and the order matters: **`harvest` writes raw records → `normalize` projects them into one token convention → `cost` reads the normalized layer.** `flow cost active` and `flow cost verdict` run the first two steps for you; `flow cost summary`, `flow cost sessions`, `flow cost trend`, and `flow cost baseline` do not, so they show whatever the last harvest left behind.
 
 ## Command Reference
 
@@ -320,6 +320,45 @@ Manual and auto compactions are never summed. A manual `/compact` is deliberate 
 Read-only, and it does not harvest first — a trend over completed periods does not become wrong for want of the last few minutes.
 
 **Coverage is labelled, never silently truncated.** If the window reaches back before the earliest harvested turn for a harness, a note says so. Absent buckets and empty buckets are different facts, and hiding the difference turns a coverage gap into a false trend.
+
+### `flow cost baseline`
+
+The always-on token floor — what a session costs to *open*, before any work happens — and the changes that moved it.
+
+Every session pays a static prefix: system prompt, tool definitions, MCP server instructions, agent and skill descriptions, `CLAUDE.md`, memory files. Every other `cost` view measures what a session spent; this one measures where it started. The distinction matters because enabling a plugin raises the opening cost of every future session, permanently and invisibly.
+
+Flags:
+
+- `--days N` — show the last N days (default: 7)
+- `--all` — every bucket ever normalized; **this is the useful invocation**, since a changepoint log needs more than one bucket to compare
+- `--harness claude|codex` — restrict to one harness (default: both, one block each)
+- `--by-cwd` — estimate per working directory instead of pooling
+- `--json` — JSON instead of the rendered block
+
+**The estimator is `cache_read_tokens` on a session's first turn.** At that point no conversation exists, so the number is the cached static prefix and nothing else — the opening message and any SessionStart hook output land in `fresh_input_tokens` instead. The obvious alternative, `fresh + cache_read + cache_write`, is available on more sessions but reads high for exactly that reason.
+
+A session qualifies only when all four hold. Each rule removes a different way a turn can look like a first turn without being one:
+
+| Rule | Removes |
+|---|---|
+| minimum `turn_seq` among non-subagent turns | a subagent turn that precedes the main thread in the file |
+| `source_line_no` at or below the threshold | sessions where the collector first attached mid-file, so its earliest row is mid-conversation |
+| no `compact_boundary` at or before the turn | resumed sessions, which restart with a summary already in context |
+| `cache_read_tokens > 0` | cache misses, which carry no prefix reading at all |
+
+`cache_read_tokens = 0` means **cache miss, not new conversation.** The prompt cache is keyed by prefix hash across the account rather than per session, so a genuinely new session started soon after another with the same prefix reads the whole thing from cache. Those are the good observations here.
+
+**Reported at p10, not a mid-range quantile.** Prefix readings are not a distribution — they are a few exact, repeated plateaus, because the cache returns the same number for every session sharing a prefix. One measured week had all 13 of its sessions read 22,489; another had all 41 read 21,830. When two configurations coexist in a week, a mid-range quantile tracks the *mix* between plateaus rather than the floor, and jumps when the mix shifts. On the corpus this was built against, p25 manufactured a +35% spike and a −28% return across weeks in which nothing changed. p10 is flat there, and equals the minimum in every measured week.
+
+**A change registers only when it clears both 15% and 2,500 tokens.** Either bound alone misfires at one end of the range. The consequence is stated in the output rather than hidden: a change smaller than that is invisible here. This detects deliberate reconfiguration, not gradual creep — one plugin quietly returning will not show up.
+
+Pooled across projects by default. `--by-cwd` is available but fragments the population quickly: on the corpus this was built against, 166 observations spread over 24 directories left only three with 20 or more. It is also largely unnecessary — the floor's dominant contributors are global, and the three directories with enough observations to compare agreed to within 6%.
+
+A bucket below the minimum sample keeps its row and its count but reports no floor. A thin week and a week with no sessions are different facts, and a quantile over a handful of sessions is noise dressed as a measurement.
+
+No `~` markers. Unlike an inferred context window, every figure here is a value some session actually reported.
+
+Read-only, no harvest, no schema. Like every other `cost` surface, it measures this machine only.
 
 ### `flow cost sessions`
 
