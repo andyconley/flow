@@ -16,6 +16,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # The `# noqa: E402` markers are load-bearing, not decoration: these imports
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
+from baseline import baseline_command  # noqa: E402
 from cost import (  # noqa: E402
     BUCKET_DAY,
     BUCKET_WEEK,
@@ -189,7 +190,7 @@ def main() -> int:
         help="read token usage back out of the usage store",
         description="Read `~/.flow/usage.db`'s normalized layer (ensuring the store's schema exists first, like every other command). `summary` and `sessions` never touch turn_raw, turn_norm, or session data; `active` runs the incremental Claude harvest and a normalize pass first so its answer is current.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n  flow cost active\n  flow cost active --within 180\n  flow cost trend --days 30 --bucket week\n",
+        epilog="Examples:\n  flow cost summary\n  flow cost summary --all --json\n  flow cost sessions --days 30\n  flow cost active\n  flow cost active --within 180\n  flow cost trend --days 30 --bucket week\n  flow cost baseline --all\n",
     )
     cost_sub = cost.add_subparsers(dest="cost_target", required=True, title="cost views")
 
@@ -218,6 +219,21 @@ def main() -> int:
         "--harness",
         choices=("claude", "codex"),
         help="restrict to one harness (default: both, one row per bucket per harness)",
+    )
+    cost_baseline_parser = cost_sub.add_parser(
+        "baseline",
+        help="the always-on token floor, and when it moved",
+        description="The static prefix every session pays before any work — system prompt, tool definitions, MCP instructions, agent and skill descriptions, CLAUDE.md, memory files. Estimated from cache_read_tokens on a session's first turn, where no conversation exists yet, and reported with the changes that cleared threshold. Detects deliberate reconfiguration, not gradual drift; see data/baseline_thresholds.json.",
+    )
+    cost_baseline_parser.add_argument(
+        "--harness",
+        choices=("claude", "codex"),
+        help="restrict to one harness (default: both, one block each)",
+    )
+    cost_baseline_parser.add_argument(
+        "--by-cwd",
+        action="store_true",
+        help="estimate per working directory instead of pooling (thins buckets sharply)",
     )
     cost_active_parser = cost_sub.add_parser(
         "active",
@@ -288,7 +304,12 @@ def main() -> int:
         help="hook mode: read hook JSON from stdin and branch on hook_event_name",
     )
 
-    for cost_parser in (cost_summary_parser, cost_sessions_parser, cost_trend_parser):
+    for cost_parser in (
+        cost_summary_parser,
+        cost_sessions_parser,
+        cost_trend_parser,
+        cost_baseline_parser,
+    ):
         window = cost_parser.add_mutually_exclusive_group()
         window.add_argument(
             "--days",
@@ -473,6 +494,14 @@ def main() -> int:
             show_all=args.all,
             bucket=args.bucket,
             harness=args.harness,
+            as_json=args.json,
+        )
+    if args.command == "cost" and args.cost_target == "baseline":
+        return baseline_command(
+            days=args.days,
+            show_all=args.all,
+            harness=args.harness,
+            by_cwd=args.by_cwd,
             as_json=args.json,
         )
     if args.command == "cost" and args.cost_target == "active":

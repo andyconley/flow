@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Parameters for `flow cost baseline`. Calibration is a data question, not a",
+    "per-invocation one, so these live here rather than as CLI flags.",
+    "",
+    "min_pct / min_abs: a week-over-week move must clear BOTH to register as a",
+    "changepoint. Calibrated 2026-08-17 against 166 qualifying sessions over 8",
+    "reporting weeks. That series ran 14632, 20131, 21094, 20568, 22489, 22595,",
+    "21830, 21830. Its first move (+5,499 / +37.6%) is a real one — the floor",
+    "growing as plugins accumulated. Every later move is sampling wander:",
+    "+4.8%, -2.5%, +9.3%, +0.5%, -3.4%, 0.0%, a largest absolute move of 1,921",
+    "tokens. These thresholds sit between the two, so the real change registers",
+    "and the wander does not.",
+    "",
+    "Requiring both is deliberate. A percentage alone fires on small floors; an",
+    "absolute alone fires on large ones. The consequence is stated in the",
+    "surface's own output: a change smaller than these is not detectable, so",
+    "slow creep is out of reach by construction.",
+    "",
+    "min_n: fewer qualifying sessions than this in a bucket reports blank rather",
+    "than a number, because a quantile over a handful of sessions is noise.",
+    "",
+    "line_threshold: the largest source_line_no a session's first recorded turn",
+    "may carry and still count as seen-from-the-start. Above it the collector",
+    "attached mid-file and the turn is not really a first turn."
+  ],
+  "min_pct": 0.15,
+  "min_abs": 2500,
+  "min_n": 5,
+  "line_threshold": 20
+}
