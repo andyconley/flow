@@ -33,7 +33,11 @@ so a change here cannot reach the surfaces that already ship.
 
 import sqlite3
 
-from cost import _bucket_expr, _cutoff, _data_file
+import usage_store
+from cost import DEFAULT_WINDOW_DAYS, _bucket_expr, _cutoff, _data_file, render_json
+from paths import HOME, SOURCE_DIR
+
+HARNESSES = ("claude", "codex")
 
 # Fallbacks for every tunable, used when `data/baseline_thresholds.json` is
 # missing or unreadable. Same reasoning as `token_weights`: a number computed
@@ -328,3 +332,138 @@ def baseline_rows(
         "thresholds": limits,
         "grouped_by_cwd": by_cwd,
     }
+
+
+def _fmt(value) -> str:
+    """Thousands-separated, or an em dash when there is nothing to report.
+
+    A blank cell and a zero are different claims. Nothing in this surface
+    renders a missing floor as 0 — a week too thin to estimate has to look
+    thin, not free.
+    """
+    if value is None:
+        return "—"
+    return f"{value:,}"
+
+
+def _fmt_delta(value) -> str:
+    if value is None:
+        return "—"
+    return f"{value:+,}"
+
+
+def render_baseline_table(payload: dict) -> str:
+    """Headline floor, the changes that cleared threshold, and the caveats.
+
+    The caveats are not a footnote. This is an estimator over a filtered
+    population with a detection floor, and a reader who takes the headline
+    number without them will over-trust it — so what was measured, how many
+    sessions it came from, and what the surface cannot see all render every
+    time.
+
+    No `~` marker anywhere: unlike an inferred context window, every figure
+    here is a value a session actually reported. Marking it would spend the
+    convention on something measured and weaken it where it is real.
+    """
+    limits = payload["thresholds"]
+    quantile_label = f"p{int(payload['quantile'] * 100)}"
+    # The headline carries its own provenance because the two counts in this
+    # block mean different things: the floor comes from one week's sessions,
+    # the estimator line below reports the whole qualifying population. Naming
+    # only "n" next to the floor invites reading the larger number as its
+    # support.
+    where = (
+        f"{quantile_label} of {payload['current_n']} sessions"
+        f" in week of {payload['current_bucket']}"
+        if payload["current_floor"] is not None
+        else "no week had enough sessions to estimate"
+    )
+    lines = [f"floor  {_fmt(payload['current_floor'])} tokens   [{payload['harness']}]   {where}"]
+
+    history = payload["history"]
+    if history:
+        last = history[-1]
+        pct = 100.0 * last["delta"] / last["previous"] if last["previous"] else 0.0
+        lines.append(
+            f"last change  {last['date']}   {_fmt(last['previous'])} -> {_fmt(last['floor'])}"
+            f"   {_fmt_delta(last['delta'])}  ({pct:+.1f}%)"
+        )
+        lines.append("")
+        lines.append("history")
+        lines.append(f"  {'date':<12}{'floor':>9}{'delta':>10}{'n':>5}")
+        for row in history:
+            lines.append(
+                f"  {row['date']:<12}{_fmt(row['floor']):>9}"
+                f"{_fmt_delta(row['delta']):>10}{row['n']:>5}"
+            )
+    else:
+        lines.append("last change  none above threshold")
+
+    lines.append("")
+    lines.append(
+        f"estimator: turn-1 cache_read_tokens at {quantile_label};"
+        f" {payload['n']} qualifying sessions"
+    )
+    lines.append(
+        "compaction filtering: applied"
+        if payload["compaction_filtered"]
+        else f"compaction filtering: unsupported for {payload['harness']} —"
+        " resumed sessions cannot be excluded, so this population is noisier"
+    )
+    lines.append(
+        f"detects moves of at least {int(limits['min_pct'] * 100)}% and"
+        f" {int(limits['min_abs']):,} tokens; smaller drift is not visible here"
+    )
+    if payload["grouped_by_cwd"]:
+        lines.append("grouped by cwd — buckets thin out quickly when split this way")
+    lines.append("measured on this machine only")
+
+    return "\n".join(lines)
+
+
+EMPTY_POPULATION_NOTE = (
+    "no qualifying sessions: a session contributes only its first recorded"
+    " turn, seen from the start of its transcript, with a cache hit and no"
+    " preceding compaction"
+)
+
+
+def baseline_command(
+    days: int = DEFAULT_WINDOW_DAYS,
+    show_all: bool = False,
+    harness: str | None = None,
+    by_cwd: bool = False,
+    as_json: bool = False,
+) -> int:
+    """CLI entry point for `flow cost baseline`.
+
+    The window flags exist for parity with the other cost surfaces, but the
+    useful invocation is `--all`: a changepoint log needs more than one
+    bucket to have anything to compare, and a seven-day window holds one.
+    """
+    store = usage_store.default_store_path(HOME)
+    capabilities = usage_store.default_capabilities_path(SOURCE_DIR)
+    usage_store.ensure_store(store, capabilities)
+
+    since = None if show_all else _cutoff(days)
+    targets = (harness,) if harness else HARNESSES
+
+    conn = sqlite3.connect(store)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = [baseline_rows(conn, name, since=since, by_cwd=by_cwd) for name in targets]
+    finally:
+        conn.close()
+
+    if as_json:
+        print(render_json({"rows": rows}))
+        return 0
+
+    rendered = [
+        f"floor  —   [{row['harness']}]\n{EMPTY_POPULATION_NOTE}"
+        if row["n"] == 0
+        else render_baseline_table(row)
+        for row in rows
+    ]
+    print("\n\n".join(rendered))
+    return 0
