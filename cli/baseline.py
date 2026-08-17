@@ -32,6 +32,7 @@ so a change here cannot reach the surfaces that already ship.
 """
 
 import sqlite3
+from datetime import date, timedelta
 
 import usage_store
 from cost import DEFAULT_WINDOW_DAYS, _bucket_expr, _cutoff, _data_file, render_json
@@ -67,9 +68,14 @@ DEFAULT_THRESHOLDS = {
 #
 # At p10 the same series is flat, and p10 is identical to the minimum in
 # every measured week — the plateaus repeat, so nothing sits below the
-# lowest one. p10 rather than a bare `min` only to absorb a single freak
-# low reading. It is also the semantically right statistic: the floor is
-# the leanest prefix a session actually started from, not a typical one.
+# lowest one. It is also the semantically right statistic: the floor is the
+# leanest prefix a session actually started from, not a typical one.
+#
+# p10 rather than a bare `min` to absorb a single freak low reading — but
+# only where the sample is large enough for the two to differ. At nearest
+# rank `ceil(0.10 * n) == 1` for every n up to 10, so in any bucket at or
+# below ten sessions p10 *is* the minimum and offers no protection at all.
+# Worth stating rather than implying: the guard arrives only with volume.
 FLOOR_QUANTILE = 0.10
 
 COMPACT_BOUNDARY_KIND = "compact_boundary"
@@ -83,9 +89,17 @@ def thresholds() -> dict:
     """
     data = _data_file("baseline_thresholds.json")
     resolved = dict(DEFAULT_THRESHOLDS)
-    for key, default in DEFAULT_THRESHOLDS.items():
+    for key in DEFAULT_THRESHOLDS:
         value = data.get(key)
-        if isinstance(value, (int, float)) and value >= 0:
+        # Strictly positive, and `bool` rejected explicitly because it is an
+        # `int` subclass. Zero is not a permissive setting here, it is a
+        # broken one: `min_pct` or `min_abs` at 0 makes every bucket a
+        # changepoint, and `min_n` at 0 reports a quantile over an empty
+        # sample. A malformed file falls back rather than disabling the
+        # guards it exists to configure.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if value > 0:
             resolved[key] = value
     return resolved
 
@@ -261,6 +275,17 @@ def detect_changepoints(
     treated as zero, and comparison resumes from the last bucket that had
     one. A thin week should not manufacture a drop and a recovery.
 
+    **The input must be a single series in time order.** Rows for two
+    directories in the same week are not a series, and comparing them
+    reports the difference between two projects as though it were a change
+    over time. `baseline_rows` splits by directory before calling this;
+    nothing else should call it with mixed rows.
+
+    Both endpoints are recorded, and a comparison that skips weeks is
+    marked. Buckets exist only for weeks that had observations, so two
+    adjacent rows can be months apart — reporting only the later date would
+    date a change to a week it may not have happened in.
+
     The consequence of the thresholds is real and belongs in the caller's
     output: a change smaller than them is invisible here. This detects
     deliberate reconfiguration, not gradual creep.
@@ -273,6 +298,7 @@ def detect_changepoints(
 
     changes = []
     previous = None
+    previous_bucket = None
     for row in weekly:
         floor = row.get("floor")
         if floor is None:
@@ -283,14 +309,29 @@ def detect_changepoints(
                 changes.append(
                     {
                         "date": row["bucket"],
+                        "previous_bucket": previous_bucket,
                         "floor": floor,
                         "previous": previous,
                         "delta": delta,
                         "n": row["n"],
+                        "adjacent": _is_next_week(previous_bucket, row["bucket"]),
                     }
                 )
         previous = floor
+        previous_bucket = row["bucket"]
     return changes
+
+
+def _is_next_week(earlier: str | None, later: str | None) -> bool:
+    """Whether two Monday-keyed bucket labels are consecutive weeks.
+
+    Unparseable labels report False — an unknown span should read as a gap
+    rather than quietly claim adjacency it cannot establish.
+    """
+    try:
+        return date.fromisoformat(later) - date.fromisoformat(earlier) == timedelta(days=7)
+    except (TypeError, ValueError):
+        return False
 
 
 def baseline_rows(
@@ -309,26 +350,67 @@ def baseline_rows(
     difference between "resumed sessions were excluded" and "resumed
     sessions could not be identified", and a reader deciding how much to
     trust the number needs to know which one they are looking at.
+    `compaction_boundaries` accompanies it because capability is not
+    coverage: a store harvested before the collector recorded these events
+    has the capability and no rows, and would otherwise claim a filter that
+    matched nothing.
+
+    Results are grouped into one series per directory when `by_cwd`, and a
+    single pooled series otherwise. Changepoints are detected *within* a
+    series and never across them — two directories in one week are not a
+    sequence, and comparing them would report the gap between two projects
+    as a change over time.
     """
     limits = thresholds()
     compaction_filtered = harness_supports(conn, harness, COMPACT_BOUNDARY_KIND)
+    boundaries = conn.execute(
+        "SELECT COUNT(*) FROM agent_activity_raw a JOIN session s"
+        " ON s.id = a.session_row_id WHERE a.kind = ? AND s.harness = ?",
+        (COMPACT_BOUNDARY_KIND, harness),
+    ).fetchone()[0]
+
     observations = qualifying_observations(conn, harness, since=since)
     weekly = weekly_floor(observations, by_cwd=by_cwd)
 
-    reported = [row for row in weekly if row.get("floor") is not None]
-    current = reported[-1] if reported else None
+    grouped: dict = {}
+    for row in weekly:
+        grouped.setdefault(row["cwd"], []).append(row)
+
+    series = []
+    for cwd, buckets in sorted(grouped.items(), key=lambda kv: kv[0] or ""):
+        buckets = sorted(buckets, key=lambda r: r["bucket"])
+        reported = [b for b in buckets if b.get("floor") is not None]
+        current = reported[-1] if reported else None
+        series.append(
+            {
+                "cwd": cwd,
+                "buckets": buckets,
+                "current_floor": current["floor"] if current else None,
+                "current_bucket": current["bucket"] if current else None,
+                "current_n": current["n"] if current else 0,
+                "history": detect_changepoints(buckets),
+            }
+        )
+
+    # Top-level convenience fields describe the pooled series only. Under
+    # --by-cwd there is no single current floor to name, and picking one
+    # would put a directory-specific number under a heading that does not
+    # say which directory.
+    pooled = series[0] if series and not by_cwd else None
 
     return {
         "harness": harness,
         "estimator": "turn-1 cache_read_tokens",
         "quantile": FLOOR_QUANTILE,
         "n": len(observations),
+        "series": series,
         "buckets": weekly,
-        "current_floor": current["floor"] if current else None,
-        "current_bucket": current["bucket"] if current else None,
-        "current_n": current["n"] if current else 0,
-        "history": detect_changepoints(weekly),
+        "current_floor": pooled["current_floor"] if pooled else None,
+        "current_bucket": pooled["current_bucket"] if pooled else None,
+        "current_n": pooled["current_n"] if pooled else 0,
+        "history": pooled["history"] if pooled else [],
         "compaction_filtered": compaction_filtered,
+        "compaction_boundaries": boundaries,
         "thresholds": limits,
         "grouped_by_cwd": by_cwd,
     }
@@ -372,50 +454,85 @@ def render_baseline_table(payload: dict) -> str:
     # the estimator line below reports the whole qualifying population. Naming
     # only "n" next to the floor invites reading the larger number as its
     # support.
-    where = (
-        f"{quantile_label} of {payload['current_n']} sessions"
-        f" in week of {payload['current_bucket']}"
-        if payload["current_floor"] is not None
-        else "no week had enough sessions to estimate"
-    )
-    lines = [f"floor  {_fmt(payload['current_floor'])} tokens   [{payload['harness']}]   {where}"]
+    lines = []
+    for entry in payload["series"]:
+        label = f"   {entry['cwd']}" if payload["grouped_by_cwd"] else ""
+        where = (
+            f"{quantile_label} of {entry['current_n']} sessions"
+            f" in week of {entry['current_bucket']}"
+            if entry["current_floor"] is not None
+            else "no week had enough sessions to estimate"
+        )
+        headline = (
+            f"{_fmt(entry['current_floor'])} tokens"
+            if entry["current_floor"] is not None
+            else _fmt(None)
+        )
+        lines.append(f"floor  {headline}   [{payload['harness']}]{label}   {where}")
 
-    history = payload["history"]
-    if history:
+        history = entry["history"]
+        if not history:
+            lines.append("last change  none above threshold")
+            lines.append("")
+            continue
+
         last = history[-1]
         pct = 100.0 * last["delta"] / last["previous"] if last["previous"] else 0.0
         lines.append(
-            f"last change  {last['date']}   {_fmt(last['previous'])} -> {_fmt(last['floor'])}"
+            f"last change  {last['previous_bucket']} -> {last['date']}"
+            f"   {_fmt(last['previous'])} -> {_fmt(last['floor'])}"
             f"   {_fmt_delta(last['delta'])}  ({pct:+.1f}%)"
         )
         lines.append("")
         lines.append("history")
-        lines.append(f"  {'date':<12}{'floor':>9}{'delta':>10}{'n':>5}")
+        lines.append(f"  {'from':<12}{'to':<12}{'floor':>9}{'delta':>10}{'n':>5}")
         for row in history:
+            # Buckets exist only for weeks with observations, so two adjacent
+            # rows can be months apart. Saying so is the difference between a
+            # dated fact and a date the reader supplies themselves.
+            gap = "" if row["adjacent"] else "   (weeks skipped in between)"
             lines.append(
-                f"  {row['date']:<12}{_fmt(row['floor']):>9}"
-                f"{_fmt_delta(row['delta']):>10}{row['n']:>5}"
+                f"  {str(row['previous_bucket']):<12}{row['date']:<12}"
+                f"{_fmt(row['floor']):>9}{_fmt_delta(row['delta']):>10}{row['n']:>5}{gap}"
             )
-    else:
-        lines.append("last change  none above threshold")
+        lines.append("")
 
-    lines.append("")
     lines.append(
         f"estimator: turn-1 cache_read_tokens at {quantile_label};"
         f" {payload['n']} qualifying sessions"
     )
-    lines.append(
-        "compaction filtering: applied"
-        if payload["compaction_filtered"]
-        else f"compaction filtering: unsupported for {payload['harness']} —"
-        " resumed sessions cannot be excluded, so this population is noisier"
-    )
+    if not payload["compaction_filtered"]:
+        lines.append(
+            f"compaction filtering: unsupported for {payload['harness']} —"
+            " resumed sessions cannot be excluded, so this population is noisier"
+        )
+    elif payload["compaction_boundaries"] == 0:
+        # Capability is not coverage. A store harvested before the collector
+        # recorded these events has the capability and no rows, and "applied"
+        # over zero rows claims a filter that matched nothing.
+        lines.append(
+            "compaction filtering: supported, but this store holds no boundary"
+            " events — harvest with --rescan if it predates their capture"
+        )
+    else:
+        lines.append(
+            f"compaction filtering: applied ({payload['compaction_boundaries']} boundaries)"
+        )
     lines.append(
         f"detects moves of at least {int(limits['min_pct'] * 100)}% and"
         f" {int(limits['min_abs']):,} tokens; smaller drift is not visible here"
     )
     if payload["grouped_by_cwd"]:
         lines.append("grouped by cwd — buckets thin out quickly when split this way")
+    else:
+        # The pooled floor is the leanest project's prefix, so a week that
+        # adds sessions from a lighter directory lowers it without any
+        # configuration having changed. Same failure mode p25 had, one level
+        # up, and it cannot be filtered away — only disclosed.
+        lines.append(
+            "pooled across projects — a shift in which directories you worked"
+            " in can move this without any configuration changing"
+        )
     lines.append("measured on this machine only")
 
     return "\n".join(lines)

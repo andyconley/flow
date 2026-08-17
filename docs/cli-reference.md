@@ -331,8 +331,8 @@ Flags:
 
 - `--days N` — show the last N days (default: 7)
 - `--all` — every bucket ever normalized; **this is the useful invocation**, since a changepoint log needs more than one bucket to compare
-- `--harness claude|codex` — restrict to one harness (default: both, one block each)
-- `--by-cwd` — estimate per working directory instead of pooling
+- `--harness claude|codex` — restrict to one harness (default: both)
+- `--by-cwd` — estimate per working directory instead of pooling, one block per directory
 - `--json` — JSON instead of the rendered block
 
 **The estimator is `cache_read_tokens` on a session's first turn.** At that point no conversation exists, so the number is the cached static prefix and nothing else — the opening message and any SessionStart hook output land in `fresh_input_tokens` instead. The obvious alternative, `fresh + cache_read + cache_write`, is available on more sessions but reads high for exactly that reason.
@@ -352,7 +352,15 @@ A session qualifies only when all four hold. Each rule removes a different way a
 
 **A change registers only when it clears both 15% and 2,500 tokens.** Either bound alone misfires at one end of the range. The consequence is stated in the output rather than hidden: a change smaller than that is invisible here. This detects deliberate reconfiguration, not gradual creep — one plugin quietly returning will not show up.
 
+**Changes are detected within a series, never across two.** Pooled, that is one series over time. Under `--by-cwd` it is one series per directory, each with its own headline and history — two directories in the same week are not a sequence, and comparing them would report the gap between two projects as a change over time.
+
+**Both endpoints of a change are shown, and skipped weeks are marked.** Buckets exist only for weeks that had observations, so two adjacent rows can be months apart. A change reported as `2026-06-22 -> 2026-07-06` with a "weeks skipped" note happened somewhere in that span, not necessarily in the later week.
+
 Pooled across projects by default. `--by-cwd` is available but fragments the population quickly: on the corpus this was built against, 166 observations spread over 24 directories left only three with 20 or more. It is also largely unnecessary — the floor's dominant contributors are global, and the three directories with enough observations to compare agreed to within 6%.
+
+The pooled figure has a known sensitivity, disclosed in its own output: it reports the *leanest project's* prefix, so a week that adds sessions from a lighter directory lowers it without any configuration changing. This is the same failure mode that ruled out p25, one level up, and it can only be disclosed rather than filtered away.
+
+`compaction filtering:` distinguishes capability from coverage. A store harvested before the collector began recording `compact_boundary` has the capability and no rows, and says so rather than claiming a filter that matched nothing.
 
 A bucket below the minimum sample keeps its row and its count but reports no floor. A thin week and a week with no sessions are different facts, and a quantile over a handful of sessions is noise dressed as a measurement.
 

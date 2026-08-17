@@ -7747,11 +7747,124 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual(rows[0]["n"], 2)
         self.assertIsNone(rows[0]["floor"], "a thin week must not report a quantile")
 
-    def test_empty_population_reports_zero_not_a_floor(self) -> None:
+    def test_empty_population_reports_no_floor_rather_than_a_number(self) -> None:
         payload = self.baseline.baseline_rows(self.conn, "claude")
         self.assertEqual(payload["n"], 0)
         self.assertIsNone(payload["current_floor"])
         self.assertEqual(payload["history"], [])
+
+    def test_by_cwd_never_compares_one_project_to_another(self) -> None:
+        """Regression: two directories in one week are not a time series.
+
+        Before the fix, weekly_floor's (bucket, cwd) rows went straight into
+        detect_changepoints, which read consecutive rows as consecutive
+        weeks. Two projects in the same week whose floors differ enough then
+        rendered as a dated change in which nothing had changed.
+        """
+        self.seed_week(self.WEEKS[0], 18000, cwd="/a")
+        self.seed_week(self.WEEKS[0], 26000, cwd="/b")
+        payload = self.baseline.baseline_rows(self.conn, "claude", by_cwd=True)
+        self.assertEqual(len(payload["series"]), 2)
+        for entry in payload["series"]:
+            self.assertEqual(
+                entry["history"], [], f"{entry['cwd']} has one week and cannot have a change"
+            )
+
+    def test_by_cwd_headline_names_the_directory(self) -> None:
+        """A directory-specific floor must not render under an unlabelled heading."""
+        self.seed_week(self.WEEKS[0], 18000, cwd="/a")
+        self.seed_week(self.WEEKS[0], 26000, cwd="/b")
+        payload = self.baseline.baseline_rows(self.conn, "claude", by_cwd=True)
+        self.assertIsNone(payload["current_floor"], "no single floor exists when split")
+        rendered = self.baseline.render_baseline_table(payload)
+        self.assertIn("/a", rendered)
+        self.assertIn("/b", rendered)
+
+    def test_changepoint_records_both_endpoints_and_flags_gaps(self) -> None:
+        """A change between non-adjacent weeks must not be dated to the later one."""
+        self.seed_week(self.WEEKS[0], 21000)
+        self.seed_week(self.WEEKS[3], 13200)  # three weeks later, nothing between
+        weekly = self.baseline.weekly_floor(self.observations())
+        change = self.baseline.detect_changepoints(weekly)[0]
+        self.assertEqual(change["previous_bucket"], self.WEEKS[0])
+        self.assertEqual(change["date"], self.WEEKS[3])
+        self.assertFalse(change["adjacent"])
+
+    def test_consecutive_weeks_are_marked_adjacent(self) -> None:
+        self.seed_week(self.WEEKS[0], 21000)
+        self.seed_week(self.WEEKS[1], 13200)
+        change = self.baseline.detect_changepoints(
+            self.baseline.weekly_floor(self.observations())
+        )[0]
+        self.assertTrue(change["adjacent"])
+
+    def test_since_filters_without_disturbing_the_compaction_clause(self) -> None:
+        """Both optional clauses bind parameters; order must survive using both.
+
+        The failure this catches is silent: swap the two appends and the
+        compaction filter compares kind against a timestamp while the window
+        compares a timestamp against 'compact_boundary'. Both stop matching,
+        nothing errors, and every other test still passes.
+        """
+        old = self.seed(21000, week="2026-01-05")
+        self.compact_boundary(old, "2026-01-05T11:00:00Z")
+        self.seed(21000, week="2026-02-09")
+        rows = self.baseline.qualifying_observations(
+            self.conn, "claude", since="2026-02-01T00:00:00Z"
+        )
+        self.assertEqual(len(rows), 1, "window keeps only the later session")
+        self.assertEqual(rows[0]["bucket"], "2026-02-09")
+        unwindowed = self.baseline.qualifying_observations(self.conn, "claude")
+        self.assertEqual(
+            len(unwindowed), 1, "and the compacted session is still excluded without a window"
+        )
+
+    def test_percentile_moves_off_the_minimum_once_the_sample_allows(self) -> None:
+        """p10 only differs from min above ten observations; pin that it does.
+
+        Every other fixture here has p10 == min, so a `rank = 1` mutant would
+        otherwise pass the whole suite.
+        """
+        values = [100] + [200] * 10  # n=11, ceil(0.10*11) = 2
+        self.assertEqual(self.baseline._percentile(values, 0.10), 200)
+        self.assertEqual(self.baseline._percentile(values[:10], 0.10), 100)
+
+    def test_thresholds_reject_zero_and_boolean_values(self) -> None:
+        """min_pct=0 would make every bucket a changepoint; bool is an int."""
+        original = self.baseline._data_file
+        try:
+            self.baseline._data_file = lambda name: {"min_pct": 0, "min_abs": True, "min_n": -1}
+            resolved = self.baseline.thresholds()
+        finally:
+            self.baseline._data_file = original
+        self.assertEqual(resolved, self.baseline.DEFAULT_THRESHOLDS)
+
+    def test_thresholds_fall_back_only_for_the_bad_key(self) -> None:
+        original = self.baseline._data_file
+        try:
+            self.baseline._data_file = lambda name: {"min_pct": 0.4, "min_abs": "nope"}
+            resolved = self.baseline.thresholds()
+        finally:
+            self.baseline._data_file = original
+        self.assertEqual(resolved["min_pct"], 0.4, "the good key is honoured")
+        self.assertEqual(
+            resolved["min_abs"],
+            self.baseline.DEFAULT_THRESHOLDS["min_abs"],
+            "the bad key falls back on its own",
+        )
+
+    def test_capability_without_coverage_does_not_claim_a_filter_ran(self) -> None:
+        """A store predating boundary capture has the capability and no rows."""
+        self.seed_week(self.WEEKS[0], 21000)
+        payload = self.baseline.baseline_rows(self.conn, "claude")
+        self.assertTrue(payload["compaction_filtered"])
+        self.assertEqual(payload["compaction_boundaries"], 0)
+        self.assertIn("no boundary", self.baseline.render_baseline_table(payload))
+
+    def test_pooled_render_discloses_that_project_mix_moves_the_floor(self) -> None:
+        self.seed_week(self.WEEKS[0], 21000)
+        payload = self.baseline.baseline_rows(self.conn, "claude")
+        self.assertIn("pooled across projects", self.baseline.render_baseline_table(payload))
 
     def test_codex_payload_declares_compaction_filtering_unsupported(self) -> None:
         self.seed_week(self.WEEKS[0], 11000, harness="codex")
@@ -7762,8 +7875,13 @@ class BaselineTests(unittest.TestCase):
 
     def test_claude_payload_declares_compaction_filtering_applied(self) -> None:
         self.seed_week(self.WEEKS[0], 21000)
+        # A boundary somewhere in the store, so the render reports a filter
+        # that actually had rows to match rather than the zero-coverage case.
+        excluded = self.seed(21000, week=self.WEEKS[1])
+        self.compact_boundary(excluded, f"{self.WEEKS[1]}T11:00:00Z")
         payload = self.baseline.baseline_rows(self.conn, "claude")
         self.assertTrue(payload["compaction_filtered"])
+        self.assertEqual(payload["compaction_boundaries"], 1)
         self.assertIn("compaction filtering: applied", self.baseline.render_baseline_table(payload))
 
     def test_render_states_the_detection_limit(self) -> None:

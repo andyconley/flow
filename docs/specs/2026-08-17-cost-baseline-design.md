@@ -120,6 +120,35 @@ observations agreed to within 6% (20,568 / 20,737 / 21,830), because the floor's
 contributors — plugins, MCP definitions, agent and skill descriptions, the global
 `CLAUDE.md` — are the same everywhere. Per-project `CLAUDE.md` is a rounding error.
 
+## Found in review
+
+Three defects worth recording, because each is a way this class of surface goes
+wrong rather than a typo.
+
+**Changepoints ran across grouped rows.** `weekly_floor` emits one row per
+`(bucket, cwd)` sorted by `(bucket, cwd)`, and `detect_changepoints` assumed a single
+series in time order. Under `--by-cwd` consecutive rows were therefore two *projects in
+the same week*, and their difference rendered as a dated change in which nothing had
+changed. Results are now split into one series per directory and detection runs within a
+series, never across. The headline also names its directory; previously a
+directory-specific floor rendered under an unlabelled heading.
+
+**Comparisons spanned arbitrary gaps silently.** Buckets exist only for weeks with
+observations, so two adjacent rows can be months apart, and the history row printed only
+the later date. A move dated to a single week may have happened anywhere in the span.
+Both endpoints are now recorded and non-adjacent comparisons are marked.
+
+**Capability was reported as coverage.** `compaction filtering: applied` rendered
+whenever the harness *could* report boundaries, including for a store harvested before
+the collector recorded them — a filter over zero rows, described as having run.
+
+Two honesty gaps were also closed. The pooled floor reports the leanest project's prefix,
+so a shift in which directories were worked in moves it without any configuration
+changing — the p25 failure mode one level up, disclosed in the output because it cannot
+be filtered away. And p10 only differs from the minimum above ten observations, since
+`ceil(0.10 * n) == 1` below that, so the claim to absorb a freak low reading is false for
+exactly the thin buckets where one would matter.
+
 ## Structure
 
 Read-time only. No schema change, no `normalize.py` change, no `NORM_VERSION` bump, no
