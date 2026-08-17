@@ -2,6 +2,8 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.12.0](https://github.com/andyconley/flow/compare/v0.11.1...v0.12.0) (2026-08-17)
+
 ## [0.11.1](https://github.com/andyconley/flow/compare/v0.11.0...v0.11.1) (2026-08-16)
 
 ### Documentation
