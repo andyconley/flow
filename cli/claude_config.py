@@ -21,6 +21,7 @@ answer is "no reading", so the two are kept distinguishable at every boundary:
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 # `pluginUsage` is seeded at install, so a zero there is a real reading.
@@ -75,19 +76,47 @@ def read_usage(path: Path) -> tuple[list[dict], os.stat_result] | None:
                 # Skipping the entry keeps the rest of the map usable; coercing
                 # it would invent a reading.
                 continue
-            last_used = entry.get("lastUsedAt")
             startups = entry.get("lastUsedNumStartups")
             records.append(
                 {
                     "kind": kind,
                     "name": name,
                     "usage_count": count,
-                    "last_used_at": last_used if isinstance(last_used, str) else None,
+                    "last_used_at": _as_iso(entry.get("lastUsedAt")),
                     "startups": startups if isinstance(startups, int) else None,
                 }
             )
 
     return records, stat
+
+
+def _as_iso(value: object) -> str | None:
+    """Normalize `lastUsedAt` to an ISO 8601 UTC string.
+
+    The harness writes this as epoch **milliseconds**, not a string — a first
+    version of this reader assumed ISO text, rejected every integer, and turned
+    a populated field into `None` for all 127 entries without failing anything.
+    Both forms are accepted now in case the harness ever changes its mind.
+
+    Converting the format is not the same as inferring a value: the instant is
+    exactly what was reported, only spelled the way the rest of the store spells
+    timestamps. Anything that is neither an int nor a string reads as absent,
+    because a timestamp flow cannot interpret is not one it should guess at.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        try:
+            return (
+                datetime.fromtimestamp(value / 1000, timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z")
+            )
+        except (OSError, OverflowError, ValueError):
+            return None
+    return None
 
 
 def read_enabled_plugins(path: Path) -> dict[str, bool]:
