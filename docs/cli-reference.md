@@ -433,6 +433,42 @@ Behavior:
 
 Both thresholds are fixed constants in `cli/cost.py`. Use this only through the generated `UserPromptSubmit` hook — invoking it by hand tells you nothing the verdict file does not.
 
+### `flow plugin-usage snapshot`
+
+Records the harness's plugin and skill usage counters into the store, if they have moved since the last look.
+
+Flags:
+
+- `--hook` — SessionStart-hook mode: shorter busy timeout, prints nothing, always exits 0
+
+Every other flow surface measures what a session cost. This one is the write half of measuring whether the configuration that cost it is being used at all. The evidence is counters the harness maintains in its own config — values flow did not create and cannot re-derive from anything else on disk.
+
+**Two writers, no coordination.** A SessionStart hook samples on every session, and `flow harvest claude` samples as a backstop. Neither locks against the other, because observations are keyed by their *content* — `(harness, host_id, kind, name, usage_count, source_mtime)` — so two writers that saw the same file revision produce identical rows and the second is a no-op. No delta is stored at all, which removes the race worth caring about: a writer arriving second cannot compute a change against a row the first just wrote.
+
+**The mtime guard is the cost control.** The harness config runs past 150 KB, so the command stats it, compares against the recorded watermark, and only parses on a change. This is also why the hook runs on SessionStart rather than Stop: the file is rewritten every few seconds during a session, so a Stop hook would find it changed almost every turn and parse it every time.
+
+Claude only. Codex maintains no equivalent counters, which `data/harness_capabilities.json` records as `plugin_usage_counters = 0`.
+
+### `flow plugin-usage show`
+
+The report `flow doctor` renders as a section, standalone.
+
+Flags:
+
+- `--json` — the payload instead of the rendered section
+
+**Hook firings are reported separately from deliberate invocations, and this is the point of the surface.** The harness increments a plugin's counter once per hook firing, so a plugin's number measures how many hook events it declares rather than anything a person did. On the machine this was built against, one plugin registering five hook entries read 16,373 while a plugin invoked deliberately read 1 — three orders of magnitude apart, in the same field, meaning different things. They never share a column, and the hook block says so in its own heading.
+
+**Plugins and skills report zero differently, because their maps disagree.** `pluginUsage` is seeded at install, so a plugin present at zero is a real reading of "never used". `skillUsage` is written on first use, so it holds no zeros at all and an unused skill is simply *absent*. Identifying unused skills therefore needs a separate walk of the installed skills, and the result is marked `~` because it is inferred rather than reported.
+
+**Counter keys that match no installed skill get their own line.** They are renamed, uninstalled, or from a marketplace that no longer exists; on the corpus this was built against, 40 of 73 keys no longer resolved. They are surfaced rather than dropped, because losing more than half the evidence silently would leave output that looks clean and is not.
+
+**Namespace variants are shown separately and never summed.** One plugin can appear under two map keys — a marketplace one and an `inline` one. Whether those counters double-count the same invocations or count disjoint ones is unverified, so a total is not offered. The namespace is printed only where a base name has more than one variant, because a namespace truncated to fit a column disambiguates nothing.
+
+**A thin history reports as thin.** Below five snapshots, the "never invoked" plugin rollup is withheld: a plugin at zero after two days is evidence of a short window, not of disuse, and a list that looks identical to the mature one while meaning something weaker is worse than no list.
+
+History cannot be backfilled — the harness keeps none — so this reports only what flow has observed since it started looking, and the header says how many snapshots that is. Read-only; measures this machine only.
+
 ### `flow overlay status`
 
 The `doctor` overlay line on its own, plus the remote, the upstream, and the uncommitted paths behind its counts.

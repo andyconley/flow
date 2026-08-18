@@ -304,6 +304,19 @@ Use these to read cost, context growth, active sessions, and token trends. For t
 - `--json`
   - print structured output for any `flow cost` view
 
+### Plugin And Skill Usage
+
+`flow cost` answers what a session spent. These answer whether the configuration it loaded is being used at all, by sampling the usage counters the harness maintains in its own config and reporting movement over time. The design is explained in [plugin usage history design](docs/specs/2026-08-18-plugin-usage-history-design.md).
+
+- `flow plugin-usage snapshot`
+  - record the current counters if they have moved since the last look
+- `flow plugin-usage show`
+  - print the report `flow doctor` also renders as a section
+
+**Claude only.** Codex maintains no equivalent counters, so on Codex the section states that rather than rendering an empty table. This is the same capability-gated asymmetry `flow cost baseline` carries for compaction filtering, declared in `data/harness_capabilities.json`.
+
+Two things to know before acting on the numbers. **A high count usually means hooks, not use** — the harness increments a plugin's counter once per hook firing, so a plugin registering several hooks accumulates tens of thousands of firings without ever being invoked deliberately; those are reported in a separate block and never counted as invocations. And **history starts when flow starts looking** — the harness keeps none to backfill from, so the counts inherited at the first snapshot are archaeology, while the deltas between later snapshots are sound.
+
 ## How Flow Manages Runtime Files
 
 Most users only need to know that flow writes the Claude and Codex files each runtime expects. For the full adapter model and file list, see [runtime-adapters.md](docs/runtime-adapters.md).

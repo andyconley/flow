@@ -7480,7 +7480,10 @@ class CliReferenceDocTests(unittest.TestCase):
             [sys.executable, str(FLOW_CLI), "--help"],
             text=True, capture_output=True, env=_clean_env(),
         ).stdout
-        match = re.search(r"\{([a-z,]+)\}", root_help)
+        # Hyphens included: `plugin-usage` was the first subcommand to carry
+        # one, and a pattern that silently failed to match turned this guard
+        # into an assertion about its own regex rather than about the CLI.
+        match = re.search(r"\{([a-z,-]+)\}", root_help)
         self.assertIsNotNone(match, "could not read the subcommand list out of `flow --help`")
         subcommands = match.group(1).split(",")
         self.assertGreater(len(subcommands), 5, "suspiciously few subcommands parsed")
