@@ -1703,6 +1703,8 @@ class FlowCliTests(unittest.TestCase):
             # a store at v0. Forgetting one here (as happened when v2 added
             # agent_activity_raw) makes re-migration fail on "table already
             # exists" rather than testing what this test means to test.
+            conn.execute("DROP TABLE plugin_usage_observation")
+            conn.execute("DROP TABLE plugin_usage_scan")
             conn.execute("DROP TABLE agent_activity_raw")
             conn.execute("DROP TABLE turn_norm")
             conn.execute("DROP TABLE turn_raw")
@@ -1937,6 +1939,7 @@ class FlowCliTests(unittest.TestCase):
             [
                 "baseline",
                 "claude_collector",
+                "claude_config",
                 "codex_collector",
                 "cost",
                 "diagnostics",
@@ -1949,6 +1952,7 @@ class FlowCliTests(unittest.TestCase):
                 "normalize",
                 "overlay",
                 "paths",
+                "plugin_usage",
                 "render",
                 "session_lookup",
                 "setup",
