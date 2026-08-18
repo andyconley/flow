@@ -82,9 +82,14 @@ because this scan never looked there".
   column disambiguates nothing — which is its only job.
 - **Never drop unresolved keys.** Losing 55% of the evidence silently leaves
   output that looks clean.
-- **Never report a thin history as a mature one.** Below five snapshots the
-  never-invoked plugin rollup is withheld: a plugin at zero after two days is
-  evidence of a short window.
+- **Never report a thin history as a mature one.** The never-invoked plugin
+  rollup is withheld until five snapshots span at least a week: a plugin at zero
+  after two days is evidence of a short window. Elapsed time is part of the gate
+  because the hook fires every session start, so five snapshots can land inside
+  an hour and a count-only gate would call that mature.
+- **Never classify a plugin that cannot be classified.** Hook status comes from
+  the install directory, so a counter that outlived its plugin gets its own
+  block rather than the benefit of the doubt in either lane.
 - **Never claim a skill is unused without marking it inferred.** That figure
   comes from a directory walk, not from anything the harness reported, so it
   carries `~`.
@@ -104,6 +109,54 @@ capability row was indistinguishable from one saying "unsupported". That
 statement is false about Claude, and it sat on the first path every upgrading
 user would hit. Found by running against the real v5 store rather than a
 fixture. Absent and unsupported are now different answers.
+
+## Found in review
+
+Three of these are the same defect wearing different clothes: a plugin whose
+provenance could not be established was quietly given the most favourable
+reading available.
+
+**Hook detection failed open.** Hook status was read from the plugin's install
+directory, and a plugin with no such directory returned zero hooks — which
+routed it into the deliberate-invocation column. Uninstalling a plugin is
+exactly what removes that directory, so an uninstalled `ralph-loop` would have
+rendered 3,552 hook firings as calls, uncaveated, at the moment someone
+re-checked a prune. The tool would have reproduced its own originating error.
+Hook status is now tri-state: `None` means "no install found, cannot tell", and
+those plugins go to their own block rather than into either lane.
+
+**Counter keys outlive their plugin, and only skills accounted for it.** The
+unresolved-key bucket existed for `skillUsage` and not for `pluginUsage`, so a
+departed plugin's last counter rendered forever as a live row with a stale date
+— on the machine this was built against, roughly half the keys. The design's own
+rule, implemented on one of two maps.
+
+**A reset landed in the prune list.** A counter reset to zero satisfies
+`usage_count == 0`, so it printed beside genuinely never-used plugins in the
+list a person prunes from — while the reset caveat printed separately at the
+bottom, attached to nothing. An earlier version of the test suite asserted this
+behaviour, which is the more useful half of the finding: the test encoded the
+bug.
+
+Four smaller ones, all real: the plugin block truncated to five with no "and N
+more" counterpart, in the one block a prune decision reads; the maturity gate
+counted snapshots without elapsed time, and the hook fires every session, so
+five could land in an hour; the inventory-scope footer selected an arbitrary row
+from the scan table rather than the scope the number was computed from; and the
+capability probe sat outside the `OperationalError` guard, so a store with no
+`harness_capability` table escaped into doctor's catch-all as "unavailable" —
+the absent-versus-unsupported collapse again, in different costume.
+
+The security review found no secret reaching the store, the output, or any error
+path, and confirmed the `turn_raw` verbatim-payload pattern was deliberately not
+repeated. It did find that `observe_usage` parsed the config *before* comparing
+the watermark, so the guard suppressed the insert but not the 150 KB parse — the
+whole cost the design existed to avoid, with every row-count assertion still
+passing. It also asked for two things now done: control characters stripped from
+displayed names, since a cloned repo can ship a project-local skill whose name
+repositions the cursor in output someone is reading to make a decision, and the
+inventory scope rendered home-relative, since doctor output gets pasted into
+issues.
 
 ## Structure
 
@@ -126,12 +179,12 @@ path is `flow plugin-usage snapshot`.
 
 ## Testing
 
-54 tests across two classes, built against a real fake home on disk rather than
+60 tests across two classes, built against a real fake home on disk rather than
 mocks: most of what this can get wrong is a disagreement between two files
 written by two processes, and a mock of either side cannot disagree with the
 other the way real files do.
 
-Ten mutations, each caught, none surviving: disabling the mtime guard; ordering
+Twenty mutations, each caught, none surviving: disabling the mtime guard; ordering
 the `LAG` by `observed_at`; dropping the reset guard; skipping the capability
 gate; dropping the hook label; treating an absent skill as never-installed;
 collapsing namespace variants; dropping the unresolved-key bucket; rejecting the

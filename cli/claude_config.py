@@ -185,6 +185,35 @@ def _glob(root: Path, pattern: str) -> list[Path]:
         return []
 
 
+def installed_plugins(user_home: Path) -> set[str]:
+    """Base names of plugins with an install directory in the cache.
+
+    Needed because a counter key outlives its install: uninstalling a plugin
+    leaves its `pluginUsage` entry behind forever. Without this set, a departed
+    plugin's last counter renders as a live row with a stale date, and — worse —
+    a departed *hook-registering* plugin renders as deliberate invocations,
+    because hook detection reads the install directory that is no longer there.
+
+    Absence of a directory means "cannot tell", not "declares no hooks". Those
+    are different answers and the read model keeps them apart.
+    """
+    names: set[str] = set()
+    cache = user_home / ".claude" / "plugins" / "cache"
+    # cache/<marketplace>/<plugin>/<version>/
+    for marketplace in _iterdir(cache):
+        for plugin in _iterdir(marketplace):
+            if plugin.is_dir():
+                names.add(plugin.name)
+    return names
+
+
+def _iterdir(root: Path) -> list[Path]:
+    try:
+        return [p for p in root.iterdir() if p.is_dir()]
+    except OSError:
+        return []
+
+
 def hook_registering_plugins(user_home: Path) -> dict[str, int]:
     """Map each installed plugin's base name to how many hook entries it registers.
 

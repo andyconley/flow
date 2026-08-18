@@ -449,6 +449,8 @@ Every other flow surface measures what a session cost. This one is the write hal
 
 Claude only. Codex maintains no equivalent counters, which `data/harness_capabilities.json` records as `plugin_usage_counters = 0`.
 
+**What lands in the store:** plugin and skill names, their integer counters, a timestamp, and the working directory the skill inventory was scanned from. Nothing else from the harness config is read — not MCP server definitions, not credentials, not project entries. The scanned directory is recorded because the installed-skill population depends on where the scan ran, and it accumulates one row per distinct directory over time. `flow doctor` renders it home-relative, but the absolute path is what the store holds, so bear that in mind before sharing `~/.flow/usage.db` itself.
+
 ### `flow plugin-usage show`
 
 The report `flow doctor` renders as a section, standalone.
@@ -465,7 +467,13 @@ Flags:
 
 **Namespace variants are shown separately and never summed.** One plugin can appear under two map keys — a marketplace one and an `inline` one. Whether those counters double-count the same invocations or count disjoint ones is unverified, so a total is not offered. The namespace is printed only where a base name has more than one variant, because a namespace truncated to fit a column disambiguates nothing.
 
-**A thin history reports as thin.** Below five snapshots, the "never invoked" plugin rollup is withheld: a plugin at zero after two days is evidence of a short window, not of disuse, and a list that looks identical to the mature one while meaning something weaker is worse than no list.
+**A plugin whose counter outlived its install gets its own block.** Counter keys persist after uninstall, and hook detection reads the install directory — so a departed plugin cannot be classified at all. Reporting it under deliberate invocations would render an uninstalled hook plugin's firings as calls, which is the original error exactly. Absence of evidence is reported as absence of evidence.
+
+**A reset plugin is not a never-used plugin.** A counter reset to zero satisfies "zero invocations" while meaning something different: its history stopped being comparable at the reset. It is excluded from the prune list and reported as a reset instead.
+
+**A thin history reports as thin,** and maturity is elapsed time *and* sample count — five snapshots spanning a week, not five snapshots. The hook fires on every session start, so a count-only gate would call a same-day store mature and release the "never invoked" list on it.
+
+**Rows record changes, not observations.** A counter that has not moved writes no new row, so the table grows with usage rather than with how often the harness rewrites its config. One consequence is worth knowing: a delta of zero cannot occur. Movement is a delta, no movement is the absence of a row, and `last_used_at` carries recency. A displayed delta is the size of the most recent change, not a per-snapshot difference.
 
 History cannot be backfilled — the harness keeps none — so this reports only what flow has observed since it started looking, and the header says how many snapshots that is. Read-only; measures this machine only.
 

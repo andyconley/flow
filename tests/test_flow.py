@@ -8271,8 +8271,21 @@ class PluginUsageTests(unittest.TestCase):
 
     # -- fixtures --------------------------------------------------------
 
-    def write_counters(self, plugins: dict, skills: dict | None = None, mtime: float = 1000.0):
-        """Write a `.claude.json` and pin its mtime, which is the ordering key."""
+    def write_counters(
+        self,
+        plugins: dict,
+        skills: dict | None = None,
+        mtime: float = 1000.0,
+        install: bool = True,
+    ):
+        """Write a `.claude.json` and pin its mtime, which is the ordering key.
+
+        `install=True` also creates a cache directory for each plugin base name,
+        because a counter key with no install directory is a *different* case —
+        the read model cannot tell whether it fired hooks, so it goes to its own
+        bucket. Tests about invocation lanes want installed plugins; the tests
+        about departed plugins pass `install=False` and say so.
+        """
         import os
 
         path = self.home / ".claude.json"
@@ -8281,7 +8294,14 @@ class PluginUsageTests(unittest.TestCase):
             payload["skillUsage"] = skills
         path.write_text(json.dumps(payload), encoding="utf-8")
         os.utime(path, (mtime, mtime))
+        if install:
+            for key in plugins:
+                self.install_plugin(key.rpartition("@")[0] or key)
         return path
+
+    def install_plugin(self, base_name: str) -> None:
+        d = self.home / ".claude" / "plugins" / "cache" / "mkt" / base_name / "1.0.0"
+        d.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def entry(count: int, last_used: int | None = None) -> dict:
@@ -8338,6 +8358,36 @@ class PluginUsageTests(unittest.TestCase):
         self.assertTrue(again["skipped_unchanged"])
         self.assertEqual(again["inserted"], 0)
         self.assertEqual(len(self.rows()), 1)
+
+    def test_unchanged_file_is_never_parsed_at_all(self) -> None:
+        """The guard has to stop the read, not just the insert.
+
+        A first version compared the watermark *after* calling read_usage, so
+        every session still loaded and decoded the whole document and only the
+        write was skipped — the entire cost the guard exists to avoid, with
+        every row-count assertion still passing. Asserting on rows cannot catch
+        that; only asserting the parse never happened can.
+        """
+        import claude_config
+
+        path = self.write_counters({"a@m": self.entry(3)})
+        self.observe(path)
+
+        calls = []
+        original = claude_config.read_usage
+
+        def counted(p):
+            calls.append(p)
+            return original(p)
+
+        claude_config.read_usage = counted
+        try:
+            result = self.observe(path)
+        finally:
+            claude_config.read_usage = original
+
+        self.assertTrue(result["skipped_unchanged"])
+        self.assertEqual(calls, [], "the config was parsed despite not having moved")
 
     def test_advancing_mtime_records_the_new_state(self) -> None:
         path = self.write_counters({"a@m": self.entry(3)}, mtime=1000.0)
@@ -8411,16 +8461,22 @@ class PluginUsageTests(unittest.TestCase):
 
     # -- resets ----------------------------------------------------------
 
-    def test_reset_renders_a_blank_delta_never_a_negative(self) -> None:
+    def test_a_reset_plugin_stays_out_of_the_prune_list(self) -> None:
+        """A reset satisfies `usage_count == 0` but is not a never-used plugin.
+
+        Its history stopped being comparable at the reset, so listing it beside
+        genuinely unused plugins puts something the user may run daily into the
+        list they prune from. An earlier version did exactly that, and an
+        earlier version of this test asserted it.
+        """
         path = self.home / ".claude.json"
         self.write_counters({"a@m": self.entry(40)}, mtime=1000.0)
         self.observe(path, scan_state=0.0)
         self.write_counters({"a@m": self.entry(0)}, mtime=2000.0)
         self.observe(path, scan_state=0.0)
-        entry = [p for p in self.payload()["plugins_never_invoked"]]
-        self.assertIn("a@m", entry)
-        resets = self.payload()["resets"]
-        self.assertEqual([r["name"] for r in resets], ["a@m"])
+        payload = self.payload()
+        self.assertNotIn("a@m", payload["plugins_never_invoked"])
+        self.assertEqual([r["name"] for r in payload["resets"]], ["a@m"])
 
     def test_reset_delta_is_none_not_zero(self) -> None:
         """Zero would report 'no change'; the truth is 'no longer comparable'."""
@@ -8433,15 +8489,36 @@ class PluginUsageTests(unittest.TestCase):
         self.assertIsNone(entry["delta"])
         self.assertTrue(entry["is_reset"])
 
-    def test_genuine_zero_delta_is_distinguishable_from_unknown(self) -> None:
+    def test_an_unmoved_counter_writes_no_second_row(self) -> None:
+        """Rows track changes, not observations.
+
+        Without this guard every observation copies all ~127 entries, so the
+        table grows with how often the harness rewrites its config rather than
+        with how often anything was used. The consequence is that a delta of
+        zero cannot occur by construction — "did not move" is expressed by the
+        absence of a new row, and by `last_used_at`, not by a zero.
+        """
         path = self.home / ".claude.json"
         self.write_counters({"a@m": self.entry(7)}, mtime=1000.0)
         self.observe(path, scan_state=0.0)
         self.write_counters({"a@m": self.entry(7), "b@m": self.entry(1)}, mtime=2000.0)
+        result = self.observe(path, scan_state=0.0)
+
+        self.assertEqual(result["inserted"], 1, "only the moved counter should be stored")
+        names = [r[1] for r in self.rows()]
+        self.assertEqual(names.count("a@m"), 1)
+        by_name = {p["name"]: p for p in self.payload()["plugins_used"]}
+        self.assertIsNone(by_name["a@m"]["delta"])  # one row: nothing to compare against
+        self.assertIsNone(by_name["b@m"]["delta"])  # first sighting, no predecessor
+
+    def test_a_moved_counter_reports_the_size_of_its_change(self) -> None:
+        path = self.home / ".claude.json"
+        self.write_counters({"a@m": self.entry(7)}, mtime=1000.0)
+        self.observe(path, scan_state=0.0)
+        self.write_counters({"a@m": self.entry(19)}, mtime=2000.0)
         self.observe(path, scan_state=0.0)
         by_name = {p["name"]: p for p in self.payload()["plugins_used"]}
-        self.assertEqual(by_name["a@m"]["delta"], 0)   # observed, and it did not move
-        self.assertIsNone(by_name["b@m"]["delta"])     # first sighting, no predecessor
+        self.assertEqual(by_name["a@m"]["delta"], 12)
 
     # -- capability and store states -------------------------------------
 
@@ -8493,10 +8570,19 @@ class PluginUsageTests(unittest.TestCase):
         self.observe(self.home / ".claude.json")
         self.assertEqual(self.payload()["state"], self.pu.STATE_THIN)
 
-    def test_enough_snapshots_flips_to_ok(self) -> None:
+    def test_snapshots_alone_do_not_make_a_history_mature(self) -> None:
+        """Five snapshots can land in an hour — the hook fires every session."""
         path = self.home / ".claude.json"
-        for i in range(self.pu.MIN_SNAPSHOTS):
+        for i in range(self.pu.MIN_SNAPSHOTS + 2):
             self.write_counters({"a@m": self.entry(i)}, mtime=1000.0 + i)
+            self.observe(path, scan_state=0.0)
+        self.assertEqual(self.payload()["state"], self.pu.STATE_THIN)
+
+    def test_enough_snapshots_over_enough_days_flips_to_ok(self) -> None:
+        path = self.home / ".claude.json"
+        day = 86400.0
+        for i in range(self.pu.MIN_SNAPSHOTS):
+            self.write_counters({"a@m": self.entry(i)}, mtime=1000.0 + i * 2 * day)
             self.observe(path, scan_state=0.0)
         self.assertEqual(self.payload()["state"], self.pu.STATE_OK)
 
@@ -8510,6 +8596,53 @@ class PluginUsageTests(unittest.TestCase):
         payload = self.payload()
         self.assertEqual([p["base_name"] for p in payload["plugins_hook_driven"]], ["noisy"])
         self.assertEqual([p["name"] for p in payload["plugins_used"]], ["quiet@m"])
+
+    def test_a_plugin_with_no_install_never_enters_the_invocation_lane(self) -> None:
+        """The originating error, in its worst form.
+
+        Hook detection reads the plugin's install directory, so a plugin whose
+        counter outlived its install answers "no hooks" for the same reason it
+        answers nothing else: it is gone. Routing that absence into the
+        deliberate-invocation lane would render an uninstalled hook plugin's
+        3,552 firings as calls, uncaveated, at the moment someone re-checks a
+        prune.
+        """
+        self.write_counters({"departed@m": self.entry(3552)}, install=False)
+        self.observe(self.home / ".claude.json")
+        payload = self.payload()
+        self.assertEqual([p["name"] for p in payload["plugins_used"]], [])
+        self.assertEqual([p["name"] for p in payload["plugins_hook_driven"]], [])
+        self.assertEqual([p["name"] for p in payload["plugins_departed"]], ["departed@m"])
+
+    def test_unknown_hook_status_is_none_not_zero(self) -> None:
+        """Cannot-tell and declares-no-hooks are different answers."""
+        self.write_counters({"gone@m": self.entry(5)}, install=False)
+        self.write_counters(
+            {"gone@m": self.entry(5), "here@m": self.entry(5)}, mtime=2000.0, install=False
+        )
+        self.install_plugin("here")
+        self.observe(self.home / ".claude.json")
+        by_name = {
+            p["name"]: p
+            for p in self.payload()["plugins_departed"] + self.payload()["plugins_used"]
+        }
+        self.assertIsNone(by_name["gone@m"]["hook_entries"])
+        self.assertEqual(by_name["here@m"]["hook_entries"], 0)
+
+    def test_departed_plugins_are_rendered_with_their_caveat(self) -> None:
+        self.write_counters({"departed@m": self.entry(3552)}, install=False)
+        self.observe(self.home / ".claude.json")
+        out = self.pu.render_usage_section(self.payload())
+        self.assertIn("no install", out)
+        self.assertIn("cannot tell whether these fired hooks", out)
+
+    def test_the_plugin_block_declares_its_own_truncation(self) -> None:
+        """Silent truncation in the block a prune reads invites the reader to
+        infer the population from what is on screen."""
+        self.write_counters({f"p{i}@m": self.entry(i + 1) for i in range(12)})
+        self.observe(self.home / ".claude.json")
+        out = self.pu.render_usage_section(self.payload())
+        self.assertIn("and 7 more with invocations", out)
 
     def test_namespace_variants_are_never_summed(self) -> None:
         self.write_counters({"p@mkt": self.entry(100), "p@inline": self.entry(20)})
@@ -8573,6 +8706,37 @@ class PluginUsageTests(unittest.TestCase):
         self.observe(self.home / ".claude.json")
         out = self.pu.render_usage_section(self.payload())
         self.assertLessEqual(max(len(ln) for ln in out.splitlines()), 100)
+
+    def test_control_characters_never_reach_the_terminal(self) -> None:
+        """A cloned repo can ship a project-local skill whose name moves the cursor.
+
+        doctor output is read to make a decision, so a name carrying ESC or CR
+        could overwrite the lines above it. Stripped at render only — the stored
+        name stays verbatim.
+        """
+        hostile = "evil\x1b[2Kname\r"
+        self.write_counters({}, {hostile: self.entry(4)})
+        self.observe(self.home / ".claude.json")
+        out = self.pu.render_usage_section(self.payload())
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\r", out)
+        self.assertIn("evil[2Kname", out)
+        # ...and the store still holds exactly what the harness wrote.
+        stored = self.conn.execute(
+            "SELECT name FROM plugin_usage_observation WHERE kind = 'skill'"
+        ).fetchone()[0]
+        self.assertEqual(stored, hostile)
+
+    def test_inventory_scope_renders_home_relative(self) -> None:
+        """doctor output gets pasted into issues; an absolute path carries the
+        username and whatever the project is named."""
+        self.write_counters({"a@m": self.entry(1)})
+        self.observe(self.home / ".claude.json")
+        scope = Path.home() / "work" / "client-x"
+        payload = self.pu.usage_payload(self.conn, home=self.home, project_root=scope)
+        out = self.pu.render_usage_section(payload)
+        self.assertIn("~/work/client-x", out)
+        self.assertNotIn(str(Path.home() / "work"), out)
 
     def test_inferred_skill_count_is_marked(self) -> None:
         self.install_skill("never-run")
