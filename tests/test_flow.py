@@ -8081,6 +8081,34 @@ class ClaudeConfigTests(unittest.TestCase):
         records, _ = self.cc.read_usage(path)
         self.assertEqual(records, [])
 
+    def test_epoch_millisecond_last_used_becomes_iso(self) -> None:
+        """The harness writes lastUsedAt as epoch ms, not ISO text.
+
+        A first version of this reader assumed a string, rejected every integer,
+        and turned a populated field into None for all 127 real entries without
+        failing a single test. Mutation testing found the gap; this closes it.
+        """
+        path = self.write_config(
+            {"pluginUsage": {"a@m": {"usageCount": 1, "lastUsedAt": 1775249400612}}}
+        )
+        records, _ = self.cc.read_usage(path)
+        self.assertEqual(records[0]["last_used_at"], "2026-04-03T20:50:00Z")
+
+    def test_iso_string_last_used_is_passed_through(self) -> None:
+        path = self.write_config(
+            {"pluginUsage": {"a@m": {"usageCount": 1, "lastUsedAt": "2026-08-17T12:00:00Z"}}}
+        )
+        records, _ = self.cc.read_usage(path)
+        self.assertEqual(records[0]["last_used_at"], "2026-08-17T12:00:00Z")
+
+    def test_uninterpretable_last_used_reads_absent(self) -> None:
+        """A timestamp flow cannot interpret is not one it should guess at."""
+        path = self.write_config(
+            {"pluginUsage": {"a@m": {"usageCount": 1, "lastUsedAt": {"nested": 1}}}}
+        )
+        records, _ = self.cc.read_usage(path)
+        self.assertIsNone(records[0]["last_used_at"])
+
     def test_absent_last_used_is_none_not_empty_string(self) -> None:
         path = self.write_config({"pluginUsage": {"a@m": {"usageCount": 5}}})
         records, _ = self.cc.read_usage(path)
@@ -8185,3 +8213,345 @@ class ClaudeConfigTests(unittest.TestCase):
     def test_base_name_splits_on_the_last_at(self) -> None:
         """A key with more than one @ keeps everything before the suffix."""
         self.assertEqual(self.cc.base_plugin_name("scope@weird@inline"), "scope@weird")
+
+
+class PluginUsageTests(unittest.TestCase):
+    """Direct tests of cli/plugin_usage.py against a constructed store and home.
+
+    A whole fake `home` is built on disk rather than mocked, because most of what
+    this module gets wrong is a disagreement between two files written by two
+    processes — the counters in `.claude.json` against `enabledPlugins` in
+    `settings.json`, and the counter keys against the installed-skill walk. A
+    mock of either side cannot disagree with the other in the way real files do.
+    """
+
+    def setUp(self) -> None:
+        import sqlite3
+        import tempfile
+
+        repo_cli = REPO_ROOT / "cli"
+        if str(repo_cli) not in sys.path:
+            sys.path.insert(0, str(repo_cli))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import usage_store
+        import plugin_usage
+
+        self.pu = plugin_usage
+        self.tmp = Path(tempfile.mkdtemp())
+        self.home = self.tmp / "home"
+        (self.home / ".claude").mkdir(parents=True)
+
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        for _v, _d, sql in usage_store.MIGRATIONS:
+            self.conn.executescript(sql)
+        self.conn.executemany(
+            "INSERT INTO harness_capability (harness, field, supported) VALUES (?, ?, ?)",
+            [("claude", "plugin_usage_counters", 1), ("codex", "plugin_usage_counters", 0)],
+        )
+
+    def tearDown(self) -> None:
+        import shutil
+
+        self.conn.close()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        for name in ("plugin_usage", "claude_config", "usage_store"):
+            sys.modules.pop(name, None)
+
+    # -- fixtures --------------------------------------------------------
+
+    def write_counters(self, plugins: dict, skills: dict | None = None, mtime: float = 1000.0):
+        """Write a `.claude.json` and pin its mtime, which is the ordering key."""
+        import os
+
+        path = self.home / ".claude.json"
+        payload = {"pluginUsage": plugins}
+        if skills is not None:
+            payload["skillUsage"] = skills
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        os.utime(path, (mtime, mtime))
+        return path
+
+    @staticmethod
+    def entry(count: int, last_used: int | None = None) -> dict:
+        e: dict = {"usageCount": count}
+        if last_used is not None:
+            e["lastUsedAt"] = last_used
+        return e
+
+    def write_settings(self, enabled: dict) -> None:
+        (self.home / ".claude" / "settings.json").write_text(
+            json.dumps({"enabledPlugins": enabled}), encoding="utf-8"
+        )
+
+    def install_skill(self, name: str) -> None:
+        d = self.home / ".claude" / "skills" / name
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+
+    def install_hooked_plugin(self, name: str, entries: int) -> None:
+        d = (
+            self.home / ".claude" / "plugins" / "cache" / "mkt" / name / "1.0.0" / "hooks"
+        )
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "hooks.json").write_text(
+            json.dumps({"hooks": {"Stop": [{} for _ in range(entries)]}}), encoding="utf-8"
+        )
+
+    def observe(self, path, **kw):
+        return self.pu.observe_usage(path, self.conn, **kw)
+
+    def payload(self):
+        return self.pu.usage_payload(self.conn, home=self.home)
+
+    def rows(self) -> list[tuple]:
+        return self.conn.execute(
+            "SELECT kind, name, usage_count, source_mtime FROM plugin_usage_observation"
+            " ORDER BY name, source_mtime"
+        ).fetchall()
+
+    # -- write path ------------------------------------------------------
+
+    def test_first_observation_stores_every_counter(self) -> None:
+        path = self.write_counters({"a@m": self.entry(3)}, {"s": self.entry(1)})
+        result = self.observe(path)
+        self.assertEqual(result["inserted"], 2)
+        self.assertTrue(result["changed"])
+        self.assertEqual(len(self.rows()), 2)
+
+    def test_unchanged_file_is_not_reparsed(self) -> None:
+        """The mtime guard is the whole cost control: no move, no parse, no rows."""
+        path = self.write_counters({"a@m": self.entry(3)})
+        self.observe(path)
+        again = self.observe(path)
+        self.assertTrue(again["skipped_unchanged"])
+        self.assertEqual(again["inserted"], 0)
+        self.assertEqual(len(self.rows()), 1)
+
+    def test_advancing_mtime_records_the_new_state(self) -> None:
+        path = self.write_counters({"a@m": self.entry(3)}, mtime=1000.0)
+        self.observe(path)
+        self.write_counters({"a@m": self.entry(9)}, mtime=2000.0)
+        self.observe(path)
+        self.assertEqual([r[2] for r in self.rows()], [3, 9])
+
+    def test_missing_file_reports_error_and_writes_nothing(self) -> None:
+        result = self.observe(self.home / "absent.json")
+        self.assertEqual(result["error"], "unreadable")
+        self.assertEqual(self.rows(), [])
+
+    def test_torn_json_reports_error_and_writes_nothing(self) -> None:
+        path = self.home / ".claude.json"
+        path.write_text('{"pluginUsage": {"a', encoding="utf-8")
+        self.assertEqual(self.observe(path)["error"], "unreadable")
+        self.assertEqual(self.rows(), [])
+
+    def test_scan_state_override_suppresses_a_reobservation(self) -> None:
+        """The seam a dual-write test needs: simulate another writer's watermark."""
+        path = self.write_counters({"a@m": self.entry(3)}, mtime=1000.0)
+        result = self.observe(path, scan_state=5000.0)
+        self.assertTrue(result["skipped_unchanged"])
+        self.assertEqual(self.rows(), [])
+
+    # -- dual write ------------------------------------------------------
+
+    def test_two_writers_on_one_revision_collapse_to_one_row(self) -> None:
+        """The property the UNIQUE key exists for: same state twice is one fact."""
+        path = self.write_counters({"a@m": self.entry(3)}, mtime=1000.0)
+        self.observe(path)
+        # A second writer that never saw the watermark still cannot duplicate.
+        second = self.observe(path, scan_state=0.0)
+        self.assertEqual(second["inserted"], 0)
+        self.assertEqual(len(self.rows()), 1)
+
+    def test_final_state_is_independent_of_writer_order(self) -> None:
+        import sqlite3
+
+        import usage_store
+
+        def run(order: list[float]) -> list[tuple]:
+            conn = sqlite3.connect(":memory:")
+            for _v, _d, sql in usage_store.MIGRATIONS:
+                conn.executescript(sql)
+            for mtime in order:
+                self.write_counters({"a@m": self.entry(int(mtime))}, mtime=mtime)
+                self.pu.observe_usage(
+                    self.home / ".claude.json", conn, scan_state=0.0
+                )
+            out = conn.execute(
+                "SELECT name, usage_count, source_mtime FROM plugin_usage_observation"
+                " ORDER BY source_mtime"
+            ).fetchall()
+            conn.close()
+            return out
+
+        self.assertEqual(run([1000.0, 2000.0, 3000.0]), run([3000.0, 1000.0, 2000.0]))
+
+    def test_out_of_order_observation_still_orders_by_source_mtime(self) -> None:
+        """observed_at is not the ordering key; the harness's own clock is."""
+        path = self.home / ".claude.json"
+        self.write_counters({"a@m": self.entry(10)}, mtime=3000.0)
+        self.observe(path, scan_state=0.0)
+        self.write_counters({"a@m": self.entry(4)}, mtime=1000.0)
+        self.observe(path, scan_state=0.0)
+        entry = [p for p in self.payload()["plugins_used"] if p["name"] == "a@m"][0]
+        self.assertEqual(entry["usage_count"], 10)
+        self.assertEqual(entry["delta"], 6)
+
+    # -- resets ----------------------------------------------------------
+
+    def test_reset_renders_a_blank_delta_never_a_negative(self) -> None:
+        path = self.home / ".claude.json"
+        self.write_counters({"a@m": self.entry(40)}, mtime=1000.0)
+        self.observe(path, scan_state=0.0)
+        self.write_counters({"a@m": self.entry(0)}, mtime=2000.0)
+        self.observe(path, scan_state=0.0)
+        entry = [p for p in self.payload()["plugins_never_invoked"]]
+        self.assertIn("a@m", entry)
+        resets = self.payload()["resets"]
+        self.assertEqual([r["name"] for r in resets], ["a@m"])
+
+    def test_reset_delta_is_none_not_zero(self) -> None:
+        """Zero would report 'no change'; the truth is 'no longer comparable'."""
+        path = self.home / ".claude.json"
+        self.write_counters({"a@m": self.entry(40)}, mtime=1000.0)
+        self.observe(path, scan_state=0.0)
+        self.write_counters({"a@m": self.entry(2)}, mtime=2000.0)
+        self.observe(path, scan_state=0.0)
+        entry = [p for p in self.payload()["plugins_used"] if p["name"] == "a@m"][0]
+        self.assertIsNone(entry["delta"])
+        self.assertTrue(entry["is_reset"])
+
+    def test_genuine_zero_delta_is_distinguishable_from_unknown(self) -> None:
+        path = self.home / ".claude.json"
+        self.write_counters({"a@m": self.entry(7)}, mtime=1000.0)
+        self.observe(path, scan_state=0.0)
+        self.write_counters({"a@m": self.entry(7), "b@m": self.entry(1)}, mtime=2000.0)
+        self.observe(path, scan_state=0.0)
+        by_name = {p["name"]: p for p in self.payload()["plugins_used"]}
+        self.assertEqual(by_name["a@m"]["delta"], 0)   # observed, and it did not move
+        self.assertIsNone(by_name["b@m"]["delta"])     # first sighting, no predecessor
+
+    # -- capability and store states -------------------------------------
+
+    def test_codex_reports_unsupported_rather_than_empty(self) -> None:
+        self.write_counters({"a@m": self.entry(1)})
+        self.observe(self.home / ".claude.json")
+        payload = self.pu.usage_payload(self.conn, harness="codex", home=self.home)
+        self.assertEqual(payload["state"], self.pu.STATE_UNSUPPORTED)
+
+    def test_unmigrated_store_reports_stale_and_does_not_raise(self) -> None:
+        """flow doctor never migrates, so a v5 store must degrade, not traceback."""
+        import sqlite3
+
+        conn = sqlite3.connect(":memory:")
+        conn.execute(
+            "CREATE TABLE harness_capability (harness TEXT, field TEXT, supported INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO harness_capability VALUES ('claude', 'plugin_usage_counters', 1)"
+        )
+        payload = self.pu.usage_payload(conn, home=self.home)
+        conn.close()
+        self.assertEqual(payload["state"], self.pu.STATE_STALE)
+
+    def test_no_observations_reports_empty(self) -> None:
+        self.assertEqual(self.payload()["state"], self.pu.STATE_EMPTY)
+
+    def test_thin_history_is_not_reported_as_mature(self) -> None:
+        """A plugin at zero after one snapshot is a short window, not disuse."""
+        self.write_counters({"a@m": self.entry(0)})
+        self.observe(self.home / ".claude.json")
+        self.assertEqual(self.payload()["state"], self.pu.STATE_THIN)
+
+    def test_enough_snapshots_flips_to_ok(self) -> None:
+        path = self.home / ".claude.json"
+        for i in range(self.pu.MIN_SNAPSHOTS):
+            self.write_counters({"a@m": self.entry(i)}, mtime=1000.0 + i)
+            self.observe(path, scan_state=0.0)
+        self.assertEqual(self.payload()["state"], self.pu.STATE_OK)
+
+    # -- classification --------------------------------------------------
+
+    def test_hook_registering_plugin_leaves_the_invocation_lane(self) -> None:
+        """The defect this feature exists to prevent, asserted directly."""
+        self.install_hooked_plugin("noisy", entries=3)
+        self.write_counters({"noisy@m": self.entry(9000), "quiet@m": self.entry(4)})
+        self.observe(self.home / ".claude.json")
+        payload = self.payload()
+        self.assertEqual([p["base_name"] for p in payload["plugins_hook_driven"]], ["noisy"])
+        self.assertEqual([p["name"] for p in payload["plugins_used"]], ["quiet@m"])
+
+    def test_namespace_variants_are_never_summed(self) -> None:
+        self.write_counters({"p@mkt": self.entry(100), "p@inline": self.entry(20)})
+        self.observe(self.home / ".claude.json")
+        counts = sorted(p["usage_count"] for p in self.payload()["plugins_used"])
+        self.assertEqual(counts, [20, 100])
+        self.assertNotIn(120, counts)
+
+    def test_enabled_state_resolves_across_namespace_variants(self) -> None:
+        """One plugin has one enablement, even when the counters name it twice."""
+        self.write_settings({"p@mkt": False})
+        self.write_counters({"p@mkt": self.entry(5), "p@inline": self.entry(2)})
+        self.observe(self.home / ".claude.json")
+        states = {p["namespace"]: p["enabled"] for p in self.payload()["plugins_used"]}
+        self.assertEqual(states["mkt"], False)
+        self.assertEqual(states["inline"], False)
+
+    def test_absent_skill_is_never_invoked_not_zero(self) -> None:
+        self.install_skill("used-skill")
+        self.install_skill("unused-skill")
+        self.write_counters({}, {"used-skill": self.entry(3)})
+        self.observe(self.home / ".claude.json")
+        payload = self.payload()
+        self.assertEqual(payload["skills_never_invoked"], ["unused-skill"])
+        self.assertEqual([s["name"] for s in payload["skills_used"]], ["used-skill"])
+
+    def test_unresolvable_counter_keys_are_surfaced_not_dropped(self) -> None:
+        """55% of real keys no longer resolve; silently dropping them looks clean."""
+        self.install_skill("current")
+        self.write_counters({}, {"current": self.entry(2), "renamed-away": self.entry(60)})
+        self.observe(self.home / ".claude.json")
+        self.assertEqual(self.payload()["skills_unresolved"], ["renamed-away"])
+
+    # -- rendering -------------------------------------------------------
+
+    def test_every_state_renders_without_raising(self) -> None:
+        for state in (
+            self.pu.STATE_UNSUPPORTED,
+            self.pu.STATE_STALE,
+            self.pu.STATE_EMPTY,
+        ):
+            out = self.pu.render_usage_section({"state": state, "harness": "codex"})
+            self.assertLessEqual(len(out.splitlines()), 2, state)
+
+    def test_hook_firings_are_never_called_uses(self) -> None:
+        self.install_hooked_plugin("noisy", entries=5)
+        self.write_counters({"noisy@m": self.entry(16373)})
+        self.observe(self.home / ".claude.json")
+        out = self.pu.render_usage_section(self.payload())
+        self.assertIn("firings", out)
+        self.assertIn("not a usage signal", out)
+        hook_line = [ln for ln in out.splitlines() if "16,373" in ln][0]
+        self.assertNotIn("invocation", hook_line)
+
+    def test_render_never_exceeds_the_terminal_budget(self) -> None:
+        self.install_skill("a-skill")
+        self.write_counters(
+            {f"p{i}@m": self.entry(i) for i in range(40)},
+            {f"s{i}": self.entry(i + 1) for i in range(40)},
+        )
+        self.observe(self.home / ".claude.json")
+        out = self.pu.render_usage_section(self.payload())
+        self.assertLessEqual(max(len(ln) for ln in out.splitlines()), 100)
+
+    def test_inferred_skill_count_is_marked(self) -> None:
+        self.install_skill("never-run")
+        self.write_counters({}, {"other": self.entry(1)})
+        self.observe(self.home / ".claude.json")
+        out = self.pu.render_usage_section(self.payload())
+        self.assertIn("~1 installed skills never invoked", out)
