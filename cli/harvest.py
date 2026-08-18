@@ -7,7 +7,9 @@ module (`codex_collector.py`, `claude_collector.py`).
 
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
+import plugin_usage
 import usage_store
 from claude_collector import HARNESS as CLAUDE_HARNESS
 from claude_collector import default_sessions_root as claude_sessions_root
@@ -373,6 +375,18 @@ def harvest_claude_command(
             _reset_claude_watermarks(conn, since=since, session=session)
             conn.commit()
         summary = claude_harvest_all(conn, sessions_root)
+        # Backstop for the SessionStart observer. The hook is best-effort by
+        # design — it never blocks a session and drops its work on any failure —
+        # so a guaranteed writer has to exist somewhere, and harvest is already
+        # the command that runs when someone wants the store current.
+        #
+        # Deliberately not wrapped in the summary or the exit code: a transcript
+        # harvest that succeeded must not report failure because an unrelated
+        # counter file was mid-write.
+        try:
+            plugin_usage.snapshot(conn, home=HOME, project_root=Path.cwd())
+        except Exception:  # noqa: BLE001 — a counter sample never fails a harvest
+            pass
     finally:
         conn.close()
 
