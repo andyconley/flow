@@ -249,6 +249,18 @@ matcher = "Write|Edit"
 type = "command"
 script = "flow-managed-write-reminder.sh"
 
+# Claude only: Codex maintains no equivalent usage counters, which
+# `data/harness_capabilities.json` records as plugin_usage_counters = 0. No
+# matcher, so it fires on every session start rather than only inside a flow
+# project — the counters are user-level state and gating on a project manifest
+# would record history from only the directories that happen to carry one.
+[[claude.hooks]]
+name = "flow-plugin-usage"
+event = "SessionStart"
+type = "command"
+script = "flow-plugin-usage.sh"
+timeout = 10
+
 # [[codex.hooks]] entries use the same shape (name/event/matcher/type/script,
 # optional timeout/status_message). They deploy scripts to hook_dir and merge
 # handler entries into hooks_file (.codex/hooks.json) under the same
