@@ -7955,3 +7955,233 @@ class BaselineTests(unittest.TestCase):
             self.assertEqual(self.baseline.thresholds(), self.baseline.DEFAULT_THRESHOLDS)
         finally:
             cost.SOURCE_DIR = original
+
+
+class ClaudeConfigTests(unittest.TestCase):
+    """Direct tests of cli/claude_config.py against files on disk.
+
+    Written against real files in a temp directory rather than mocks: every
+    reader here exists to survive another program rewriting a file underneath
+    it, and a mock cannot fail the way an OSError or a half-written JSON
+    document does.
+    """
+
+    # Shaped like the real map, small enough to read. The doubled
+    # `security-guidance` keys are the observed case where one plugin is
+    # surfaced under two namespaces; `quiet` is the seeded-at-install zero that
+    # only `pluginUsage` ever produces.
+    PLUGIN_USAGE = {
+        "security-guidance@claude-plugins-official": {
+            "usageCount": 16373,
+            "lastUsedAt": "2026-08-17T12:00:00Z",
+            "lastUsedNumStartups": 700,
+        },
+        "security-guidance@inline": {
+            "usageCount": 4800,
+            "lastUsedAt": "2026-08-17T12:00:00Z",
+            "lastUsedNumStartups": 700,
+        },
+        "quiet@claude-plugins-official": {
+            "usageCount": 0,
+            "lastUsedAt": "2026-06-04T00:00:00Z",
+            "lastUsedNumStartups": 1,
+        },
+    }
+
+    # No zero entries, by construction: the harness writes a skill row on first
+    # use, so an unused skill is absent rather than present at zero.
+    SKILL_USAGE = {
+        "flow-plan": {"usageCount": 75, "lastUsedAt": "2026-08-17T12:00:00Z"},
+        "superpowers:brainstorming": {"usageCount": 27, "lastUsedAt": "2026-08-01T00:00:00Z"},
+    }
+
+    def setUp(self) -> None:
+        import tempfile
+
+        repo_cli = REPO_ROOT / "cli"
+        if str(repo_cli) not in sys.path:
+            sys.path.insert(0, str(repo_cli))
+            self._added_cli_path = True
+        else:
+            self._added_cli_path = False
+        import claude_config
+
+        self.cc = claude_config
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self) -> None:
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        if self._added_cli_path:
+            sys.path.remove(str(REPO_ROOT / "cli"))
+        sys.modules.pop("claude_config", None)
+
+    def write_config(self, payload: dict) -> Path:
+        path = self.tmp / ".claude.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    # -- read_usage ------------------------------------------------------
+
+    def test_reads_both_maps_with_their_kinds(self) -> None:
+        path = self.write_config(
+            {"pluginUsage": self.PLUGIN_USAGE, "skillUsage": self.SKILL_USAGE}
+        )
+        records, stat = self.cc.read_usage(path)
+        self.assertEqual(sum(1 for r in records if r["kind"] == "plugin"), 3)
+        self.assertEqual(sum(1 for r in records if r["kind"] == "skill"), 2)
+        self.assertEqual(stat.st_size, path.stat().st_size)
+
+    def test_namespace_variants_stay_separate_records(self) -> None:
+        """One plugin under two keys is two readings, never one summed total."""
+        path = self.write_config({"pluginUsage": self.PLUGIN_USAGE})
+        records, _ = self.cc.read_usage(path)
+        counts = {r["name"]: r["usage_count"] for r in records}
+        self.assertEqual(counts["security-guidance@claude-plugins-official"], 16373)
+        self.assertEqual(counts["security-guidance@inline"], 4800)
+        self.assertNotIn("security-guidance", counts)
+
+    def test_seeded_zero_is_kept(self) -> None:
+        """A plugin at zero is a real reading and must survive to the store."""
+        path = self.write_config({"pluginUsage": self.PLUGIN_USAGE})
+        records, _ = self.cc.read_usage(path)
+        zero = [r for r in records if r["name"] == "quiet@claude-plugins-official"]
+        self.assertEqual(zero[0]["usage_count"], 0)
+
+    def test_absent_file_reads_none(self) -> None:
+        self.assertIsNone(self.cc.read_usage(self.tmp / "nothing.json"))
+
+    def test_torn_json_reads_none(self) -> None:
+        """A file caught mid-rewrite is an ordinary event, not a fault."""
+        path = self.tmp / ".claude.json"
+        path.write_text('{"pluginUsage": {"a": {"usageCo', encoding="utf-8")
+        self.assertIsNone(self.cc.read_usage(path))
+
+    def test_non_dict_document_reads_none(self) -> None:
+        path = self.tmp / ".claude.json"
+        path.write_text("[1, 2, 3]", encoding="utf-8")
+        self.assertIsNone(self.cc.read_usage(path))
+
+    def test_missing_maps_read_empty_not_none(self) -> None:
+        """A readable config with no counters is zero records, not no reading."""
+        records, _ = self.cc.read_usage(self.write_config({"editorMode": "normal"}))
+        self.assertEqual(records, [])
+
+    def test_non_integer_counter_is_skipped_not_coerced(self) -> None:
+        path = self.write_config(
+            {"pluginUsage": {"bad@m": {"usageCount": "12"}, "good@m": {"usageCount": 3}}}
+        )
+        records, _ = self.cc.read_usage(path)
+        self.assertEqual([r["name"] for r in records], ["good@m"])
+
+    def test_boolean_counter_is_rejected(self) -> None:
+        """bool is an int subclass; a True counter must not read as 1."""
+        path = self.write_config({"pluginUsage": {"b@m": {"usageCount": True}}})
+        records, _ = self.cc.read_usage(path)
+        self.assertEqual(records, [])
+
+    def test_absent_last_used_is_none_not_empty_string(self) -> None:
+        path = self.write_config({"pluginUsage": {"a@m": {"usageCount": 5}}})
+        records, _ = self.cc.read_usage(path)
+        self.assertIsNone(records[0]["last_used_at"])
+        self.assertIsNone(records[0]["startups"])
+
+    # -- read_enabled_plugins --------------------------------------------
+
+    def test_reads_enabled_plugins(self) -> None:
+        path = self.tmp / "settings.json"
+        path.write_text(json.dumps({"enabledPlugins": {"a@m": True, "b@m": False}}))
+        self.assertEqual(self.cc.read_enabled_plugins(path), {"a@m": True, "b@m": False})
+
+    def test_absent_settings_is_unknown_not_empty(self) -> None:
+        """{} means enablement is unknown; callers must not read it as 'none on'."""
+        self.assertEqual(self.cc.read_enabled_plugins(self.tmp / "nope.json"), {})
+
+    def test_malformed_settings_does_not_raise(self) -> None:
+        path = self.tmp / "settings.json"
+        path.write_text("{not json", encoding="utf-8")
+        self.assertEqual(self.cc.read_enabled_plugins(path), {})
+
+    # -- installed_skills ------------------------------------------------
+
+    def make_skill(self, root: Path, *parts: str) -> None:
+        target = root.joinpath(*parts)
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+
+    def test_enumerates_user_and_plugin_skills_as_usage_keys(self) -> None:
+        home = self.tmp / "home"
+        self.make_skill(home, ".claude", "skills", "confluence-adf")
+        self.make_skill(
+            home, ".claude", "plugins", "cache", "official", "superpowers", "6.3.0",
+            "skills", "brainstorming",
+        )
+        self.assertEqual(
+            self.cc.installed_skills(home),
+            {"confluence-adf", "superpowers:brainstorming"},
+        )
+
+    def test_project_root_widens_the_population(self) -> None:
+        """Project-local skills are in scope, which is why scope gets recorded."""
+        home = self.tmp / "home"
+        project = self.tmp / "proj"
+        self.make_skill(home, ".claude", "skills", "user-skill")
+        self.make_skill(project, ".claude", "skills", "project-skill")
+        self.assertEqual(self.cc.installed_skills(home), {"user-skill"})
+        self.assertEqual(
+            self.cc.installed_skills(home, project), {"user-skill", "project-skill"}
+        )
+
+    def test_absent_roots_enumerate_empty(self) -> None:
+        self.assertEqual(self.cc.installed_skills(self.tmp / "gone"), set())
+
+    # -- hook_registering_plugins ----------------------------------------
+
+    def write_hooks(self, home: Path, plugin: str, version: str, hooks: dict) -> None:
+        target = home / ".claude" / "plugins" / "cache" / "official" / plugin / version / "hooks"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "hooks.json").write_text(json.dumps({"hooks": hooks}), encoding="utf-8")
+
+    def test_counts_hook_entries_across_events(self) -> None:
+        """The count is entries, not events: two PostToolUse matchers are two."""
+        home = self.tmp / "home"
+        self.write_hooks(
+            home, "security-guidance", "1.0.0",
+            {"SessionStart": [{}], "UserPromptSubmit": [{}], "PostToolUse": [{}, {}], "Stop": [{}]},
+        )
+        self.write_hooks(home, "ralph-loop", "1.0.0", {"Stop": [{}]})
+        counts = self.cc.hook_registering_plugins(home)
+        self.assertEqual(counts["security-guidance"], 5)
+        self.assertEqual(counts["ralph-loop"], 1)
+
+    def test_plugin_without_hooks_is_absent_from_the_map(self) -> None:
+        home = self.tmp / "home"
+        self.write_hooks(home, "hooked", "1.0.0", {"Stop": [{}]})
+        self.assertNotIn("quiet", self.cc.hook_registering_plugins(home))
+
+    def test_highest_count_wins_across_cached_versions(self) -> None:
+        """Under-reporting hook registration is the direction that misleads."""
+        home = self.tmp / "home"
+        self.write_hooks(home, "p", "1.0.0", {"Stop": [{}]})
+        self.write_hooks(home, "p", "2.0.0", {"Stop": [{}], "SessionStart": [{}, {}]})
+        self.assertEqual(self.cc.hook_registering_plugins(home)["p"], 3)
+
+    def test_malformed_hooks_json_is_skipped(self) -> None:
+        home = self.tmp / "home"
+        target = home / ".claude" / "plugins" / "cache" / "official" / "p" / "1.0.0" / "hooks"
+        target.mkdir(parents=True)
+        (target / "hooks.json").write_text("{broken", encoding="utf-8")
+        self.assertEqual(self.cc.hook_registering_plugins(home), {})
+
+    # -- base_plugin_name ------------------------------------------------
+
+    def test_base_name_strips_marketplace_suffix(self) -> None:
+        self.assertEqual(self.cc.base_plugin_name("ralph-loop@inline"), "ralph-loop")
+
+    def test_base_name_leaves_unsuffixed_keys_alone(self) -> None:
+        self.assertEqual(self.cc.base_plugin_name("humanize"), "humanize")
+
+    def test_base_name_splits_on_the_last_at(self) -> None:
+        """A key with more than one @ keeps everything before the suffix."""
+        self.assertEqual(self.cc.base_plugin_name("scope@weird@inline"), "scope@weird")
