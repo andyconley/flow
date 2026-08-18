@@ -301,7 +301,20 @@ def usage_payload(
     """
     base = home if home is not None else Path.home()
 
-    if not harness_supports(conn, harness, CAPABILITY):
+    # Absent and unsupported are different answers and must not collapse.
+    # `harness_capability` has existed since v1, so a *missing* row means this
+    # store predates the feature and has not been re-seeded — not that the
+    # harness cannot report. Collapsing the two told every existing user on an
+    # unmigrated store "no usage counters exist to sample", which is false about
+    # Claude and is exactly the confident-wrong statement this surface exists to
+    # prevent. Only an explicit 0 means unsupported.
+    row = conn.execute(
+        "SELECT supported FROM harness_capability WHERE harness = ? AND field = ?",
+        (harness, CAPABILITY),
+    ).fetchone()
+    if row is None:
+        return {"state": STATE_STALE, "harness": harness}
+    if not row[0]:
         return {"state": STATE_UNSUPPORTED, "harness": harness}
 
     try:

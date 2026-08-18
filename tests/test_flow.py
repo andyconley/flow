@@ -8444,6 +8444,24 @@ class PluginUsageTests(unittest.TestCase):
         payload = self.pu.usage_payload(self.conn, harness="codex", home=self.home)
         self.assertEqual(payload["state"], self.pu.STATE_UNSUPPORTED)
 
+    def test_unseeded_capability_reports_stale_not_unsupported(self) -> None:
+        """An absent capability row is 'not migrated', never 'cannot report'.
+
+        Found by running against a real v5 store: every existing user upgrading
+        would have been told "no usage counters exist to sample", which is false
+        about Claude. Absent and unsupported are different answers.
+        """
+        self.conn.execute("DELETE FROM harness_capability")
+        self.write_counters({"a@m": self.entry(1)})
+        self.observe(self.home / ".claude.json")
+        self.assertEqual(self.payload()["state"], self.pu.STATE_STALE)
+
+    def test_explicit_zero_capability_still_reports_unsupported(self) -> None:
+        self.conn.execute(
+            "UPDATE harness_capability SET supported = 0 WHERE harness = 'claude'"
+        )
+        self.assertEqual(self.payload()["state"], self.pu.STATE_UNSUPPORTED)
+
     def test_unmigrated_store_reports_stale_and_does_not_raise(self) -> None:
         """flow doctor never migrates, so a v5 store must degrade, not traceback."""
         import sqlite3

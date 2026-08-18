@@ -35,6 +35,10 @@ from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
 from overlay import overlay_check_command, overlay_status_command  # noqa: E402
+from plugin_usage import (  # noqa: E402
+    plugin_usage_show_command,
+    plugin_usage_snapshot_command,
+)
 from setup import (  # noqa: E402
     refresh_project,
     setup_machine,
@@ -279,6 +283,34 @@ def main() -> int:
         required=True,
         help="UserPromptSubmit-hook mode: read hook JSON from stdin",
     )
+    plugin_usage_parser = sub.add_parser(
+        "plugin-usage",
+        help="sample and report which installed plugins and skills are actually used",
+        description="Samples the plugin and skill usage counters the harness maintains in its own config into flow's store, and reports movement over time. Separate from `flow doctor`, which renders the same read model but never writes: doctor is read-only by contract.",
+    )
+    plugin_usage_sub = plugin_usage_parser.add_subparsers(
+        dest="plugin_usage_target", required=True
+    )
+    plugin_usage_snapshot_parser = plugin_usage_sub.add_parser(
+        "snapshot",
+        help="record the current counters if they have moved since the last look",
+        description="Stats the harness config, compares it against the recorded watermark, and stores any state not already held. Safe to run concurrently with `flow harvest`: observations are keyed by their content, so two writers seeing one revision collapse to a single row.",
+    )
+    plugin_usage_snapshot_parser.add_argument(
+        "--hook",
+        action="store_true",
+        help="SessionStart-hook mode: shorter busy timeout, prints nothing, always exits 0",
+    )
+    plugin_usage_show_parser = plugin_usage_sub.add_parser(
+        "show",
+        help="print the usage report `flow doctor` renders as a section",
+        description="The same read model doctor renders, standalone. Hook-registering plugins are reported separately from deliberate invocations: the harness increments a plugin's counter once per hook firing, so those numbers measure how many hook events a plugin declares rather than anything a person did.",
+    )
+    plugin_usage_show_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit the payload as JSON instead of the rendered section",
+    )
     overlay_parser = sub.add_parser(
         "overlay",
         help="inspect the user overlay's version-control state",
@@ -510,6 +542,10 @@ def main() -> int:
         return cost_verdict_command(transcript=args.transcript, hook=args.hook)
     if args.command == "cost" and args.cost_target == "warn":
         return cost_warn_command()
+    if args.command == "plugin-usage" and args.plugin_usage_target == "snapshot":
+        return plugin_usage_snapshot_command(hook=args.hook)
+    if args.command == "plugin-usage" and args.plugin_usage_target == "show":
+        return plugin_usage_show_command(as_json=args.json)
     if args.command == "overlay" and args.overlay_target == "status":
         return overlay_status_command()
     if args.command == "overlay" and args.overlay_target == "check":
