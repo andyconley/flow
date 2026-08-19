@@ -521,7 +521,9 @@ Flags:
 
 **Requires `~/.flow/source` to be a git work tree.** A release install copies the framework in and deletes the clone, so there is no backlog to write; there the command prints a paste-ready entry and exits 0. That is the ordinary outcome for most installs, not a fault. Membership is asked of git rather than inferred from a `.git` directory, because `~/.flow/source` is normally a symlink.
 
-**Never commits and never pushes.** Promoting and publishing are separate decisions, and the second is the engineer's alone. The command stops at a dirty working tree on purpose.
+**Never commits and never pushes.** Promoting and publishing are separate decisions, and the second is the engineer's alone. The command deliberately stops having left the working tree dirty, so the change is staged for a human to read before it goes anywhere.
+
+**The promoted entry carries the gap and its count, never the project or run that produced it.** The ledger is personal and lives in a private overlay; `docs/backlog.md` lives in the flow repository, which does not share that audience. The count is the half that makes a repeat actionable and the provenance is the half that identifies the work, so only the first crosses over.
 
 **Promotion is recorded as a second event, not a flag on the first.** Rewriting a line mid-file is the only operation that can corrupt an append log, and a flag would discard when the promotion happened. Promoting twice is refused and leaves the backlog byte-identical.
 

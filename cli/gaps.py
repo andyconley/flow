@@ -22,6 +22,14 @@ holds an unpromoted gap — under the append model this file is the record, not 
 cache rebuildable from run artifacts. `~/.flow/user/` is version-controlled
 precisely so personal state survives a lost machine.
 
+Read that as a constraint, not only a benefit: **everything written here is
+committed and pushed**. A gap summary is free text composed while working on a
+real project, so it must describe what *flow* was missing and never what the
+work contained — no customer names, no quoted file or error content, no
+identifiers. `promote` narrows this further by writing only the gap and its
+count into the backlog, never the project or run that produced it, because the
+backlog lives in the flow repository and does not share the ledger's audience.
+
 **Repeats are detected by an agent-supplied key, never by matching text.** The
 agent reads existing keys and reuses one when a new gap is the same gap. That
 puts the judgment where judgment belongs and keeps counting exact. Nothing here
@@ -37,6 +45,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from overlay import git_env
 from paths import SOURCE_DIR, USER_OVERLAY_DIR
 
 SCHEMA = 1
@@ -221,6 +230,15 @@ def is_promoted(events: list[dict], key: str) -> bool:
 
 
 def _git(cwd: Path, *args: str) -> tuple[int, str]:
+    """Run one git command, with the ambient overrides stripped.
+
+    `git_env()` is not optional here. `GIT_DIR` and `GIT_WORK_TREE` override
+    `cwd`, so inside a git hook or under `git rebase -x` an unscrubbed call
+    would resolve `--show-toplevel` to *that* repository — and `promote` would
+    then write its backlog into an unrelated checkout. `cli/overlay.py`
+    documents the same hazard for the same reason; this reuses its helper
+    rather than growing a second, subtly different one.
+    """
     try:
         proc = subprocess.run(
             ["git", *args],
@@ -228,6 +246,7 @@ def _git(cwd: Path, *args: str) -> tuple[int, str]:
             capture_output=True,
             text=True,
             timeout=_GIT_TIMEOUT_SEC,
+            env=git_env(),
         )
     except (OSError, subprocess.SubprocessError):
         return _GIT_DID_NOT_RUN, ""
@@ -252,7 +271,15 @@ def resolve_checkout(source_dir: Path | None = None) -> Path | None:
     rc, out = _git(base, "rev-parse", "--show-toplevel")
     if rc != 0 or not out:
         return None
-    return Path(out)
+    top = Path(out)
+    # Being *a* work tree is not enough; it has to be the flow one. A release
+    # install whose ~/.flow/source sits inside some other repository — a
+    # dotfiles checkout that happens to contain $HOME, most plausibly — would
+    # otherwise resolve to that repository, and a `docs/backlog.md` there would
+    # be edited. `cli/flow.py` is the cheapest thing only this repo has.
+    if not (top / "cli" / "flow.py").exists():
+        return None
+    return top
 
 
 # ---------------------------------------------------------------------------
@@ -260,19 +287,40 @@ def resolve_checkout(source_dir: Path | None = None) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
+def _flatten(text: str) -> str:
+    """One line, with nothing that can be read as Markdown structure.
+
+    A summary is free text written during an archive, and it lands in a
+    document whose headings this module parses. A summary containing a line
+    beginning `## Deferred / Watch` would make every later promotion fail with
+    "appears 2 times" — a self-inflicted denial of the feature. Leading hashes
+    go, newlines collapse.
+    """
+    flat = " ".join(text.split())
+    return flat.lstrip("#").strip()
+
+
 def backlog_entry(entry: dict) -> str:
-    """The Markdown block a promoted gap becomes."""
-    title = entry["key"].replace("-", " ").replace("_", " ").strip().title()
-    lines = [f"### {title}", ""]
+    """The Markdown block a promoted gap becomes.
+
+    **Provenance is deliberately omitted.** The ledger records which project
+    and which run observed each gap; the backlog gets the count and nothing
+    else. The two files do not have the same audience: the ledger is personal
+    and private, while `docs/backlog.md` lives in the flow repository, which
+    may well be public. A gap is a statement about what the framework lacked,
+    and it stays useful without naming where the work happened — so the
+    identifying half never leaves the private side.
+    """
+    title = _flatten(entry["key"].replace("-", " ").replace("_", " ")).title()
+    lines = [f"### {title or 'Untitled Gap'}", ""]
     times = "once" if entry["count"] == 1 else f"{entry['count']} times"
     lines.append(f"Status: observed {times}, promoted from the capability-gap ledger")
     lines.append("")
     for summary in entry["summaries"]:
-        lines.append(summary)
-        lines.append("")
-    seen = ", ".join(f"{s['project']} ({s['run']})" for s in entry["sightings"])
-    lines.append(f"Seen in: {seen}")
-    lines.append("")
+        flat = _flatten(summary)
+        if flat:
+            lines.append(flat)
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -315,8 +363,8 @@ def promote(
     """Write one gap into the backlog and record that it happened.
 
     Never commits and never pushes. Publishing is the engineer's decision and
-    is made separately from the decision to promote — the tool stops at a dirty
-    working tree on purpose.
+    is made separately from the decision to promote, so this deliberately stops
+    having left the working tree dirty.
     """
     events, skipped = read_events(ledger_path)
     grouped = {entry["key"]: entry for entry in group_gaps(events)}
@@ -358,8 +406,24 @@ def promote(
     # while the backlog never received it, and nothing would ever surface the
     # gap again.
     tmp = backlog.with_suffix(backlog.suffix + ".tmp")
-    tmp.write_text(updated, encoding="utf-8")
-    tmp.replace(backlog)
+    try:
+        tmp.write_text(updated, encoding="utf-8")
+        tmp.replace(backlog)
+    except OSError as exc:
+        # A half-written temp file must not survive: it would hold the whole
+        # backlog plus the new entry, untracked and unignored, inside the repo.
+        # And a failed write is the one case where handing back the paste block
+        # matters most, so it takes the same path as every other refusal rather
+        # than escaping as a traceback.
+        tmp.unlink(missing_ok=True)
+        return {
+            "status": "write-failed",
+            "key": key,
+            "block": block,
+            "path": str(backlog),
+            "reason": str(exc),
+            "skipped": skipped,
+        }
 
     append_event(
         ledger_path,
@@ -413,12 +477,15 @@ def render_list(entries: list[dict], skipped: int, ledger_path: Path) -> str:
 
 def cmd_add(args) -> int:
     path = Path(args.ledger) if args.ledger else default_ledger_path()
+    # Stripped at the boundary: a trailing space makes "a-key " a second
+    # lineage that renders identically to "a-key" in every view, and defeats
+    # the (key, run) idempotency while looking like it worked.
     result = add_gap(
         path,
-        key=args.key,
+        key=args.key.strip(),
         summary=args.summary,
-        project=args.project,
-        run=args.run,
+        project=args.project.strip(),
+        run=args.run.strip(),
         at=args.at or _now(),
     )
     if result["status"] == "duplicate":
@@ -449,11 +516,16 @@ def cmd_list(args) -> int:
 
 def cmd_promote(args) -> int:
     path = Path(args.ledger) if args.ledger else default_ledger_path()
-    result = promote(path, key=args.key, at=args.at or _now())
+    result = promote(path, key=args.key.strip(), at=args.at or _now())
     status = result["status"]
+    if result.get("skipped"):
+        print(f"warning: {result['skipped']} unreadable ledger line(s) skipped")
 
     if status == "promoted":
         print(f"promoted {result['key']} into {result['path']}")
+        print("the entry carries the gap and its count, not the project or run")
+        print("check the diff before publishing: the backlog may not be as private")
+        print("as the ledger it came from")
         print("not committed and not pushed — both are yours to make")
         return 0
     if status == "unknown-key":
@@ -469,7 +541,9 @@ def cmd_promote(args) -> int:
         print(result["block"])
         return 0
 
-    print(f"cannot write the backlog: {result.get('reason', status)}")
+    where = result.get("path")
+    detail = result.get("reason") or status
+    print(f"cannot write the backlog{f' at {where}' if where else ''}: {detail}")
     print("Paste this in yourself:")
     print("")
     print(result["block"])

@@ -61,6 +61,8 @@ The archive command does not replace review. It packages the accepted outcome.
    flow gaps add --key <slug> --summary "<what was missing>" --project <project> --run <work-id>
    ```
 
+   **Write the summary about the framework, never about the work.** The ledger is committed and pushed, and a promoted entry goes into the flow repository, which does not share the ledger's audience. Say what flow was missing — "no template for symptom-first operational docs" — not what the run contained. No customer or client names, no internal system or project codenames, no quoted file content, error text, identifiers, paths, or anything pasted from configuration. A gap is a statement about the framework and stays useful without any of that.
+
    **Tell the engineer when a gap is a repeat**, and say how many times it has now been seen. A gap recurring after it was already noticed is a different fact from a gap seen once, and it is the fact worth acting on. Offer to promote it into the backlog with `flow gaps promote --key <slug>` — and do not run that until they say yes. Promotion writes a file; committing and pushing it are separate decisions that are theirs alone, so ask for those separately and never do them as a side effect.
 
    If `flow` is unavailable, record the gaps in the output section as before and say the ledger was not updated.

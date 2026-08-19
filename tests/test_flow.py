@@ -8931,6 +8931,10 @@ class CapabilityGapLedgerTests(unittest.TestCase):
         (repo / "docs" / "backlog.md").write_text(
             self.BACKLOG if backlog is None else backlog
         )
+        # The sentinel resolve_checkout looks for. Being a git work tree is not
+        # enough to be *the flow* work tree.
+        (repo / "cli").mkdir()
+        (repo / "cli" / "flow.py").write_text("")
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
         return repo
 
@@ -9029,6 +9033,93 @@ class CapabilityGapLedgerTests(unittest.TestCase):
             "ranking is the maintainer's call; promotion must not claim a position",
         )
 
+    def test_promoted_entry_carries_no_project_or_run(self):
+        """The ledger is private; the backlog is not necessarily.
+
+        `docs/backlog.md` lives in the flow repository, which is public, while
+        the ledger sits in a private overlay. The count is the useful half of a
+        gap and the provenance is the identifying half, so only the count
+        crosses over.
+        """
+        self._observe("a", "run-alpha", project="path-nexus", summary="No template existed.")
+        self._observe("a", "run-beta", project="acme-migration", at=self.AT_B)
+        repo = self._checkout()
+        self.gaps.promote(self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo)
+        text = (repo / "docs" / "backlog.md").read_text()
+        self.assertIn("observed 2 times", text, "the count is what makes a repeat actionable")
+        for leaked in ("path-nexus", "acme-migration", "run-alpha", "run-beta"):
+            self.assertNotIn(leaked, text, f"{leaked} must not reach the backlog")
+
+    def test_a_summary_cannot_forge_a_heading(self):
+        """A summary that looks like Markdown structure must not become it.
+
+        A summary containing the anchor heading would make every later
+        promotion fail as ambiguous — a self-inflicted denial of the feature.
+        """
+        self._observe(
+            "a",
+            "run-1",
+            summary="Broke because\n## Deferred / Watch\nwas emitted verbatim.",
+        )
+        repo = self._checkout()
+        self.gaps.promote(self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo)
+        text = (repo / "docs" / "backlog.md").read_text()
+        # The invariant is line-level, because that is what the parser matches
+        # on: the anchor must occur as its own line exactly once. Flattening the
+        # summary to a single line is what guarantees it — the words may still
+        # appear, but never as a heading.
+        anchor_lines = [l for l in text.splitlines() if l.strip() == "## Deferred / Watch"]
+        self.assertEqual(
+            len(anchor_lines),
+            1,
+            "a forged anchor line would break every subsequent promotion",
+        )
+        self._observe("b", "run-2", at=self.AT_B)
+        second = self.gaps.promote(
+            self.ledger, key="b", at="2026-08-20T00:00:00+00:00", source_dir=repo
+        )
+        self.assertEqual(second["status"], "promoted", "the document must stay parseable")
+
+    def test_git_is_run_with_the_ambient_overrides_stripped(self):
+        """GIT_DIR would redirect the write target to an unrelated repository.
+
+        Reached inside a git hook or under `git rebase -x`, an unscrubbed call
+        resolves --show-toplevel to whatever GIT_DIR names, and promote would
+        write its backlog there.
+        """
+        repo = self._checkout()
+        elsewhere = self._checkout(name="elsewhere")
+
+        # GIT_WORK_TREE is the one that actually moves `--show-toplevel`;
+        # GIT_DIR alone leaves cwd as the work tree, so setting only that
+        # produced a test which passed against an unscrubbed call and proved
+        # nothing. Both are set here, and both are on the stripped list.
+        overrides = {
+            "GIT_DIR": str(elsewhere / ".git"),
+            "GIT_WORK_TREE": str(elsewhere),
+        }
+        saved = {k: os.environ.get(k) for k in overrides}
+        os.environ.update(overrides)
+        try:
+            resolved = self.gaps.resolve_checkout(repo)
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertEqual(
+            resolved,
+            repo.resolve(),
+            "cwd must win; ambient git env must not choose the repository",
+        )
+        self.assertNotEqual(
+            resolved,
+            elsewhere.resolve(),
+            "promote would have written its backlog into an unrelated checkout",
+        )
+
     def test_promotion_is_a_second_event_not_a_mutated_record(self):
         self._observe("a", "run-1")
         repo = self._checkout()
@@ -9121,7 +9212,8 @@ class CapabilityGapLedgerTests(unittest.TestCase):
     def test_missing_backlog_file_is_refused_and_hands_back_the_entry(self):
         self._observe("a", "run-1")
         repo = self.tmp / "repo4"
-        repo.mkdir()
+        (repo / "cli").mkdir(parents=True)
+        (repo / "cli" / "flow.py").write_text("")
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
         result = self.gaps.promote(
             self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo
@@ -9143,21 +9235,123 @@ class CapabilityGapLedgerTests(unittest.TestCase):
 
     # -- the tool never publishes ---------------------------------------
 
-    def test_the_module_never_commits_or_pushes(self):
+    def test_promoting_issues_no_mutating_git_command(self):
         """Publishing is the engineer's decision, made separately from promoting.
 
-        Matches the quoted git subcommand a call would have to pass, not the
-        bare word: the module deliberately *says* "not committed and not
-        pushed", and a substring search would fail on that reassurance while
-        proving nothing about behaviour.
+        Observes the calls rather than grepping the source. A text search was
+        the first attempt and it was wrong twice over: it matched the module's
+        own reassurance string "not committed and not pushed", and it would
+        still have passed against a subcommand assembled from a variable.
         """
-        source = (REPO_ROOT / "cli" / "gaps.py").read_text()
-        for subcommand in ('"push"', '"commit"', '"add"'):
-            self.assertNotIn(
-                subcommand,
-                source,
-                f"gaps.py must never invoke git {subcommand}",
+        self._observe("a", "run-1")
+        repo = self._checkout()
+        seen = []
+        real_run = self.gaps.subprocess.run
+
+        def spy(cmd, *a, **kw):
+            seen.append(list(cmd))
+            return real_run(cmd, *a, **kw)
+
+        self.gaps.subprocess.run = spy
+        try:
+            result = self.gaps.promote(
+                self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo
             )
+        finally:
+            self.gaps.subprocess.run = real_run
+
+        self.assertEqual(result["status"], "promoted")
+        self.assertTrue(seen, "promote must actually consult git")
+        for cmd in seen:
+            self.assertEqual(cmd[0], "git")
+            self.assertNotIn(
+                cmd[1],
+                ("push", "commit", "add", "checkout", "reset"),
+                f"promote issued a mutating git command: {cmd}",
+            )
+
+    def test_a_git_work_tree_that_is_not_flow_is_rejected(self):
+        """Being a repository is not enough to be the flow repository.
+
+        A ~/.flow/source sitting inside an unrelated checkout — a dotfiles repo
+        containing $HOME is the plausible case — would otherwise resolve there,
+        and a docs/backlog.md in it would be edited.
+        """
+        stranger = self.tmp / "stranger"
+        (stranger / "docs").mkdir(parents=True)
+        (stranger / "docs" / "backlog.md").write_text(self.BACKLOG)
+        subprocess.run(["git", "init", "-q"], cwd=stranger, check=True)
+
+        self.assertIsNone(self.gaps.resolve_checkout(stranger))
+
+        self._observe("a", "run-1")
+        result = self.gaps.promote(
+            self.ledger, key="a", at=self.AT_PROMOTE, source_dir=stranger
+        )
+        self.assertEqual(result["status"], "no-checkout")
+        self.assertEqual(
+            (stranger / "docs" / "backlog.md").read_text(),
+            self.BACKLOG,
+            "byte-identical: an unrelated repo's backlog must be untouched",
+        )
+
+    # -- the CLI layer, through argparse ---------------------------------
+
+    def _flow(self, *args):
+        return subprocess.run(
+            [sys.executable, str(FLOW_CLI), *args],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_add_and_list_work_through_the_real_entrypoint(self):
+        """Exercises dispatch, not just the pure functions.
+
+        Without this the three dispatch lines in flow.py could be deleted and
+        the suite would stay green while `flow gaps add` silently returned 1.
+        """
+        ledger = str(self.ledger)
+        first = self._flow(
+            "gaps", "add", "--key", "a-gap", "--summary", "no template existed",
+            "--project", "proj", "--run", "run-1", "--at", self.AT_A,
+            "--ledger", ledger,
+        )
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("recorded", first.stdout)
+
+        repeat = self._flow(
+            "gaps", "add", "--key", "a-gap", "--summary", "again",
+            "--project", "other", "--run", "run-2", "--at", self.AT_B,
+            "--ledger", ledger,
+        )
+        self.assertEqual(repeat.returncode, 0, repeat.stderr)
+        self.assertIn("2 times", repeat.stdout, "a repeat must announce itself")
+
+        listed = self._flow("gaps", "list", "--json", "--ledger", ledger)
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        payload = json.loads(listed.stdout)
+        self.assertEqual(payload["entries"][0]["key"], "a-gap")
+        self.assertEqual(payload["entries"][0]["count"], 2)
+
+    def test_a_key_with_stray_whitespace_does_not_start_a_second_lineage(self):
+        ledger = str(self.ledger)
+        self._flow(
+            "gaps", "add", "--key", "a-gap", "--summary", "s",
+            "--project", "p", "--run", "run-1", "--at", self.AT_A,
+            "--ledger", ledger,
+        )
+        self._flow(
+            "gaps", "add", "--key", "  a-gap  ", "--summary", "s",
+            "--project", "p", "--run", "run-2", "--at", self.AT_B,
+            "--ledger", ledger,
+        )
+        entries = self.gaps.group_gaps(self.gaps.read_events(self.ledger)[0])
+        self.assertEqual(
+            len(entries),
+            1,
+            "a padded key renders identically everywhere; it must not fork the count",
+        )
+        self.assertEqual(entries[0]["count"], 2)
 
     def test_cli_registers_the_three_verbs(self):
         result = subprocess.run(
