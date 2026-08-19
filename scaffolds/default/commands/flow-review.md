@@ -61,6 +61,8 @@ Review should check:
 
 ## Review Workflow
 
+**Every brief carries an evidence inventory** — what already exists in the area under review, with paths. Without it a reviewer cannot tell absent from unfound, and "X is missing" is an unsupported finding. See `standards/evidence.md`; `templates/adversarial-review.md` has the block.
+
 1. Read the plan or requirements.
 2. Read the implementation and changed tests.
 3. Compare implementation to:

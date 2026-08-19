@@ -132,6 +132,8 @@ Use `templates/research-note.md`. Research is complete only when each finding ha
 
 Before requirements can be approved, the roles challenge the draft from their accountable perspectives.
 
+**Every brief carries an evidence inventory** — what already exists in the area under review, with paths. Without it a reviewer cannot tell absent from unfound, and "X is missing" is an unsupported finding. See `standards/evidence.md`; `templates/adversarial-review.md` has the block.
+
 - `product-manager`: Is the outcome worth doing now? Is the scope too broad? Are non-goals honest?
 - `business-analyst`: Are users, workflows, acceptance criteria, and edge cases clear enough?
 - `solution-architect`: Are capability boundaries, standards, precedent, and feasibility assumptions sound?

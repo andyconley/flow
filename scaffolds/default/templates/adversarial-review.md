@@ -4,6 +4,16 @@
 - Reviewer roles:
 - Status: Draft | Dispositioned
 
+## Evidence inventory
+
+Required before findings. An empty block does not support a finding of the form
+"X is missing" — see `standards/evidence.md`.
+
+- Already exists (path or line each):
+- Partially covered, and by what:
+- Checked and genuinely absent:
+- How this was searched:
+
 ## Product challenge
 
 - Question:

@@ -102,6 +102,7 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 
 - run structured review with the right roles
 - capture findings and dispositions
+- **Every brief carries an evidence inventory** — what already exists in the area under review, with paths. Without it a reviewer cannot tell absent from unfound, and "X is missing" is an unsupported finding. See `standards/evidence.md`; `templates/adversarial-review.md` has the block.
 
 ### 6. Validation
 
@@ -133,7 +134,7 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 - Handback:
 
 ### Roles Engaged
-- [Role and why]
+- [Role] - ran | absorbed by orchestrator | skipped - [why the role, and for absorbed/skipped, why that happened]
 
 ### Change Surface
 - [Files/modules changed]
