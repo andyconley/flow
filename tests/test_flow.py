@@ -12,6 +12,37 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_CLI = REPO_ROOT / "cli" / "flow.py"
+
+
+def load_cli_module(name: str):
+    """Import a cli/ module directly, leaving sys.path and sys.modules as found.
+
+    cli/ modules import each other by bare name, which only resolves with cli/
+    on sys.path. flow.py arranges that for itself at import time; a direct load
+    does not, so this does it — and then puts everything back.
+
+    Restoring sys.modules matters as much as sys.path. Loading these binds
+    generic top-level names (`paths`, `setup`, `sync`, `render`) in the test
+    process, where they would shadow any same-named module a later import
+    wanted.
+    """
+    import importlib.util
+
+    cli_dir = str(REPO_ROOT / "cli")
+    saved_modules = dict(sys.modules)
+    sys.path.insert(0, cli_dir)
+    try:
+        spec = importlib.util.spec_from_file_location(
+            f"flow_cli_{name}_under_test", REPO_ROOT / "cli" / f"{name}.py"
+        )
+        module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        assert spec and spec.loader
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        return module
+    finally:
+        sys.path.remove(cli_dir)
+        for added in set(sys.modules) - set(saved_modules):
+            del sys.modules[added]
 INSTALL_SCRIPT = REPO_ROOT / "install-flow.sh"
 BOOTSTRAP_INSTALL_SCRIPT = REPO_ROOT / "install.sh"
 
@@ -1726,34 +1757,13 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(status["state"], usage_store.STATE_EMPTY)
 
     def _load_cli_module(self, name: str):
-        """Import a cli/ module directly, leaving sys.path and sys.modules as found.
+        """Delegate to the module-level loader.
 
-        cli/ modules import each other by bare name, which only resolves with
-        cli/ on sys.path. flow.py arranges that for itself at import time; a
-        direct load does not, so this does it — and then puts everything back.
-
-        Restoring sys.modules matters as much as sys.path. Loading these binds
-        generic top-level names (`paths`, `setup`, `sync`, `render`) in the test
-        process, where they would shadow any same-named module a later import
-        wanted. Two tests already load modules this way and more will.
+        Kept as a method because call sites throughout this class use it that
+        way; the body moved out so classes that do not subclass this one can
+        load cli/ modules without inheriting its whole suite.
         """
-        import importlib.util
-
-        cli_dir = str(REPO_ROOT / "cli")
-        saved_modules = dict(sys.modules)
-        sys.path.insert(0, cli_dir)
-        try:
-            spec = importlib.util.spec_from_file_location(
-                f"flow_cli_{name}_under_test", REPO_ROOT / "cli" / f"{name}.py"
-            )
-            module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-            assert spec and spec.loader
-            spec.loader.exec_module(module)  # type: ignore[union-attr]
-            return module
-        finally:
-            sys.path.remove(cli_dir)
-            for added in set(sys.modules) - set(saved_modules):
-                del sys.modules[added]
+        return load_cli_module(name)
 
     def test_release_staging_requires_cli_siblings(self) -> None:
         """A release shipping the launcher without its siblings installs then breaks."""
@@ -8744,3 +8754,141 @@ class PluginUsageTests(unittest.TestCase):
         self.observe(self.home / ".claude.json")
         out = self.pu.render_usage_section(self.payload())
         self.assertIn("~1 installed skills never invoked", out)
+
+
+class RepoRootFlowHomeTests(unittest.TestCase):
+    """`~/.flow` is flow's own home, not a project overlay.
+
+    Before the guard, any directory under $HOME that was not itself a repo
+    walked up, matched flow home's `.flow`, and reported $HOME as its project
+    root. `flow doctor` then printed a project section whose manifest was
+    missing and whose sync checks had been skipped — indistinguishable, in the
+    output, from a genuinely broken project.
+    """
+
+    def _repo_root_from(self, home: Path, cwd: Path) -> Path:
+        """Call the real `repo_root` with HOME and the working directory faked.
+
+        Both are read at call time rather than import time, so patching the
+        environment around the call is enough; no reload is needed.
+        """
+        fsutil = load_cli_module("fsutil")
+        saved_cwd = Path.cwd()
+        saved_home = os.environ.get("HOME")
+        os.environ["HOME"] = str(home)
+        os.chdir(cwd)
+        try:
+            return fsutil.repo_root()
+        finally:
+            os.chdir(saved_cwd)
+            if saved_home is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = saved_home
+
+    def _isolated_home(self) -> Path:
+        """A HOME with no `.git` anywhere above it.
+
+        `self.repo` carries a `.git` from setUp, which would satisfy the walk
+        before it ever reached the case under test.
+        """
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        home = Path(tmp.name).resolve() / "home"
+        (home / ".flow").mkdir(parents=True)
+        return home
+
+    def test_flow_home_is_not_mistaken_for_a_project_overlay(self) -> None:
+        home = self._isolated_home()
+        work = home / "notes"
+        work.mkdir()
+
+        self.assertEqual(
+            self._repo_root_from(home, work),
+            work,
+            "a plain directory under $HOME has no project root; falling back to "
+            "the working directory is the honest answer, and claiming $HOME is not",
+        )
+
+    def test_a_real_project_overlay_under_home_is_still_found(self) -> None:
+        """The guard must exclude one specific path, not `.flow` in general."""
+        home = self._isolated_home()
+        project = home / "code" / "thing"
+        (project / ".flow").mkdir(parents=True)
+        nested = project / "src"
+        nested.mkdir()
+
+        self.assertEqual(self._repo_root_from(home, nested), project)
+
+    def test_a_git_root_under_home_is_still_found(self) -> None:
+        home = self._isolated_home()
+        project = home / "code" / "repo"
+        (project / ".git").mkdir(parents=True)
+        nested = project / "src"
+        nested.mkdir()
+
+        self.assertEqual(self._repo_root_from(home, nested), project)
+
+    def test_a_project_overlay_at_home_itself_is_shadowed(self) -> None:
+        """Known and accepted: $HOME cannot also be a flow project, because the
+        two would need the same `.flow` directory for different purposes. The
+        walk continues past it rather than claiming it."""
+        home = self._isolated_home()
+        (home / ".flow" / "flow.toml").write_text("# would be a project manifest\n")
+        work = home / "x"
+        work.mkdir()
+
+        self.assertEqual(self._repo_root_from(home, work), work)
+
+    def test_guard_holds_when_home_is_reached_through_a_symlink(self) -> None:
+        """Covers the `.resolve()` in `_flow_home`.
+
+        macOS hands out temporary directories under `/var`, a symlink to
+        `/private/var`, so HOME and a resolved working directory routinely spell
+        the same place differently. Comparing unresolved makes the guard match
+        nothing while still looking present in the source.
+        """
+        home = self._isolated_home()
+        link = home.parent / "home-by-another-name"
+        link.symlink_to(home)
+        work = home / "notes"
+        work.mkdir()
+
+        self.assertEqual(
+            self._repo_root_from(link, work),
+            work,
+            "flow home reached through a symlink is still flow home",
+        )
+
+    def test_fsutil_flow_home_matches_paths_flow_home(self) -> None:
+        """Pin the two derivations together.
+
+        `fsutil` computes `~/.flow` itself rather than importing `FLOW_HOME`, to
+        stay a stdlib-only leaf. That duplication is only safe while the two
+        agree, so assert it instead of trusting it.
+        """
+        fsutil = load_cli_module("fsutil")
+        paths = load_cli_module("paths")
+        self.assertEqual(fsutil._flow_home().resolve(), paths.FLOW_HOME.resolve())
+
+    def test_doctor_from_home_reports_not_a_project(self) -> None:
+        """The reported symptom, end to end."""
+        home = self._isolated_home()
+        (home / ".flow" / "source").symlink_to(REPO_ROOT)
+
+        result = subprocess.run(
+            [sys.executable, str(FLOW_CLI), "doctor"],
+            cwd=home,
+            text=True,
+            capture_output=True,
+            env=_clean_env(home),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("not a flow project", result.stdout)
+        self.assertNotIn(
+            "repo .flow:",
+            result.stdout,
+            "the project section is what made 'not a project' look like a broken one",
+        )
+        self.assertNotIn("manifest:         missing", result.stdout)

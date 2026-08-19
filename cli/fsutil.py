@@ -15,10 +15,36 @@ import shutil
 from pathlib import Path
 
 
+def _flow_home() -> Path:
+    """`~/.flow` — flow's own home, which is not a project overlay.
+
+    Derived here instead of imported from `paths.FLOW_HOME` so this module stays
+    a stdlib-only leaf (see the module docstring). A test pins the two
+    derivations together so they cannot drift apart.
+
+    Resolved because the comparison in `repo_root` is against a resolved path,
+    and on macOS a temporary or symlinked home reaches the same directory by two
+    different spellings. An unresolved comparison silently never matches, which
+    would leave the guard below looking present and doing nothing.
+    """
+    return Path.home().resolve() / ".flow"
+
+
 def repo_root() -> Path:
+    """The nearest enclosing project root, or the working directory.
+
+    `.flow` names two different things: a project's overlay, and flow's own home
+    at `~/.flow`. Only the first marks a project. Without the exclusion below,
+    any directory under $HOME that is not itself a repo walks up, matches flow
+    home, and reports $HOME as its project root — so commands that resolve paths
+    against the root operate on the home directory instead of failing to find a
+    project.
+    """
+    flow_home = _flow_home()
     cwd = Path.cwd().resolve()
     for path in [cwd, *cwd.parents]:
-        if (path / ".flow").exists() or (path / ".git").exists():
+        overlay = path / ".flow"
+        if (overlay.exists() and overlay != flow_home) or (path / ".git").exists():
             return path
     return cwd
 

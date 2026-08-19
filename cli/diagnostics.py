@@ -78,7 +78,15 @@ def print_smoke_test_hint(label: str) -> None:
 def doctor() -> int:
     root = repo_root()
     flow_dir = root / ".flow"
-    project_manifest_ok = (flow_dir / "flow.toml").exists()
+    # Run from $HOME, `repo_root` finds no project and falls back to the working
+    # directory, so `flow_dir` becomes flow's own home. Reporting that as a
+    # project overlay turns "you are not in a project" into a project whose
+    # manifest is missing and whose sync checks never ran -- twelve lines that
+    # read as a broken install. Resolved on both sides because `root` is
+    # resolved and `FLOW_HOME` is not.
+    root_is_flow_home = flow_dir.resolve() == FLOW_HOME.resolve()
+    project_overlay_ok = flow_dir.exists() and not root_is_flow_home
+    project_manifest_ok = project_overlay_ok and (flow_dir / "flow.toml").exists()
     skills_dir = root / ".claude" / "skills"
     agents_dir = root / ".claude" / "agents"
     claude_managed_ok = False
@@ -203,7 +211,14 @@ def doctor() -> int:
     print(f"  vcs:            {format_overlay_vcs(overlay_vcs_status(USER_OVERLAY_DIR))}")
     print()
     print(f"-- project: {root} --")
-    print(f"repo .flow:       {'ok' if flow_dir.exists() else 'missing'}")
+    if root_is_flow_home:
+        # One accurate line instead of twelve misleading ones.
+        print("not a flow project: that .flow is flow's own home, not a project overlay")
+        print("                  run doctor from inside a repo to check a project")
+        print()
+        print(_usage_section())
+        return 0
+    print(f"repo .flow:       {'ok' if project_overlay_ok else 'missing'}")
     print(f"manifest:         {'ok' if project_manifest_ok else 'missing'}")
     print(f"claude sync:      {'ok' if claude_managed_ok else 'missing'}")
     print(f"claude drift:     {claude_drift}")
@@ -282,6 +297,12 @@ def help_command() -> int:
 def bootstrap() -> int:
     root = repo_root()
     flow_dir = root / ".flow"
+    # Same confusion doctor guards against: from $HOME this is flow's own home,
+    # and without the check bootstrap walks into it and reports the framework
+    # files it will never contain as missing from a project that does not exist.
+    if flow_dir.resolve() == FLOW_HOME.resolve():
+        print("not inside a flow project; run `flow setup project` in a repo")
+        return 1
     if not flow_dir.exists():
         print("repo is missing .flow; run `flow setup project` first")
         return 1
