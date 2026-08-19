@@ -2,6 +2,20 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.13.1](https://github.com/andyconley/flow/compare/v0.13.0...v0.13.1) (2026-08-19)
+
+### Bug Fixes
+
+* **release:** pin conventionalcommits preset to a renderable major ([15344d8](https://github.com/andyconley/flow/commit/15344d80c27ae122a03362a32b1334195d49793a))
+
+### Documentation
+
+* **changelog:** restore the notes 0.12.0 and 0.13.0 never got ([dc02abe](https://github.com/andyconley/flow/commit/dc02abe32aafebdfe0d69bffc3b3ef9fd2479543))
+
+### Continuous Integration
+
+* **release:** fail the build when a release describes nothing ([c499a22](https://github.com/andyconley/flow/commit/c499a2220c7fb2349af56ded1dbc0f8135a0f1c3))
+
 ## [0.13.0](https://github.com/andyconley/flow/compare/v0.12.0...v0.13.0) (2026-08-19)
 
 ### Features
