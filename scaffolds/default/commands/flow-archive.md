@@ -54,6 +54,16 @@ The archive command does not replace review. It packages the accepted outcome.
    - runtime or deploy checks
 4. Record residual risks, follow-ups, and deferred work.
 5. **Record capability gaps observed during the run** — what the *framework* was missing, as distinct from what the work left undone. Look for: steps you carried out by hand that a command or skill should have done, a standard whose absence caused rework, an agent role that would have fit and does not exist, and artifacts you wanted a template for. This is the only point in the phase machine where the run is fresh enough to notice and finished enough to judge. If nothing was missing, say so explicitly — an omitted section reads as "not considered."
+
+   **Read the ledger before you write to it.** Run `flow gaps list` and compare what you observed against the existing keys. Reuse a key when the gap is the same gap — that reuse is the only thing that makes a repeat countable, and a new key for an old problem silently starts a second lineage. Then record each gap:
+
+   ```
+   flow gaps add --key <slug> --summary "<what was missing>" --project <project> --run <work-id>
+   ```
+
+   **Tell the engineer when a gap is a repeat**, and say how many times it has now been seen. A gap recurring after it was already noticed is a different fact from a gap seen once, and it is the fact worth acting on. Offer to promote it into the backlog with `flow gaps promote --key <slug>` — and do not run that until they say yes. Promotion writes a file; committing and pushing it are separate decisions that are theirs alone, so ask for those separately and never do them as a side effect.
+
+   If `flow` is unavailable, record the gaps in the output section as before and say the ledger was not updated.
 6. **Update transient work state** in `.flow/memory/STATE.md` at the **most-specific stacked overlay** (e.g., when archiving in path-nexus, writes go to `~/KB/repos/path-nexus/.flow/memory/STATE.md`, not the workspace's). STATE.md should reflect what is now in flight, blocked, or pending — not durable facts.
 7. **Record durable decisions in auto-memory** at `~/.claude/projects/<project-id>/memory/`. For each cross-cutting decision worth remembering across sessions, write a structured memory file with frontmatter (`type: project`) and add a one-line entry to `MEMORY.md`. See your global CLAUDE.md auto-memory instructions for the exact format. Do NOT write decisions to `.flow/memory/` — that surface no longer exists.
 8. If the work materially affects a parent overlay's state, surface that in the archive output so it can be picked up in a separate parent-level archive.
@@ -87,6 +97,8 @@ The archive command does not replace review. It packages the accepted outcome.
 - [Standard whose absence caused rework]
 - [Agent role that would have fit and does not exist]
 - [Artifact that wanted a template]
+- Ledger: (always present; the key recorded for each gap and whether it was new or a reuse, or "not updated" and why)
+- Repeats: (always present; any key now seen more than once, with its count, or "none")
 
 ### Memory Updates
 - STATE (`.flow/memory/STATE.md`): (always present; describe the transient work-state change, or "n/a — work state unchanged")
@@ -119,6 +131,10 @@ Before leaving `flow-archive`, confirm:
 - [ ] validation status is explicit
 - [ ] residual risks and follow-up work are explicit
 - [ ] capability gaps are recorded (or explicitly marked "none observed")
+- [ ] the ledger was read before it was written, and existing keys were reused where the gap was the same gap
+- [ ] each gap was appended with `flow gaps add` (or the ledger was explicitly reported as not updated)
+- [ ] any repeat was surfaced to the engineer with its count, and promotion was offered rather than performed
+- [ ] nothing was committed or pushed without being asked for separately
 - [ ] STATE.md was updated (or explicitly marked "n/a")
 - [ ] durable decisions were written to auto-memory (or explicitly marked "n/a — no durable decisions recorded")
 - [ ] writes went to the most-specific overlay; parent-overlay implications surfaced if applicable

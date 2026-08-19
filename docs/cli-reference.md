@@ -477,6 +477,56 @@ Flags:
 
 History cannot be backfilled — the harness keeps none — so this reports only what flow has observed since it started looking, and the header says how many snapshots that is. Read-only; measures this machine only.
 
+### `flow gaps add`
+
+Records one capability gap observed during a run. Run by `flow-archive`, not usually typed by hand.
+
+Flags:
+
+- `--key` — short slug identifying the gap; **reuse an existing key to mark a repeat**
+- `--summary` — what the framework was missing
+- `--project` — the project the run belonged to
+- `--run` — the work id of the run that observed it
+- `--at` — ISO timestamp, defaults to now
+- `--ledger` — ledger path, defaults to `~/.flow/user/capability-gaps.jsonl`
+
+**Repeats are detected by the key you supply, never by matching text.** Gap descriptions are free prose, so exact matching would never fire and fuzzy matching is a guess dressed as a measurement. The agent reads the existing keys with `flow gaps list` and reuses one when the new gap is the same gap. Counting stays exact and the judgment stays with the reader — but nothing enforces the discipline, and a careless key silently starts a second lineage for one problem.
+
+**Idempotent on `(key, run)`.** The same key twice in one run is a re-run of the archive, not a recurrence. Inflating the count there would make the one number this surface exists to produce untrustworthy.
+
+### `flow gaps list`
+
+Groups recorded observations by key, most-observed first, with each sighting's project and run.
+
+Flags:
+
+- `--json` — the payload instead of the rendered table
+- `--ledger` — ledger path
+
+A key with more than one sighting is a gap that recurred *after* being noticed. That is the signal the surface exists for: while observations sat in separate run artifacts, three sightings of one problem read as three unrelated notes.
+
+**A malformed line is skipped and counted, not fatal.** One bad line from a partial write must not make every recorded gap unreadable, and the skipped count is printed so the damage is visible rather than swallowed.
+
+### `flow gaps promote`
+
+Writes one gap into the flow repo's `docs/backlog.md`.
+
+Flags:
+
+- `--key` — the gap to promote
+- `--at` — ISO timestamp, defaults to now
+- `--ledger` — ledger path
+
+**Promoted entries land under `## Deferred / Watch`, never under `## Active Priorities`.** Active Priorities is an ordered list whose order is the maintainer's judgment; inserting into it — even at the end — is a ranking claim about an item that has had no triage.
+
+**Requires `~/.flow/source` to be a git work tree.** A release install copies the framework in and deletes the clone, so there is no backlog to write; there the command prints a paste-ready entry and exits 0. That is the ordinary outcome for most installs, not a fault. Membership is asked of git rather than inferred from a `.git` directory, because `~/.flow/source` is normally a symlink.
+
+**Never commits and never pushes.** Promoting and publishing are separate decisions, and the second is the engineer's alone. The command stops at a dirty working tree on purpose.
+
+**Promotion is recorded as a second event, not a flag on the first.** Rewriting a line mid-file is the only operation that can corrupt an append log, and a flag would discard when the promotion happened. Promoting twice is refused and leaves the backlog byte-identical.
+
+If the backlog is missing, or its anchor heading is absent or duplicated, the command refuses and hands back the entry rather than guessing where a section starts in a document someone has restructured.
+
 ### `flow overlay status`
 
 The `doctor` overlay line on its own, plus the remote, the upstream, and the uncommitted paths behind its counts.
