@@ -29,9 +29,18 @@ jobs:
       - uses: cycjimmy/semantic-release-action@v6
         with:
           semantic_version: 25.0.9
+          # conventionalcommits must stay on 9.x. Version 10 moved its
+          # templates to @conventional-changelog/template, which
+          # release-notes-generator cannot render -- it writes through
+          # conventional-changelog-writer@8. The mismatch does not fail the
+          # build: commit-analyzer still resolves the version correctly and
+          # generateNotes reports success, so the only symptom is a release
+          # whose notes are an empty header. That is how 0.12.0 and 0.13.0
+          # shipped blank. Do not bump this without rendering a release body
+          # first.
           extra_plugins: |
             @semantic-release/changelog@7.0.0
             @semantic-release/git@11.0.1
-            conventional-changelog-conventionalcommits@10.3.0
+            conventional-changelog-conventionalcommits@9.3.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
