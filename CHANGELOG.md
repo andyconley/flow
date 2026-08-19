@@ -4,7 +4,57 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ## [0.13.0](https://github.com/andyconley/flow/compare/v0.12.0...v0.13.0) (2026-08-19)
 
+### Features
+
+* **cli:** wire flow plugin-usage snapshot and show ([6b5c116](https://github.com/andyconley/flow/commit/6b5c116711ad6cfd3cd5de55e0ceeb7a8e9418b9))
+* **doctor:** render the usage section ([024dbe3](https://github.com/andyconley/flow/commit/024dbe3c100af670ef90c6e79ec20921fc58ef3c))
+* **harvest:** sample usage counters as a backstop ([d2c3d60](https://github.com/andyconley/flow/commit/d2c3d60984bcce8ac2c036a7ee05a36025fd6abf))
+* **hooks:** observe usage counters on SessionStart ([74c0a49](https://github.com/andyconley/flow/commit/74c0a49d4c65c6fe60d4f1eaea2acd26eb410cfc))
+* **plugin-usage:** add reader for Claude's on-disk configuration ([918505f](https://github.com/andyconley/flow/commit/918505f0bc6d54aa2f659dc434cd8017ec25e07e))
+* **plugin-usage:** add usage history capture and the doctor read model ([3ec1b1f](https://github.com/andyconley/flow/commit/3ec1b1fa47510e10f336dec7167d664d1bff042e))
+* **store:** add migration 6 for plugin and skill usage observations ([a3ea411](https://github.com/andyconley/flow/commit/a3ea411f6c19347fbd09b8facfed871ae1bec8ae))
+* **store:** declare plugin_usage_counters capability ([097b15a](https://github.com/andyconley/flow/commit/097b15ad2febe489ddcf60d12c74232ed87fd407))
+
+### Bug Fixes
+
+* **plugin-usage:** close review findings on misleading output ([ae136da](https://github.com/andyconley/flow/commit/ae136da402bcb339b017d50db8d9787f1f1f0318))
+
+### Documentation
+
+* **plugin-usage:** reference sections, design record, and README note ([bbe0e96](https://github.com/andyconley/flow/commit/bbe0e963dc1cb33b0124256b6b42ccf5d35938d2))
+
+### Tests
+
+* **plugin-usage:** prove the write path, read model, and rendering ([8617eb9](https://github.com/andyconley/flow/commit/8617eb9f4bcddf45ca1ff2d9bb3dda2f48c0ea2f))
+
 ## [0.12.0](https://github.com/andyconley/flow/compare/v0.11.1...v0.12.0) (2026-08-17)
+
+### Features
+
+* **baseline:** estimate the always-on token floor from turn-1 cache reads ([498113d](https://github.com/andyconley/flow/commit/498113d94c9599f2501255dd4df79e7b4fd3ef4c))
+* **cost:** add flow cost baseline ([a94ba73](https://github.com/andyconley/flow/commit/a94ba73d6bc7e8ccf284f797964b12f8e709e923))
+
+### Bug Fixes
+
+* **baseline:** detect changes within a series, not across grouped rows ([7a4be49](https://github.com/andyconley/flow/commit/7a4be49d127a7cdb6c38d3df34c960f5147046f6))
+
+### Documentation
+
+* record the cost baseline design and reference ([90e8d8d](https://github.com/andyconley/flow/commit/90e8d8d6af0e3326055c60dc932929787b057fc1))
+
+### Tests
+
+* **baseline:** cover the population rules and the detection floor ([b1ef862](https://github.com/andyconley/flow/commit/b1ef862695ffb5b821e04d54df42bac2cca9b729))
+
+### Continuous Integration
+
+* use current release workflow actions [skip ci] ([3329ded](https://github.com/andyconley/flow/commit/3329ded3975908be3c46bae1b4266b1c6849dfca))
+
+### Maintenance
+
+* **data:** declare compact_boundary capability per harness ([fabfd1f](https://github.com/andyconley/flow/commit/fabfd1f78a59a1bc3b96c1782ea1eebf54af1672))
+* **release:** clean changelog carryover [skip ci] ([6209d80](https://github.com/andyconley/flow/commit/6209d80e8a1a1544c11f37051feda50635dfe9d0))
+* **release:** fix changelog commit link [skip ci] ([74dd850](https://github.com/andyconley/flow/commit/74dd85063fb29defc8413ac3edbd9b940ad2c93f))
 
 ## [0.11.1](https://github.com/andyconley/flow/compare/v0.11.0...v0.11.1) (2026-08-16)
 
