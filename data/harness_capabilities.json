@@ -25,6 +25,7 @@
     { "harness": "codex",  "field": "sub_turn_detail",     "supported": 0 },
     { "harness": "codex",  "field": "session_lineage",     "supported": 1 },
     { "harness": "codex",  "field": "compact_boundary",    "supported": 0 },
+    { "harness": "codex",  "field": "plugin_usage_counters", "supported": 0 },
 
     { "harness": "claude", "field": "input_tokens",        "supported": 1 },
     { "harness": "claude", "field": "cache_read_tokens",   "supported": 1 },
@@ -36,6 +37,7 @@
     { "harness": "claude", "field": "cache_ttl_split",     "supported": 1 },
     { "harness": "claude", "field": "sub_turn_detail",     "supported": 1 },
     { "harness": "claude", "field": "session_lineage",     "supported": 0 },
-    { "harness": "claude", "field": "compact_boundary",    "supported": 1 }
+    { "harness": "claude", "field": "compact_boundary",    "supported": 1 },
+    { "harness": "claude", "field": "plugin_usage_counters", "supported": 1 }
   ]
 }

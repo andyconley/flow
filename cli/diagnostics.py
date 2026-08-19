@@ -10,6 +10,7 @@ omitted section reads as "checked and fine" when it may mean "never checked."
 """
 
 import sys
+from pathlib import Path
 
 import usage_store
 from flowtoml import read_toml
@@ -215,7 +216,39 @@ def doctor() -> int:
     print(f"codex skills:     {'ok' if codex_skills_dir.exists() else 'missing'}")
     print(f"codex agents:     {codex_agent_policy}")
     print_smoke_test_hint("codex")
+    print()
+    print(_usage_section())
     return 0
+
+
+def _usage_section() -> str:
+    """Render the plugin/skill usage section, and never let it break doctor.
+
+    Read-only like the rest of doctor: it opens the store but never creates or
+    migrates it, so an unmigrated store reports its state instead of being
+    silently repaired — the same reasoning the store-status line above follows.
+
+    Wrapped in a bare except because this section is the newest and least
+    load-bearing thing doctor prints, and doctor is what someone runs when their
+    install is already broken. A diagnostic that cannot survive a broken machine
+    is worth less than the line it would have printed.
+    """
+    try:
+        import sqlite3
+
+        import plugin_usage
+
+        store = usage_store.default_store_path(HOME)
+        if not store.exists():
+            return "-- usage: skills & plugins --\n  no usage store yet — run `flow setup machine`"
+        conn = sqlite3.connect(store)
+        try:
+            payload = plugin_usage.usage_payload(conn, home=HOME, project_root=Path.cwd())
+        finally:
+            conn.close()
+        return plugin_usage.render_usage_section(payload)
+    except Exception:  # noqa: BLE001 — see docstring
+        return "-- usage: skills & plugins --\n  unavailable on this install"
 
 
 def help_command() -> int:

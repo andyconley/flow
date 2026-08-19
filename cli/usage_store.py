@@ -30,7 +30,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 STATE_ABSENT = "absent"
 STATE_OK = "ok"
@@ -264,12 +264,160 @@ ALTER TABLE turn_norm ADD COLUMN cache_write_1h_tokens INTEGER;
 ALTER TABLE turn_norm ADD COLUMN cache_write_5m_tokens INTEGER;
 """
 
+_V6 = """
+-- Sampling harness-maintained counters into flow's own history. Distinct from
+-- every prior migration in this file: `pluginUsage` and `skillUsage` in
+-- `~/.claude.json` are not a transcript or a derivation of one, they are live
+-- state the harness mutates on its own schedule. flow did not create these
+-- numbers and cannot re-derive them from anything else on disk, so unlike
+-- `turn_norm` there is no raw/derived split here — there is only one layer,
+-- `plugin_usage_observation`, holding exactly what was read, verbatim, at the
+-- moment it was read.
+--
+-- WHY THE UNIQUE KEY IS OVER OBSERVED STATE, NOT OBSERVATION TIME
+--
+-- Two independent writers watch this file: a SessionStart hook (fast, frequent,
+-- best-effort) and the `flow harvest claude` backstop (slower, guaranteed).
+-- Both read the same `~/.claude.json` and nothing coordinates them. A key on
+-- when-observed (`observed_at`, or a bare autoincrement id) makes every
+-- double-observation of one file state a duplicate row — and worse, whichever
+-- writer runs second computes its delta against the row the first just wrote,
+-- so a real +47 gets stored as +0 purely because of arrival order. That is a
+-- wrong number that looks confident, the one failure mode this codebase treats
+-- as worse than a blank.
+--
+-- Keying on `(harness, host_id, kind, name, usage_count, source_mtime)` makes
+-- the *content* of an observation its own identity. Two writers that saw the
+-- same file revision produce identical rows and `INSERT OR IGNORE` makes the
+-- second a no-op — order stops mattering because there is nothing left for
+-- order to affect. Two writers that saw genuinely different revisions produce
+-- two real rows, both true, both kept. A counter reset lands here too: a
+-- reinstalled plugin reporting `usage_count = 0` again collides with nothing,
+-- because `source_mtime` moved. This mirrors the dual-write identity the store
+-- already relies on for `turn_raw` (`session_row_id, natural_turn_id`) and
+-- `agent_activity_raw` (`session_row_id, source_line_no`).
+--
+-- The application-level guard — skip the insert when the latest stored count
+-- for a name already equals the observed one — still lives in
+-- `plugin_usage.py`, not here. The UNIQUE key is not a substitute for it; it is
+-- what makes that guard's inherent TOCTOU race harmless instead of corrupting.
+-- Application logic decides what is worth writing, the constraint decides what
+-- counts as the same fact.
+--
+-- WHY THERE IS NO `delta` COLUMN
+--
+-- Delta is `usage_count` minus the previous row's for the same
+-- (harness, host_id, kind, name), and "previous" only has stable meaning once
+-- a series is ordered by `source_mtime` — the harness's own revision clock —
+-- rather than `observed_at`, which is merely when flow happened to look.
+-- Storing delta at write time bakes in whichever ordering the inserting writer
+-- believed was current, and under two writers that belief is exactly what
+-- cannot be trusted. A counter reading is raw; a delta is derived. One
+-- `LAG(...) OVER (PARTITION BY harness, host_id, kind, name
+-- ORDER BY source_mtime, rowid)` at read time costs nothing to get right every
+-- time it is asked, against a write-time race that gets it wrong once and
+-- keeps it.
+--
+-- WHY THERE IS NO `enabled` COLUMN
+--
+-- Plugin enablement lives in `enabledPlugins` in `~/.claude/settings.json` — a
+-- different file, written by a different process, and on at least one machine a
+-- symlink into a dotfiles repo whose contents can change via `git pull` with
+-- the harness never involved. A row here means "the harness reported this
+-- counter value at this file revision." Adding `enabled` would make every row
+-- additionally claim "and this is whether the plugin was enabled at that
+-- instant" — a claim this table cannot verify, since the two files are read on
+-- unrelated schedules. Resolved live at render time instead, following the
+-- read-time-inference precedent set for context windows: never write an
+-- inferred or externally-sourced value into a column meaning "the harness
+-- reported this."
+--
+-- WHAT A RESET LOOKS LIKE IN THE DATA
+--
+-- Within one install `usage_count` cannot decrease; a reinstall or a config
+-- edit clearing the counter is the only way a later row reads lower than its
+-- predecessor for the same name. Nothing flags that at write time. A reset is
+-- just two ordinary rows where the second's `usage_count` is below its
+-- `source_mtime`-ordered predecessor, and the read model is the only place that
+-- classifies it. When it does, that row's delta renders blank — never negative,
+-- and never zero, because zero would report "no change" when the truth is "the
+-- history before this point stopped being comparable."
+--
+-- WHY ONE TABLE SERVES BOTH MAPS DESPITE OPPOSITE ZERO-SEMANTICS
+--
+-- `pluginUsage` is seeded at install, so a present `usage_count = 0` means
+-- "installed, never used" — a real and reportable fact. `skillUsage` is written
+-- only on first use, so no skill row at zero exists; an unused skill is simply
+-- absent from the map until first invoked. This table stores what the harness
+-- wrote and nothing else: plugin zeros are real rows because the harness
+-- reported them, and skill zeros are never synthesized, because that would put
+-- an invented reading into a column whose contract is "the harness reported
+-- this." The resulting asymmetry — this table can hold a population of
+-- never-used plugins but never one of never-used skills — is real, and it is
+-- the read model's job to say so out loud rather than the schema's job to paper
+-- over.
+--
+-- NAMES STORED VERBATIM
+--
+-- `security-guidance@claude-plugins-official` and `security-guidance@inline`
+-- are one plugin surfaced under two map keys. Splitting the key at write time
+-- would put a parsed value in a column meaning "the map key exactly as the
+-- harness wrote it", and would break the day a key contains an unexpected `@`.
+-- The base-name fold happens only in the read model, and it never sums the two:
+-- whether those counters double-count the same invocations or count disjoint
+-- ones is unverified, and summing them would manufacture a total this store
+-- cannot back up.
+CREATE TABLE plugin_usage_observation (
+  harness      TEXT NOT NULL,
+  host_id      TEXT NOT NULL DEFAULT '',
+  kind         TEXT NOT NULL CHECK (kind IN ('plugin', 'skill')),
+  name         TEXT NOT NULL,          -- verbatim map key, namespace included
+  usage_count  INTEGER NOT NULL,       -- as reported; never synthesized
+  last_used_at TEXT,                   -- as reported; NULL when the harness omits it
+  source_mtime REAL NOT NULL,          -- mtime of the source file for this revision
+  observed_at  TEXT NOT NULL,          -- when flow first saw this state; not an ordering key
+  UNIQUE (harness, host_id, kind, name, usage_count, source_mtime)
+);
+
+CREATE INDEX ix_plugin_usage_series
+  ON plugin_usage_observation (harness, host_id, kind, name, source_mtime);
+
+-- The "have we looked" watermark, kept apart from `harvest` on purpose:
+-- `harvest`'s columns (`last_offset`, `last_line_no`, `last_line_hash`) carry
+-- JSONL-stream semantics that do not apply to a single JSON document, and
+-- `harvest`'s claude rescan filters select `WHERE harness = 'claude'` — reusing
+-- that table would pull a non-transcript row into a code path reasoning about
+-- transcript rescans and zero it during an unrelated one.
+--
+-- `scope` generalizes the watermark to more than one kind of "have we looked":
+-- the counters file (`source_path` = the config path, `scope = ''`) and,
+-- separately, an installed-skill-inventory walk rooted at a working directory
+-- (`source_path = 'skill-inventory'`, `scope` = that root). The inventory needs
+-- a scope because `skillUsage` holds no zeros, so "which skills are unused"
+-- depends on enumerating installed skills — and that enumeration is
+-- directory-dependent once project-local skills count. Without recording the
+-- root, a later read cannot tell "absent because never invoked" from "absent
+-- because this scan never looked where it lives", and comparing two such
+-- enumerations as one population would manufacture exactly the confident-wrong
+-- claim this feature exists to prevent.
+CREATE TABLE plugin_usage_scan (
+  harness     TEXT NOT NULL,
+  host_id     TEXT NOT NULL DEFAULT '',
+  source_path TEXT NOT NULL,
+  scope       TEXT NOT NULL DEFAULT '',
+  last_mtime  REAL NOT NULL,
+  scanned_at  TEXT NOT NULL,
+  PRIMARY KEY (harness, host_id, source_path, scope)
+);
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "initial schema: raw + normalized layers, harvest watermark, capabilities", _V1),
     (2, "agent activity log for sub-agent telemetry with no local token data", _V2),
     (3, "secondary capacity window columns on turn_norm", _V3),
     (4, "title provenance and a session-level timestamp high-water mark", _V4),
     (5, "cache-TTL split columns on turn_norm", _V5),
+    (6, "plugin and skill usage counter observations, scoped scan watermark", _V6),
 ]
 
 
