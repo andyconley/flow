@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.13.2](https://github.com/andyconley/flow/compare/v0.13.1...v0.13.2) (2026-08-19)
+
+### Bug Fixes
+
+* **doctor:** stop reporting flow's own home as a project overlay ([39149c8](https://github.com/andyconley/flow/commit/39149c8587081db3f02c05a4ad7516cd290ee063))
+
 ## [0.13.1](https://github.com/andyconley/flow/compare/v0.13.0...v0.13.1) (2026-08-19)
 
 ### Bug Fixes
