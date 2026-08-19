@@ -27,11 +27,60 @@ jobs:
           node-version: 24
 
       - uses: cycjimmy/semantic-release-action@v6
+        id: semantic
         with:
           semantic_version: 25.0.9
+          # conventionalcommits must stay on 9.x. Version 10 renders through
+          # @conventional-changelog/template, while release-notes-generator
+          # writes through conventional-changelog-writer@8. The mismatch does
+          # not fail the build: commit-analyzer still resolves the version
+          # correctly and generateNotes reports success, so the only symptom
+          # is a release whose notes are an empty header. That is how 0.12.0
+          # and 0.13.0 shipped blank.
+          #
+          # Upgrading gains nothing. Rendering this repo's own 0.13.0 range
+          # through 10.4.0 on writer 9 produces a changelog body byte-identical
+          # to the one 9.3.1 produces, and the single real behavioural change
+          # in 10.x -- the whatBump rewrite -- is unreachable here, because
+          # commit-analyzer resolves bumps from releaseRules and never calls
+          # the preset's whatBump.
+          #
+          # The pin is also not what holds this repo back. semantic-release
+          # pins conventional-changelog-writer@8, conventional-commits-parser@6,
+          # conventional-commits-filter@5 and conventional-changelog-angular@8
+          # itself. Moving the preset alone makes it the only new-generation
+          # package in an old-generation tree, which is the state that broke.
+          # Unpin when release-notes-generator depends on writer 9, not before.
           extra_plugins: |
             @semantic-release/changelog@7.0.0
             @semantic-release/git@11.0.1
-            conventional-changelog-conventionalcommits@10.3.0
+            conventional-changelog-conventionalcommits@9.3.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # A release that describes nothing is the failure this repo already
+      # shipped twice without noticing. Every type in release.config.cjs is
+      # visible, so any commit able to trigger a release is also able to be
+      # rendered: a published release with no entries means the notes pipeline
+      # broke, whatever the cause. This detects rather than prevents -- the
+      # release is already out by the time it runs -- so its job is to make the
+      # next occurrence loud instead of silent.
+      - name: Verify the release describes itself
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          # Passed as env, never inline interpolation: these notes are built
+          # from commit messages and must not reach the shell as code.
+          RELEASE_NOTES: ${{ steps.semantic.outputs.new_release_notes }}
+          RELEASE_VERSION: ${{ steps.semantic.outputs.new_release_version }}
+        run: |
+          entries=$(printf '%s\n' "$RELEASE_NOTES" | grep -c '^[*-] ' || true)
+          if [ "$entries" -eq 0 ]; then
+            echo "::error::Released $RELEASE_VERSION with no entries in its notes."
+            echo "The version resolved but nothing rendered, which is what a"
+            echo "preset/writer generation mismatch looks like. See the pin"
+            echo "comment above and check conventional-changelog-conventionalcommits."
+            echo "--- notes as published ---"
+            printf '%s\n' "$RELEASE_NOTES"
+            exit 1
+          fi
+          echo "Released $RELEASE_VERSION with $entries rendered entries."
