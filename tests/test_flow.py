@@ -286,6 +286,11 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(command.read_text(), "# local define override\n")
 
     def test_refresh_project_interactive_can_update_changed_files(self) -> None:
+        # Asserts content equality against REPO_ROOT, so the subprocess must
+        # resolve scaffolds through a source that points there. Without the
+        # fake home it reads the ambient ~/.flow/source and passes only when
+        # that happens to be this checkout.
+        self.use_fake_home()
         flow_dir = self.repo / ".flow"
         flow_dir.mkdir()
         (flow_dir / "flow.toml").write_text(
