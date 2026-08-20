@@ -26,6 +26,35 @@ At minimum, every project should assign providers for:
 - implementation
 - acceptance review
 
+## Provider failure
+
+A declared provider can fail to run — an agent dies on an overload response, a
+subagent never returns, a human is unavailable. Three outcomes are possible and
+they are not equivalent:
+
+- **retried and ran.** Normal. Record nothing beyond the result.
+- **absorbed.** The orchestrator performed the role itself. Legitimate for some
+  roles, but weaker than the role running, because part of a role's value is
+  that its context is independent of the orchestrator's. Must be disclosed.
+- **skipped.** The role did not run and nobody performed it. Never acceptable
+  silently.
+
+Defaults:
+
+- `DO` record every role's outcome, not just its name — a run that lost a role
+  must not read like a run that did not
+- `DO` retry twice with backoff on an infrastructure failure, then stop; an
+  overload response is not a fixable request
+- `DO NOT` absorb `security-reviewer`. Its purpose is adversarial review of the
+  orchestrator's own work, which the orchestrator cannot perform on itself. If
+  it cannot run, say so and let the engineer decide
+- `AVOID` continuing past a skipped core role without surfacing it
+
+## Relevant caution
+
+A status field is only as honest as whoever fills it. This policy makes a lost
+role *recordable*; it cannot make it self-reporting.
+
 ## Durable sources of truth
 
 Work should be understandable without relying on chat history.

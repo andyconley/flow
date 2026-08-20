@@ -46,6 +46,8 @@ Mutation tests:
 
 - useful for checking whether the suite actually detects faults
 - best run nightly or on changed files, not on every save
+- the failure mode they exist to catch is the vacuous assertion, and the check
+  runs without tooling — see `standards/evidence.md`
 
 ## TDD guidance
 

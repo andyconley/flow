@@ -31,6 +31,7 @@ from cost import (  # noqa: E402
     cost_warn_command,
 )
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
+from gaps import cmd_add, cmd_list, cmd_promote  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
@@ -311,6 +312,42 @@ def main() -> int:
         action="store_true",
         help="emit the payload as JSON instead of the rendered section",
     )
+    gaps_parser = sub.add_parser(
+        "gaps",
+        help="record and read back the capability gaps observed during runs",
+        description="The framework's own improvement signal. `flow-archive` appends what the framework was missing during a run; this reads it back so a gap seen from three projects is visible as one recurring problem rather than three unrelated notes. Strictly non-interactive: it never prompts, never commits, and never pushes.",
+    )
+    gaps_sub = gaps_parser.add_subparsers(dest="gaps_target", required=True)
+
+    gaps_add_parser = gaps_sub.add_parser(
+        "add",
+        help="record one observed capability gap",
+        description="Appends one observation. Idempotent on (key, run), so re-running an archive does not inflate the count. Repeats are detected by the key you supply, never by matching text: read the existing keys with `flow gaps list` and reuse one when the gap is the same gap.",
+    )
+    gaps_add_parser.add_argument("--key", required=True, help="short slug identifying the gap; reuse an existing one to mark a repeat")
+    gaps_add_parser.add_argument("--summary", required=True, help="what the framework was missing")
+    gaps_add_parser.add_argument("--project", required=True, help="project the run belonged to")
+    gaps_add_parser.add_argument("--run", required=True, help="work id of the run that observed it")
+    gaps_add_parser.add_argument("--at", help="ISO timestamp; defaults to now")
+    gaps_add_parser.add_argument("--ledger", help="ledger path; defaults to ~/.flow/user/capability-gaps.jsonl")
+
+    gaps_list_parser = gaps_sub.add_parser(
+        "list",
+        help="show recorded gaps, most-observed first",
+        description="Groups observations by key and counts them. A key with more than one sighting is a gap that recurred after being noticed, which is the signal this command exists to surface.",
+    )
+    gaps_list_parser.add_argument("--json", action="store_true", help="emit the payload as JSON")
+    gaps_list_parser.add_argument("--ledger", help="ledger path; defaults to ~/.flow/user/capability-gaps.jsonl")
+
+    gaps_promote_parser = gaps_sub.add_parser(
+        "promote",
+        help="write one gap into the flow repo's backlog",
+        description="Adds the gap to `docs/backlog.md` under `## Deferred / Watch`, never under the ordered Active Priorities — ranking stays the maintainer's decision. Requires ~/.flow/source to be a git work tree; a release install has none, so there it prints a paste-ready entry instead. Never commits and never pushes.",
+    )
+    gaps_promote_parser.add_argument("--key", required=True, help="key of the gap to promote")
+    gaps_promote_parser.add_argument("--at", help="ISO timestamp; defaults to now")
+    gaps_promote_parser.add_argument("--ledger", help="ledger path; defaults to ~/.flow/user/capability-gaps.jsonl")
+
     overlay_parser = sub.add_parser(
         "overlay",
         help="inspect the user overlay's version-control state",
@@ -546,6 +583,12 @@ def main() -> int:
         return plugin_usage_snapshot_command(hook=args.hook)
     if args.command == "plugin-usage" and args.plugin_usage_target == "show":
         return plugin_usage_show_command(as_json=args.json)
+    if args.command == "gaps" and args.gaps_target == "add":
+        return cmd_add(args)
+    if args.command == "gaps" and args.gaps_target == "list":
+        return cmd_list(args)
+    if args.command == "gaps" and args.gaps_target == "promote":
+        return cmd_promote(args)
     if args.command == "overlay" and args.overlay_target == "status":
         return overlay_status_command()
     if args.command == "overlay" and args.overlay_target == "check":

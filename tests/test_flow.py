@@ -286,6 +286,11 @@ class FlowCliTests(unittest.TestCase):
         self.assertEqual(command.read_text(), "# local define override\n")
 
     def test_refresh_project_interactive_can_update_changed_files(self) -> None:
+        # Asserts content equality against REPO_ROOT, so the subprocess must
+        # resolve scaffolds through a source that points there. Without the
+        # fake home it reads the ambient ~/.flow/source and passes only when
+        # that happens to be this checkout.
+        self.use_fake_home()
         flow_dir = self.repo / ".flow"
         flow_dir.mkdir()
         (flow_dir / "flow.toml").write_text(
@@ -1955,6 +1960,7 @@ class FlowCliTests(unittest.TestCase):
                 "diagnostics",
                 "flowtoml",
                 "fsutil",
+                "gaps",
                 "harvest",
                 "hookio",
                 "jsonl_watermark",
@@ -8892,3 +8898,472 @@ class RepoRootFlowHomeTests(unittest.TestCase):
             "the project section is what made 'not a project' look like a broken one",
         )
         self.assertNotIn("manifest:         missing", result.stdout)
+
+
+class CapabilityGapLedgerTests(unittest.TestCase):
+    """`flow gaps`: the ledger, its grouping, and promotion into the backlog.
+
+    Subclasses TestCase rather than FlowCliTests on purpose. Inheriting that
+    class would re-run its whole suite to add these few, which has happened
+    before; the module-level loader is what these actually need from it.
+    """
+
+    AT_A = "2026-08-01T00:00:00+00:00"
+    AT_B = "2026-08-19T00:00:00+00:00"
+    AT_PROMOTE = "2026-08-19T12:00:00+00:00"
+
+    BACKLOG = (
+        "# Backlog\n\n## Purpose\n\nOpen work only.\n\n"
+        "## Active Priorities\n\n### 1. Existing Thing\n\nStatus: not started\n\n"
+        "## Deferred / Watch\n\n### Something Deferred\n\nStatus: deferred\n"
+    )
+
+    def setUp(self):
+        self.gaps = load_cli_module("gaps")
+        self.tmp = Path(tempfile.mkdtemp(prefix="flow-gaps-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.ledger = self.tmp / "capability-gaps.jsonl"
+
+    def _checkout(self, name="repo", backlog=None):
+        """A throwaway git work tree carrying a backlog.
+
+        promote() resolves its target from ~/.flow/source by default, which is
+        the real clone. Every test passes an explicit source_dir so the real
+        docs/backlog.md is never a candidate.
+        """
+        repo = self.tmp / name
+        (repo / "docs").mkdir(parents=True)
+        (repo / "docs" / "backlog.md").write_text(
+            self.BACKLOG if backlog is None else backlog
+        )
+        # The sentinel resolve_checkout looks for. Being a git work tree is not
+        # enough to be *the flow* work tree.
+        (repo / "cli").mkdir()
+        (repo / "cli" / "flow.py").write_text("")
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        return repo
+
+    def _observe(self, key, run, project="proj", summary="a gap", at=None):
+        return self.gaps.add_gap(
+            self.ledger,
+            key=key,
+            summary=summary,
+            project=project,
+            run=run,
+            at=at or self.AT_A,
+        )
+
+    # -- ledger ---------------------------------------------------------
+
+    def test_absent_ledger_reads_empty_rather_than_raising(self):
+        events, skipped = self.gaps.read_events(self.tmp / "nope.jsonl")
+        self.assertEqual(events, [])
+        self.assertEqual(skipped, 0)
+
+    def test_empty_ledger_reads_empty(self):
+        self.ledger.write_text("")
+        events, skipped = self.gaps.read_events(self.ledger)
+        self.assertEqual(events, [])
+        self.assertEqual(skipped, 0)
+
+    def test_malformed_lines_are_skipped_and_counted_not_swallowed(self):
+        self._observe("a", "run-1")
+        with self.ledger.open("a") as handle:
+            handle.write("{not json\n")
+            handle.write('{"no_event_field": true}\n')
+        events, skipped = self.gaps.read_events(self.ledger)
+        self.assertEqual(len(events), 1, "the good record must survive its neighbours")
+        self.assertEqual(skipped, 2, "damage must be reported, not silently dropped")
+
+    def test_first_observation_is_recorded(self):
+        result = self._observe("evidence-inventory", "run-1")
+        self.assertEqual(result["status"], "added")
+        self.assertEqual(result["count"], 1)
+        self.assertTrue(self.ledger.exists())
+
+    def test_same_key_from_a_different_run_is_a_repeat(self):
+        self._observe("evidence-inventory", "run-1", project="sheets")
+        result = self._observe("evidence-inventory", "run-2", project="flow", at=self.AT_B)
+        self.assertEqual(result["status"], "added")
+        self.assertEqual(result["count"], 2, "a repeat across runs is the whole signal")
+
+    def test_same_key_in_the_same_run_does_not_inflate_the_count(self):
+        self._observe("evidence-inventory", "run-1")
+        again = self._observe("evidence-inventory", "run-1")
+        self.assertEqual(again["status"], "duplicate")
+        entries = self.gaps.group_gaps(self.gaps.read_events(self.ledger)[0])
+        self.assertEqual(entries[0]["count"], 1, "re-running an archive is not a recurrence")
+
+    def test_grouping_orders_by_count_descending(self):
+        self._observe("seen-twice", "run-1")
+        self._observe("seen-twice", "run-2", at=self.AT_B)
+        self._observe("seen-once", "run-1")
+        entries = self.gaps.group_gaps(self.gaps.read_events(self.ledger)[0])
+        self.assertEqual([e["key"] for e in entries], ["seen-twice", "seen-once"])
+
+    def test_timestamp_is_supplied_not_read_from_the_clock(self):
+        self._observe("a", "run-1", at=self.AT_A)
+        record = json.loads(self.ledger.read_text().splitlines()[0])
+        self.assertEqual(
+            record["at"],
+            self.AT_A,
+            "pure functions must take `at`, or no test can assert exact bytes",
+        )
+
+    # -- promotion ------------------------------------------------------
+
+    def test_promote_writes_into_deferred_watch(self):
+        self._observe("evidence-inventory", "run-1")
+        repo = self._checkout()
+        result = self.gaps.promote(
+            self.ledger, key="evidence-inventory", at=self.AT_PROMOTE, source_dir=repo
+        )
+        self.assertEqual(result["status"], "promoted")
+        text = (repo / "docs" / "backlog.md").read_text()
+        deferred = text.split("## Deferred / Watch", 1)[1]
+        self.assertIn("Evidence Inventory", deferred)
+
+    def test_promote_leaves_active_priorities_untouched(self):
+        self._observe("evidence-inventory", "run-1")
+        repo = self._checkout()
+        self.gaps.promote(
+            self.ledger, key="evidence-inventory", at=self.AT_PROMOTE, source_dir=repo
+        )
+        text = (repo / "docs" / "backlog.md").read_text()
+        active = text.split("## Active Priorities", 1)[1].split("## Deferred", 1)[0]
+        self.assertIn("### 1. Existing Thing", active)
+        self.assertNotIn(
+            "Evidence Inventory",
+            active,
+            "ranking is the maintainer's call; promotion must not claim a position",
+        )
+
+    def test_promoted_entry_carries_no_project_or_run(self):
+        """The ledger is private; the backlog is not necessarily.
+
+        `docs/backlog.md` lives in the flow repository, which is public, while
+        the ledger sits in a private overlay. The count is the useful half of a
+        gap and the provenance is the identifying half, so only the count
+        crosses over.
+        """
+        self._observe("a", "run-alpha", project="path-nexus", summary="No template existed.")
+        self._observe("a", "run-beta", project="acme-migration", at=self.AT_B)
+        repo = self._checkout()
+        self.gaps.promote(self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo)
+        text = (repo / "docs" / "backlog.md").read_text()
+        self.assertIn("observed 2 times", text, "the count is what makes a repeat actionable")
+        for leaked in ("path-nexus", "acme-migration", "run-alpha", "run-beta"):
+            self.assertNotIn(leaked, text, f"{leaked} must not reach the backlog")
+
+    def test_a_summary_cannot_forge_a_heading(self):
+        """A summary that looks like Markdown structure must not become it.
+
+        A summary containing the anchor heading would make every later
+        promotion fail as ambiguous — a self-inflicted denial of the feature.
+        """
+        self._observe(
+            "a",
+            "run-1",
+            summary="Broke because\n## Deferred / Watch\nwas emitted verbatim.",
+        )
+        repo = self._checkout()
+        self.gaps.promote(self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo)
+        text = (repo / "docs" / "backlog.md").read_text()
+        # The invariant is line-level, because that is what the parser matches
+        # on: the anchor must occur as its own line exactly once. Flattening the
+        # summary to a single line is what guarantees it — the words may still
+        # appear, but never as a heading.
+        anchor_lines = [l for l in text.splitlines() if l.strip() == "## Deferred / Watch"]
+        self.assertEqual(
+            len(anchor_lines),
+            1,
+            "a forged anchor line would break every subsequent promotion",
+        )
+        self._observe("b", "run-2", at=self.AT_B)
+        second = self.gaps.promote(
+            self.ledger, key="b", at="2026-08-20T00:00:00+00:00", source_dir=repo
+        )
+        self.assertEqual(second["status"], "promoted", "the document must stay parseable")
+
+    def test_git_is_run_with_the_ambient_overrides_stripped(self):
+        """GIT_DIR would redirect the write target to an unrelated repository.
+
+        Reached inside a git hook or under `git rebase -x`, an unscrubbed call
+        resolves --show-toplevel to whatever GIT_DIR names, and promote would
+        write its backlog there.
+        """
+        repo = self._checkout()
+        elsewhere = self._checkout(name="elsewhere")
+
+        # GIT_WORK_TREE is the one that actually moves `--show-toplevel`;
+        # GIT_DIR alone leaves cwd as the work tree, so setting only that
+        # produced a test which passed against an unscrubbed call and proved
+        # nothing. Both are set here, and both are on the stripped list.
+        overrides = {
+            "GIT_DIR": str(elsewhere / ".git"),
+            "GIT_WORK_TREE": str(elsewhere),
+        }
+        saved = {k: os.environ.get(k) for k in overrides}
+        os.environ.update(overrides)
+        try:
+            resolved = self.gaps.resolve_checkout(repo)
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertEqual(
+            resolved,
+            repo.resolve(),
+            "cwd must win; ambient git env must not choose the repository",
+        )
+        self.assertNotEqual(
+            resolved,
+            elsewhere.resolve(),
+            "promote would have written its backlog into an unrelated checkout",
+        )
+
+    def test_promotion_is_a_second_event_not_a_mutated_record(self):
+        self._observe("a", "run-1")
+        repo = self._checkout()
+        self.gaps.promote(self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo)
+        events = [json.loads(l) for l in self.ledger.read_text().splitlines()]
+        self.assertEqual(
+            [e["event"] for e in events],
+            ["observed", "promoted"],
+            "an append log must never be rewritten in place",
+        )
+
+    def test_promoting_twice_does_not_write_the_backlog_again(self):
+        self._observe("a", "run-1")
+        repo = self._checkout()
+        self.gaps.promote(self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo)
+        after_first = (repo / "docs" / "backlog.md").read_bytes()
+        result = self.gaps.promote(
+            self.ledger, key="a", at="2026-08-20T00:00:00+00:00", source_dir=repo
+        )
+        self.assertEqual(result["status"], "already-promoted")
+        self.assertEqual((repo / "docs" / "backlog.md").read_bytes(), after_first)
+
+    def test_unknown_key_is_refused(self):
+        self._observe("a", "run-1")
+        repo = self._checkout()
+        result = self.gaps.promote(
+            self.ledger, key="never-seen", at=self.AT_PROMOTE, source_dir=repo
+        )
+        self.assertEqual(result["status"], "unknown-key")
+
+    # -- the checkout guard ---------------------------------------------
+
+    def test_non_checkout_falls_back_and_leaves_the_ledger_intact(self):
+        self._observe("rollout", "run-1")
+        plain = self.tmp / "notarepo"
+        plain.mkdir()
+        result = self.gaps.promote(
+            self.ledger, key="rollout", at=self.AT_PROMOTE, source_dir=plain
+        )
+        self.assertEqual(result["status"], "no-checkout")
+        self.assertTrue(result["block"], "a refusal must still hand back the entry")
+        self.assertFalse(
+            self.gaps.is_promoted(self.gaps.read_events(self.ledger)[0], "rollout"),
+            "declining must leave the gap promotable later",
+        )
+
+    def test_a_plain_directory_is_not_mistaken_for_a_checkout(self):
+        """The guard must ask git, not test for a directory.
+
+        Widening it to "the path exists" would call every release install a
+        develop one and write a backlog that is not there.
+        """
+        plain = self.tmp / "exists-but-not-a-repo"
+        plain.mkdir()
+        self.assertIsNone(self.gaps.resolve_checkout(plain))
+
+    def test_a_real_checkout_resolves_to_its_toplevel(self):
+        repo = self._checkout()
+        self.assertEqual(self.gaps.resolve_checkout(repo), repo.resolve())
+
+    def test_missing_source_dir_is_not_a_checkout(self):
+        self.assertIsNone(self.gaps.resolve_checkout(self.tmp / "absent"))
+
+    # -- refusing to guess ----------------------------------------------
+
+    def test_backlog_without_the_anchor_is_refused_and_left_alone(self):
+        self._observe("a", "run-1")
+        original = "# Backlog\n\nNo anchor here.\n"
+        repo = self._checkout(name="repo2", backlog=original)
+        result = self.gaps.promote(
+            self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo
+        )
+        self.assertEqual(result["status"], "unparsable-backlog")
+        self.assertEqual(
+            (repo / "docs" / "backlog.md").read_text(),
+            original,
+            "byte-identical: asserting only the status would pass on a corrupted file",
+        )
+
+    def test_duplicated_anchor_is_ambiguous_and_refused(self):
+        self._observe("a", "run-1")
+        original = self.BACKLOG + "\n## Deferred / Watch\n\nsecond one\n"
+        repo = self._checkout(name="repo3", backlog=original)
+        result = self.gaps.promote(
+            self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo
+        )
+        self.assertEqual(result["status"], "unparsable-backlog")
+        self.assertEqual((repo / "docs" / "backlog.md").read_text(), original)
+
+    def test_missing_backlog_file_is_refused_and_hands_back_the_entry(self):
+        self._observe("a", "run-1")
+        repo = self.tmp / "repo4"
+        (repo / "cli").mkdir(parents=True)
+        (repo / "cli" / "flow.py").write_text("")
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        result = self.gaps.promote(
+            self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo
+        )
+        self.assertEqual(result["status"], "no-backlog")
+        self.assertTrue(result["block"])
+
+    # -- section placement ----------------------------------------------
+
+    def test_entry_lands_inside_deferred_not_after_a_following_section(self):
+        self._observe("a", "run-1")
+        backlog = self.BACKLOG + "\n## Notes\n\ntrailing section\n"
+        repo = self._checkout(name="repo5", backlog=backlog)
+        self.gaps.promote(self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo)
+        text = (repo / "docs" / "backlog.md").read_text()
+        deferred = text.split("## Deferred / Watch", 1)[1].split("## Notes", 1)[0]
+        self.assertIn("### A", deferred)
+        self.assertTrue(text.rstrip().endswith("trailing section"))
+
+    # -- the tool never publishes ---------------------------------------
+
+    def test_promoting_issues_no_mutating_git_command(self):
+        """Publishing is the engineer's decision, made separately from promoting.
+
+        Observes the calls rather than grepping the source. A text search was
+        the first attempt and it was wrong twice over: it matched the module's
+        own reassurance string "not committed and not pushed", and it would
+        still have passed against a subcommand assembled from a variable.
+        """
+        self._observe("a", "run-1")
+        repo = self._checkout()
+        seen = []
+        real_run = self.gaps.subprocess.run
+
+        def spy(cmd, *a, **kw):
+            seen.append(list(cmd))
+            return real_run(cmd, *a, **kw)
+
+        self.gaps.subprocess.run = spy
+        try:
+            result = self.gaps.promote(
+                self.ledger, key="a", at=self.AT_PROMOTE, source_dir=repo
+            )
+        finally:
+            self.gaps.subprocess.run = real_run
+
+        self.assertEqual(result["status"], "promoted")
+        self.assertTrue(seen, "promote must actually consult git")
+        for cmd in seen:
+            self.assertEqual(cmd[0], "git")
+            self.assertNotIn(
+                cmd[1],
+                ("push", "commit", "add", "checkout", "reset"),
+                f"promote issued a mutating git command: {cmd}",
+            )
+
+    def test_a_git_work_tree_that_is_not_flow_is_rejected(self):
+        """Being a repository is not enough to be the flow repository.
+
+        A ~/.flow/source sitting inside an unrelated checkout — a dotfiles repo
+        containing $HOME is the plausible case — would otherwise resolve there,
+        and a docs/backlog.md in it would be edited.
+        """
+        stranger = self.tmp / "stranger"
+        (stranger / "docs").mkdir(parents=True)
+        (stranger / "docs" / "backlog.md").write_text(self.BACKLOG)
+        subprocess.run(["git", "init", "-q"], cwd=stranger, check=True)
+
+        self.assertIsNone(self.gaps.resolve_checkout(stranger))
+
+        self._observe("a", "run-1")
+        result = self.gaps.promote(
+            self.ledger, key="a", at=self.AT_PROMOTE, source_dir=stranger
+        )
+        self.assertEqual(result["status"], "no-checkout")
+        self.assertEqual(
+            (stranger / "docs" / "backlog.md").read_text(),
+            self.BACKLOG,
+            "byte-identical: an unrelated repo's backlog must be untouched",
+        )
+
+    # -- the CLI layer, through argparse ---------------------------------
+
+    def _flow(self, *args):
+        return subprocess.run(
+            [sys.executable, str(FLOW_CLI), *args],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_add_and_list_work_through_the_real_entrypoint(self):
+        """Exercises dispatch, not just the pure functions.
+
+        Without this the three dispatch lines in flow.py could be deleted and
+        the suite would stay green while `flow gaps add` silently returned 1.
+        """
+        ledger = str(self.ledger)
+        first = self._flow(
+            "gaps", "add", "--key", "a-gap", "--summary", "no template existed",
+            "--project", "proj", "--run", "run-1", "--at", self.AT_A,
+            "--ledger", ledger,
+        )
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("recorded", first.stdout)
+
+        repeat = self._flow(
+            "gaps", "add", "--key", "a-gap", "--summary", "again",
+            "--project", "other", "--run", "run-2", "--at", self.AT_B,
+            "--ledger", ledger,
+        )
+        self.assertEqual(repeat.returncode, 0, repeat.stderr)
+        self.assertIn("2 times", repeat.stdout, "a repeat must announce itself")
+
+        listed = self._flow("gaps", "list", "--json", "--ledger", ledger)
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        payload = json.loads(listed.stdout)
+        self.assertEqual(payload["entries"][0]["key"], "a-gap")
+        self.assertEqual(payload["entries"][0]["count"], 2)
+
+    def test_a_key_with_stray_whitespace_does_not_start_a_second_lineage(self):
+        ledger = str(self.ledger)
+        self._flow(
+            "gaps", "add", "--key", "a-gap", "--summary", "s",
+            "--project", "p", "--run", "run-1", "--at", self.AT_A,
+            "--ledger", ledger,
+        )
+        self._flow(
+            "gaps", "add", "--key", "  a-gap  ", "--summary", "s",
+            "--project", "p", "--run", "run-2", "--at", self.AT_B,
+            "--ledger", ledger,
+        )
+        entries = self.gaps.group_gaps(self.gaps.read_events(self.ledger)[0])
+        self.assertEqual(
+            len(entries),
+            1,
+            "a padded key renders identically everywhere; it must not fork the count",
+        )
+        self.assertEqual(entries[0]["count"], 2)
+
+    def test_cli_registers_the_three_verbs(self):
+        result = subprocess.run(
+            [sys.executable, str(FLOW_CLI), "gaps", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for verb in ("add", "list", "promote"):
+            self.assertIn(verb, result.stdout)

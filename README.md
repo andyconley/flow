@@ -61,7 +61,7 @@ Main surfaces:
 
 Customization and project files:
 
-- [templates](scaffolds/default/templates/) for definitions, research notes, adversarial reviews, ADRs, spikes, runs, and handoffs
+- [templates](scaffolds/default/templates/) for definitions, research notes, adversarial reviews, ADRs, spikes, runs, runbooks, and handoffs
 - [project overlay starter files](scaffolds/default/project/) under `.flow/project/`
 - [memory and run scaffolding](scaffolds/default/) for transient state and durable artifacts
 - [flow.toml](scaffolds/default/flow.toml), the machine-readable manifest for commands, agents, hooks, model hints, and standard dependencies

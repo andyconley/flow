@@ -65,6 +65,8 @@ Optional prioritization or urgency context.
 - deploy required:
 - E2E required:
 - logs review required:
+- mutation check (ran / not run / why):
+- validated in (environment, and known deltas from the original):
 
 ## Required handback
 

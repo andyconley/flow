@@ -14,7 +14,7 @@ Projects should distinguish between:
 - architecture docs
 - ADRs
 - API contracts
-- runbooks
+- runbooks (symptom-first; see `templates/runbook.md`)
 - product or user guidance
 
 ## Format defaults

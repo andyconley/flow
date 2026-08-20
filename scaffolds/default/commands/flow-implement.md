@@ -102,10 +102,15 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 
 - run structured review with the right roles
 - capture findings and dispositions
+- **Every brief carries an evidence inventory** — what already exists in the area under review, with paths. Without it a reviewer cannot tell absent from unfound, and "X is missing" is an unsupported finding. See `standards/evidence.md`; `templates/adversarial-review.md` has the block.
 
 ### 6. Validation
 
 - collect automated, manual, and runtime evidence
+- state whether a mutation check ran — break one behavior, confirm the covering
+  test fails, restore — and if not, why
+- when a check ran anywhere but against the thing being changed, give a verdict
+  per check rather than per environment. See `standards/evidence.md` for both.
 
 ### 7. Handback
 
@@ -133,13 +138,15 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 - Handback:
 
 ### Roles Engaged
-- [Role and why]
+- [Role] - ran | absorbed by orchestrator | skipped - [why the role, and for absorbed/skipped, why that happened]
 
 ### Change Surface
 - [Files/modules changed]
 
 ### Validation Evidence
 - [Tests, manual checks, runtime checks]
+- mutation check: ran (behavior broken, test that caught it) | not run (why)
+- validated against: [the change itself, or surrogate + per-check transfer verdict]
 
 ### Handback
 - [What shipped or is ready]
