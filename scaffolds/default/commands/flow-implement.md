@@ -107,6 +107,10 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 ### 6. Validation
 
 - collect automated, manual, and runtime evidence
+- state whether a mutation check ran — break one behavior, confirm the covering
+  test fails, restore — and if not, why
+- when a check ran anywhere but against the thing being changed, give a verdict
+  per check rather than per environment. See `standards/evidence.md` for both.
 
 ### 7. Handback
 
@@ -141,6 +145,8 @@ This command is the orchestrated lane for multi-phase execution. It should make 
 
 ### Validation Evidence
 - [Tests, manual checks, runtime checks]
+- mutation check: ran (behavior broken, test that caught it) | not run (why)
+- validated against: [the change itself, or surrogate + per-check transfer verdict]
 
 ### Handback
 - [What shipped or is ready]
