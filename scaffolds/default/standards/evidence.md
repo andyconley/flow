@@ -62,10 +62,20 @@ on remembering to think of one:
   drifted between the two
 
 Then take each validation step in turn and ask whether its pass or fail depends
-on a property in that list. If it depends only on properties that are identical,
-the result transfers. If it touches one that differs, the result speaks to the
-surrogate alone and is unverified for the original — say so, rather than folding
-it into an overall pass.
+on a property in that list. That gives one of three verdicts, and they are not
+interchangeable:
+
+- **transfers** — the step depends only on properties that are identical, so
+  the result holds for the original
+- **does not transfer** — the step depends on a property that differs, and you
+  know the difference changes the original's behavior; the check has to be run
+  again against the original
+- **unverified** — the step depends on a property that differs and you do not
+  know whether that matters; the result is true of the surrogate and an open
+  question for the original
+
+Say which. Folding any of the three into an overall pass is the thing this
+section exists to prevent.
 
 Partial transfer is the normal case. Most surrogate validation carries some
 steps and not others, so a transfer claim is a mixed table and not a boolean:
@@ -77,6 +87,10 @@ Defaults:
 
 - `DO` list the deltas before judging any step, so the judgment has something
   concrete to check against
+- `DO` say how each delta was established — diffed the config, compared row
+  counts, asked the owner. A delta list is an inventory and carries the same
+  burden as any other; "credentials: identical" written from memory launders an
+  assumption into a verdict that looks measured
 - `DO` record a verdict per check — transfers, does not transfer, or unverified
 - `AVOID` discarding an entire surrogate run because one delta broke one step
 - `DO NOT` offer "validated in <environment>" as the evidence for a change to
@@ -94,10 +108,11 @@ not proof of the behavior.
 
 Checking this needs no tooling: break one behavior in the source, confirm the
 test that covers it goes red, restore the source. Do it for the behaviors the
-change actually depends on, not for the whole suite. Projects with mutation
-tooling wired into CI (`standards/reference-stack.md`) get the same check at
-larger scale automatically, but the manual form works in any language and any
-repo, which is why it is the default here.
+change actually depends on, not for the whole suite. Projects carrying mutation
+tooling in the stack (`standards/reference-stack.md`) get the same check at
+larger scale on nightly or scheduled runs (`standards/testing.md`), but the
+manual form works in any language and any repo, which is why it is the default
+here.
 
 Whether to run it is a cost judgment. Whether to say so is not: validation that
 never states whether fault detection was checked reads identically whether it
@@ -105,11 +120,16 @@ happened or not.
 
 Defaults:
 
-- `DO` state whether a mutation check ran, and when it did not, why
+- `DO` state whether a mutation check ran, and when it did not, name the
+  behaviors whose fault detection is therefore unverified. "Not run (time)"
+  costs nothing to write and says nothing; naming the exposure cannot be done
+  without reading the tests, which is the point
 - `DO` name the behavior you broke and the test that caught it
 - `AVOID` reading a passing suite as evidence that the tests would have gone red
-- `DO NOT` make the check a gate — a gate that is routinely skipped is a broken
-  gate (`standards/delivery.md`), and an honest "not run" beats a ritual one
+- `DO NOT` make the check a gate. `standards/delivery.md` holds that a gate
+  whose failures are routinely ignored is broken, and requiring this check on
+  every change — including the many where it answers nothing — is how a gate
+  arrives there. An honest "not run" beats a ritual one
 
 ## Relevant principle
 

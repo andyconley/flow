@@ -19,6 +19,7 @@ symptom an operator can actually observe, in the operator's words.
   - [step]
   - [step]
 - Remediation (if fault): [operator-safe fix steps, or the reason there is none]
+- Escalate to: [role or rota, not a person's name]
 - Escalate when: [concrete signals — unable to diagnose past step N, data loss
   plausible, customer-visible, requires a code change]
 
