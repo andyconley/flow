@@ -2,6 +2,21 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.14.0](https://github.com/andyconley/flow/compare/v0.13.2...v0.14.0) (2026-08-20)
+
+### Features
+
+* **cli:** give capability gaps a destination and a way back out ([a4c1abe](https://github.com/andyconley/flow/commit/a4c1abe8e0ff7b795876c8f8c89c94ef7c488052))
+* **standards:** finish evidence.md with where proof was collected and whether it could have failed ([de0497f](https://github.com/andyconley/flow/commit/de0497f5f1eeb52543f3134572c5eb02d87e1434))
+* **standards:** require an evidence inventory in briefs and record provider failure ([fdbf6e6](https://github.com/andyconley/flow/commit/fdbf6e62b976f81e7a6d50cff7075a9e57dcacfe))
+* **templates:** add a symptom-first runbook template and wire it to three callers ([84f609d](https://github.com/andyconley/flow/commit/84f609d72ed5a1d1a1252325c218c168ab443352))
+
+### Bug Fixes
+
+* **cli:** keep gap provenance out of the public backlog and harden promote ([c4c8b47](https://github.com/andyconley/flow/commit/c4c8b4751ccb5e04894343f650289fceedaa8fd8))
+* **standards:** make the new evidence sections capable of failing their own test ([6505086](https://github.com/andyconley/flow/commit/65050867981c82803cdf45d01ccd06079686e06f))
+* **tests:** give the interactive refresh test the fake home it needs ([940f020](https://github.com/andyconley/flow/commit/940f020e63f02759c56e80a5ecdaad89927a3292)), closes [#8](https://github.com/andyconley/flow/issues/8)
+
 ## [0.13.2](https://github.com/andyconley/flow/compare/v0.13.1...v0.13.2) (2026-08-19)
 
 ### Bug Fixes
