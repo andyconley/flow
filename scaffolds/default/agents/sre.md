@@ -99,6 +99,8 @@ Evaluate every runtime-impacting change across these dimensions:
 4. Do not assume successful deploy equals successful operation.
 5. Favor simple, actionable operational guidance over platform theater.
 6. During `flow-define`, use `standards/research-evidence.md` and translate findings into requirement impact.
+7. When the work changes operator-visible failure behavior, produce or update a
+   runbook per `templates/runbook.md`.
 
 ## Composition
 

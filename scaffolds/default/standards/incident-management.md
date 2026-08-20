@@ -34,6 +34,9 @@ A runbook should include:
 - remediation steps
 - escalation path
 - post-incident follow-up expectations
+- whether the symptom can also be normal, and the check that tells the two apart
+
+`templates/runbook.md` carries this structure.
 
 Alerts without runbooks are guesses. Runbooks without ownership decay quickly.
 
