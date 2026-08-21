@@ -390,20 +390,30 @@ def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
         return 1
 
     if all_files:
-        rel_paths = [item.relative_to(SCAFFOLD_DIR) for item in SCAFFOLD_DIR.iterdir()]
-        mode = "full scaffold"
-    else:
-        manifest_path = target / "flow.toml"
-        manifest = flowtoml.read_toml(manifest_path) if manifest_path.exists() else {}
-        rel_paths = set(_REFRESH_CORE_PATHS)
-        # Rejected declarations are dropped here rather than reported: refresh
-        # has always silently skipped them (`_safe_scaffold_rel_paths` filters
-        # the same two cases), and `flow project audit` is the surface that
-        # names them.
-        declared, _rejected = declared_sources(manifest)
-        rel_paths.update(Path(d.rel) for d in declared)
-        rel_paths = _safe_scaffold_rel_paths(rel_paths)
-        mode = "overlay core and registered sources"
+        # `--all` used to copy every scaffold entry into the project. That is
+        # the fork this refactor exists to remove: the copies never update, and
+        # the runtime reads the user-level install regardless, so backfilling
+        # them produced a directory of files that look authoritative and are
+        # not. Refused rather than quietly reinterpreted as a plain refresh —
+        # someone who typed `--all` wanted the copies, and should be told they
+        # are gone instead of watching the command exit 0 having ignored them.
+        print("`flow refresh project --all` was retired: it restored a full copy")
+        print("of the framework scaffold, and those copies never update")
+        print("run `flow refresh project` to repair this overlay's own core files")
+        print("run `flow project audit` to see what it is still carrying")
+        return 1
+
+    manifest_path = target / "flow.toml"
+    manifest = flowtoml.read_toml(manifest_path) if manifest_path.exists() else {}
+    rel_paths = set(_REFRESH_CORE_PATHS)
+    # Rejected declarations are dropped here rather than reported: refresh
+    # has always silently skipped them (`_safe_scaffold_rel_paths` filters
+    # the same two cases), and `flow project audit` is the surface that
+    # names them.
+    declared, _rejected = declared_sources(manifest)
+    rel_paths.update(Path(d.rel) for d in declared)
+    rel_paths = _safe_scaffold_rel_paths(rel_paths)
+    mode = "overlay core and registered sources"
 
     prompt = interactive or sys.stdin.isatty()
     counts = _refresh_scaffold_files(rel_paths, target, prompt=prompt)
@@ -415,8 +425,6 @@ def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
     print(f"updated from framework: {counts['updated']}")
     print(f"left changed files unchanged: {counts['changed']}")
     print(f"conflicts: {counts['conflicts']}")
-    if not all_files:
-        print("tip: use `flow refresh project --all` to backfill the full framework scaffold")
     if counts["changed"] and not prompt:
         print("tip: rerun with `flow refresh project --interactive` to choose updates")
     return 0

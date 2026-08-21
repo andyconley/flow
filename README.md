@@ -223,7 +223,7 @@ Use these when a repo needs a `.flow/` overlay for project-specific roles, memor
 - `flow refresh project --interactive`
   - review same-name files whose framework content differs and choose whether to update them
 - `flow refresh project --all`
-  - backfill the full framework scaffold into the project overlay
+  - retired; it restored a full copy of the framework scaffold, and those copies never update
 - `flow bootstrap`
   - validate that the required `.flow/` structure exists
 

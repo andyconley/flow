@@ -342,7 +342,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("updated from framework: 1", result.stdout)
         self.assertEqual(command.read_text(), (REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-define.md").read_text())
 
-    def test_refresh_project_all_backfills_full_scaffold(self) -> None:
+    def test_refresh_project_all_is_retired(self) -> None:
         flow_dir = self.repo / ".flow"
         flow_dir.mkdir()
         (flow_dir / "flow.toml").write_text(
@@ -351,13 +351,38 @@ class FlowCliTests(FlowCliHarness):
         )
 
         result = self.run_flow("refresh", "project", "--all")
-        self.assert_ok(result)
 
-        self.assertIn("mode: full scaffold", result.stdout)
-        self.assertTrue((flow_dir / "commands" / "flow-plan.md").exists())
-        self.assertTrue((flow_dir / "agents" / "architect.md").exists())
-        self.assertTrue((flow_dir / "standards" / "git-commits.md").exists())
-        self.assertTrue((flow_dir / "templates" / "definition.md").exists())
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("was retired", result.stdout)
+        self.assertIn("flow project audit", result.stdout)
+
+    def test_refresh_project_all_creates_nothing(self) -> None:
+        """Exit 1 alone would pass even if it wrote half the fork before bailing.
+
+        The point of the retirement is the absence of the copies, not the
+        return code, so this pins the filesystem rather than the exit status.
+        """
+        flow_dir = self.repo / ".flow"
+        flow_dir.mkdir()
+        (flow_dir / "flow.toml").write_text('[framework]\nname = "flow"\nversion = 1\n')
+
+        before = {p.relative_to(flow_dir): p.read_bytes() for p in flow_dir.rglob("*") if p.is_file()}
+        self.assertEqual(self.run_flow("refresh", "project", "--all").returncode, 1)
+        after = {p.relative_to(flow_dir): p.read_bytes() for p in flow_dir.rglob("*") if p.is_file()}
+
+        self.assertEqual(before, after)
+
+    def test_refresh_project_all_still_hits_the_missing_overlay_guard_first(self) -> None:
+        """Retiring `--all` must not jump the queue ahead of the older guard.
+
+        A repo with no `.flow` at all should still be told to run `setup
+        project`, not handed a message about a flag it never needed.
+        """
+        result = self.run_flow("refresh", "project", "--all")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("repo is missing .flow", result.stdout)
+        self.assertNotIn("was retired", result.stdout)
 
     def test_sync_claude_generates_the_full_runtime_surface(self) -> None:
         fake_home = self.use_fake_home()

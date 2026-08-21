@@ -65,7 +65,7 @@ Behavior:
 - leaves existing project files untouched when their content differs from the framework
 - reports changed same-name files as update candidates
 - use `flow refresh project --interactive` to choose whether to replace changed files with the framework version
-- use `flow refresh project --all` to backfill the full framework scaffold, including commands, agents, standards, templates, and project starter files
+- `flow refresh project --all` is retired. It backfilled the whole framework scaffold into the project, which is the fork this overlay model removed: the copies never update and the runtime reads the user-level install regardless. It exits 1 and points at `flow project audit`.
 
 Use this to repair an incomplete overlay or restore registered project-local sources without importing framework content that the user-level install already provides.
 

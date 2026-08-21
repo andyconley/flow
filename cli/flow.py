@@ -125,7 +125,7 @@ def main() -> int:
     refresh_project_parser.add_argument(
         "--all",
         action="store_true",
-        help="backfill the full framework scaffold, including commands, agents, standards, and templates",
+        help="retired — it restored a full copy of the framework scaffold; exits 1 with a pointer",
     )
     refresh_project_parser.add_argument(
         "--interactive",
