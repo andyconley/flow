@@ -89,7 +89,7 @@ Initial role mapping proposal, now represented in shared `[[agents]]` entries:
 ## Claude findings
 
 Claude Code already has a mature custom-subagent surface, and Flow already emits
-that surface. `flow sync claude` generates `.claude/agents/*.md` from the Flow
+that surface. `flow sync claude --user` generates `.claude/agents/*.md` from the Flow
 agent source files. Those files use YAML frontmatter plus a Markdown body, which
 matches Claude Code's native subagent format.
 

@@ -6,12 +6,15 @@ never overwrite, and `sync_missing_tree` reports what it skipped rather than
 clobbering it. That bias is deliberate: these run against user repos and
 `~/.flow`, where an overwrite loses hand-edited content.
 
-`_remove_path` is the one destructive helper, and it exists because the obvious
-call (`shutil.rmtree`) has a symlink blind spot — see its docstring.
+`_remove_path` and `write_atomic` are the two exceptions, and both exist for a
+reason their docstrings give: `shutil.rmtree` has a symlink blind spot, and a
+non-atomic rewrite can be interrupted into a zero-length file.
 """
 
 import json
+import os
 import shutil
+import tempfile
 from pathlib import Path
 
 
@@ -58,6 +61,58 @@ def ensure_file(path: Path, content: str) -> None:
         return
     ensure_dir(path.parent)
     path.write_text(content)
+
+
+def write_atomic(path: Path, content: str, *, mode: int | None = None) -> None:
+    """Replace a file's contents so a crash leaves either the old file or the new.
+
+    The one destructive-by-default function in a module whose whole bias is the
+    opposite, and it exists for the migration path: a manifest rewritten
+    non-atomically can be interrupted between truncate and write, leaving an
+    empty file that names none of the sources still on disk.
+
+    Four details are load-bearing and each has a plausible wrong version:
+
+    **The temp file goes in the destination's own directory.** `os.replace` is
+    atomic only within a filesystem; a temp file under `/tmp` is a different
+    mount on many systems and the rename raises `EXDEV`.
+
+    **fsync before the rename.** Without it a crash can land the rename ahead of
+    the data and leave a zero-length file — worse than either the old or the new
+    contents, and worse than not being atomic at all.
+
+    **The mode is carried over.** `mkstemp` creates `0600`, so a rewritten
+    `settings.json` would silently become owner-only.
+
+    **The temp file is removed on any failure**, and the exception is re-raised
+    rather than swallowed. A caller that believes a write succeeded is how a
+    migration deletes the files a manifest was supposed to stop naming.
+    """
+    # Written through, not over: `.claude/settings.json` is commonly a symlink
+    # into a dotfiles repo, and `os.replace` onto the link would break it —
+    # leaving the real file untouched, which for the migration means flow's
+    # handlers survive pointing at scripts the next step deletes. Resolving
+    # also puts the temp file on the target's own filesystem, which is what
+    # makes the rename atomic.
+    if path.is_symlink():
+        path = Path(os.path.realpath(path))
+    ensure_dir(path.parent)
+    if mode is None:
+        mode = (path.stat().st_mode & 0o7777) if path.exists() else 0o644
+    fd, temp_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temp = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp, mode)
+        os.replace(temp, path)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
 
 
 def copy_if_missing(src: Path, dest: Path) -> None:

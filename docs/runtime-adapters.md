@@ -19,7 +19,7 @@ Each runtime target can be generated at two scopes:
 | **User-level** | Framework scaffold (`~/.flow/source/scaffolds/default/`) **plus** user overlay (`~/.flow/user/`) when present | `~/.claude/`, `~/.agents/skills/`, `~/.codex/` | Always — installs Flow into every supported runtime session |
 | **Project-level** | Project overlay (`<repo>/.flow/`) | `<repo>/.claude/`, `<repo>/.agents/skills/`, `<repo>/.codex/` | Per-repo, when you want project-specific role assignments, memory, and run artifacts |
 
-User-mode sync (`flow sync claude --user`) and project-mode sync (`flow sync claude`) generate distinct artifacts to distinct locations and are independent. A single repo can have both active simultaneously — the user-level install provides the universal framework while the project overlay provides repo-specific context.
+Sync is user-level only (`flow sync claude --user`). Project-mode sync generated a second, repo-local copy of the same adapters from a project's own copies of the framework; it was retired along with those copies. The user-level install provides the universal framework in every session, and a repo's `.flow/` provides that project's context — the two no longer overlap.
 
 Mode-specific differences:
 
@@ -34,7 +34,7 @@ Mode-specific differences:
 
 Claude is a native skill, agent, hook, and settings target.
 
-`flow sync claude` generates:
+`flow sync claude --user` generates:
 
 - `.claude/skills/<flow-command>/SKILL.md`
 - `.claude/agents/*.md`
@@ -106,7 +106,7 @@ This is why the Claude settings file is tracked as `sync_mode = "merge"` in the 
 
 Codex is a native skill, agent, and hook target.
 
-`flow sync codex` generates:
+`flow sync codex --user` generates:
 
 - `.agents/skills/<flow-command>/SKILL.md`
 - `.codex/agents/*.toml`
@@ -188,8 +188,8 @@ This prevents `flow` from silently overwriting user-owned runtime files.
 
 Use:
 
-- `flow sync claude --check`
-- `flow sync codex --check`
+- `flow sync claude --user --check`
+- `flow sync codex --user --check`
 
 These commands:
 

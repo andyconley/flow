@@ -20,8 +20,6 @@ from paths import (
     CODEX_SKILL_DIR,
     GENERATED_MARKER,
     LEGACY_CODEX_SKILL_DIR,
-    MODE_PROJECT,
-    MODE_USER,
 )
 
 
@@ -126,50 +124,49 @@ def routing_hints_for(target: str, agents: list[dict], model_tiers: dict) -> str
     return "\n".join(lines)
 
 
-def hook_command_for(mode: str, script: str) -> str:
-    """Return the absolute hook command path for a given sync mode."""
-    if mode == MODE_USER:
-        return f'"$HOME"/.claude/hooks/{script}'
-    return f'"$CLAUDE_PROJECT_DIR"/.claude/hooks/{script}'
+def hook_command_for(script: str) -> str:
+    """The absolute hook command path.
+
+    Took a `mode` until project-level sync was retired. Adapters are only ever
+    generated at user level now, so `$CLAUDE_PROJECT_DIR` — which resolved to
+    whichever repo a session was launched in — has nothing left to point at.
+    """
+    return f'"$HOME"/.claude/hooks/{script}'
 
 
-def codex_hook_command_for(mode: str, script: str) -> str:
+def codex_hook_command_for(script: str) -> str:
     """Codex twin of `hook_command_for`.
 
-    Codex has no `$CLAUDE_PROJECT_DIR` equivalent; the official project-mode
-    idiom in its own hook docs is `$(git rev-parse --show-toplevel)`, which
-    resolves correctly because project hooks only load when the project
-    `.codex/` layer is trusted — i.e. inside that repo.
+    The project form used `$(git rev-parse --show-toplevel)`, because Codex has
+    no `$CLAUDE_PROJECT_DIR` equivalent. It went with project sync.
     """
-    if mode == MODE_USER:
-        return f'"$HOME"/.codex/hooks/{script}'
-    return f'"$(git rev-parse --show-toplevel)"/.codex/hooks/{script}'
+    return f'"$HOME"/.codex/hooks/{script}'
 
 
-def source_ref_for(mode: str, source_rel: str, origin: str = "framework") -> str:
-    """Return the source-of-truth reference string used in managed manifests.
+def source_ref_for(source_rel: str, origin: str = "framework") -> str:
+    """The source-of-truth reference string used in managed manifests.
 
     `origin` is "framework" for entries from `scaffolds/default/flow.toml` and
     "user" for entries that came from the `~/.flow/user/` user overlay (see
     `merge_user_overlay`). The reference path differs so a reader of the
     managed manifest can tell at a glance which entries are user-customized.
     """
-    if mode == MODE_USER:
-        if origin == "user":
-            return f'~/.flow/user/{source_rel}'
-        return f'~/.flow/source/scaffolds/default/{source_rel}'
-    return f'.flow/{source_rel}'
+    if origin == "user":
+        return f'~/.flow/user/{source_rel}'
+    return f'~/.flow/source/scaffolds/default/{source_rel}'
 
 
-def manifest_ref_for(mode: str, manifest_path: Path, root: Path) -> str:
-    """Return the source_manifest reference used in managed manifests."""
-    if mode == MODE_USER:
-        return '~/.flow/source/scaffolds/default/flow.toml'
-    return rel_posix(manifest_path, root)
+def manifest_ref_for() -> str:
+    """The source_manifest reference used in managed manifests."""
+    return '~/.flow/source/scaffolds/default/flow.toml'
 
 
 def render_codex_skill(
-    name: str, description: str, source_path: str, body: str, routing_hints: str = ""
+    name: str,
+    description: str,
+    source_ref: str,
+    body: str,
+    routing_hints: str = "",
 ) -> str:
     lines = [
         "---",
@@ -177,7 +174,7 @@ def render_codex_skill(
         f"description: {json.dumps(description)}",
         "---",
         "",
-        f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and rerun `flow sync codex`. -->",
+        f"<!-- {GENERATED_MARKER} Edit `{source_ref}` and rerun `flow sync codex --user`. -->",
         "",
         body.rstrip(),
         "",
@@ -241,19 +238,19 @@ def build_skill_frontmatter(name: str, command: dict, skill_defaults: dict) -> l
 
 
 def render_skill_from_command(
-    command: dict, skill_defaults: dict, routing_hints: str = "", mode: str = MODE_PROJECT
+    command: dict, skill_defaults: dict, routing_hints: str = ""
 ) -> str:
     source_path = command["source"]
     body = command["_body"]
     # The edit hint must point at a file that actually exists, which depends
-    # on BOTH origin and sync mode: a user-overlay command's source lives
-    # under ~/.flow/user/; a framework command synced in --user mode lives
+    # on origin: a user-overlay command's source lives under ~/.flow/user/,
+    # while a framework command's lives under the installed scaffold
     # under ~/.flow/source/scaffolds/default/ (there is no `.flow/` anywhere
     # near ~/.claude/skills/); only project mode's `.flow/<source>` matches
     # the classic hint. `source_ref_for` already encodes exactly this
     # decision for the managed manifest — reuse it rather than restate it.
-    source_ref = source_ref_for(mode, source_path, command.get("_origin", "framework"))
-    resync = "flow sync claude --user" if mode == MODE_USER else "flow sync claude"
+    source_ref = source_ref_for(source_path, command.get("_origin", "framework"))
+    resync = "flow sync claude --user"
     edit_hint = f"Edit `{source_ref}` and run `{resync}`."
     lines = build_skill_frontmatter(command["name"], command, skill_defaults)
     lines.extend(
@@ -280,18 +277,18 @@ def render_skill_from_command(
     return "\n".join(lines)
 
 
-def render_claude_agent(source_path: str, body: str, policy: dict) -> str:
+def render_claude_agent(source_ref: str, body: str, policy: dict) -> str:
     frontmatter, content = parse_frontmatter(body)
     for key, value in policy.items():
         if value:
             frontmatter[key] = value
-    marker = f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->"
+    marker = f"<!-- {GENERATED_MARKER} Edit `{source_ref}` and run `flow sync claude --user`. -->"
     lines = render_yaml_frontmatter(frontmatter)
     lines.extend(["", marker, "", content.rstrip(), ""])
     return "\n".join(lines)
 
 
-def render_codex_agent(name: str, source_path: str, body: str, policy: dict) -> str:
+def render_codex_agent(name: str, source_ref: str, body: str, policy: dict) -> str:
     frontmatter, content = parse_frontmatter(body)
     description = str(frontmatter.get("description", f"Flow agent: {name}"))
     safe_body = content.rstrip().replace('"""', '""\\"')
@@ -309,7 +306,7 @@ def render_codex_agent(name: str, source_path: str, body: str, policy: dict) -> 
     lines.extend(
         [
             "",
-            f"# {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync codex`.",
+            f"# {GENERATED_MARKER} Edit `{source_ref}` and run `flow sync codex --user`.",
             "",
         ]
     )

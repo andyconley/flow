@@ -455,3 +455,11 @@ summary = "Validate the current repo's `.flow/` structure"
 [[help.cli_commands]]
 invocation = "flow doctor"
 summary = "Report machine, install, user-level, and project-level state"
+
+[[help.cli_commands]]
+invocation = "flow project audit"
+summary = "Classify a repo's `.flow/` overlay against the framework (read-only)"
+
+[[help.cli_commands]]
+invocation = "flow project migrate"
+summary = "Remove the framework copies `audit` finds; dry run unless `--apply --yes`"

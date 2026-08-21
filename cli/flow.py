@@ -40,6 +40,7 @@ from plugin_usage import (  # noqa: E402
     plugin_usage_show_command,
     plugin_usage_snapshot_command,
 )
+from migrate import cmd_migrate  # noqa: E402
 from project import cmd_audit  # noqa: E402
 from setup import (  # noqa: E402
     refresh_project,
@@ -62,8 +63,9 @@ def main() -> int:
             "  flow setup user                    (install at user level)\n"
             "  flow setup project                 (per-repo overlay)\n"
             "  flow bootstrap\n"
-            "  flow sync claude\n"
-            "  flow sync codex --check\n"
+            "  flow sync claude --user\n"
+            "  flow sync codex --user --check\n"
+            "  flow project audit                 (what a repo still copies)\n"
             "  flow doctor\n"
         ),
     )
@@ -365,6 +367,18 @@ def main() -> int:
     project_audit_parser.add_argument("--json", action="store_true", help="emit the payload as JSON instead of the rendered report")
     project_audit_parser.add_argument("--root", metavar="PATH", help="audit this `.flow` directory instead of the enclosing repo's")
     project_audit_parser.add_argument("--scaffold", metavar="PATH", help="compare against this framework scaffold instead of the installed one")
+    project_migrate_parser = project_sub.add_parser(
+        "migrate",
+        help="remove the framework copies `audit` reports, and the declarations naming them",
+        description="Acts on what `flow project audit` reports. Dry run by default: prints exactly which files would be deleted and which `flow.toml` declarations would be removed, and exits 0 without touching anything. Only byte-identical framework copies are ever removed \u2014 `differs` cannot be told apart from a real customization by anything on this machine, so it is reported and left. The manifest is edited as text rather than parsed and rewritten, so comments and formatting survive.",
+    )
+    project_migrate_parser.add_argument("--json", action="store_true", help="emit the plan as JSON instead of the rendered report")
+    project_migrate_parser.add_argument("--root", metavar="PATH", help="migrate this `.flow` directory instead of the enclosing repo's")
+    project_migrate_parser.add_argument("--scaffold", metavar="PATH", help="compare against this framework scaffold instead of the installed one")
+    project_migrate_parser.add_argument("--apply", action="store_true", help="actually remove them; requires --yes")
+    project_migrate_parser.add_argument("--yes", action="store_true", help="confirm a destructive --apply run (no interactive prompt exists)")
+    project_migrate_parser.add_argument("--at", help="UTC stamp for the backup directory name; defaults to now")
+
 
     overlay_parser = sub.add_parser(
         "overlay",
@@ -440,20 +454,18 @@ def main() -> int:
     )
     sync = sub.add_parser(
         "sync",
-        help="generate runtime adapters from repo/.flow or the framework scaffold",
-        description="Generate runtime-facing adapters from the repo-local .flow source of truth, or from the framework scaffold when --user is set.",
+        help="generate runtime adapters from the framework scaffold (user level)",
+        description="Generate runtime-facing adapters from the framework scaffold, layered with the user overlay. Requires --user: project-level sync was retired, because it existed to regenerate adapters from a project's own copies of the framework and projects no longer hold copies. Without --user this exits 1 and points at `flow project migrate`, which removes the adapters an earlier project-level sync left behind.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Targets:\n"
             "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
             "  codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.\n\n"
             "Examples:\n"
-            "  flow sync claude\n"
-            "  flow sync claude --check\n"
             "  flow sync claude --user\n"
-            "  flow sync codex\n"
-            "  flow sync codex --check\n"
+            "  flow sync claude --user --check\n"
             "  flow sync codex --user\n"
+            "  flow sync codex --user --check\n"
         ),
     )
     sync.add_argument(
@@ -469,7 +481,7 @@ def main() -> int:
     sync.add_argument(
         "--user",
         action="store_true",
-        help="sync user-level runtime surfaces from the framework scaffold (instead of the current repo)",
+        help="required: sync user-level runtime surfaces from the framework scaffold",
     )
 
     install_parser = sub.add_parser(
@@ -609,6 +621,8 @@ def main() -> int:
         return cmd_promote(args)
     if args.command == "project" and args.project_target == "audit":
         return cmd_audit(args)
+    if args.command == "project" and args.project_target == "migrate":
+        return cmd_migrate(args)
     if args.command == "overlay" and args.overlay_target == "status":
         return overlay_status_command()
     if args.command == "overlay" and args.overlay_target == "check":

@@ -285,7 +285,7 @@ Do not treat generated runtime folders as the primary source of truth at any sco
 All of these are generated. To change them, edit the corresponding source:
 
 - For user-level outputs: edit `scaffolds/default/*` in this repo and rerun `flow sync claude --user` / `flow sync codex --user`
-- For project-level outputs: edit `<repo>/.flow/*` in the consuming repo and rerun `flow sync claude` / `flow sync codex` there
+- There are no project-level generated outputs. Runtime adapters are generated once at user level from the framework scaffold; a repo's `.flow/` holds that project's own context, memory, and runs
 
 ## Install Scopes At A Glance
 

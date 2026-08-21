@@ -65,8 +65,19 @@ def parse_simple_toml(text: str) -> dict:
     return root
 
 
-def read_toml(path: Path) -> dict:
-    text = path.read_text()
+def loads(text: str) -> dict:
+    """Parse TOML text the same way `read_toml` parses a file.
+
+    Callers that hold text rather than a path used to reach for
+    `parse_simple_toml` directly, which is the fallback for interpreters
+    without tomllib and raises on anything outside its subset — floats,
+    arrays, inline comments. Reaching past `read_toml` like that turns a
+    perfectly ordinary manifest into a crash.
+    """
     if _tomllib is not None:
         return _tomllib.loads(text)
     return parse_simple_toml(text)
+
+
+def read_toml(path: Path) -> dict:
+    return loads(path.read_text())

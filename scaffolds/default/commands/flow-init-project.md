@@ -55,10 +55,10 @@ Conditional roles (invoked when relevant):
    - Workflow notes — propose preferred small-change and gated-work paths based on observed work patterns.
    - Runtime and integration notes — propose based on file inspection (Dockerfile, package.json, requirements.txt, .github/workflows/, etc.).
 4. **Write the updated `.flow/PROJECT.md`.** Edit the file in place — don't make the user copy-paste.
-5. **Project-level sync check.** Determine whether `flow sync claude` (and `flow sync codex`) at the project level is actually needed:
-   - Compare `.flow/agents/*.md`, `.flow/commands/*.md`, and `.flow/standards/*.md` against the framework scaffold at `~/.flow/source/scaffolds/default/`
-   - If NO divergence (all files match the scaffold), project-level sync is **not needed**. The user-level install (`flow setup user`) already covers the framework surfaces in every supported runtime session. Tell the user explicitly: "No project-level sync needed — your user-level install handles the framework's runtime surfaces."
-   - If YES divergence (this project has customized agents, commands, or standards), recommend running `flow sync claude` and `flow sync codex` as appropriate to regenerate this project's runtime adapters. Offer to run them.
+5. **Overlay check.** Run `flow project audit` and read the result to the user.
+   - Runtime surfaces come from the user-level install (`flow setup user`) in every supported session. A project does not generate its own; project-level sync was retired.
+   - Anything in the `identical` or `orphaned` buckets is a stale copy of a framework file, or a manifest entry naming a file that is gone. Recommend `flow project migrate` — dry run first — and offer to run it.
+   - Anything in `differs` is either a real customization or a stale copy, and nothing local can tell which. Say that rather than guessing, and leave it alone.
 6. **Optional follow-up.** Offer to also walk through:
    - which `.flow/standards/*.md` files to keep vs delete (only override framework defaults where the project actually differs)
    - which `.flow/project/*.md` overlay files to populate now vs defer
@@ -83,8 +83,9 @@ Conditional roles (invoked when relevant):
 - Inferred (no user input needed): [sections]
 - Asked the user: [sections]
 
-### Project-level sync status
-- [One of: "Not needed — no divergence from framework scaffold; user-level install covers runtime surfaces" | "Needed — project has customized {agents/commands/standards}; recommend `flow sync claude` and/or `flow sync codex` to regenerate runtime adapters"]
+### Overlay status
+- [One of: "Clean — no framework copies, no stale declarations" | "{N} framework copies and/or stale declarations; recommend `flow project migrate`"]
+- [Anything in `differs`, named, with the caveat that staleness and customization cannot be told apart locally]
 
 ### Follow-up offered
 - [What you offered to do next — standards trim, project overlay population, etc.]
@@ -95,7 +96,7 @@ Conditional roles (invoked when relevant):
 ### Recommended Next Command
 - Commit the overlay change: `git add .flow/ && git commit -m "Initialize flow project overlay"`
 - `/flow-boot` to verify the overlay is being read correctly
-- (If sync was needed): `flow sync claude` and `flow sync codex` to regenerate project adapters
+- (If the overlay is not clean): `flow project migrate` to review, then `--apply --yes` to act
 ```
 
 ## Common Rationalizations

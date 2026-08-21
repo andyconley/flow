@@ -111,6 +111,25 @@ class FlowCliHarness(unittest.TestCase):
     def setup_project(self) -> None:
         self.assert_ok(self.run_flow("setup", "project"))
 
+    def writable_scaffold(self, fake_home: Path) -> Path:
+        """Give this fake HOME its own editable copy of the framework scaffold.
+
+        `use_fake_home` points ~/.flow/source straight at the checkout, so a
+        test that needs to change the scaffold manifest would be editing the
+        repo it is running from. Only `scaffolds/` is copied; everything else
+        (hooks/, cli/) stays a link, so hook scripts still resolve.
+        """
+        source = fake_home / ".flow" / "source"
+        if source.is_symlink():
+            source.unlink()
+        source.mkdir(parents=True, exist_ok=True)
+        for entry in REPO_ROOT.iterdir():
+            if entry.name.startswith(".") or entry.name == "scaffolds":
+                continue
+            (source / entry.name).symlink_to(entry)
+        shutil.copytree(REPO_ROOT / "scaffolds", source / "scaffolds")
+        return source / "scaffolds" / "default"
+
     def use_fake_home(self) -> Path:
         """Create a fake HOME with a flow source symlink. Subsequent run_flow calls use this HOME."""
         fake_home = self.repo / "fake_home"
@@ -340,18 +359,18 @@ class FlowCliTests(FlowCliHarness):
         self.assertTrue((flow_dir / "standards" / "git-commits.md").exists())
         self.assertTrue((flow_dir / "templates" / "definition.md").exists())
 
-    def test_sync_claude_generates_runtime_surface(self) -> None:
-        self.setup_project()
+    def test_sync_claude_generates_the_full_runtime_surface(self) -> None:
+        fake_home = self.use_fake_home()
 
-        self.assert_ok(self.run_flow("sync", "claude"))
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
 
-        skill_path = self.repo / ".claude" / "skills" / "flow-plan" / "SKILL.md"
-        define_skill_path = self.repo / ".claude" / "skills" / "flow-define" / "SKILL.md"
-        agent_path = self.repo / ".claude" / "agents" / "architect.md"
-        tech_writer_path = self.repo / ".claude" / "agents" / "tech-writer.md"
-        hook_path = self.repo / ".claude" / "hooks" / "flow-session-start.sh"
-        settings_path = self.repo / ".claude" / "settings.json"
-        managed_path = self.repo / ".claude" / "flow.managed.toml"
+        skill_path = fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md"
+        define_skill_path = fake_home / ".claude" / "skills" / "flow-define" / "SKILL.md"
+        agent_path = fake_home / ".claude" / "agents" / "architect.md"
+        tech_writer_path = fake_home / ".claude" / "agents" / "tech-writer.md"
+        hook_path = fake_home / ".claude" / "hooks" / "flow-session-start.sh"
+        settings_path = fake_home / ".claude" / "settings.json"
+        managed_path = fake_home / ".claude" / "flow.managed.toml"
 
         self.assertTrue(skill_path.exists())
         self.assertTrue(define_skill_path.exists())
@@ -370,20 +389,20 @@ class FlowCliTests(FlowCliHarness):
         session_groups = settings["hooks"]["SessionStart"]
         self.assertTrue(
             any(
-                group["hooks"][0]["command"] == '"$CLAUDE_PROJECT_DIR"/.claude/hooks/flow-session-start.sh'
+                group["hooks"][0]["command"] == '"$HOME"/.claude/hooks/flow-session-start.sh'
                 for group in session_groups
             )
         )
 
     def test_sync_codex_generates_skill_runtime(self) -> None:
-        self.setup_project()
+        fake_home = self.use_fake_home()
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
-        skill_path = self.repo / ".agents" / "skills" / "flow-plan" / "SKILL.md"
-        define_skill_path = self.repo / ".agents" / "skills" / "flow-define" / "SKILL.md"
-        agent_path = self.repo / ".codex" / "agents" / "architect.toml"
-        managed_path = self.repo / ".codex" / "flow.managed.toml"
+        skill_path = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        define_skill_path = fake_home / ".agents" / "skills" / "flow-define" / "SKILL.md"
+        agent_path = fake_home / ".codex" / "agents" / "architect.toml"
+        managed_path = fake_home / ".codex" / "flow.managed.toml"
 
         self.assertTrue(skill_path.exists())
         self.assertTrue(define_skill_path.exists())
@@ -398,25 +417,48 @@ class FlowCliTests(FlowCliHarness):
         agent_content = agent_path.read_text()
         self.assertIn('model = "gpt-5.6-sol"', agent_content)
         self.assertIn('model_reasoning_effort = "medium"', agent_content)
-        tech_writer_content = (self.repo / ".codex" / "agents" / "tech-writer.toml").read_text()
+        tech_writer_content = (fake_home / ".codex" / "agents" / "tech-writer.toml").read_text()
         self.assertIn('model = "gpt-5.6-luna"', tech_writer_content)
         self.assertIn('model_reasoning_effort = "low"', tech_writer_content)
 
     def test_sync_check_detects_codex_drift(self) -> None:
-        self.setup_project()
-        self.assert_ok(self.run_flow("sync", "codex"))
+        fake_home = self.use_fake_home()
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
-        skill_path = self.repo / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        skill_path = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
         skill_path.write_text(skill_path.read_text() + "\nmanual drift\n")
 
-        result = self.run_flow("sync", "codex", "--check")
+        result = self.run_flow("sync", "codex", "--user", "--check")
         self.assertEqual(result.returncode, 1)
         self.assertIn("codex sync check: drift detected", result.stdout)
 
-    def test_doctor_reports_both_runtime_states(self) -> None:
+    def test_sync_without_user_is_refused(self) -> None:
+        """Project-level sync was retired. Exiting 1 rather than 0 matters: a
+        pointer printed alongside success is indistinguishable from having
+        synced, and any caller checking the exit code would carry on believing
+        its adapters were current."""
+        self.use_fake_home()
         self.setup_project()
-        self.assert_ok(self.run_flow("sync", "claude"))
-        self.assert_ok(self.run_flow("sync", "codex"))
+        for target in ("claude", "codex"):
+            result = self.run_flow("sync", target)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("project-level sync was retired", result.stdout)
+            self.assertIn(f"flow sync {target} --user", result.stdout)
+        self.assertFalse((self.repo / ".claude").exists(), "nothing may be generated")
+
+    def test_doctor_reports_both_runtime_states(self) -> None:
+        """Doctor still reports two sections, but only the user-level one
+        carries runtime state now. Project-level sync was retired, so the
+        project section no longer has claude/codex sync, drift, skills,
+        agents, or agent-policy lines — it reports the repo overlay only.
+        Asserting the old project drift lines here would pin behavior that
+        no longer exists; asserting `overlay:` pins what replaced it.
+        """
+        fake_home = self.use_fake_home()
+        self.setup_project()
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+        self.assertTrue((fake_home / ".claude" / "flow.managed.toml").exists())
 
         result = self.run_flow("doctor")
         self.assert_ok(result)
@@ -429,12 +471,22 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("-- user-level", result.stdout)
         self.assertIn("-- project:", result.stdout)
 
+        project_section = result.stdout.split("-- project:", 1)[1]
+        self.assertIn("overlay:", project_section)
+
     def test_top_level_help_lists_core_commands_and_examples(self) -> None:
         result = self.run_flow("--help")
         self.assert_ok(result)
         self.assertIn("Portable AI workflow framework CLI.", result.stdout)
-        self.assertIn("sync                generate runtime adapters from repo/.flow", result.stdout)
-        self.assertIn("flow sync codex --check", result.stdout)
+        self.assertIn(
+            "sync                generate runtime adapters from the framework scaffold", result.stdout
+        )
+        self.assertIn("flow sync codex --user --check", result.stdout)
+        self.assertIn("flow project audit", result.stdout)
+        # The top-level examples advertised `flow sync claude` and
+        # `flow sync codex --check` after those forms had started exiting 1.
+        # Help that recommends a command which fails is worse than no help.
+        self.assertNotIn("flow sync claude\n", result.stdout)
 
     def test_sync_help_describes_targets_and_examples(self) -> None:
         result = self.run_flow("sync", "--help")
@@ -640,16 +692,17 @@ class FlowCliTests(FlowCliHarness):
         self.assertTrue(skill.exists(), "user-added command must generate a SKILL.md")
         self.assertIn("user-defined Jira status", skill.read_text())
 
-    def test_skill_edit_hint_matches_origin_and_mode(self) -> None:
+    def test_skill_edit_hint_matches_origin(self) -> None:
         """The generated marker must direct edits to a file that actually
-        exists, which depends on BOTH origin and sync mode: a user-overlay
-        command's source lives under `~/.flow/user/`; a framework command
-        synced in --user mode lives under the scaffold at
-        `~/.flow/source/scaffolds/default/` (there is no `.flow/` anywhere
-        near `~/.claude/skills/`); only project mode gets the classic
-        `.flow/<source>` hint. Review caught the first fix handling only
-        the user-origin case and a test pinning the wrong framework-in-
-        user-mode string — this asserts all three cells of the matrix.
+        exists, and which file that is depends on the command's origin. A
+        user-overlay command's source lives under `~/.flow/user/`; a
+        framework command's lives in the scaffold at
+        `~/.flow/source/scaffolds/default/`. Neither is `.flow/`, which is
+        what the hint used to say and which does not exist anywhere near
+        `~/.claude/skills/`. Both cases are asserted below. There used to be
+        a third — a framework command synced in project mode, which did get
+        the classic `.flow/<source>` hint — and it went away with
+        project-level sync.
         """
         fake_home = self.use_fake_home()
         self._write_user_overlay_command(
@@ -674,12 +727,6 @@ class FlowCliTests(FlowCliHarness):
             "a framework skill installed at user level cannot be edited via a nonexistent .flow/",
         )
         self.assertIn("flow sync claude --user", framework_user)
-
-        self.setup_project()
-        self.assert_ok(self.run_flow("sync", "claude"))
-        framework_project = (self.repo / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
-        self.assertIn("Edit `.flow/commands/flow-plan.md`", framework_project)
-        self.assertNotIn("--user", framework_project.split("-->")[0].split("<!--")[-1])
 
     # ------------------------------------------------------------------
     # [[codex.hooks]] — full-parity hook management for the Codex runtime
@@ -789,29 +836,6 @@ class FlowCliTests(FlowCliHarness):
         self.assertFalse(any("flow-my-stop.sh" in c for c in commands))
         self.assertFalse((codex_dir / "hooks" / "flow-my-stop.sh").exists(), "deregistered script must be removed")
 
-    def test_codex_hooks_project_mode_uses_git_toplevel_path(self) -> None:
-        """Codex has no $CLAUDE_PROJECT_DIR equivalent — project-mode hook
-        commands use the git rev-parse idiom from Codex's own docs.
-        """
-        self.use_fake_home()
-        self.setup_project()
-        flow_toml = self.repo / ".flow" / "flow.toml"
-        flow_toml.write_text(
-            flow_toml.read_text()
-            + "\n[[codex.hooks]]\n"
-            + 'name = "proj-hook"\nevent = "SessionStart"\ntype = "command"\nscript = "flow-proj.sh"\n'
-        )
-        # Project-mode hook scripts still come from the framework hooks/ dir;
-        # point at one that exists there.
-        flow_toml.write_text(flow_toml.read_text().replace("flow-proj.sh", "flow-session-start.sh"))
-
-        self.assert_ok(self.run_flow("sync", "codex"))
-
-        doc = json.loads((self.repo / ".codex" / "hooks.json").read_text())
-        handler = doc["hooks"]["SessionStart"][0]["hooks"][0]
-        self.assertIn('"$(git rev-parse --show-toplevel)"/.codex/hooks/flow-session-start.sh', handler["command"])
-        self.assertTrue((self.repo / ".codex" / "hooks" / "flow-session-start.sh").is_file())
-
     def test_hook_script_not_named_flow_is_rejected_at_sync_time(self) -> None:
         """The preserve-unmanaged strip identifies flow's handlers by the
         `/.codex/hooks/flow-` marker — a script named outside that
@@ -832,16 +856,15 @@ class FlowCliTests(FlowCliHarness):
         flow's. Removing hook_dir/hooks_file from the manifest makes the
         file 'stale' — it must be unmanaged, never unlinked.
         """
-        self.use_fake_home()
-        self.setup_project()
-        flow_toml = self.repo / ".flow" / "flow.toml"
-        hooks_json = self.repo / ".codex" / "hooks.json"
+        fake_home = self.use_fake_home()
+        flow_toml = self.writable_scaffold(fake_home) / "flow.toml"
+        hooks_json = fake_home / ".codex" / "hooks.json"
         hooks_json.parent.mkdir(parents=True, exist_ok=True)
         hooks_json.write_text(
             json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "user-owned.sh"}]}]}})
         )
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
         self.assertTrue(hooks_json.exists())
 
         # Drop the hooks surface from the manifest entirely.
@@ -861,7 +884,7 @@ class FlowCliTests(FlowCliHarness):
                 lines.append(line)
         flow_toml.write_text("".join(lines))
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
         self.assertTrue(hooks_json.exists(), "a merge-mode file must survive being dropped from the manifest")
         doc = json.loads(hooks_json.read_text())
         commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
@@ -940,8 +963,8 @@ class FlowCliTests(FlowCliHarness):
 
     def test_sync_codex_migrates_legacy_managed_skills(self) -> None:
         """Existing overlays keep working when their manifest still names the old path."""
-        self.setup_project()
-        manifest = self.repo / ".flow" / "flow.toml"
+        fake_home = self.use_fake_home()
+        manifest = self.writable_scaffold(fake_home) / "flow.toml"
         manifest_text = manifest.read_text().replace(
             '[codex]\nskill_dir = ".agents/skills"',
             '[codex]\nskill_dir = ".codex/skills"',
@@ -949,33 +972,33 @@ class FlowCliTests(FlowCliHarness):
         manifest.write_text(manifest_text)
         self.assertIn('skill_dir = ".codex/skills"', manifest.read_text())
 
-        legacy_skill = self.repo / ".codex" / "skills" / "flow-plan" / "SKILL.md"
+        legacy_skill = fake_home / ".codex" / "skills" / "flow-plan" / "SKILL.md"
         legacy_skill.parent.mkdir(parents=True)
         legacy_skill.write_text("<!-- Generated by flow. -->\nlegacy\n")
-        managed = self.repo / ".codex" / "flow.managed.toml"
+        managed = fake_home / ".codex" / "flow.managed.toml"
         managed.parent.mkdir(parents=True, exist_ok=True)
         managed.write_text(
             '[managed]\n'
             'generator = "flow"\n'
             'version = 2\n'
             'target = "codex"\n'
-            'source_manifest = ".flow/flow.toml"\n'
+            'source_manifest = "~/.flow/source/scaffolds/default/flow.toml"\n'
             'preserve_unmanaged = true\n\n'
             '[[files]]\n'
             'path = ".codex/skills/flow-plan/SKILL.md"\n'
             'kind = "skill"\n'
-            'source = ".flow/commands/flow-plan.md"\n'
+            'source = "~/.flow/source/scaffolds/default/commands/flow-plan.md"\n'
             'sync_mode = "replace"\n'
             '\n[[files]]\n'
             'path = ".codex/flow.managed.toml"\n'
             'kind = "managed-manifest"\n'
-            'source = ".flow/flow.toml"\n'
+            'source = "~/.flow/source/scaffolds/default/flow.toml"\n'
             'sync_mode = "replace"\n'
         )
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
-        current_skill = self.repo / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        current_skill = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
         self.assertTrue(current_skill.exists())
         self.assertFalse(legacy_skill.exists())
         self.assertIn('.agents/skills/flow-plan/SKILL.md', managed.read_text())
@@ -1977,6 +2000,7 @@ class FlowCliTests(FlowCliHarness):
                 "hookio",
                 "jsonl_watermark",
                 "lifecycle",
+                "migrate",
                 "normalize",
                 "overlay",
                 "paths",
@@ -10112,3 +10136,1096 @@ class ProjectAuditCommandTests(FlowCliHarness):
         result = self.audit("--root", str(inside))
         self.assertEqual(result.returncode, 1)
         self.assertIn("flow's own home", result.stdout)
+
+
+class WriteAtomicTests(unittest.TestCase):
+    """`fsutil.write_atomic` — the primitive the migration's manifest rewrite
+    depends on."""
+
+    def setUp(self) -> None:
+        self.fsutil = load_cli_module("fsutil")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_replaces_existing_content(self) -> None:
+        target = self.root / "f.toml"
+        target.write_text("before\n")
+        self.fsutil.write_atomic(target, "after\n")
+        self.assertEqual(target.read_text(), "after\n")
+
+    def test_creates_the_parent_directory(self) -> None:
+        """`os.replace` raises on a missing parent, and `.claude/settings.json`
+        can have none."""
+        target = self.root / "deep" / "nested" / "f.json"
+        self.fsutil.write_atomic(target, "{}\n")
+        self.assertEqual(target.read_text(), "{}\n")
+
+    def test_preserves_the_existing_file_mode(self) -> None:
+        """mkstemp creates 0600, so without this a rewritten settings.json
+        silently becomes owner-only."""
+        target = self.root / "f.json"
+        target.write_text("{}\n")
+        target.chmod(0o644)
+        self.fsutil.write_atomic(target, '{"a": 1}\n')
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+
+    def test_a_new_file_is_not_owner_only(self) -> None:
+        target = self.root / "new.txt"
+        self.fsutil.write_atomic(target, "x\n")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+
+    def test_an_explicit_mode_wins(self) -> None:
+        target = self.root / "script.sh"
+        self.fsutil.write_atomic(target, "#!/bin/sh\n", mode=0o755)
+        self.assertEqual(target.stat().st_mode & 0o777, 0o755)
+
+    def test_the_temp_file_lives_beside_the_target(self) -> None:
+        """`os.replace` is atomic only within a filesystem. A temp file under
+        /tmp is a different mount on many systems and the rename raises EXDEV.
+
+        Asserted by observing where the temp file is created, not by reading the
+        source — a test that greps for `dir=` would pass against a comment.
+        """
+        target = self.root / "sub" / "f.toml"
+        target.parent.mkdir()
+        seen: list[str] = []
+        real_mkstemp = tempfile.mkstemp
+
+        def spy(*args, **kwargs):
+            seen.append(str(kwargs.get("dir")))
+            return real_mkstemp(*args, **kwargs)
+
+        self.fsutil.tempfile.mkstemp = spy
+        try:
+            self.fsutil.write_atomic(target, "x\n")
+        finally:
+            self.fsutil.tempfile.mkstemp = real_mkstemp
+        self.assertEqual(seen, [str(target.parent)])
+
+    def test_a_failed_write_leaves_the_original_and_no_debris(self) -> None:
+        """The caller must not be able to believe a write succeeded. A migration
+        that deletes files on the strength of a manifest rewrite that silently
+        failed is the worst outcome this whole slice can produce."""
+        target = self.root / "f.toml"
+        target.write_text("original\n")
+
+        class Boom(Exception):
+            pass
+
+        real_replace = os.replace
+
+        def exploding_replace(*args, **kwargs):
+            raise Boom("simulated crash between write and rename")
+
+        self.fsutil.os.replace = exploding_replace
+        try:
+            with self.assertRaises(Boom):
+                self.fsutil.write_atomic(target, "never lands\n")
+        finally:
+            self.fsutil.os.replace = real_replace
+
+        self.assertEqual(target.read_text(), "original\n")
+        self.assertEqual(
+            sorted(p.name for p in self.root.iterdir()),
+            ["f.toml"],
+            "a temp file was left behind",
+        )
+
+
+class ManifestSurgeryTests(unittest.TestCase):
+    """Editing `flow.toml` as text rather than parsing and re-serializing it.
+
+    There is no TOML writer in this codebase — `cli/flowtoml.py` only reads, and
+    its fallback parser drops comments and formatting and raises on value types
+    it does not know. A round-trip would rewrite the hand-annotated scaffold
+    manifest into something else, so the migration cuts line ranges out of the
+    original bytes. These tests exist to prove that stays true.
+    """
+
+    def setUp(self) -> None:
+        self.migrate = load_cli_module("migrate")
+        self.project = load_cli_module("project")
+        self.scaffold_manifest = (
+            REPO_ROOT / "scaffolds" / "default" / "flow.toml"
+        ).read_text()
+
+    def sites_in(self, text: str) -> set:
+        found, _ = self.project.declared_sources(
+            load_cli_module("flowtoml").parse_simple_toml(text)
+        )
+        return {d.declared_by for d in found}
+
+    def test_cutting_an_array_entry_removes_that_block_and_nothing_else(self) -> None:
+        text = (
+            '# a comment that must survive\n'
+            '\n'
+            '[[agents]]\n'
+            'name = "keep"\n'
+            'source = "agents/keep.md"\n'
+            '\n'
+            '[[agents]]\n'
+            'name = "drop"\n'
+            'source = "agents/drop.md"\n'
+            '\n'
+            '[[agents]]\n'
+            'name = "also-keep"\n'
+            'source = "agents/also-keep.md"\n'
+        )
+        edits, unresolved = self.migrate.plan_manifest_edits(
+            text, ["agents.drop.source"]
+        )
+        self.assertEqual(unresolved, [])
+        result = self.migrate.apply_manifest_edits(text, edits)
+        self.assertNotIn("drop", result)
+        self.assertIn("# a comment that must survive", result)
+        self.assertIn('name = "keep"', result)
+        self.assertIn('name = "also-keep"', result)
+
+    def test_cutting_a_standards_key_leaves_the_rest_of_the_table(self) -> None:
+        """A `[standards.x]` table can carry `spec` and `upstream` that outlive
+        the source going away, so only the offending key line is cut."""
+        text = (
+            "[standards.git-commits]\n"
+            'spec = "Conventional Commits"\n'
+            'upstream = "https://example.invalid"\n'
+            'flow_standard = "standards/git-commits.md"\n'
+        )
+        edits, unresolved = self.migrate.plan_manifest_edits(
+            text, ["standards.git-commits.flow_standard"]
+        )
+        self.assertEqual(unresolved, [])
+        self.assertEqual([e.kind for e in edits], ["key"])
+        result = self.migrate.apply_manifest_edits(text, edits)
+        self.assertNotIn("flow_standard", result)
+        self.assertIn("[standards.git-commits]", result)
+        self.assertIn('spec = "Conventional Commits"', result)
+        self.assertIn("upstream", result)
+
+    def test_a_key_whose_name_is_a_prefix_of_another_is_not_confused(self) -> None:
+        """`flow_standard` and `flow_standard_extra` both start with the same
+        text; a `startswith` match without the `=` split would cut the wrong
+        line."""
+        text = (
+            "[standards.x]\n"
+            'flow_standard_extra = "keep me"\n'
+            'flow_standard = "standards/x.md"\n'
+        )
+        edits, _ = self.migrate.plan_manifest_edits(
+            text, ["standards.x.flow_standard"]
+        )
+        result = self.migrate.apply_manifest_edits(text, edits)
+        self.assertIn("flow_standard_extra", result)
+        self.assertNotIn('flow_standard = ', result)
+
+    def test_an_unresolvable_site_is_reported_never_guessed(self) -> None:
+        """The alternative is cutting a range chosen by a near-miss, in a file
+        the user hand-annotated."""
+        text = '[[agents]]\nname = "real"\nsource = "agents/real.md"\n'
+        edits, unresolved = self.migrate.plan_manifest_edits(
+            text, ["agents.ghost.source"]
+        )
+        self.assertEqual(edits, [])
+        self.assertEqual(unresolved, ["agents.ghost.source"])
+        self.assertEqual(self.migrate.apply_manifest_edits(text, edits), text)
+
+    def test_overlapping_edits_are_refused_not_merged(self) -> None:
+        edit = self.migrate.ManifestEdit
+        with self.assertRaises(ValueError):
+            self.migrate.apply_manifest_edits(
+                "a\nb\nc\nd\n",
+                [edit("one", 0, 3, "entry"), edit("two", 1, 4, "entry")],
+            )
+
+    def test_an_unnamed_entry_is_matched_by_position(self) -> None:
+        text = (
+            '[[agents]]\nsource = "agents/zero.md"\n'
+            '\n'
+            '[[agents]]\nsource = "agents/one.md"\n'
+        )
+        edits, unresolved = self.migrate.plan_manifest_edits(text, ["agents.[1].source"])
+        self.assertEqual(unresolved, [])
+        result = self.migrate.apply_manifest_edits(text, edits)
+        self.assertIn("agents/zero.md", result)
+        self.assertNotIn("agents/one.md", result)
+
+
+    def test_an_array_element_line_is_not_mistaken_for_a_table_header(self) -> None:
+        """A line like `["c", "d"]` inside a multi-line array is syntactically
+        indistinguishable from a table header to a loose regex.
+
+        Mistaking one truncates the enclosing block's range, so cutting that
+        block leaves the array's tail behind as orphaned syntax and the
+        manifest no longer parses. The validating re-parse would catch it and
+        refuse, which is safe but useless — the entry never gets removed and
+        the user has no way to fix it.
+        """
+        text = (
+            '[[agents]]\n'
+            'name = "keep"\n'
+            'source = "agents/keep.md"\n'
+            'matrix = [\n'
+            '  ["c", "d"]\n'
+            ']\n'
+            '\n'
+            '[[agents]]\n'
+            'name = "drop"\n'
+            'source = "agents/drop.md"\n'
+        )
+        edits, unresolved = self.migrate.plan_manifest_edits(
+            text, ["agents.keep.source"]
+        )
+        self.assertEqual(unresolved, [])
+        result = self.migrate.apply_manifest_edits(text, edits)
+
+        self.assertNotIn("agents/keep.md", result)
+        self.assertNotIn("matrix", result, "the array's opening line survived the cut")
+        self.assertNotIn('["c", "d"]', result, "the array's body was orphaned")
+        self.assertIn('name = "drop"', result)
+        # The proof that matters: what is left is still TOML.
+        parsed = load_cli_module("flowtoml").loads(result)
+        self.assertEqual([a["name"] for a in parsed["agents"]], ["drop"])
+
+    # -- against the real manifest ---------------------------------------
+
+    def test_the_real_scaffold_manifest_survives_a_cut_byte_for_byte(self) -> None:
+        """The anti-round-trip proof, and the reason this module does text
+        surgery at all.
+
+        Every line except the cut range must be byte-identical. A parse-and-
+        re-serialize implementation passes none of this: it would reflow the
+        whole file while still producing something that parses.
+        """
+        text = self.scaffold_manifest
+        edits, unresolved = self.migrate.plan_manifest_edits(
+            text, ["claude.commands.flow-boot.source"]
+        )
+        self.assertEqual(unresolved, [])
+        result = self.migrate.apply_manifest_edits(text, edits)
+
+        before = text.splitlines()
+        after = result.splitlines()
+        cut = before[edits[0].start : edits[0].end]
+        self.assertEqual(
+            before[: edits[0].start] + before[edits[0].end :],
+            after,
+            "lines outside the cut range were modified",
+        )
+        self.assertIn('name = "flow-boot"', "\n".join(cut))
+
+    def test_the_real_manifest_still_parses_and_loses_exactly_one_site(self) -> None:
+        text = self.scaffold_manifest
+        before_sites = self.sites_in(text)
+        edits, _ = self.migrate.plan_manifest_edits(
+            text, ["claude.commands.flow-boot.source"]
+        )
+        after_sites = self.sites_in(self.migrate.apply_manifest_edits(text, edits))
+        self.assertEqual(
+            before_sites - after_sites, {"claude.commands.flow-boot.source"}
+        )
+        self.assertEqual(after_sites - before_sites, set())
+
+    def test_one_source_declared_at_two_sites_cuts_both_entries(self) -> None:
+        """`commands/flow-boot.md` is declared under both `[[claude.commands]]`
+        and `[[codex.commands]]`. Cutting one and leaving the other is the
+        dangling-declaration bug the audit's per-site attribution exists to
+        prevent."""
+        text = self.scaffold_manifest
+        both = [
+            "claude.commands.flow-boot.source",
+            "codex.commands.flow-boot.source",
+        ]
+        self.assertLessEqual(set(both), self.sites_in(text), "fixture assumption")
+        edits, unresolved = self.migrate.plan_manifest_edits(text, both)
+        self.assertEqual(unresolved, [])
+        after = self.sites_in(self.migrate.apply_manifest_edits(text, edits))
+        self.assertEqual(set(both) & after, set())
+
+    def test_cutting_every_command_declaration_leaves_a_parseable_manifest(self) -> None:
+        """The real shape of a migration on a fully forked project."""
+        text = self.scaffold_manifest
+        sites = sorted(
+            s for s in self.sites_in(text) if s.startswith(("claude.", "codex."))
+        )
+        self.assertGreater(len(sites), 10, "fixture assumption")
+        edits, unresolved = self.migrate.plan_manifest_edits(text, sites)
+        self.assertEqual(unresolved, [])
+        result = self.migrate.apply_manifest_edits(text, edits)
+        remaining = self.sites_in(result)
+        self.assertEqual(remaining & set(sites), set())
+        self.assertTrue(remaining, "agents and standards declarations must survive")
+
+
+class ProjectMigrateDryRunTests(FlowCliHarness):
+    """`flow project migrate` with no `--apply`: planning and reporting only."""
+
+    def migrate(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.run_flow("project", "migrate", *extra)
+
+    def snapshot(self) -> dict:
+        state = {}
+        for path in sorted(self.repo.rglob("*")):
+            if ".git" in path.parts:
+                continue
+            rel = path.relative_to(self.repo).as_posix()
+            if path.is_dir():
+                state[rel] = ("dir", None)
+            else:
+                stat = path.stat()
+                state[rel] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    stat.st_mtime_ns,
+                )
+        return state
+
+    def test_dry_run_changes_absolutely_nothing(self) -> None:
+        """Proven by a full-tree hash and mtime diff, not by the words "dry
+        run" appearing in stdout.
+
+        The bug this defeats is wiring the apply path to run unconditionally and
+        merely suppressing its output — against which a stdout assertion passes
+        and this does not. The path set is compared too, so a created backup
+        directory or a deleted file both show up.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        before = self.snapshot()
+        result = self.migrate()
+        self.assert_ok(result)
+        after = self.snapshot()
+        self.assertEqual(set(before), set(after), "a path was created or removed")
+        self.assertEqual(before, after, "content or mtime changed")
+
+    def test_dry_run_leaves_the_manifest_byte_identical(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        before = manifest.read_text()
+        self.assert_ok(self.migrate())
+        self.assertEqual(manifest.read_text(), before)
+
+    def test_reports_the_files_it_would_remove(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        result = self.migrate()
+        self.assert_ok(result)
+        self.assertIn("would remove", result.stdout)
+        self.assertIn("dry run — nothing was changed.", result.stdout)
+
+    def test_names_what_it_leaves_alone(self) -> None:
+        """Dry-run output is the whole informed-consent surface, so "my
+        customization is not in the removal list" has to be a conclusion someone
+        can actually reach."""
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "standards" / "testing.md").write_text("ours\n")
+        (self.repo / ".flow" / "standards" / "house.md").write_text("also ours\n")
+        result = self.migrate()
+        self.assert_ok(result)
+        self.assertIn("left alone, and never removed by this command:", result.stdout)
+        self.assertIn("standards/testing.md", result.stdout)
+        self.assertIn("standards/house.md", result.stdout)
+
+    def test_a_customized_file_is_never_in_the_removal_list(self) -> None:
+        """R2, as a planning-level assertion. The real projects contain no
+        customized file, so nothing but a synthetic fixture exercises this."""
+        self.use_fake_home()
+        self.setup_project()
+        target = self.repo / ".flow" / "standards" / "testing.md"
+        target.write_text(target.read_text() + "\nOne extra sentence.\n")
+
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertNotIn("standards/testing.md", data["delete"])
+        self.assertIn("standards/testing.md", data["kept"]["differs"])
+
+    def test_the_same_file_unmodified_is_in_the_removal_list(self) -> None:
+        """The other half of the previous test, and what stops it being
+        vacuous: identical content must flip the same path into `delete`."""
+        self.use_fake_home()
+        self.setup_project()
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertIn("standards/testing.md", data["delete"])
+
+    def test_a_declaration_at_two_sites_yields_two_edits(self) -> None:
+        """`commands/flow-boot.md` is declared under both runtimes. Removing one
+        entry and leaving the other is the dangling declaration the audit's
+        per-site attribution exists to prevent."""
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "commands" / "flow-boot.md").unlink()
+        data = json.loads(self.migrate("--json").stdout)
+        sites = {e["site"] for e in data["manifest_edits"]}
+        self.assertIn("claude.commands.flow-boot.source", sites)
+        self.assertIn("codex.commands.flow-boot.source", sites)
+
+    def test_refuses_without_a_framework_baseline(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        empty = self.repo / "empty-framework"
+        empty.mkdir()
+        result = self.migrate("--scaffold", str(empty))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no framework baseline", result.stdout)
+
+    def test_refuses_a_root_inside_flow_s_own_home(self) -> None:
+        fake_home = self.use_fake_home()
+        inside = fake_home / ".flow" / "user"
+        inside.mkdir(parents=True)
+        result = self.migrate("--root", str(inside))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("flow's own home", result.stdout)
+
+
+class ProjectMigrateApplyTests(FlowCliHarness):
+    """`flow project migrate --apply` — the destructive path."""
+
+    STAMP = "20260821T000000Z"
+
+    def migrate(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.run_flow("project", "migrate", *extra)
+
+    def apply(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.migrate("--apply", "--yes", "--at", self.STAMP, *extra)
+
+    def tree(self) -> dict:
+        state = {}
+        for path in sorted(self.repo.rglob("*")):
+            parts = path.relative_to(self.repo).parts
+            if ".git" in parts or "fake_home" in parts:
+                continue
+            if path.is_file():
+                stat = path.stat()
+                state[path.relative_to(self.repo).as_posix()] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    stat.st_mtime_ns,
+                )
+        return state
+
+    def seeded(self):
+        """A project carrying a customization and a legacy adapter surface.
+
+        The adapters are fabricated rather than generated, because the command
+        that generated them no longer exists — project-level sync was retired
+        in the same change that added this. That is not a workaround: it is
+        exactly the state migration meets in the field, where the `.claude/`
+        tree and its managed manifest were written by an older flow and are
+        now just files on disk that nothing maintains.
+        """
+        home = self.use_fake_home()
+        self.setup_project()
+
+        claude = self.repo / ".claude"
+        (claude / "skills" / "flow-boot").mkdir(parents=True)
+        (claude / "skills" / "flow-boot" / "SKILL.md").write_text("generated\n")
+        (claude / "agents").mkdir(parents=True)
+        (claude / "agents" / "architect.md").write_text("generated\n")
+        (claude / "hooks").mkdir(parents=True)
+        (claude / "hooks" / "flow-session-start.sh").write_text("#!/bin/sh\n")
+        (claude / "settings.json").write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "SessionStart": [
+                            {
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": '"$CLAUDE_PROJECT_DIR"/.claude/hooks/flow-session-start.sh',
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        managed = [
+            "[managed]",
+            'generator = "flow"',
+            "version = 2",
+            'target = "claude"',
+            'source_manifest = ".flow/flow.toml"',
+            "preserve_unmanaged = true",
+            "",
+        ]
+        for rel, mode in (
+            (".claude/skills/flow-boot/SKILL.md", "replace"),
+            (".claude/agents/architect.md", "replace"),
+            (".claude/hooks/flow-session-start.sh", "replace"),
+            (".claude/settings.json", "merge"),
+            (".claude/flow.managed.toml", "replace"),
+        ):
+            managed.extend(
+                ["[[files]]", f'path = "{rel}"', f'sync_mode = "{mode}"', ""]
+            )
+        (claude / "flow.managed.toml").write_text("\n".join(managed))
+
+        custom = self.repo / ".flow" / "standards" / "testing.md"
+        custom.write_text(custom.read_text() + "\nOne extra sentence.\n")
+        local = self.repo / ".flow" / "standards" / "house.md"
+        local.write_text("entirely ours\n")
+        return home, custom, local
+
+    # -- refusal ---------------------------------------------------------
+
+    def test_apply_without_yes_refuses_and_changes_nothing(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        before = self.tree()
+        result = self.migrate("--apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--apply --yes", result.stdout)
+        self.assertEqual(self.tree(), before)
+
+    # -- the destructive path --------------------------------------------
+
+    def test_removes_identical_copies_and_leaves_everything_else(self) -> None:
+        """The over-delete invariant, asserted as a set difference rather than
+        by sampling files — so a bug nobody anticipated is not missed by
+        checking the wrong ones."""
+        _home, custom, local = self.seeded()
+        plan = json.loads(self.migrate("--json").stdout)
+        deletable = {f".flow/{rel}" for rel in plan["delete"]}
+        before = self.tree()
+
+        result = self.apply()
+        self.assert_ok(result)
+        after = self.tree()
+
+        vanished = set(before) - set(after)
+        unexpected = vanished - deletable
+        # Generated adapters go too; they are not in the audit's buckets.
+        unexpected = {p for p in unexpected if not p.startswith(".claude/")}
+        self.assertEqual(unexpected, set(), "removed something outside the plan")
+
+        # Two paths are deliberately rewritten rather than removed: the
+        # manifest loses its dead declarations, and the settings file loses
+        # flow's handlers. Everything else that survives must be untouched --
+        # mtime included, because a rewrite reproducing the same bytes still
+        # proves something wrote to a file it should have skipped.
+        mutated = {".flow/flow.toml", ".claude/settings.json", ".codex/hooks.json"}
+        survivors = set(before).intersection(after).difference(mutated)
+        for rel in survivors:
+            self.assertEqual(
+                before[rel], after[rel], f"{rel} was modified but should not have been"
+            )
+
+    def test_a_customization_survives_byte_for_byte(self) -> None:
+        """R2. Asserting only that the file still exists would pass against a
+        migration that truncated it."""
+        _home, custom, _local = self.seeded()
+        content = custom.read_text()
+        self.assert_ok(self.apply())
+        self.assertTrue(custom.exists(), "a differs file was deleted")
+        self.assertEqual(custom.read_text(), content)
+
+    def test_a_project_only_file_survives_byte_for_byte(self) -> None:
+        _home, _custom, local = self.seeded()
+        content = local.read_text()
+        self.assert_ok(self.apply())
+        self.assertEqual(local.read_text(), content)
+
+    def test_the_manifest_keeps_its_comments_and_loses_only_dead_sites(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        before_text = manifest.read_text()
+        before_comments = [l for l in before_text.splitlines() if l.lstrip().startswith("#")]
+        self.assertTrue(before_comments, "fixture assumption: the manifest has comments")
+
+        plan = json.loads(self.migrate("--json").stdout)
+        removed_sites = {e["site"] for e in plan["manifest_edits"]}
+        self.assert_ok(self.apply())
+
+        after_text = manifest.read_text()
+        after_comments = [l for l in after_text.splitlines() if l.lstrip().startswith("#")]
+        self.assertEqual(before_comments, after_comments, "comments were lost")
+
+        project = load_cli_module("project")
+        flowtoml = load_cli_module("flowtoml")
+        remaining = {
+            d.declared_by
+            for d in project.declared_sources(flowtoml.parse_simple_toml(after_text))[0]
+        }
+        self.assertEqual(removed_sites & remaining, set())
+
+    def test_the_backup_holds_everything_that_was_removed(self) -> None:
+        home, _custom, _local = self.seeded()
+        plan = json.loads(self.migrate("--json").stdout)
+        self.assert_ok(self.apply())
+
+        backup = home / ".flow" / "backups" / f"migrate-{self.repo.name}-{self.STAMP}"
+        self.assertTrue(backup.is_dir(), "no backup directory was created")
+        self.assertTrue((backup / "MANIFEST.txt").is_file())
+        for rel in plan["delete"]:
+            self.assertTrue(
+                (backup / "files" / ".flow" / rel).is_file(),
+                f"{rel} missing from the backup",
+            )
+        self.assertTrue((backup / "files" / ".flow" / "flow.toml").is_file())
+
+    def test_a_second_run_is_a_no_op(self) -> None:
+        """R3: migration must be re-runnable to nothing. A second `--apply`
+        with the same stamp would also collide with its own backup directory,
+        so the no-op has to be detected before the backup step."""
+        self.seeded()
+        self.assert_ok(self.apply())
+        after_first = self.tree()
+
+        second = self.apply()
+        self.assert_ok(second)
+        self.assertIn("nothing to migrate", second.stdout)
+        self.assertEqual(self.tree(), after_first)
+
+    def test_the_manifest_and_the_files_it_names_agree_afterwards(self) -> None:
+        """The prove-it test, restated as a state fact.
+
+        `flow sync claude --check` is the surface that used to catch this and it
+        is being retired, so the property is asserted directly: after migration
+        no declaration names a file that is not there.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        # Reproduce path-nexus: delete a source the way a naive migration would,
+        # leaving the manifest declaring it.
+        (self.repo / ".flow" / "commands" / "flow-boot.md").unlink()
+        manifest = self.repo / ".flow" / "flow.toml"
+        self.assertIn("commands/flow-boot.md", manifest.read_text())
+
+        self.assert_ok(self.apply())
+
+        project = load_cli_module("project")
+        flowtoml = load_cli_module("flowtoml")
+        declared, _ = project.declared_sources(
+            flowtoml.parse_simple_toml(manifest.read_text())
+        )
+        missing = [
+            d.rel for d in declared if not (self.repo / ".flow" / d.rel).exists()
+        ]
+        self.assertEqual(missing, [], "the manifest still names files that are gone")
+
+    def test_settings_json_keeps_every_unmanaged_key(self) -> None:
+        """R4. Full-subtree equality against a snapshot, not key-by-key
+        presence — the failure mode is re-serialization drift, where a sibling
+        key is reordered, reformatted, or dropped because its value was empty.
+        """
+        self.seeded()
+        settings = self.repo / ".claude" / "settings.json"
+        doc = json.loads(settings.read_text())
+        doc["env"] = {"CUSTOM_VAR": "keep me"}
+        doc["permissions"] = {"allow": [], "deny": ["Bash(rm:*)"]}
+        doc.setdefault("hooks", {}).setdefault("PostToolUse", []).append(
+            {"hooks": [{"type": "command", "command": "/usr/local/bin/mine.sh"}]}
+        )
+        settings.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+        before = json.loads(settings.read_text())
+
+        self.assert_ok(self.apply())
+
+        after = json.loads(settings.read_text())
+        self.assertEqual(
+            {k: v for k, v in before.items() if k != "hooks"},
+            {k: v for k, v in after.items() if k != "hooks"},
+            "unmanaged top-level content changed",
+        )
+        remaining = json.dumps(after.get("hooks", {}))
+        self.assertIn("/usr/local/bin/mine.sh", remaining, "user handler was removed")
+        self.assertNotIn("/.claude/hooks/flow-", remaining, "flow handlers survived")
+
+
+class MigrationAbortGuardTests(unittest.TestCase):
+    """The three guards that only fire on conditions which never occur naturally.
+
+    Each was added because the consequence of it being absent is severe, and
+    each initially survived a mutation run — meaning nothing proved it worked.
+    A guard that has never been observed to fire is indistinguishable from one
+    that cannot, so every one of them is provoked here directly.
+
+    All three raise before the first deletion. That ordering is the point: a
+    migration that stops is recoverable, and these stop it.
+    """
+
+    def setUp(self) -> None:
+        self.migrate = load_cli_module("migrate")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.flow_dir = self.root / ".flow"
+        self.scaffold = self.root / "scaffold"
+        for name in ("standards", "agents", "commands", "project", "templates"):
+            (self.flow_dir / name).mkdir(parents=True)
+            (self.scaffold / name).mkdir(parents=True)
+        (self.flow_dir / "standards" / "same.md").write_text("shared\n")
+        (self.scaffold / "standards" / "same.md").write_text("shared\n")
+        self.backups = self.root / "backups"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def run_apply(self):
+        plan = self.migrate.plan_migration(self.flow_dir, self.scaffold)
+        return self.migrate.apply_migration(
+            self.root, self.flow_dir, self.scaffold, plan, self.backups, "STAMP"
+        )
+
+    def test_an_incomplete_backup_aborts_before_anything_is_deleted(self) -> None:
+        """A migration that cannot prove it backed up does not delete. Project
+        sync is retired in the same change, so the backup is the only route
+        back — and a partial one is worse than none, because it looks like a
+        route."""
+        target = self.flow_dir / "standards" / "same.md"
+        real = self.migrate.perform_backup
+
+        def under_reporting_backup(root, destination, paths):
+            real(root, destination, paths)
+            return len(paths) - 1
+
+        self.migrate.perform_backup = under_reporting_backup
+        try:
+            with self.assertRaises(self.migrate.MigrationAborted) as caught:
+                self.run_apply()
+        finally:
+            self.migrate.perform_backup = real
+        self.assertIn("backup incomplete", str(caught.exception))
+        self.assertTrue(target.is_file(), "a file was deleted despite the abort")
+
+    def test_a_reused_backup_directory_aborts(self) -> None:
+        """Writing a second migration's backup into the first one's directory
+        would silently make both unusable."""
+        (self.backups / "migrate-.flow-STAMP").mkdir(parents=True)
+        (self.backups / f"migrate-{self.root.name}-STAMP").mkdir(parents=True)
+        with self.assertRaises(self.migrate.MigrationAborted) as caught:
+            self.run_apply()
+        self.assertIn("already exists", str(caught.exception))
+
+    def test_a_remover_that_touches_unmanaged_content_aborts_the_write(self) -> None:
+        """R4 enforced at write time rather than trusted to a restore."""
+        settings = self.root / "settings.json"
+        settings.write_text(
+            json.dumps({"env": {"KEEP": "1"}, "hooks": {}}, indent=2) + "\n"
+        )
+        before = settings.read_text()
+
+        def greedy_remover(doc):
+            doc.pop("env", None)
+            return doc
+
+        with self.assertRaises(self.migrate.MigrationAborted) as caught:
+            self.migrate.strip_managed_handlers(settings, greedy_remover)
+        self.assertIn("unmanaged content", str(caught.exception))
+        self.assertEqual(settings.read_text(), before, "the file was written anyway")
+
+    def test_a_manifest_rewrite_that_did_not_remove_the_site_aborts(self) -> None:
+        """The one validating round-trip in the module, and the only thing
+        standing between a botched text edit and a deletion performed on the
+        strength of it."""
+        (self.flow_dir / "flow.toml").write_text(
+            '[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        manifest_before = (self.flow_dir / "flow.toml").read_text()
+        target = self.flow_dir / "standards" / "same.md"
+        real = self.migrate.apply_manifest_edits
+
+        def no_op_edit(text, edits):
+            return text
+
+        self.migrate.apply_manifest_edits = no_op_edit
+        try:
+            with self.assertRaises(self.migrate.MigrationAborted) as caught:
+                self.run_apply()
+        finally:
+            self.migrate.apply_manifest_edits = real
+        self.assertIn("did not remove", str(caught.exception))
+        self.assertEqual((self.flow_dir / "flow.toml").read_text(), manifest_before)
+        self.assertTrue(target.is_file(), "a file was deleted despite the abort")
+
+
+class ManagedPathContainmentTests(unittest.TestCase):
+    """A managed-manifest entry can never name a path outside the root.
+
+    `sync_outputs` unlinks whatever it considers stale, and `flow project
+    migrate` calls it with an empty desired set specifically in order to delete
+    everything the manifest lists. So a manifest entry that escapes the root is
+    a deletion outside the root.
+
+    The join is the hazard: `root / "/etc/passwd"` is `/etc/passwd`, because
+    pathlib discards the left operand when the right is absolute. That is easy
+    to write and impossible to see.
+    """
+
+    def setUp(self) -> None:
+        self.sync = load_cli_module("sync")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "repo"
+        (self.root / ".claude").mkdir(parents=True)
+        self.outside = Path(self._tmp.name) / "victim.txt"
+        self.outside.write_text("must survive\n")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def manifest(self, *entries: tuple[str, str]) -> Path:
+        path = self.root / ".claude" / "flow.managed.toml"
+        body = ["[managed]", 'generator = "flow"', "version = 2", ""]
+        for rel, mode in entries:
+            body += ["[[files]]", f'path = "{rel}"', f'sync_mode = "{mode}"', ""]
+        path.write_text("\n".join(body))
+        return path
+
+    def test_an_absolute_entry_is_refused(self) -> None:
+        path = self.manifest(
+            (str(self.outside), "replace"), (".claude/ok.md", "replace")
+        )
+        paths = self.sync.read_managed_paths(self.root, path)
+        self.assertEqual(paths, {self.root / ".claude" / "ok.md"})
+        self.assertNotIn(self.outside, paths)
+
+    def test_a_parent_traversal_entry_is_refused(self) -> None:
+        path = self.manifest(("../../escape.md", "replace"), (".claude/ok.md", "replace"))
+        paths = self.sync.read_managed_paths(self.root, path)
+        self.assertEqual(paths, {self.root / ".claude" / "ok.md"})
+
+    def test_the_merge_protected_reader_is_guarded_too(self) -> None:
+        """Merge-protected paths are read by a second function. Guarding only
+        the first would leave the settings-file path unchecked, which is the one
+        the migration writes to rather than merely deletes."""
+        path = self.manifest(
+            (str(self.outside), "merge"), (".claude/settings.json", "merge")
+        )
+        paths = self.sync.read_managed_merge_paths(self.root, path)
+        self.assertEqual(paths, {self.root / ".claude" / "settings.json"})
+
+    def test_an_escaping_entry_would_otherwise_have_been_deleted(self) -> None:
+        """The control. Proves the guard is load-bearing rather than decorative
+        by running the exact call migration makes — `sync_outputs` with an empty
+        desired set — and confirming the outside file is still there."""
+        (self.root / ".claude" / "ok.md").write_text("managed\n")
+        path = self.manifest(
+            (str(self.outside), "replace"), (".claude/ok.md", "replace")
+        )
+        previous = self.sync.read_managed_paths(self.root, path)
+        self.sync.sync_outputs(
+            self.root, "claude", {}, previous, set(), check=False, merge_protected=set()
+        )
+        self.assertTrue(self.outside.is_file(), "a file outside the root was deleted")
+        self.assertFalse((self.root / ".claude" / "ok.md").exists(), "control: the in-root managed file should go")
+
+
+class MigrationReviewRegressionTests(FlowCliHarness):
+    """Regressions for the defects acceptance review found.
+
+    Each of these shipped in a working, 563-green build. They are here so the
+    next change cannot quietly restore any of them.
+    """
+
+    STAMP = "20260821T000000Z"
+
+    def migrate(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.run_flow("project", "migrate", *extra)
+
+    def test_a_manifest_value_outside_the_fallback_parsers_subset_migrates(self) -> None:
+        """The worst defect review found, as a regression test.
+
+        The validating round-trip called `parse_simple_toml` directly instead
+        of the tomllib-preferring read. That fallback raises on floats, arrays,
+        and inline comments — so a perfectly ordinary manifest crashed the
+        apply path *after* the handler strip and the adapter deletion had
+        already run, and crashed identically on every retry. The repo was left
+        permanently adapter-less with an unedited manifest.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + "\n[tooling]\n"
+            + "timeout = 1.5\n"
+            + 'matchers = ["Write", "Edit"]\n'
+        )
+        (self.repo / ".flow" / "commands" / "flow-boot.md").unlink()
+
+        result = self.migrate("--apply", "--yes", "--at", self.STAMP)
+        self.assert_ok(result)
+        surviving = manifest.read_text()
+        self.assertIn("timeout = 1.5", surviving, "the float was lost")
+        self.assertIn('matchers = ["Write", "Edit"]', surviving, "the array was lost")
+        self.assertNotIn("commands/flow-boot.md", surviving)
+
+    def test_the_float_is_reported_at_plan_time_not_discovered_at_apply(self) -> None:
+        """The same manifest through the dry run, which must not crash either —
+        the fix moved the validating parse into planning so a failure surfaces
+        before anything is destroyed."""
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(manifest.read_text() + "\n[tooling]\ntimeout = 1.5\n")
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertEqual(data["unresolved_sites"], [])
+
+    def test_generated_adapters_appear_in_the_dry_run(self) -> None:
+        """The dry run is the whole consent surface, and it listed only two of
+        the five things `--apply` does. Adapter removal and the handler strip
+        were invisible."""
+        self.use_fake_home()
+        self.setup_project()
+        claude = self.repo / ".claude"
+        (claude / "skills" / "flow-boot").mkdir(parents=True)
+        (claude / "skills" / "flow-boot" / "SKILL.md").write_text("generated\n")
+        (claude / "settings.json").write_text('{"hooks": {}}\n')
+        (claude / "flow.managed.toml").write_text(
+            "[managed]\n"
+            'generator = "flow"\nversion = 2\n\n'
+            '[[files]]\npath = ".claude/skills/flow-boot/SKILL.md"\nsync_mode = "replace"\n\n'
+            '[[files]]\npath = ".claude/settings.json"\nsync_mode = "merge"\n'
+        )
+
+        result = self.migrate()
+        self.assert_ok(result)
+        self.assertIn("generated adapter file(s)", result.stdout)
+        self.assertIn(".claude/skills/flow-boot/SKILL.md", result.stdout)
+        self.assertIn("would strip flow's hook handlers", result.stdout)
+
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertIn(".claude/skills/flow-boot/SKILL.md", data["adapters"])
+        self.assertIn(".claude/settings.json", data["settings_files"])
+
+    def test_an_adapter_tree_alone_is_not_a_no_op(self) -> None:
+        """A project whose overlay files all land in `differs` still has a full
+        generated adapter tree to remove — and both `flow sync` and `flow
+        doctor` send people here to remove it. Reporting "nothing to migrate"
+        contradicted the two commands that recommend this one."""
+        self.use_fake_home()
+        self.setup_project()
+        # Nothing byte-identical and nothing orphaned: every overlay file is
+        # edited, so `delete` and `manifest_edits` are both empty. Every file,
+        # not just the .md ones — a single byte-identical LICENSE.txt is enough
+        # to make this test pass for the wrong reason.
+        for path in (self.repo / ".flow").rglob("*"):
+            if path.is_file() and path.name != "flow.toml":
+                path.write_text("locally rewritten\n")
+        claude = self.repo / ".claude"
+        claude.mkdir(exist_ok=True)
+        (claude / "agents").mkdir(parents=True, exist_ok=True)
+        (claude / "agents" / "architect.md").write_text("generated\n")
+        (claude / "flow.managed.toml").write_text(
+            "[managed]\n"
+            'generator = "flow"\nversion = 2\n\n'
+            '[[files]]\npath = ".claude/agents/architect.md"\nsync_mode = "replace"\n'
+        )
+
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertEqual(data["delete"], [])
+        self.assertEqual(data["manifest_edits"], [])
+        self.assertFalse(data["noop"], "an adapter tree is work to do")
+
+    def test_two_entries_sharing_a_name_are_refused_at_plan_time(self) -> None:
+        """`_site` builds one dotted site from both, so a single cut would
+        leave the other declaring a file that is gone. Detected while planning,
+        because the alternative was an abort after two destructive steps."""
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-a.md"\n'
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-b.md"\n'
+        )
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertIn("agents.twin.source", data["unresolved_sites"])
+        self.assertNotIn(
+            "agents.twin.source", [e["site"] for e in data["manifest_edits"]]
+        )
+
+    def test_unresolved_sites_are_reported_even_when_nothing_else_is_to_do(
+        self,
+    ) -> None:
+        """The no-op branch returned before the unresolved block, so a plan with
+        only unresolved sites printed "nothing to migrate" while doctor
+        reported declarations to fix."""
+        self.use_fake_home()
+        self.setup_project()
+        for path in (self.repo / ".flow").rglob("*.md"):
+            path.write_text("locally rewritten\n")
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-a.md"\n'
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-b.md"\n'
+        )
+        result = self.migrate()
+        self.assert_ok(result)
+        self.assertIn("could not locate", result.stdout)
+        self.assertIn("agents.twin.source", result.stdout)
+
+    def test_at_cannot_escape_the_backups_directory(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        result = self.migrate("--apply", "--yes", "--at", "../../escape")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--at must be", result.stdout)
+
+    def test_root_must_look_like_an_overlay(self) -> None:
+        """`--root ~/projects` would have walked and backed up something that
+        is not an overlay at all."""
+        self.use_fake_home()
+        elsewhere = self.repo / "not-an-overlay"
+        elsewhere.mkdir()
+        result = self.migrate("--root", str(elsewhere))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not look like a .flow overlay", result.stdout)
+
+    def test_a_repo_owning_a_manifest_txt_keeps_it(self) -> None:
+        """The backup listing was written to `MANIFEST.txt` at the top of the
+        backup, so a repo with its own top-level `MANIFEST.txt` in the managed
+        set had it saved and then immediately overwritten — destroyed, not
+        saved, and invisible to any count."""
+        home = self.use_fake_home()
+        self.setup_project()
+        victim = self.repo / "MANIFEST.txt"
+        victim.write_text("the project's own manifest\n")
+        claude = self.repo / ".claude"
+        claude.mkdir(exist_ok=True)
+        (claude / "flow.managed.toml").write_text(
+            "[managed]\n"
+            'generator = "flow"\nversion = 2\n\n'
+            '[[files]]\npath = "MANIFEST.txt"\nsync_mode = "replace"\n'
+        )
+
+        self.assert_ok(self.migrate("--apply", "--yes", "--at", self.STAMP))
+        backup = home / ".flow" / "backups" / f"migrate-{self.repo.name}-{self.STAMP}"
+        saved = backup / "files" / "MANIFEST.txt"
+        self.assertTrue(saved.is_file(), "the repo's own MANIFEST.txt was not saved")
+        self.assertEqual(saved.read_text(), "the project's own manifest\n")
+        self.assertTrue((backup / "MANIFEST.txt").is_file(), "the listing is missing")
+        self.assertIn("restore a file", (backup / "MANIFEST.txt").read_text())
+
+
+class WriteAtomicSymlinkTests(unittest.TestCase):
+    """`.claude/settings.json` is commonly a symlink into a dotfiles repo."""
+
+    def setUp(self) -> None:
+        self.fsutil = load_cli_module("fsutil")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_writes_through_a_symlink_instead_of_replacing_it(self) -> None:
+        """`os.replace` onto the link would break it, leaving the real file
+        untouched — which for the migration means flow's handlers survive,
+        pointing at scripts the next step deletes."""
+        real = self.root / "dotfiles" / "settings.json"
+        real.parent.mkdir()
+        real.write_text("original\n")
+        link = self.root / "settings.json"
+        link.symlink_to(real)
+
+        self.fsutil.write_atomic(link, "updated\n")
+
+        self.assertTrue(link.is_symlink(), "the symlink was replaced by a file")
+        self.assertEqual(real.read_text(), "updated\n", "the real file was not updated")

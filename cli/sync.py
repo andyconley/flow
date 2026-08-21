@@ -28,13 +28,10 @@ from fsutil import (
     read_json,
     rel_posix,
     remove_empty_parents,
-    repo_root,
 )
 from paths import (
     GENERATED_MARKER,
     HOME,
-    MODE_PROJECT,
-    MODE_USER,
     SCAFFOLD_DIR,
     SOURCE_DIR,
     USER_OVERLAY_DIR,
@@ -54,12 +51,38 @@ from render import (
 )
 
 
+def _contained(root: Path, raw: str) -> Path | None:
+    """Join a managed-manifest path against the root, or refuse it.
+
+    `root / raw` is not safe on its own: pathlib discards the left operand when
+    the right is absolute, so a manifest entry of `/etc/passwd` yields exactly
+    `/etc/passwd`, and `../../x` walks out of the repo. Every path returned by
+    the readers below is handed to `sync_outputs`, which unlinks whatever it
+    considers stale — so an entry outside the root is a delete outside the root.
+
+    The managed manifest is a generated file, but it is a generated file
+    sitting in the user's repo where anything can edit it, and `flow project
+    migrate` now consumes it specifically in order to delete. Refused rather
+    than sanitized: a path that escaped was never a path flow wrote.
+    """
+    candidate = root / raw
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if not resolved.is_relative_to(root.resolve()):
+        print(f"ignoring managed path outside the root: {raw}")
+        return None
+    return candidate
+
+
 def read_managed_paths(root: Path, path: Path) -> set[Path]:
     if not path.exists():
         return set()
     data = read_toml(path)
     files = data.get("files", [])
-    return {root / entry["path"] for entry in files if "path" in entry}
+    found = (_contained(root, entry["path"]) for entry in files if "path" in entry)
+    return {p for p in found if p is not None}
 
 
 def read_managed_merge_paths(root: Path, path: Path) -> set[Path]:
@@ -77,24 +100,12 @@ def read_managed_merge_paths(root: Path, path: Path) -> set[Path]:
         return set()
     data = read_toml(path)
     files = data.get("files", [])
-    return {
-        root / entry["path"]
+    found = (
+        _contained(root, entry["path"])
         for entry in files
         if "path" in entry and entry.get("sync_mode") == "merge"
-    }
-
-
-def load_flow_manifest(flow_dir: Path) -> tuple[Path, dict]:
-    manifest_path = flow_dir / "flow.toml"
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"missing manifest: {manifest_path}")
-    manifest = read_toml(manifest_path)
-    _tag_entries(manifest.get("agents", []), flow_dir, "framework")
-    if "claude" in manifest:
-        _tag_entries(manifest["claude"].get("commands", []), flow_dir, "framework")
-    if "codex" in manifest:
-        _tag_entries(manifest["codex"].get("commands", []), flow_dir, "framework")
-    return manifest_path, manifest
+    )
+    return {p for p in found if p is not None}
 
 
 def _tag_entries(entries: list, root: Path, origin: str) -> None:
@@ -256,7 +267,7 @@ def _hook_handler(hook: dict, command: str) -> dict:
     return handler
 
 
-def build_claude_settings(root: Path, runtime: dict, mode: str = MODE_PROJECT) -> str:
+def build_claude_settings(root: Path, runtime: dict) -> str:
     settings_path = root / runtime["settings_file"]
     settings = remove_managed_flow_hooks(read_json(settings_path))
     hooks = settings.setdefault("hooks", {})
@@ -267,7 +278,7 @@ def build_claude_settings(root: Path, runtime: dict, mode: str = MODE_PROJECT) -
         group: dict = {}
         if hook.get("matcher") is not None:
             group["matcher"] = hook["matcher"]
-        group["hooks"] = [_hook_handler(hook, hook_command_for(mode, hook["script"]))]
+        group["hooks"] = [_hook_handler(hook, hook_command_for(hook["script"]))]
         groups.append(group)
 
     if not hooks:
@@ -319,7 +330,7 @@ def remove_managed_codex_hooks(doc: dict) -> dict:
     return doc
 
 
-def build_codex_hooks_file(root: Path, runtime: dict, mode: str = MODE_PROJECT) -> str:
+def build_codex_hooks_file(root: Path, runtime: dict) -> str:
     """Codex twin of `build_claude_settings`, against `.codex/hooks.json`.
 
     hooks.json rather than config.toml on purpose: Codex loads hooks from
@@ -341,7 +352,7 @@ def build_codex_hooks_file(root: Path, runtime: dict, mode: str = MODE_PROJECT) 
             # Codex treats an absent matcher as match-everything; emitting
             # an empty string instead would be equivalent but noisier.
             group["matcher"] = hook["matcher"]
-        group["hooks"] = [_hook_handler(hook, codex_hook_command_for(mode, hook["script"]))]
+        group["hooks"] = [_hook_handler(hook, codex_hook_command_for(hook["script"]))]
         groups.append(group)
 
     if not hooks:
@@ -389,7 +400,7 @@ def hook_script_source(hook: dict) -> Path:
 
 
 def desired_claude_outputs(
-    root: Path, flow_dir: Path, manifest: dict, manifest_rel: str, mode: str = MODE_PROJECT
+    root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
     runtime = manifest["claude"]
     skill_defaults = runtime.get("skill_defaults", {})
@@ -408,13 +419,13 @@ def desired_claude_outputs(
         target = root / runtime["skill_dir"] / command["name"] / "SKILL.md"
         command_with_body = dict(command)
         command_with_body["_body"] = source_path.read_text()
-        content = render_skill_from_command(command_with_body, skill_defaults, routing_hints, mode)
+        content = render_skill_from_command(command_with_body, skill_defaults, routing_hints)
         outputs[target] = content
         managed_entries.append(
             {
                 "path": rel_posix(target, root),
                 "kind": "skill",
-                "source": source_ref_for(mode, source_rel, entry_origin),
+                "source": source_ref_for(source_rel, entry_origin),
                 "sync_mode": "replace",
             }
         )
@@ -429,7 +440,7 @@ def desired_claude_outputs(
         if generation_mode != "verbatim":
             raise ValueError(f"unsupported agent generation mode: {generation_mode}")
         content = render_claude_agent(
-            source_rel,
+            source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
             runtime_policy_for_agent(manifest, "claude", agent),
         )
@@ -438,7 +449,7 @@ def desired_claude_outputs(
             {
                 "path": rel_posix(target, root),
                 "kind": "agent",
-                "source": source_ref_for(mode, source_rel, entry_origin),
+                "source": source_ref_for(source_rel, entry_origin),
                 "sync_mode": "replace",
             }
         )
@@ -463,7 +474,7 @@ def desired_claude_outputs(
         )
 
     settings_path = root / runtime["settings_file"]
-    outputs[settings_path] = build_claude_settings(root, runtime, mode)
+    outputs[settings_path] = build_claude_settings(root, runtime)
     mergeable_paths.add(settings_path)
     managed_entries.append(
         {
@@ -491,7 +502,7 @@ def desired_claude_outputs(
 
 
 def desired_codex_outputs(
-    root: Path, flow_dir: Path, manifest: dict, manifest_rel: str, mode: str = MODE_PROJECT
+    root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
     runtime = manifest["codex"]
     agents = shared_agents(manifest)
@@ -507,13 +518,17 @@ def desired_codex_outputs(
         source_path = entry_root / source_rel
         target = root / codex_skill_dir(runtime) / command["name"] / "SKILL.md"
         outputs[target] = render_codex_skill(
-            command["name"], command["description"], source_rel, source_path.read_text(), routing_hints
+            command["name"],
+            command["description"],
+            source_ref_for(source_rel, entry_origin),
+            source_path.read_text(),
+            routing_hints,
         )
         managed_entries.append(
             {
                 "path": rel_posix(target, root),
                 "kind": "skill",
-                "source": source_ref_for(mode, source_rel, entry_origin),
+                "source": source_ref_for(source_rel, entry_origin),
                 "sync_mode": "replace",
             }
         )
@@ -526,7 +541,7 @@ def desired_codex_outputs(
         target = root / runtime["agent_dir"] / f'{agent["name"]}.toml'
         outputs[target] = render_codex_agent(
             agent["name"],
-            source_rel,
+            source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
             runtime_policy_for_agent(manifest, "codex", agent),
         )
@@ -534,7 +549,7 @@ def desired_codex_outputs(
             {
                 "path": rel_posix(target, root),
                 "kind": "agent",
-                "source": source_ref_for(mode, source_rel, entry_origin),
+                "source": source_ref_for(source_rel, entry_origin),
                 "sync_mode": "replace",
             }
         )
@@ -562,7 +577,7 @@ def desired_codex_outputs(
             )
 
         hooks_path = root / runtime["hooks_file"]
-        outputs[hooks_path] = build_codex_hooks_file(root, runtime, mode)
+        outputs[hooks_path] = build_codex_hooks_file(root, runtime)
         mergeable_paths.add(hooks_path)
         managed_entries.append(
             {
@@ -614,7 +629,7 @@ def analyze_sync(
 
 
 def runtime_status(
-    root: Path, flow_dir: Path, manifest_path: Path, manifest: dict, target: str, mode: str = MODE_PROJECT
+    root: Path, flow_dir: Path, manifest_path: Path, manifest: dict, target: str
 ) -> tuple[str, bool]:
     runtime = manifest.get(target)
     if not isinstance(runtime, dict):
@@ -625,7 +640,7 @@ def runtime_status(
     try:
         previous_managed = read_managed_paths(root, managed_path)
         desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
-            target, root, flow_dir, manifest, manifest_ref_for(mode, manifest_path, root), mode
+            target, root, flow_dir, manifest, manifest_ref_for()
         )
         conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
         if conflicts:
@@ -698,54 +713,58 @@ def sync_outputs(
 
 
 def desired_outputs_for_target(
-    target: str, root: Path, flow_dir: Path, manifest: dict, manifest_rel: str, mode: str = MODE_PROJECT
+    target: str, root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
     if target == "claude":
-        return desired_claude_outputs(root, flow_dir, manifest, manifest_rel, mode)
+        return desired_claude_outputs(root, flow_dir, manifest, manifest_rel)
     if target == "codex":
-        return desired_codex_outputs(root, flow_dir, manifest, manifest_rel, mode)
+        return desired_codex_outputs(root, flow_dir, manifest, manifest_rel)
     raise ValueError(f"unsupported sync target: {target}")
 
 
 def sync_target(target: str, check: bool = False, user_mode: bool = False) -> int:
-    if user_mode:
-        root = HOME
-        flow_dir = SCAFFOLD_DIR
-        if not flow_dir.exists():
-            print("framework scaffold missing; re-run install-flow.sh first")
-            return 1
-        scope_label = "user-level"
-    else:
-        root = repo_root()
-        flow_dir = root / ".flow"
-        if not flow_dir.exists():
-            print("repo is missing .flow; run `flow setup project` first")
-            return 1
-        scope_label = "project"
+    """Generate a runtime's adapters from the framework scaffold.
+
+    User level only. Project-level sync existed to regenerate adapters from a
+    project's own copies of the framework's commands and agents, and projects
+    no longer hold copies. `flow project migrate` removes the adapters an
+    earlier project-level sync left behind.
+
+    Exits 1 rather than 0 without `--user`. Printing a pointer and succeeding
+    would be indistinguishable from having synced, and any caller checking the
+    exit code would carry on believing its adapters were current.
+    """
+    if not user_mode:
+        print("project-level sync was retired; runtime surfaces are user-level")
+        print(f"run `flow sync {target} --user` instead")
+        print("to remove a repo's leftover project adapters, run `flow project migrate`")
+        return 1
+
+    root = HOME
+    flow_dir = SCAFFOLD_DIR
+    if not flow_dir.exists():
+        print("framework scaffold missing; re-run install-flow.sh first")
+        return 1
+    scope_label = "user-level"
 
     try:
-        if user_mode:
-            # User mode reads the framework scaffold and layers in
-            # ~/.flow/user/flow.toml if present.
-            manifest_path, manifest = merge_user_overlay(flow_dir)
-        else:
-            manifest_path, manifest = load_flow_manifest(flow_dir)
+        # Reads the framework scaffold and layers in ~/.flow/user/flow.toml
+        # if present.
+        manifest_path, manifest = merge_user_overlay(flow_dir)
     except FileNotFoundError as err:
         print(str(err))
         return 1
 
     runtime = manifest.get(target)
     if not isinstance(runtime, dict):
-        location = "scaffold flow.toml" if user_mode else ".flow/flow.toml"
-        print(f"sync target is not configured in {location}: {target}")
+        print(f"sync target is not configured in scaffold flow.toml: {target}")
         return 1
 
-    mode = MODE_USER if user_mode else MODE_PROJECT
     previous_managed = read_managed_paths(root, root / runtime["managed_manifest"])
     merge_protected = read_managed_merge_paths(root, root / runtime["managed_manifest"])
     try:
         desired, _managed_entries, mergeable_paths = desired_outputs_for_target(
-            target, root, flow_dir, manifest, manifest_ref_for(mode, manifest_path, root), mode
+            target, root, flow_dir, manifest, manifest_ref_for()
         )
     except (ValueError, FileNotFoundError) as err:
         # A misnamed hook script (must be flow-*) or a hook script missing
