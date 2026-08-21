@@ -1969,6 +1969,7 @@ class FlowCliTests(unittest.TestCase):
                 "overlay",
                 "paths",
                 "plugin_usage",
+                "project",
                 "render",
                 "session_lookup",
                 "setup",
@@ -9367,3 +9368,190 @@ class CapabilityGapLedgerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         for verb in ("add", "list", "promote"):
             self.assertIn(verb, result.stdout)
+
+
+class ProjectManifestDeclarationTests(unittest.TestCase):
+    """`declared_sources` — the manifest half of the project audit.
+
+    This function moved out of `cli/setup.py`, where it was
+    `_registered_manifest_paths` and returned a bare `set[Path]`. Its behavior
+    for `flow refresh project` must be unchanged; what is new is the declaring
+    site travelling with each record, and escaping paths coming back as a
+    different type instead of being silently dropped.
+    """
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+
+    def test_reads_every_declaration_site_that_carries_a_project_source(self) -> None:
+        found, rejected = self.project.declared_sources(
+            {
+                "claude": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+                "codex": {"commands": [{"name": "b", "source": "commands/b.md"}]},
+                "agents": [{"name": "c", "source": "agents/c.md"}],
+                "standards": {
+                    "d": {"flow_standard": "standards/d.md"},
+                    "e": {"vendored_path": "standards/vendor/e.md"},
+                },
+            }
+        )
+        self.assertEqual(rejected, [])
+        self.assertEqual(
+            [d.rel for d in found],
+            [
+                "commands/a.md",
+                "commands/b.md",
+                "agents/c.md",
+                "standards/d.md",
+                "standards/vendor/e.md",
+            ],
+        )
+
+    def test_each_declaration_carries_the_site_that_named_it(self) -> None:
+        """A later manifest rewrite has to know which entry to drop, and a
+        rewrite keyed on array position breaks when someone reorders the file."""
+        found, _ = self.project.declared_sources(
+            {
+                "claude": {
+                    "commands": [
+                        {"name": "flow-boot", "source": "commands/flow-boot.md"}
+                    ]
+                },
+                "agents": [{"name": "architect", "source": "agents/architect.md"}],
+                "standards": {
+                    "git-commits": {"flow_standard": "standards/git-commits.md"}
+                },
+            }
+        )
+        self.assertEqual(
+            [d.declared_by for d in found],
+            [
+                "claude.commands.flow-boot.source",
+                "agents.architect.source",
+                "standards.git-commits.flow_standard",
+            ],
+        )
+
+    def test_an_unnamed_entry_falls_back_to_its_index(self) -> None:
+        found, _ = self.project.declared_sources(
+            {"agents": [{"source": "agents/one.md"}, {"source": "agents/two.md"}]}
+        )
+        self.assertEqual(
+            [d.declared_by for d in found],
+            ["agents.[0].source", "agents.[1].source"],
+        )
+
+    def test_escaping_declarations_have_no_joinable_field(self) -> None:
+        """The safety property, asserted structurally rather than by string.
+
+        An absolute path or one containing `..` comes back as
+        `RejectedDeclaration`, which deliberately has no `rel`. If a future
+        refactor folds these back into `Declaration`, a downstream `root / rel`
+        would resolve outside the overlay — so the assertion is that the
+        attribute does not exist, not that its value looks safe.
+        """
+        found, rejected = self.project.declared_sources(
+            {
+                "agents": [
+                    {"name": "ok", "source": "agents/ok.md"},
+                    {"name": "abs", "source": "/etc/passwd"},
+                    {"name": "up", "source": "../../../etc/passwd"},
+                ]
+            }
+        )
+        self.assertEqual([d.rel for d in found], ["agents/ok.md"])
+        self.assertEqual(
+            [(r.declared_value, r.declared_by) for r in rejected],
+            [
+                ("/etc/passwd", "agents.abs.source"),
+                ("../../../etc/passwd", "agents.up.source"),
+            ],
+        )
+        for record in rejected:
+            self.assertFalse(
+                hasattr(record, "rel"),
+                "a rejected declaration must not carry a joinable path",
+            )
+
+    def test_hooks_are_not_a_declaration_site(self) -> None:
+        """`[[hooks]]` carries `script`, which sync resolves against the
+        framework source or the user overlay with no project branch — so a hook
+        cannot be an orphaned project source. Including it would invent a
+        finding class that cannot occur."""
+        found, rejected = self.project.declared_sources(
+            {"hooks": [{"name": "h", "script": "hooks/h.sh"}]}
+        )
+        self.assertEqual(found, [])
+        self.assertEqual(rejected, [])
+
+    def test_duplicate_sources_collapse_but_order_is_stable(self) -> None:
+        """Ordered, not a set: the previous form's unordered iteration would
+        make a rendered report non-deterministic."""
+        manifest = {
+            "claude": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+            "codex": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+            "agents": [{"name": "z", "source": "agents/z.md"}],
+        }
+        first, _ = self.project.declared_sources(manifest)
+        second, _ = self.project.declared_sources(manifest)
+        self.assertEqual([d.rel for d in first], ["commands/a.md", "agents/z.md"])
+        self.assertEqual([d.rel for d in first], [d.rel for d in second])
+
+    def test_malformed_manifest_shapes_are_skipped_not_fatal(self) -> None:
+        found, rejected = self.project.declared_sources(
+            {
+                "claude": "not-a-table",
+                "agents": [{"name": "n", "source": None}, {"name": "e", "source": ""}],
+                "standards": {"s": "not-a-table"},
+            }
+        )
+        self.assertEqual(found, [])
+        self.assertEqual(rejected, [])
+
+    def test_project_module_imports_no_heavy_siblings(self) -> None:
+        """The dependency direction, asserted rather than left in a docstring.
+
+        `cli/setup.py` imports `sync_target`, and now also imports this module.
+        One convenience import back into `setup` would both drag the whole
+        adapter-generation graph into a read-only command and close a cycle.
+        Walked statically and transitively, because a runtime check would only
+        see what the current code path happens to touch.
+        """
+        import ast
+
+        cli_dir = REPO_ROOT / "cli"
+        siblings = {p.stem for p in cli_dir.glob("*.py")}
+        allowed = {"paths", "fsutil", "flowtoml"}
+
+        def sibling_imports(stem: str) -> set[str]:
+            tree = ast.parse((cli_dir / f"{stem}.py").read_text())
+            names: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names.update(a.name.split(".")[0] for a in node.names)
+                elif (
+                    isinstance(node, ast.ImportFrom)
+                    and node.level == 0
+                    and node.module
+                ):
+                    names.add(node.module.split(".")[0])
+            return names & siblings
+
+        reached: set[str] = set()
+        queue = list(sibling_imports("project"))
+        while queue:
+            stem = queue.pop()
+            if stem in reached:
+                continue
+            reached.add(stem)
+            queue.extend(sibling_imports(stem))
+
+        self.assertLessEqual(
+            reached,
+            allowed,
+            f"cli/project.py reaches {sorted(reached - allowed)}; it may only "
+            f"reach {sorted(allowed)}",
+        )
+        # Control: the walk does find edges when they exist, so an empty
+        # `reached` from a broken parser cannot pass this silently.
+        self.assertIn("paths", sibling_imports("diagnostics"))
