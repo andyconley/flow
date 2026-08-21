@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -61,7 +62,16 @@ def _clean_env(home: Path | None = None) -> dict[str, str]:
     return env
 
 
-class FlowCliTests(unittest.TestCase):
+class FlowCliHarness(unittest.TestCase):
+    """Temp repo, subprocess runner, and fake HOME — the parts every CLI test
+    needs and none of the assertions.
+
+    Extracted from `FlowCliTests` because a class that carried both meant any
+    test class wanting `run_flow` had to inherit a hundred unrelated tests and
+    re-run them. That had already happened twice, and the workaround each time
+    was to give up the helpers and reimplement them.
+    """
+
     def setUp(self) -> None:
         self._tempdir = tempfile.TemporaryDirectory()
         self.repo = Path(self._tempdir.name)
@@ -110,6 +120,8 @@ class FlowCliTests(unittest.TestCase):
         self._fake_home = fake_home
         return fake_home
 
+
+class FlowCliTests(FlowCliHarness):
     # ------------------------------------------------------------------
     # Two-mode install helpers
     # ------------------------------------------------------------------
@@ -8907,6 +8919,8 @@ class CapabilityGapLedgerTests(unittest.TestCase):
     Subclasses TestCase rather than FlowCliTests on purpose. Inheriting that
     class would re-run its whole suite to add these few, which has happened
     before; the module-level loader is what these actually need from it.
+    (`FlowCliHarness` now exists for tests that do want the subprocess runner
+    without the suite.)
     """
 
     AT_A = "2026-08-01T00:00:00+00:00"
@@ -9740,14 +9754,14 @@ class ProjectAuditClassifierTests(unittest.TestCase):
         against a hand audit."""
         self.in_project("standards/.DS_Store", "\x00\x01")
         self.in_project("standards/real.md", "counted\n")
-        self.assertEqual(self.audit().scanned(), 1)
+        self.assertEqual(self.audit().classified(), 1)
 
     def test_a_project_with_no_capability_directories_reports_nothing(self) -> None:
         for name in self.CAPABILITY_DIRS:
             shutil.rmtree(self.flow_dir / name)
         report = self.audit()
         self.assertEqual(report.findings, [])
-        self.assertEqual(report.scanned(), 0)
+        self.assertEqual(report.classified(), 0)
         self.assertTrue(report.has_baseline, "the framework side is still intact")
 
     def test_no_framework_baseline_refuses_to_report_buckets(self) -> None:
@@ -9790,3 +9804,153 @@ class ProjectAuditClassifierTests(unittest.TestCase):
             self.assertEqual(set(finding), {"rel", "bucket", "declared_by"})
             self.assertFalse(finding["rel"].startswith("/"))
             self.assertNotIn(str(self.flow_dir), finding["rel"])
+
+
+class ProjectAuditCommandTests(FlowCliHarness):
+    """`flow project audit` through the real entrypoint.
+
+    The classifier is unit-tested against synthetic trees elsewhere; these
+    exercise the parts only a subprocess reaches — root resolution, the
+    flow-home guard, exit codes, and JSON.
+    """
+
+    def audit(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.run_flow("project", "audit", *extra)
+
+    def snapshot(self) -> dict:
+        """Every path under the project, with content hash and mtime.
+
+        The *set* of paths is part of the snapshot, not just hashes of a fixed
+        list: re-hashing paths captured beforehand cannot see a file the command
+        created or deleted, which is half of what report-only has to mean.
+        """
+        state = {}
+        for path in sorted((self.repo / ".flow").rglob("*")):
+            rel = path.relative_to(self.repo).as_posix()
+            if path.is_dir():
+                state[rel] = ("dir", None)
+            else:
+                stat = path.stat()
+                state[rel] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    stat.st_mtime_ns,
+                )
+        return state
+
+    def test_exits_zero_on_a_mixed_report(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "standards" / "testing.md").write_text("edited\n")
+        (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
+
+        result = self.audit()
+        self.assert_ok(result)
+        self.assertIn("standards/testing.md", result.stdout)
+        self.assertIn("standards/house.md", result.stdout)
+
+    def test_exits_zero_even_when_every_file_differs(self) -> None:
+        """A single happy-path exit-0 assertion cannot tell "always 0" from "0
+        this time". Contamination is the normal state of an old project, so the
+        worst-looking input must still be a successful run."""
+        self.use_fake_home()
+        self.setup_project()
+        for path in (self.repo / ".flow" / "standards").rglob("*.md"):
+            path.write_text("clobbered\n")
+
+        result = self.audit()
+        self.assert_ok(result)
+        self.assertNotIn("differs (0)", result.stdout)
+
+    def test_makes_no_filesystem_changes(self) -> None:
+        """Report-only asserted as behavior, not as the absence of an --apply
+        flag in argparse."""
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
+
+        before = self.snapshot()
+        self.assert_ok(self.audit())
+        self.assert_ok(self.audit("--json"))
+        after = self.snapshot()
+
+        self.assertEqual(
+            set(before), set(after), "the audit added or removed a path"
+        )
+        self.assertEqual(before, after, "the audit changed content or mtimes")
+
+    def test_classifies_something_in_every_capability_directory(self) -> None:
+        """Catches a classifier wired only to standards/, which every
+        single-directory fixture would let through."""
+        self.use_fake_home()
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+        for name in ("agents", "commands", "project", "standards", "templates"):
+            (flow_dir / name).mkdir(parents=True, exist_ok=True)
+            (flow_dir / name / "zz-local.md").write_text(f"local to {name}\n")
+
+        result = self.audit()
+        self.assert_ok(result)
+        for name in ("agents", "commands", "project", "standards", "templates"):
+            self.assertIn(f"{name}/zz-local.md", result.stdout)
+
+    def test_refuses_to_audit_flow_s_own_home(self) -> None:
+        """`repo_root` falls back to the working directory, so from $HOME the
+        `.flow` it finds is flow's own home. Reporting the entire framework as
+        project-only is the failure being prevented."""
+        fake_home = self.use_fake_home()
+        result = self.audit("--root", str(fake_home / ".flow"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("flow's own home", result.stdout)
+
+    def test_refuses_a_root_that_is_not_a_directory(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        result = self.audit("--root", str(self.repo / ".flow" / "flow.toml"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not a directory", result.stdout)
+
+    def test_refuses_when_the_repo_has_no_overlay(self) -> None:
+        self.use_fake_home()
+        result = self.audit()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing .flow", result.stdout)
+
+    def test_json_carries_the_same_counts_as_the_table(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
+
+        rendered = self.audit()
+        payload = self.audit("--json")
+        self.assert_ok(rendered)
+        self.assert_ok(payload)
+
+        data = json.loads(payload.stdout)
+        self.assertTrue(data["has_baseline"])
+        for bucket, count in data["counts"].items():
+            self.assertIn(f"{bucket} ({count})", rendered.stdout)
+        self.assertIn(
+            {"rel": "standards/house.md", "bucket": "project-only", "declared_by": None},
+            data["findings"],
+        )
+
+    def test_json_findings_carry_no_absolute_paths(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        data = json.loads(self.audit("--json").stdout)
+        self.assertTrue(data["findings"], "fixture produced nothing to check")
+        for finding in data["findings"]:
+            self.assertFalse(finding["rel"].startswith("/"), finding)
+
+    def test_an_orphaned_declaration_is_reported_with_its_site(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        result = self.audit()
+        self.assert_ok(result)
+        self.assertIn("agents/ghost.md", result.stdout)
+        self.assertIn("agents.ghost.source", result.stdout)

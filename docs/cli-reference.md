@@ -529,6 +529,38 @@ Flags:
 
 If the backlog is missing, or its anchor heading is absent or duplicated, the command refuses and hands back the entry rather than guessing where a section starts in a document someone has restructured.
 
+### `flow project audit`
+
+Classifies this repo's `.flow/` overlay against the installed framework scaffold. Read-only.
+
+Flags:
+
+- `--json` — the payload instead of the rendered report
+- `--root PATH` — audit this `.flow` directory instead of the enclosing repo's
+- `--scaffold PATH` — compare against this framework scaffold instead of the installed one
+
+`flow setup project` copies the entire scaffold into a repo, and those copies never update. A project set up months ago is running framework files nobody has touched since, and nothing on the machine says so — the copies are byte-identical to files the user never edited, so they read as deliberate customization. This command is what separates the two.
+
+Five buckets:
+
+- **identical** — byte-equal to the framework's copy
+- **differs** — the framework has this file and the contents are not equal
+- **project-only** — no framework counterpart
+- **orphaned** — declared in `flow.toml`, absent on disk
+- **conflict** — the path exists but is not a file where the framework has one
+
+**`differs` cannot be split locally, and the report says so.** A file that differs is either a real customization or a stale copy of a framework file that has since moved on, and nothing on this machine can tell which — the overlay records no provenance. The caveat is printed with the count rather than left in this document, because the count is what gets pasted into a ticket.
+
+**Only capability paths are walked: `standards/`, `templates/`, `commands/`, `agents/`, `project/`, and `FRAMEWORK.md`.** `PROJECT.md`, `flow.toml`, `memory/`, and `runs/` are the project's own state and are never visited. That is the safety property rather than a scoping convenience — a path this command never classifies cannot be proposed for deletion by anything reading its output. The report names what it skipped, so a 71-file overlay reporting 48 classified entries reads as a deliberate scope rather than a broken scanner.
+
+**`flow.toml` is read as input, never classified.** It is how orphans are found. It also differs from the framework's copy in every real project, so classifying it would report a permanent false positive.
+
+**Exits 0 whatever it finds.** This diverges from `flow sync --check`, which exits 1 on drift, and the difference is deliberate: drift in a generated adapter is a repairable fault, while a contaminated overlay is the normal state of every project set up before the overlay was thinned. A non-zero exit there would fail in every pipeline it ran in and train everyone to ignore it.
+
+It exits 1 only when no audit could be produced: there is no `.flow` here, the path resolves to flow's own home rather than a project, `--root` is not a directory, or the framework scaffold holds none of the capability directories. That last one refuses to print buckets at all — without a baseline every file classifies as `project-only`, which would be wrong rather than clean.
+
+**Nothing here deletes.** Acting on the report is a separate verb, and it reads this one's output.
+
 ### `flow overlay status`
 
 The `doctor` overlay line on its own, plus the remote, the upstream, and the uncommitted paths behind its counts.

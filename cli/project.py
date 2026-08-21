@@ -39,6 +39,7 @@ rather than shared for exactly that reason; the two are small and the direction
 of the dependency matters more than the four lines.
 """
 
+import json
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
@@ -47,11 +48,14 @@ from pathlib import Path
 # and `sync` here is a contract, not an accident, and `tests/test_flow.py`
 # asserts it.
 from flowtoml import read_toml
+from fsutil import repo_root
 from paths import (
     CAPABILITY_DIRS,
     CAPABILITY_PATHS,
+    FLOW_HOME,
     RELEASE_EXCLUDE_DIRS,
     RELEASE_EXCLUDE_FILE_PATTERNS,
+    SCAFFOLD_DIR,
 )
 
 
@@ -233,10 +237,14 @@ class AuditReport:
             counts[finding.bucket] += 1
         return counts
 
-    def scanned(self) -> int:
-        """Entries visited on disk. Orphans were never on disk, so they are not
-        part of this total — a scanned count that included them could not be
-        reconciled against a file listing."""
+    def classified(self) -> int:
+        """How many entries got a bucket.
+
+        Not "entries visited": the capability directories themselves are walked
+        and produce no finding, and orphans were never on disk at all. This is
+        the number that reconciles against a file listing, which is the only
+        reason to print it.
+        """
         return sum(1 for f in self.findings if f.bucket != BUCKET_ORPHANED)
 
 
@@ -351,7 +359,7 @@ def audit_payload(report: AuditReport) -> dict:
         "flow_dir": report.flow_dir,
         "scaffold_dir": report.scaffold_dir,
         "has_baseline": report.has_baseline,
-        "scanned": report.scanned(),
+        "classified": report.classified(),
         "counts": report.counts(),
         "findings": [
             {"rel": f.rel, "bucket": f.bucket, "declared_by": f.declared_by}
@@ -397,9 +405,9 @@ def render_audit(report: AuditReport) -> str:
         return "\n".join(lines)
 
     counts = report.counts()
-    scanned = report.scanned()
+    classified = report.classified()
     lines.append(
-        f"scanned {scanned} entr{'y' if scanned == 1 else 'ies'} under: "
+        f"classified {classified} entr{'y' if classified == 1 else 'ies'} under: "
         f"{', '.join(CAPABILITY_PATHS)}"
     )
     lines.append(
@@ -433,3 +441,57 @@ def render_audit(report: AuditReport) -> str:
             )
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+
+def cmd_audit(args) -> int:
+    """Resolve the two roots, print, and return.
+
+    The exit code reports whether an audit could be produced, never what it
+    found. Contamination is the normal state of every project set up before
+    the overlay was thinned, so a non-zero exit on `differs` would make the
+    command useless in a pipeline and train everyone to ignore it — this is
+    the deliberate divergence from `flow sync --check`, which exits 1 on drift
+    because drift there is a repairable fault.
+
+    The two cases that do exit 1 are the ones where a clean-looking report
+    would be a lie: there is no project here, or there is no framework to
+    compare against.
+    """
+    scaffold_dir = (
+        Path(args.scaffold).expanduser() if getattr(args, "scaffold", None)
+        else SCAFFOLD_DIR
+    )
+
+    if getattr(args, "root", None):
+        flow_dir = Path(args.root).expanduser()
+        if not flow_dir.is_dir():
+            print(f"--root is not a directory: {flow_dir}")
+            return 1
+    else:
+        flow_dir = repo_root() / ".flow"
+
+    # `repo_root` falls back to the working directory when nothing above it
+    # looks like a project, so from $HOME this resolves to flow's own home.
+    # `bootstrap` guards the same confusion. Without it, one invocation from
+    # the wrong directory reports the entire framework as project-only.
+    if flow_dir.resolve() == FLOW_HOME.resolve():
+        print("that is flow's own home, not a project overlay")
+        print("run this inside a repo, or pass --root <path-to-a-project>/.flow")
+        return 1
+    if not flow_dir.exists():
+        print("repo is missing .flow; run `flow setup project` first")
+        return 1
+
+    report = audit_project(flow_dir, scaffold_dir)
+
+    if getattr(args, "json", False):
+        print(json.dumps(audit_payload(report), indent=2, sort_keys=True))
+    else:
+        print(render_audit(report))
+
+    return 0 if report.has_baseline else 1
