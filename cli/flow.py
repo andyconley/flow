@@ -40,6 +40,7 @@ from plugin_usage import (  # noqa: E402
     plugin_usage_show_command,
     plugin_usage_snapshot_command,
 )
+from migrate import cmd_migrate  # noqa: E402
 from project import cmd_audit  # noqa: E402
 from setup import (  # noqa: E402
     refresh_project,
@@ -365,6 +366,15 @@ def main() -> int:
     project_audit_parser.add_argument("--json", action="store_true", help="emit the payload as JSON instead of the rendered report")
     project_audit_parser.add_argument("--root", metavar="PATH", help="audit this `.flow` directory instead of the enclosing repo's")
     project_audit_parser.add_argument("--scaffold", metavar="PATH", help="compare against this framework scaffold instead of the installed one")
+    project_migrate_parser = project_sub.add_parser(
+        "migrate",
+        help="remove the framework copies `audit` reports, and the declarations naming them",
+        description="Acts on what `flow project audit` reports. Dry run by default: prints exactly which files would be deleted and which `flow.toml` declarations would be removed, and exits 0 without touching anything. Only byte-identical framework copies are ever removed \u2014 `differs` cannot be told apart from a real customization by anything on this machine, so it is reported and left. The manifest is edited as text rather than parsed and rewritten, so comments and formatting survive.",
+    )
+    project_migrate_parser.add_argument("--json", action="store_true", help="emit the plan as JSON instead of the rendered report")
+    project_migrate_parser.add_argument("--root", metavar="PATH", help="migrate this `.flow` directory instead of the enclosing repo's")
+    project_migrate_parser.add_argument("--scaffold", metavar="PATH", help="compare against this framework scaffold instead of the installed one")
+
 
     overlay_parser = sub.add_parser(
         "overlay",
@@ -609,6 +619,8 @@ def main() -> int:
         return cmd_promote(args)
     if args.command == "project" and args.project_target == "audit":
         return cmd_audit(args)
+    if args.command == "project" and args.project_target == "migrate":
+        return cmd_migrate(args)
     if args.command == "overlay" and args.overlay_target == "status":
         return overlay_status_command()
     if args.command == "overlay" and args.overlay_target == "check":

@@ -566,6 +566,30 @@ It exits 1 only when no audit could be produced: there is no `.flow` here, the p
 
 **Nothing here deletes.** Acting on the report is a separate verb, and it reads this one's output.
 
+### `flow project migrate`
+
+Acts on what `flow project audit` reports. **Dry run by default** — prints what it would do and exits 0 without touching anything.
+
+Flags:
+
+- `--json` — the plan instead of the rendered report
+- `--root PATH` — migrate this `.flow` directory instead of the enclosing repo's
+- `--scaffold PATH` — compare against this framework scaffold instead of the installed one
+
+Two things are removed: byte-identical copies of framework files under `.flow/`, and the `flow.toml` declarations that name a source which is gone or about to be.
+
+**Only `identical` is ever removed.** A file in the `differs` bucket is either a real customization or a stale copy of a framework file that has since moved on, and nothing on this machine can tell which — so it is reported and left, permanently. Migration is not the place that resolves that ambiguity; nothing is.
+
+**The manifest is edited as text, not parsed and rewritten.** There is no TOML writer in this codebase, and the fallback parser drops comments and formatting. Each declaration is located in the manifest's own bytes by the dotted site the audit recorded, its line range is cut, and everything else survives byte-for-byte. A declaration that cannot be located is reported and left in place rather than guessed at.
+
+**Array entries go whole; `[standards.*]` loses only its key.** A `[[claude.commands]]` entry with no `source` declares nothing, so the entry goes. A `[standards.x]` table can carry `spec` and `upstream` that outlive the source, so only the offending key line is cut.
+
+**One source is often declared twice.** Every framework command appears under both `[[claude.commands]]` and `[[codex.commands]]`. Removing one and leaving the other is a dangling declaration, so the audit records every declaring site and migration removes all of them.
+
+**The dry-run output is the whole informed-consent surface.** There is no interactive confirmation, so it prints the exact files, the exact declarations, and an explicit list of what is being left alone — `differs`, `project-only`, `conflict`, `unreadable`, and skipped symlinks — so "my customization is not in the removal list" is a conclusion you can reach rather than assume.
+
+It exits 1 for the same reasons `flow project audit` does: no `.flow` here, a path inside flow's own home, a `--root` that is not a directory, or a framework scaffold with no capability directories. Refusing without a baseline matters more here than there — every file would look project-only, so nothing could be classified as safe to remove.
+
 ### `flow overlay status`
 
 The `doctor` overlay line on its own, plus the remote, the upstream, and the uncommitted paths behind its counts.
