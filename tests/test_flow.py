@@ -10112,3 +10112,100 @@ class ProjectAuditCommandTests(FlowCliHarness):
         result = self.audit("--root", str(inside))
         self.assertEqual(result.returncode, 1)
         self.assertIn("flow's own home", result.stdout)
+
+
+class WriteAtomicTests(unittest.TestCase):
+    """`fsutil.write_atomic` — the primitive the migration's manifest rewrite
+    depends on."""
+
+    def setUp(self) -> None:
+        self.fsutil = load_cli_module("fsutil")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_replaces_existing_content(self) -> None:
+        target = self.root / "f.toml"
+        target.write_text("before\n")
+        self.fsutil.write_atomic(target, "after\n")
+        self.assertEqual(target.read_text(), "after\n")
+
+    def test_creates_the_parent_directory(self) -> None:
+        """`os.replace` raises on a missing parent, and `.claude/settings.json`
+        can have none."""
+        target = self.root / "deep" / "nested" / "f.json"
+        self.fsutil.write_atomic(target, "{}\n")
+        self.assertEqual(target.read_text(), "{}\n")
+
+    def test_preserves_the_existing_file_mode(self) -> None:
+        """mkstemp creates 0600, so without this a rewritten settings.json
+        silently becomes owner-only."""
+        target = self.root / "f.json"
+        target.write_text("{}\n")
+        target.chmod(0o644)
+        self.fsutil.write_atomic(target, '{"a": 1}\n')
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+
+    def test_a_new_file_is_not_owner_only(self) -> None:
+        target = self.root / "new.txt"
+        self.fsutil.write_atomic(target, "x\n")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+
+    def test_an_explicit_mode_wins(self) -> None:
+        target = self.root / "script.sh"
+        self.fsutil.write_atomic(target, "#!/bin/sh\n", mode=0o755)
+        self.assertEqual(target.stat().st_mode & 0o777, 0o755)
+
+    def test_the_temp_file_lives_beside_the_target(self) -> None:
+        """`os.replace` is atomic only within a filesystem. A temp file under
+        /tmp is a different mount on many systems and the rename raises EXDEV.
+
+        Asserted by observing where the temp file is created, not by reading the
+        source — a test that greps for `dir=` would pass against a comment.
+        """
+        target = self.root / "sub" / "f.toml"
+        target.parent.mkdir()
+        seen: list[str] = []
+        real_mkstemp = tempfile.mkstemp
+
+        def spy(*args, **kwargs):
+            seen.append(str(kwargs.get("dir")))
+            return real_mkstemp(*args, **kwargs)
+
+        self.fsutil.tempfile.mkstemp = spy
+        try:
+            self.fsutil.write_atomic(target, "x\n")
+        finally:
+            self.fsutil.tempfile.mkstemp = real_mkstemp
+        self.assertEqual(seen, [str(target.parent)])
+
+    def test_a_failed_write_leaves_the_original_and_no_debris(self) -> None:
+        """The caller must not be able to believe a write succeeded. A migration
+        that deletes files on the strength of a manifest rewrite that silently
+        failed is the worst outcome this whole slice can produce."""
+        target = self.root / "f.toml"
+        target.write_text("original\n")
+
+        class Boom(Exception):
+            pass
+
+        real_replace = os.replace
+
+        def exploding_replace(*args, **kwargs):
+            raise Boom("simulated crash between write and rename")
+
+        self.fsutil.os.replace = exploding_replace
+        try:
+            with self.assertRaises(Boom):
+                self.fsutil.write_atomic(target, "never lands\n")
+        finally:
+            self.fsutil.os.replace = real_replace
+
+        self.assertEqual(target.read_text(), "original\n")
+        self.assertEqual(
+            sorted(p.name for p in self.root.iterdir()),
+            ["f.toml"],
+            "a temp file was left behind",
+        )
