@@ -505,6 +505,27 @@ def plan_payload(plan: MigrationPlan) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _overlapping_trees(a: Path, b: Path) -> bool:
+    """True when two resolved paths are the same directory or one contains
+    the other.
+
+    Containment rather than equality, because a subdirectory of the overlay is
+    still the project's own tree and still compares byte-equal to itself.
+    `samefile` covers the gap `resolve()` leaves on a case-insensitive
+    filesystem, where two spellings name one directory but compare unequal.
+    """
+    if a == b:
+        return True
+    try:
+        if a.samefile(b):
+            return True
+    except OSError:
+        # Either side missing. Not the same tree by any reading, and a
+        # nonexistent scaffold is caught by the baseline gate anyway.
+        pass
+    return a.is_relative_to(b) or b.is_relative_to(a)
+
+
 def resolve_roots(args) -> tuple[Path, Path] | None:
     """Shared root resolution, including the guard against flow's own home.
 
@@ -539,6 +560,25 @@ def resolve_roots(args) -> tuple[Path, Path] | None:
     if flow_dir.name != ".flow" and not (flow_dir / "flow.toml").is_file():
         print(f"--root does not look like a .flow overlay: {flow_dir}")
         print("expected a directory named .flow, or one containing flow.toml")
+        return None
+    # Compared against the project's own tree, every file is byte-equal to
+    # itself. That reclassifies the whole `differs` bucket — the files this
+    # command exists to protect — as `identical`, which is the bucket `--apply`
+    # deletes, and it sweeps up `project-only` files the contract says are
+    # never removed. Refused at planning time so the dry run and `--json`
+    # cannot describe a plan the command would decline to run.
+    #
+    # Deliberately not `AuditReport.default_scaffold`, which asks "is this the
+    # installed framework" and is false for every override — including the
+    # legitimate ones the flag exists for.
+    if _overlapping_trees(scaffold_dir.resolve(), flow_dir.resolve()):
+        print("--scaffold names this project's own overlay, or part of it")
+        print(f"  scaffold: {scaffold_dir}")
+        print(f"  project:  {flow_dir}")
+        print("")
+        print("Every file would be byte-equal to itself, so the whole overlay")
+        print("would classify as removable. Refusing. Pass a framework scaffold,")
+        print("or omit --scaffold to compare against the installed one.")
         return None
     return flow_dir, scaffold_dir
 

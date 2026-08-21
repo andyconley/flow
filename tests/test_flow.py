@@ -11391,6 +11391,64 @@ class ProjectMigrateApplyTests(FlowCliHarness):
         self.assertIn("--apply --yes", result.stdout)
         self.assertEqual(self.tree(), before)
 
+    def test_scaffold_pointed_at_own_overlay_refuses(self) -> None:
+        """The comparison that inverts the safety rule.
+
+        Every file in the overlay is byte-equal to itself, so pointing
+        `--scaffold` at the project's own `.flow` reclassifies the whole
+        `differs` bucket — the files migration exists to protect — as
+        `identical`, which is the bucket `--apply` deletes. Asserted as a
+        whole-tree snapshot rather than by naming files, because the failure
+        deletes the overlay and a sampled assertion could miss which part.
+        """
+        _home, custom, local = self.seeded()
+        before = self.tree()
+        result = self.apply("--scaffold", str(self.repo / ".flow"))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.tree(), before)
+        self.assertTrue(custom.is_file())
+        self.assertTrue(local.is_file())
+
+    def test_scaffold_inside_own_overlay_refuses(self) -> None:
+        """Equality is the wrong relation: a subdirectory of the overlay is
+        still the project's own tree and still self-compares identical."""
+        self.seeded()
+        before = self.tree()
+        result = self.apply("--scaffold", str(self.repo / ".flow" / "standards"))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.tree(), before)
+        # Named, not just refused. Without this the test passes on the
+        # baseline gate — a subdirectory holds no capability directories — and
+        # would keep passing with the containment guard removed.
+        self.assertIn("own overlay", result.stdout)
+
+    def test_scaffold_self_pointer_refuses_on_dry_run_too(self) -> None:
+        """A planning-time property, not an apply-time one — otherwise the
+        dry run and `--json` describe a plan the command would refuse."""
+        self.seeded()
+        result = self.migrate("--scaffold", str(self.repo / ".flow"))
+        self.assertEqual(result.returncode, 1)
+
+    def test_scaffold_self_pointer_message_names_the_collision(self) -> None:
+        """So someone who hits this checks their argument instead of filing a
+        bug against the classifier."""
+        self.seeded()
+        result = self.migrate("--scaffold", str(self.repo / ".flow"))
+        self.assertIn("--scaffold", result.stdout)
+        self.assertIn("own overlay", result.stdout)
+
+    def test_a_distinct_scaffold_is_not_refused(self) -> None:
+        """Negative control. Without this the guard can be implemented as
+        "refuse any --scaffold", which would break the override entirely."""
+        self.seeded()
+        # Inside the repo but outside `.flow`, so it is a genuinely distinct
+        # tree by the containment test and is cleaned up with the fixture.
+        other = self.repo / "other-scaffold"
+        shutil.copytree(REPO_ROOT / "scaffolds" / "default", other)
+        result = self.migrate("--scaffold", str(other))
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("own overlay", result.stdout)
+
     # -- the destructive path --------------------------------------------
 
     def test_removes_identical_copies_and_leaves_everything_else(self) -> None:

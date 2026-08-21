@@ -547,7 +547,7 @@ Two things are reported outside the buckets, because neither can be safely acted
 
 It exits 1 only when no audit could be produced: there is no `.flow` here, the path resolves inside flow's own home rather than a project, `--root` is not a directory, or the framework scaffold holds none of the capability directories. That last one classifies nothing at all — not in the table and not in `--json` — because without a baseline every file would come back `project-only`, which is wrong rather than clean.
 
-**`--scaffold` decides what `identical` means.** Pointed at a project's own overlay it would make every file identical, which is the bucket a migration deletes, so the payload records whether the comparison used the installed framework.
+**`--scaffold` decides what `identical` means.** Pointed at a project's own overlay it makes every file identical, which is the bucket a migration deletes, so the payload records whether the comparison used the installed framework. Audit itself still allows it — audit deletes nothing, and comparing a tree against itself is a legitimate thing to ask for. `flow project migrate` refuses it; see that command.
 
 **Nothing here deletes.** Acting on the report is a separate verb, and it reads this one's output.
 
@@ -572,6 +572,8 @@ Two things are removed: byte-identical copies of framework files under `.flow/`,
 **One source is often declared twice.** Every framework command appears under both `[[claude.commands]]` and `[[codex.commands]]`. Removing one and leaving the other is a dangling declaration, so the audit records every declaring site and migration removes all of them.
 
 **The dry-run output is the whole informed-consent surface.** There is no interactive confirmation, so it prints the exact files, the exact declarations, and an explicit list of what is being left alone — `differs`, `project-only`, `conflict`, `unreadable`, and skipped symlinks — so "my customization is not in the removal list" is a conclusion you can reach rather than assume.
+
+**`--scaffold` may not name the project's own tree.** Compared against itself every file is byte-equal, so the whole `differs` bucket — the files this command exists to protect — reclassifies as `identical`, and `project-only` files go the same way. The refusal tests resolved containment in both directions, not equality, because a subdirectory of the overlay is still the project's own tree. It fires at planning time, so the dry run and `--json` cannot describe a plan the command would decline to run. Any other scaffold is still accepted; the override exists for a reason.
 
 It exits 1 for the same reasons `flow project audit` does: no `.flow` here, a path inside flow's own home, a `--root` that is not a directory, or a framework scaffold with no capability directories. Refusing without a baseline matters more here than there — every file would look project-only, so nothing could be classified as safe to remove.
 
