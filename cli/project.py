@@ -229,6 +229,21 @@ class RejectedReplace:
     reason: str
 
 
+# The only two kinds resolved by the runtime convention. Commands, agents, and
+# hooks are merged at sync time instead (`merge_user_overlay` in `sync.py`), so
+# a wiring naming one of those would resolve on disk, report healthy, and be
+# honoured by nothing — a confident `ok` that ends the reader's investigation
+# at the wrong place.
+REPLACEABLE_DIRS = ("standards", "templates")
+
+
+def _reject_unresolvable_kind(raw: str) -> str | None:
+    parts = Path(raw).parts
+    if len(parts) < 2 or parts[0] not in REPLACEABLE_DIRS:
+        return f"only {' and '.join(d + '/' for d in REPLACEABLE_DIRS)} are resolved by this convention"
+    return None
+
+
 def declared_replaces(manifest: dict) -> tuple[list[ReplaceWiring], list[RejectedReplace]]:
     """Parse `[[replaces]]`. Pure — no filesystem, no resolution.
 
@@ -263,6 +278,8 @@ def declared_replaces(manifest: dict) -> tuple[list[ReplaceWiring], list[Rejecte
                 problem = f"{key} is not a non-empty string"
             else:
                 problem = reject_relative(value)
+                if problem is None:
+                    problem = _reject_unresolvable_kind(value)
                 if problem is not None:
                     problem = f"{key}: {problem}"
             if problem is not None:
@@ -283,6 +300,26 @@ def declared_replaces(manifest: dict) -> tuple[list[ReplaceWiring], list[Rejecte
                 declared_by=site,
             )
         )
+
+    # Two wirings for one `default` hand a role two instructions and no rule
+    # for choosing, which is the split-brain this whole design exists to close.
+    # Both are rejected rather than first-wins: picking silently would make the
+    # resolution depend on manifest order, which nothing documents.
+    counts: dict[str, int] = {}
+    for wiring in found:
+        counts[wiring.default] = counts.get(wiring.default, 0) + 1
+    duplicated = {default for default, n in counts.items() if n > 1}
+    if duplicated:
+        rejected.extend(
+            RejectedReplace(
+                w.declared_by,
+                w.default,
+                "duplicate default — another entry already replaces this name",
+            )
+            for w in found
+            if w.default in duplicated
+        )
+        found = [w for w in found if w.default not in duplicated]
 
     return found, rejected
 
@@ -315,8 +352,18 @@ def resolve_replaces(
     """
     resolved: list[ResolvedReplace] = []
     for wiring in wirings:
-        if not (scaffold_dir / wiring.default).is_file():
+        # A `default` is whatever name a role cites, and rule 2 lets the user
+        # overlay introduce standards the framework never shipped. Checking
+        # only the scaffold would call those legitimate wirings typos.
+        cited_exists = (scaffold_dir / wiring.default).is_file() or (
+            user_overlay_dir / wiring.default
+        ).is_file()
+        if not cited_exists:
             status = REPLACE_UNKNOWN
+        # `is_file` follows symlinks, unlike `capability_entries`, which
+        # refuses to classify them. The asymmetry is deliberate: that function
+        # feeds deletion, this one only reports, and the link would have to be
+        # inside the user's own overlay to matter.
         elif (user_overlay_dir / wiring.with_).is_file():
             status = REPLACE_OK
         else:
@@ -434,7 +481,7 @@ class AuditReport:
         return sum(1 for f in self.findings if f.bucket != BUCKET_ORPHANED)
 
 
-def _printable(text: str) -> str:
+def printable(text: str) -> str:
     """Control characters escaped for display.
 
     A manifest source containing a newline carries no `..` and is not absolute,
@@ -677,7 +724,7 @@ def render_audit(report: AuditReport) -> str:
                 if finding.declared_by
                 else ""
             )
-            lines.append(f"  {_printable(finding.rel)}{suffix}")
+            lines.append(f"  {printable(finding.rel)}{suffix}")
 
     if report.symlinks:
         lines.append("")
@@ -686,7 +733,7 @@ def render_audit(report: AuditReport) -> str:
             f"outside the overlay and are never classified"
         )
         for rel in report.symlinks:
-            lines.append(f"  {_printable(rel)}")
+            lines.append(f"  {printable(rel)}")
 
     if report.rejected:
         lines.append("")
@@ -696,8 +743,8 @@ def render_audit(report: AuditReport) -> str:
         )
         for record in report.rejected:
             lines.append(
-                f"  {_printable(record.declared_value)}   "
-                f"[{_printable(record.declared_by)}: {record.reason}]"
+                f"  {printable(record.declared_value)}   "
+                f"[{printable(record.declared_by)}: {record.reason}]"
             )
 
     return "\n".join(lines)

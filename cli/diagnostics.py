@@ -38,6 +38,7 @@ from project import (
     REPLACE_UNKNOWN,
     audit_project,
     declared_replaces,
+    printable,
     has_legacy_active_standards_heading,
     resolve_replaces,
 )
@@ -121,13 +122,22 @@ def doctor() -> int:
     # manifest must produce a line rather than a traceback.
     replaces_resolved: list = []
     replaces_rejected: list = []
+    replaces_error = None
     if project_manifest_ok:
         try:
             wirings, replaces_rejected = declared_replaces(read_toml(flow_dir / "flow.toml"))
-            replaces_resolved = resolve_replaces(wirings, SCAFFOLD_DIR, USER_OVERLAY_DIR)
-        except Exception:
-            replaces_resolved = []
-            replaces_rejected = []
+        except Exception as err:  # noqa: BLE001 — a bad manifest is a line, not a traceback
+            # Said out loud. `manifest:` above is an existence check, so a
+            # corrupt file already reports `ok` there; staying silent here too
+            # would make it indistinguishable from a project with no wirings.
+            replaces_error = err
+        else:
+            if SCAFFOLD_DIR.exists():
+                replaces_resolved = resolve_replaces(wirings, SCAFFOLD_DIR, USER_OVERLAY_DIR)
+            elif wirings:
+                # Without a scaffold every `default` would look unresolvable
+                # and every wiring would be reported as a typo.
+                replaces_error = "framework scaffold missing — cannot check"
 
     legacy_heading = False
     if project_overlay_ok:
@@ -247,7 +257,7 @@ def doctor() -> int:
     print(f"repo .flow:       {'ok' if project_overlay_ok else 'missing'}")
     print(f"manifest:         {'ok' if project_manifest_ok else 'missing'}")
     print(f"overlay:          {overlay_line}")
-    _print_replaces(replaces_resolved, replaces_rejected)
+    _print_replaces(replaces_resolved, replaces_rejected, replaces_error)
     if legacy_heading:
         print("PROJECT.md:       carries the retired `## Active project standards` section")
         print("                  the files it lists are not part of an overlay any more")
@@ -256,7 +266,7 @@ def doctor() -> int:
     return 0
 
 
-def _print_replaces(resolved: list, rejected: list) -> None:
+def _print_replaces(resolved: list, rejected: list, error) -> None:
     """Render the `[[replaces]]` block, or nothing at all when there is none.
 
     Silent rather than `replaces: none` when a project declares no wirings:
@@ -269,23 +279,30 @@ def _print_replaces(resolved: list, rejected: list) -> None:
     `~/.flow/user/` that the author has and a teammate may not; telling the
     teammate their repo is broken would be both wrong and unactionable.
     """
+    if error is not None:
+        print(f"replaces:         cannot be read ({error})")
+        return
     if not resolved and not rejected:
         return
 
-    total = len(resolved) + len(rejected)
-    print(f"replaces:         {total} wired")
+    # Rejected entries are counted separately: an entry that failed validation
+    # is precisely the thing that is *not* wired.
+    print(f"replaces:         {len(resolved)} wired, {len(rejected)} invalid"
+          if rejected else f"replaces:         {len(resolved)} wired")
     for entry in resolved:
         wiring = entry.wiring
+        default = printable(wiring.default)
+        with_ = printable(wiring.with_)
         if entry.status == REPLACE_OK:
-            print(f"  ok       {wiring.default} -> {wiring.with_}")
+            print(f"  ok       {default} -> {with_}")
         elif entry.status == REPLACE_ABSENT:
-            print(f"  absent   {wiring.default} -> {wiring.with_}")
-            print(f"           not in your {USER_OVERLAY_DIR}/{Path(wiring.with_).parent}/")
+            print(f"  absent   {default} -> {with_}")
+            print(f"           not in your {USER_OVERLAY_DIR}/{printable(str(Path(wiring.with_).parent))}/")
         elif entry.status == REPLACE_UNKNOWN:
-            print(f"  unknown  {wiring.default}")
-            print("           no framework file by that name — check for a typo")
+            print(f"  unknown  {default}")
+            print("           nothing resolves that name in the framework or your overlay")
     for entry in rejected:
-        print(f"  invalid  {entry.declared_by}: {entry.reason}")
+        print(f"  invalid  {printable(entry.declared_by)}: {entry.reason}")
 
 
 def _usage_section() -> str:
