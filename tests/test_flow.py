@@ -9805,6 +9805,144 @@ class ProjectManifestDeclarationTests(unittest.TestCase):
         self.assertIn("paths", sibling_imports("diagnostics"))
 
 
+class DoctorReplacesReportTests(FlowCliHarness):
+    """`flow doctor`'s project-wiring block, end to end."""
+
+    def _project(self, manifest_body: str) -> Path:
+        home = self.use_fake_home()
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+        (flow_dir / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\nkind = "project"\n' + manifest_body
+        )
+        return home
+
+    def _overlay_standard(self, home: Path, name: str) -> None:
+        target = home / ".flow" / "user" / "standards" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("replacement\n")
+
+    def _project_section(self, stdout: str) -> str:
+        """Only the project block.
+
+        doctor prints `overlay:` in the project section and `user overlay:`
+        in the section above it, so an unscoped `assertIn` can match the wrong
+        half of the same output.
+        """
+        start = stdout.find("-- project:")
+        self.assertNotEqual(start, -1, f"no project section in:\n{stdout}")
+        end = stdout.find("-- usage:", start)
+        return stdout[start:end if end != -1 else len(stdout)]
+
+    def test_a_resolving_wiring_reports_ok(self) -> None:
+        home = self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "standards/mine.md"\n'
+        )
+        self._overlay_standard(home, "mine.md")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("replaces:         1 wired", section)
+        self.assertIn("ok       standards/testing.md -> standards/mine.md", section)
+
+    def test_a_replacement_this_user_lacks_is_reported_as_their_gap(self) -> None:
+        """Risk R1: never as a defect in the project.
+
+        A committed manifest names a path under `~/.flow/user/` that the
+        author has and a teammate may not. Telling the teammate their repo is
+        broken would be wrong and unactionable.
+        """
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "standards/mine.md"\n'
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("absent   standards/testing.md -> standards/mine.md", section)
+        self.assertIn("not in your", section)
+        for accusation in ("broken", "invalid", "error", "defect"):
+            self.assertNotIn(accusation, section.lower().split("replaces:")[1].split("\n\n")[0])
+
+    def test_a_default_naming_no_framework_file_reports_unknown(self) -> None:
+        home = self._project(
+            '\n[[replaces]]\ndefault = "standards/standrds.md"\nwith = "standards/mine.md"\n'
+        )
+        self._overlay_standard(home, "mine.md")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("unknown  standards/standrds.md", section)
+        self.assertIn("typo", section)
+
+    def test_a_wiring_that_escapes_the_overlay_is_reported_invalid(self) -> None:
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "../../../etc/passwd"\n'
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("invalid  replaces[0]", section)
+        self.assertNotIn("/etc/passwd", section)
+
+    def test_mixed_states_are_each_reported_once(self) -> None:
+        home = self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "standards/mine.md"\n'
+            '\n[[replaces]]\ndefault = "standards/security.md"\nwith = "standards/gone.md"\n'
+            '\n[[replaces]]\ndefault = "standards/nope.md"\nwith = "standards/mine.md"\n'
+        )
+        self._overlay_standard(home, "mine.md")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("replaces:         3 wired", section)
+        self.assertEqual(section.count("\n  ok "), 1)
+        self.assertEqual(section.count("\n  absent "), 1)
+        self.assertEqual(section.count("\n  unknown "), 1)
+
+    def test_a_project_with_no_wiring_prints_no_replaces_line(self) -> None:
+        """An optional feature should not announce its absence every run."""
+        self._project("")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertNotIn("replaces:", section)
+
+    def test_doctor_still_exits_zero_with_every_wiring_broken(self) -> None:
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/nope.md"\nwith = "../escape.md"\n'
+        )
+
+        self.assert_ok(self.run_flow("doctor"))
+
+    def test_a_malformed_manifest_reports_rather_than_crashing(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "flow.toml").write_text("[framework\nname = ")
+
+        result = self.run_flow("doctor")
+
+        self.assert_ok(result)
+        self.assertIn("-- project:", result.stdout)
+
+    def test_a_legacy_project_md_heading_is_flagged(self) -> None:
+        self._project("")
+        (self.repo / ".flow" / "PROJECT.md").write_text(
+            "# Project\n\n## Active project standards\n\n- `project/brand.md`\n"
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("PROJECT.md:", section)
+        self.assertIn("Active project standards", section)
+
+    def test_a_current_project_md_is_not_flagged(self) -> None:
+        self._project("")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertNotIn("PROJECT.md:", section)
+
+
 class ProjectReplacesParseTests(unittest.TestCase):
     """`declared_replaces` — pure parsing of the `[[replaces]]` table."""
 
