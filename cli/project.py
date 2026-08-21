@@ -192,6 +192,156 @@ def declared_sources(
 
 
 # ---------------------------------------------------------------------------
+# Project wiring — `[[replaces]]`
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReplaceWiring:
+    """One validated `[[replaces]]` entry.
+
+    `default` names a framework file by the same relative name a role cites
+    (`standards/testing.md`). `with_` names a replacement resolved under the
+    user overlay — never inside the project, which is the whole point: a
+    project that held the replacement would be the fork again.
+
+    Both are safe to join. `why` is documentation, never resolved, printed
+    only so a reader can see the intent without opening the manifest.
+    """
+
+    default: str
+    with_: str
+    why: str | None
+    declared_by: str
+
+
+@dataclass(frozen=True)
+class RejectedReplace:
+    """A `[[replaces]]` entry that could not be validated.
+
+    Carries no joinable field, for the reason `RejectedDeclaration` does not:
+    a `with` of `../../../etc/passwd` must never reach a join against the
+    user overlay, so it is kept as raw text to be printed and read.
+    """
+
+    declared_by: str
+    declared_value: str
+    reason: str
+
+
+def declared_replaces(manifest: dict) -> tuple[list[ReplaceWiring], list[RejectedReplace]]:
+    """Parse `[[replaces]]`. Pure — no filesystem, no resolution.
+
+    Order is the manifest's, not sorted. This table is a short hand-authored
+    list; re-ordering it would make doctor's report harder to read against
+    the file it came from.
+
+    Entries are keyed by index rather than by name because `[[replaces]]` has
+    no name field. That is fine here in a way it would not be for
+    `declared_sources`: nothing rewrites this table, so the key only has to
+    identify a line for a human.
+    """
+    entries = manifest.get("replaces", [])
+    if not isinstance(entries, list):
+        return [], [RejectedReplace("replaces", str(entries), "not an array of tables")]
+
+    found: list[ReplaceWiring] = []
+    rejected: list[RejectedReplace] = []
+
+    for index, entry in enumerate(entries):
+        site = f"replaces[{index}]"
+        if not isinstance(entry, dict):
+            rejected.append(RejectedReplace(site, str(entry), "not a table"))
+            continue
+
+        problem = None
+        for key in ("default", "with"):
+            value = entry.get(key)
+            if value is None:
+                problem = f"missing {key}"
+            elif not isinstance(value, str) or not value:
+                problem = f"{key} is not a non-empty string"
+            else:
+                problem = reject_relative(value)
+                if problem is not None:
+                    problem = f"{key}: {problem}"
+            if problem is not None:
+                rejected.append(RejectedReplace(site, str(entry.get(key)), problem))
+                break
+        if problem is not None:
+            continue
+
+        why = entry.get("why")
+        found.append(
+            ReplaceWiring(
+                default=Path(entry["default"]).as_posix(),
+                with_=Path(entry["with"]).as_posix(),
+                # Dropped rather than rejected when it is the wrong type. `why`
+                # is a comment with a TOML key; a bad one should not disable a
+                # wiring that otherwise resolves.
+                why=why if isinstance(why, str) and why else None,
+                declared_by=site,
+            )
+        )
+
+    return found, rejected
+
+
+REPLACE_OK = "ok"
+REPLACE_ABSENT = "absent"
+REPLACE_UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class ResolvedReplace:
+    wiring: ReplaceWiring
+    status: str
+
+
+def resolve_replaces(
+    wirings: list[ReplaceWiring], scaffold_dir: Path, user_overlay_dir: Path
+) -> list[ResolvedReplace]:
+    """Check each wiring against the two roots it spans.
+
+    `unknown` is tested before `absent` deliberately. An entry can be wrong in
+    both ways at once, and a `default` naming no framework file is the more
+    actionable defect: it is a typo the author can fix, whereas an absent
+    `with` may simply mean this machine is not the one the wiring was written
+    on. Reporting the typo as a per-user gap would send the reader to fix the
+    wrong thing.
+
+    Both roots are parameters rather than module constants so this is testable
+    against two temp directories, the way `classify_tree` is.
+    """
+    resolved: list[ResolvedReplace] = []
+    for wiring in wirings:
+        if not (scaffold_dir / wiring.default).is_file():
+            status = REPLACE_UNKNOWN
+        elif (user_overlay_dir / wiring.with_).is_file():
+            status = REPLACE_OK
+        else:
+            status = REPLACE_ABSENT
+        resolved.append(ResolvedReplace(wiring, status))
+    return resolved
+
+
+LEGACY_ACTIVE_STANDARDS_HEADING = "## Active project standards"
+
+
+def has_legacy_active_standards_heading(project_md_text: str) -> bool:
+    """Whether a `PROJECT.md` still lists the retired project-standards section.
+
+    Deliberately not an audit `Finding`. `PROJECT.md` is in `NOT_SCANNED`, and
+    that is a safety property rather than a scoping convenience: nothing
+    outside `CAPABILITY_PATHS` can be proposed for deletion by anything reading
+    an `AuditReport`. This is a doctor-level flag about the *content* of a file
+    the audit deliberately never opens, so it stays a separate question with a
+    separate answer.
+    """
+    return LEGACY_ACTIVE_STANDARDS_HEADING in project_md_text
+
+
+# ---------------------------------------------------------------------------
 # Classification
 # ---------------------------------------------------------------------------
 

@@ -9805,6 +9805,251 @@ class ProjectManifestDeclarationTests(unittest.TestCase):
         self.assertIn("paths", sibling_imports("diagnostics"))
 
 
+class ProjectReplacesParseTests(unittest.TestCase):
+    """`declared_replaces` — pure parsing of the `[[replaces]]` table."""
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+
+    def test_reads_a_complete_wiring(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {
+                "replaces": [
+                    {
+                        "default": "standards/testing.md",
+                        "with": "standards/hypr-testing.md",
+                        "why": "pytest only, no BDD layer",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].default, "standards/testing.md")
+        self.assertEqual(found[0].with_, "standards/hypr-testing.md")
+        self.assertEqual(found[0].why, "pytest only, no BDD layer")
+        self.assertEqual(found[0].declared_by, "replaces[0]")
+
+    def test_a_missing_table_is_not_an_error(self) -> None:
+        self.assertEqual(self.project.declared_replaces({}), ([], []))
+
+    def test_templates_are_wirable_not_only_standards(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "templates/adr-template.md", "with": "templates/acme-adr.md"}]}
+        )
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(found[0].default, "templates/adr-template.md")
+
+    def test_order_is_the_manifests_not_sorted(self) -> None:
+        found, _ = self.project.declared_replaces(
+            {
+                "replaces": [
+                    {"default": "standards/zebra.md", "with": "standards/z.md"},
+                    {"default": "standards/alpha.md", "with": "standards/a.md"},
+                ]
+            }
+        )
+
+        self.assertEqual([w.default for w in found], ["standards/zebra.md", "standards/alpha.md"])
+
+    def test_a_with_that_escapes_the_user_overlay_is_rejected(self) -> None:
+        """The one rejection that matters operationally.
+
+        An escaping `with` would otherwise reach a join against
+        `USER_OVERLAY_DIR` and resolve somewhere nobody asked for.
+        """
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "../../../etc/passwd"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("escapes the overlay", rejected[0].reason)
+
+    def test_an_absolute_with_is_rejected(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "/etc/passwd"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("absolute path", rejected[0].reason)
+
+    def test_a_home_relative_with_is_rejected(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "~/secrets.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("home-relative", rejected[0].reason)
+
+    def test_a_missing_field_is_rejected_and_named(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertEqual(rejected[0].reason, "missing with")
+
+    def test_a_non_string_field_is_rejected(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": 3, "with": "standards/x.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("not a non-empty string", rejected[0].reason)
+
+    def test_a_bad_why_is_dropped_rather_than_disabling_the_wiring(self) -> None:
+        """`why` is a comment that happens to have a TOML key."""
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "standards/x.md", "why": 7}]}
+        )
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(len(found), 1)
+        self.assertIsNone(found[0].why)
+
+    def test_one_bad_entry_does_not_discard_the_others(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {
+                "replaces": [
+                    {"default": "standards/a.md", "with": "standards/a2.md"},
+                    {"default": "standards/b.md", "with": "/absolute.md"},
+                    {"default": "standards/c.md", "with": "standards/c2.md"},
+                ]
+            }
+        )
+
+        self.assertEqual([w.default for w in found], ["standards/a.md", "standards/c.md"])
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0].declared_by, "replaces[1]")
+
+    def test_the_shipped_commented_example_parses_if_uncommented(self) -> None:
+        """Guards the template against drifting away from the parser.
+
+        `setup project` ships the `[[replaces]]` block commented out, which
+        means nothing exercises its field names. If the parser ever expected
+        different keys, every user following that example would write a
+        manifest the tool silently ignores.
+        """
+        setup = load_cli_module("setup")
+        flowtoml = load_cli_module("flowtoml")
+        template = setup._PROJECT_MANIFEST_TEMPLATE
+
+        lines = template.splitlines()
+        start = next(
+            (i for i, line in enumerate(lines) if line.strip() == "# [[replaces]]"),
+            None,
+        )
+        self.assertIsNotNone(start, "template no longer ships a commented [[replaces]] example")
+        uncommented = "\n".join(line.lstrip("#").strip() for line in lines[start:] if line.strip())
+        parsed = flowtoml.loads(uncommented)
+        found, rejected = self.project.declared_replaces(parsed)
+
+        self.assertEqual(rejected, [], f"template example does not parse: {uncommented}")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].default, "standards/testing.md")
+
+
+class ProjectReplacesResolveTests(unittest.TestCase):
+    """`resolve_replaces` — the three states doctor reports."""
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.scaffold = root / "scaffold"
+        self.overlay = root / "overlay"
+        (self.scaffold / "standards").mkdir(parents=True)
+        (self.overlay / "standards").mkdir(parents=True)
+        (self.scaffold / "standards" / "testing.md").write_text("framework testing\n")
+
+    def _wire(self, default: str, with_: str):
+        return self.project.ReplaceWiring(default, with_, None, "replaces[0]")
+
+    def _status(self, default: str, with_: str) -> str:
+        return self.project.resolve_replaces(
+            [self._wire(default, with_)], self.scaffold, self.overlay
+        )[0].status
+
+    def test_ok_when_the_replacement_is_in_the_user_overlay(self) -> None:
+        (self.overlay / "standards" / "mine.md").write_text("mine\n")
+
+        self.assertEqual(
+            self._status("standards/testing.md", "standards/mine.md"),
+            self.project.REPLACE_OK,
+        )
+
+    def test_absent_when_the_replacement_is_not_on_this_machine(self) -> None:
+        self.assertEqual(
+            self._status("standards/testing.md", "standards/mine.md"),
+            self.project.REPLACE_ABSENT,
+        )
+
+    def test_unknown_when_the_default_names_no_framework_file(self) -> None:
+        (self.overlay / "standards" / "mine.md").write_text("mine\n")
+
+        self.assertEqual(
+            self._status("standards/standrds-typo.md", "standards/mine.md"),
+            self.project.REPLACE_UNKNOWN,
+        )
+
+    def test_a_typo_in_default_outranks_a_missing_replacement(self) -> None:
+        """Wrong in both ways at once reports the fixable one.
+
+        `absent` sends the reader to their own overlay; `unknown` sends them
+        to the manifest line that can never match. The second is the defect.
+        """
+        self.assertEqual(
+            self._status("standards/nope.md", "standards/also-nope.md"),
+            self.project.REPLACE_UNKNOWN,
+        )
+
+    def test_a_directory_is_not_a_resolution(self) -> None:
+        (self.overlay / "standards" / "mine.md").mkdir()
+
+        self.assertEqual(
+            self._status("standards/testing.md", "standards/mine.md"),
+            self.project.REPLACE_ABSENT,
+        )
+
+    def test_every_wiring_gets_exactly_one_verdict_in_order(self) -> None:
+        (self.overlay / "standards" / "here.md").write_text("here\n")
+        wirings = [
+            self._wire("standards/testing.md", "standards/here.md"),
+            self._wire("standards/testing.md", "standards/gone.md"),
+            self._wire("standards/typo.md", "standards/here.md"),
+        ]
+
+        resolved = self.project.resolve_replaces(wirings, self.scaffold, self.overlay)
+
+        self.assertEqual(
+            [r.status for r in resolved],
+            [self.project.REPLACE_OK, self.project.REPLACE_ABSENT, self.project.REPLACE_UNKNOWN],
+        )
+
+
+class LegacyProjectHeadingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+
+    def test_detects_the_retired_heading(self) -> None:
+        self.assertTrue(
+            self.project.has_legacy_active_standards_heading(
+                "# Project\n\n## Active project standards\n\n- project/brand.md\n"
+            )
+        )
+
+    def test_does_not_fire_on_a_current_project_md(self) -> None:
+        self.assertFalse(
+            self.project.has_legacy_active_standards_heading(
+                (REPO_ROOT / "scaffolds" / "default" / "PROJECT.md").read_text()
+            )
+        )
+
+
 class ProjectAuditClassifierTests(unittest.TestCase):
     """`classify_tree` and friends, against two synthetic trees.
 
