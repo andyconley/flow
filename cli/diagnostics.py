@@ -18,6 +18,7 @@ from fsutil import repo_root
 from lifecycle import read_install_config
 from overlay import format_overlay_vcs, overlay_vcs_status
 from paths import (
+    CAPABILITY_DIRS,
     CODEX_SKILL_DIR,
     DEFAULT_REMOTE,
     FLOW_CONFIG,
@@ -320,14 +321,12 @@ def bootstrap() -> int:
             print(f"- {path}")
         return 1
 
-    optional = [
-        flow_dir / "commands",
-        flow_dir / "agents",
-        flow_dir / "standards",
-        flow_dir / "project",
-        flow_dir / "templates",
+    # Shared with the project audit rather than spelled out again here: two
+    # independent lists of "which directories are framework capability" drift,
+    # and the audit's consumers delete based on that answer.
+    missing_optional = [
+        name for name in CAPABILITY_DIRS if not (flow_dir / name).exists()
     ]
-    missing_optional = [p.name for p in optional if not p.exists()]
     print(f"bootstrap ok: {flow_dir}")
     if missing_optional:
         print(f"optional framework dirs absent: {', '.join(missing_optional)}")

@@ -42,6 +42,24 @@ RELEASE_EXCLUDE_TOP_LEVEL = (
     "install.sh",       # same — curl-able bootstrap, not part of the runtime
 )
 RELEASE_EXCLUDE_DIRS = ("__pycache__", ".agents", ".claude", ".codex", ".git")  # recursive cleanup
+
+# Which paths inside a project's `.flow/` hold framework capability, as opposed
+# to the project's own state. Two constants, derived, rather than two lists:
+# `bootstrap` reports on the directories only, while the audit also classifies
+# FRAMEWORK.md, and two independently maintained spellings of "which paths are
+# framework capability" is exactly the drift that would let a later migration
+# delete something no audit ever showed.
+#
+# Deliberately excluded, and this is the safety property rather than an
+# omission: PROJECT.md, flow.toml, memory/, and runs/ are project state. A path
+# absent from here is never walked by the audit, and therefore can never be
+# proposed for deletion by anything consuming the audit's output.
+#
+# Plain strings, not Path: everything else in this module that is a Path is
+# absolute, and findings are keyed on POSIX-relative strings. Callers join.
+CAPABILITY_DIRS = ("agents", "commands", "project", "standards", "templates")
+CAPABILITY_PATHS = CAPABILITY_DIRS + ("FRAMEWORK.md",)
+
 RELEASE_EXCLUDE_FILE_PATTERNS = ("*.pyc", ".DS_Store")
 SEMVER_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:[-+][\w.-]+)?$")
 
