@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.15.0](https://github.com/andyconley/flow/compare/v0.14.0...v0.15.0) (2026-08-21)
+
+### Features
+
+* **cli:** add `flow project audit` ([#9](https://github.com/andyconley/flow/issues/9)) ([e96b661](https://github.com/andyconley/flow/commit/e96b661c7fbdbee6da46454418037a6edc8f3b2d))
+
 ## [0.14.0](https://github.com/andyconley/flow/compare/v0.13.2...v0.14.0) (2026-08-20)
 
 ### Features
