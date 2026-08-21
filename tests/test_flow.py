@@ -350,200 +350,108 @@ class FlowCliTests(FlowCliHarness):
 
         self.assertRegex(text, r"(?m)^\s*#.*\[\[replaces\]\]")
         self.assertNotIn("replaces", flowtoml.read_toml(manifest))
+    # -- `flow refresh project`, retired -------------------------------
+    #
+    # Seven tests here previously asserted that refresh repaired an overlay:
+    # restored a deleted manifest, backfilled registered sources, reported
+    # changed files, and updated them interactively. None could be adjusted to
+    # pass, because each claimed the command does work it must no longer do.
+    # They are replaced rather than relaxed — the behaviour under test is
+    # different behaviour, so the names change with it.
 
-    def test_refresh_after_setup_does_not_resurrect_the_framework_copies(self) -> None:
-        """The pairing, not either half.
+    def _retired(self, *extra: str):
+        return self.run_flow("refresh", "project", *extra)
 
-        `setup_project` and `_REFRESH_CORE_PATHS` are two independently
-        maintained lists of what a project holds. Thinning the first and
-        forgetting the second would undo this slice on the very next `flow
-        refresh project` — silently, because refresh reports the copy as an
-        ordinary added file. Uses the real ambient scaffold rather than
-        `writable_scaffold` on purpose: FRAMEWORK.md must genuinely still
-        exist on the framework side, so that the only thing standing between
-        it and the project is the list.
-        """
-        self.setup_project()
-        flow_dir = self.repo / ".flow"
-        before = {p.relative_to(flow_dir).as_posix() for p in flow_dir.rglob("*") if p.is_file()}
-        self.assertNotIn("FRAMEWORK.md", before, "fixture assumption: setup left no FRAMEWORK.md")
-
-        self.assert_ok(self.run_flow("refresh", "project"))
-
-        after = {p.relative_to(flow_dir).as_posix() for p in flow_dir.rglob("*") if p.is_file()}
-        self.assertEqual(after, before)
-
-    def test_refresh_restores_a_deleted_manifest_without_copying_the_framework_one(self) -> None:
-        """Repairing a missing manifest is refresh's job; replacing one is not.
-
-        The framework scaffold ships a `flow.toml` too — its own sync
-        configuration, hundreds of lines. Restoring *that* into a project
-        would hand every repo a manifest declaring framework sources it does
-        not have.
-        """
-        self.setup_project()
-        manifest = self.repo / ".flow" / "flow.toml"
-        expected = manifest.read_text()
-        manifest.unlink()
-
-        self.assert_ok(self.run_flow("refresh", "project"))
-
-        self.assertEqual(manifest.read_text(), expected)
-        self.assertNotIn("[claude.skill_defaults]", manifest.read_text())
-
-    def test_bootstrap_passes_on_a_freshly_created_project(self) -> None:
-        self.setup_project()
-
-        result = self.run_flow("bootstrap")
-
-        self.assert_ok(result)
-        self.assertNotIn("missing framework paths", result.stdout)
-        self.assertNotIn("FRAMEWORK.md", result.stdout)
-        self.assertIn("optional framework dirs absent", result.stdout)
-
-    def test_refresh_project_default_does_not_backfill_unregistered_framework_dirs(self) -> None:
+    def test_refresh_project_is_retired(self) -> None:
         flow_dir = self.repo / ".flow"
         flow_dir.mkdir()
-        (flow_dir / "flow.toml").write_text(
-            '[framework]\nname = "flow"\nversion = 1\n'
-            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
-        )
+        (flow_dir / "flow.toml").write_text('[framework]\nname = "flow"\nversion = 1\n')
 
-        result = self.run_flow("refresh", "project")
-        self.assert_ok(result)
-
-        self.assertIn("mode: overlay core and registered sources", result.stdout)
-        self.assertFalse((flow_dir / "FRAMEWORK.md").exists())
-        self.assertTrue((flow_dir / "PROJECT.md").exists())
-        self.assertTrue((flow_dir / "memory" / "STATE.md").exists())
-        self.assertTrue((flow_dir / "runs" / ".gitkeep").exists())
-        self.assertFalse((flow_dir / "commands").exists())
-        self.assertFalse((flow_dir / "agents").exists())
-        self.assertFalse((flow_dir / "standards").exists())
-        self.assertFalse((flow_dir / "templates").exists())
-
-        bootstrap = self.run_flow("bootstrap")
-        self.assert_ok(bootstrap)
-        self.assertIn("optional framework dirs absent", bootstrap.stdout)
-
-    def test_refresh_project_default_repairs_registered_sources_only(self) -> None:
-        flow_dir = self.repo / ".flow"
-        flow_dir.mkdir()
-        (flow_dir / "flow.toml").write_text(
-            '[framework]\nname = "flow"\nversion = 1\n'
-            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
-            '\n[[claude.commands]]\n'
-            'name = "flow-define"\n'
-            'source = "commands/flow-define.md"\n'
-            'description = "define"\n'
-            '\n[[agents]]\n'
-            'name = "architect"\n'
-            'source = "agents/architect.md"\n'
-        )
-
-        result = self.run_flow("refresh", "project")
-        self.assert_ok(result)
-
-        self.assertTrue((flow_dir / "commands" / "flow-define.md").exists())
-        self.assertTrue((flow_dir / "agents" / "architect.md").exists())
-        self.assertFalse((flow_dir / "commands" / "flow-plan.md").exists())
-        self.assertFalse((flow_dir / "agents" / "lead-developer.md").exists())
-
-    def test_refresh_project_reports_changed_existing_files_without_overwriting(self) -> None:
-        flow_dir = self.repo / ".flow"
-        flow_dir.mkdir()
-        (flow_dir / "flow.toml").write_text(
-            '[framework]\nname = "flow"\nversion = 1\n'
-            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
-            '\n[[claude.commands]]\n'
-            'name = "flow-define"\n'
-            'source = "commands/flow-define.md"\n'
-            'description = "define"\n'
-        )
-        command = flow_dir / "commands" / "flow-define.md"
-        command.parent.mkdir()
-        command.write_text("# local define override\n")
-
-        result = self.run_flow("refresh", "project")
-        self.assert_ok(result)
-
-        self.assertIn("update available: .flow/commands/flow-define.md", result.stdout)
-        # The manifest is never an update candidate. This test used to assert
-        # the opposite, which is how the phantom was found: refresh compared
-        # the project's manifest against the framework's own sync
-        # configuration, so every project reported one forever, and accepting
-        # it would have replaced the project's manifest with the framework's.
-        self.assertNotIn("update available: .flow/flow.toml", result.stdout)
-        self.assertIn("left changed files unchanged: 1", result.stdout)
-        self.assertEqual(command.read_text(), "# local define override\n")
-
-    def test_refresh_project_interactive_can_update_changed_files(self) -> None:
-        # Asserts content equality against REPO_ROOT, so the subprocess must
-        # resolve scaffolds through a source that points there. Without the
-        # fake home it reads the ambient ~/.flow/source and passes only when
-        # that happens to be this checkout.
-        self.use_fake_home()
-        flow_dir = self.repo / ".flow"
-        flow_dir.mkdir()
-        (flow_dir / "flow.toml").write_text(
-            '[framework]\nname = "flow"\nversion = 1\n'
-            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
-            '\n[[claude.commands]]\n'
-            'name = "flow-define"\n'
-            'source = "commands/flow-define.md"\n'
-            'description = "define"\n'
-        )
-        command = flow_dir / "commands" / "flow-define.md"
-        command.parent.mkdir()
-        command.write_text("# local define override\n")
-
-        result = self.run_flow_with_input("y\n", "refresh", "project", "--interactive")
-        self.assert_ok(result)
-
-        self.assertIn("updated from framework: 1", result.stdout)
-        self.assertEqual(command.read_text(), (REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-define.md").read_text())
-
-    def test_refresh_project_all_is_retired(self) -> None:
-        flow_dir = self.repo / ".flow"
-        flow_dir.mkdir()
-        (flow_dir / "flow.toml").write_text(
-            '[framework]\nname = "flow"\nversion = 1\n'
-            '\n[project]\nflow_dir = ".flow"\nsource_of_truth = ".flow"\n'
-        )
-
-        result = self.run_flow("refresh", "project", "--all")
+        result = self._retired()
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("was retired", result.stdout)
-        self.assertIn("flow project audit", result.stdout)
+
+    def test_the_retirement_names_where_each_job_went(self) -> None:
+        """A refusal that does not say what to run instead just moves the
+        problem to whoever hit it."""
+        (self.repo / ".flow").mkdir()
+
+        out = self._retired().stdout
+
+        self.assertIn("flow setup project", out)
+        self.assertIn("flow project migrate", out)
+
+    def test_the_retirement_admits_the_one_capability_with_no_successor(self) -> None:
+        """Updating an existing core file from the framework template has no
+        replacement. Saying so beats letting it be discovered."""
+        (self.repo / ".flow").mkdir()
+
+        out = self._retired().stdout
+
+        self.assertIn("no replacement", out)
+
+    def test_refresh_project_touches_nothing(self) -> None:
+        """Exit 1 alone would pass if the old repair ran before the early
+        return, which is exactly the shape this replaced."""
+        flow_dir = self.repo / ".flow"
+        flow_dir.mkdir()
+        (flow_dir / "flow.toml").write_text('[framework]\nname = "flow"\nversion = 1\n')
+        before = {
+            p.relative_to(self.repo): p.read_bytes()
+            for p in self.repo.rglob("*")
+            if p.is_file() and ".git" not in p.parts
+        }
+
+        self.assertEqual(self._retired().returncode, 1)
+
+        after = {
+            p.relative_to(self.repo): p.read_bytes()
+            for p in self.repo.rglob("*")
+            if p.is_file() and ".git" not in p.parts
+        }
+        self.assertEqual(before, after)
+
+    def test_refresh_project_is_retired_without_a_flow_dir_too(self) -> None:
+        """The older missing-overlay guard used to run first. It no longer
+        does, deliberately: someone typing a retired command needs to hear
+        that it is retired, not a setup error about a directory the command
+        would not have touched.
+        """
+        result = self._retired()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("was retired", result.stdout)
+        self.assertNotIn("repo is missing .flow", result.stdout)
+
+    def test_refresh_project_interactive_is_retired_too(self) -> None:
+        (self.repo / ".flow").mkdir()
+
+        result = self._retired("--interactive")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("was retired", result.stdout)
+
+    def test_refresh_project_all_is_retired(self) -> None:
+        (self.repo / ".flow").mkdir()
+
+        result = self._retired("--all")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("was retired", result.stdout)
 
     def test_refresh_project_all_creates_nothing(self) -> None:
-        """Exit 1 alone would pass even if it wrote half the fork before bailing.
-
-        The point of the retirement is the absence of the copies, not the
-        return code, so this pins the filesystem rather than the exit status.
-        """
+        """The point of the retirement is the absence of the copies, not the
+        return code."""
         flow_dir = self.repo / ".flow"
         flow_dir.mkdir()
         (flow_dir / "flow.toml").write_text('[framework]\nname = "flow"\nversion = 1\n')
 
         before = {p.relative_to(flow_dir): p.read_bytes() for p in flow_dir.rglob("*") if p.is_file()}
-        self.assertEqual(self.run_flow("refresh", "project", "--all").returncode, 1)
+        self.assertEqual(self._retired("--all").returncode, 1)
         after = {p.relative_to(flow_dir): p.read_bytes() for p in flow_dir.rglob("*") if p.is_file()}
 
         self.assertEqual(before, after)
-
-    def test_refresh_project_all_still_hits_the_missing_overlay_guard_first(self) -> None:
-        """Retiring `--all` must not jump the queue ahead of the older guard.
-
-        A repo with no `.flow` at all should still be told to run `setup
-        project`, not handed a message about a flag it never needed.
-        """
-        result = self.run_flow("refresh", "project", "--all")
-
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("repo is missing .flow", result.stdout)
-        self.assertNotIn("was retired", result.stdout)
 
     def test_sync_claude_generates_the_full_runtime_surface(self) -> None:
         fake_home = self.use_fake_home()
@@ -9759,11 +9667,13 @@ class ProjectManifestDeclarationTests(unittest.TestCase):
     def test_project_module_imports_no_heavy_siblings(self) -> None:
         """The dependency direction, asserted rather than left in a docstring.
 
-        `cli/setup.py` imports `sync_target`, and now also imports this module.
-        One convenience import back into `setup` would both drag the whole
-        adapter-generation graph into a read-only command and close a cycle.
-        Walked statically and transitively, because a runtime check would only
-        see what the current code path happens to touch.
+        `cli/setup.py` imports `sync_target`. It no longer imports this module
+        — retiring `flow refresh project` removed the only edge — so the cycle
+        half of the original rationale is gone, and the weight half is not:
+        one convenience import back into `setup` would still drag the whole
+        adapter-generation graph into a read-only command. Walked statically
+        and transitively, because a runtime check would only see what the
+        current code path happens to touch.
         """
         import ast
 
@@ -11949,7 +11859,15 @@ class LegacyOverlaySurvivesThinningTests(FlowCliHarness):
     which is exactly the shape that cannot catch a regression here.
     """
 
-    def test_refresh_leaves_a_legacy_overlay_intact(self) -> None:
+    def test_the_retired_refresh_leaves_a_legacy_overlay_intact(self) -> None:
+        """Same property, different command state.
+
+        This asserted that refresh repaired a legacy overlay without touching
+        it. Refresh is retired now, so the exit code moved to 1 — but the
+        property that mattered is unchanged and still worth pinning: someone
+        who types the retired command against a fat overlay must not lose
+        anything to it.
+        """
         self.setup_legacy_project()
         flow_dir = self.repo / ".flow"
         before = {
@@ -11959,7 +11877,7 @@ class LegacyOverlaySurvivesThinningTests(FlowCliHarness):
         }
         self.assertIn("FRAMEWORK.md", before, "fixture assumption: legacy overlay is fat")
 
-        self.assert_ok(self.run_flow("refresh", "project"))
+        self.assertEqual(self.run_flow("refresh", "project").returncode, 1)
 
         after = {
             p.relative_to(flow_dir).as_posix(): p.read_bytes()
@@ -11987,19 +11905,21 @@ class LegacyOverlaySurvivesThinningTests(FlowCliHarness):
         flow_dir = self.repo / ".flow"
         (flow_dir / "flow.toml").unlink()
 
-        result = self.run_flow("refresh", "project")
+        # Asserted through `setup project`, which is `_write_project_manifest`'s
+        # only caller now that refresh is retired. The property under test is
+        # the refusal, not which command reaches it.
+        result = self.run_flow("setup", "project")
 
-        self.assert_ok(result)
         self.assertFalse((flow_dir / "flow.toml").exists())
         self.assertIn("flow project audit", result.stdout)
 
-    def test_a_manifest_shaped_like_a_directory_does_not_crash_refresh(self) -> None:
+    def test_a_manifest_shaped_like_a_directory_does_not_crash_setup(self) -> None:
         self.setup_project()
         manifest = self.repo / ".flow" / "flow.toml"
         manifest.unlink()
         manifest.mkdir()
 
-        result = self.run_flow("refresh", "project")
+        result = self.run_flow("setup", "project")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(manifest.is_dir())
@@ -12017,7 +11937,7 @@ class LegacyOverlaySurvivesThinningTests(FlowCliHarness):
         manifest.unlink()
         manifest.symlink_to(outside)
 
-        self.assert_ok(self.run_flow("refresh", "project"))
+        self.assert_ok(self.run_flow("setup", "project"))
 
         self.assertFalse(outside.exists())
 

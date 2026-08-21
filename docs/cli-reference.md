@@ -57,19 +57,18 @@ Use this once per machine, then again whenever the framework scaffold changes an
 
 ### `flow refresh project`
 
-Repair missing files in an existing `repo/.flow`.
+**Retired.** Exits 1 and points at the commands that took over.
 
-Behavior:
+It repaired a missing manifest and missing core files, and restored manifest-declared sources from the scaffold. The first two are things `flow setup project` already does idempotently; the third is fork restoration in miniature, and is what `flow project migrate` exists to undo. A project overlay no longer holds framework files, so there is nothing left for it to refresh.
 
-- adds missing overlay core files: `PROJECT.md`, `memory/STATE.md`, and `runs/.gitkeep`
-- recreates `flow.toml` if it is missing — as the short project template, not as a copy of the framework's manifest — and otherwise leaves it alone. The manifest is the project's own state, and the framework scaffold's file of that name is the framework's sync configuration — comparing the two reports an update that is never real.
-- adds missing command, agent, and standard files only when they are registered in `.flow/flow.toml`
-- leaves existing project files untouched when their content differs from the framework
-- reports changed same-name files as update candidates
-- use `flow refresh project --interactive` to choose whether to replace changed files with the framework version
-- `flow refresh project --all` is retired. It backfilled the whole framework scaffold into the project, which is the fork this overlay model removed: the copies never update and the runtime reads the user-level install regardless. It exits 1 and points at `flow project audit`.
+| what it used to do | what to run |
+|---|---|
+| missing `flow.toml` or core files | `flow setup project` |
+| framework copies still present | `flow project audit`, then `flow project migrate` |
 
-Use this to repair an incomplete overlay or restore registered project-local sources without importing framework content that the user-level install already provides.
+**One capability has no successor.** Updating an *existing* `PROJECT.md` or `memory/STATE.md` from the framework template is gone — `copy_if_missing` never touches a file that is there, and nothing else offers the update. Those files are the project's own content from the moment it is initialized, so edit them directly. The retirement message says this rather than leaving it to be discovered.
+
+The refusal fires before any filesystem check, including whether `.flow` exists. Someone typing a retired command needs to hear that it is retired, not a setup error about a directory the command would no longer have touched.
 
 ### `flow bootstrap`
 
