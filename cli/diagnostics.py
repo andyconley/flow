@@ -292,9 +292,12 @@ def bootstrap() -> int:
         print("repo is missing .flow; run `flow setup project` first")
         return 1
 
+    # `FRAMEWORK.md` is not required: a project stopped holding one when the
+    # scaffold was thinned. It is still in `CAPABILITY_PATHS` so that `flow
+    # project audit` can classify a legacy copy left over from before that
+    # change — required-here and classifiable-there are different questions.
     required = [
         flow_dir / "flow.toml",
-        flow_dir / "FRAMEWORK.md",
         flow_dir / "PROJECT.md",
         flow_dir / "memory",
     ]

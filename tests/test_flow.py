@@ -111,6 +111,38 @@ class FlowCliHarness(unittest.TestCase):
     def setup_project(self) -> None:
         self.assert_ok(self.run_flow("setup", "project"))
 
+    def setup_legacy_project(self) -> None:
+        """A project overlay as `flow setup project` built them before thinning.
+
+        `setup project` now creates four files. Every test of `flow project
+        audit` and `flow project migrate` needs the opposite: a repo carrying
+        a full copy of the framework scaffold, because that is the only kind
+        of project those two commands have anything to say about. Building it
+        here rather than in each test keeps the fixture honest about what it
+        is — a legacy overlay, not the current contract — and means the
+        thinning does not have to be re-litigated in thirty fixtures.
+        """
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+        scaffold = REPO_ROOT / "scaffolds" / "default"
+        for src in scaffold.rglob("*"):
+            if not src.is_file():
+                continue
+            rel = src.relative_to(scaffold)
+            if rel == Path("flow.toml"):
+                # The scaffold's manifest is the framework's sync
+                # configuration. Old `setup project` really did copy it, and
+                # the migrate tests depend on a project manifest that declares
+                # sources, so it is copied here too — but as the legacy
+                # artifact it is, not as something a new project would get.
+                (flow_dir / rel).write_text(src.read_text())
+                continue
+            dest = flow_dir / rel
+            if dest.exists():
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(src.read_bytes())
+
     def writable_scaffold(self, fake_home: Path) -> Path:
         """Give this fake HOME its own editable copy of the framework scaffold.
 
@@ -237,13 +269,112 @@ class FlowCliTests(FlowCliHarness):
         )
         return bare
 
-    def test_setup_project_scaffolds_flow_manifest(self) -> None:
+    def test_setup_project_creates_exactly_four_paths(self) -> None:
+        """The whole contract of the thinned scaffold, as a set equality.
+
+        Deliberately not four `assertTrue`s: those pass just as happily when a
+        fifth file appears, and a fifth file is precisely the regression this
+        slice exists to prevent.
+        """
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+
+        created = {
+            p.relative_to(flow_dir).as_posix()
+            for p in flow_dir.rglob("*")
+            if p.is_file()
+        }
+
+        self.assertEqual(
+            created,
+            {"flow.toml", "PROJECT.md", "memory/STATE.md", "runs/.gitkeep"},
+        )
+
+    def test_setup_project_creates_no_framework_md(self) -> None:
+        """Stated directly rather than inferred from the set above.
+
+        A project holding its own FRAMEWORK.md is the fork in miniature: it
+        goes stale the first time the framework's changes, and nothing reads
+        it. Both surveyed real overlays carried one, both already drifted.
+        """
         self.setup_project()
 
-        self.assertTrue((self.repo / ".flow" / "flow.toml").exists())
-        self.assertTrue((self.repo / ".flow" / "commands" / "flow-plan.md").exists())
-        self.assertTrue((self.repo / ".flow" / "commands" / "flow-define.md").exists())
-        self.assertTrue((self.repo / ".flow" / "agents" / "architect.md").exists())
+        self.assertFalse((self.repo / ".flow" / "FRAMEWORK.md").exists())
+
+    def test_setup_project_manifest_round_trips_through_flowtoml(self) -> None:
+        self.setup_project()
+        flowtoml = load_cli_module("flowtoml")
+
+        data = flowtoml.read_toml(self.repo / ".flow" / "flow.toml")
+
+        self.assertEqual(data["framework"]["name"], "flow")
+        self.assertEqual(data["framework"]["version"], 1)
+
+    def test_setup_project_manifest_ships_replaces_commented_out(self) -> None:
+        """The example must be inert, not merely present.
+
+        `assertIn("[[replaces]]", text)` would pass with a live block, and a
+        live block means every new project starts by declaring a replacement
+        for a standard it does not have.
+        """
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        flowtoml = load_cli_module("flowtoml")
+
+        text = manifest.read_text()
+
+        self.assertRegex(text, r"(?m)^\s*#.*\[\[replaces\]\]")
+        self.assertNotIn("replaces", flowtoml.read_toml(manifest))
+
+    def test_refresh_after_setup_does_not_resurrect_the_framework_copies(self) -> None:
+        """The pairing, not either half.
+
+        `setup_project` and `_REFRESH_CORE_PATHS` are two independently
+        maintained lists of what a project holds. Thinning the first and
+        forgetting the second would undo this slice on the very next `flow
+        refresh project` — silently, because refresh reports the copy as an
+        ordinary added file. Uses the real ambient scaffold rather than
+        `writable_scaffold` on purpose: FRAMEWORK.md must genuinely still
+        exist on the framework side, so that the only thing standing between
+        it and the project is the list.
+        """
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+        before = {p.relative_to(flow_dir).as_posix() for p in flow_dir.rglob("*") if p.is_file()}
+        self.assertNotIn("FRAMEWORK.md", before, "fixture assumption: setup left no FRAMEWORK.md")
+
+        self.assert_ok(self.run_flow("refresh", "project"))
+
+        after = {p.relative_to(flow_dir).as_posix() for p in flow_dir.rglob("*") if p.is_file()}
+        self.assertEqual(after, before)
+
+    def test_refresh_restores_a_deleted_manifest_without_copying_the_framework_one(self) -> None:
+        """Repairing a missing manifest is refresh's job; replacing one is not.
+
+        The framework scaffold ships a `flow.toml` too — its own sync
+        configuration, hundreds of lines. Restoring *that* into a project
+        would hand every repo a manifest declaring framework sources it does
+        not have.
+        """
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        expected = manifest.read_text()
+        manifest.unlink()
+
+        self.assert_ok(self.run_flow("refresh", "project"))
+
+        self.assertEqual(manifest.read_text(), expected)
+        self.assertNotIn("[claude.skill_defaults]", manifest.read_text())
+
+    def test_bootstrap_passes_on_a_freshly_created_project(self) -> None:
+        self.setup_project()
+
+        result = self.run_flow("bootstrap")
+
+        self.assert_ok(result)
+        self.assertNotIn("missing framework paths", result.stdout)
+        self.assertNotIn("FRAMEWORK.md", result.stdout)
+        self.assertIn("optional framework dirs absent", result.stdout)
 
     def test_refresh_project_default_does_not_backfill_unregistered_framework_dirs(self) -> None:
         flow_dir = self.repo / ".flow"
@@ -257,7 +388,7 @@ class FlowCliTests(FlowCliHarness):
         self.assert_ok(result)
 
         self.assertIn("mode: overlay core and registered sources", result.stdout)
-        self.assertTrue((flow_dir / "FRAMEWORK.md").exists())
+        self.assertFalse((flow_dir / "FRAMEWORK.md").exists())
         self.assertTrue((flow_dir / "PROJECT.md").exists())
         self.assertTrue((flow_dir / "memory" / "STATE.md").exists())
         self.assertTrue((flow_dir / "runs" / ".gitkeep").exists())
@@ -312,8 +443,13 @@ class FlowCliTests(FlowCliHarness):
         self.assert_ok(result)
 
         self.assertIn("update available: .flow/commands/flow-define.md", result.stdout)
-        self.assertIn("update available: .flow/flow.toml", result.stdout)
-        self.assertIn("left changed files unchanged: 2", result.stdout)
+        # The manifest is never an update candidate. This test used to assert
+        # the opposite, which is how the phantom was found: refresh compared
+        # the project's manifest against the framework's own sync
+        # configuration, so every project reported one forever, and accepting
+        # it would have replaced the project's manifest with the framework's.
+        self.assertNotIn("update available: .flow/flow.toml", result.stdout)
+        self.assertIn("left changed files unchanged: 1", result.stdout)
         self.assertEqual(command.read_text(), "# local define override\n")
 
     def test_refresh_project_interactive_can_update_changed_files(self) -> None:
@@ -10020,7 +10156,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
 
     def test_exits_zero_on_a_mixed_report(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         (self.repo / ".flow" / "standards" / "testing.md").write_text("edited\n")
         (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
 
@@ -10034,7 +10170,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
         this time". Contamination is the normal state of an old project, so the
         worst-looking input must still be a successful run."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         for path in (self.repo / ".flow" / "standards").rglob("*.md"):
             path.write_text("clobbered\n")
 
@@ -10046,7 +10182,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
         """Report-only asserted as behavior, not as the absence of an --apply
         flag in argparse."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
 
         before = self.snapshot()
@@ -10063,7 +10199,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
         """Catches a classifier wired only to standards/, which every
         single-directory fixture would let through."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         flow_dir = self.repo / ".flow"
         for name in ("agents", "commands", "project", "standards", "templates"):
             (flow_dir / name).mkdir(parents=True, exist_ok=True)
@@ -10085,7 +10221,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
 
     def test_refuses_a_root_that_is_not_a_directory(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         result = self.audit("--root", str(self.repo / ".flow" / "flow.toml"))
         self.assertEqual(result.returncode, 1)
         self.assertIn("not a directory", result.stdout)
@@ -10098,7 +10234,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
 
     def test_json_carries_the_same_counts_as_the_table(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
 
         rendered = self.audit()
@@ -10117,7 +10253,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
 
     def test_json_findings_carry_no_absolute_paths(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         data = json.loads(self.audit("--json").stdout)
         self.assertTrue(data["findings"], "fixture produced nothing to check")
         for finding in data["findings"]:
@@ -10125,7 +10261,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
 
     def test_an_orphaned_declaration_is_reported_with_its_site(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         manifest = self.repo / ".flow" / "flow.toml"
         manifest.write_text(
             manifest.read_text()
@@ -10139,7 +10275,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
     def test_exits_one_and_reports_nothing_without_a_framework_baseline(self) -> None:
         """The no-baseline path through the real CLI, not just the renderer."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         empty = self.repo / "empty-framework"
         empty.mkdir()
 
@@ -10515,7 +10651,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
         directory or a deleted file both show up.
         """
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         before = self.snapshot()
         result = self.migrate()
         self.assert_ok(result)
@@ -10525,7 +10661,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
 
     def test_dry_run_leaves_the_manifest_byte_identical(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         manifest = self.repo / ".flow" / "flow.toml"
         before = manifest.read_text()
         self.assert_ok(self.migrate())
@@ -10533,7 +10669,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
 
     def test_reports_the_files_it_would_remove(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         result = self.migrate()
         self.assert_ok(result)
         self.assertIn("would remove", result.stdout)
@@ -10544,7 +10680,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
         customization is not in the removal list" has to be a conclusion someone
         can actually reach."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         (self.repo / ".flow" / "standards" / "testing.md").write_text("ours\n")
         (self.repo / ".flow" / "standards" / "house.md").write_text("also ours\n")
         result = self.migrate()
@@ -10557,7 +10693,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
         """R2, as a planning-level assertion. The real projects contain no
         customized file, so nothing but a synthetic fixture exercises this."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         target = self.repo / ".flow" / "standards" / "testing.md"
         target.write_text(target.read_text() + "\nOne extra sentence.\n")
 
@@ -10569,7 +10705,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
         """The other half of the previous test, and what stops it being
         vacuous: identical content must flip the same path into `delete`."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         data = json.loads(self.migrate("--json").stdout)
         self.assertIn("standards/testing.md", data["delete"])
 
@@ -10578,7 +10714,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
         entry and leaving the other is the dangling declaration the audit's
         per-site attribution exists to prevent."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         (self.repo / ".flow" / "commands" / "flow-boot.md").unlink()
         data = json.loads(self.migrate("--json").stdout)
         sites = {e["site"] for e in data["manifest_edits"]}
@@ -10587,7 +10723,7 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
 
     def test_refuses_without_a_framework_baseline(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         empty = self.repo / "empty-framework"
         empty.mkdir()
         result = self.migrate("--scaffold", str(empty))
@@ -10639,7 +10775,7 @@ class ProjectMigrateApplyTests(FlowCliHarness):
         now just files on disk that nothing maintains.
         """
         home = self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
 
         claude = self.repo / ".claude"
         (claude / "skills" / "flow-boot").mkdir(parents=True)
@@ -10700,7 +10836,7 @@ class ProjectMigrateApplyTests(FlowCliHarness):
 
     def test_apply_without_yes_refuses_and_changes_nothing(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         before = self.tree()
         result = self.migrate("--apply")
         self.assertEqual(result.returncode, 1)
@@ -10757,7 +10893,7 @@ class ProjectMigrateApplyTests(FlowCliHarness):
 
     def test_the_manifest_keeps_its_comments_and_loses_only_dead_sites(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         manifest = self.repo / ".flow" / "flow.toml"
         before_text = manifest.read_text()
         before_comments = [l for l in before_text.splitlines() if l.lstrip().startswith("#")]
@@ -10815,7 +10951,7 @@ class ProjectMigrateApplyTests(FlowCliHarness):
         no declaration names a file that is not there.
         """
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         # Reproduce path-nexus: delete a source the way a naive migration would,
         # leaving the manifest declaring it.
         (self.repo / ".flow" / "commands" / "flow-boot.md").unlink()
@@ -11063,7 +11199,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
         permanently adapter-less with an unedited manifest.
         """
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         manifest = self.repo / ".flow" / "flow.toml"
         manifest.write_text(
             manifest.read_text()
@@ -11085,7 +11221,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
         the fix moved the validating parse into planning so a failure surfaces
         before anything is destroyed."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         manifest = self.repo / ".flow" / "flow.toml"
         manifest.write_text(manifest.read_text() + "\n[tooling]\ntimeout = 1.5\n")
         data = json.loads(self.migrate("--json").stdout)
@@ -11096,7 +11232,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
         the five things `--apply` does. Adapter removal and the handler strip
         were invisible."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         claude = self.repo / ".claude"
         (claude / "skills" / "flow-boot").mkdir(parents=True)
         (claude / "skills" / "flow-boot" / "SKILL.md").write_text("generated\n")
@@ -11124,7 +11260,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
         doctor` send people here to remove it. Reporting "nothing to migrate"
         contradicted the two commands that recommend this one."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         # Nothing byte-identical and nothing orphaned: every overlay file is
         # edited, so `delete` and `manifest_edits` are both empty. Every file,
         # not just the .md ones — a single byte-identical LICENSE.txt is enough
@@ -11152,7 +11288,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
         leave the other declaring a file that is gone. Detected while planning,
         because the alternative was an abort after two destructive steps."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         manifest = self.repo / ".flow" / "flow.toml"
         manifest.write_text(
             manifest.read_text()
@@ -11172,7 +11308,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
         only unresolved sites printed "nothing to migrate" while doctor
         reported declarations to fix."""
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         for path in (self.repo / ".flow").rglob("*.md"):
             path.write_text("locally rewritten\n")
         manifest = self.repo / ".flow" / "flow.toml"
@@ -11188,7 +11324,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
 
     def test_at_cannot_escape_the_backups_directory(self) -> None:
         self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         result = self.migrate("--apply", "--yes", "--at", "../../escape")
         self.assertEqual(result.returncode, 1)
         self.assertIn("--at must be", result.stdout)
@@ -11209,7 +11345,7 @@ class MigrationReviewRegressionTests(FlowCliHarness):
         set had it saved and then immediately overwritten — destroyed, not
         saved, and invisible to any count."""
         home = self.use_fake_home()
-        self.setup_project()
+        self.setup_legacy_project()
         victim = self.repo / "MANIFEST.txt"
         victim.write_text("the project's own manifest\n")
         claude = self.repo / ".claude"

@@ -84,15 +84,69 @@ def _ensure_usage_store() -> None:
         print(f"usage store: current (schema v{usage_store.SCHEMA_VERSION})")
 
 
+# What a new project overlay actually holds. Everything absent from this list
+# is framework capability, served by the user-level install: copying it here
+# produced a fork that never updated and that the runtime never read.
+#
+# `flow.toml` is not here because it is not copied from the scaffold at all —
+# the scaffold's manifest is the *framework's* 465-line sync configuration,
+# and a project's is the handful of lines below. Sharing a filename is not
+# sharing a document.
+_PROJECT_SCAFFOLD_PATHS = (
+    Path("PROJECT.md"),
+    Path("memory/STATE.md"),
+    Path("runs/.gitkeep"),
+)
+
+# Written verbatim into a new project. The commented `[[replaces]]` block is
+# the only thing this file is for; it is commented rather than omitted so the
+# shape is discoverable without reaching for the docs.
+_PROJECT_MANIFEST_TEMPLATE = """\
+[framework]
+name = "flow"
+version = 1
+
+# Point a role at a project standard instead of the
+# framework default. `with` resolves in the user overlay.
+#
+# [[replaces]]
+# default = "standards/testing.md"
+# with    = "standards/hypr-testing.md"
+# why     = "pytest only, no BDD layer"
+"""
+
+
+def _write_project_manifest(target: Path) -> bool:
+    """Create the project manifest if absent. Never touch an existing one.
+
+    Returns whether it wrote. The manifest is project state — `flow project
+    audit` lists it in `NOT_SCANNED` alongside `PROJECT.md` and `memory/` for
+    the same reason — so repairing a missing one is in scope and reconciling
+    a present one against the framework's manifest is not.
+    """
+    manifest = target / "flow.toml"
+    if manifest.exists():
+        return False
+    ensure_dir(target)
+    manifest.write_text(_PROJECT_MANIFEST_TEMPLATE)
+    return True
+
+
 def setup_project() -> int:
     root = repo_root()
     target = root / ".flow"
     ensure_dir(target)
 
-    for item in SCAFFOLD_DIR.iterdir():
-        copy_if_missing(item, target / item.name)
+    for rel in _PROJECT_SCAFFOLD_PATHS:
+        ensure_dir((target / rel).parent)
+        copy_if_missing(SCAFFOLD_DIR / rel, target / rel)
+    _write_project_manifest(target)
 
-    print(f"project scaffold ready: {target}")
+    print(f"project overlay ready: {target}")
+    print()
+    print("This overlay holds this project's own work — its context, its state,")
+    print("and its run artifacts. Commands, agents, standards, and templates")
+    print("come from the user-level install and are not copied here.")
     print()
     print("Next steps:")
     print()
@@ -103,18 +157,11 @@ def setup_project() -> int:
     print()
     print("   (Or edit .flow/PROJECT.md by hand if you prefer.)")
     print()
-    print("2. Optional — populate project-specific overlays where this project")
-    print("   differs from the framework defaults:")
-    print("   - .flow/project/*.md   (brand, domain, terminology, UX, etc.)")
-    print("   - .flow/standards/*.md (only when a project standard must override the framework's)")
-    print()
-    print("3. Runtime surfaces come from the user-level install")
+    print("2. Runtime surfaces come from the user-level install")
     print("   (`flow setup user`) and apply in every session. A project does")
     print("   not generate its own; project-level sync was retired.")
-    print("   `flow project audit` reports anything this overlay is still")
-    print("   carrying that the framework owns.")
     print()
-    print("4. Open a fresh Claude Code session in this repo and try `/flow-boot`")
+    print("3. Open a fresh Claude Code session in this repo and try `/flow-boot`")
     print("   to verify the overlay is being read.")
     return 0
 
@@ -282,9 +329,20 @@ def setup_user(overlay_repo: str | None = None) -> int:
     return 0
 
 
+# Deliberately the same set `setup_project` creates, minus the manifest.
+#
+# `FRAMEWORK.md` is absent because a project no longer holds one. Leaving it
+# here would have been the quiet way to undo this whole refactor: setup would
+# stop creating it and the very next `flow refresh project` would copy it back.
+#
+# `flow.toml` is absent because refresh compares each path against the
+# framework scaffold's file of the same name, and the scaffold's `flow.toml`
+# is the framework's own sync manifest — hundreds of lines that have never
+# belonged in a project. Diffing the two reports a permanent phantom update,
+# and accepting that update would overwrite the project's manifest with the
+# framework's. `_write_project_manifest` handles the only case that is really
+# refresh's business: the file being missing entirely.
 _REFRESH_CORE_PATHS = [
-    Path("flow.toml"),
-    Path("FRAMEWORK.md"),
     Path("PROJECT.md"),
     Path("memory/STATE.md"),
     Path("runs/.gitkeep"),
@@ -403,6 +461,7 @@ def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
         print("run `flow project audit` to see what it is still carrying")
         return 1
 
+    wrote_manifest = _write_project_manifest(target)
     manifest_path = target / "flow.toml"
     manifest = flowtoml.read_toml(manifest_path) if manifest_path.exists() else {}
     rel_paths = set(_REFRESH_CORE_PATHS)
@@ -417,6 +476,7 @@ def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
 
     prompt = interactive or sys.stdin.isatty()
     counts = _refresh_scaffold_files(rel_paths, target, prompt=prompt)
+    counts["added"] += int(wrote_manifest)
 
     print(f"project refresh complete: {target}")
     print(f"mode: {mode}")
