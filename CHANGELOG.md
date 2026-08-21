@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.17.0](https://github.com/andyconley/flow/compare/v0.16.0...v0.17.0) (2026-08-21)
+
+### Features
+
+* **cli:** thin the project scaffold at creation and retire `refresh project --all` ([#11](https://github.com/andyconley/flow/issues/11)) ([9b18e36](https://github.com/andyconley/flow/commit/9b18e3667cce3464e5abc910283e1639dfbe0c92))
+
 ## [0.16.0](https://github.com/andyconley/flow/compare/v0.15.0...v0.16.0) (2026-08-21)
 
 ### ⚠ BREAKING CHANGES
