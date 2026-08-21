@@ -111,6 +111,25 @@ class FlowCliHarness(unittest.TestCase):
     def setup_project(self) -> None:
         self.assert_ok(self.run_flow("setup", "project"))
 
+    def writable_scaffold(self, fake_home: Path) -> Path:
+        """Give this fake HOME its own editable copy of the framework scaffold.
+
+        `use_fake_home` points ~/.flow/source straight at the checkout, so a
+        test that needs to change the scaffold manifest would be editing the
+        repo it is running from. Only `scaffolds/` is copied; everything else
+        (hooks/, cli/) stays a link, so hook scripts still resolve.
+        """
+        source = fake_home / ".flow" / "source"
+        if source.is_symlink():
+            source.unlink()
+        source.mkdir(parents=True, exist_ok=True)
+        for entry in REPO_ROOT.iterdir():
+            if entry.name.startswith(".") or entry.name == "scaffolds":
+                continue
+            (source / entry.name).symlink_to(entry)
+        shutil.copytree(REPO_ROOT / "scaffolds", source / "scaffolds")
+        return source / "scaffolds" / "default"
+
     def use_fake_home(self) -> Path:
         """Create a fake HOME with a flow source symlink. Subsequent run_flow calls use this HOME."""
         fake_home = self.repo / "fake_home"
@@ -340,18 +359,18 @@ class FlowCliTests(FlowCliHarness):
         self.assertTrue((flow_dir / "standards" / "git-commits.md").exists())
         self.assertTrue((flow_dir / "templates" / "definition.md").exists())
 
-    def test_sync_claude_generates_runtime_surface(self) -> None:
-        self.setup_project()
+    def test_sync_claude_generates_the_full_runtime_surface(self) -> None:
+        fake_home = self.use_fake_home()
 
-        self.assert_ok(self.run_flow("sync", "claude"))
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
 
-        skill_path = self.repo / ".claude" / "skills" / "flow-plan" / "SKILL.md"
-        define_skill_path = self.repo / ".claude" / "skills" / "flow-define" / "SKILL.md"
-        agent_path = self.repo / ".claude" / "agents" / "architect.md"
-        tech_writer_path = self.repo / ".claude" / "agents" / "tech-writer.md"
-        hook_path = self.repo / ".claude" / "hooks" / "flow-session-start.sh"
-        settings_path = self.repo / ".claude" / "settings.json"
-        managed_path = self.repo / ".claude" / "flow.managed.toml"
+        skill_path = fake_home / ".claude" / "skills" / "flow-plan" / "SKILL.md"
+        define_skill_path = fake_home / ".claude" / "skills" / "flow-define" / "SKILL.md"
+        agent_path = fake_home / ".claude" / "agents" / "architect.md"
+        tech_writer_path = fake_home / ".claude" / "agents" / "tech-writer.md"
+        hook_path = fake_home / ".claude" / "hooks" / "flow-session-start.sh"
+        settings_path = fake_home / ".claude" / "settings.json"
+        managed_path = fake_home / ".claude" / "flow.managed.toml"
 
         self.assertTrue(skill_path.exists())
         self.assertTrue(define_skill_path.exists())
@@ -370,20 +389,20 @@ class FlowCliTests(FlowCliHarness):
         session_groups = settings["hooks"]["SessionStart"]
         self.assertTrue(
             any(
-                group["hooks"][0]["command"] == '"$CLAUDE_PROJECT_DIR"/.claude/hooks/flow-session-start.sh'
+                group["hooks"][0]["command"] == '"$HOME"/.claude/hooks/flow-session-start.sh'
                 for group in session_groups
             )
         )
 
     def test_sync_codex_generates_skill_runtime(self) -> None:
-        self.setup_project()
+        fake_home = self.use_fake_home()
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
-        skill_path = self.repo / ".agents" / "skills" / "flow-plan" / "SKILL.md"
-        define_skill_path = self.repo / ".agents" / "skills" / "flow-define" / "SKILL.md"
-        agent_path = self.repo / ".codex" / "agents" / "architect.toml"
-        managed_path = self.repo / ".codex" / "flow.managed.toml"
+        skill_path = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        define_skill_path = fake_home / ".agents" / "skills" / "flow-define" / "SKILL.md"
+        agent_path = fake_home / ".codex" / "agents" / "architect.toml"
+        managed_path = fake_home / ".codex" / "flow.managed.toml"
 
         self.assertTrue(skill_path.exists())
         self.assertTrue(define_skill_path.exists())
@@ -398,25 +417,48 @@ class FlowCliTests(FlowCliHarness):
         agent_content = agent_path.read_text()
         self.assertIn('model = "gpt-5.6-sol"', agent_content)
         self.assertIn('model_reasoning_effort = "medium"', agent_content)
-        tech_writer_content = (self.repo / ".codex" / "agents" / "tech-writer.toml").read_text()
+        tech_writer_content = (fake_home / ".codex" / "agents" / "tech-writer.toml").read_text()
         self.assertIn('model = "gpt-5.6-luna"', tech_writer_content)
         self.assertIn('model_reasoning_effort = "low"', tech_writer_content)
 
     def test_sync_check_detects_codex_drift(self) -> None:
-        self.setup_project()
-        self.assert_ok(self.run_flow("sync", "codex"))
+        fake_home = self.use_fake_home()
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
-        skill_path = self.repo / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        skill_path = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
         skill_path.write_text(skill_path.read_text() + "\nmanual drift\n")
 
-        result = self.run_flow("sync", "codex", "--check")
+        result = self.run_flow("sync", "codex", "--user", "--check")
         self.assertEqual(result.returncode, 1)
         self.assertIn("codex sync check: drift detected", result.stdout)
 
-    def test_doctor_reports_both_runtime_states(self) -> None:
+    def test_sync_without_user_is_refused(self) -> None:
+        """Project-level sync was retired. Exiting 1 rather than 0 matters: a
+        pointer printed alongside success is indistinguishable from having
+        synced, and any caller checking the exit code would carry on believing
+        its adapters were current."""
+        self.use_fake_home()
         self.setup_project()
-        self.assert_ok(self.run_flow("sync", "claude"))
-        self.assert_ok(self.run_flow("sync", "codex"))
+        for target in ("claude", "codex"):
+            result = self.run_flow("sync", target)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("project-level sync was retired", result.stdout)
+            self.assertIn(f"flow sync {target} --user", result.stdout)
+        self.assertFalse((self.repo / ".claude").exists(), "nothing may be generated")
+
+    def test_doctor_reports_both_runtime_states(self) -> None:
+        """Doctor still reports two sections, but only the user-level one
+        carries runtime state now. Project-level sync was retired, so the
+        project section no longer has claude/codex sync, drift, skills,
+        agents, or agent-policy lines — it reports the repo overlay only.
+        Asserting the old project drift lines here would pin behavior that
+        no longer exists; asserting `overlay:` pins what replaced it.
+        """
+        fake_home = self.use_fake_home()
+        self.setup_project()
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+        self.assertTrue((fake_home / ".claude" / "flow.managed.toml").exists())
 
         result = self.run_flow("doctor")
         self.assert_ok(result)
@@ -429,12 +471,22 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("-- user-level", result.stdout)
         self.assertIn("-- project:", result.stdout)
 
+        project_section = result.stdout.split("-- project:", 1)[1]
+        self.assertIn("overlay:", project_section)
+
     def test_top_level_help_lists_core_commands_and_examples(self) -> None:
         result = self.run_flow("--help")
         self.assert_ok(result)
         self.assertIn("Portable AI workflow framework CLI.", result.stdout)
-        self.assertIn("sync                generate runtime adapters from repo/.flow", result.stdout)
-        self.assertIn("flow sync codex --check", result.stdout)
+        self.assertIn(
+            "sync                generate runtime adapters from the framework scaffold", result.stdout
+        )
+        self.assertIn("flow sync codex --user --check", result.stdout)
+        self.assertIn("flow project audit", result.stdout)
+        # The top-level examples advertised `flow sync claude` and
+        # `flow sync codex --check` after those forms had started exiting 1.
+        # Help that recommends a command which fails is worse than no help.
+        self.assertNotIn("flow sync claude\n", result.stdout)
 
     def test_sync_help_describes_targets_and_examples(self) -> None:
         result = self.run_flow("sync", "--help")
@@ -640,16 +692,17 @@ class FlowCliTests(FlowCliHarness):
         self.assertTrue(skill.exists(), "user-added command must generate a SKILL.md")
         self.assertIn("user-defined Jira status", skill.read_text())
 
-    def test_skill_edit_hint_matches_origin_and_mode(self) -> None:
+    def test_skill_edit_hint_matches_origin(self) -> None:
         """The generated marker must direct edits to a file that actually
-        exists, which depends on BOTH origin and sync mode: a user-overlay
-        command's source lives under `~/.flow/user/`; a framework command
-        synced in --user mode lives under the scaffold at
-        `~/.flow/source/scaffolds/default/` (there is no `.flow/` anywhere
-        near `~/.claude/skills/`); only project mode gets the classic
-        `.flow/<source>` hint. Review caught the first fix handling only
-        the user-origin case and a test pinning the wrong framework-in-
-        user-mode string — this asserts all three cells of the matrix.
+        exists, and which file that is depends on the command's origin. A
+        user-overlay command's source lives under `~/.flow/user/`; a
+        framework command's lives in the scaffold at
+        `~/.flow/source/scaffolds/default/`. Neither is `.flow/`, which is
+        what the hint used to say and which does not exist anywhere near
+        `~/.claude/skills/`. Both cases are asserted below. There used to be
+        a third — a framework command synced in project mode, which did get
+        the classic `.flow/<source>` hint — and it went away with
+        project-level sync.
         """
         fake_home = self.use_fake_home()
         self._write_user_overlay_command(
@@ -674,12 +727,6 @@ class FlowCliTests(FlowCliHarness):
             "a framework skill installed at user level cannot be edited via a nonexistent .flow/",
         )
         self.assertIn("flow sync claude --user", framework_user)
-
-        self.setup_project()
-        self.assert_ok(self.run_flow("sync", "claude"))
-        framework_project = (self.repo / ".claude" / "skills" / "flow-plan" / "SKILL.md").read_text()
-        self.assertIn("Edit `.flow/commands/flow-plan.md`", framework_project)
-        self.assertNotIn("--user", framework_project.split("-->")[0].split("<!--")[-1])
 
     # ------------------------------------------------------------------
     # [[codex.hooks]] — full-parity hook management for the Codex runtime
@@ -789,29 +836,6 @@ class FlowCliTests(FlowCliHarness):
         self.assertFalse(any("flow-my-stop.sh" in c for c in commands))
         self.assertFalse((codex_dir / "hooks" / "flow-my-stop.sh").exists(), "deregistered script must be removed")
 
-    def test_codex_hooks_project_mode_uses_git_toplevel_path(self) -> None:
-        """Codex has no $CLAUDE_PROJECT_DIR equivalent — project-mode hook
-        commands use the git rev-parse idiom from Codex's own docs.
-        """
-        self.use_fake_home()
-        self.setup_project()
-        flow_toml = self.repo / ".flow" / "flow.toml"
-        flow_toml.write_text(
-            flow_toml.read_text()
-            + "\n[[codex.hooks]]\n"
-            + 'name = "proj-hook"\nevent = "SessionStart"\ntype = "command"\nscript = "flow-proj.sh"\n'
-        )
-        # Project-mode hook scripts still come from the framework hooks/ dir;
-        # point at one that exists there.
-        flow_toml.write_text(flow_toml.read_text().replace("flow-proj.sh", "flow-session-start.sh"))
-
-        self.assert_ok(self.run_flow("sync", "codex"))
-
-        doc = json.loads((self.repo / ".codex" / "hooks.json").read_text())
-        handler = doc["hooks"]["SessionStart"][0]["hooks"][0]
-        self.assertIn('"$(git rev-parse --show-toplevel)"/.codex/hooks/flow-session-start.sh', handler["command"])
-        self.assertTrue((self.repo / ".codex" / "hooks" / "flow-session-start.sh").is_file())
-
     def test_hook_script_not_named_flow_is_rejected_at_sync_time(self) -> None:
         """The preserve-unmanaged strip identifies flow's handlers by the
         `/.codex/hooks/flow-` marker — a script named outside that
@@ -832,16 +856,15 @@ class FlowCliTests(FlowCliHarness):
         flow's. Removing hook_dir/hooks_file from the manifest makes the
         file 'stale' — it must be unmanaged, never unlinked.
         """
-        self.use_fake_home()
-        self.setup_project()
-        flow_toml = self.repo / ".flow" / "flow.toml"
-        hooks_json = self.repo / ".codex" / "hooks.json"
+        fake_home = self.use_fake_home()
+        flow_toml = self.writable_scaffold(fake_home) / "flow.toml"
+        hooks_json = fake_home / ".codex" / "hooks.json"
         hooks_json.parent.mkdir(parents=True, exist_ok=True)
         hooks_json.write_text(
             json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "user-owned.sh"}]}]}})
         )
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
         self.assertTrue(hooks_json.exists())
 
         # Drop the hooks surface from the manifest entirely.
@@ -861,7 +884,7 @@ class FlowCliTests(FlowCliHarness):
                 lines.append(line)
         flow_toml.write_text("".join(lines))
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
         self.assertTrue(hooks_json.exists(), "a merge-mode file must survive being dropped from the manifest")
         doc = json.loads(hooks_json.read_text())
         commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
@@ -940,8 +963,8 @@ class FlowCliTests(FlowCliHarness):
 
     def test_sync_codex_migrates_legacy_managed_skills(self) -> None:
         """Existing overlays keep working when their manifest still names the old path."""
-        self.setup_project()
-        manifest = self.repo / ".flow" / "flow.toml"
+        fake_home = self.use_fake_home()
+        manifest = self.writable_scaffold(fake_home) / "flow.toml"
         manifest_text = manifest.read_text().replace(
             '[codex]\nskill_dir = ".agents/skills"',
             '[codex]\nskill_dir = ".codex/skills"',
@@ -949,33 +972,33 @@ class FlowCliTests(FlowCliHarness):
         manifest.write_text(manifest_text)
         self.assertIn('skill_dir = ".codex/skills"', manifest.read_text())
 
-        legacy_skill = self.repo / ".codex" / "skills" / "flow-plan" / "SKILL.md"
+        legacy_skill = fake_home / ".codex" / "skills" / "flow-plan" / "SKILL.md"
         legacy_skill.parent.mkdir(parents=True)
         legacy_skill.write_text("<!-- Generated by flow. -->\nlegacy\n")
-        managed = self.repo / ".codex" / "flow.managed.toml"
+        managed = fake_home / ".codex" / "flow.managed.toml"
         managed.parent.mkdir(parents=True, exist_ok=True)
         managed.write_text(
             '[managed]\n'
             'generator = "flow"\n'
             'version = 2\n'
             'target = "codex"\n'
-            'source_manifest = ".flow/flow.toml"\n'
+            'source_manifest = "~/.flow/source/scaffolds/default/flow.toml"\n'
             'preserve_unmanaged = true\n\n'
             '[[files]]\n'
             'path = ".codex/skills/flow-plan/SKILL.md"\n'
             'kind = "skill"\n'
-            'source = ".flow/commands/flow-plan.md"\n'
+            'source = "~/.flow/source/scaffolds/default/commands/flow-plan.md"\n'
             'sync_mode = "replace"\n'
             '\n[[files]]\n'
             'path = ".codex/flow.managed.toml"\n'
             'kind = "managed-manifest"\n'
-            'source = ".flow/flow.toml"\n'
+            'source = "~/.flow/source/scaffolds/default/flow.toml"\n'
             'sync_mode = "replace"\n'
         )
 
-        self.assert_ok(self.run_flow("sync", "codex"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
-        current_skill = self.repo / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        current_skill = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
         self.assertTrue(current_skill.exists())
         self.assertFalse(legacy_skill.exists())
         self.assertIn('.agents/skills/flow-plan/SKILL.md', managed.read_text())
@@ -10544,10 +10567,67 @@ class ProjectMigrateApplyTests(FlowCliHarness):
         return state
 
     def seeded(self):
-        """A project with a real customization and a real adapter surface."""
+        """A project carrying a customization and a legacy adapter surface.
+
+        The adapters are fabricated rather than generated, because the command
+        that generated them no longer exists — project-level sync was retired
+        in the same change that added this. That is not a workaround: it is
+        exactly the state migration meets in the field, where the `.claude/`
+        tree and its managed manifest were written by an older flow and are
+        now just files on disk that nothing maintains.
+        """
         home = self.use_fake_home()
         self.setup_project()
-        self.assert_ok(self.run_flow("sync", "claude"))
+
+        claude = self.repo / ".claude"
+        (claude / "skills" / "flow-boot").mkdir(parents=True)
+        (claude / "skills" / "flow-boot" / "SKILL.md").write_text("generated\n")
+        (claude / "agents").mkdir(parents=True)
+        (claude / "agents" / "architect.md").write_text("generated\n")
+        (claude / "hooks").mkdir(parents=True)
+        (claude / "hooks" / "flow-session-start.sh").write_text("#!/bin/sh\n")
+        (claude / "settings.json").write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "SessionStart": [
+                            {
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": '"$CLAUDE_PROJECT_DIR"/.claude/hooks/flow-session-start.sh',
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        managed = [
+            "[managed]",
+            'generator = "flow"',
+            "version = 2",
+            'target = "claude"',
+            'source_manifest = ".flow/flow.toml"',
+            "preserve_unmanaged = true",
+            "",
+        ]
+        for rel, mode in (
+            (".claude/skills/flow-boot/SKILL.md", "replace"),
+            (".claude/agents/architect.md", "replace"),
+            (".claude/hooks/flow-session-start.sh", "replace"),
+            (".claude/settings.json", "merge"),
+            (".claude/flow.managed.toml", "replace"),
+        ):
+            managed.extend(
+                ["[[files]]", f'path = "{rel}"', f'sync_mode = "{mode}"', ""]
+            )
+        (claude / "flow.managed.toml").write_text("\n".join(managed))
+
         custom = self.repo / ".flow" / "standards" / "testing.md"
         custom.write_text(custom.read_text() + "\nOne extra sentence.\n")
         local = self.repo / ".flow" / "standards" / "house.md"
@@ -10698,9 +10778,6 @@ class ProjectMigrateApplyTests(FlowCliHarness):
         """
         self.seeded()
         settings = self.repo / ".claude" / "settings.json"
-        if not settings.is_file():
-            self.skipTest("this scaffold generates no project settings.json")
-
         doc = json.loads(settings.read_text())
         doc["env"] = {"CUSTOM_VAR": "keep me"}
         doc["permissions"] = {"allow": [], "deny": ["Bash(rm:*)"]}

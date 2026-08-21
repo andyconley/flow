@@ -153,55 +153,37 @@ Flags:
 
 The update is atomic: staging is validated before any rename happens, so a failed clone, broken staging, or swap error leaves the existing install intact. A successful update keeps no rollback state — to revert, run `flow update --remote <url>` against an older tag or re-run `install-flow.sh --release` from a checkout at the desired version.
 
-### `flow sync claude`
+### `flow sync claude --user`
 
-Generate the Claude runtime adapter surface from `repo/.flow`.
+Generate the Claude runtime adapter surface at user level, from the framework scaffold.
 
-Current outputs:
+Outputs, all under `~/`:
 
-- `.claude/skills/...`
-- `.claude/agents/...`
-- `.claude/hooks/...`
-- `.claude/settings.json`
-- `.claude/flow.managed.toml`
+- `~/.claude/skills/...`
+- `~/.claude/agents/...`
+- `~/.claude/hooks/...`
+- `~/.claude/settings.json`
+- `~/.claude/flow.managed.toml`
 
-### `flow sync claude --check`
+If `~/.flow/user/flow.toml` exists, the user overlay merges on top of the framework manifest before generation: same-name commands and shared agents override the framework entry, new names append. User-origin entries in the managed manifest carry `~/.flow/user/...` source paths so origin stays auditable. See `docs/architecture.md` "User Overlay" for the merge semantics.
 
-Report Claude runtime drift without writing files.
+### `flow sync codex --user`
 
-Use this when:
+The Codex twin. Outputs `~/.agents/skills/...`, `~/.codex/agents/...`, `~/.codex/hooks/...`, `~/.codex/hooks.json`, and `~/.codex/flow.managed.toml`.
 
-- checking whether generated Claude artifacts are current
-- validating CI or pre-review state
-- diagnosing local manual drift
+### `flow sync <target> --user --check`
 
-### `flow sync codex`
+Report drift without writing files. Exits 1 when the generated surface is out of date, which is the difference between this and `flow project audit` — drift in a generated adapter is a repairable fault, so it fails; a contaminated project overlay is a normal state, so that does not.
 
-Generate the Codex runtime adapter surface from `repo/.flow`.
+### `flow sync <target>` without `--user`
 
-Current outputs:
+**Retired.** Prints a pointer and exits 1.
 
-- `.agents/skills/...`
-- `.codex/agents/...`
-- `.codex/hooks/...`
-- `.codex/hooks.json`
-- `.codex/flow.managed.toml`
+Project-level sync existed to regenerate a repo's own `.claude/` and `.codex/` adapters from that repo's own copies of the framework's commands and agents. Both halves of that are gone: projects no longer hold copies, and `flow setup project` no longer creates them. Runtime surfaces are installed once at user level and apply in every session.
 
-### `flow sync codex --check`
+It exits 1 rather than printing a note and succeeding, because a pointer alongside a zero exit is indistinguishable from having synced — any caller checking the exit code would carry on believing its adapters were current.
 
-Report Codex runtime drift without writing files.
-
-### `flow sync <target> --user`
-
-Generate the runtime adapter surface at the **user level** (`~/.claude/`, `~/.agents/skills`, and `~/.codex/`) from the framework scaffold directly. Combine with `--check` to detect drift without writing.
-
-User-mode differences from project-mode:
-
-- source files come from the framework scaffold (`~/.flow/source/scaffolds/default/`), not from a project's `.flow/`
-- output goes to the runtime's user-level locations (universal across every session)
-- hook commands in `settings.json` use `$HOME` instead of `$CLAUDE_PROJECT_DIR`
-- the managed manifest's `source` fields reference the scaffold path (e.g., `~/.flow/source/scaffolds/default/commands/flow-boot.md`)
-- if `~/.flow/user/flow.toml` exists, the user overlay merges on top of the framework manifest before generation: same-name commands and shared agents override the framework entry, new names append. User-origin entries in the managed manifest carry `~/.flow/user/...` source paths so origin is auditable. See `docs/architecture.md` "User Overlay" for the merge semantics.
+To remove the adapters an earlier project-level sync left behind in a repo, use `flow project migrate`.
 
 Use `flow setup user` for the initial install; use `flow sync <target> --user` to re-sync after framework changes.
 
@@ -646,26 +628,28 @@ flow update --resync   # apply + re-sync user-level adapters
 cd /path/to/project
 flow setup project
 flow bootstrap
-flow sync claude
-flow sync codex
+flow project audit    # nothing to migrate in a fresh overlay; confirms it
 flow doctor
 ```
+
+Runtime surfaces come from the user-level install and need no per-project step.
 
 ### Framework update roll-forward
 
 ```bash
+flow update --resync              # framework, plus user-level adapters
 cd /path/to/project
 flow refresh project
 flow bootstrap
-flow sync claude     # only when the project overlay has registered local runtime surfaces
-flow sync codex      # only when the project overlay has registered local runtime surfaces
+flow project audit                # did the update leave stale copies behind?
 ```
 
 ### Drift-only check
 
 ```bash
-flow sync claude --check
-flow sync codex --check
+flow sync claude --user --check
+flow sync codex --user --check
+flow project audit                # the project-overlay equivalent
 flow doctor
 ```
 

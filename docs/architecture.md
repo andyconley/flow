@@ -165,7 +165,7 @@ Merge rules:
 The operational rule, by layer:
 
 - **Framework content** (workflow commands, role agents, shared standards): edit in the flow repo's `scaffolds/default/`, then re-run `flow sync claude --user` (and `flow sync codex --user`) to push changes to the user-level install.
-- **Project overlay content** (PROJECT.md, memory, runs): edit in `<repo>/.flow/`, then re-run `flow sync claude` and `flow sync codex` inside that repo to update its project-level adapters.
+- **Project overlay content** (PROJECT.md, memory, runs): edit in `<repo>/.flow/`. Nothing needs regenerating — a project's overlay holds its own context and work, not runtime adapters. Project-level sync was retired; `flow project migrate` removes what an earlier one left behind.
 - **Never hand-maintain generated surfaces** — `~/.claude/skills/flow-*`, `<repo>/.claude/agents/*`, etc. are generated adapters. If you find yourself wanting to edit them directly, the change belongs in the corresponding source layer.
 
 The framework reinforces this with generated markers in every adapter file, managed manifests at each runtime root, and a `PostToolUse` reminder hook that nudges editors back to source when a managed file is modified directly.

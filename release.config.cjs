@@ -7,6 +7,12 @@ module.exports = {
       {
         preset: "conventionalcommits",
         releaseRules: [
+          // Pre-1.0: a breaking change bumps the minor, not the major.
+          // semantic-release's default would take 0.x straight to 1.0.0, and
+          // cutting 1.0 is a claim about stability that should be made
+          // deliberately rather than fall out of the first `feat!:` commit.
+          // Remove this rule when 1.0 is actually intended.
+          { breaking: true, release: "minor" },
           { type: "docs", scope: "framework", release: "minor" },
           { type: "docs", scope: "commands", release: "minor" },
           { type: "docs", scope: "agents", release: "minor" },

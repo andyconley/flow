@@ -63,8 +63,9 @@ def main() -> int:
             "  flow setup user                    (install at user level)\n"
             "  flow setup project                 (per-repo overlay)\n"
             "  flow bootstrap\n"
-            "  flow sync claude\n"
-            "  flow sync codex --check\n"
+            "  flow sync claude --user\n"
+            "  flow sync codex --user --check\n"
+            "  flow project audit                 (what a repo still copies)\n"
             "  flow doctor\n"
         ),
     )
@@ -453,20 +454,18 @@ def main() -> int:
     )
     sync = sub.add_parser(
         "sync",
-        help="generate runtime adapters from repo/.flow or the framework scaffold",
-        description="Generate runtime-facing adapters from the repo-local .flow source of truth, or from the framework scaffold when --user is set.",
+        help="generate runtime adapters from the framework scaffold (user level)",
+        description="Generate runtime-facing adapters from the framework scaffold, layered with the user overlay. Requires --user: project-level sync was retired, because it existed to regenerate adapters from a project's own copies of the framework and projects no longer hold copies. Without --user this exits 1 and points at `flow project migrate`, which removes the adapters an earlier project-level sync left behind.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Targets:\n"
             "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
             "  codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.\n\n"
             "Examples:\n"
-            "  flow sync claude\n"
-            "  flow sync claude --check\n"
             "  flow sync claude --user\n"
-            "  flow sync codex\n"
-            "  flow sync codex --check\n"
+            "  flow sync claude --user --check\n"
             "  flow sync codex --user\n"
+            "  flow sync codex --user --check\n"
         ),
     )
     sync.add_argument(
@@ -482,7 +481,7 @@ def main() -> int:
     sync.add_argument(
         "--user",
         action="store_true",
-        help="sync user-level runtime surfaces from the framework scaffold (instead of the current repo)",
+        help="required: sync user-level runtime surfaces from the framework scaffold",
     )
 
     install_parser = sub.add_parser(

@@ -178,8 +178,7 @@ flow doctor
 cd /path/to/project
 flow setup project
 flow bootstrap
-flow sync claude
-flow sync codex
+flow project audit
 flow doctor
 ```
 
@@ -232,14 +231,15 @@ Use these when a repo needs a `.flow/` overlay for project-specific roles, memor
 
 Use these after changing framework content, user overlays, project overlays, commands, agents, or hooks.
 
-- `flow sync claude`
-  - generate Claude runtime files for the current repo
 - `flow sync claude --user`
   - generate Claude runtime files at user level
-- `flow sync codex`
-  - generate Codex runtime files for the current repo
 - `flow sync codex --user`
   - generate Codex runtime files at user level
+
+`--user` is required. Project-level sync was retired: it existed to regenerate
+adapters from a project's own copies of the framework's commands and agents,
+and projects no longer hold copies. `flow project migrate` removes the adapters
+an earlier project-level sync left behind.
 - `--check`
   - report drift without writing files; use it with any sync target
 
@@ -341,7 +341,7 @@ Flow-managed files are generated. Change the `.flow/` source files instead of ed
 - edit `.flow/commands/*` to change generated skills
 - edit `.flow/agents/*` to change generated agents
 - edit framework hook sources in this repo to change generated hook scripts
-- rerun `flow sync claude` and `flow sync codex` after changing the source of truth
+- rerun `flow sync claude --user` and `flow sync codex --user` after changing the source of truth
 
 Flow preserves unmanaged Claude and Codex files. It only removes files that were previously marked as flow-managed and are no longer part of the generated surface.
 
@@ -370,8 +370,9 @@ Current validation covers setup, sync, generated files, drift detection, refresh
 
 - `flow setup project`
 - `flow bootstrap`
-- `flow sync claude`
-- `flow sync claude --check`
+- `flow project audit`
+- `flow sync claude --user`
+- `flow sync claude --user --check`
 - generated skill and agent output
 - generated hook scripts and executable bits
 - managed settings generation

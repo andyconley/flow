@@ -26,15 +26,14 @@ from paths import (
     HOME,
     INSTALL_MODE_DEVELOP,
     INSTALL_MODE_RELEASE,
-    MODE_PROJECT,
-    MODE_USER,
     SCAFFOLD_DIR,
     SOURCE_DIR,
     USER_BIN_DIR,
     USER_OVERLAY_DIR,
 )
 from render import codex_skill_dir
-from sync import load_flow_manifest, merge_user_overlay, runtime_status, shared_agents
+from project import audit_project
+from sync import merge_user_overlay, runtime_status, shared_agents
 
 
 def agent_policy_status(root, manifest: dict, target: str) -> str:
@@ -88,31 +87,26 @@ def doctor() -> int:
     root_is_flow_home = flow_dir.resolve() == FLOW_HOME.resolve()
     project_overlay_ok = flow_dir.exists() and not root_is_flow_home
     project_manifest_ok = project_overlay_ok and (flow_dir / "flow.toml").exists()
-    skills_dir = root / ".claude" / "skills"
-    agents_dir = root / ".claude" / "agents"
-    claude_managed_ok = False
-    claude_drift = "n/a"
-    codex_skills_dir = root / CODEX_SKILL_DIR
-    codex_managed_ok = False
-    codex_drift = "n/a"
-    claude_agent_policy = "n/a"
-    codex_agent_policy = "n/a"
 
-    if project_manifest_ok:
+    # Six sync and drift lines used to live here. They reported whether this
+    # repo's own generated adapters matched its own copies of the framework,
+    # and both halves of that are gone: project-level sync is retired and
+    # projects no longer hold copies. What replaces them is one line derived
+    # from the same classifier `flow project audit` uses, because the question
+    # a project can still answer is not "are your adapters current" but "are
+    # you still carrying framework files nobody updates".
+    overlay_line = "n/a"
+    if project_overlay_ok and SCAFFOLD_DIR.exists():
         try:
-            manifest_path, manifest = load_flow_manifest(flow_dir)
-            claude_drift, claude_managed_ok = runtime_status(
-                root, flow_dir, manifest_path, manifest, "claude", MODE_PROJECT
+            report = audit_project(flow_dir, SCAFFOLD_DIR)
+            copies = report.counts()["identical"] + report.counts()["orphaned"]
+            overlay_line = (
+                "clean"
+                if copies == 0
+                else f"{copies} framework copy/declaration(s) — run `flow project migrate`"
             )
-            codex_drift, codex_managed_ok = runtime_status(
-                root, flow_dir, manifest_path, manifest, "codex", MODE_PROJECT
-            )
-            codex_skills_dir = root / codex_skill_dir(manifest["codex"])
-            claude_agent_policy = agent_policy_status(root, manifest, "claude")
-            codex_agent_policy = agent_policy_status(root, manifest, "codex")
         except Exception:
-            claude_drift = "error"
-            codex_drift = "error"
+            overlay_line = "error"
 
     user_claude_managed_ok = False
     user_claude_drift = "n/a"
@@ -127,10 +121,10 @@ def doctor() -> int:
         try:
             user_manifest_path, user_manifest = merge_user_overlay(SCAFFOLD_DIR)
             user_claude_drift, user_claude_managed_ok = runtime_status(
-                HOME, SCAFFOLD_DIR, user_manifest_path, user_manifest, "claude", MODE_USER
+                HOME, SCAFFOLD_DIR, user_manifest_path, user_manifest, "claude"
             )
             user_codex_drift, user_codex_managed_ok = runtime_status(
-                HOME, SCAFFOLD_DIR, user_manifest_path, user_manifest, "codex", MODE_USER
+                HOME, SCAFFOLD_DIR, user_manifest_path, user_manifest, "codex"
             )
             user_codex_skills_dir = HOME / codex_skill_dir(user_manifest["codex"])
             user_claude_agent_policy = agent_policy_status(HOME, user_manifest, "claude")
@@ -221,17 +215,7 @@ def doctor() -> int:
         return 0
     print(f"repo .flow:       {'ok' if project_overlay_ok else 'missing'}")
     print(f"manifest:         {'ok' if project_manifest_ok else 'missing'}")
-    print(f"claude sync:      {'ok' if claude_managed_ok else 'missing'}")
-    print(f"claude drift:     {claude_drift}")
-    print(f"skills dir:       {'ok' if skills_dir.exists() else 'missing'}")
-    print(f"agents dir:       {'ok' if agents_dir.exists() else 'missing'}")
-    print(f"agent policy:     {claude_agent_policy}")
-    print_smoke_test_hint("claude")
-    print(f"codex sync:       {'ok' if codex_managed_ok else 'missing'}")
-    print(f"codex drift:      {codex_drift}")
-    print(f"codex skills:     {'ok' if codex_skills_dir.exists() else 'missing'}")
-    print(f"codex agents:     {codex_agent_policy}")
-    print_smoke_test_hint("codex")
+    print(f"overlay:          {overlay_line}")
     print()
     print(_usage_section())
     return 0

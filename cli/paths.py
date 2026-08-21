@@ -63,10 +63,6 @@ CAPABILITY_PATHS = CAPABILITY_DIRS + ("FRAMEWORK.md",)
 RELEASE_EXCLUDE_FILE_PATTERNS = ("*.pyc", ".DS_Store")
 SEMVER_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:[-+][\w.-]+)?$")
 
-# Sync modes
-MODE_PROJECT = "project"
-MODE_USER = "user"
-
 # Codex moved standalone skill discovery from `.codex/skills` to the shared
 # agent-skills locations. Normalize the legacy value so existing project
 # overlays migrate on their next sync without requiring a manifest edit.
