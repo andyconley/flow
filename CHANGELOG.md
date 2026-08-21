@@ -2,6 +2,67 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.16.0](https://github.com/andyconley/flow/compare/v0.15.0...v0.16.0) (2026-08-21)
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** `flow sync claude` and `flow sync codex` now require `--user`
+and exit 1 without it. Project-level runtime adapters are no longer generated;
+run `flow project migrate` to remove the ones an earlier sync left behind.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+* fix(cli): close the defects review found in the migration path
+
+Nine findings from acceptance and path-safety review, plus one I hit probing
+by hand. Two would have bricked a repo.
+
+**The validating round-trip used the lossy fallback parser.** `plan_migration`
+reads the manifest through `read_toml`, which prefers tomllib, but the
+post-rewrite check called `parse_simple_toml` directly — and that raises on
+floats, arrays, and inline comments. An ordinary manifest containing
+`timeout = 1.5` therefore planned cleanly and then crashed the apply path
+*after* the handler strip and the adapter deletion had run, identically on
+every retry, leaving the repo permanently adapter-less with an unedited
+manifest. `flowtoml.loads` now exists for callers holding text, and the check
+runs at plan time too, so the failure surfaces in the dry run.
+
+**The dry run showed two of the five steps.** Adapter removal and the handler
+strip were invisible, and `is_noop` ignored them — so a project whose overlay
+files all landed in `differs` but which still had a full generated adapter tree
+was told "nothing to migrate", contradicting both `flow sync` and `flow doctor`,
+which send people here to remove exactly that.
+
+**A managed-manifest path could escape the repo.** `root / entry["path"]`
+discards the left operand when the right is absolute, so an entry of
+`/etc/passwd` — or `../../x` — resolved outside the root and `sync_outputs`
+would unlink it. Both readers now refuse anything that does not resolve inside
+the root. Pre-existing in `sync_target`; it matters now because migration is
+the delete path.
+
+Also: two `[[agents]]` sharing a `name` collapse to one dotted site, which is
+now refused while planning rather than aborted after two destructive steps; the
+no-op branch skipped the unresolved-sites report; a line like `["c", "d"]`
+inside a multi-line array matched the table-header regex and truncated the
+enclosing block; the backup listing was written to `MANIFEST.txt` at the top of
+the backup, so a repo owning that filename had it saved and then overwritten;
+`write_atomic` replaced a symlinked `settings.json` instead of writing through
+it; the backup count restated that the loop ran rather than checking the
+filesystem; and `--at` and `--root` were unvalidated.
+
+Finally, every generated adapter still carried "Edit `.flow/<source>` and rerun
+`flow sync codex`" — both halves wrong after the retirement. Same for
+bootstrap's and `setup project`'s next-step text.
+
+Twenty-five mutations now caught across the slice; the four that survived a
+first run got tests written for them rather than a clean report.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+### Features
+
+* **cli:** add `flow project migrate` and retire project-level sync ([#10](https://github.com/andyconley/flow/issues/10)) ([efb4e69](https://github.com/andyconley/flow/commit/efb4e69791e1dfaadeb7289cd4a14bf72fbe5128))
+
 ## [0.15.0](https://github.com/andyconley/flow/compare/v0.14.0...v0.15.0) (2026-08-21)
 
 ### Features
