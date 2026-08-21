@@ -66,7 +66,7 @@ How it merges:
   - Entries in the user manifest with the same `name` as a framework entry **replace** it (override).
   - Entries with a new `name` are **appended** (addition).
   - The merged manifest drives adapter generation. Generated SKILLs, agent files, and hook registrations embed or point at the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.
-- **Standards and templates are *not* merged at sync time** — they're not embedded into adapters; they're referenced by name at runtime. The runtime resolution order is documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates": user overlay > framework default. Projects do not hold standards or templates.
+- **Standards and templates are *not* merged at sync time** — they're not embedded into adapters; they're referenced by name at runtime. The runtime resolution order is documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates": project `[[replaces]]` wiring > user overlay > framework default. Projects still do not *hold* standards or templates — a `[[replaces]]` entry names a replacement that lives in the user overlay. `flow doctor` reports whether each wiring resolves on this machine.
 
 The user overlay is opt-in. Without `~/.flow/user/flow.toml`, sync behavior is identical to the framework-only baseline. `flow doctor` reports whether the overlay is present and what it declares.
 

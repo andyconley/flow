@@ -117,8 +117,10 @@ name = "flow"
 version = 1
 kind = "project"
 
-# Point a role at a project standard instead of the
-# framework default. `with` resolves in the user overlay.
+# Point a role at your own standard instead of the
+# framework default. `with` resolves in the user
+# overlay — the project names the file, never holds it.
+# Only standards/ and templates/ can be wired.
 #
 # [[replaces]]
 # default = "standards/testing.md"

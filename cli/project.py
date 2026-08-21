@@ -98,21 +98,35 @@ def _site(prefix: str, entry: dict, index: int, key: str) -> str:
     return f"{prefix}.{label}.{key}"
 
 
-def _classify_declaration(
-    raw: str, declared_by: str
-) -> Declaration | RejectedDeclaration:
+def reject_relative(raw: str) -> str | None:
+    """`None` if `raw` is safe to join against a root; else why it is not.
+
+    Root-agnostic on purpose. The same three hazards apply whichever root a
+    caller is about to join against — the project overlay for a declared
+    source, the user overlay for a `[[replaces]]` target — and a second copy
+    of this reasoning is a second place for it to drift.
+    """
     rel = Path(raw)
     if rel.is_absolute():
-        return RejectedDeclaration(raw, declared_by, "absolute path")
+        return "absolute path"
     if ".." in rel.parts:
-        return RejectedDeclaration(raw, declared_by, "escapes the overlay via ..")
+        return "escapes the overlay via .."
     if rel.parts and rel.parts[0].startswith("~"):
         # pathlib does not expand `~`, so this is not absolute and carries no
         # `..` — it passes both guards above and lands as an ordinary relative
         # key. Harmless until one consumer calls expanduser, at which point it
         # is an absolute path that was never checked.
-        return RejectedDeclaration(raw, declared_by, "home-relative path")
-    return Declaration(rel.as_posix(), declared_by)
+        return "home-relative path"
+    return None
+
+
+def _classify_declaration(
+    raw: str, declared_by: str
+) -> Declaration | RejectedDeclaration:
+    reason = reject_relative(raw)
+    if reason is not None:
+        return RejectedDeclaration(raw, declared_by, reason)
+    return Declaration(Path(raw).as_posix(), declared_by)
 
 
 def declared_sources(
@@ -175,6 +189,203 @@ def declared_sources(
             take(standard.get(key), f"standards.{name}.{key}")
 
     return found, rejected
+
+
+# ---------------------------------------------------------------------------
+# Project wiring — `[[replaces]]`
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReplaceWiring:
+    """One validated `[[replaces]]` entry.
+
+    `default` names a framework file by the same relative name a role cites
+    (`standards/testing.md`). `with_` names a replacement resolved under the
+    user overlay — never inside the project, which is the whole point: a
+    project that held the replacement would be the fork again.
+
+    Both are safe to join. `why` is documentation, never resolved, printed
+    only so a reader can see the intent without opening the manifest.
+    """
+
+    default: str
+    with_: str
+    why: str | None
+    declared_by: str
+
+
+@dataclass(frozen=True)
+class RejectedReplace:
+    """A `[[replaces]]` entry that could not be validated.
+
+    Carries no joinable field, for the reason `RejectedDeclaration` does not:
+    a `with` of `../../../etc/passwd` must never reach a join against the
+    user overlay, so it is kept as raw text to be printed and read.
+    """
+
+    declared_by: str
+    declared_value: str
+    reason: str
+
+
+# The only two kinds resolved by the runtime convention. Commands, agents, and
+# hooks are merged at sync time instead (`merge_user_overlay` in `sync.py`), so
+# a wiring naming one of those would resolve on disk, report healthy, and be
+# honoured by nothing — a confident `ok` that ends the reader's investigation
+# at the wrong place.
+REPLACEABLE_DIRS = ("standards", "templates")
+
+
+def _reject_unresolvable_kind(raw: str) -> str | None:
+    parts = Path(raw).parts
+    if len(parts) < 2 or parts[0] not in REPLACEABLE_DIRS:
+        return f"only {' and '.join(d + '/' for d in REPLACEABLE_DIRS)} are resolved by this convention"
+    return None
+
+
+def declared_replaces(manifest: dict) -> tuple[list[ReplaceWiring], list[RejectedReplace]]:
+    """Parse `[[replaces]]`. Pure — no filesystem, no resolution.
+
+    Order is the manifest's, not sorted. This table is a short hand-authored
+    list; re-ordering it would make doctor's report harder to read against
+    the file it came from.
+
+    Entries are keyed by index rather than by name because `[[replaces]]` has
+    no name field. That is fine here in a way it would not be for
+    `declared_sources`: nothing rewrites this table, so the key only has to
+    identify a line for a human.
+    """
+    entries = manifest.get("replaces", [])
+    if not isinstance(entries, list):
+        return [], [RejectedReplace("replaces", str(entries), "not an array of tables")]
+
+    found: list[ReplaceWiring] = []
+    rejected: list[RejectedReplace] = []
+
+    for index, entry in enumerate(entries):
+        site = f"replaces[{index}]"
+        if not isinstance(entry, dict):
+            rejected.append(RejectedReplace(site, str(entry), "not a table"))
+            continue
+
+        problem = None
+        for key in ("default", "with"):
+            value = entry.get(key)
+            if value is None:
+                problem = f"missing {key}"
+            elif not isinstance(value, str) or not value:
+                problem = f"{key} is not a non-empty string"
+            else:
+                problem = reject_relative(value)
+                if problem is None:
+                    problem = _reject_unresolvable_kind(value)
+                if problem is not None:
+                    problem = f"{key}: {problem}"
+            if problem is not None:
+                rejected.append(RejectedReplace(site, str(entry.get(key)), problem))
+                break
+        if problem is not None:
+            continue
+
+        why = entry.get("why")
+        found.append(
+            ReplaceWiring(
+                default=Path(entry["default"]).as_posix(),
+                with_=Path(entry["with"]).as_posix(),
+                # Dropped rather than rejected when it is the wrong type. `why`
+                # is a comment with a TOML key; a bad one should not disable a
+                # wiring that otherwise resolves.
+                why=why if isinstance(why, str) and why else None,
+                declared_by=site,
+            )
+        )
+
+    # Two wirings for one `default` hand a role two instructions and no rule
+    # for choosing, which is the split-brain this whole design exists to close.
+    # Both are rejected rather than first-wins: picking silently would make the
+    # resolution depend on manifest order, which nothing documents.
+    counts: dict[str, int] = {}
+    for wiring in found:
+        counts[wiring.default] = counts.get(wiring.default, 0) + 1
+    duplicated = {default for default, n in counts.items() if n > 1}
+    if duplicated:
+        rejected.extend(
+            RejectedReplace(
+                w.declared_by,
+                w.default,
+                "duplicate default — another entry already replaces this name",
+            )
+            for w in found
+            if w.default in duplicated
+        )
+        found = [w for w in found if w.default not in duplicated]
+
+    return found, rejected
+
+
+REPLACE_OK = "ok"
+REPLACE_ABSENT = "absent"
+REPLACE_UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class ResolvedReplace:
+    wiring: ReplaceWiring
+    status: str
+
+
+def resolve_replaces(
+    wirings: list[ReplaceWiring], scaffold_dir: Path, user_overlay_dir: Path
+) -> list[ResolvedReplace]:
+    """Check each wiring against the two roots it spans.
+
+    `unknown` is tested before `absent` deliberately. An entry can be wrong in
+    both ways at once, and a `default` naming no framework file is the more
+    actionable defect: it is a typo the author can fix, whereas an absent
+    `with` may simply mean this machine is not the one the wiring was written
+    on. Reporting the typo as a per-user gap would send the reader to fix the
+    wrong thing.
+
+    Both roots are parameters rather than module constants so this is testable
+    against two temp directories, the way `classify_tree` is.
+    """
+    resolved: list[ResolvedReplace] = []
+    for wiring in wirings:
+        # A `default` is whatever name a role cites, and rule 2 lets the user
+        # overlay introduce standards the framework never shipped. Checking
+        # only the scaffold would call those legitimate wirings typos.
+        cited_exists = (scaffold_dir / wiring.default).is_file() or (
+            user_overlay_dir / wiring.default
+        ).is_file()
+        if not cited_exists:
+            status = REPLACE_UNKNOWN
+        # `is_file` follows symlinks, unlike `capability_entries`, which
+        # refuses to classify them. The asymmetry is deliberate: that function
+        # feeds deletion, this one only reports, and the link would have to be
+        # inside the user's own overlay to matter.
+        elif (user_overlay_dir / wiring.with_).is_file():
+            status = REPLACE_OK
+        else:
+            status = REPLACE_ABSENT
+        resolved.append(ResolvedReplace(wiring, status))
+    return resolved
+
+
+LEGACY_ACTIVE_STANDARDS_HEADING = "## Active project standards"
+
+
+def has_legacy_active_standards_heading(project_md_text: str) -> bool:
+    """Whether a `PROJECT.md` still lists the retired project-standards section.
+
+    Deliberately not an audit `Finding`. `PROJECT.md` is in `NOT_SCANNED`, and
+    that is a safety property rather than a scoping convenience: nothing
+    outside `CAPABILITY_PATHS` can be proposed for deletion by anything reading
+    an `AuditReport`. This is a doctor-level flag about the *content* of a file
+    the audit deliberately never opens, so it stays a separate question with a
+    separate answer.
+    """
+    return LEGACY_ACTIVE_STANDARDS_HEADING in project_md_text
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +481,7 @@ class AuditReport:
         return sum(1 for f in self.findings if f.bucket != BUCKET_ORPHANED)
 
 
-def _printable(text: str) -> str:
+def printable(text: str) -> str:
     """Control characters escaped for display.
 
     A manifest source containing a newline carries no `..` and is not absolute,
@@ -513,7 +724,7 @@ def render_audit(report: AuditReport) -> str:
                 if finding.declared_by
                 else ""
             )
-            lines.append(f"  {_printable(finding.rel)}{suffix}")
+            lines.append(f"  {printable(finding.rel)}{suffix}")
 
     if report.symlinks:
         lines.append("")
@@ -522,7 +733,7 @@ def render_audit(report: AuditReport) -> str:
             f"outside the overlay and are never classified"
         )
         for rel in report.symlinks:
-            lines.append(f"  {_printable(rel)}")
+            lines.append(f"  {printable(rel)}")
 
     if report.rejected:
         lines.append("")
@@ -532,8 +743,8 @@ def render_audit(report: AuditReport) -> str:
         )
         for record in report.rejected:
             lines.append(
-                f"  {_printable(record.declared_value)}   "
-                f"[{_printable(record.declared_by)}: {record.reason}]"
+                f"  {printable(record.declared_value)}   "
+                f"[{printable(record.declared_by)}: {record.reason}]"
             )
 
     return "\n".join(lines)

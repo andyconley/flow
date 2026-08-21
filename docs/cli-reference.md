@@ -100,7 +100,9 @@ Current sections:
 - **machine** — Python, flow home, source path, scaffold availability, config, launcher
 - **install** — install mode (develop or release), version (release only), source target (develop only), installed_at timestamp
 - **user-level** — Claude/Codex sync state and drift for `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`
-- **project** — repo `.flow/` presence, manifest, Claude/Codex sync state and drift for the current repo
+- **project** — repo `.flow/` presence, manifest, whether the overlay still carries framework copies, each `[[replaces]]` wiring's status, and whether `PROJECT.md` still lists the retired project-standards section
+
+The `replaces:` block appears only when the project declares wirings. Each is reported as `ok` (the replacement resolves in your user overlay), `absent` (it does not resolve *on this machine* — a wiring names a path under `~/.flow/user/` that a teammate may not have, so this is a gap in your overlay rather than a fault in the project), `unknown` (the `default` names no framework file, so the wiring can never match), or `invalid` (the entry did not validate). None of them change doctor's exit code.
 
 Use this as the main diagnostics command.
 

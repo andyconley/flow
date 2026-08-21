@@ -9805,6 +9805,529 @@ class ProjectManifestDeclarationTests(unittest.TestCase):
         self.assertIn("paths", sibling_imports("diagnostics"))
 
 
+class DoctorReplacesReportTests(FlowCliHarness):
+    """`flow doctor`'s project-wiring block, end to end."""
+
+    def _project(self, manifest_body: str) -> Path:
+        home = self.use_fake_home()
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+        (flow_dir / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\nkind = "project"\n' + manifest_body
+        )
+        return home
+
+    def _overlay_standard(self, home: Path, name: str) -> None:
+        target = home / ".flow" / "user" / "standards" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("replacement\n")
+
+    def _project_section(self, stdout: str) -> str:
+        """Only the project block.
+
+        doctor prints `overlay:` in the project section and `user overlay:`
+        in the section above it, so an unscoped `assertIn` can match the wrong
+        half of the same output.
+        """
+        start = stdout.find("-- project:")
+        self.assertNotEqual(start, -1, f"no project section in:\n{stdout}")
+        end = stdout.find("-- usage:", start)
+        return stdout[start:end if end != -1 else len(stdout)]
+
+    def test_a_resolving_wiring_reports_ok(self) -> None:
+        home = self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "standards/mine.md"\n'
+        )
+        self._overlay_standard(home, "mine.md")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("replaces:         1 wired", section)
+        self.assertIn("ok       standards/testing.md -> standards/mine.md", section)
+
+    def test_a_replacement_this_user_lacks_is_reported_as_their_gap(self) -> None:
+        """Risk R1: never as a defect in the project.
+
+        A committed manifest names a path under `~/.flow/user/` that the
+        author has and a teammate may not. Telling the teammate their repo is
+        broken would be wrong and unactionable.
+        """
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "standards/mine.md"\n'
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("absent   standards/testing.md -> standards/mine.md", section)
+        # The positive property, rather than a blocklist of blame words: the
+        # line points at the reader's own overlay as the place the file is
+        # missing from, and never at the repo.
+        self.assertIn("not in your", section)
+        absent_line = next(line for line in section.splitlines() if "not in your" in line)
+        self.assertIn(str(self._fake_home / ".flow" / "user"), absent_line)
+        self.assertNotIn(str(self.repo / ".flow"), absent_line)
+
+    def test_a_default_naming_no_framework_file_reports_unknown(self) -> None:
+        home = self._project(
+            '\n[[replaces]]\ndefault = "standards/standrds.md"\nwith = "standards/mine.md"\n'
+        )
+        self._overlay_standard(home, "mine.md")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("unknown  standards/standrds.md", section)
+        self.assertIn("nothing resolves that name", section)
+
+    def test_a_wiring_that_escapes_the_overlay_is_reported_invalid(self) -> None:
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "../../../etc/passwd"\n'
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("invalid  replaces[0]", section)
+        self.assertNotIn("/etc/passwd", section)
+
+    def test_mixed_states_are_each_reported_once(self) -> None:
+        home = self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "standards/mine.md"\n'
+            '\n[[replaces]]\ndefault = "standards/security.md"\nwith = "standards/gone.md"\n'
+            '\n[[replaces]]\ndefault = "standards/nope.md"\nwith = "standards/mine.md"\n'
+        )
+        self._overlay_standard(home, "mine.md")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("replaces:         3 wired", section)
+        self.assertEqual(section.count("\n  ok "), 1)
+        self.assertEqual(section.count("\n  absent "), 1)
+        self.assertEqual(section.count("\n  unknown "), 1)
+
+    def test_a_project_with_no_wiring_prints_no_replaces_line(self) -> None:
+        """An optional feature should not announce its absence every run."""
+        self._project("")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertNotIn("replaces:", section)
+
+    def test_doctor_still_exits_zero_with_every_wiring_broken(self) -> None:
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/nope.md"\nwith = "../escape.md"\n'
+        )
+
+        self.assert_ok(self.run_flow("doctor"))
+
+    def test_a_malformed_manifest_says_so_rather_than_going_quiet(self) -> None:
+        """Silence here is indistinguishable from a project with no wirings.
+
+        `manifest:` above is only an existence check, so a corrupt file
+        already reports `ok` there. If this block also said nothing, a broken
+        manifest would look exactly like a healthy one.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "flow.toml").write_text("[framework\nname = ")
+
+        result = self.run_flow("doctor")
+
+        self.assert_ok(result)
+        section = self._project_section(result.stdout)
+        self.assertIn("replaces:         cannot be read", section)
+
+    def test_manifest_values_cannot_forge_lines_in_the_report(self) -> None:
+        """A committed manifest is data from another repo reaching stdout.
+
+        A newline in a value carries no `..` and is not absolute, so it passes
+        every path guard and would otherwise fabricate rows in a report
+        someone is about to read by eye.
+        """
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\n'
+            'with = "standards/x\\nreplaces:         99 wired"\n'
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        # The injected text survives as escaped characters on one line; what
+        # it must never do is become a line of its own.
+        header_lines = [ln for ln in section.splitlines() if ln.startswith("replaces:")]
+        self.assertEqual(header_lines, ["replaces:         1 wired"])
+        self.assertIn("\\n", section)
+
+    def test_invalid_entries_are_not_counted_as_wired(self) -> None:
+        self._project(
+            '\n[[replaces]]\ndefault = "standards/testing.md"\nwith = "/etc/passwd"\n'
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("0 wired, 1 invalid", section)
+
+    def test_a_legacy_project_md_heading_is_flagged(self) -> None:
+        self._project("")
+        (self.repo / ".flow" / "PROJECT.md").write_text(
+            "# Project\n\n## Active project standards\n\n- `project/brand.md`\n"
+        )
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertIn("PROJECT.md:", section)
+        self.assertIn("Active project standards", section)
+
+    def test_a_current_project_md_is_not_flagged(self) -> None:
+        self._project("")
+
+        section = self._project_section(self.run_flow("doctor").stdout)
+
+        self.assertNotIn("PROJECT.md:", section)
+
+
+class ProjectReplacesParseTests(unittest.TestCase):
+    """`declared_replaces` — pure parsing of the `[[replaces]]` table."""
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+
+    def test_reads_a_complete_wiring(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {
+                "replaces": [
+                    {
+                        "default": "standards/testing.md",
+                        "with": "standards/hypr-testing.md",
+                        "why": "pytest only, no BDD layer",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].default, "standards/testing.md")
+        self.assertEqual(found[0].with_, "standards/hypr-testing.md")
+        self.assertEqual(found[0].why, "pytest only, no BDD layer")
+        self.assertEqual(found[0].declared_by, "replaces[0]")
+
+    def test_a_missing_table_is_not_an_error(self) -> None:
+        self.assertEqual(self.project.declared_replaces({}), ([], []))
+
+    def test_templates_are_wirable_not_only_standards(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "templates/adr-template.md", "with": "templates/acme-adr.md"}]}
+        )
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(found[0].default, "templates/adr-template.md")
+
+    def test_order_is_the_manifests_not_sorted(self) -> None:
+        found, _ = self.project.declared_replaces(
+            {
+                "replaces": [
+                    {"default": "standards/zebra.md", "with": "standards/z.md"},
+                    {"default": "standards/alpha.md", "with": "standards/a.md"},
+                ]
+            }
+        )
+
+        self.assertEqual([w.default for w in found], ["standards/zebra.md", "standards/alpha.md"])
+
+    def test_a_with_that_escapes_the_user_overlay_is_rejected(self) -> None:
+        """The one rejection that matters operationally.
+
+        An escaping `with` would otherwise reach a join against
+        `USER_OVERLAY_DIR` and resolve somewhere nobody asked for.
+        """
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "../../../etc/passwd"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("escapes the overlay", rejected[0].reason)
+
+    def test_an_absolute_with_is_rejected(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "/etc/passwd"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("absolute path", rejected[0].reason)
+
+    def test_a_home_relative_with_is_rejected(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "~/secrets.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("home-relative", rejected[0].reason)
+
+    def test_a_missing_field_is_rejected_and_named(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertEqual(rejected[0].reason, "missing with")
+
+    def test_a_non_string_field_is_rejected(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": 3, "with": "standards/x.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("not a non-empty string", rejected[0].reason)
+
+    def test_a_bad_why_is_dropped_rather_than_disabling_the_wiring(self) -> None:
+        """`why` is a comment that happens to have a TOML key."""
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "standards/testing.md", "with": "standards/x.md", "why": 7}]}
+        )
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(len(found), 1)
+        self.assertIsNone(found[0].why)
+
+    def test_one_bad_entry_does_not_discard_the_others(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {
+                "replaces": [
+                    {"default": "standards/a.md", "with": "standards/a2.md"},
+                    {"default": "standards/b.md", "with": "/absolute.md"},
+                    {"default": "standards/c.md", "with": "standards/c2.md"},
+                ]
+            }
+        )
+
+        self.assertEqual([w.default for w in found], ["standards/a.md", "standards/c.md"])
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0].declared_by, "replaces[1]")
+
+    def test_a_default_outside_standards_and_templates_is_rejected(self) -> None:
+        """Commands and agents are merged at sync time, not resolved at runtime.
+
+        A wiring naming one would resolve on disk and report healthy while
+        nothing honours it — a confident `ok` that ends the reader's
+        investigation in the wrong place.
+        """
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "commands/flow-plan.md", "with": "standards/mine.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("only standards/ and templates/", rejected[0].reason)
+
+    def test_a_bare_filename_is_rejected(self) -> None:
+        found, rejected = self.project.declared_replaces(
+            {"replaces": [{"default": "testing.md", "with": "standards/mine.md"}]}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("only standards/ and templates/", rejected[0].reason)
+
+    def test_two_wirings_for_the_same_default_are_both_rejected(self) -> None:
+        """No tiebreak exists, so neither may silently win.
+
+        First-wins would make resolution depend on manifest order, which
+        nothing documents and no role could predict.
+        """
+        found, rejected = self.project.declared_replaces(
+            {
+                "replaces": [
+                    {"default": "standards/testing.md", "with": "standards/a.md"},
+                    {"default": "standards/testing.md", "with": "standards/b.md"},
+                    {"default": "standards/other.md", "with": "standards/c.md"},
+                ]
+            }
+        )
+
+        self.assertEqual([w.default for w in found], ["standards/other.md"])
+        self.assertEqual(len(rejected), 2)
+        self.assertTrue(all("duplicate default" in r.reason for r in rejected))
+
+    def test_the_shipped_commented_example_parses_if_uncommented(self) -> None:
+        """Guards the template against drifting away from the parser.
+
+        `setup project` ships the `[[replaces]]` block commented out, which
+        means nothing exercises its field names. If the parser ever expected
+        different keys, every user following that example would write a
+        manifest the tool silently ignores.
+        """
+        setup = load_cli_module("setup")
+        flowtoml = load_cli_module("flowtoml")
+        template = setup._PROJECT_MANIFEST_TEMPLATE
+
+        lines = template.splitlines()
+        start = next(
+            (i for i, line in enumerate(lines) if line.strip() == "# [[replaces]]"),
+            None,
+        )
+        self.assertIsNotNone(start, "template no longer ships a commented [[replaces]] example")
+        uncommented = "\n".join(line.lstrip("#").strip() for line in lines[start:] if line.strip())
+        parsed = flowtoml.loads(uncommented)
+        found, rejected = self.project.declared_replaces(parsed)
+
+        self.assertEqual(rejected, [], f"template example does not parse: {uncommented}")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].default, "standards/testing.md")
+
+
+class ProjectReplacesResolveTests(unittest.TestCase):
+    """`resolve_replaces` — the three states doctor reports."""
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.scaffold = root / "scaffold"
+        self.overlay = root / "overlay"
+        (self.scaffold / "standards").mkdir(parents=True)
+        (self.overlay / "standards").mkdir(parents=True)
+        (self.scaffold / "standards" / "testing.md").write_text("framework testing\n")
+
+    def _wire(self, default: str, with_: str):
+        return self.project.ReplaceWiring(default, with_, None, "replaces[0]")
+
+    def _status(self, default: str, with_: str) -> str:
+        return self.project.resolve_replaces(
+            [self._wire(default, with_)], self.scaffold, self.overlay
+        )[0].status
+
+    def test_ok_when_the_replacement_is_in_the_user_overlay(self) -> None:
+        (self.overlay / "standards" / "mine.md").write_text("mine\n")
+
+        self.assertEqual(
+            self._status("standards/testing.md", "standards/mine.md"),
+            self.project.REPLACE_OK,
+        )
+
+    def test_absent_when_the_replacement_is_not_on_this_machine(self) -> None:
+        self.assertEqual(
+            self._status("standards/testing.md", "standards/mine.md"),
+            self.project.REPLACE_ABSENT,
+        )
+
+    def test_unknown_when_the_default_names_no_framework_file(self) -> None:
+        (self.overlay / "standards" / "mine.md").write_text("mine\n")
+
+        self.assertEqual(
+            self._status("standards/standrds-typo.md", "standards/mine.md"),
+            self.project.REPLACE_UNKNOWN,
+        )
+
+    def test_a_typo_in_default_outranks_a_missing_replacement(self) -> None:
+        """Wrong in both ways at once reports the fixable one.
+
+        `absent` sends the reader to their own overlay; `unknown` sends them
+        to the manifest line that can never match. The second is the defect.
+        """
+        self.assertEqual(
+            self._status("standards/nope.md", "standards/also-nope.md"),
+            self.project.REPLACE_UNKNOWN,
+        )
+
+    def test_a_default_the_user_overlay_introduces_is_not_unknown(self) -> None:
+        """Rule 2 lets the user overlay add standards the framework never shipped.
+
+        Checking only the scaffold would call every wiring for one of those a
+        typo, and send the reader to fix a manifest that is correct.
+        """
+        (self.overlay / "standards" / "house-only.md").write_text("house\n")
+        (self.overlay / "standards" / "mine.md").write_text("mine\n")
+
+        self.assertEqual(
+            self._status("standards/house-only.md", "standards/mine.md"),
+            self.project.REPLACE_OK,
+        )
+
+    def test_a_directory_is_not_a_resolution(self) -> None:
+        (self.overlay / "standards" / "mine.md").mkdir()
+
+        self.assertEqual(
+            self._status("standards/testing.md", "standards/mine.md"),
+            self.project.REPLACE_ABSENT,
+        )
+
+    def test_every_wiring_gets_exactly_one_verdict_in_order(self) -> None:
+        (self.overlay / "standards" / "here.md").write_text("here\n")
+        wirings = [
+            self._wire("standards/testing.md", "standards/here.md"),
+            self._wire("standards/testing.md", "standards/gone.md"),
+            self._wire("standards/typo.md", "standards/here.md"),
+        ]
+
+        resolved = self.project.resolve_replaces(wirings, self.scaffold, self.overlay)
+
+        self.assertEqual(
+            [r.status for r in resolved],
+            [self.project.REPLACE_OK, self.project.REPLACE_ABSENT, self.project.REPLACE_UNKNOWN],
+        )
+
+
+class ResolutionOrderDocumentationTests(unittest.TestCase):
+    """The resolution order in `FRAMEWORK.md` is the whole implementation.
+
+    Honouring a `[[replaces]]` wiring is a prompt convention: no code makes a
+    role obey it, so this prose is the feature. It is also the only part of
+    the slice nothing else can fail on, which is exactly why it needs pinning.
+    """
+
+    def setUp(self) -> None:
+        text = (REPO_ROOT / "scaffolds" / "default" / "FRAMEWORK.md").read_text()
+        start = text.find("## Overlay resolution for standards and templates")
+        self.assertNotEqual(start, -1, "resolution section was renamed or removed")
+        end = text.find("\n## ", start + 1)
+        self.section = text[start:end if end != -1 else len(text)]
+
+    def test_the_order_has_exactly_three_levels(self) -> None:
+        numbered = re.findall(r"(?m)^(\d)\. \*\*", self.section)
+
+        self.assertEqual(numbered, ["1", "2", "3"])
+
+    def test_the_retired_project_standards_path_appears_nowhere(self) -> None:
+        for retired in ("<repo>/.flow/standards/", "<repo>/.flow/templates/"):
+            self.assertNotIn(retired, self.section)
+
+    def test_project_wiring_is_first_and_names_the_manifest(self) -> None:
+        self.assertIn("1. **Project wiring**", self.section)
+        self.assertIn("[[replaces]]", self.section)
+        self.assertIn(".flow/flow.toml", self.section)
+
+    def test_the_absent_case_has_a_stated_fallback(self) -> None:
+        """The modal path on any machine but the author's.
+
+        Without this the agent is told to read the replacement and never told
+        what to do when it is not there.
+        """
+        self.assertIn("fall back to rule 2", self.section)
+
+    def test_stacking_names_which_level_wins(self) -> None:
+        self.assertIn("nearest", self.section)
+
+    def test_the_wirable_kinds_are_stated(self) -> None:
+        self.assertIn("Only `standards/` and `templates/` names are wirable", self.section)
+
+
+class LegacyProjectHeadingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+
+    def test_detects_the_retired_heading(self) -> None:
+        self.assertTrue(
+            self.project.has_legacy_active_standards_heading(
+                "# Project\n\n## Active project standards\n\n- project/brand.md\n"
+            )
+        )
+
+    def test_does_not_fire_on_a_current_project_md(self) -> None:
+        self.assertFalse(
+            self.project.has_legacy_active_standards_heading(
+                (REPO_ROOT / "scaffolds" / "default" / "PROJECT.md").read_text()
+            )
+        )
+
+
 class ProjectAuditClassifierTests(unittest.TestCase):
     """`classify_tree` and friends, against two synthetic trees.
 

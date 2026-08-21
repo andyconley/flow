@@ -153,8 +153,9 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     User-overlay support is intentionally scoped to commands and agents — the
     embedded surfaces. Standards and templates are *referenced* by name at
     runtime; user customization for those follows the resolution-order
-    convention documented in `FRAMEWORK.md` (user overlay > framework default),
-    not this merge step. Projects hold neither.
+    convention documented in `FRAMEWORK.md` (project `[[replaces]]` wiring >
+    user overlay > framework default), not this merge step. A project can name
+    a replacement but never holds one.
     """
     framework_manifest_path = framework_dir / "flow.toml"
     if not framework_manifest_path.exists():

@@ -79,10 +79,11 @@ By default, use:
 
 Commands and agents cite standards by name (e.g., `standards/git-commits.md`) and may cite templates similarly (e.g., `templates/spike-template.md`). At runtime, look for these files in **most-specific-wins** order:
 
-1. **User overlay** — `~/.flow/user/standards/<name>.md` or `~/.flow/user/templates/<name>.md`. Personal customizations that apply in every session.
-2. **Framework default** — `~/.flow/source/scaffolds/default/standards/<name>.md` or `~/.flow/source/scaffolds/default/templates/<name>.md`. The shipped baseline.
+1. **Project wiring** — if `.flow/flow.toml` declares a `[[replaces]]` entry whose `default` matches the name being cited, read its `with` instead, resolved under `~/.flow/user/`, and do **not** also read the default. Only `standards/` and `templates/` names are wirable. When overlays stack, the nearest `.flow/flow.toml` wins on a matching `default`; `flow doctor` checks only that level. **If the `with` file is not present, fall back to rule 2 and then rule 3, and say which you used in the role's output** — a wiring is a per-user promise the repo cannot keep for a teammate, so a missing replacement is the ordinary case on anyone else's machine, not an error. `flow doctor` reports each wiring as `ok`, `absent` (nothing at that path on this machine), or `unknown` (nothing resolves the cited name at all).
+2. **User overlay** — `~/.flow/user/standards/<name>.md` or `~/.flow/user/templates/<name>.md`. Personal customizations that apply in every session.
+3. **Framework default** — `~/.flow/source/scaffolds/default/standards/<name>.md` or `~/.flow/source/scaffolds/default/templates/<name>.md`. The shipped baseline.
 
-Projects do not hold standards or templates. They used to, and the copies went stale without anyone noticing, because nothing updated them and the difference from the framework's version was invisible from inside the project. A project that needs a different standard puts it in the user overlay, where one copy serves every repo. `flow project audit` reports any project still carrying its own copies.
+Projects do not hold standards or templates. They used to, and the copies went stale without anyone noticing, because nothing updated them and the difference from the framework's version was invisible from inside the project. A project that needs a different standard puts it in the user overlay, where one copy serves every repo, and names it with a `[[replaces]]` entry as above — the project points at the file, it does not hold it. `flow project audit` reports any project still carrying its own copies.
 
 Use the Read tool to resolve. If a name is cited and the user overlay has its own version, use that and note the resolution in the role's output if the difference matters. Commands, agents, and hooks are merged at sync time (see `merge_user_overlay` in `cli/sync.py`); standards and templates are resolved at runtime by this convention.
 
