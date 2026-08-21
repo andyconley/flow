@@ -30,20 +30,39 @@ findings. The two are separate processes and the gap between them is a
 time-of-check/time-of-use window on the one bucket that gets deleted.
 """
 
+import copy
 import json
 import re
+import shutil
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
-from flowtoml import read_toml
-from fsutil import repo_root
-from paths import CAPABILITY_DIRS, FLOW_HOME, SCAFFOLD_DIR
+from flowtoml import parse_simple_toml, read_toml
+from fsutil import (
+    ensure_dir,
+    read_json,
+    rel_posix,
+    remove_empty_parents,
+    repo_root,
+    write_atomic,
+)
+from paths import CAPABILITY_DIRS, FLOW_HOME, FLOW_HOME as _FLOW_HOME, SCAFFOLD_DIR
 from project import (
     BUCKET_IDENTICAL,
     audit_project,
     declared_sources,
     has_framework_baseline,
 )
+from sync import (
+    read_managed_merge_paths,
+    read_managed_paths,
+    remove_managed_codex_hooks,
+    remove_managed_flow_hooks,
+    sync_outputs,
+)
+
+BACKUPS_DIR = _FLOW_HOME / "backups"
 
 # The order writes happen in, and the reason the order is what it is. Each step
 # names what an interruption immediately after it leaves behind.
@@ -114,16 +133,31 @@ def _blocks(lines: list[str]) -> list[tuple[str, bool, int, int]]:
     return found
 
 
-def _trailing_blank(lines: list[str], end: int) -> int:
-    """Extend a cut through one trailing blank line.
+def _cut_end(lines: list[str], start: int, end: int) -> int:
+    """Where a block's cut actually stops.
 
-    Without it, removing entries from a blank-line-separated manifest leaves a
-    growing run of blanks — cosmetic, but it makes the diff of a migration
-    unreadable, which is the diff someone checks before trusting the next one.
+    A block runs to the next header, but the blank lines and comments sitting
+    immediately before that header introduce the *next* section, not this one.
+    Cutting through them destroys section headings — the real manifest has a
+    `# CLI command summaries for the flow-help...` block before
+    `[[help.cli_commands]]`, and removing the last `[[codex.commands]]` entry
+    took it with it. Comments *inside* the block still go: they annotate the
+    entry being removed.
+
+    One trailing blank is then reclaimed so repeated removals do not leave a
+    growing run of blank lines, which would make the diff of a migration
+    unreadable — and that diff is what someone reads before trusting the next
+    one.
     """
-    if end < len(lines) and not lines[end].strip():
-        return end + 1
-    return end
+    body_end = end
+    while body_end > start + 1:
+        stripped = lines[body_end - 1].strip()
+        if stripped and not stripped.startswith("#"):
+            break
+        body_end -= 1
+    if body_end < len(lines) and not lines[body_end].strip():
+        return body_end + 1
+    return body_end
 
 
 def plan_manifest_edits(
@@ -166,7 +200,7 @@ def plan_manifest_edits(
                 )
                 if matched:
                     edit = ManifestEdit(
-                        site, start, _trailing_blank(lines, end), "entry"
+                        site, start, _cut_end(lines, start, end), "entry"
                     )
                     break
         else:
@@ -412,9 +446,255 @@ def cmd_migrate(args) -> int:
         return 1
 
     plan = plan_migration(flow_dir, scaffold_dir)
+    apply = getattr(args, "apply", False)
+
+    if apply and not getattr(args, "yes", False):
+        print("`--apply` deletes files. Re-run with `--apply --yes` to confirm.")
+        print("Run without `--apply` first to see exactly what would go.")
+        return 1
+
+    if not apply:
+        if getattr(args, "json", False):
+            print(json.dumps(plan_payload(plan), indent=2, sort_keys=True))
+        else:
+            print(render_plan(plan))
+        return 0
+
+    if plan.is_noop():
+        print(render_plan(plan))
+        return 0
+
+    root = flow_dir.parent
+    stamp = (args.at or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")).strip()
+    try:
+        outcome = apply_migration(
+            root, flow_dir, scaffold_dir, plan, BACKUPS_DIR, stamp
+        )
+    except MigrationAborted as err:
+        print(f"migration aborted: {err}")
+        return 1
 
     if getattr(args, "json", False):
-        print(json.dumps(plan_payload(plan), indent=2, sort_keys=True))
-    else:
-        print(render_plan(plan))
+        print(json.dumps({**plan_payload(plan), "applied": outcome}, indent=2, sort_keys=True))
+        return 0
+
+    print(render_plan(plan, applied=True))
+    print("")
+    print(f"backup: {outcome['backup']} ({outcome['backed_up']} file(s))")
+    for rel in outcome["handlers_stripped"]:
+        print(f"stripped flow handlers from {rel}")
+    if outcome["adapters_removed"]:
+        print(f"removed {len(outcome['adapters_removed'])} generated adapter file(s)")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Apply
+# ---------------------------------------------------------------------------
+
+
+class MigrationAborted(Exception):
+    """Raised before anything irreversible, never during.
+
+    Every raise site is upstream of the first deletion. A migration that stops
+    halfway is recoverable from the backup; a migration that stops halfway
+    *without* one is the failure this whole module is arranged to avoid.
+    """
+
+
+def runtime_managed_paths(root: Path, manifest: dict) -> dict[str, dict]:
+    """Per runtime: the managed paths, the merge-protected subset, and the
+    settings file flow writes into.
+
+    Read from each runtime's own managed manifest, which is the record of what
+    project-level sync generated. That record is also what disappears when
+    project sync is retired, which is why migration has to run before anyone
+    can rely on it not existing.
+    """
+    found: dict[str, dict] = {}
+    for target in ("claude", "codex"):
+        runtime = manifest.get(target)
+        if not isinstance(runtime, dict) or "managed_manifest" not in runtime:
+            continue
+        managed_manifest = root / runtime["managed_manifest"]
+        found[target] = {
+            "managed_manifest": managed_manifest,
+            "managed": read_managed_paths(root, managed_manifest),
+            "merge_protected": read_managed_merge_paths(root, managed_manifest),
+        }
+    return found
+
+
+def backup_set(
+    root: Path, flow_dir: Path, plan: MigrationPlan, runtimes: dict[str, dict]
+) -> list[Path]:
+    """Everything about to be deleted or mutated, and nothing else.
+
+    Deliberately includes the settings files whole. Project-level sync is
+    retired in the same change that adds this, so there is no `flow sync` left
+    to regenerate an adapter with — the backup is the only route back, and a
+    partial one is worse than none because it looks like a route.
+    """
+    paths = {flow_dir / rel for rel in plan.delete}
+    if plan.manifest_edits:
+        paths.add(flow_dir / "flow.toml")
+    for info in runtimes.values():
+        paths.update(info["managed"])
+        paths.update(info["merge_protected"])
+    return sorted(p for p in paths if p.is_file())
+
+
+def perform_backup(root: Path, destination: Path, paths: list[Path]) -> int:
+    """Copy each path into `destination`, mirroring its path relative to root.
+
+    Returns the count, which the caller checks against what it asked for. A
+    migration that cannot prove it backed up does not delete: the check is the
+    difference between "the backup step ran" and "the backup exists".
+    """
+    ensure_dir(destination)
+    written = 0
+    listed = []
+    for path in paths:
+        rel = path.relative_to(root)
+        target = destination / rel
+        ensure_dir(target.parent)
+        shutil.copy2(path, target)
+        listed.append(rel.as_posix())
+        written += 1
+    (destination / "MANIFEST.txt").write_text(
+        "\n".join(
+            [
+                f"# flow project migrate backup of {root}",
+                "# restore a file by copying it back to the same relative path",
+                "",
+                *listed,
+                "",
+            ]
+        )
+    )
+    return written
+
+
+def strip_managed_handlers(path: Path, remover) -> bool:
+    """Remove flow's hook handlers from a settings/hooks file, in place.
+
+    R4's guarantee is enforced here, at write time, rather than trusted to a
+    restore: the stripped document is compared to the original with `hooks`
+    removed from both, and anything else differing aborts. A remover that
+    dropped an unmanaged top-level key, or reordered a nested structure, would
+    otherwise be indistinguishable from one that behaved.
+    """
+    if not path.is_file():
+        return False
+    original = read_json(path)
+    # Deep-copied because `remove_managed_flow_hooks` mutates its argument and
+    # returns the same object. Without this, `original` and `stripped` are one
+    # dict, every comparison below is a dict against itself, and the function
+    # concludes nothing changed and writes nothing — silently leaving flow's
+    # handlers pointing at scripts the next step deletes.
+    original = copy.deepcopy(original)
+    stripped = remover(copy.deepcopy(original))
+
+    without_hooks = {k: v for k, v in original.items() if k != "hooks"}
+    stripped_without_hooks = {k: v for k, v in stripped.items() if k != "hooks"}
+    if without_hooks != stripped_without_hooks:
+        raise MigrationAborted(
+            f"refusing to write {path}: stripping flow's handlers would have "
+            f"changed unmanaged content"
+        )
+    if stripped == original:
+        return False
+    write_atomic(path, json.dumps(stripped, indent=2, sort_keys=True) + "\n")
+    return True
+
+
+def apply_migration(
+    root: Path,
+    flow_dir: Path,
+    scaffold_dir: Path,
+    plan: MigrationPlan,
+    backups_root: Path,
+    stamp: str,
+) -> dict:
+    """The five ordered writes. See MIGRATION_ORDER for what each interruption
+    leaves behind.
+
+    Whenever one thing references another, the reference goes first: handlers
+    before the scripts they invoke, adapters before the `.flow` sources they
+    were generated from, and the manifest before the files it declares. The
+    reverse of any of those pairs is a live breakage; this direction leaves
+    only files nothing points at.
+    """
+    manifest_path = flow_dir / "flow.toml"
+    manifest = read_toml(manifest_path) if manifest_path.is_file() else {}
+    runtimes = runtime_managed_paths(root, manifest)
+
+    # 1 — backup, and verify it before anything else happens.
+    destination = backups_root / f"migrate-{root.name}-{stamp}"
+    if destination.exists():
+        raise MigrationAborted(f"backup destination already exists: {destination}")
+    wanted = backup_set(root, flow_dir, plan, runtimes)
+    written = perform_backup(root, destination, wanted)
+    if written != len(wanted):
+        raise MigrationAborted(
+            f"backup incomplete: {written} of {len(wanted)} files copied"
+        )
+
+    result = {
+        "backup": str(destination),
+        "backed_up": written,
+        "handlers_stripped": [],
+        "adapters_removed": [],
+        "manifest_edits": 0,
+        "deleted": [],
+    }
+
+    # 2 — hook handlers, before the scripts they invoke are removed.
+    for target, remover in (
+        ("claude", remove_managed_flow_hooks),
+        ("codex", remove_managed_codex_hooks),
+    ):
+        if target not in runtimes:
+            continue
+        for path in sorted(runtimes[target]["merge_protected"]):
+            if strip_managed_handlers(path, remover):
+                result["handlers_stripped"].append(rel_posix(path, root))
+
+    # 3 — generated adapters, before the `.flow` sources they came from.
+    for target, info in runtimes.items():
+        before = {p for p in info["managed"] if p.exists()}
+        sync_outputs(
+            root,
+            target,
+            {},
+            info["managed"],
+            set(),
+            check=False,
+            merge_protected=info["merge_protected"],
+        )
+        gone = sorted(rel_posix(p, root) for p in before if not p.exists())
+        result["adapters_removed"].extend(gone)
+
+    # 4 — the manifest, before the sources it declares.
+    if plan.manifest_edits:
+        edited = apply_manifest_edits(manifest_path.read_text(), plan.manifest_edits)
+        # The one place a validating round-trip belongs: parse the result and
+        # confirm the sites really went, before the replace makes it the file.
+        remaining = {d.declared_by for d in declared_sources(parse_simple_toml(edited))[0]}
+        still_there = sorted({e.site for e in plan.manifest_edits} & remaining)
+        if still_there:
+            raise MigrationAborted(
+                f"manifest rewrite did not remove: {', '.join(still_there)}"
+            )
+        write_atomic(manifest_path, edited)
+        result["manifest_edits"] = len(plan.manifest_edits)
+
+    # 5 — the framework copies themselves.
+    for rel in plan.delete:
+        path = flow_dir / rel
+        if path.is_file():
+            path.unlink()
+            remove_empty_parents(path, flow_dir)
+            result["deleted"].append(rel)
+
+    return result

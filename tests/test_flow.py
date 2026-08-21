@@ -10516,3 +10516,314 @@ class ProjectMigrateDryRunTests(FlowCliHarness):
         result = self.migrate("--root", str(inside))
         self.assertEqual(result.returncode, 1)
         self.assertIn("flow's own home", result.stdout)
+
+
+class ProjectMigrateApplyTests(FlowCliHarness):
+    """`flow project migrate --apply` — the destructive path."""
+
+    STAMP = "20260821T000000Z"
+
+    def migrate(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.run_flow("project", "migrate", *extra)
+
+    def apply(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.migrate("--apply", "--yes", "--at", self.STAMP, *extra)
+
+    def tree(self) -> dict:
+        state = {}
+        for path in sorted(self.repo.rglob("*")):
+            parts = path.relative_to(self.repo).parts
+            if ".git" in parts or "fake_home" in parts:
+                continue
+            if path.is_file():
+                stat = path.stat()
+                state[path.relative_to(self.repo).as_posix()] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    stat.st_mtime_ns,
+                )
+        return state
+
+    def seeded(self):
+        """A project with a real customization and a real adapter surface."""
+        home = self.use_fake_home()
+        self.setup_project()
+        self.assert_ok(self.run_flow("sync", "claude"))
+        custom = self.repo / ".flow" / "standards" / "testing.md"
+        custom.write_text(custom.read_text() + "\nOne extra sentence.\n")
+        local = self.repo / ".flow" / "standards" / "house.md"
+        local.write_text("entirely ours\n")
+        return home, custom, local
+
+    # -- refusal ---------------------------------------------------------
+
+    def test_apply_without_yes_refuses_and_changes_nothing(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        before = self.tree()
+        result = self.migrate("--apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--apply --yes", result.stdout)
+        self.assertEqual(self.tree(), before)
+
+    # -- the destructive path --------------------------------------------
+
+    def test_removes_identical_copies_and_leaves_everything_else(self) -> None:
+        """The over-delete invariant, asserted as a set difference rather than
+        by sampling files — so a bug nobody anticipated is not missed by
+        checking the wrong ones."""
+        _home, custom, local = self.seeded()
+        plan = json.loads(self.migrate("--json").stdout)
+        deletable = {f".flow/{rel}" for rel in plan["delete"]}
+        before = self.tree()
+
+        result = self.apply()
+        self.assert_ok(result)
+        after = self.tree()
+
+        vanished = set(before) - set(after)
+        unexpected = vanished - deletable
+        # Generated adapters go too; they are not in the audit's buckets.
+        unexpected = {p for p in unexpected if not p.startswith(".claude/")}
+        self.assertEqual(unexpected, set(), "removed something outside the plan")
+
+        # Two paths are deliberately rewritten rather than removed: the
+        # manifest loses its dead declarations, and the settings file loses
+        # flow's handlers. Everything else that survives must be untouched --
+        # mtime included, because a rewrite reproducing the same bytes still
+        # proves something wrote to a file it should have skipped.
+        mutated = {".flow/flow.toml", ".claude/settings.json", ".codex/hooks.json"}
+        survivors = set(before).intersection(after).difference(mutated)
+        for rel in survivors:
+            self.assertEqual(
+                before[rel], after[rel], f"{rel} was modified but should not have been"
+            )
+
+    def test_a_customization_survives_byte_for_byte(self) -> None:
+        """R2. Asserting only that the file still exists would pass against a
+        migration that truncated it."""
+        _home, custom, _local = self.seeded()
+        content = custom.read_text()
+        self.assert_ok(self.apply())
+        self.assertTrue(custom.exists(), "a differs file was deleted")
+        self.assertEqual(custom.read_text(), content)
+
+    def test_a_project_only_file_survives_byte_for_byte(self) -> None:
+        _home, _custom, local = self.seeded()
+        content = local.read_text()
+        self.assert_ok(self.apply())
+        self.assertEqual(local.read_text(), content)
+
+    def test_the_manifest_keeps_its_comments_and_loses_only_dead_sites(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        before_text = manifest.read_text()
+        before_comments = [l for l in before_text.splitlines() if l.lstrip().startswith("#")]
+        self.assertTrue(before_comments, "fixture assumption: the manifest has comments")
+
+        plan = json.loads(self.migrate("--json").stdout)
+        removed_sites = {e["site"] for e in plan["manifest_edits"]}
+        self.assert_ok(self.apply())
+
+        after_text = manifest.read_text()
+        after_comments = [l for l in after_text.splitlines() if l.lstrip().startswith("#")]
+        self.assertEqual(before_comments, after_comments, "comments were lost")
+
+        project = load_cli_module("project")
+        flowtoml = load_cli_module("flowtoml")
+        remaining = {
+            d.declared_by
+            for d in project.declared_sources(flowtoml.parse_simple_toml(after_text))[0]
+        }
+        self.assertEqual(removed_sites & remaining, set())
+
+    def test_the_backup_holds_everything_that_was_removed(self) -> None:
+        home, _custom, _local = self.seeded()
+        plan = json.loads(self.migrate("--json").stdout)
+        self.assert_ok(self.apply())
+
+        backup = home / ".flow" / "backups" / f"migrate-{self.repo.name}-{self.STAMP}"
+        self.assertTrue(backup.is_dir(), "no backup directory was created")
+        self.assertTrue((backup / "MANIFEST.txt").is_file())
+        for rel in plan["delete"]:
+            self.assertTrue(
+                (backup / ".flow" / rel).is_file(), f"{rel} missing from the backup"
+            )
+        self.assertTrue((backup / ".flow" / "flow.toml").is_file())
+
+    def test_a_second_run_is_a_no_op(self) -> None:
+        """R3: migration must be re-runnable to nothing. A second `--apply`
+        with the same stamp would also collide with its own backup directory,
+        so the no-op has to be detected before the backup step."""
+        self.seeded()
+        self.assert_ok(self.apply())
+        after_first = self.tree()
+
+        second = self.apply()
+        self.assert_ok(second)
+        self.assertIn("nothing to migrate", second.stdout)
+        self.assertEqual(self.tree(), after_first)
+
+    def test_the_manifest_and_the_files_it_names_agree_afterwards(self) -> None:
+        """The prove-it test, restated as a state fact.
+
+        `flow sync claude --check` is the surface that used to catch this and it
+        is being retired, so the property is asserted directly: after migration
+        no declaration names a file that is not there.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        # Reproduce path-nexus: delete a source the way a naive migration would,
+        # leaving the manifest declaring it.
+        (self.repo / ".flow" / "commands" / "flow-boot.md").unlink()
+        manifest = self.repo / ".flow" / "flow.toml"
+        self.assertIn("commands/flow-boot.md", manifest.read_text())
+
+        self.assert_ok(self.apply())
+
+        project = load_cli_module("project")
+        flowtoml = load_cli_module("flowtoml")
+        declared, _ = project.declared_sources(
+            flowtoml.parse_simple_toml(manifest.read_text())
+        )
+        missing = [
+            d.rel for d in declared if not (self.repo / ".flow" / d.rel).exists()
+        ]
+        self.assertEqual(missing, [], "the manifest still names files that are gone")
+
+    def test_settings_json_keeps_every_unmanaged_key(self) -> None:
+        """R4. Full-subtree equality against a snapshot, not key-by-key
+        presence — the failure mode is re-serialization drift, where a sibling
+        key is reordered, reformatted, or dropped because its value was empty.
+        """
+        self.seeded()
+        settings = self.repo / ".claude" / "settings.json"
+        if not settings.is_file():
+            self.skipTest("this scaffold generates no project settings.json")
+
+        doc = json.loads(settings.read_text())
+        doc["env"] = {"CUSTOM_VAR": "keep me"}
+        doc["permissions"] = {"allow": [], "deny": ["Bash(rm:*)"]}
+        doc.setdefault("hooks", {}).setdefault("PostToolUse", []).append(
+            {"hooks": [{"type": "command", "command": "/usr/local/bin/mine.sh"}]}
+        )
+        settings.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+        before = json.loads(settings.read_text())
+
+        self.assert_ok(self.apply())
+
+        after = json.loads(settings.read_text())
+        self.assertEqual(
+            {k: v for k, v in before.items() if k != "hooks"},
+            {k: v for k, v in after.items() if k != "hooks"},
+            "unmanaged top-level content changed",
+        )
+        remaining = json.dumps(after.get("hooks", {}))
+        self.assertIn("/usr/local/bin/mine.sh", remaining, "user handler was removed")
+        self.assertNotIn("/.claude/hooks/flow-", remaining, "flow handlers survived")
+
+
+class MigrationAbortGuardTests(unittest.TestCase):
+    """The three guards that only fire on conditions which never occur naturally.
+
+    Each was added because the consequence of it being absent is severe, and
+    each initially survived a mutation run — meaning nothing proved it worked.
+    A guard that has never been observed to fire is indistinguishable from one
+    that cannot, so every one of them is provoked here directly.
+
+    All three raise before the first deletion. That ordering is the point: a
+    migration that stops is recoverable, and these stop it.
+    """
+
+    def setUp(self) -> None:
+        self.migrate = load_cli_module("migrate")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.flow_dir = self.root / ".flow"
+        self.scaffold = self.root / "scaffold"
+        for name in ("standards", "agents", "commands", "project", "templates"):
+            (self.flow_dir / name).mkdir(parents=True)
+            (self.scaffold / name).mkdir(parents=True)
+        (self.flow_dir / "standards" / "same.md").write_text("shared\n")
+        (self.scaffold / "standards" / "same.md").write_text("shared\n")
+        self.backups = self.root / "backups"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def run_apply(self):
+        plan = self.migrate.plan_migration(self.flow_dir, self.scaffold)
+        return self.migrate.apply_migration(
+            self.root, self.flow_dir, self.scaffold, plan, self.backups, "STAMP"
+        )
+
+    def test_an_incomplete_backup_aborts_before_anything_is_deleted(self) -> None:
+        """A migration that cannot prove it backed up does not delete. Project
+        sync is retired in the same change, so the backup is the only route
+        back — and a partial one is worse than none, because it looks like a
+        route."""
+        target = self.flow_dir / "standards" / "same.md"
+        real = self.migrate.perform_backup
+
+        def under_reporting_backup(root, destination, paths):
+            real(root, destination, paths)
+            return len(paths) - 1
+
+        self.migrate.perform_backup = under_reporting_backup
+        try:
+            with self.assertRaises(self.migrate.MigrationAborted) as caught:
+                self.run_apply()
+        finally:
+            self.migrate.perform_backup = real
+        self.assertIn("backup incomplete", str(caught.exception))
+        self.assertTrue(target.is_file(), "a file was deleted despite the abort")
+
+    def test_a_reused_backup_directory_aborts(self) -> None:
+        """Writing a second migration's backup into the first one's directory
+        would silently make both unusable."""
+        (self.backups / "migrate-.flow-STAMP").mkdir(parents=True)
+        (self.backups / f"migrate-{self.root.name}-STAMP").mkdir(parents=True)
+        with self.assertRaises(self.migrate.MigrationAborted) as caught:
+            self.run_apply()
+        self.assertIn("already exists", str(caught.exception))
+
+    def test_a_remover_that_touches_unmanaged_content_aborts_the_write(self) -> None:
+        """R4 enforced at write time rather than trusted to a restore."""
+        settings = self.root / "settings.json"
+        settings.write_text(
+            json.dumps({"env": {"KEEP": "1"}, "hooks": {}}, indent=2) + "\n"
+        )
+        before = settings.read_text()
+
+        def greedy_remover(doc):
+            doc.pop("env", None)
+            return doc
+
+        with self.assertRaises(self.migrate.MigrationAborted) as caught:
+            self.migrate.strip_managed_handlers(settings, greedy_remover)
+        self.assertIn("unmanaged content", str(caught.exception))
+        self.assertEqual(settings.read_text(), before, "the file was written anyway")
+
+    def test_a_manifest_rewrite_that_did_not_remove_the_site_aborts(self) -> None:
+        """The one validating round-trip in the module, and the only thing
+        standing between a botched text edit and a deletion performed on the
+        strength of it."""
+        (self.flow_dir / "flow.toml").write_text(
+            '[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        manifest_before = (self.flow_dir / "flow.toml").read_text()
+        target = self.flow_dir / "standards" / "same.md"
+        real = self.migrate.apply_manifest_edits
+
+        def no_op_edit(text, edits):
+            return text
+
+        self.migrate.apply_manifest_edits = no_op_edit
+        try:
+            with self.assertRaises(self.migrate.MigrationAborted) as caught:
+                self.run_apply()
+        finally:
+            self.migrate.apply_manifest_edits = real
+        self.assertIn("did not remove", str(caught.exception))
+        self.assertEqual((self.flow_dir / "flow.toml").read_text(), manifest_before)
+        self.assertTrue(target.is_file(), "a file was deleted despite the abort")
