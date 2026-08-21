@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.18.0](https://github.com/andyconley/flow/compare/v0.17.0...v0.18.0) (2026-08-21)
+
+### Features
+
+* **cli:** add project `[[replaces]]` wiring and verify it in doctor ([#12](https://github.com/andyconley/flow/issues/12)) ([9dbfcdd](https://github.com/andyconley/flow/commit/9dbfcdd675b655307aaf9aa7e0fa5047f8cba320))
+
 ## [0.17.0](https://github.com/andyconley/flow/compare/v0.16.0...v0.17.0) (2026-08-21)
 
 ### Features
