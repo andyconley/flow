@@ -66,7 +66,7 @@ How it merges:
   - Entries in the user manifest with the same `name` as a framework entry **replace** it (override).
   - Entries with a new `name` are **appended** (addition).
   - The merged manifest drives adapter generation. Generated SKILLs, agent files, and hook registrations embed or point at the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.
-- **Standards and templates are *not* merged at sync time** — they're not embedded into adapters; they're referenced by name at runtime. The runtime resolution order is documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates": project overlay > user overlay > framework default.
+- **Standards and templates are *not* merged at sync time** — they're not embedded into adapters; they're referenced by name at runtime. The runtime resolution order is documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates": user overlay > framework default. Projects do not hold standards or templates.
 
 The user overlay is opt-in. Without `~/.flow/user/flow.toml`, sync behavior is identical to the framework-only baseline. `flow doctor` reports whether the overlay is present and what it declares.
 
@@ -97,7 +97,7 @@ The framework source. Contains:
 - workflow command contracts under `commands/`
 - role agent definitions under `agents/`
 - shared standards library under `standards/` (flow-authored standards) and `standards/vendor/` (verbatim mirrors of upstream specs that flow depends on)
-- project overlay templates under `project/`, memory placeholders under `memory/`, form templates under `templates/`
+- memory placeholders under `memory/`, form templates under `templates/`
 - the runtime adapter manifest at `flow.toml` (also records declared dependencies on upstream standards via `[standards.<name>]` blocks)
 
 This defines what the user-level install generates and what `flow setup project` copies into a repo's overlay.

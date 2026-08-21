@@ -62,14 +62,13 @@ Main surfaces:
 Customization and project files:
 
 - [templates](scaffolds/default/templates/) for definitions, research notes, adversarial reviews, ADRs, spikes, runs, runbooks, and handoffs
-- [project overlay starter files](scaffolds/default/project/) under `.flow/project/`
 - [memory and run scaffolding](scaffolds/default/) for transient state and durable artifacts
 - [flow.toml](scaffolds/default/flow.toml), the machine-readable manifest for commands, agents, hooks, model hints, and standard dependencies
 - user overlays at `~/.flow/user/` for personal commands, agents, hooks, standards, or templates without forking this repo
 
 A user overlay is your personal layer on top of the default framework. Put files in `~/.flow/user/` when you want an override or extension to follow you across projects.
 
-A project overlay is the repo-local `.flow/` layer. Use it when one project needs its own roles, standards, memory, templates, or run artifacts.
+A project overlay is the repo-local `.flow/` layer. It holds the project's own work — its context, its transient state, and its run artifacts. Commands, agents, standards, and templates are not copied into it; those come from the user-level install.
 
 User overlays are optional. Use `flow setup user --overlay-repo URL` if you want that overlay backed by your own git repo. Flow can clone an absent overlay or attach a remote to an existing one, but it does not clobber files or commit for you. For the merge model and ownership rules, see [architecture.md](docs/architecture.md).
 
