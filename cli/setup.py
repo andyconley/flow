@@ -1,9 +1,10 @@
 """Machine, project, and user-level setup, plus the project refresh path.
 
-Every function here is additive by design. `setup project` copies the project
-overlay scaffold. `refresh project` copies only missing overlay-core files and
-registered local sources by default; `refresh project --all` is the explicit
-full-scaffold backfill. Existing files whose content differs become update
+Every function here is additive by design. `setup project` creates the four
+paths a project actually owns — see `_PROJECT_SCAFFOLD_PATHS`. `refresh
+project` repairs those same paths plus any local sources the manifest
+registers; `refresh project --all`, which used to backfill the whole framework
+scaffold, is retired. Existing files whose content differs become update
 candidates; none are overwritten without an explicit interactive choice.
 
 `_ensure_usage_store` lives here rather than in usage_store.py because it is the
@@ -29,6 +30,7 @@ from fsutil import (
 )
 from overlay import OVERLAY_GITIGNORE, format_overlay_vcs, git_env, overlay_vcs_status
 from paths import (
+    CAPABILITY_DIRS,
     FLOW_CONFIG,
     FLOW_HOME,
     HOME,
@@ -101,10 +103,19 @@ _PROJECT_SCAFFOLD_PATHS = (
 # Written verbatim into a new project. The commented `[[replaces]]` block is
 # the only thing this file is for; it is commented rather than omitted so the
 # shape is discoverable without reaching for the docs.
+#
+# `kind` exists so the two documents named `flow.toml` do not open identically.
+# The framework's manifest at `scaffolds/default/flow.toml` starts with the
+# same `[framework] name/version` pair, and without a discriminator a project
+# manifest reads as that file truncated — which is exactly the confusion this
+# split was supposed to end. Nothing consumes `kind` yet; it is here so that
+# anything which needs to tell the two apart later can, without having to
+# infer it from length or from which tables happen to be absent.
 _PROJECT_MANIFEST_TEMPLATE = """\
 [framework]
 name = "flow"
 version = 1
+kind = "project"
 
 # Point a role at a project standard instead of the
 # framework default. `with` resolves in the user overlay.
@@ -116,20 +127,38 @@ version = 1
 """
 
 
-def _write_project_manifest(target: Path) -> bool:
+def _write_project_manifest(target: Path) -> str:
     """Create the project manifest if absent. Never touch an existing one.
 
-    Returns whether it wrote. The manifest is project state — `flow project
-    audit` lists it in `NOT_SCANNED` alongside `PROJECT.md` and `memory/` for
-    the same reason — so repairing a missing one is in scope and reconciling
-    a present one against the framework's manifest is not.
+    Returns `"written"`, `"present"`, or `"refused"`. The manifest is project
+    state — `flow project audit` lists it in `NOT_SCANNED` alongside
+    `PROJECT.md` and `memory/` for the same reason — so repairing a missing
+    one is in scope and reconciling a present one against the framework's
+    manifest is not.
+
+    Refuses on an overlay that still carries framework capability directories.
+    Writing the short template there would be worse than doing nothing: a
+    legacy manifest declares the project's registered sources, and
+    `migrate.runtime_managed_paths` reads `[claude] managed_manifest` out of it
+    to find the generated adapters. Replace it with eleven lines naming
+    neither and `flow refresh project` quietly stops repairing those sources,
+    while `flow project migrate` can no longer see `.claude/skills`,
+    `.claude/agents`, or `.claude/hooks` at all — orphaning them permanently,
+    which is the outcome acceptance criterion 3 exists to prevent.
+
+    `is_symlink` is checked separately because `exists()` follows links and
+    reports False for a dangling one — `write_text` would then write *through*
+    the link to wherever it points, outside the overlay. `capability_entries`
+    in `project.py` guards the same way for the same reason.
     """
     manifest = target / "flow.toml"
-    if manifest.exists():
-        return False
+    if manifest.exists() or manifest.is_symlink():
+        return "present"
+    if any((target / name).is_dir() for name in CAPABILITY_DIRS):
+        return "refused"
     ensure_dir(target)
     manifest.write_text(_PROJECT_MANIFEST_TEMPLATE)
-    return True
+    return "written"
 
 
 def setup_project() -> int:
@@ -140,7 +169,18 @@ def setup_project() -> int:
     for rel in _PROJECT_SCAFFOLD_PATHS:
         ensure_dir((target / rel).parent)
         copy_if_missing(SCAFFOLD_DIR / rel, target / rel)
-    _write_project_manifest(target)
+    # `setup project` is also run against directories that already hold an
+    # overlay, so the refusal path is reachable here too and must not be
+    # swallowed — it is the difference between a repaired overlay and one
+    # whose registered sources silently stopped being repaired.
+    if _write_project_manifest(target) == "refused":
+        print(f"project overlay ready: {target}")
+        print()
+        print("no .flow/flow.toml was written: this overlay already carries")
+        print("framework directories, and a short manifest would hide the")
+        print("sources and generated adapters the old one named")
+        print("run `flow project audit` to see what is here")
+        return 0
 
     print(f"project overlay ready: {target}")
     print()
@@ -461,9 +501,9 @@ def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
         print("run `flow project audit` to see what it is still carrying")
         return 1
 
-    wrote_manifest = _write_project_manifest(target)
+    manifest_state = _write_project_manifest(target)
     manifest_path = target / "flow.toml"
-    manifest = flowtoml.read_toml(manifest_path) if manifest_path.exists() else {}
+    manifest = flowtoml.read_toml(manifest_path) if manifest_path.is_file() else {}
     rel_paths = set(_REFRESH_CORE_PATHS)
     # Rejected declarations are dropped here rather than reported: refresh
     # has always silently skipped them (`_safe_scaffold_rel_paths` filters
@@ -476,7 +516,17 @@ def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
 
     prompt = interactive or sys.stdin.isatty()
     counts = _refresh_scaffold_files(rel_paths, target, prompt=prompt)
-    counts["added"] += int(wrote_manifest)
+
+    # Said out loud rather than folded into `added missing files`. That count
+    # means "copied from the framework scaffold", and this file was not; and
+    # recreating a manifest someone deleted on purpose is worth one line of
+    # output rather than a silent increment.
+    if manifest_state == "written":
+        print("wrote a new .flow/flow.toml (none was present)")
+    elif manifest_state == "refused":
+        print("this overlay carries framework directories but has no .flow/flow.toml")
+        print("not writing one: a short manifest here would hide the sources and")
+        print("generated adapters the old one named — run `flow project audit`")
 
     print(f"project refresh complete: {target}")
     print(f"mode: {mode}")

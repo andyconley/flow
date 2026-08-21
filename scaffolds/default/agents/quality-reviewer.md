@@ -20,7 +20,7 @@ Your role is to evaluate a work output before it is accepted and produce actiona
 - the changed files or new artifacts (diff, document, analysis, etc.)
 - the relevant spec, ticket, plan, or acceptance criteria
 - related tests, evidence, or supporting material
-- project standards under `.flow/standards/`
+- relevant standards, resolved from the user overlay or the framework default
 
 ## Primary outputs
 

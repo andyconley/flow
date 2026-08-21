@@ -135,7 +135,10 @@ class FlowCliHarness(unittest.TestCase):
                 # the migrate tests depend on a project manifest that declares
                 # sources, so it is copied here too — but as the legacy
                 # artifact it is, not as something a new project would get.
-                (flow_dir / rel).write_text(src.read_text())
+                # Bytes, not text: `classify_tree` compares raw bytes, so a
+                # decode/encode round-trip here could bucket a file as
+                # `differs` for an encoding reason rather than a real one.
+                (flow_dir / rel).write_bytes(src.read_bytes())
                 continue
             dest = flow_dir / rel
             if dest.exists():
@@ -309,6 +312,28 @@ class FlowCliTests(FlowCliHarness):
 
         self.assertEqual(data["framework"]["name"], "flow")
         self.assertEqual(data["framework"]["version"], 1)
+
+    def test_setup_project_manifest_is_not_the_framework_manifest(self) -> None:
+        """The two documents named `flow.toml` must not open identically.
+
+        Asserting the template's own literal values proves nothing — they were
+        copied from the template. What is worth pinning is the difference: a
+        project manifest that opened exactly like the framework's would read
+        as that file truncated, which is the confusion splitting them was
+        meant to end.
+        """
+        self.setup_project()
+        flowtoml = load_cli_module("flowtoml")
+
+        project = flowtoml.read_toml(self.repo / ".flow" / "flow.toml")
+        framework = flowtoml.read_toml(REPO_ROOT / "scaffolds" / "default" / "flow.toml")
+
+        self.assertNotEqual(project["framework"], framework["framework"])
+        self.assertEqual(project["framework"]["kind"], "project")
+        self.assertNotIn("kind", framework["framework"])
+        # The framework's sync configuration has no business in a project.
+        for table in ("claude", "codex", "agents", "standards"):
+            self.assertNotIn(table, project)
 
     def test_setup_project_manifest_ships_replaces_commented_out(self) -> None:
         """The example must be inert, not merely present.
@@ -11103,6 +11128,87 @@ class MigrationAbortGuardTests(unittest.TestCase):
         self.assertIn("did not remove", str(caught.exception))
         self.assertEqual((self.flow_dir / "flow.toml").read_text(), manifest_before)
         self.assertTrue(target.is_file(), "a file was deleted despite the abort")
+
+
+class LegacyOverlaySurvivesThinningTests(FlowCliHarness):
+    """Backward compatibility for overlays created before the scaffold thinned.
+
+    Thinning `setup project` is only safe if it leaves existing projects alone,
+    and every other test of the thinned contract starts from a thin project —
+    which is exactly the shape that cannot catch a regression here.
+    """
+
+    def test_refresh_leaves_a_legacy_overlay_intact(self) -> None:
+        self.setup_legacy_project()
+        flow_dir = self.repo / ".flow"
+        before = {
+            p.relative_to(flow_dir).as_posix(): p.read_bytes()
+            for p in flow_dir.rglob("*")
+            if p.is_file()
+        }
+        self.assertIn("FRAMEWORK.md", before, "fixture assumption: legacy overlay is fat")
+
+        self.assert_ok(self.run_flow("refresh", "project"))
+
+        after = {
+            p.relative_to(flow_dir).as_posix(): p.read_bytes()
+            for p in flow_dir.rglob("*")
+            if p.is_file()
+        }
+        self.assertEqual(after, before)
+
+    def test_bootstrap_still_passes_on_a_legacy_overlay(self) -> None:
+        self.setup_legacy_project()
+
+        self.assert_ok(self.run_flow("bootstrap"))
+
+    def test_a_legacy_overlay_missing_its_manifest_is_not_given_a_thin_one(self) -> None:
+        """The one place this slice could lose user data.
+
+        A fat overlay whose manifest has gone missing must not be handed the
+        short template. The legacy manifest is what names the project's
+        registered sources and, via `[claude] managed_manifest`, what lets
+        `flow project migrate` find the generated adapters — replace it with
+        eleven lines naming neither and those adapters are orphaned with no
+        way back.
+        """
+        self.setup_legacy_project()
+        flow_dir = self.repo / ".flow"
+        (flow_dir / "flow.toml").unlink()
+
+        result = self.run_flow("refresh", "project")
+
+        self.assert_ok(result)
+        self.assertFalse((flow_dir / "flow.toml").exists())
+        self.assertIn("flow project audit", result.stdout)
+
+    def test_a_manifest_shaped_like_a_directory_does_not_crash_refresh(self) -> None:
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.unlink()
+        manifest.mkdir()
+
+        result = self.run_flow("refresh", "project")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(manifest.is_dir())
+
+    def test_a_dangling_manifest_symlink_is_not_written_through(self) -> None:
+        """`exists()` follows links and reports False for a broken one.
+
+        Writing the template then lands wherever the link points, which is by
+        construction outside the overlay.
+        """
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+        manifest = flow_dir / "flow.toml"
+        outside = self.repo / "not-the-overlay.toml"
+        manifest.unlink()
+        manifest.symlink_to(outside)
+
+        self.assert_ok(self.run_flow("refresh", "project"))
+
+        self.assertFalse(outside.exists())
 
 
 class ManagedPathContainmentTests(unittest.TestCase):

@@ -1,11 +1,11 @@
 """Project overlay audit: what a project carries that the framework owns.
 
-`flow setup project` copies the whole scaffold into a repo's `.flow/`, so every
-project starts life holding its own copy of every command, agent, standard, and
-template. Those copies never update. A project set up months ago is running
-framework files nobody has touched since, and nothing on the machine says so —
-the copies are byte-identical to files the user never edited, so they read as
-deliberate customization and are treated as untouchable.
+`flow setup project` used to copy the whole scaffold into a repo's `.flow/`, so
+a project set up before that changed holds its own copy of every command,
+agent, standard, and template. Those copies never update. Such a project is
+running framework files nobody has touched since, and nothing on the machine
+says so — the copies are byte-identical to files the user never edited, so they
+read as deliberate customization and are treated as untouchable.
 
 This module answers the question that has to come first: **which of those files
 are actually the project's, and which are stale duplicates of the framework's?**

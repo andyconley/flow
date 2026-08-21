@@ -13,11 +13,11 @@ Portable workflow contract.
 This framework has two distinct layers:
 
 - **Framework** lives at the user level (installed into `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`, sourced from this scaffold). Defines the workflow vocabulary (commands), the role agents, hooks, and the shared standards library. Active in every supported runtime session regardless of cwd.
-- **Project overlays** live per-project in `<repo>/.flow/`. Hold project-specific role assignments, sources of truth, durable memory, and run artifacts. Overlays stack — when working in a nested project, the workspace overlay (e.g., `~/KB/.flow/`) and the project overlay (e.g., `~/KB/repos/path-nexus/.flow/`) merge.
+- **Project overlays** live per-project in `<repo>/.flow/`. Hold that project's context, its transient work state, and its run artifacts — and nothing the framework already provides. Overlays stack — when working in a nested project, the workspace overlay (e.g., `~/KB/.flow/`) and the project overlay (e.g., `~/KB/repos/path-nexus/.flow/`) merge.
 
-When stacked overlays merge, the more-specific overlay overrides on conflicts. Memory writes always go to the most-specific overlay; reads merge across all stacked levels.
+When stacked overlays merge, the more-specific overlay overrides on conflicts. Memory writes always go to the most-specific overlay; reads merge across all stacked levels. What stacks is context and state; commands, agents, standards, and templates do not, because a project holds none.
 
-Each project overlay defines:
+Each project overlay records, in `PROJECT.md`:
 
 - role providers
 - source-of-truth order
@@ -56,7 +56,7 @@ A project overlay holds the project's own work and nothing else. Commands,
 agents, standards, and templates come from the user-level install.
 
 - `flow.toml` - the overlay's manifest
-- `PROJECT.md` - project overlay
+- `PROJECT.md` - project identity and context
 - `memory/STATE.md` - transient work state (what is in flight, blocked, or pending right now)
 - `runs/` - per-work-item artifacts
 

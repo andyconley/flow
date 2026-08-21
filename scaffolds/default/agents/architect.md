@@ -20,7 +20,7 @@ Your role is to turn requirements into a sound system shape: boundaries, data fl
 
 - specs, tickets, or shaping documents
 - project constraints in `.flow/PROJECT.md`
-- relevant standards in `.flow/standards/`
+- relevant standards, resolved from the user overlay or the framework default
 - current code, infrastructure, and ADRs
 
 ## Primary outputs

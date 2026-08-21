@@ -57,7 +57,7 @@ Main surfaces:
 
 - [command contracts](scaffolds/default/commands/) under `.flow/commands/`
 - [agent role definitions](scaffolds/default/agents/) under `.flow/agents/`
-- [standards](scaffolds/default/standards/) under `.flow/standards/`
+- [standards](scaffolds/default/standards/), resolved at runtime from the user overlay or the framework default
 
 Customization and project files:
 
@@ -213,7 +213,7 @@ Most users only need the bootstrap installer once, then `flow update --resync` l
 
 ### Project Setup
 
-Use these when a repo needs a `.flow/` overlay for project-specific roles, memory, standards, or run artifacts.
+Use these when a repo needs a `.flow/` overlay for its own context, transient state, or run artifacts.
 
 - `flow setup project`
   - scaffold `.flow/` into the current repo

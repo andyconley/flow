@@ -62,7 +62,7 @@ Repair missing files in an existing `repo/.flow`.
 Behavior:
 
 - adds missing overlay core files: `PROJECT.md`, `memory/STATE.md`, and `runs/.gitkeep`
-- recreates `flow.toml` if it is missing, and otherwise leaves it alone. The manifest is the project's own state, and the framework scaffold's file of that name is the framework's sync configuration — comparing the two reports an update that is never real.
+- recreates `flow.toml` if it is missing — as the short project template, not as a copy of the framework's manifest — and otherwise leaves it alone. The manifest is the project's own state, and the framework scaffold's file of that name is the framework's sync configuration — comparing the two reports an update that is never real.
 - adds missing command, agent, and standard files only when they are registered in `.flow/flow.toml`
 - leaves existing project files untouched when their content differs from the framework
 - reports changed same-name files as update candidates

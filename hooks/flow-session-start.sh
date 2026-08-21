@@ -10,13 +10,16 @@ fi
 cat <<'EOF'
 This project uses the flow framework.
 
-The portable source of truth for workflow commands, agents, standards, and memory lives under `.flow/`.
-Flow-generated Claude adapters live under `.claude/` and are derived output.
-If a generated Claude skill, agent, hook, or settings entry needs to change, update the corresponding `.flow` source or framework manifest and rerun `flow sync claude`.
+`.flow/` holds this project's own work: its context, its transient state, and
+its run artifacts. Commands, agents, standards, and templates come from the
+user-level install, not from here — edit those in `~/.flow/user/` or the
+framework source and rerun `flow sync claude --user`.
 
 Primary project context lives in:
-- `.flow/FRAMEWORK.md`
 - `.flow/PROJECT.md`
 - `.flow/memory/STATE.md`
-- `.flow/memory/DECISIONS.md`
+
+An overlay set up before the scaffold was thinned may also carry copies of
+framework files. `flow project audit` reports them; `flow project migrate`
+removes the ones that are byte-identical to the framework's.
 EOF
