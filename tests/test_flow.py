@@ -9498,9 +9498,15 @@ class ProjectManifestDeclarationTests(unittest.TestCase):
         self.assertEqual(found, [])
         self.assertEqual(rejected, [])
 
-    def test_duplicate_sources_collapse_but_order_is_stable(self) -> None:
-        """Ordered, not a set: the previous form's unordered iteration would
-        make a rendered report non-deterministic."""
+    def test_one_record_per_site_even_when_two_sites_name_one_path(self) -> None:
+        """The scaffold really does declare `commands/flow-boot.md` under both
+        `[[claude.commands]]` and `[[codex.commands]]`.
+
+        Collapsing to the first site would hand a later manifest rewrite one
+        entry to drop and leave the other dangling — the exact failure the
+        declaring site was added to carry. Ordered, too: unordered iteration
+        would make a rendered report non-deterministic.
+        """
         manifest = {
             "claude": {"commands": [{"name": "a", "source": "commands/a.md"}]},
             "codex": {"commands": [{"name": "a", "source": "commands/a.md"}]},
@@ -9508,8 +9514,26 @@ class ProjectManifestDeclarationTests(unittest.TestCase):
         }
         first, _ = self.project.declared_sources(manifest)
         second, _ = self.project.declared_sources(manifest)
-        self.assertEqual([d.rel for d in first], ["commands/a.md", "agents/z.md"])
-        self.assertEqual([d.rel for d in first], [d.rel for d in second])
+        self.assertEqual(
+            [(d.rel, d.declared_by) for d in first],
+            [
+                ("commands/a.md", "claude.commands.a.source"),
+                ("commands/a.md", "codex.commands.a.source"),
+                ("agents/z.md", "agents.z.source"),
+            ],
+        )
+        self.assertEqual(first, second)
+
+    def test_refresh_project_still_sees_each_path_once(self) -> None:
+        """The one existing caller takes a set of `rel`, so per-site records
+        must not change what it refreshes."""
+        found, _ = self.project.declared_sources(
+            {
+                "claude": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+                "codex": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+            }
+        )
+        self.assertEqual({d.rel for d in found}, {"commands/a.md"})
 
     def test_malformed_manifest_shapes_are_skipped_not_fatal(self) -> None:
         found, rejected = self.project.declared_sources(
@@ -9662,7 +9686,7 @@ class ProjectAuditClassifierTests(unittest.TestCase):
             f for f in self.audit().findings if f.rel == "agents/ghost.md"
         )
         self.assertEqual(finding.bucket, "orphaned")
-        self.assertEqual(finding.declared_by, "agents.ghost.source")
+        self.assertEqual(finding.declared_by, ("agents.ghost.source",))
 
     def test_a_declared_file_that_exists_is_never_orphaned(self) -> None:
         """Existence wins over declaration.
@@ -9775,6 +9799,114 @@ class ProjectAuditClassifierTests(unittest.TestCase):
         rendered = self.project.render_audit(report)
         self.assertIn("no framework baseline", rendered)
         self.assertNotIn("project-only (", rendered)
+
+
+    def test_a_path_declared_at_two_sites_reports_both(self) -> None:
+        """The scaffold declares `commands/flow-boot.md` under both
+        `[[claude.commands]]` and `[[codex.commands]]`. One finding, two sites:
+        a rewrite told about only one leaves the other pointing at a file it
+        just deleted."""
+        self.in_project(
+            "flow.toml",
+            '[[claude.commands]]\nname = "boot"\nsource = "commands/boot.md"\n'
+            '[[codex.commands]]\nname = "boot"\nsource = "commands/boot.md"\n',
+        )
+        found = [f for f in self.audit().findings if f.rel == "commands/boot.md"]
+        self.assertEqual(len(found), 1, "one path, one finding")
+        self.assertEqual(
+            found[0].declared_by,
+            ("claude.commands.boot.source", "codex.commands.boot.source"),
+        )
+
+    def test_a_symlink_is_never_classified(self) -> None:
+        """The safety contract in one test.
+
+        Every finding's `rel` must be safe to join against the overlay root,
+        because the consumer of these findings deletes what they name. A
+        symlinked capability directory produces innocuous-looking keys that
+        resolve outside the overlay entirely — `rglob` declines to descend into
+        a nested symlinked directory, but it does follow the capability path
+        itself.
+        """
+        outside = Path(self._tmp.name) / "outside"
+        outside.mkdir()
+        (outside / "secret.md").write_text("not in the overlay\n")
+
+        (self.flow_dir / "standards" / "link.md").symlink_to(outside / "secret.md")
+        (self.flow_dir / "agents").rmdir()
+        (self.flow_dir / "agents").symlink_to(outside)
+
+        report = self.audit()
+        for finding in report.findings:
+            resolved = (self.flow_dir / finding.rel).resolve()
+            self.assertTrue(
+                resolved.is_relative_to(self.flow_dir.resolve()),
+                f"{finding.rel} resolves outside the overlay, to {resolved}",
+            )
+        self.assertNotIn("agents/secret.md", {f.rel for f in report.findings})
+        self.assertEqual(report.symlinks, ["agents", "standards/link.md"])
+
+    def test_a_broken_symlink_at_a_capability_path_is_reported_not_dropped(
+        self,
+    ) -> None:
+        """`exists()` is False for a dangling link, so an ordering that checked
+        it first would skip the path with no trace while `classified N` still
+        looked healthy."""
+        (self.flow_dir / "templates").rmdir()
+        (self.flow_dir / "templates").symlink_to(
+            Path(self._tmp.name) / "nothing-here"
+        )
+        self.assertIn("templates", self.audit().symlinks)
+
+    def test_an_unreadable_file_gets_a_bucket_rather_than_a_traceback(self) -> None:
+        """mode 000 is the ordinary cause. Crashing would break the one promise
+        the command makes — that it is safe to run anywhere — and silently
+        skipping is worse, because a path with no bucket is indistinguishable
+        from a path that is not there."""
+        target = self.in_project("standards/locked.md", "secret\n")
+        self.in_framework("standards/locked.md", "framework\n")
+        target.chmod(0o000)
+        try:
+            self.assertEqual(self.buckets()["standards/locked.md"], "unreadable")
+        finally:
+            target.chmod(0o644)
+
+    def test_a_home_relative_declaration_is_rejected(self) -> None:
+        """`~/x` is neither absolute nor contains `..`, so it passes both
+        guards and lands as an ordinary relative key — right up until one
+        consumer calls expanduser."""
+        _, rejected = self.project.declared_sources(
+            {"agents": [{"name": "h", "source": "~/.ssh/id_rsa"}]}
+        )
+        self.assertEqual([r.declared_value for r in rejected], ["~/.ssh/id_rsa"])
+
+    def test_control_characters_cannot_fabricate_report_rows(self) -> None:
+        """A manifest source containing a newline carries no `..` and is not
+        absolute, so it reaches the renderer as an ordinary value."""
+        self.in_project(
+            "flow.toml",
+            '[[agents]]\nname = "x"\nsource = "agents/a\\nfake-bucket (99).md"\n',
+        )
+        rendered = self.project.render_audit(self.audit())
+        self.assertNotIn("\nfake-bucket (99)", rendered)
+        self.assertIn("\\n", rendered)
+
+    def test_no_baseline_withholds_findings_from_the_payload_too(self) -> None:
+        """The renderer refusing to print buckets while `--json` still shipped
+        them would make the doc's claim false for every machine consumer."""
+        for name in self.CAPABILITY_DIRS:
+            shutil.rmtree(self.scaffold_dir / name)
+        self.in_project("standards/real.md", "would be misreported\n")
+        payload = self.project.audit_payload(self.audit())
+        self.assertFalse(payload["has_baseline"])
+        self.assertEqual(payload["findings"], [])
+        self.assertEqual(payload["classified"], 0)
+
+    def test_payload_records_whether_the_installed_framework_was_used(self) -> None:
+        """`--scaffold` pointed at the project's own overlay makes every file
+        `identical`, which is the bucket a migration deletes. The answer travels
+        with the report rather than being reconstructed downstream."""
+        self.assertFalse(self.project.audit_payload(self.audit())["default_scaffold"])
 
     # -- render / payload -----------------------------------------------
 
@@ -9930,7 +10062,7 @@ class ProjectAuditCommandTests(FlowCliHarness):
         for bucket, count in data["counts"].items():
             self.assertIn(f"{bucket} ({count})", rendered.stdout)
         self.assertIn(
-            {"rel": "standards/house.md", "bucket": "project-only", "declared_by": None},
+            {"rel": "standards/house.md", "bucket": "project-only", "declared_by": []},
             data["findings"],
         )
 
@@ -9954,3 +10086,29 @@ class ProjectAuditCommandTests(FlowCliHarness):
         self.assert_ok(result)
         self.assertIn("agents/ghost.md", result.stdout)
         self.assertIn("agents.ghost.source", result.stdout)
+
+    def test_exits_one_and_reports_nothing_without_a_framework_baseline(self) -> None:
+        """The no-baseline path through the real CLI, not just the renderer."""
+        self.use_fake_home()
+        self.setup_project()
+        empty = self.repo / "empty-framework"
+        empty.mkdir()
+
+        result = self.audit("--scaffold", str(empty))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no framework baseline", result.stdout)
+        self.assertNotIn("identical (", result.stdout)
+
+        payload = self.audit("--scaffold", str(empty), "--json")
+        self.assertEqual(payload.returncode, 1)
+        self.assertEqual(json.loads(payload.stdout)["findings"], [])
+
+    def test_refuses_a_root_inside_flow_s_own_home(self) -> None:
+        """Equality on the flow-home path alone would let `--root
+        ~/.flow/user` through, auditing framework content as a project."""
+        fake_home = self.use_fake_home()
+        inside = fake_home / ".flow" / "user"
+        inside.mkdir(parents=True)
+        result = self.audit("--root", str(inside))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("flow's own home", result.stdout)

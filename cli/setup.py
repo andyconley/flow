@@ -28,7 +28,6 @@ from fsutil import (
     repo_root,
 )
 from overlay import OVERLAY_GITIGNORE, format_overlay_vcs, git_env, overlay_vcs_status
-from project import declared_sources
 from paths import (
     FLOW_CONFIG,
     FLOW_HOME,
@@ -38,6 +37,7 @@ from paths import (
     USER_BIN_DIR,
     USER_OVERLAY_DIR,
 )
+from project import declared_sources
 from sync import sync_target
 
 
