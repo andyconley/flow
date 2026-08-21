@@ -37,6 +37,7 @@ from paths import (
     USER_BIN_DIR,
     USER_OVERLAY_DIR,
 )
+from project import declared_sources
 from sync import sync_target
 
 
@@ -290,31 +291,6 @@ _REFRESH_CORE_PATHS = [
 ]
 
 
-def _registered_manifest_paths(manifest: dict) -> set[Path]:
-    paths: set[Path] = set()
-    for runtime_name in ("claude", "codex"):
-        runtime = manifest.get(runtime_name, {})
-        for entry in runtime.get("commands", []):
-            source = entry.get("source")
-            if isinstance(source, str):
-                paths.add(Path(source))
-
-    for entry in manifest.get("agents", []):
-        source = entry.get("source")
-        if isinstance(source, str):
-            paths.add(Path(source))
-
-    for standard in manifest.get("standards", {}).values():
-        if not isinstance(standard, dict):
-            continue
-        for key in ("flow_standard", "vendored_path"):
-            source = standard.get(key)
-            if isinstance(source, str):
-                paths.add(Path(source))
-
-    return paths
-
-
 def _safe_scaffold_rel_paths(paths: set[Path]) -> list[Path]:
     safe: list[Path] = []
     for rel in paths:
@@ -420,7 +396,12 @@ def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
         manifest_path = target / "flow.toml"
         manifest = flowtoml.read_toml(manifest_path) if manifest_path.exists() else {}
         rel_paths = set(_REFRESH_CORE_PATHS)
-        rel_paths.update(_registered_manifest_paths(manifest))
+        # Rejected declarations are dropped here rather than reported: refresh
+        # has always silently skipped them (`_safe_scaffold_rel_paths` filters
+        # the same two cases), and `flow project audit` is the surface that
+        # names them.
+        declared, _rejected = declared_sources(manifest)
+        rel_paths.update(Path(d.rel) for d in declared)
         rel_paths = _safe_scaffold_rel_paths(rel_paths)
         mode = "overlay core and registered sources"
 

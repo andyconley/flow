@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -61,7 +62,16 @@ def _clean_env(home: Path | None = None) -> dict[str, str]:
     return env
 
 
-class FlowCliTests(unittest.TestCase):
+class FlowCliHarness(unittest.TestCase):
+    """Temp repo, subprocess runner, and fake HOME — the parts every CLI test
+    needs and none of the assertions.
+
+    Extracted from `FlowCliTests` because a class that carried both meant any
+    test class wanting `run_flow` had to inherit a hundred unrelated tests and
+    re-run them. That had already happened twice, and the workaround each time
+    was to give up the helpers and reimplement them.
+    """
+
     def setUp(self) -> None:
         self._tempdir = tempfile.TemporaryDirectory()
         self.repo = Path(self._tempdir.name)
@@ -110,6 +120,8 @@ class FlowCliTests(unittest.TestCase):
         self._fake_home = fake_home
         return fake_home
 
+
+class FlowCliTests(FlowCliHarness):
     # ------------------------------------------------------------------
     # Two-mode install helpers
     # ------------------------------------------------------------------
@@ -1969,6 +1981,7 @@ class FlowCliTests(unittest.TestCase):
                 "overlay",
                 "paths",
                 "plugin_usage",
+                "project",
                 "render",
                 "session_lookup",
                 "setup",
@@ -8906,6 +8919,8 @@ class CapabilityGapLedgerTests(unittest.TestCase):
     Subclasses TestCase rather than FlowCliTests on purpose. Inheriting that
     class would re-run its whole suite to add these few, which has happened
     before; the module-level loader is what these actually need from it.
+    (`FlowCliHarness` now exists for tests that do want the subprocess runner
+    without the suite.)
     """
 
     AT_A = "2026-08-01T00:00:00+00:00"
@@ -9367,3 +9382,733 @@ class CapabilityGapLedgerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         for verb in ("add", "list", "promote"):
             self.assertIn(verb, result.stdout)
+
+
+class ProjectManifestDeclarationTests(unittest.TestCase):
+    """`declared_sources` — the manifest half of the project audit.
+
+    This function moved out of `cli/setup.py`, where it was
+    `_registered_manifest_paths` and returned a bare `set[Path]`. Its behavior
+    for `flow refresh project` must be unchanged; what is new is the declaring
+    site travelling with each record, and escaping paths coming back as a
+    different type instead of being silently dropped.
+    """
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+
+    def test_reads_every_declaration_site_that_carries_a_project_source(self) -> None:
+        found, rejected = self.project.declared_sources(
+            {
+                "claude": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+                "codex": {"commands": [{"name": "b", "source": "commands/b.md"}]},
+                "agents": [{"name": "c", "source": "agents/c.md"}],
+                "standards": {
+                    "d": {"flow_standard": "standards/d.md"},
+                    "e": {"vendored_path": "standards/vendor/e.md"},
+                },
+            }
+        )
+        self.assertEqual(rejected, [])
+        self.assertEqual(
+            [d.rel for d in found],
+            [
+                "commands/a.md",
+                "commands/b.md",
+                "agents/c.md",
+                "standards/d.md",
+                "standards/vendor/e.md",
+            ],
+        )
+
+    def test_each_declaration_carries_the_site_that_named_it(self) -> None:
+        """A later manifest rewrite has to know which entry to drop, and a
+        rewrite keyed on array position breaks when someone reorders the file."""
+        found, _ = self.project.declared_sources(
+            {
+                "claude": {
+                    "commands": [
+                        {"name": "flow-boot", "source": "commands/flow-boot.md"}
+                    ]
+                },
+                "agents": [{"name": "architect", "source": "agents/architect.md"}],
+                "standards": {
+                    "git-commits": {"flow_standard": "standards/git-commits.md"}
+                },
+            }
+        )
+        self.assertEqual(
+            [d.declared_by for d in found],
+            [
+                "claude.commands.flow-boot.source",
+                "agents.architect.source",
+                "standards.git-commits.flow_standard",
+            ],
+        )
+
+    def test_an_unnamed_entry_falls_back_to_its_index(self) -> None:
+        found, _ = self.project.declared_sources(
+            {"agents": [{"source": "agents/one.md"}, {"source": "agents/two.md"}]}
+        )
+        self.assertEqual(
+            [d.declared_by for d in found],
+            ["agents.[0].source", "agents.[1].source"],
+        )
+
+    def test_escaping_declarations_have_no_joinable_field(self) -> None:
+        """The safety property, asserted structurally rather than by string.
+
+        An absolute path or one containing `..` comes back as
+        `RejectedDeclaration`, which deliberately has no `rel`. If a future
+        refactor folds these back into `Declaration`, a downstream `root / rel`
+        would resolve outside the overlay — so the assertion is that the
+        attribute does not exist, not that its value looks safe.
+        """
+        found, rejected = self.project.declared_sources(
+            {
+                "agents": [
+                    {"name": "ok", "source": "agents/ok.md"},
+                    {"name": "abs", "source": "/etc/passwd"},
+                    {"name": "up", "source": "../../../etc/passwd"},
+                ]
+            }
+        )
+        self.assertEqual([d.rel for d in found], ["agents/ok.md"])
+        self.assertEqual(
+            [(r.declared_value, r.declared_by) for r in rejected],
+            [
+                ("/etc/passwd", "agents.abs.source"),
+                ("../../../etc/passwd", "agents.up.source"),
+            ],
+        )
+        for record in rejected:
+            self.assertFalse(
+                hasattr(record, "rel"),
+                "a rejected declaration must not carry a joinable path",
+            )
+
+    def test_hooks_are_not_a_declaration_site(self) -> None:
+        """`[[hooks]]` carries `script`, which sync resolves against the
+        framework source or the user overlay with no project branch — so a hook
+        cannot be an orphaned project source. Including it would invent a
+        finding class that cannot occur."""
+        found, rejected = self.project.declared_sources(
+            {"hooks": [{"name": "h", "script": "hooks/h.sh"}]}
+        )
+        self.assertEqual(found, [])
+        self.assertEqual(rejected, [])
+
+    def test_one_record_per_site_even_when_two_sites_name_one_path(self) -> None:
+        """The scaffold really does declare `commands/flow-boot.md` under both
+        `[[claude.commands]]` and `[[codex.commands]]`.
+
+        Collapsing to the first site would hand a later manifest rewrite one
+        entry to drop and leave the other dangling — the exact failure the
+        declaring site was added to carry. Ordered, too: unordered iteration
+        would make a rendered report non-deterministic.
+        """
+        manifest = {
+            "claude": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+            "codex": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+            "agents": [{"name": "z", "source": "agents/z.md"}],
+        }
+        first, _ = self.project.declared_sources(manifest)
+        second, _ = self.project.declared_sources(manifest)
+        self.assertEqual(
+            [(d.rel, d.declared_by) for d in first],
+            [
+                ("commands/a.md", "claude.commands.a.source"),
+                ("commands/a.md", "codex.commands.a.source"),
+                ("agents/z.md", "agents.z.source"),
+            ],
+        )
+        self.assertEqual(first, second)
+
+    def test_refresh_project_still_sees_each_path_once(self) -> None:
+        """The one existing caller takes a set of `rel`, so per-site records
+        must not change what it refreshes."""
+        found, _ = self.project.declared_sources(
+            {
+                "claude": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+                "codex": {"commands": [{"name": "a", "source": "commands/a.md"}]},
+            }
+        )
+        self.assertEqual({d.rel for d in found}, {"commands/a.md"})
+
+    def test_malformed_manifest_shapes_are_skipped_not_fatal(self) -> None:
+        found, rejected = self.project.declared_sources(
+            {
+                "claude": "not-a-table",
+                "agents": [{"name": "n", "source": None}, {"name": "e", "source": ""}],
+                "standards": {"s": "not-a-table"},
+            }
+        )
+        self.assertEqual(found, [])
+        self.assertEqual(rejected, [])
+
+    def test_project_module_imports_no_heavy_siblings(self) -> None:
+        """The dependency direction, asserted rather than left in a docstring.
+
+        `cli/setup.py` imports `sync_target`, and now also imports this module.
+        One convenience import back into `setup` would both drag the whole
+        adapter-generation graph into a read-only command and close a cycle.
+        Walked statically and transitively, because a runtime check would only
+        see what the current code path happens to touch.
+        """
+        import ast
+
+        cli_dir = REPO_ROOT / "cli"
+        siblings = {p.stem for p in cli_dir.glob("*.py")}
+        allowed = {"paths", "fsutil", "flowtoml"}
+
+        def sibling_imports(stem: str) -> set[str]:
+            tree = ast.parse((cli_dir / f"{stem}.py").read_text())
+            names: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names.update(a.name.split(".")[0] for a in node.names)
+                elif (
+                    isinstance(node, ast.ImportFrom)
+                    and node.level == 0
+                    and node.module
+                ):
+                    names.add(node.module.split(".")[0])
+            return names & siblings
+
+        reached: set[str] = set()
+        queue = list(sibling_imports("project"))
+        while queue:
+            stem = queue.pop()
+            if stem in reached:
+                continue
+            reached.add(stem)
+            queue.extend(sibling_imports(stem))
+
+        self.assertLessEqual(
+            reached,
+            allowed,
+            f"cli/project.py reaches {sorted(reached - allowed)}; it may only "
+            f"reach {sorted(allowed)}",
+        )
+        # Control: the walk does find edges when they exist, so an empty
+        # `reached` from a broken parser cannot pass this silently.
+        self.assertIn("paths", sibling_imports("diagnostics"))
+
+
+class ProjectAuditClassifierTests(unittest.TestCase):
+    """`classify_tree` and friends, against two synthetic trees.
+
+    No subprocess and no fabricated HOME, which is possible only because both
+    roots are parameters. That also defuses the trap this suite invites: with
+    `use_fake_home()` the fake `~/.flow/source` is a symlink to `REPO_ROOT`, so
+    a test that seeds a project file by *copying* it from the real scaffold and
+    then asserts `identical` is comparing a file to itself. It passes against a
+    classifier hardcoded to return `identical`.
+
+    So: nothing here copies, and where two sides must be byte-equal they are
+    written from two separate literals rather than one shared variable. Where a
+    variable *is* shared, one side is mutated — which is what proves the
+    comparison reads both trees rather than one.
+    """
+
+    CAPABILITY_DIRS = ("agents", "commands", "project", "standards", "templates")
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.flow_dir = root / "someproject" / ".flow"
+        self.scaffold_dir = root / "framework" / "scaffolds" / "default"
+        for name in self.CAPABILITY_DIRS:
+            (self.flow_dir / name).mkdir(parents=True)
+            (self.scaffold_dir / name).mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def put(self, root: Path, rel: str, text: str) -> Path:
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        return path
+
+    def in_project(self, rel: str, text: str) -> Path:
+        return self.put(self.flow_dir, rel, text)
+
+    def in_framework(self, rel: str, text: str) -> Path:
+        return self.put(self.scaffold_dir, rel, text)
+
+    def audit(self):
+        return self.project.audit_project(self.flow_dir, self.scaffold_dir)
+
+    def buckets(self) -> dict:
+        return {f.rel: f.bucket for f in self.audit().findings}
+
+    # -- byte comparison ------------------------------------------------
+
+    def test_identical_when_bytes_match(self) -> None:
+        # Two literals, not one variable used twice: a shared variable is
+        # byte-equal by construction and proves nothing about the comparator.
+        self.in_project("standards/testing.md", "# Testing\n\nProve it.\n")
+        self.in_framework("standards/testing.md", "# Testing\n\nProve it.\n")
+        self.assertEqual(self.buckets()["standards/testing.md"], "identical")
+
+    def test_differs_on_a_single_byte(self) -> None:
+        """A trailing newline is the realistic drift. Being falsely lenient here
+        is the direction that gets a real customization deleted later."""
+        body = "# Testing\n\nProve it."
+        self.in_project("standards/testing.md", body)
+        self.in_framework("standards/testing.md", body + "\n")
+        self.assertEqual(self.buckets()["standards/testing.md"], "differs")
+
+    def test_identical_requires_exact_bytes_not_normalized_text(self) -> None:
+        body = "line one\nline two\n"
+        self.in_project("standards/eol.md", body.replace("\n", "\r\n"))
+        self.in_framework("standards/eol.md", body)
+        self.assertEqual(
+            self.buckets()["standards/eol.md"],
+            "differs",
+            "CRLF vs LF must not be normalized away — identical is the bucket a "
+            "later migration deletes",
+        )
+
+    # -- buckets --------------------------------------------------------
+
+    def test_project_only_when_the_framework_has_no_counterpart(self) -> None:
+        self.in_project("standards/house-style.md", "local only\n")
+        self.assertEqual(self.buckets()["standards/house-style.md"], "project-only")
+
+    def test_orphaned_when_the_manifest_declares_an_absent_file(self) -> None:
+        self.in_project(
+            "flow.toml", '[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        finding = next(
+            f for f in self.audit().findings if f.rel == "agents/ghost.md"
+        )
+        self.assertEqual(finding.bucket, "orphaned")
+        self.assertEqual(finding.declared_by, ("agents.ghost.source",))
+
+    def test_a_declared_file_that_exists_is_never_orphaned(self) -> None:
+        """Existence wins over declaration.
+
+        A classifier that checked "declared?" before "present?" would report a
+        customized file as orphaned, and a later manifest rewrite would drop an
+        entry that resolves perfectly well.
+        """
+        self.in_project(
+            "flow.toml", '[[agents]]\nname = "sre"\nsource = "agents/sre.md"\n'
+        )
+        self.in_project("agents/sre.md", "customized\n")
+        self.in_framework("agents/sre.md", "framework\n")
+        found = [f for f in self.audit().findings if f.rel == "agents/sre.md"]
+        self.assertEqual([f.bucket for f in found], ["differs"])
+
+    def test_conflict_when_the_project_has_a_directory_where_the_framework_has_a_file(
+        self,
+    ) -> None:
+        """Without this branch the byte comparison raises IsADirectoryError and
+        one odd path kills the whole audit."""
+        self.in_framework("FRAMEWORK.md", "the framework file\n")
+        (self.flow_dir / "FRAMEWORK.md").mkdir()
+        self.assertEqual(self.buckets()["FRAMEWORK.md"], "conflict")
+
+    def test_project_stub_is_identical_while_unfilled_and_differs_once_filled(
+        self,
+    ) -> None:
+        """`project/` holds framework-supplied stubs, so the plausible shortcut
+        "project/ is user content, therefore always project-only" is wrong in
+        both directions."""
+        self.in_framework("project/architecture.md", "<describe the architecture>\n")
+        self.in_project("project/architecture.md", "<describe the architecture>\n")
+        self.assertEqual(self.buckets()["project/architecture.md"], "identical")
+
+        self.in_project("project/architecture.md", "It is a modular monolith.\n")
+        self.assertEqual(self.buckets()["project/architecture.md"], "differs")
+
+    def test_bucket_membership_is_not_invariant_under_a_label_swap(self) -> None:
+        """Two members per bucket, and named. A one-per-bucket fixture passes
+        unchanged if two labels are swapped."""
+        for rel in ("standards/a.md", "standards/b.md"):
+            self.in_project(rel, "project side\n")
+            self.in_framework(rel, "framework side\n")
+        for rel in ("standards/c.md", "standards/d.md"):
+            self.in_project(rel, "local only\n")
+
+        buckets = self.buckets()
+        counts = self.audit().counts()
+        self.assertEqual(counts["differs"], 2)
+        self.assertEqual(counts["project-only"], 2)
+        self.assertEqual(buckets["standards/a.md"], "differs")
+        self.assertEqual(buckets["standards/b.md"], "differs")
+        self.assertEqual(buckets["standards/c.md"], "project-only")
+        self.assertEqual(buckets["standards/d.md"], "project-only")
+
+    # -- scope ----------------------------------------------------------
+
+    def test_only_capability_paths_are_walked(self) -> None:
+        """The safety property. A naive walk of `.flow/` passes every other test
+        in this class while silently over-scanning — and what this scanner
+        visits is what a later migration is allowed to delete."""
+        self.in_project("memory/STATE.md", "in flight: something\n")
+        self.in_project("runs/2026-01-01/run.md", "a run artifact\n")
+        self.in_project("PROJECT.md", "the project's own context\n")
+        self.in_project("flow.toml", "# a manifest unlike the framework's\n")
+        self.in_framework("PROJECT.md", "the framework's stub\n")
+        self.in_framework("flow.toml", "# the framework manifest\n")
+        self.in_project("standards/real.md", "scanned\n")
+
+        rels = {f.rel for f in self.audit().findings}
+        self.assertIn("standards/real.md", rels)
+        for excluded in ("memory/STATE.md", "runs/2026-01-01/run.md", "PROJECT.md", "flow.toml"):
+            self.assertNotIn(excluded, rels, f"{excluded} must never be classified")
+
+    def test_flow_toml_is_manifest_input_and_not_a_candidate(self) -> None:
+        """It differs from the framework's copy in every real project, so a
+        scanner that classified it would report a permanent false positive."""
+        self.in_project(
+            "flow.toml", '[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        self.in_framework("flow.toml", "# entirely different\n")
+        report = self.audit()
+        self.assertNotIn("flow.toml", {f.rel for f in report.findings})
+        self.assertIn("agents/ghost.md", {f.rel for f in report.findings})
+
+    def test_noise_files_are_not_counted(self) -> None:
+        """A stray .DS_Store is harmless but pollutes the count being diffed
+        against a hand audit."""
+        self.in_project("standards/.DS_Store", "\x00\x01")
+        self.in_project("standards/real.md", "counted\n")
+        self.assertEqual(self.audit().classified(), 1)
+
+    def test_a_project_with_no_capability_directories_reports_nothing(self) -> None:
+        for name in self.CAPABILITY_DIRS:
+            shutil.rmtree(self.flow_dir / name)
+        report = self.audit()
+        self.assertEqual(report.findings, [])
+        self.assertEqual(report.classified(), 0)
+        self.assertTrue(report.has_baseline, "the framework side is still intact")
+
+    def test_no_framework_baseline_refuses_to_report_buckets(self) -> None:
+        """Otherwise a pruned or half-installed framework makes every project
+        file project-only while the report looks clean."""
+        for name in self.CAPABILITY_DIRS:
+            shutil.rmtree(self.scaffold_dir / name)
+        self.in_project("standards/real.md", "would be misreported\n")
+        report = self.audit()
+        self.assertFalse(report.has_baseline)
+        rendered = self.project.render_audit(report)
+        self.assertIn("no framework baseline", rendered)
+        self.assertNotIn("project-only (", rendered)
+
+
+    def test_a_path_declared_at_two_sites_reports_both(self) -> None:
+        """The scaffold declares `commands/flow-boot.md` under both
+        `[[claude.commands]]` and `[[codex.commands]]`. One finding, two sites:
+        a rewrite told about only one leaves the other pointing at a file it
+        just deleted."""
+        self.in_project(
+            "flow.toml",
+            '[[claude.commands]]\nname = "boot"\nsource = "commands/boot.md"\n'
+            '[[codex.commands]]\nname = "boot"\nsource = "commands/boot.md"\n',
+        )
+        found = [f for f in self.audit().findings if f.rel == "commands/boot.md"]
+        self.assertEqual(len(found), 1, "one path, one finding")
+        self.assertEqual(
+            found[0].declared_by,
+            ("claude.commands.boot.source", "codex.commands.boot.source"),
+        )
+
+    def test_a_symlink_is_never_classified(self) -> None:
+        """The safety contract in one test.
+
+        Every finding's `rel` must be safe to join against the overlay root,
+        because the consumer of these findings deletes what they name. A
+        symlinked capability directory produces innocuous-looking keys that
+        resolve outside the overlay entirely — `rglob` declines to descend into
+        a nested symlinked directory, but it does follow the capability path
+        itself.
+        """
+        outside = Path(self._tmp.name) / "outside"
+        outside.mkdir()
+        (outside / "secret.md").write_text("not in the overlay\n")
+
+        (self.flow_dir / "standards" / "link.md").symlink_to(outside / "secret.md")
+        (self.flow_dir / "agents").rmdir()
+        (self.flow_dir / "agents").symlink_to(outside)
+
+        report = self.audit()
+        for finding in report.findings:
+            resolved = (self.flow_dir / finding.rel).resolve()
+            self.assertTrue(
+                resolved.is_relative_to(self.flow_dir.resolve()),
+                f"{finding.rel} resolves outside the overlay, to {resolved}",
+            )
+        self.assertNotIn("agents/secret.md", {f.rel for f in report.findings})
+        self.assertEqual(report.symlinks, ["agents", "standards/link.md"])
+
+    def test_a_broken_symlink_at_a_capability_path_is_reported_not_dropped(
+        self,
+    ) -> None:
+        """`exists()` is False for a dangling link, so an ordering that checked
+        it first would skip the path with no trace while `classified N` still
+        looked healthy."""
+        (self.flow_dir / "templates").rmdir()
+        (self.flow_dir / "templates").symlink_to(
+            Path(self._tmp.name) / "nothing-here"
+        )
+        self.assertIn("templates", self.audit().symlinks)
+
+    def test_an_unreadable_file_gets_a_bucket_rather_than_a_traceback(self) -> None:
+        """mode 000 is the ordinary cause. Crashing would break the one promise
+        the command makes — that it is safe to run anywhere — and silently
+        skipping is worse, because a path with no bucket is indistinguishable
+        from a path that is not there."""
+        target = self.in_project("standards/locked.md", "secret\n")
+        self.in_framework("standards/locked.md", "framework\n")
+        target.chmod(0o000)
+        try:
+            self.assertEqual(self.buckets()["standards/locked.md"], "unreadable")
+        finally:
+            target.chmod(0o644)
+
+    def test_a_home_relative_declaration_is_rejected(self) -> None:
+        """`~/x` is neither absolute nor contains `..`, so it passes both
+        guards and lands as an ordinary relative key — right up until one
+        consumer calls expanduser."""
+        _, rejected = self.project.declared_sources(
+            {"agents": [{"name": "h", "source": "~/.ssh/id_rsa"}]}
+        )
+        self.assertEqual([r.declared_value for r in rejected], ["~/.ssh/id_rsa"])
+
+    def test_control_characters_cannot_fabricate_report_rows(self) -> None:
+        """A manifest source containing a newline carries no `..` and is not
+        absolute, so it reaches the renderer as an ordinary value."""
+        self.in_project(
+            "flow.toml",
+            '[[agents]]\nname = "x"\nsource = "agents/a\\nfake-bucket (99).md"\n',
+        )
+        rendered = self.project.render_audit(self.audit())
+        self.assertNotIn("\nfake-bucket (99)", rendered)
+        self.assertIn("\\n", rendered)
+
+    def test_no_baseline_withholds_findings_from_the_payload_too(self) -> None:
+        """The renderer refusing to print buckets while `--json` still shipped
+        them would make the doc's claim false for every machine consumer."""
+        for name in self.CAPABILITY_DIRS:
+            shutil.rmtree(self.scaffold_dir / name)
+        self.in_project("standards/real.md", "would be misreported\n")
+        payload = self.project.audit_payload(self.audit())
+        self.assertFalse(payload["has_baseline"])
+        self.assertEqual(payload["findings"], [])
+        self.assertEqual(payload["classified"], 0)
+
+    def test_payload_records_whether_the_installed_framework_was_used(self) -> None:
+        """`--scaffold` pointed at the project's own overlay makes every file
+        `identical`, which is the bucket a migration deletes. The answer travels
+        with the report rather than being reconstructed downstream."""
+        self.assertFalse(self.project.audit_payload(self.audit())["default_scaffold"])
+
+    # -- render / payload -----------------------------------------------
+
+    def test_render_carries_the_differs_caveat_with_the_count(self) -> None:
+        """The one literal-string assertion that earns its keep: this count gets
+        pasted into a ticket, and a later migration keys off this label."""
+        self.in_project("standards/x.md", "one\n")
+        self.in_framework("standards/x.md", "two\n")
+        rendered = self.project.render_audit(self.audit())
+        self.assertIn("differs (1)", rendered)
+        self.assertIn("cannot be told apart locally", rendered)
+
+    def test_render_names_what_it_did_not_scan(self) -> None:
+        """Without it, a 71-file .flow reporting 48 scanned reads as a broken
+        scanner rather than a deliberate scope."""
+        rendered = self.project.render_audit(self.audit())
+        for excluded in ("PROJECT.md", "flow.toml", "memory/", "runs/"):
+            self.assertIn(excluded, rendered)
+
+    def test_payload_keeps_roots_out_of_the_findings(self) -> None:
+        """An absolute path inside a finding is how a later `--apply` acts
+        outside the root it was pointed at."""
+        self.in_project("standards/x.md", "one\n")
+        payload = self.project.audit_payload(self.audit())
+        self.assertEqual(payload["flow_dir"], str(self.flow_dir))
+        for finding in payload["findings"]:
+            self.assertEqual(set(finding), {"rel", "bucket", "declared_by"})
+            self.assertFalse(finding["rel"].startswith("/"))
+            self.assertNotIn(str(self.flow_dir), finding["rel"])
+
+
+class ProjectAuditCommandTests(FlowCliHarness):
+    """`flow project audit` through the real entrypoint.
+
+    The classifier is unit-tested against synthetic trees elsewhere; these
+    exercise the parts only a subprocess reaches — root resolution, the
+    flow-home guard, exit codes, and JSON.
+    """
+
+    def audit(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.run_flow("project", "audit", *extra)
+
+    def snapshot(self) -> dict:
+        """Every path under the project, with content hash and mtime.
+
+        The *set* of paths is part of the snapshot, not just hashes of a fixed
+        list: re-hashing paths captured beforehand cannot see a file the command
+        created or deleted, which is half of what report-only has to mean.
+        """
+        state = {}
+        for path in sorted((self.repo / ".flow").rglob("*")):
+            rel = path.relative_to(self.repo).as_posix()
+            if path.is_dir():
+                state[rel] = ("dir", None)
+            else:
+                stat = path.stat()
+                state[rel] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    stat.st_mtime_ns,
+                )
+        return state
+
+    def test_exits_zero_on_a_mixed_report(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "standards" / "testing.md").write_text("edited\n")
+        (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
+
+        result = self.audit()
+        self.assert_ok(result)
+        self.assertIn("standards/testing.md", result.stdout)
+        self.assertIn("standards/house.md", result.stdout)
+
+    def test_exits_zero_even_when_every_file_differs(self) -> None:
+        """A single happy-path exit-0 assertion cannot tell "always 0" from "0
+        this time". Contamination is the normal state of an old project, so the
+        worst-looking input must still be a successful run."""
+        self.use_fake_home()
+        self.setup_project()
+        for path in (self.repo / ".flow" / "standards").rglob("*.md"):
+            path.write_text("clobbered\n")
+
+        result = self.audit()
+        self.assert_ok(result)
+        self.assertNotIn("differs (0)", result.stdout)
+
+    def test_makes_no_filesystem_changes(self) -> None:
+        """Report-only asserted as behavior, not as the absence of an --apply
+        flag in argparse."""
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
+
+        before = self.snapshot()
+        self.assert_ok(self.audit())
+        self.assert_ok(self.audit("--json"))
+        after = self.snapshot()
+
+        self.assertEqual(
+            set(before), set(after), "the audit added or removed a path"
+        )
+        self.assertEqual(before, after, "the audit changed content or mtimes")
+
+    def test_classifies_something_in_every_capability_directory(self) -> None:
+        """Catches a classifier wired only to standards/, which every
+        single-directory fixture would let through."""
+        self.use_fake_home()
+        self.setup_project()
+        flow_dir = self.repo / ".flow"
+        for name in ("agents", "commands", "project", "standards", "templates"):
+            (flow_dir / name).mkdir(parents=True, exist_ok=True)
+            (flow_dir / name / "zz-local.md").write_text(f"local to {name}\n")
+
+        result = self.audit()
+        self.assert_ok(result)
+        for name in ("agents", "commands", "project", "standards", "templates"):
+            self.assertIn(f"{name}/zz-local.md", result.stdout)
+
+    def test_refuses_to_audit_flow_s_own_home(self) -> None:
+        """`repo_root` falls back to the working directory, so from $HOME the
+        `.flow` it finds is flow's own home. Reporting the entire framework as
+        project-only is the failure being prevented."""
+        fake_home = self.use_fake_home()
+        result = self.audit("--root", str(fake_home / ".flow"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("flow's own home", result.stdout)
+
+    def test_refuses_a_root_that_is_not_a_directory(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        result = self.audit("--root", str(self.repo / ".flow" / "flow.toml"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not a directory", result.stdout)
+
+    def test_refuses_when_the_repo_has_no_overlay(self) -> None:
+        self.use_fake_home()
+        result = self.audit()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing .flow", result.stdout)
+
+    def test_json_carries_the_same_counts_as_the_table(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        (self.repo / ".flow" / "standards" / "house.md").write_text("ours\n")
+
+        rendered = self.audit()
+        payload = self.audit("--json")
+        self.assert_ok(rendered)
+        self.assert_ok(payload)
+
+        data = json.loads(payload.stdout)
+        self.assertTrue(data["has_baseline"])
+        for bucket, count in data["counts"].items():
+            self.assertIn(f"{bucket} ({count})", rendered.stdout)
+        self.assertIn(
+            {"rel": "standards/house.md", "bucket": "project-only", "declared_by": []},
+            data["findings"],
+        )
+
+    def test_json_findings_carry_no_absolute_paths(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        data = json.loads(self.audit("--json").stdout)
+        self.assertTrue(data["findings"], "fixture produced nothing to check")
+        for finding in data["findings"]:
+            self.assertFalse(finding["rel"].startswith("/"), finding)
+
+    def test_an_orphaned_declaration_is_reported_with_its_site(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        result = self.audit()
+        self.assert_ok(result)
+        self.assertIn("agents/ghost.md", result.stdout)
+        self.assertIn("agents.ghost.source", result.stdout)
+
+    def test_exits_one_and_reports_nothing_without_a_framework_baseline(self) -> None:
+        """The no-baseline path through the real CLI, not just the renderer."""
+        self.use_fake_home()
+        self.setup_project()
+        empty = self.repo / "empty-framework"
+        empty.mkdir()
+
+        result = self.audit("--scaffold", str(empty))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no framework baseline", result.stdout)
+        self.assertNotIn("identical (", result.stdout)
+
+        payload = self.audit("--scaffold", str(empty), "--json")
+        self.assertEqual(payload.returncode, 1)
+        self.assertEqual(json.loads(payload.stdout)["findings"], [])
+
+    def test_refuses_a_root_inside_flow_s_own_home(self) -> None:
+        """Equality on the flow-home path alone would let `--root
+        ~/.flow/user` through, auditing framework content as a project."""
+        fake_home = self.use_fake_home()
+        inside = fake_home / ".flow" / "user"
+        inside.mkdir(parents=True)
+        result = self.audit("--root", str(inside))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("flow's own home", result.stdout)

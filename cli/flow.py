@@ -40,6 +40,7 @@ from plugin_usage import (  # noqa: E402
     plugin_usage_show_command,
     plugin_usage_snapshot_command,
 )
+from project import cmd_audit  # noqa: E402
 from setup import (  # noqa: E402
     refresh_project,
     setup_machine,
@@ -348,6 +349,23 @@ def main() -> int:
     gaps_promote_parser.add_argument("--at", help="ISO timestamp; defaults to now")
     gaps_promote_parser.add_argument("--ledger", help="ledger path; defaults to ~/.flow/user/capability-gaps.jsonl")
 
+    project_parser = sub.add_parser(
+        "project",
+        help="inspect this repo's `.flow/` overlay against the framework",
+        description="Project-overlay maintenance. `flow setup project` copies the whole framework scaffold into a repo, and those copies never update — so a project carries its own frozen commands, agents, standards, and templates. These subcommands are how you see which of them are the project's own work and which are stale duplicates.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Examples:\n  flow project audit\n  flow project audit --json\n",
+    )
+    project_sub = project_parser.add_subparsers(dest="project_target", required=True, title="project views")
+    project_audit_parser = project_sub.add_parser(
+        "audit",
+        help="classify the overlay's capability files against the framework",
+        description="Read-only. Walks the overlay's capability paths — standards/, templates/, commands/, agents/, project/, and FRAMEWORK.md — and sorts every entry into identical, differs, project-only, orphaned, or conflict. PROJECT.md, flow.toml, memory/, and runs/ are the project's own state and are never visited. Exits 0 whatever it finds: contamination is the normal state of any project set up before the overlay was thinned, so a non-zero exit on drift would train everyone to ignore it. It exits 1 only when no audit could be produced at all — no project here, or no framework to compare against.",
+    )
+    project_audit_parser.add_argument("--json", action="store_true", help="emit the payload as JSON instead of the rendered report")
+    project_audit_parser.add_argument("--root", metavar="PATH", help="audit this `.flow` directory instead of the enclosing repo's")
+    project_audit_parser.add_argument("--scaffold", metavar="PATH", help="compare against this framework scaffold instead of the installed one")
+
     overlay_parser = sub.add_parser(
         "overlay",
         help="inspect the user overlay's version-control state",
@@ -589,6 +607,8 @@ def main() -> int:
         return cmd_list(args)
     if args.command == "gaps" and args.gaps_target == "promote":
         return cmd_promote(args)
+    if args.command == "project" and args.project_target == "audit":
+        return cmd_audit(args)
     if args.command == "overlay" and args.overlay_target == "status":
         return overlay_status_command()
     if args.command == "overlay" and args.overlay_target == "check":
