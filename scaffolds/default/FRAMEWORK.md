@@ -13,14 +13,13 @@ Portable workflow contract.
 This framework has two distinct layers:
 
 - **Framework** lives at the user level (installed into `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`, sourced from this scaffold). Defines the workflow vocabulary (commands), the role agents, hooks, and the shared standards library. Active in every supported runtime session regardless of cwd.
-- **Project overlays** live per-project in `<repo>/.flow/`. Hold project-specific role assignments, sources of truth, durable memory, and run artifacts. Overlays stack — when working in a nested project, the workspace overlay (e.g., `~/KB/.flow/`) and the project overlay (e.g., `~/KB/repos/path-nexus/.flow/`) merge.
+- **Project overlays** live per-project in `<repo>/.flow/`. Hold that project's context, its transient work state, and its run artifacts — and nothing the framework already provides. Overlays stack — when working in a nested project, the workspace overlay (e.g., `~/KB/.flow/`) and the project overlay (e.g., `~/KB/repos/path-nexus/.flow/`) merge.
 
-When stacked overlays merge, the more-specific overlay overrides on conflicts. Memory writes always go to the most-specific overlay; reads merge across all stacked levels.
+When stacked overlays merge, the more-specific overlay overrides on conflicts. Memory writes always go to the most-specific overlay; reads merge across all stacked levels. What stacks is context and state; commands, agents, standards, and templates do not, because a project holds none.
 
-Each project overlay defines:
+Each project overlay records, in `PROJECT.md`:
 
 - role providers
-- active standards (subset of the framework's standards library that applies here)
 - source-of-truth order
 - runtime and integration constraints
 
@@ -53,9 +52,11 @@ Not every task needs every phase. Small work should stay small.
 
 ## File model
 
-- `PROJECT.md` - project overlay
-- `standards/` - reusable standards categories
-- `project/` - project-specific content
+A project overlay holds the project's own work and nothing else. Commands,
+agents, standards, and templates come from the user-level install.
+
+- `flow.toml` - the overlay's manifest
+- `PROJECT.md` - project identity and context
 - `memory/STATE.md` - transient work state (what is in flight, blocked, or pending right now)
 - `runs/` - per-work-item artifacts
 
@@ -69,7 +70,7 @@ By default, use:
 
 1. issue tracker or explicitly assigned work item
 2. `.flow/PROJECT.md` (read from every stacked overlay level)
-3. relevant files in `.flow/standards/` and `.flow/project/`
+3. relevant standards and templates, resolved as below
 4. ADRs and code
 5. `.flow/memory/STATE.md` (transient work state — read from every stacked overlay level)
 6. Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (durable project facts and decisions; consult `MEMORY.md` as the index)
@@ -78,11 +79,12 @@ By default, use:
 
 Commands and agents cite standards by name (e.g., `standards/git-commits.md`) and may cite templates similarly (e.g., `templates/spike-template.md`). At runtime, look for these files in **most-specific-wins** order:
 
-1. **Project overlay** — `<repo>/.flow/standards/<name>.md` or `<repo>/.flow/templates/<name>.md`. Only when invoked inside a repo with a `.flow/` overlay; the most-specific overlay walked up from the current directory wins.
-2. **User overlay** — `~/.flow/user/standards/<name>.md` or `~/.flow/user/templates/<name>.md`. Personal customizations that apply in every session.
-3. **Framework default** — `~/.flow/source/scaffolds/default/standards/<name>.md` or `~/.flow/source/scaffolds/default/templates/<name>.md`. The shipped baseline.
+1. **User overlay** — `~/.flow/user/standards/<name>.md` or `~/.flow/user/templates/<name>.md`. Personal customizations that apply in every session.
+2. **Framework default** — `~/.flow/source/scaffolds/default/standards/<name>.md` or `~/.flow/source/scaffolds/default/templates/<name>.md`. The shipped baseline.
 
-Use the Read tool to resolve. If a name is cited and the project overlay or user overlay has its own version, use that and note the resolution in the role's output if the difference matters. Commands, agents, and hooks are merged at sync time (see `merge_user_overlay` in `cli/sync.py`); standards and templates are resolved at runtime by this convention.
+Projects do not hold standards or templates. They used to, and the copies went stale without anyone noticing, because nothing updated them and the difference from the framework's version was invisible from inside the project. A project that needs a different standard puts it in the user overlay, where one copy serves every repo. `flow project audit` reports any project still carrying its own copies.
+
+Use the Read tool to resolve. If a name is cited and the user overlay has its own version, use that and note the resolution in the role's output if the difference matters. Commands, agents, and hooks are merged at sync time (see `merge_user_overlay` in `cli/sync.py`); standards and templates are resolved at runtime by this convention.
 
 ### Committing user-overlay edits
 

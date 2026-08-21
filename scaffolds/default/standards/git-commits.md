@@ -104,7 +104,7 @@ Refs: 676104e, a215868
 
 ## Project Overrides
 
-Projects MAY extend this standard via a project overlay at `<repo>/.flow/standards/git-commits.md`. Projects SHOULD NOT silently weaken it.
+This standard MAY be extended via the user overlay at `~/.flow/user/standards/git-commits.md`. It SHOULD NOT be silently weakened.
 
 Reasonable project additions:
 

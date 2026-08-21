@@ -25,22 +25,16 @@
 ## Sources of truth
 
 1. Ticket / issue tracker
-2. Project standards in `.flow/project/`
+2. This file
 3. ADRs
 4. Code
 5. `.flow/memory/STATE.md` (transient work state — what is in flight, blocked, or pending right now)
 6. Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (durable project facts and decisions)
 
-## Active project standards
-
-- `project/brand.md`
-- `project/domain-model.md`
-- `project/ux-guide.md`
-- `project/copy-guide.md`
-- `project/terminology.md`
-- `project/ui-contract.md`
-
-These project files should augment or tighten the base framework standards with repo-specific rules, domain concepts, design language, and platform constraints.
+Standards and templates are not among them: they come from the user-level
+install, not from this overlay. Record here what is true of *this* project —
+its domain language, its constraints, its conventions — and let the framework
+supply the rest.
 
 ## Workflow notes
 

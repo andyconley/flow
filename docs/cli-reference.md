@@ -35,8 +35,9 @@ Scaffold `repo/.flow` into the current repository.
 
 Behavior:
 
-- copies template files from `scaffolds/default/`
+- creates exactly four paths: `flow.toml`, `PROJECT.md`, `memory/STATE.md`, and `runs/.gitkeep`
 - does not overwrite files that already exist
+- copies no commands, agents, standards, templates, or `FRAMEWORK.md`. Those are framework capability, served by the user-level install; copying them into a repo produced a fork that never updated. A project set up before this change can be reconciled with `flow project migrate`.
 
 Use this when bootstrapping a repo for the first time.
 
@@ -60,12 +61,13 @@ Repair missing files in an existing `repo/.flow`.
 
 Behavior:
 
-- adds missing overlay core files: `flow.toml`, `FRAMEWORK.md`, `PROJECT.md`, `memory/STATE.md`, and `runs/.gitkeep`
+- adds missing overlay core files: `PROJECT.md`, `memory/STATE.md`, and `runs/.gitkeep`
+- recreates `flow.toml` if it is missing — as the short project template, not as a copy of the framework's manifest — and otherwise leaves it alone. The manifest is the project's own state, and the framework scaffold's file of that name is the framework's sync configuration — comparing the two reports an update that is never real.
 - adds missing command, agent, and standard files only when they are registered in `.flow/flow.toml`
 - leaves existing project files untouched when their content differs from the framework
 - reports changed same-name files as update candidates
 - use `flow refresh project --interactive` to choose whether to replace changed files with the framework version
-- use `flow refresh project --all` to backfill the full framework scaffold, including commands, agents, standards, templates, and project starter files
+- `flow refresh project --all` is retired. It backfilled the whole framework scaffold into the project, which is the fork this overlay model removed: the copies never update and the runtime reads the user-level install regardless. It exits 1 and points at `flow project audit`.
 
 Use this to repair an incomplete overlay or restore registered project-local sources without importing framework content that the user-level install already provides.
 
@@ -76,7 +78,6 @@ Validate that the minimum `repo/.flow` structure exists.
 Checks for:
 
 - `flow.toml`
-- `FRAMEWORK.md`
 - `PROJECT.md`
 - `memory/`
 

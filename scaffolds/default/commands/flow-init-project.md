@@ -51,7 +51,6 @@ Conditional roles (invoked when relevant):
    - Role providers (product owner, PM, requirements shaping, implementation, acceptance review) — for solo/personal projects propose "Andy" (or the actual git author) for all roles plus "+ Claude" where applicable; for team projects ask explicitly.
    - Collaboration deviations and tightening — propose based on project type; ask for confirmation.
    - Sources of truth — propose based on inference (issue tracker, ADR location, CLAUDE.md, STATE.md, auto-memory).
-   - Active project standards — propose the subset of `.flow/project/*.md` files that apply to this project type; offer to remove ones that don't.
    - Workflow notes — propose preferred small-change and gated-work paths based on observed work patterns.
    - Runtime and integration notes — propose based on file inspection (Dockerfile, package.json, requirements.txt, .github/workflows/, etc.).
 4. **Write the updated `.flow/PROJECT.md`.** Edit the file in place — don't make the user copy-paste.
@@ -59,9 +58,11 @@ Conditional roles (invoked when relevant):
    - Runtime surfaces come from the user-level install (`flow setup user`) in every supported session. A project does not generate its own; project-level sync was retired.
    - Anything in the `identical` or `orphaned` buckets is a stale copy of a framework file, or a manifest entry naming a file that is gone. Recommend `flow project migrate` — dry run first — and offer to run it.
    - Anything in `differs` is either a real customization or a stale copy, and nothing local can tell which. Say that rather than guessing, and leave it alone.
-6. **Optional follow-up.** Offer to also walk through:
-   - which `.flow/standards/*.md` files to keep vs delete (only override framework defaults where the project actually differs)
-   - which `.flow/project/*.md` overlay files to populate now vs defer
+6. **Optional follow-up.** Offer to also walk through the project's transient
+   work state in `.flow/memory/STATE.md` — what is in flight, blocked, or
+   pending right now. Do not offer to create project standards or project
+   overlay files: an overlay holds no `standards/` or `project/` directory,
+   and standards resolve from the user overlay and the framework default.
 7. **Recommend next steps.** Commit the overlay change. Run `/flow-boot` to verify the overlay is being read correctly.
 
 ## Output Format

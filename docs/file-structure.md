@@ -292,9 +292,9 @@ All of these are generated. To change them, edit the corresponding source:
 | Scope | Source | Generated to | Purpose |
 |---|---|---|---|
 | **User-level** | `scaffolds/default/` (this repo) **plus** `~/.flow/user/` if present | `~/.claude/`, `~/.agents/skills/`, `~/.codex/` | Framework + personal overrides active in every supported runtime session |
-| **Project-level** | `<repo>/.flow/` | `<repo>/.claude/`, `<repo>/.agents/skills/`, `<repo>/.codex/` | Per-project overlay with project-specific role assignments, memory, runs |
+| **Project-level** | `<repo>/.flow/` | nothing | Per-project overlay holding that project's context, transient state, and run artifacts |
 
-User-level and project-level are independent — a single repo can run both, with the project overlay supplying repo-specific context layered on top of the universally-active framework.
+Only user-level generates anything. A project overlay is read, not compiled: it supplies repo-specific context layered on top of the universally-active framework.
 
 ### User overlay layout (`~/.flow/user/`)
 
@@ -312,4 +312,4 @@ The user overlay mirrors `scaffolds/default/`'s shape:
   templates/<name>.md    — overriding or new templates (runtime-resolved)
 ```
 
-Commands, agents, and hooks merge at `flow sync ... --user` time via `merge_user_overlay` — same name = override, new name = addition. Standards and templates aren't merged at sync time; they're resolved at runtime by the order project overlay > user overlay > framework default (see `FRAMEWORK.md` "Overlay resolution for standards and templates"). See `docs/architecture.md` for the full description.
+Commands, agents, and hooks merge at `flow sync ... --user` time via `merge_user_overlay` — same name = override, new name = addition. Standards and templates aren't merged at sync time; they're resolved at runtime by the order user overlay > framework default (see `FRAMEWORK.md` "Overlay resolution for standards and templates"). See `docs/architecture.md` for the full description.

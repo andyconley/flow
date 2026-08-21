@@ -125,7 +125,7 @@ def main() -> int:
     refresh_project_parser.add_argument(
         "--all",
         action="store_true",
-        help="backfill the full framework scaffold, including commands, agents, standards, and templates",
+        help="retired — it restored a full copy of the framework scaffold; exits 1 with a pointer",
     )
     refresh_project_parser.add_argument(
         "--interactive",
@@ -354,7 +354,7 @@ def main() -> int:
     project_parser = sub.add_parser(
         "project",
         help="inspect this repo's `.flow/` overlay against the framework",
-        description="Project-overlay maintenance. `flow setup project` copies the whole framework scaffold into a repo, and those copies never update — so a project carries its own frozen commands, agents, standards, and templates. These subcommands are how you see which of them are the project's own work and which are stale duplicates.",
+        description="Project-overlay maintenance. `flow setup project` used to copy the whole framework scaffold into a repo, and those copies never updated — so a project set up before the scaffold was thinned still carries its own frozen commands, agents, standards, and templates. These subcommands are how you see which of them are the project's own work and which are stale duplicates, and how you remove the duplicates.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Examples:\n  flow project audit\n  flow project audit --json\n",
     )
