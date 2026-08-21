@@ -9555,3 +9555,238 @@ class ProjectManifestDeclarationTests(unittest.TestCase):
         # Control: the walk does find edges when they exist, so an empty
         # `reached` from a broken parser cannot pass this silently.
         self.assertIn("paths", sibling_imports("diagnostics"))
+
+
+class ProjectAuditClassifierTests(unittest.TestCase):
+    """`classify_tree` and friends, against two synthetic trees.
+
+    No subprocess and no fabricated HOME, which is possible only because both
+    roots are parameters. That also defuses the trap this suite invites: with
+    `use_fake_home()` the fake `~/.flow/source` is a symlink to `REPO_ROOT`, so
+    a test that seeds a project file by *copying* it from the real scaffold and
+    then asserts `identical` is comparing a file to itself. It passes against a
+    classifier hardcoded to return `identical`.
+
+    So: nothing here copies, and where two sides must be byte-equal they are
+    written from two separate literals rather than one shared variable. Where a
+    variable *is* shared, one side is mutated — which is what proves the
+    comparison reads both trees rather than one.
+    """
+
+    CAPABILITY_DIRS = ("agents", "commands", "project", "standards", "templates")
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.flow_dir = root / "someproject" / ".flow"
+        self.scaffold_dir = root / "framework" / "scaffolds" / "default"
+        for name in self.CAPABILITY_DIRS:
+            (self.flow_dir / name).mkdir(parents=True)
+            (self.scaffold_dir / name).mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def put(self, root: Path, rel: str, text: str) -> Path:
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        return path
+
+    def in_project(self, rel: str, text: str) -> Path:
+        return self.put(self.flow_dir, rel, text)
+
+    def in_framework(self, rel: str, text: str) -> Path:
+        return self.put(self.scaffold_dir, rel, text)
+
+    def audit(self):
+        return self.project.audit_project(self.flow_dir, self.scaffold_dir)
+
+    def buckets(self) -> dict:
+        return {f.rel: f.bucket for f in self.audit().findings}
+
+    # -- byte comparison ------------------------------------------------
+
+    def test_identical_when_bytes_match(self) -> None:
+        # Two literals, not one variable used twice: a shared variable is
+        # byte-equal by construction and proves nothing about the comparator.
+        self.in_project("standards/testing.md", "# Testing\n\nProve it.\n")
+        self.in_framework("standards/testing.md", "# Testing\n\nProve it.\n")
+        self.assertEqual(self.buckets()["standards/testing.md"], "identical")
+
+    def test_differs_on_a_single_byte(self) -> None:
+        """A trailing newline is the realistic drift. Being falsely lenient here
+        is the direction that gets a real customization deleted later."""
+        body = "# Testing\n\nProve it."
+        self.in_project("standards/testing.md", body)
+        self.in_framework("standards/testing.md", body + "\n")
+        self.assertEqual(self.buckets()["standards/testing.md"], "differs")
+
+    def test_identical_requires_exact_bytes_not_normalized_text(self) -> None:
+        body = "line one\nline two\n"
+        self.in_project("standards/eol.md", body.replace("\n", "\r\n"))
+        self.in_framework("standards/eol.md", body)
+        self.assertEqual(
+            self.buckets()["standards/eol.md"],
+            "differs",
+            "CRLF vs LF must not be normalized away — identical is the bucket a "
+            "later migration deletes",
+        )
+
+    # -- buckets --------------------------------------------------------
+
+    def test_project_only_when_the_framework_has_no_counterpart(self) -> None:
+        self.in_project("standards/house-style.md", "local only\n")
+        self.assertEqual(self.buckets()["standards/house-style.md"], "project-only")
+
+    def test_orphaned_when_the_manifest_declares_an_absent_file(self) -> None:
+        self.in_project(
+            "flow.toml", '[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        finding = next(
+            f for f in self.audit().findings if f.rel == "agents/ghost.md"
+        )
+        self.assertEqual(finding.bucket, "orphaned")
+        self.assertEqual(finding.declared_by, "agents.ghost.source")
+
+    def test_a_declared_file_that_exists_is_never_orphaned(self) -> None:
+        """Existence wins over declaration.
+
+        A classifier that checked "declared?" before "present?" would report a
+        customized file as orphaned, and a later manifest rewrite would drop an
+        entry that resolves perfectly well.
+        """
+        self.in_project(
+            "flow.toml", '[[agents]]\nname = "sre"\nsource = "agents/sre.md"\n'
+        )
+        self.in_project("agents/sre.md", "customized\n")
+        self.in_framework("agents/sre.md", "framework\n")
+        found = [f for f in self.audit().findings if f.rel == "agents/sre.md"]
+        self.assertEqual([f.bucket for f in found], ["differs"])
+
+    def test_conflict_when_the_project_has_a_directory_where_the_framework_has_a_file(
+        self,
+    ) -> None:
+        """Without this branch the byte comparison raises IsADirectoryError and
+        one odd path kills the whole audit."""
+        self.in_framework("FRAMEWORK.md", "the framework file\n")
+        (self.flow_dir / "FRAMEWORK.md").mkdir()
+        self.assertEqual(self.buckets()["FRAMEWORK.md"], "conflict")
+
+    def test_project_stub_is_identical_while_unfilled_and_differs_once_filled(
+        self,
+    ) -> None:
+        """`project/` holds framework-supplied stubs, so the plausible shortcut
+        "project/ is user content, therefore always project-only" is wrong in
+        both directions."""
+        self.in_framework("project/architecture.md", "<describe the architecture>\n")
+        self.in_project("project/architecture.md", "<describe the architecture>\n")
+        self.assertEqual(self.buckets()["project/architecture.md"], "identical")
+
+        self.in_project("project/architecture.md", "It is a modular monolith.\n")
+        self.assertEqual(self.buckets()["project/architecture.md"], "differs")
+
+    def test_bucket_membership_is_not_invariant_under_a_label_swap(self) -> None:
+        """Two members per bucket, and named. A one-per-bucket fixture passes
+        unchanged if two labels are swapped."""
+        for rel in ("standards/a.md", "standards/b.md"):
+            self.in_project(rel, "project side\n")
+            self.in_framework(rel, "framework side\n")
+        for rel in ("standards/c.md", "standards/d.md"):
+            self.in_project(rel, "local only\n")
+
+        buckets = self.buckets()
+        counts = self.audit().counts()
+        self.assertEqual(counts["differs"], 2)
+        self.assertEqual(counts["project-only"], 2)
+        self.assertEqual(buckets["standards/a.md"], "differs")
+        self.assertEqual(buckets["standards/b.md"], "differs")
+        self.assertEqual(buckets["standards/c.md"], "project-only")
+        self.assertEqual(buckets["standards/d.md"], "project-only")
+
+    # -- scope ----------------------------------------------------------
+
+    def test_only_capability_paths_are_walked(self) -> None:
+        """The safety property. A naive walk of `.flow/` passes every other test
+        in this class while silently over-scanning — and what this scanner
+        visits is what a later migration is allowed to delete."""
+        self.in_project("memory/STATE.md", "in flight: something\n")
+        self.in_project("runs/2026-01-01/run.md", "a run artifact\n")
+        self.in_project("PROJECT.md", "the project's own context\n")
+        self.in_project("flow.toml", "# a manifest unlike the framework's\n")
+        self.in_framework("PROJECT.md", "the framework's stub\n")
+        self.in_framework("flow.toml", "# the framework manifest\n")
+        self.in_project("standards/real.md", "scanned\n")
+
+        rels = {f.rel for f in self.audit().findings}
+        self.assertIn("standards/real.md", rels)
+        for excluded in ("memory/STATE.md", "runs/2026-01-01/run.md", "PROJECT.md", "flow.toml"):
+            self.assertNotIn(excluded, rels, f"{excluded} must never be classified")
+
+    def test_flow_toml_is_manifest_input_and_not_a_candidate(self) -> None:
+        """It differs from the framework's copy in every real project, so a
+        scanner that classified it would report a permanent false positive."""
+        self.in_project(
+            "flow.toml", '[[agents]]\nname = "ghost"\nsource = "agents/ghost.md"\n'
+        )
+        self.in_framework("flow.toml", "# entirely different\n")
+        report = self.audit()
+        self.assertNotIn("flow.toml", {f.rel for f in report.findings})
+        self.assertIn("agents/ghost.md", {f.rel for f in report.findings})
+
+    def test_noise_files_are_not_counted(self) -> None:
+        """A stray .DS_Store is harmless but pollutes the count being diffed
+        against a hand audit."""
+        self.in_project("standards/.DS_Store", "\x00\x01")
+        self.in_project("standards/real.md", "counted\n")
+        self.assertEqual(self.audit().scanned(), 1)
+
+    def test_a_project_with_no_capability_directories_reports_nothing(self) -> None:
+        for name in self.CAPABILITY_DIRS:
+            shutil.rmtree(self.flow_dir / name)
+        report = self.audit()
+        self.assertEqual(report.findings, [])
+        self.assertEqual(report.scanned(), 0)
+        self.assertTrue(report.has_baseline, "the framework side is still intact")
+
+    def test_no_framework_baseline_refuses_to_report_buckets(self) -> None:
+        """Otherwise a pruned or half-installed framework makes every project
+        file project-only while the report looks clean."""
+        for name in self.CAPABILITY_DIRS:
+            shutil.rmtree(self.scaffold_dir / name)
+        self.in_project("standards/real.md", "would be misreported\n")
+        report = self.audit()
+        self.assertFalse(report.has_baseline)
+        rendered = self.project.render_audit(report)
+        self.assertIn("no framework baseline", rendered)
+        self.assertNotIn("project-only (", rendered)
+
+    # -- render / payload -----------------------------------------------
+
+    def test_render_carries_the_differs_caveat_with_the_count(self) -> None:
+        """The one literal-string assertion that earns its keep: this count gets
+        pasted into a ticket, and a later migration keys off this label."""
+        self.in_project("standards/x.md", "one\n")
+        self.in_framework("standards/x.md", "two\n")
+        rendered = self.project.render_audit(self.audit())
+        self.assertIn("differs (1)", rendered)
+        self.assertIn("cannot be told apart locally", rendered)
+
+    def test_render_names_what_it_did_not_scan(self) -> None:
+        """Without it, a 71-file .flow reporting 48 scanned reads as a broken
+        scanner rather than a deliberate scope."""
+        rendered = self.project.render_audit(self.audit())
+        for excluded in ("PROJECT.md", "flow.toml", "memory/", "runs/"):
+            self.assertIn(excluded, rendered)
+
+    def test_payload_keeps_roots_out_of_the_findings(self) -> None:
+        """An absolute path inside a finding is how a later `--apply` acts
+        outside the root it was pointed at."""
+        self.in_project("standards/x.md", "one\n")
+        payload = self.project.audit_payload(self.audit())
+        self.assertEqual(payload["flow_dir"], str(self.flow_dir))
+        for finding in payload["findings"]:
+            self.assertEqual(set(finding), {"rel", "bucket", "declared_by"})
+            self.assertFalse(finding["rel"].startswith("/"))
+            self.assertNotIn(str(self.flow_dir), finding["rel"])

@@ -40,11 +40,19 @@ of the dependency matters more than the four lines.
 """
 
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 
 # paths/fsutil/flowtoml only. See the module docstring: the absence of `setup`
 # and `sync` here is a contract, not an accident, and `tests/test_flow.py`
 # asserts it.
+from flowtoml import read_toml
+from paths import (
+    CAPABILITY_DIRS,
+    CAPABILITY_PATHS,
+    RELEASE_EXCLUDE_DIRS,
+    RELEASE_EXCLUDE_FILE_PATTERNS,
+)
 
 
 @dataclass(frozen=True)
@@ -154,3 +162,274 @@ def declared_sources(
             take(standard.get(key), f"standards.{name}.{key}")
 
     return found, rejected
+
+
+# ---------------------------------------------------------------------------
+# Classification
+# ---------------------------------------------------------------------------
+
+BUCKET_IDENTICAL = "identical"
+BUCKET_DIFFERS = "differs"
+BUCKET_PROJECT_ONLY = "project-only"
+BUCKET_ORPHANED = "orphaned"
+BUCKET_CONFLICT = "conflict"
+
+# Render order, and the sort key. Deliberately not alphabetical: the two buckets
+# that need a decision come after the two that do not.
+BUCKET_ORDER = (
+    BUCKET_IDENTICAL,
+    BUCKET_DIFFERS,
+    BUCKET_PROJECT_ONLY,
+    BUCKET_ORPHANED,
+    BUCKET_CONFLICT,
+)
+
+BUCKET_GLOSS = {
+    BUCKET_IDENTICAL: "byte-equal to the framework's copy",
+    # Stated in the output and not only in the docs, because this count is what
+    # gets pasted into a ticket and the caveat has to travel with it. Nothing
+    # local can separate "the framework moved on" from "someone edited this".
+    BUCKET_DIFFERS: "stale or customized — cannot be told apart locally",
+    BUCKET_PROJECT_ONLY: "no framework counterpart",
+    BUCKET_ORPHANED: "declared in flow.toml, absent on disk",
+    BUCKET_CONFLICT: "not a file where the framework has one",
+}
+
+NOT_SCANNED = ("PROJECT.md", "flow.toml", "memory/", "runs/")
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One classified path, keyed relative to the overlay root.
+
+    `declared_by` is set only for orphans, which are the one bucket discovered
+    through the manifest rather than by walking.
+    """
+
+    rel: str
+    bucket: str
+    declared_by: str | None = None
+
+
+@dataclass(frozen=True)
+class AuditReport:
+    """The roots are carried here, once, and nowhere inside a finding.
+
+    `has_baseline` is false when the framework scaffold holds none of the
+    capability directories. Every classification is then wrong in the same
+    direction — everything looks project-only — so callers must refuse to
+    report buckets rather than print a confident zero.
+    """
+
+    flow_dir: str
+    scaffold_dir: str
+    findings: list[Finding]
+    rejected: list[RejectedDeclaration]
+    has_baseline: bool
+
+    def counts(self) -> dict[str, int]:
+        counts = {bucket: 0 for bucket in BUCKET_ORDER}
+        for finding in self.findings:
+            counts[finding.bucket] += 1
+        return counts
+
+    def scanned(self) -> int:
+        """Entries visited on disk. Orphans were never on disk, so they are not
+        part of this total — a scanned count that included them could not be
+        reconciled against a file listing."""
+        return sum(1 for f in self.findings if f.bucket != BUCKET_ORPHANED)
+
+
+def _is_noise(name: str) -> bool:
+    return any(fnmatch(name, pattern) for pattern in RELEASE_EXCLUDE_FILE_PATTERNS)
+
+
+def capability_entries(flow_dir: Path) -> list[tuple[str, bool]]:
+    """Every entry under the capability paths, as `(posix_rel, is_dir)`.
+
+    An allowlist walk, never a denylist over `.flow/`: a directory added to the
+    overlay in some future version is excluded by default rather than swept in.
+    """
+    entries: set[tuple[str, bool]] = set()
+    for name in CAPABILITY_PATHS:
+        top = flow_dir / name
+        if not top.exists():
+            continue
+        entries.add((name, top.is_dir()))
+        if not top.is_dir():
+            continue
+        for child in top.rglob("*"):
+            rel = child.relative_to(flow_dir)
+            if any(part in RELEASE_EXCLUDE_DIRS for part in rel.parts):
+                continue
+            is_dir = child.is_dir()
+            if not is_dir and _is_noise(child.name):
+                continue
+            entries.add((rel.as_posix(), is_dir))
+    return sorted(entries)
+
+
+def classify_tree(flow_dir: Path, scaffold_dir: Path) -> list[Finding]:
+    """Classify a project's capability files against a framework scaffold.
+
+    Both roots are parameters and neither is read from a module global. That is
+    the whole reason this is unit-testable against two temporary directories
+    instead of a subprocess with a fabricated HOME — `_refresh_scaffold_files`
+    in setup.py reads `SCAFFOLD_DIR` directly, and every test of it pays for it.
+
+    Comparison is raw bytes. Anything more forgiving — normalizing line endings,
+    ignoring trailing whitespace — would classify a real edit as `identical`,
+    and `identical` is the bucket a later migration deletes.
+    """
+    findings: list[Finding] = []
+    for rel, is_dir in capability_entries(flow_dir):
+        src = scaffold_dir / rel
+        if is_dir:
+            # A directory where the framework has a file. setup.py already
+            # carries this branch; without it the byte comparison below raises
+            # IsADirectoryError and the whole audit dies on one odd path.
+            if src.is_file():
+                findings.append(Finding(rel, BUCKET_CONFLICT))
+            continue
+        if not src.exists():
+            findings.append(Finding(rel, BUCKET_PROJECT_ONLY))
+        elif not src.is_file():
+            findings.append(Finding(rel, BUCKET_CONFLICT))
+        elif (flow_dir / rel).read_bytes() == src.read_bytes():
+            findings.append(Finding(rel, BUCKET_IDENTICAL))
+        else:
+            findings.append(Finding(rel, BUCKET_DIFFERS))
+    return findings
+
+
+def find_orphans(declarations: list[Declaration], flow_dir: Path) -> list[Finding]:
+    """Declarations naming a file that is not there.
+
+    Existence is checked first and wins: a declared file that *is* present has
+    already been classified by `classify_tree`, and reporting it as orphaned as
+    well would tell a later manifest rewrite to drop an entry that resolves.
+    """
+    orphans = [
+        Finding(d.rel, BUCKET_ORPHANED, d.declared_by)
+        for d in declarations
+        if not (flow_dir / d.rel).exists()
+    ]
+    return sorted(orphans, key=lambda f: (f.rel, f.declared_by or ""))
+
+
+def has_framework_baseline(scaffold_dir: Path) -> bool:
+    return any((scaffold_dir / name).is_dir() for name in CAPABILITY_DIRS)
+
+
+def audit_project(flow_dir: Path, scaffold_dir: Path) -> AuditReport:
+    manifest_path = flow_dir / "flow.toml"
+    manifest = read_toml(manifest_path) if manifest_path.is_file() else {}
+    declarations, rejected = declared_sources(manifest)
+
+    findings = classify_tree(flow_dir, scaffold_dir)
+    findings.extend(find_orphans(declarations, flow_dir))
+    findings.sort(key=lambda f: (BUCKET_ORDER.index(f.bucket), f.rel))
+
+    return AuditReport(
+        flow_dir=str(flow_dir),
+        scaffold_dir=str(scaffold_dir),
+        findings=findings,
+        rejected=rejected,
+        has_baseline=has_framework_baseline(scaffold_dir),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Render
+# ---------------------------------------------------------------------------
+
+
+def audit_payload(report: AuditReport) -> dict:
+    """The machine form. Roots appear once, at the top; findings carry only a
+    relative key, so nothing in the array can be joined against the wrong root."""
+    return {
+        "flow_dir": report.flow_dir,
+        "scaffold_dir": report.scaffold_dir,
+        "has_baseline": report.has_baseline,
+        "scanned": report.scanned(),
+        "counts": report.counts(),
+        "findings": [
+            {"rel": f.rel, "bucket": f.bucket, "declared_by": f.declared_by}
+            for f in report.findings
+        ],
+        "rejected": [
+            {
+                "declared_value": r.declared_value,
+                "declared_by": r.declared_by,
+                "reason": r.reason,
+            }
+            for r in report.rejected
+        ],
+    }
+
+
+def render_audit(report: AuditReport) -> str:
+    """Bucket-major, with the paths listed under every bucket including
+    `identical`.
+
+    Per-file rows with a bucket column would be shorter, but the buckets carry
+    different actions and the counts belong at the section head where a hand
+    audit can be diffed against them. The paths are listed because the list is
+    what a diff actually compares — two audits agreeing on six integers while
+    disagreeing on which files they counted is the failure this format exists
+    to make visible.
+    """
+    lines = [
+        f"project:   {report.flow_dir}",
+        f"framework: {report.scaffold_dir}",
+        "",
+    ]
+
+    if not report.has_baseline:
+        lines.append("no framework baseline: the scaffold holds none of the")
+        lines.append(f"capability directories ({', '.join(CAPABILITY_DIRS)}).")
+        lines.append("")
+        lines.append(
+            "Every file would classify as project-only, which would be wrong "
+            "rather than clean."
+        )
+        lines.append("Nothing is reported. Check the framework install first.")
+        return "\n".join(lines)
+
+    counts = report.counts()
+    scanned = report.scanned()
+    lines.append(
+        f"scanned {scanned} entr{'y' if scanned == 1 else 'ies'} under: "
+        f"{', '.join(CAPABILITY_PATHS)}"
+    )
+    lines.append(
+        f"not scanned: {', '.join(NOT_SCANNED)} — project state, never framework "
+        f"capability"
+    )
+    lines.append("this command only reads; it never writes, moves, or deletes.")
+
+    for bucket in BUCKET_ORDER:
+        members = [f for f in report.findings if f.bucket == bucket]
+        lines.append("")
+        lines.append(f"{bucket} ({counts[bucket]}) — {BUCKET_GLOSS[bucket]}")
+        if not members:
+            lines.append("  (none)")
+            continue
+        for finding in members:
+            suffix = (
+                f"   [declared by {finding.declared_by}]" if finding.declared_by else ""
+            )
+            lines.append(f"  {finding.rel}{suffix}")
+
+    if report.rejected:
+        lines.append("")
+        lines.append(
+            f"unusable declarations ({len(report.rejected)}) — flow.toml names a "
+            f"source outside the overlay"
+        )
+        for record in report.rejected:
+            lines.append(
+                f"  {record.declared_value}   [{record.declared_by}: {record.reason}]"
+            )
+
+    return "\n".join(lines)
