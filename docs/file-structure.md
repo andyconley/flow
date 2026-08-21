@@ -312,4 +312,4 @@ The user overlay mirrors `scaffolds/default/`'s shape:
   templates/<name>.md    — overriding or new templates (runtime-resolved)
 ```
 
-Commands, agents, and hooks merge at `flow sync ... --user` time via `merge_user_overlay` — same name = override, new name = addition. Standards and templates aren't merged at sync time; they're resolved at runtime by the order user overlay > framework default (see `FRAMEWORK.md` "Overlay resolution for standards and templates"). See `docs/architecture.md` for the full description.
+Commands, agents, and hooks merge at `flow sync ... --user` time via `merge_user_overlay` — same name = override, new name = addition. Standards and templates aren't merged at sync time; they're resolved at runtime by the order project `[[replaces]]` wiring > user overlay > framework default (see `FRAMEWORK.md` "Overlay resolution for standards and templates"). See `docs/architecture.md` for the full description.
