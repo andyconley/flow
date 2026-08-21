@@ -98,21 +98,35 @@ def _site(prefix: str, entry: dict, index: int, key: str) -> str:
     return f"{prefix}.{label}.{key}"
 
 
-def _classify_declaration(
-    raw: str, declared_by: str
-) -> Declaration | RejectedDeclaration:
+def reject_relative(raw: str) -> str | None:
+    """`None` if `raw` is safe to join against a root; else why it is not.
+
+    Root-agnostic on purpose. The same three hazards apply whichever root a
+    caller is about to join against — the project overlay for a declared
+    source, the user overlay for a `[[replaces]]` target — and a second copy
+    of this reasoning is a second place for it to drift.
+    """
     rel = Path(raw)
     if rel.is_absolute():
-        return RejectedDeclaration(raw, declared_by, "absolute path")
+        return "absolute path"
     if ".." in rel.parts:
-        return RejectedDeclaration(raw, declared_by, "escapes the overlay via ..")
+        return "escapes the overlay via .."
     if rel.parts and rel.parts[0].startswith("~"):
         # pathlib does not expand `~`, so this is not absolute and carries no
         # `..` — it passes both guards above and lands as an ordinary relative
         # key. Harmless until one consumer calls expanduser, at which point it
         # is an absolute path that was never checked.
-        return RejectedDeclaration(raw, declared_by, "home-relative path")
-    return Declaration(rel.as_posix(), declared_by)
+        return "home-relative path"
+    return None
+
+
+def _classify_declaration(
+    raw: str, declared_by: str
+) -> Declaration | RejectedDeclaration:
+    reason = reject_relative(raw)
+    if reason is not None:
+        return RejectedDeclaration(raw, declared_by, reason)
+    return Declaration(Path(raw).as_posix(), declared_by)
 
 
 def declared_sources(
