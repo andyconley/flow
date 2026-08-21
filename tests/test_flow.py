@@ -9983,6 +9983,98 @@ class DoctorReplacesReportTests(FlowCliHarness):
         self.assertNotIn("PROJECT.md:", section)
 
 
+class DoctorDriftReportTests(FlowCliHarness):
+    """`flow doctor`'s two overlay counts.
+
+    The counts are asserted against hand-written integer literals rather than
+    against a re-import of `report.counts()`, because re-deriving the number
+    the same way the implementation does passes whenever the arithmetic
+    matches itself instead of matching the classifier.
+    """
+
+    def _project_section(self, stdout: str) -> str:
+        start = stdout.find("-- project:")
+        self.assertNotEqual(start, -1, f"no project section in:\n{stdout}")
+        end = stdout.find("-- usage:", start)
+        return stdout[start:end if end != -1 else len(stdout)]
+
+    def _section(self) -> str:
+        return self._project_section(self.run_flow("doctor").stdout)
+
+    def test_a_drifted_only_overlay_is_not_reported_clean(self) -> None:
+        """The live case: hypr carried 18 drifted files and read `clean`."""
+        self.use_fake_home()
+        self.setup_legacy_project()
+        # Migrate away everything removable, leaving drift as the only finding.
+        self.run_flow("project", "migrate", "--apply", "--yes")
+        target = self.repo / ".flow" / "standards" / "testing.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("a standard, but not the framework's\n")
+
+        section = self._section()
+
+        self.assertIn("overlay:          clean", section)
+        self.assertIn("drifted:          1 framework file(s)", section)
+
+    def test_the_drifted_count_is_not_summed_into_the_overlay_count(self) -> None:
+        """Summing would make the number unclearable by `flow project
+        migrate`, which is the command the overlay line names.
+
+        Asserted on an overlay whose only finding is drift, so the two
+        readings differ maximally: `clean` if the counts stay separate, a
+        nonzero framework-copy count if they are summed. On a mixed overlay
+        both readings print a large number and the test would not bite.
+        """
+        self.use_fake_home()
+        self.setup_legacy_project()
+        self.run_flow("project", "migrate", "--apply", "--yes")
+        target = self.repo / ".flow" / "standards" / "testing.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("a standard, but not the framework's\n")
+
+        section = self._section()
+
+        overlay = [l for l in section.splitlines() if l.startswith("overlay:")][0]
+        drifted = [l for l in section.splitlines() if l.startswith("drifted:")][0]
+        self.assertIn("clean", overlay)
+        self.assertNotIn("framework copy", overlay)
+        self.assertIn("1 framework file(s)", drifted)
+
+    def test_an_overlay_with_no_drift_prints_no_drifted_line(self) -> None:
+        self.use_fake_home()
+        self.setup_legacy_project()
+
+        self.assertNotIn("drifted:", self._section())
+
+    def test_a_project_only_file_is_in_neither_count(self) -> None:
+        """It is the project's own content, not framework carryover. Folding
+        it in would make doctor cry wolf about files it should never mention."""
+        self.use_fake_home()
+        self.setup_legacy_project()
+        self.run_flow("project", "migrate", "--apply", "--yes")
+        house = self.repo / ".flow" / "standards" / "house.md"
+        house.parent.mkdir(parents=True, exist_ok=True)
+        house.write_text("ours\n")
+
+        section = self._section()
+
+        self.assertIn("overlay:          clean", section)
+        self.assertNotIn("drifted:", section)
+
+    def test_the_drifted_line_says_the_two_causes_cannot_be_separated(self) -> None:
+        """The caveat travels with the count, because the count is what gets
+        pasted into a ticket."""
+        self.use_fake_home()
+        self.setup_legacy_project()
+        target = self.repo / ".flow" / "standards" / "testing.md"
+        target.write_text(target.read_text() + "\nlocal edit\n")
+
+        section = self._section()
+
+        self.assertIn("customized or stale", section)
+        self.assertIn("flow project audit", section)
+
+
 class ProjectReplacesParseTests(unittest.TestCase):
     """`declared_replaces` — pure parsing of the `[[replaces]]` table."""
 
@@ -11546,8 +11638,146 @@ class ProjectMigrateApplyTests(FlowCliHarness):
 
         second = self.apply()
         self.assert_ok(second)
-        self.assertIn("nothing to migrate", second.stdout)
+        # "nothing removable" rather than "nothing to migrate": this fixture
+        # still holds a drifted file, and the headline no longer claims there
+        # is nothing here when the body is about to list something.
+        self.assertIn("nothing removable", second.stdout)
         self.assertEqual(self.tree(), after_first)
+
+    # -- --drifted, the opt-in destructive path -------------------------
+
+    def test_drifted_is_never_removed_without_the_flag(self) -> None:
+        """The default must stay what it has always been."""
+        _home, custom, _local = self.seeded()
+        before = custom.read_bytes()
+        self.assert_ok(self.apply())
+        self.assertTrue(custom.is_file())
+        self.assertEqual(custom.read_bytes(), before)
+
+    def test_without_the_flag_a_drifted_file_keeps_its_declaration(self) -> None:
+        """The file surviving is not enough. Widening the declaration-removal
+        set to all drifted files would strip the manifest entry while leaving
+        the file, which is the same inconsistency from the other side."""
+        self.seeded()
+        # A drifted file that is actually declared. The seeded fixture's
+        # customization is `standards/testing.md`, which no manifest entry
+        # names, so it cannot exercise the declaration path at all.
+        declared = self.repo / ".flow" / "agents" / "architect.md"
+        declared.write_text(declared.read_text() + "\nlocal edit\n")
+
+        self.assert_ok(self.apply())
+
+        manifest = (self.repo / ".flow" / "flow.toml").read_text()
+        self.assertTrue(declared.is_file())
+        self.assertIn("agents/architect.md", manifest)
+
+    def test_drifted_removes_the_differs_bucket_and_nothing_else(self) -> None:
+        """Three independent filesystem facts, not one assertion about the
+        plan's own delete list — a plan that agrees with itself proves
+        nothing."""
+        _home, custom, local = self.seeded()
+        identical = self.repo / ".flow" / "standards" / "architecture.md"
+        self.assertTrue(identical.is_file())
+
+        self.assert_ok(self.apply("--drifted"))
+
+        self.assertFalse(custom.exists(), "drifted file should be gone")
+        self.assertFalse(identical.exists(), "identical file should still go")
+        self.assertTrue(local.is_file(), "project-only file must survive")
+
+    def test_drifted_deletion_is_backed_up_before_removal(self) -> None:
+        """Bytes, not a count and not a log line. A count can be right while
+        the wrong file was copied, and the backup is the only copy left."""
+        home, custom, _local = self.seeded()
+        original = custom.read_bytes()
+        rel = custom.relative_to(self.repo)
+
+        self.assert_ok(self.apply("--drifted"))
+
+        backups = sorted((home / ".flow" / "backups").iterdir())
+        self.assertEqual(len(backups), 1, f"expected one backup, got {backups}")
+        saved = backups[0] / "files" / rel
+        self.assertTrue(saved.is_file(), f"{rel} missing from the backup")
+        self.assertEqual(saved.read_bytes(), original)
+
+    def test_bare_drifted_lists_and_changes_nothing(self) -> None:
+        """List-then-confirm: the list has to be receivable without consenting
+        to anything."""
+        _home, custom, _local = self.seeded()
+        before = self.tree()
+
+        result = self.migrate("--drifted")
+
+        self.assert_ok(result)
+        self.assertIn("standards/testing.md", result.stdout)
+        self.assertEqual(self.tree(), before)
+        self.assertTrue(custom.is_file())
+
+    def test_drifted_still_requires_yes(self) -> None:
+        """The new destructive path gets the existing consent gate, not a
+        weaker one of its own."""
+        _home, custom, _local = self.seeded()
+        before = self.tree()
+
+        result = self.migrate("--drifted", "--apply")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.tree(), before)
+        self.assertTrue(custom.is_file())
+
+    def test_drifted_names_the_loss_before_asking_for_consent(self) -> None:
+        self.seeded()
+        result = self.migrate("--drifted")
+        self.assertIn("DIFFER", result.stdout)
+        # The destination, not just the word "backup" — that appears in the
+        # warning prose regardless, so asserting it proved nothing.
+        self.assertIn("a backup is taken first, under", result.stdout)
+        self.assertIn("/backups", result.stdout)
+
+    def test_a_drifted_file_is_listed_once_not_twice(self) -> None:
+        """A path appearing under both "would remove" and "never removed by
+        this command" makes the output useless as a consent surface."""
+        self.seeded()
+        for extra in ((), ("--drifted",)):
+            with self.subTest(extra=extra):
+                out = self.migrate(*extra).stdout
+                self.assertEqual(out.count("standards/testing.md"), 1, out)
+
+    def test_a_drifted_file_whose_declaration_cannot_be_found_is_refused(self) -> None:
+        """The unrecoverable case.
+
+        For a framework copy an unresolved declaring site is survivable: the
+        file is byte-identical to the scaffold's and can be fetched back. A
+        drifted file cannot be. Removing it while its declaration stays would
+        leave the manifest naming a customization that exists nowhere but the
+        backup, so it is refused individually and the run continues.
+
+        The site is made unresolvable by declaring the same name twice, which
+        the text locator refuses to disambiguate rather than guess at.
+        """
+        _home, custom, _local = self.seeded()
+        (self.repo / ".flow" / "flow.toml").write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            '[[agents]]\nname = "dup"\nsource = "standards/testing.md"\n'
+            '[[agents]]\nname = "dup"\nsource = "standards/testing.md"\n'
+        )
+
+        result = self.apply("--drifted")
+
+        self.assertTrue(custom.is_file(), "refused file must survive")
+        self.assertIn("refused", result.stdout)
+        self.assertIn("standards/testing.md", result.stdout)
+
+    def test_drifted_with_an_empty_bucket_is_still_a_clean_no_op(self) -> None:
+        self.use_fake_home()
+        self.setup_legacy_project()
+        self.assert_ok(self.apply())
+        before = self.tree()
+
+        second = self.apply("--drifted")
+
+        self.assert_ok(second)
+        self.assertEqual(self.tree(), before)
 
     def test_the_manifest_and_the_files_it_names_agree_afterwards(self) -> None:
         """The prove-it test, restated as a state fact.

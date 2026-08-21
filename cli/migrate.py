@@ -49,6 +49,7 @@ from fsutil import (
 )
 from paths import CAPABILITY_DIRS, FLOW_HOME, FLOW_HOME as _FLOW_HOME, SCAFFOLD_DIR
 from project import (
+    BUCKET_DIFFERS,
     BUCKET_IDENTICAL,
     audit_project,
     declared_sources,
@@ -115,10 +116,31 @@ class MigrationPlan:
     # remove, which an is_noop that only looked at `delete` called "nothing".
     adapters: list[str] = field(default_factory=list)
     settings_files: list[str] = field(default_factory=list)
+    # Always populated from the `differs` bucket, whether or not they are
+    # being removed, so the dry run can name them and point at the flag
+    # without computing the same list twice.
+    drifted: list[str] = field(default_factory=list)
+    remove_drifted: bool = False
+    # Drifted files whose declaring site could not be located in the manifest.
+    # Refused rather than removed: an unresolved site leaves the manifest
+    # pointing at a file that is gone, and unlike a framework copy a drifted
+    # file cannot be re-fetched from the scaffold. The backup would be the
+    # only copy left.
+    drifted_blocked: list[str] = field(default_factory=list)
+
+    def drifted_removals(self) -> list[str]:
+        if not self.remove_drifted:
+            return []
+        blocked = set(self.drifted_blocked)
+        return [rel for rel in self.drifted if rel not in blocked]
 
     def is_noop(self) -> bool:
         return not (
-            self.delete or self.manifest_edits or self.adapters or self.settings_files
+            self.delete
+            or self.manifest_edits
+            or self.adapters
+            or self.settings_files
+            or self.drifted_removals()
         )
 
 
@@ -313,12 +335,19 @@ def unremoved_sites(text: str, edits: list[ManifestEdit]) -> list[str]:
     return sorted({e.site for e in edits}.intersection(remaining))
 
 
-def plan_migration(flow_dir: Path, scaffold_dir: Path) -> MigrationPlan:
+def plan_migration(
+    flow_dir: Path, scaffold_dir: Path, remove_drifted: bool = False
+) -> MigrationPlan:
     """What migration would do, derived fresh from a new audit every time."""
     report = audit_project(flow_dir, scaffold_dir)
 
     delete = sorted(f.rel for f in report.findings if f.bucket == BUCKET_IDENTICAL)
-    delete_set = set(delete)
+    drifted = sorted(f.rel for f in report.findings if f.bucket == BUCKET_DIFFERS)
+    # Kept separate from `delete` on purpose. `render_plan` labels that list
+    # "framework copy(ies)", which a drifted file is not, and the two carry
+    # different risk: removing an identical file is provably lossless,
+    # removing a drifted one may destroy the only copy.
+    delete_set = set(delete) | (set(drifted) if remove_drifted else set())
 
     manifest_path = flow_dir / "flow.toml"
     manifest = read_toml(manifest_path) if manifest_path.is_file() else {}
@@ -364,6 +393,24 @@ def plan_migration(flow_dir: Path, scaffold_dir: Path) -> MigrationPlan:
     elif sites:
         unresolved = sorted(set(sites))
 
+    # An unresolved site is tolerable for a framework copy: the file is
+    # byte-identical to the scaffold's and can be fetched back. For a drifted
+    # file it means the manifest would point at a customization that is gone
+    # and reconstructible from nothing but the backup. Refuse those
+    # individually rather than aborting the run, so the removable ones still
+    # go.
+    drifted_blocked: list[str] = []
+    if remove_drifted and unresolved:
+        unresolved_set = set(unresolved)
+        by_rel: dict[str, set[str]] = {}
+        for d in declarations:
+            by_rel.setdefault(d.rel, set()).add(d.declared_by)
+        drifted_blocked = sorted(
+            rel
+            for rel in drifted
+            if by_rel.get(rel, set()) & unresolved_set
+        )
+
     return MigrationPlan(
         flow_dir=flow_dir,
         scaffold_dir=scaffold_dir,
@@ -371,6 +418,9 @@ def plan_migration(flow_dir: Path, scaffold_dir: Path) -> MigrationPlan:
         manifest_edits=edits,
         unresolved_sites=unresolved,
         kept=kept,
+        drifted=drifted,
+        remove_drifted=remove_drifted,
+        drifted_blocked=drifted_blocked,
         symlinks=list(report.symlinks),
         adapters=adapters,
         settings_files=settings_files,
@@ -400,11 +450,22 @@ def render_plan(plan: MigrationPlan, *, applied: bool = False) -> str:
     ]
 
     if plan.is_noop():
-        lines.append(
-            "nothing to migrate: no framework copies, no stale declarations, "
-            "no generated adapters"
-        )
+        # The headline has to survive its own body. A drifted-only overlay
+        # used to print "nothing to migrate" directly above a list of the
+        # files it was declining to migrate, and a reader who stopped at the
+        # first line got the wrong answer.
+        if plan.drifted:
+            lines.append(
+                "nothing removable: no framework copies, no stale declarations, "
+                "no generated adapters"
+            )
+        else:
+            lines.append(
+                "nothing to migrate: no framework copies, no stale declarations, "
+                "no generated adapters"
+            )
         _append_unresolved(lines, plan)
+        _append_drifted(lines, plan, applied)
         if plan.kept or plan.symlinks:
             lines.append("")
         _append_kept(lines, plan)
@@ -445,12 +506,21 @@ def render_plan(plan: MigrationPlan, *, applied: bool = False) -> str:
             lines.append(f"  {rel}")
 
     _append_unresolved(lines, plan)
+    _append_drifted(lines, plan, applied)
     _append_kept(lines, plan)
 
     lines.append("")
     if applied:
         lines.append("done.")
     else:
+        # The backup destination belongs in the consent surface, not only in
+        # the report afterwards. Once a drifted file can be removed and
+        # nothing restores anything from the scaffold, this is the only route
+        # back, and it has to be visible before the decision rather than
+        # after it.
+        if plan.delete or plan.drifted_removals():
+            lines.append(f"a backup is taken first, under {BACKUPS_DIR}/")
+            lines.append("")
         lines.append("dry run — nothing was changed.")
     return "\n".join(lines)
 
@@ -467,12 +537,62 @@ def _append_unresolved(lines: list[str], plan: MigrationPlan) -> None:
         lines.append(f"  {site}")
 
 
+def _append_drifted(lines: list[str], plan: MigrationPlan, applied: bool) -> None:
+    """The drifted block, in whichever of its two shapes applies.
+
+    Kept out of `_append_kept` and out of the "framework copy(ies)" list: a
+    file must never appear in both the removal paragraph and the paragraph
+    headed "never removed by this command", or the output stops functioning
+    as a consent surface.
+    """
+    if not plan.drifted:
+        return
+    removals = plan.drifted_removals()
+    lines.append("")
+    if not plan.remove_drifted:
+        lines.append(
+            f"{len(plan.drifted)} file(s) differ from the framework and are left alone"
+        )
+        for rel in plan.drifted:
+            lines.append(f"  {rel}")
+        lines.append("")
+        lines.append("  customized or stale — nothing local can tell which, so none")
+        lines.append("  of these is provably safe to remove. To remove them anyway,")
+        lines.append("  re-run with --drifted after reading the list.")
+        return
+
+    verb = "removed" if applied else "would remove"
+    lines.append(f"{verb} {len(removals)} drifted file(s) from .flow/")
+    for rel in removals:
+        lines.append(f"  {rel}")
+    lines.append("")
+    lines.append("  these DIFFER from the framework. Any one of them may be a")
+    lines.append("  customization, and the backup is the only copy afterwards.")
+    if plan.drifted_blocked:
+        lines.append("")
+        lines.append(
+            f"  refused ({len(plan.drifted_blocked)}) — declaring site not found in "
+            f"flow.toml,"
+        )
+        lines.append("  so removing the file would leave the manifest pointing at it")
+        for rel in plan.drifted_blocked:
+            lines.append(f"    {rel}")
+
+
 def _append_kept(lines: list[str], plan: MigrationPlan) -> None:
-    if not plan.kept and not plan.symlinks:
+    # Drifted files always get their own block, in one of its two shapes, so
+    # they never belong here as well. Listing the same path under two headings
+    # is what stops the output working as a consent surface.
+    kept = {
+        bucket: members
+        for bucket, members in plan.kept.items()
+        if bucket != "differs"
+    }
+    if not kept and not plan.symlinks:
         return
     lines.append("")
     lines.append("left alone, and never removed by this command:")
-    for bucket, members in plan.kept.items():
+    for bucket, members in kept.items():
         lines.append(f"  {bucket} ({len(members)})")
         for rel in members:
             lines.append(f"    {rel}")
@@ -487,6 +607,12 @@ def plan_payload(plan: MigrationPlan) -> dict:
         "flow_dir": str(plan.flow_dir),
         "scaffold_dir": str(plan.scaffold_dir),
         "delete": list(plan.delete),
+        # Additive. `kept["differs"]` stays populated in both modes, so a
+        # consumer reading it keeps getting the right answer rather than an
+        # empty list that reads as "no drifted files".
+        "drifted": list(plan.drifted),
+        "remove_drifted": plan.remove_drifted,
+        "drifted_blocked": list(plan.drifted_blocked),
         "manifest_edits": [
             {"site": e.site, "kind": e.kind, "start": e.start, "end": e.end}
             for e in plan.manifest_edits
@@ -597,7 +723,8 @@ def cmd_migrate(args) -> int:
         print("as safe to remove. Refusing. Check the framework install first.")
         return 1
 
-    plan = plan_migration(flow_dir, scaffold_dir)
+    remove_drifted = getattr(args, "drifted", False)
+    plan = plan_migration(flow_dir, scaffold_dir, remove_drifted=remove_drifted)
     apply = getattr(args, "apply", False)
 
     if apply and not getattr(args, "yes", False):
@@ -693,6 +820,9 @@ def backup_set(
     partial one is worse than none because it looks like a route.
     """
     paths = {flow_dir / rel for rel in plan.delete}
+    # The one class that cannot be reconstructed from the scaffold must not be
+    # the one class left unbacked.
+    paths.update(flow_dir / rel for rel in plan.drifted_removals())
     if plan.manifest_edits:
         paths.add(flow_dir / "flow.toml")
     for info in runtimes.values():
@@ -854,8 +984,9 @@ def apply_migration(
         write_atomic(manifest_path, edited)
         result["manifest_edits"] = len(plan.manifest_edits)
 
-    # 5 — the framework copies themselves.
-    for rel in plan.delete:
+    # 5 — the framework copies themselves, and any drifted files the run
+    # explicitly opted into removing.
+    for rel in list(plan.delete) + plan.drifted_removals():
         path = flow_dir / rel
         if path.is_file():
             path.unlink()

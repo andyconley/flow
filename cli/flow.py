@@ -375,6 +375,7 @@ def main() -> int:
     project_migrate_parser.add_argument("--json", action="store_true", help="emit the plan as JSON instead of the rendered report")
     project_migrate_parser.add_argument("--root", metavar="PATH", help="migrate this `.flow` directory instead of the enclosing repo's")
     project_migrate_parser.add_argument("--scaffold", metavar="PATH", help="compare against this framework scaffold instead of the installed one")
+    project_migrate_parser.add_argument("--drifted", action="store_true", help="also remove files that differ from the framework; on its own it lists them and exits")
     project_migrate_parser.add_argument("--apply", action="store_true", help="actually remove them; requires --yes")
     project_migrate_parser.add_argument("--yes", action="store_true", help="confirm a destructive --apply run (no interactive prompt exists)")
     project_migrate_parser.add_argument("--at", help="UTC stamp for the backup directory name; defaults to now")

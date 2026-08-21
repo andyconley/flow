@@ -100,7 +100,9 @@ Current sections:
 - **machine** — Python, flow home, source path, scaffold availability, config, launcher
 - **install** — install mode (develop or release), version (release only), source target (develop only), installed_at timestamp
 - **user-level** — Claude/Codex sync state and drift for `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`
-- **project** — repo `.flow/` presence, manifest, whether the overlay still carries framework copies, each `[[replaces]]` wiring's status, and whether `PROJECT.md` still lists the retired project-standards section
+- **project** — repo `.flow/` presence, manifest, whether the overlay still carries framework copies, how many of its files have drifted from the framework, each `[[replaces]]` wiring's status, and whether `PROJECT.md` still lists the retired project-standards section
+
+The overlay count and the drift count are reported **separately and never summed**. `overlay:` counts what `flow project migrate` removes by default and can therefore drive to zero, which is what lets that line name that command. `drifted:` counts files that differ from the framework, which is not clearable the same way — removing one is opt-in and may destroy a customization. Summed, the number would name a remedy that cannot reach it, and doctor would report a permanent fault where there is none. A drifted overlay with nothing removable reads `overlay: clean` alongside a `drifted:` line, and both are true.
 
 The `replaces:` block appears only when the project declares wirings. Each is reported as `ok` (the replacement resolves in your user overlay), `absent` (it does not resolve *on this machine* — a wiring names a path under `~/.flow/user/` that a teammate may not have, so this is a gap in your overlay rather than a fault in the project), `unknown` (the `default` names no framework file, so the wiring can never match), or `invalid` (the entry did not validate). None of them change doctor's exit code.
 
@@ -560,10 +562,15 @@ Flags:
 - `--json` — the plan instead of the rendered report
 - `--root PATH` — migrate this `.flow` directory instead of the enclosing repo's
 - `--scaffold PATH` — compare against this framework scaffold instead of the installed one
+- `--drifted` — also remove files that differ from the framework; on its own it lists them and exits
 
 Two things are removed: byte-identical copies of framework files under `.flow/`, and the `flow.toml` declarations that name a source which is gone or about to be.
 
-**Only `identical` is ever removed.** A file in the `differs` bucket is either a real customization or a stale copy of a framework file that has since moved on, and nothing on this machine can tell which — so it is reported and left, permanently. Migration is not the place that resolves that ambiguity; nothing is.
+**Only `identical` is removed by default.** A file in the `differs` bucket is either a real customization or a stale copy of a framework file that has since moved on, and nothing on this machine can tell which — so it is reported and left.
+
+**`--drifted` is the exit from that state, and it is list-then-confirm.** On its own the flag prints the drifted files and exits 0 without touching anything; only `--drifted --apply --yes` removes them. That shape is deliberate: deletion elsewhere in this command is confined to hash-provable redundancy, and these files are the one bucket where no proof exists. Receiving the list is not the same as consenting to it, so the two are separate invocations.
+
+**A drifted file whose declaring site cannot be located is refused, individually.** For a framework copy an unresolved site is survivable — the file is byte-identical to the scaffold's and can be fetched back. A drifted file cannot be. Removing it while its declaration stays would leave the manifest naming something that exists nowhere but the backup, so it is skipped and named while the rest of the run proceeds.
 
 **The manifest is edited as text, not parsed and rewritten.** There is no TOML writer in this codebase, and the fallback parser drops comments and formatting. Each declaration is located in the manifest's own bytes by the dotted site the audit recorded, its line range is cut, and everything else survives byte-for-byte. A declaration that cannot be located is reported and left in place rather than guessed at.
 
@@ -571,7 +578,7 @@ Two things are removed: byte-identical copies of framework files under `.flow/`,
 
 **One source is often declared twice.** Every framework command appears under both `[[claude.commands]]` and `[[codex.commands]]`. Removing one and leaving the other is a dangling declaration, so the audit records every declaring site and migration removes all of them.
 
-**The dry-run output is the whole informed-consent surface.** There is no interactive confirmation, so it prints the exact files, the exact declarations, and an explicit list of what is being left alone — `differs`, `project-only`, `conflict`, `unreadable`, and skipped symlinks — so "my customization is not in the removal list" is a conclusion you can reach rather than assume.
+**The dry-run output is the whole informed-consent surface.** There is no interactive confirmation, so it prints the exact files, the exact declarations, an explicit list of what is being left alone — `project-only`, `conflict`, `unreadable`, and skipped symlinks — and the backup destination, before the decision rather than after it. Drifted files get their own block in one of two shapes and never appear in both the removal list and the left-alone list; a path under two headings is what stops the output functioning as a consent surface.
 
 **`--scaffold` may not name the project's own tree.** Compared against itself every file is byte-equal, so the whole `differs` bucket — the files this command exists to protect — reclassifies as `identical`, and `project-only` files go the same way. The refusal tests resolved containment in both directions, not equality, because a subdirectory of the overlay is still the project's own tree. It fires at planning time, so the dry run and `--json` cannot describe a plan the command would decline to run. Any other scaffold is still accepted; the override exists for a reason.
 
