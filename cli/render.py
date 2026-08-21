@@ -162,7 +162,11 @@ def manifest_ref_for() -> str:
 
 
 def render_codex_skill(
-    name: str, description: str, source_path: str, body: str, routing_hints: str = ""
+    name: str,
+    description: str,
+    source_ref: str,
+    body: str,
+    routing_hints: str = "",
 ) -> str:
     lines = [
         "---",
@@ -170,7 +174,7 @@ def render_codex_skill(
         f"description: {json.dumps(description)}",
         "---",
         "",
-        f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and rerun `flow sync codex`. -->",
+        f"<!-- {GENERATED_MARKER} Edit `{source_ref}` and rerun `flow sync codex --user`. -->",
         "",
         body.rstrip(),
         "",
@@ -273,18 +277,18 @@ def render_skill_from_command(
     return "\n".join(lines)
 
 
-def render_claude_agent(source_path: str, body: str, policy: dict) -> str:
+def render_claude_agent(source_ref: str, body: str, policy: dict) -> str:
     frontmatter, content = parse_frontmatter(body)
     for key, value in policy.items():
         if value:
             frontmatter[key] = value
-    marker = f"<!-- {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync claude`. -->"
+    marker = f"<!-- {GENERATED_MARKER} Edit `{source_ref}` and run `flow sync claude --user`. -->"
     lines = render_yaml_frontmatter(frontmatter)
     lines.extend(["", marker, "", content.rstrip(), ""])
     return "\n".join(lines)
 
 
-def render_codex_agent(name: str, source_path: str, body: str, policy: dict) -> str:
+def render_codex_agent(name: str, source_ref: str, body: str, policy: dict) -> str:
     frontmatter, content = parse_frontmatter(body)
     description = str(frontmatter.get("description", f"Flow agent: {name}"))
     safe_body = content.rstrip().replace('"""', '""\\"')
@@ -302,7 +306,7 @@ def render_codex_agent(name: str, source_path: str, body: str, policy: dict) -> 
     lines.extend(
         [
             "",
-            f"# {GENERATED_MARKER} Edit `.flow/{source_path}` and run `flow sync codex`.",
+            f"# {GENERATED_MARKER} Edit `{source_ref}` and run `flow sync codex --user`.",
             "",
         ]
     )

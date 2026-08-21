@@ -88,6 +88,14 @@ def write_atomic(path: Path, content: str, *, mode: int | None = None) -> None:
     rather than swallowed. A caller that believes a write succeeded is how a
     migration deletes the files a manifest was supposed to stop naming.
     """
+    # Written through, not over: `.claude/settings.json` is commonly a symlink
+    # into a dotfiles repo, and `os.replace` onto the link would break it —
+    # leaving the real file untouched, which for the migration means flow's
+    # handlers survive pointing at scripts the next step deletes. Resolving
+    # also puts the temp file on the target's own filesystem, which is what
+    # makes the rename atomic.
+    if path.is_symlink():
+        path = Path(os.path.realpath(path))
     ensure_dir(path.parent)
     if mode is None:
         mode = (path.stat().st_mode & 0o7777) if path.exists() else 0o644

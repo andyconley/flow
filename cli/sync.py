@@ -51,12 +51,38 @@ from render import (
 )
 
 
+def _contained(root: Path, raw: str) -> Path | None:
+    """Join a managed-manifest path against the root, or refuse it.
+
+    `root / raw` is not safe on its own: pathlib discards the left operand when
+    the right is absolute, so a manifest entry of `/etc/passwd` yields exactly
+    `/etc/passwd`, and `../../x` walks out of the repo. Every path returned by
+    the readers below is handed to `sync_outputs`, which unlinks whatever it
+    considers stale — so an entry outside the root is a delete outside the root.
+
+    The managed manifest is a generated file, but it is a generated file
+    sitting in the user's repo where anything can edit it, and `flow project
+    migrate` now consumes it specifically in order to delete. Refused rather
+    than sanitized: a path that escaped was never a path flow wrote.
+    """
+    candidate = root / raw
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if not resolved.is_relative_to(root.resolve()):
+        print(f"ignoring managed path outside the root: {raw}")
+        return None
+    return candidate
+
+
 def read_managed_paths(root: Path, path: Path) -> set[Path]:
     if not path.exists():
         return set()
     data = read_toml(path)
     files = data.get("files", [])
-    return {root / entry["path"] for entry in files if "path" in entry}
+    found = (_contained(root, entry["path"]) for entry in files if "path" in entry)
+    return {p for p in found if p is not None}
 
 
 def read_managed_merge_paths(root: Path, path: Path) -> set[Path]:
@@ -74,11 +100,12 @@ def read_managed_merge_paths(root: Path, path: Path) -> set[Path]:
         return set()
     data = read_toml(path)
     files = data.get("files", [])
-    return {
-        root / entry["path"]
+    found = (
+        _contained(root, entry["path"])
         for entry in files
         if "path" in entry and entry.get("sync_mode") == "merge"
-    }
+    )
+    return {p for p in found if p is not None}
 
 
 def _tag_entries(entries: list, root: Path, origin: str) -> None:
@@ -413,7 +440,7 @@ def desired_claude_outputs(
         if generation_mode != "verbatim":
             raise ValueError(f"unsupported agent generation mode: {generation_mode}")
         content = render_claude_agent(
-            source_rel,
+            source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
             runtime_policy_for_agent(manifest, "claude", agent),
         )
@@ -491,7 +518,11 @@ def desired_codex_outputs(
         source_path = entry_root / source_rel
         target = root / codex_skill_dir(runtime) / command["name"] / "SKILL.md"
         outputs[target] = render_codex_skill(
-            command["name"], command["description"], source_rel, source_path.read_text(), routing_hints
+            command["name"],
+            command["description"],
+            source_ref_for(source_rel, entry_origin),
+            source_path.read_text(),
+            routing_hints,
         )
         managed_entries.append(
             {
@@ -510,7 +541,7 @@ def desired_codex_outputs(
         target = root / runtime["agent_dir"] / f'{agent["name"]}.toml'
         outputs[target] = render_codex_agent(
             agent["name"],
-            source_rel,
+            source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
             runtime_policy_for_agent(manifest, "codex", agent),
         )

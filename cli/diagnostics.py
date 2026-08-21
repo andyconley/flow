@@ -315,5 +315,5 @@ def bootstrap() -> int:
     if missing_optional:
         print(f"optional framework dirs absent: {', '.join(missing_optional)}")
         print("user-level install provides framework commands and agents unless this project overrides them")
-    print("next: run `flow doctor` or `flow sync claude`")
+    print("next: run `flow doctor` or `flow project audit`")
     return 0

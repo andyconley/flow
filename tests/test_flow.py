@@ -10351,6 +10351,43 @@ class ManifestSurgeryTests(unittest.TestCase):
         self.assertIn("agents/zero.md", result)
         self.assertNotIn("agents/one.md", result)
 
+
+    def test_an_array_element_line_is_not_mistaken_for_a_table_header(self) -> None:
+        """A line like `["c", "d"]` inside a multi-line array is syntactically
+        indistinguishable from a table header to a loose regex.
+
+        Mistaking one truncates the enclosing block's range, so cutting that
+        block leaves the array's tail behind as orphaned syntax and the
+        manifest no longer parses. The validating re-parse would catch it and
+        refuse, which is safe but useless — the entry never gets removed and
+        the user has no way to fix it.
+        """
+        text = (
+            '[[agents]]\n'
+            'name = "keep"\n'
+            'source = "agents/keep.md"\n'
+            'matrix = [\n'
+            '  ["c", "d"]\n'
+            ']\n'
+            '\n'
+            '[[agents]]\n'
+            'name = "drop"\n'
+            'source = "agents/drop.md"\n'
+        )
+        edits, unresolved = self.migrate.plan_manifest_edits(
+            text, ["agents.keep.source"]
+        )
+        self.assertEqual(unresolved, [])
+        result = self.migrate.apply_manifest_edits(text, edits)
+
+        self.assertNotIn("agents/keep.md", result)
+        self.assertNotIn("matrix", result, "the array's opening line survived the cut")
+        self.assertNotIn('["c", "d"]', result, "the array's body was orphaned")
+        self.assertIn('name = "drop"', result)
+        # The proof that matters: what is left is still TOML.
+        parsed = load_cli_module("flowtoml").loads(result)
+        self.assertEqual([a["name"] for a in parsed["agents"]], ["drop"])
+
     # -- against the real manifest ---------------------------------------
 
     def test_the_real_scaffold_manifest_survives_a_cut_byte_for_byte(self) -> None:
@@ -10727,9 +10764,10 @@ class ProjectMigrateApplyTests(FlowCliHarness):
         self.assertTrue((backup / "MANIFEST.txt").is_file())
         for rel in plan["delete"]:
             self.assertTrue(
-                (backup / ".flow" / rel).is_file(), f"{rel} missing from the backup"
+                (backup / "files" / ".flow" / rel).is_file(),
+                f"{rel} missing from the backup",
             )
-        self.assertTrue((backup / ".flow" / "flow.toml").is_file())
+        self.assertTrue((backup / "files" / ".flow" / "flow.toml").is_file())
 
     def test_a_second_run_is_a_no_op(self) -> None:
         """R3: migration must be re-runnable to nothing. A second `--apply`
@@ -10904,3 +10942,290 @@ class MigrationAbortGuardTests(unittest.TestCase):
         self.assertIn("did not remove", str(caught.exception))
         self.assertEqual((self.flow_dir / "flow.toml").read_text(), manifest_before)
         self.assertTrue(target.is_file(), "a file was deleted despite the abort")
+
+
+class ManagedPathContainmentTests(unittest.TestCase):
+    """A managed-manifest entry can never name a path outside the root.
+
+    `sync_outputs` unlinks whatever it considers stale, and `flow project
+    migrate` calls it with an empty desired set specifically in order to delete
+    everything the manifest lists. So a manifest entry that escapes the root is
+    a deletion outside the root.
+
+    The join is the hazard: `root / "/etc/passwd"` is `/etc/passwd`, because
+    pathlib discards the left operand when the right is absolute. That is easy
+    to write and impossible to see.
+    """
+
+    def setUp(self) -> None:
+        self.sync = load_cli_module("sync")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "repo"
+        (self.root / ".claude").mkdir(parents=True)
+        self.outside = Path(self._tmp.name) / "victim.txt"
+        self.outside.write_text("must survive\n")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def manifest(self, *entries: tuple[str, str]) -> Path:
+        path = self.root / ".claude" / "flow.managed.toml"
+        body = ["[managed]", 'generator = "flow"', "version = 2", ""]
+        for rel, mode in entries:
+            body += ["[[files]]", f'path = "{rel}"', f'sync_mode = "{mode}"', ""]
+        path.write_text("\n".join(body))
+        return path
+
+    def test_an_absolute_entry_is_refused(self) -> None:
+        path = self.manifest(
+            (str(self.outside), "replace"), (".claude/ok.md", "replace")
+        )
+        paths = self.sync.read_managed_paths(self.root, path)
+        self.assertEqual(paths, {self.root / ".claude" / "ok.md"})
+        self.assertNotIn(self.outside, paths)
+
+    def test_a_parent_traversal_entry_is_refused(self) -> None:
+        path = self.manifest(("../../escape.md", "replace"), (".claude/ok.md", "replace"))
+        paths = self.sync.read_managed_paths(self.root, path)
+        self.assertEqual(paths, {self.root / ".claude" / "ok.md"})
+
+    def test_the_merge_protected_reader_is_guarded_too(self) -> None:
+        """Merge-protected paths are read by a second function. Guarding only
+        the first would leave the settings-file path unchecked, which is the one
+        the migration writes to rather than merely deletes."""
+        path = self.manifest(
+            (str(self.outside), "merge"), (".claude/settings.json", "merge")
+        )
+        paths = self.sync.read_managed_merge_paths(self.root, path)
+        self.assertEqual(paths, {self.root / ".claude" / "settings.json"})
+
+    def test_an_escaping_entry_would_otherwise_have_been_deleted(self) -> None:
+        """The control. Proves the guard is load-bearing rather than decorative
+        by running the exact call migration makes — `sync_outputs` with an empty
+        desired set — and confirming the outside file is still there."""
+        (self.root / ".claude" / "ok.md").write_text("managed\n")
+        path = self.manifest(
+            (str(self.outside), "replace"), (".claude/ok.md", "replace")
+        )
+        previous = self.sync.read_managed_paths(self.root, path)
+        self.sync.sync_outputs(
+            self.root, "claude", {}, previous, set(), check=False, merge_protected=set()
+        )
+        self.assertTrue(self.outside.is_file(), "a file outside the root was deleted")
+        self.assertFalse((self.root / ".claude" / "ok.md").exists(), "control: the in-root managed file should go")
+
+
+class MigrationReviewRegressionTests(FlowCliHarness):
+    """Regressions for the defects acceptance review found.
+
+    Each of these shipped in a working, 563-green build. They are here so the
+    next change cannot quietly restore any of them.
+    """
+
+    STAMP = "20260821T000000Z"
+
+    def migrate(self, *extra: str) -> subprocess.CompletedProcess[str]:
+        return self.run_flow("project", "migrate", *extra)
+
+    def test_a_manifest_value_outside_the_fallback_parsers_subset_migrates(self) -> None:
+        """The worst defect review found, as a regression test.
+
+        The validating round-trip called `parse_simple_toml` directly instead
+        of the tomllib-preferring read. That fallback raises on floats, arrays,
+        and inline comments — so a perfectly ordinary manifest crashed the
+        apply path *after* the handler strip and the adapter deletion had
+        already run, and crashed identically on every retry. The repo was left
+        permanently adapter-less with an unedited manifest.
+        """
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + "\n[tooling]\n"
+            + "timeout = 1.5\n"
+            + 'matchers = ["Write", "Edit"]\n'
+        )
+        (self.repo / ".flow" / "commands" / "flow-boot.md").unlink()
+
+        result = self.migrate("--apply", "--yes", "--at", self.STAMP)
+        self.assert_ok(result)
+        surviving = manifest.read_text()
+        self.assertIn("timeout = 1.5", surviving, "the float was lost")
+        self.assertIn('matchers = ["Write", "Edit"]', surviving, "the array was lost")
+        self.assertNotIn("commands/flow-boot.md", surviving)
+
+    def test_the_float_is_reported_at_plan_time_not_discovered_at_apply(self) -> None:
+        """The same manifest through the dry run, which must not crash either —
+        the fix moved the validating parse into planning so a failure surfaces
+        before anything is destroyed."""
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(manifest.read_text() + "\n[tooling]\ntimeout = 1.5\n")
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertEqual(data["unresolved_sites"], [])
+
+    def test_generated_adapters_appear_in_the_dry_run(self) -> None:
+        """The dry run is the whole consent surface, and it listed only two of
+        the five things `--apply` does. Adapter removal and the handler strip
+        were invisible."""
+        self.use_fake_home()
+        self.setup_project()
+        claude = self.repo / ".claude"
+        (claude / "skills" / "flow-boot").mkdir(parents=True)
+        (claude / "skills" / "flow-boot" / "SKILL.md").write_text("generated\n")
+        (claude / "settings.json").write_text('{"hooks": {}}\n')
+        (claude / "flow.managed.toml").write_text(
+            "[managed]\n"
+            'generator = "flow"\nversion = 2\n\n'
+            '[[files]]\npath = ".claude/skills/flow-boot/SKILL.md"\nsync_mode = "replace"\n\n'
+            '[[files]]\npath = ".claude/settings.json"\nsync_mode = "merge"\n'
+        )
+
+        result = self.migrate()
+        self.assert_ok(result)
+        self.assertIn("generated adapter file(s)", result.stdout)
+        self.assertIn(".claude/skills/flow-boot/SKILL.md", result.stdout)
+        self.assertIn("would strip flow's hook handlers", result.stdout)
+
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertIn(".claude/skills/flow-boot/SKILL.md", data["adapters"])
+        self.assertIn(".claude/settings.json", data["settings_files"])
+
+    def test_an_adapter_tree_alone_is_not_a_no_op(self) -> None:
+        """A project whose overlay files all land in `differs` still has a full
+        generated adapter tree to remove — and both `flow sync` and `flow
+        doctor` send people here to remove it. Reporting "nothing to migrate"
+        contradicted the two commands that recommend this one."""
+        self.use_fake_home()
+        self.setup_project()
+        # Nothing byte-identical and nothing orphaned: every overlay file is
+        # edited, so `delete` and `manifest_edits` are both empty. Every file,
+        # not just the .md ones — a single byte-identical LICENSE.txt is enough
+        # to make this test pass for the wrong reason.
+        for path in (self.repo / ".flow").rglob("*"):
+            if path.is_file() and path.name != "flow.toml":
+                path.write_text("locally rewritten\n")
+        claude = self.repo / ".claude"
+        claude.mkdir(exist_ok=True)
+        (claude / "agents").mkdir(parents=True, exist_ok=True)
+        (claude / "agents" / "architect.md").write_text("generated\n")
+        (claude / "flow.managed.toml").write_text(
+            "[managed]\n"
+            'generator = "flow"\nversion = 2\n\n'
+            '[[files]]\npath = ".claude/agents/architect.md"\nsync_mode = "replace"\n'
+        )
+
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertEqual(data["delete"], [])
+        self.assertEqual(data["manifest_edits"], [])
+        self.assertFalse(data["noop"], "an adapter tree is work to do")
+
+    def test_two_entries_sharing_a_name_are_refused_at_plan_time(self) -> None:
+        """`_site` builds one dotted site from both, so a single cut would
+        leave the other declaring a file that is gone. Detected while planning,
+        because the alternative was an abort after two destructive steps."""
+        self.use_fake_home()
+        self.setup_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-a.md"\n'
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-b.md"\n'
+        )
+        data = json.loads(self.migrate("--json").stdout)
+        self.assertIn("agents.twin.source", data["unresolved_sites"])
+        self.assertNotIn(
+            "agents.twin.source", [e["site"] for e in data["manifest_edits"]]
+        )
+
+    def test_unresolved_sites_are_reported_even_when_nothing_else_is_to_do(
+        self,
+    ) -> None:
+        """The no-op branch returned before the unresolved block, so a plan with
+        only unresolved sites printed "nothing to migrate" while doctor
+        reported declarations to fix."""
+        self.use_fake_home()
+        self.setup_project()
+        for path in (self.repo / ".flow").rglob("*.md"):
+            path.write_text("locally rewritten\n")
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-a.md"\n'
+            + '\n[[agents]]\nname = "twin"\nsource = "agents/twin-b.md"\n'
+        )
+        result = self.migrate()
+        self.assert_ok(result)
+        self.assertIn("could not locate", result.stdout)
+        self.assertIn("agents.twin.source", result.stdout)
+
+    def test_at_cannot_escape_the_backups_directory(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        result = self.migrate("--apply", "--yes", "--at", "../../escape")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--at must be", result.stdout)
+
+    def test_root_must_look_like_an_overlay(self) -> None:
+        """`--root ~/projects` would have walked and backed up something that
+        is not an overlay at all."""
+        self.use_fake_home()
+        elsewhere = self.repo / "not-an-overlay"
+        elsewhere.mkdir()
+        result = self.migrate("--root", str(elsewhere))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not look like a .flow overlay", result.stdout)
+
+    def test_a_repo_owning_a_manifest_txt_keeps_it(self) -> None:
+        """The backup listing was written to `MANIFEST.txt` at the top of the
+        backup, so a repo with its own top-level `MANIFEST.txt` in the managed
+        set had it saved and then immediately overwritten — destroyed, not
+        saved, and invisible to any count."""
+        home = self.use_fake_home()
+        self.setup_project()
+        victim = self.repo / "MANIFEST.txt"
+        victim.write_text("the project's own manifest\n")
+        claude = self.repo / ".claude"
+        claude.mkdir(exist_ok=True)
+        (claude / "flow.managed.toml").write_text(
+            "[managed]\n"
+            'generator = "flow"\nversion = 2\n\n'
+            '[[files]]\npath = "MANIFEST.txt"\nsync_mode = "replace"\n'
+        )
+
+        self.assert_ok(self.migrate("--apply", "--yes", "--at", self.STAMP))
+        backup = home / ".flow" / "backups" / f"migrate-{self.repo.name}-{self.STAMP}"
+        saved = backup / "files" / "MANIFEST.txt"
+        self.assertTrue(saved.is_file(), "the repo's own MANIFEST.txt was not saved")
+        self.assertEqual(saved.read_text(), "the project's own manifest\n")
+        self.assertTrue((backup / "MANIFEST.txt").is_file(), "the listing is missing")
+        self.assertIn("restore a file", (backup / "MANIFEST.txt").read_text())
+
+
+class WriteAtomicSymlinkTests(unittest.TestCase):
+    """`.claude/settings.json` is commonly a symlink into a dotfiles repo."""
+
+    def setUp(self) -> None:
+        self.fsutil = load_cli_module("fsutil")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_writes_through_a_symlink_instead_of_replacing_it(self) -> None:
+        """`os.replace` onto the link would break it, leaving the real file
+        untouched — which for the migration means flow's handlers survive,
+        pointing at scripts the next step deletes."""
+        real = self.root / "dotfiles" / "settings.json"
+        real.parent.mkdir()
+        real.write_text("original\n")
+        link = self.root / "settings.json"
+        link.symlink_to(real)
+
+        self.fsutil.write_atomic(link, "updated\n")
+
+        self.assertTrue(link.is_symlink(), "the symlink was replaced by a file")
+        self.assertEqual(real.read_text(), "updated\n", "the real file was not updated")

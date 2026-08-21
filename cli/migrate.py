@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flowtoml import parse_simple_toml, read_toml
+from flowtoml import loads as toml_loads, read_toml
 from fsutil import (
     ensure_dir,
     read_json,
@@ -74,7 +74,10 @@ MIGRATION_ORDER = (
     ("framework copies", "done"),
 )
 
-_HEADER_RE = re.compile(r"^\s*(\[\[?)\s*([^\]\s][^\]]*?)\s*\]\]?\s*$")
+# Restricted to dotted bare keys so a line inside a multi-line array —
+# `["a", "b"]` — cannot be mistaken for a table header, which would
+# truncate the preceding block and cut the wrong range.
+_HEADER_RE = re.compile(r"^\s*(\[\[?)\s*([A-Za-z0-9_.\-]+)\s*\]\]?\s*$")
 _NAME_RE = re.compile(r'^\s*name\s*=\s*["\']([^"\']*)["\']\s*$')
 
 # Sites whose owning entry is an array-of-tables element: the whole entry goes,
@@ -105,9 +108,18 @@ class MigrationPlan:
     unresolved_sites: list[str] = field(default_factory=list)
     kept: dict[str, list[str]] = field(default_factory=dict)
     symlinks: list[str] = field(default_factory=list)
+    # Steps 2 and 3. Carried on the plan rather than derived inside the apply
+    # path, because a consent surface that omits two of the five things about
+    # to happen is not a consent surface — and because a project whose overlay
+    # files all landed in `differs` still has a full generated adapter tree to
+    # remove, which an is_noop that only looked at `delete` called "nothing".
+    adapters: list[str] = field(default_factory=list)
+    settings_files: list[str] = field(default_factory=list)
 
     def is_noop(self) -> bool:
-        return not self.delete and not self.manifest_edits
+        return not (
+            self.delete or self.manifest_edits or self.adapters or self.settings_files
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +172,20 @@ def _cut_end(lines: list[str], start: int, end: int) -> int:
     return body_end
 
 
+def _name_counts(lines: list[str], prefix: str) -> dict[str, int]:
+    """How many array entries under `prefix` carry each `name`."""
+    counts: dict[str, int] = {}
+    for header, is_array, start, end in _blocks(lines):
+        if header != prefix or not is_array:
+            continue
+        for line in lines[start:end]:
+            match = _NAME_RE.match(line)
+            if match:
+                counts[match.group(1)] = counts.get(match.group(1), 0) + 1
+                break
+    return counts
+
+
 def plan_manifest_edits(
     text: str, sites: list[str]
 ) -> tuple[list[ManifestEdit], list[str]]:
@@ -174,6 +200,18 @@ def plan_manifest_edits(
     edits: list[ManifestEdit] = []
     unresolved: list[str] = []
 
+    # Two entries sharing a `name` produce one dotted site between them, so a
+    # single cut would leave the other declaring a file that is gone. There is
+    # no way to tell from the site which was meant, so both are refused here
+    # rather than discovered by the validating re-parse after two destructive
+    # steps have already run.
+    ambiguous = {
+        label
+        for prefix in _ARRAY_PREFIXES
+        for label, count in _name_counts(lines, prefix).items()
+        if count > 1
+    }
+
     # Array entries are matched by their `name`, falling back to position for
     # entries that have none — the same two-step `project.declared_sources`
     # uses to build the site, inverted.
@@ -186,6 +224,10 @@ def plan_manifest_edits(
         label = parts[-2]
         prefix = ".".join(parts[:-2])
         edit = None
+
+        if prefix in _ARRAY_PREFIXES and label in ambiguous:
+            unresolved.append(site)
+            continue
 
         if prefix in _ARRAY_PREFIXES:
             candidates = [b for b in blocks if b[0] == prefix and b[1]]
@@ -252,6 +294,25 @@ def apply_manifest_edits(text: str, edits: list[ManifestEdit]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def unremoved_sites(text: str, edits: list[ManifestEdit]) -> list[str]:
+    """Which of the intended sites still parse out of the rewritten manifest.
+
+    Runs at plan time as well as apply time. Validating only at apply time put
+    the failure after two destructive steps had already run, and made it
+    deterministic — every re-run crashed at the same place, leaving the repo
+    permanently adapter-less with an unedited manifest. Surfacing it in the dry
+    run costs one extra parse and turns a wedge into a message.
+
+    A parse failure is itself a finding: if the edited text will not parse, the
+    edit is wrong, and reporting every site as unremoved is the honest answer.
+    """
+    try:
+        remaining = {d.declared_by for d in declared_sources(toml_loads(text))[0]}
+    except Exception:
+        return sorted({e.site for e in edits})
+    return sorted({e.site for e in edits}.intersection(remaining))
+
+
 def plan_migration(flow_dir: Path, scaffold_dir: Path) -> MigrationPlan:
     """What migration would do, derived fresh from a new audit every time."""
     report = audit_project(flow_dir, scaffold_dir)
@@ -262,6 +323,20 @@ def plan_migration(flow_dir: Path, scaffold_dir: Path) -> MigrationPlan:
     manifest_path = flow_dir / "flow.toml"
     manifest = read_toml(manifest_path) if manifest_path.is_file() else {}
     declarations, _rejected = declared_sources(manifest)
+    root = flow_dir.parent
+    runtimes = runtime_managed_paths(root, manifest)
+    adapters = sorted(
+        rel_posix(p, root)
+        for info in runtimes.values()
+        for p in info["managed"]
+        if p.is_file() and p not in info["merge_protected"]
+    )
+    settings_files = sorted(
+        rel_posix(p, root)
+        for info in runtimes.values()
+        for p in info["merge_protected"]
+        if p.is_file()
+    )
 
     # Two reasons a declaration must go, and they need the manifest rather than
     # the findings to tell apart. An `orphaned` finding already carries its
@@ -297,6 +372,8 @@ def plan_migration(flow_dir: Path, scaffold_dir: Path) -> MigrationPlan:
         unresolved_sites=unresolved,
         kept=kept,
         symlinks=list(report.symlinks),
+        adapters=adapters,
+        settings_files=settings_files,
     )
 
 
@@ -323,7 +400,11 @@ def render_plan(plan: MigrationPlan, *, applied: bool = False) -> str:
     ]
 
     if plan.is_noop():
-        lines.append("nothing to migrate: no framework copies, no stale declarations")
+        lines.append(
+            "nothing to migrate: no framework copies, no stale declarations, "
+            "no generated adapters"
+        )
+        _append_unresolved(lines, plan)
         if plan.kept or plan.symlinks:
             lines.append("")
         _append_kept(lines, plan)
@@ -345,15 +426,25 @@ def render_plan(plan: MigrationPlan, *, applied: bool = False) -> str:
         )
         lines.append(f"  {edit.site}   [{edit.kind}, {span}]")
 
-    if plan.unresolved_sites:
+    if plan.adapters:
         lines.append("")
         lines.append(
-            f"could not locate {len(plan.unresolved_sites)} declaration(s) in the "
-            f"manifest text — left in place rather than guessed at"
+            f"{verb} {len(plan.adapters)} generated adapter file(s) — project-level "
+            f"sync no longer regenerates these"
         )
-        for site in plan.unresolved_sites:
-            lines.append(f"  {site}")
+        for rel in plan.adapters:
+            lines.append(f"  {rel}")
 
+    if plan.settings_files:
+        lines.append("")
+        lines.append(
+            f"{'stripped' if applied else 'would strip'} flow's hook handlers from "
+            f"{len(plan.settings_files)} settings file(s), preserving everything else"
+        )
+        for rel in plan.settings_files:
+            lines.append(f"  {rel}")
+
+    _append_unresolved(lines, plan)
     _append_kept(lines, plan)
 
     lines.append("")
@@ -362,6 +453,18 @@ def render_plan(plan: MigrationPlan, *, applied: bool = False) -> str:
     else:
         lines.append("dry run — nothing was changed.")
     return "\n".join(lines)
+
+
+def _append_unresolved(lines: list[str], plan: MigrationPlan) -> None:
+    if not plan.unresolved_sites:
+        return
+    lines.append("")
+    lines.append(
+        f"could not locate {len(plan.unresolved_sites)} declaration(s) in the "
+        f"manifest text — left in place rather than guessed at"
+    )
+    for site in plan.unresolved_sites:
+        lines.append(f"  {site}")
 
 
 def _append_kept(lines: list[str], plan: MigrationPlan) -> None:
@@ -389,6 +492,8 @@ def plan_payload(plan: MigrationPlan) -> dict:
             for e in plan.manifest_edits
         ],
         "unresolved_sites": list(plan.unresolved_sites),
+        "adapters": list(plan.adapters),
+        "settings_files": list(plan.settings_files),
         "kept": {k: list(v) for k, v in plan.kept.items()},
         "symlinks": list(plan.symlinks),
         "noop": plan.is_noop(),
@@ -428,6 +533,13 @@ def resolve_roots(args) -> tuple[Path, Path] | None:
     if not flow_dir.exists():
         print("repo is missing .flow; run `flow setup project` first")
         return None
+    # Last, so the flow-home guard above keeps its more specific message.
+    # Pointed at a home directory or a repo root, the walk and the backup
+    # would both be nonsense; cheap to require it looks like what it claims.
+    if flow_dir.name != ".flow" and not (flow_dir / "flow.toml").is_file():
+        print(f"--root does not look like a .flow overlay: {flow_dir}")
+        print("expected a directory named .flow, or one containing flow.toml")
+        return None
     return flow_dir, scaffold_dir
 
 
@@ -466,6 +578,11 @@ def cmd_migrate(args) -> int:
 
     root = flow_dir.parent
     stamp = (args.at or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", stamp):
+        # It becomes a directory name under ~/.flow/backups; `../../x` would
+        # put the backup somewhere the restore instructions do not describe.
+        print(f"--at must be 1-64 characters of [A-Za-z0-9_.-]: {stamp!r}")
+        return 1
     try:
         outcome = apply_migration(
             root, flow_dir, scaffold_dir, plan, BACKUPS_DIR, stamp
@@ -551,28 +668,35 @@ def perform_backup(root: Path, destination: Path, paths: list[Path]) -> int:
     migration that cannot prove it backed up does not delete: the check is the
     difference between "the backup step ran" and "the backup exists".
     """
-    ensure_dir(destination)
-    written = 0
+    # Files are mirrored under `files/` rather than at the top of the backup
+    # so the listing can never collide with something being backed up. A repo
+    # with its own top-level MANIFEST.txt would otherwise have it saved and
+    # then immediately overwritten by the listing — destroyed, not saved, and
+    # invisible to any count.
+    tree = destination / "files"
+    ensure_dir(tree)
     listed = []
     for path in paths:
         rel = path.relative_to(root)
-        target = destination / rel
+        target = tree / rel
         ensure_dir(target.parent)
         shutil.copy2(path, target)
         listed.append(rel.as_posix())
-        written += 1
     (destination / "MANIFEST.txt").write_text(
         "\n".join(
             [
                 f"# flow project migrate backup of {root}",
-                "# restore a file by copying it back to the same relative path",
+                "# restore a file by copying it from files/<path> back to <path>",
                 "",
                 *listed,
                 "",
             ]
         )
     )
-    return written
+    # Counted off the filesystem, not off the loop. Incrementing a counter per
+    # iteration only restates that the loop ran; it cannot notice two source
+    # paths mirroring onto one destination.
+    return sum(1 for p in tree.rglob("*") if p.is_file())
 
 
 def strip_managed_handlers(path: Path, remover) -> bool:
@@ -678,10 +802,11 @@ def apply_migration(
     # 4 — the manifest, before the sources it declares.
     if plan.manifest_edits:
         edited = apply_manifest_edits(manifest_path.read_text(), plan.manifest_edits)
-        # The one place a validating round-trip belongs: parse the result and
-        # confirm the sites really went, before the replace makes it the file.
-        remaining = {d.declared_by for d in declared_sources(parse_simple_toml(edited))[0]}
-        still_there = sorted({e.site for e in plan.manifest_edits} & remaining)
+        # The one place a validating round-trip belongs. `plan_migration` has
+        # already run exactly this check, so reaching a failure here means the
+        # tree changed under us between the two — worth aborting rather than
+        # assuming, but no longer the first time anyone looked.
+        still_there = unremoved_sites(edited, plan.manifest_edits)
         if still_there:
             raise MigrationAborted(
                 f"manifest rewrite did not remove: {', '.join(still_there)}"
