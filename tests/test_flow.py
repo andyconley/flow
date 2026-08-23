@@ -9924,7 +9924,7 @@ class DoctorDriftReportTests(FlowCliHarness):
         section = self._section()
 
         self.assertIn("overlay:          clean", section)
-        self.assertIn("drifted:          1 framework file(s)", section)
+        self.assertIn("drifted:          1 file(s) differ from the framework", section)
 
     def test_the_drifted_count_is_not_summed_into_the_overlay_count(self) -> None:
         """Summing would make the number unclearable by `flow project
@@ -9948,7 +9948,7 @@ class DoctorDriftReportTests(FlowCliHarness):
         drifted = [l for l in section.splitlines() if l.startswith("drifted:")][0]
         self.assertIn("clean", overlay)
         self.assertNotIn("framework copy", overlay)
-        self.assertIn("1 framework file(s)", drifted)
+        self.assertIn("1 file(s) differ from the framework", drifted)
 
     def test_an_overlay_with_no_drift_prints_no_drifted_line(self) -> None:
         self.use_fake_home()
@@ -11677,6 +11677,78 @@ class ProjectMigrateApplyTests(FlowCliHarness):
         self.assertTrue(custom.is_file(), "refused file must survive")
         self.assertIn("refused", result.stdout)
         self.assertIn("standards/testing.md", result.stdout)
+
+    def test_a_blocked_drifted_file_keeps_its_whole_declaration(self) -> None:
+        """The split-site case, found in review.
+
+        A drifted file can have two declaring sites where one resolves and the
+        other does not. Blocking the deletion is only half the job: the
+        resolvable site was still in the edit set, so the manifest lost an
+        entry for a file the command had just refused to remove — the same
+        file/manifest inconsistency the block exists to prevent, reached from
+        the other side.
+
+        The unresolvable site is produced by a trailing comment on the `name`
+        line, which `_NAME_RE` does not match. A hand-annotated manifest is
+        exactly the artifact the text-surgery design exists to protect.
+        """
+        self.use_fake_home()
+        self.setup_legacy_project()
+        drifted = self.repo / ".flow" / "commands" / "flow-plan.md"
+        drifted.write_text(drifted.read_text() + "\nlocal edit\n")
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            '\n[[claude.commands]]\nname = "flow-plan"\n'
+            'source = "commands/flow-plan.md"\n'
+            '\n[[codex.commands]]\nname = "flow-plan"  # keep in sync\n'
+            'source = "commands/flow-plan.md"\n'
+        )
+        before = manifest.read_bytes()
+
+        result = self.apply("--drifted")
+
+        self.assertTrue(drifted.is_file(), "blocked file must survive")
+        self.assertEqual(
+            manifest.read_bytes(),
+            before,
+            "a refused file must keep every one of its declarations",
+        )
+        self.assertIn("refused", result.stdout)
+
+    def test_blocking_one_drifted_file_does_not_spare_the_others(self) -> None:
+        """The other half of the two-pass fix.
+
+        Re-planning the edits after excluding the blocked file's sites must
+        still cut the declarations of the drifted files that are being
+        removed. A second pass that dropped every edit would leave the blocked
+        file correct and every other removal orphaned in the manifest.
+        """
+        self.use_fake_home()
+        self.setup_legacy_project()
+        blocked = self.repo / ".flow" / "commands" / "flow-plan.md"
+        removed = self.repo / ".flow" / "commands" / "flow-review.md"
+        for path in (blocked, removed):
+            path.write_text(path.read_text() + "\nlocal edit\n")
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            '[framework]\nname = "flow"\nversion = 1\n'
+            # unresolvable: the trailing comment defeats the name matcher
+            '\n[[claude.commands]]\nname = "flow-plan"  # pinned\n'
+            'source = "commands/flow-plan.md"\n'
+            '\n[[claude.commands]]\nname = "flow-review"\n'
+            'source = "commands/flow-review.md"\n'
+        )
+
+        self.assert_ok(self.apply("--drifted"))
+
+        self.assertTrue(blocked.is_file(), "blocked file must survive")
+        self.assertFalse(removed.exists(), "the resolvable one must still go")
+        text = manifest.read_text()
+        self.assertIn("commands/flow-plan.md", text, "blocked keeps its entry")
+        self.assertNotIn(
+            "commands/flow-review.md", text, "removed loses its entry"
+        )
 
     def test_drifted_with_an_empty_bucket_is_still_a_clean_no_op(self) -> None:
         self.use_fake_home()

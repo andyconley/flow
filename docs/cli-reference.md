@@ -650,7 +650,6 @@ Runtime surfaces come from the user-level install and need no per-project step.
 ```bash
 flow update --resync              # framework, plus user-level adapters
 cd /path/to/project
-flow refresh project
 flow bootstrap
 flow project audit                # did the update leave stale copies behind?
 ```

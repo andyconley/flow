@@ -273,7 +273,7 @@ def doctor() -> int:
     print(f"manifest:         {'ok' if project_manifest_ok else 'missing'}")
     print(f"overlay:          {overlay_line}")
     if drifted_line is not None:
-        print(f"drifted:          {drifted_line} framework file(s) differ from the framework")
+        print(f"drifted:          {drifted_line} file(s) differ from the framework")
         print("                  customized or stale — nothing local can tell which")
         print("                  `flow project audit` lists them")
     _print_replaces(replaces_resolved, replaces_rejected, replaces_error)

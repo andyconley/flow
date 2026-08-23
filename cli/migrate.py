@@ -384,14 +384,14 @@ def plan_migration(
         if members:
             kept[bucket] = members
 
-    edits: list[ManifestEdit] = []
-    unresolved: list[str] = []
-    if sites and manifest_path.is_file():
-        edits, unresolved = plan_manifest_edits(
-            manifest_path.read_text(), sorted(set(sites))
-        )
-    elif sites:
-        unresolved = sorted(set(sites))
+    def _plan_edits(site_list: list[str]) -> tuple[list[ManifestEdit], list[str]]:
+        if site_list and manifest_path.is_file():
+            return plan_manifest_edits(
+                manifest_path.read_text(), sorted(set(site_list))
+            )
+        return [], sorted(set(site_list))
+
+    edits, unresolved = _plan_edits(sites)
 
     # An unresolved site is tolerable for a framework copy: the file is
     # byte-identical to the scaffold's and can be fetched back. For a drifted
@@ -410,6 +410,21 @@ def plan_migration(
             for rel in drifted
             if by_rel.get(rel, set()) & unresolved_set
         )
+
+        # Second pass, and the reason there are two. A file with more than one
+        # declaring site can have one resolve and another not: it is blocked
+        # from deletion by the loop above, but its *resolvable* site is still
+        # in `sites` and step 4 would cut it. That leaves a file on disk the
+        # manifest no longer declares — the same inconsistency this guard
+        # exists to prevent, arrived at from the other side. Blocking has to
+        # be known before the edits are planned, and it cannot be known until
+        # after, so the edits are planned twice.
+        if drifted_blocked:
+            blocked_sites = {
+                site for rel in drifted_blocked for site in by_rel.get(rel, set())
+            }
+            sites = [s for s in sites if s not in blocked_sites]
+            edits, unresolved = _plan_edits(sites)
 
     return MigrationPlan(
         flow_dir=flow_dir,
@@ -638,7 +653,15 @@ def _overlapping_trees(a: Path, b: Path) -> bool:
     Containment rather than equality, because a subdirectory of the overlay is
     still the project's own tree and still compares byte-equal to itself.
     `samefile` covers the gap `resolve()` leaves on a case-insensitive
-    filesystem, where two spellings name one directory but compare unequal.
+    filesystem for the *equality* leg only: `is_relative_to` is a lexical
+    comparison, so a case-differing subdirectory is caught by none of the
+    three. Unreachable in practice, since the baseline gate rejects it a
+    moment later, but the limit is real and worth stating.
+
+    Path-shaped, not content-shaped. A copy of the overlay somewhere else is
+    a different tree by every test here, and migrating against it deletes
+    everything — no guard sees that, and none is proposed: the flag has to
+    stay usable for real scaffolds.
     """
     if a == b:
         return True
@@ -653,12 +676,17 @@ def _overlapping_trees(a: Path, b: Path) -> bool:
 
 
 def resolve_roots(args) -> tuple[Path, Path] | None:
-    """Shared root resolution, including the guard against flow's own home.
+    """Migrate's root resolution, including the guard against flow's own home.
 
-    Returns None having printed the reason. Lifted out because `audit` and
-    `migrate` must agree on what "this project" means — a migration that
-    resolved a different root than the audit the user just read would act on a
-    tree they never saw.
+    Returns None having printed the reason.
+
+    This is migrate's only, despite the name. `cmd_audit` resolves its own
+    roots (`project.py`) and never calls this, and the two now differ
+    deliberately: the `--scaffold` overlap refusal below belongs here and not
+    there, because audit deletes nothing and comparing a tree against itself is
+    a reasonable thing to ask it for. That divergence is the reason a
+    migration can refuse a comparison the audit will still perform, so the
+    audit's report is not always the plan migrate would act on.
     """
     scaffold_dir = (
         Path(args.scaffold).expanduser()
