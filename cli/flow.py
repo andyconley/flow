@@ -106,31 +106,32 @@ def main() -> int:
 
     refresh = sub.add_parser(
         "refresh",
-        help="repair missing files in an existing repo/.flow",
-        description="Refresh an existing repo-local .flow without overwriting local edits.",
+        help="retired — see `flow setup project` and `flow project migrate`",
+        description="Retired. A project overlay no longer holds framework files, so there is nothing to refresh from the scaffold.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Example:\n  flow refresh project\n",
     )
     refresh_sub = refresh.add_subparsers(dest="refresh_target", required=True, title="refresh targets")
     refresh_project_parser = refresh_sub.add_parser(
         "project",
-        help="copy missing overlay files into repo/.flow",
+        help="retired — exits 1 and names what replaced it",
         description=(
-            "Bring an existing project overlay forward without overwriting local edits. "
-            "By default this refreshes only overlay core files plus command, agent, "
-            "and standard sources registered in .flow/flow.toml. Existing files whose "
-            "content differs are reported as update candidates; use --interactive to choose updates."
+            "Retired, in every form. Missing core files are `flow setup project`'s "
+            "job and it is idempotent; framework copies a project is still carrying "
+            "are `flow project audit` and `flow project migrate`'s. Updating an "
+            "existing PROJECT.md or STATE.md from the framework template has no "
+            "replacement — those are your files once the project exists."
         ),
     )
     refresh_project_parser.add_argument(
         "--all",
         action="store_true",
-        help="retired — it restored a full copy of the framework scaffold; exits 1 with a pointer",
+        help="retired, as is the command itself",
     )
     refresh_project_parser.add_argument(
         "--interactive",
         action="store_true",
-        help="prompt before replacing existing files whose content differs from the framework",
+        help="retired, as is the command itself",
     )
 
     harvest = sub.add_parser(
@@ -370,11 +371,12 @@ def main() -> int:
     project_migrate_parser = project_sub.add_parser(
         "migrate",
         help="remove the framework copies `audit` reports, and the declarations naming them",
-        description="Acts on what `flow project audit` reports. Dry run by default: prints exactly which files would be deleted and which `flow.toml` declarations would be removed, and exits 0 without touching anything. Only byte-identical framework copies are ever removed \u2014 `differs` cannot be told apart from a real customization by anything on this machine, so it is reported and left. The manifest is edited as text rather than parsed and rewritten, so comments and formatting survive.",
+        description="Acts on what `flow project audit` reports. Dry run by default: prints exactly which files would be deleted and which `flow.toml` declarations would be removed, and exits 0 without touching anything. Only byte-identical framework copies are removed by default \u2014 `differs` cannot be told apart from a real customization by anything on this machine, so it is reported and left unless you opt in with --drifted, which lists them on its own and removes them only with --apply --yes. The manifest is edited as text rather than parsed and rewritten, so comments and formatting survive.",
     )
     project_migrate_parser.add_argument("--json", action="store_true", help="emit the plan as JSON instead of the rendered report")
     project_migrate_parser.add_argument("--root", metavar="PATH", help="migrate this `.flow` directory instead of the enclosing repo's")
     project_migrate_parser.add_argument("--scaffold", metavar="PATH", help="compare against this framework scaffold instead of the installed one")
+    project_migrate_parser.add_argument("--drifted", action="store_true", help="also remove files that differ from the framework; on its own it lists them and exits")
     project_migrate_parser.add_argument("--apply", action="store_true", help="actually remove them; requires --yes")
     project_migrate_parser.add_argument("--yes", action="store_true", help="confirm a destructive --apply run (no interactive prompt exists)")
     project_migrate_parser.add_argument("--at", help="UTC stamp for the backup directory name; defaults to now")

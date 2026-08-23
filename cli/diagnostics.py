@@ -104,16 +104,31 @@ def doctor() -> int:
     # from the same classifier `flow project audit` uses, because the question
     # a project can still answer is not "are your adapters current" but "are
     # you still carrying framework files nobody updates".
+    #
+    # Two numbers, not one. `identical + orphaned` is exactly what `flow
+    # project migrate` drives to zero, which is what lets that line name that
+    # command. Drift is not clearable the same way — removing a drifted file
+    # is opt-in and may destroy a customization — so summing it in would
+    # produce a count the named remedy cannot reach zero, and doctor would nag
+    # permanently about a state that is not a fault.
     overlay_line = "n/a"
+    drifted_line = None
     if project_overlay_ok and SCAFFOLD_DIR.exists():
         try:
             report = audit_project(flow_dir, SCAFFOLD_DIR)
-            copies = report.counts()["identical"] + report.counts()["orphaned"]
+            counts = report.counts()
+            copies = counts["identical"] + counts["orphaned"]
             overlay_line = (
                 "clean"
                 if copies == 0
                 else f"{copies} framework copy/declaration(s) — run `flow project migrate`"
             )
+            # `project-only` and `unreadable` stay out of both counts: the
+            # first is the project's own content and the second could not be
+            # compared, so neither is framework carryover. `conflict` is a
+            # type mismatch, not drift.
+            if counts["differs"]:
+                drifted_line = counts["differs"]
         except Exception:
             overlay_line = "error"
 
@@ -257,6 +272,10 @@ def doctor() -> int:
     print(f"repo .flow:       {'ok' if project_overlay_ok else 'missing'}")
     print(f"manifest:         {'ok' if project_manifest_ok else 'missing'}")
     print(f"overlay:          {overlay_line}")
+    if drifted_line is not None:
+        print(f"drifted:          {drifted_line} file(s) differ from the framework")
+        print("                  customized or stale — nothing local can tell which")
+        print("                  `flow project audit` lists them")
     _print_replaces(replaces_resolved, replaces_rejected, replaces_error)
     if legacy_heading:
         print("PROJECT.md:       carries the retired `## Active project standards` section")

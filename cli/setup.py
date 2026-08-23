@@ -17,10 +17,8 @@ setup; nothing here reaches back into lifecycle, so the two stay acyclic.
 
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
-import flowtoml
 import usage_store
 from fsutil import (
     copy_if_missing,
@@ -39,7 +37,6 @@ from paths import (
     USER_BIN_DIR,
     USER_OVERLAY_DIR,
 )
-from project import declared_sources
 from sync import sync_target
 
 
@@ -370,173 +367,35 @@ def setup_user(overlay_repo: str | None = None) -> int:
     print("next: open a fresh Claude Code session anywhere and try `/flow-boot`")
     return 0
 
-
-# Deliberately the same set `setup_project` creates, minus the manifest.
-#
-# `FRAMEWORK.md` is absent because a project no longer holds one. Leaving it
-# here would have been the quiet way to undo this whole refactor: setup would
-# stop creating it and the very next `flow refresh project` would copy it back.
-#
-# `flow.toml` is absent because refresh compares each path against the
-# framework scaffold's file of the same name, and the scaffold's `flow.toml`
-# is the framework's own sync manifest — hundreds of lines that have never
-# belonged in a project. Diffing the two reports a permanent phantom update,
-# and accepting that update would overwrite the project's manifest with the
-# framework's. `_write_project_manifest` handles the only case that is really
-# refresh's business: the file being missing entirely.
-_REFRESH_CORE_PATHS = [
-    Path("PROJECT.md"),
-    Path("memory/STATE.md"),
-    Path("runs/.gitkeep"),
-]
-
-
-def _safe_scaffold_rel_paths(paths: set[Path]) -> list[Path]:
-    safe: list[Path] = []
-    for rel in paths:
-        if rel.is_absolute() or ".." in rel.parts:
-            continue
-        if (SCAFFOLD_DIR / rel).exists():
-            safe.append(rel)
-    return sorted(safe, key=lambda path: path.as_posix())
-
-
-def _iter_scaffold_files(rel_paths: list[Path]) -> list[Path]:
-    files: list[Path] = []
-    for rel in rel_paths:
-        src = SCAFFOLD_DIR / rel
-        if src.is_dir():
-            for child in src.rglob("*"):
-                if child.is_file():
-                    files.append(child.relative_to(SCAFFOLD_DIR))
-        elif src.is_file():
-            files.append(rel)
-    return sorted(files, key=lambda path: path.as_posix())
-
-
-def _prompt_update(rel: Path, prompt: bool, update_all: bool) -> tuple[bool, bool]:
-    if update_all:
-        return True, True
-    if not prompt:
-        return False, False
-
-    prompt_text = f"Update .flow/{rel.as_posix()} from framework? [y/N/a/q] "
-    answer = ""
-    try:
-        with open("/dev/tty", "r+", encoding="utf-8") as tty:
-            tty.write(prompt_text)
-            tty.flush()
-            answer = tty.readline().strip().lower()
-    except OSError:
-        try:
-            answer = input(prompt_text).strip().lower()
-        except EOFError:
-            answer = ""
-
-    if answer in {"q", "quit"}:
-        raise KeyboardInterrupt
-    if answer in {"a", "all"}:
-        return True, True
-    if answer in {"y", "yes"}:
-        return True, False
-    return False, False
-
-
-def _refresh_scaffold_files(rel_paths: list[Path], target: Path, prompt: bool) -> dict[str, int]:
-    counts = {
-        "added": 0,
-        "current": 0,
-        "updated": 0,
-        "changed": 0,
-        "conflicts": 0,
-    }
-    update_all = False
-    for rel in _iter_scaffold_files(rel_paths):
-        src = SCAFFOLD_DIR / rel
-        dest = target / rel
-        if not dest.exists():
-            ensure_dir(dest.parent)
-            shutil.copy2(src, dest)
-            counts["added"] += 1
-            continue
-        if not dest.is_file():
-            counts["conflicts"] += 1
-            print(f"conflict: .flow/{rel.as_posix()} exists but is not a file")
-            continue
-        if dest.read_bytes() == src.read_bytes():
-            counts["current"] += 1
-            continue
-
-        try:
-            should_update, update_all = _prompt_update(rel, prompt, update_all)
-        except KeyboardInterrupt:
-            print()
-            print("refresh stopped by user")
-            break
-        if should_update:
-            shutil.copy2(src, dest)
-            counts["updated"] += 1
-        else:
-            counts["changed"] += 1
-            print(f"update available: .flow/{rel.as_posix()}")
-    return counts
-
-
 def refresh_project(all_files: bool = False, interactive: bool = False) -> int:
-    root = repo_root()
-    target = root / ".flow"
-    if not target.exists():
-        print("repo is missing .flow; run `flow setup project` first")
-        return 1
+    """Retired. Every job this had is either gone or lives elsewhere now.
 
-    if all_files:
-        # `--all` used to copy every scaffold entry into the project. That is
-        # the fork this refactor exists to remove: the copies never update, and
-        # the runtime reads the user-level install regardless, so backfilling
-        # them produced a directory of files that look authoritative and are
-        # not. Refused rather than quietly reinterpreted as a plain refresh —
-        # someone who typed `--all` wanted the copies, and should be told they
-        # are gone instead of watching the command exit 0 having ignored them.
-        print("`flow refresh project --all` was retired: it restored a full copy")
-        print("of the framework scaffold, and those copies never update")
-        print("run `flow refresh project` to repair this overlay's own core files")
-        print("run `flow project audit` to see what it is still carrying")
-        return 1
+    It repaired a missing manifest and missing core files — both of which
+    `flow setup project` already does idempotently — and restored
+    manifest-declared sources from the scaffold, which is fork restoration in
+    miniature and the thing `flow project migrate` exists to undo.
 
-    manifest_state = _write_project_manifest(target)
-    manifest_path = target / "flow.toml"
-    manifest = flowtoml.read_toml(manifest_path) if manifest_path.is_file() else {}
-    rel_paths = set(_REFRESH_CORE_PATHS)
-    # Rejected declarations are dropped here rather than reported: refresh
-    # has always silently skipped them (`_safe_scaffold_rel_paths` filters
-    # the same two cases), and `flow project audit` is the surface that
-    # names them.
-    declared, _rejected = declared_sources(manifest)
-    rel_paths.update(Path(d.rel) for d in declared)
-    rel_paths = _safe_scaffold_rel_paths(rel_paths)
-    mode = "overlay core and registered sources"
+    The one capability with no successor is updating an *existing* core file
+    from the framework: `copy_if_missing` never touches a file that is there.
+    Named in the message rather than left to be discovered, though in practice
+    all three core files are authored project content from the moment the
+    project is initialized, and the right answer to "overwrite your PROJECT.md
+    from the template?" was always no.
 
-    prompt = interactive or sys.stdin.isatty()
-    counts = _refresh_scaffold_files(rel_paths, target, prompt=prompt)
-
-    # Said out loud rather than folded into `added missing files`. That count
-    # means "copied from the framework scaffold", and this file was not; and
-    # recreating a manifest someone deleted on purpose is worth one line of
-    # output rather than a silent increment.
-    if manifest_state == "written":
-        print("wrote a new .flow/flow.toml (none was present)")
-    elif manifest_state == "refused":
-        print("this overlay carries framework directories but has no .flow/flow.toml")
-        print("not writing one: a short manifest here would hide the sources and")
-        print("generated adapters the old one named — run `flow project audit`")
-
-    print(f"project refresh complete: {target}")
-    print(f"mode: {mode}")
-    print(f"added missing files: {counts['added']}")
-    print(f"already current: {counts['current']}")
-    print(f"updated from framework: {counts['updated']}")
-    print(f"left changed files unchanged: {counts['changed']}")
-    print(f"conflicts: {counts['conflicts']}")
-    if counts["changed"] and not prompt:
-        print("tip: rerun with `flow refresh project --interactive` to choose updates")
-    return 0
+    Refused before any filesystem check, including whether `.flow` exists.
+    Someone typing a retired command needs to hear that it is retired, not a
+    setup error about a directory the command would no longer have touched.
+    """
+    print("`flow refresh project` was retired.")
+    print("")
+    print("A project overlay no longer holds framework files, so there is")
+    print("nothing here to refresh from the scaffold. What it used to do:")
+    print("")
+    print("  missing flow.toml or core files  ->  flow setup project")
+    print("  framework copies still present   ->  flow project audit")
+    print("                                       flow project migrate")
+    print("")
+    print("Updating an existing PROJECT.md or STATE.md from the framework")
+    print("template has no replacement. Those are your files once the project")
+    print("exists; edit them directly.")
+    return 1

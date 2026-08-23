@@ -429,10 +429,6 @@ invocation = "flow setup project"
 summary = "Scaffold `.flow/` overlay into the current repo"
 
 [[help.cli_commands]]
-invocation = "flow refresh project"
-summary = "Repair overlay core files and registered local sources"
-
-[[help.cli_commands]]
 invocation = "flow sync claude [--user] [--check]"
 summary = "Generate or check Claude adapters"
 

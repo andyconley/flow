@@ -218,11 +218,11 @@ Use these when a repo needs a `.flow/` overlay for its own context, transient st
 - `flow setup project`
   - scaffold `.flow/` into the current repo
 - `flow refresh project`
-  - repair missing overlay core files and registered local sources without overwriting local edits
-- `flow refresh project --interactive`
-  - review same-name files whose framework content differs and choose whether to update them
-- `flow refresh project --all`
-  - retired; it restored a full copy of the framework scaffold, and those copies never update
+  - retired. A project no longer holds framework files, so there is nothing to refresh from the scaffold. Missing core files are `flow setup project`'s job; framework copies still present are `flow project audit` and `flow project migrate`'s.
+- `flow project audit`
+  - classify what a repo's `.flow/` is still carrying, read-only
+- `flow project migrate`
+  - remove the framework copies audit finds; dry run unless `--apply --yes`
 - `flow bootstrap`
   - validate that the required `.flow/` structure exists
 
@@ -377,7 +377,7 @@ Current validation covers setup, sync, generated files, drift detection, refresh
 - managed settings generation
 - generated Codex skill, agent, and hook output
 - drift detection in `flow doctor`
-- conservative missing-file restoration in `flow refresh project`
+- overlay classification and migration in `flow project audit` / `flow project migrate`
 - automated CLI tests for setup, sync, and drift behavior
 
 ## What’s Left

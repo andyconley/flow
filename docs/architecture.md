@@ -252,8 +252,12 @@ files are present and configured.
 
 There are currently two project-evolution paths:
 
-- `flow setup project` for first-time scaffold
-- `flow refresh project` for missing-file refresh
+- `flow setup project` for first-time scaffold, and for repairing a core file
+  that has gone missing since — it is idempotent and never overwrites
+- `flow project migrate` for reconciling an overlay built before the scaffold
+  was thinned
+
+`flow refresh project` used to be the second of these and is retired.
 
 What does not exist yet:
 
