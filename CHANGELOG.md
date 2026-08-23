@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.19.2](https://github.com/andyconley/flow/compare/v0.19.1...v0.19.2) (2026-08-23)
+
+### Documentation
+
+* **backlog:** promote five repeating capability gaps ([#15](https://github.com/andyconley/flow/issues/15)) ([0f16964](https://github.com/andyconley/flow/commit/0f169648843f8329e11c216650c2c20d8d827269))
+
 ## [0.19.1](https://github.com/andyconley/flow/compare/v0.19.0...v0.19.1) (2026-08-23)
 
 ### Bug Fixes
