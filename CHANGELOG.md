@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.19.1](https://github.com/andyconley/flow/compare/v0.19.0...v0.19.1) (2026-08-23)
+
+### Bug Fixes
+
+* **audit:** say when --scaffold names the project's own tree ([#14](https://github.com/andyconley/flow/issues/14)) ([53e6279](https://github.com/andyconley/flow/commit/53e627941cb38f13114c6d805852c3d5eb9e8cc3))
+
 ## [0.19.0](https://github.com/andyconley/flow/compare/v0.18.0...v0.19.0) (2026-08-23)
 
 ### ⚠ BREAKING CHANGES
