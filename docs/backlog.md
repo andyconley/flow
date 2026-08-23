@@ -249,3 +249,45 @@ Keep watching because:
 Do not prioritize until:
 
 - flow has a concrete third runtime to support
+
+### Self Attested Validation Has No Standard
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+Every lane asks for validation evidence and none asks where the evidence came from. A test count typed by the author of the change is accepted at the same weight as one from a run anyone can re-inspect. The evidence standard now covers whether proof could have failed, but not whether the party reporting it had an interest in the answer.
+
+Second sighting. Every validation figure in this run was a local run by the author of the change, and the run's own artifacts state so in four separate places without any lane offering a way to resolve it. A lane that asks for evidence but accepts author-produced evidence at full weight turns the caveat into boilerplate: it gets written honestly, read past, and changes nothing.
+
+Third sighting. A slice adding a destructive command shipped on figures the change's own author produced, with no mechanism in the repository capable of producing any other kind. The caveat was written into the validation record, the pull request body, and the commit message, and changed nothing about whether the work merged.
+
+### Agent Brief Exceeds Tool Grant
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+Commands brief role agents to write artifacts to the run directory, but nothing reconciles a brief against what the agent can actually do. Two independent causes with the same silent outcome: roles defined without a write tool, and roles sandboxed away from the run directory by worktree isolation. Six sightings in one session, including the orchestrator itself. Nothing failed loudly in any case; each agent mentioned it in prose and the files were moved by hand afterwards. The framework has no declaration of what a role can write and no check that a brief stays inside it.
+
+Second sighting. A judgment-tier review role was briefed to record findings in a durable artifact but held read-only tools, so the findings came back inline and the orchestrator transcribed them by hand. The brief and the grant are authored in different places and nothing compares them, so the mismatch surfaces only as prose inside the agent's reply.
+
+### Cross Slice Deferrals Have No Carrier
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+A review finding can be dispositioned as partially accepted with the remainder explicitly assigned to a later slice, and nothing carries it there. Observed: a finding deferred by name to the next slice, whose own review closed neighbouring items and never mentioned it. Dispositions are per-slice documents, so a deferral is written down in the one place the next slice does not read.
+
+Second sighting, and wider than the first. The first was a review finding deferred to a later slice; this was a plan item assigned to a slice that shipped without it, caught only because a reviewer happened to compare the plan against the diff. Any document that assigns work forward — plan, disposition, handback — is written in the one place the receiving step does not read, and nothing reconciles them.
+
+### Mutation Survivors Have No Triage Guidance
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+The implement lane asks whether a mutation check ran but gives no guidance for reading the result: a surviving mutant most often means the fixture cannot reach the code, not that coverage is absent, and mutually redundant guards survive individually while being covered jointly. Both cases were misread as missing coverage.
+
+Second sighting, and the diagnosis in the first is confirmed. Four mutants survived their first attempt across two rounds; two were unreachable in the fixture that appeared to cover them rather than uncovered. Reading a survivor as missing coverage would have added a redundant test and left the real hole — a covering test asserting against the wrong fixture — in place. The lane asks whether the check ran and still says nothing about how to read the result.
+
+### No Lane Prompts For Archive
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+Archive is deliberately human-invoked, but no lane tells the engineer to run it and no lane can trigger it. A run therefore completes with its handback intact and its capability gaps never captured, silently. The gap-capture loop depends on a step that nothing in the phase machine asks for.
+
+Second sighting. Four slices were planned, implemented, reviewed, merged, and released across several days before the closing lane ran, and it ran only because the engineer asked for it directly. The handbacks recommended it each time, which is the orchestrator compensating rather than the phase machine working. Nothing in a lane triggers the step that captures gaps, so the corpus depends on the engineer remembering.
