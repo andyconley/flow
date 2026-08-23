@@ -609,6 +609,35 @@ def find_orphans(declarations: list[Declaration], flow_dir: Path) -> list[Findin
     ]
 
 
+def overlapping_trees(a: Path, b: Path) -> bool:
+    """True when two resolved paths are the same directory or one contains
+    the other.
+
+    Containment rather than equality, because a subdirectory of the overlay is
+    still the project's own tree and still compares byte-equal to itself.
+    `samefile` covers the gap `resolve()` leaves on a case-insensitive
+    filesystem for the *equality* leg only: `is_relative_to` is a lexical
+    comparison, so a case-differing subdirectory is caught by none of the
+    three. Unreachable in practice, since the baseline gate rejects it a
+    moment later, but the limit is real and worth stating.
+
+    Path-shaped, not content-shaped. A copy of the overlay somewhere else is
+    a different tree by every test here, and migrating against it deletes
+    everything — no guard sees that, and none is proposed: the flag has to
+    stay usable for real scaffolds.
+    """
+    if a == b:
+        return True
+    try:
+        if a.samefile(b):
+            return True
+    except OSError:
+        # Either side missing. Not the same tree by any reading, and a
+        # nonexistent scaffold is caught by the baseline gate anyway.
+        pass
+    return a.is_relative_to(b) or b.is_relative_to(a)
+
+
 def has_framework_baseline(scaffold_dir: Path) -> bool:
     return any((scaffold_dir / name).is_dir() for name in CAPABILITY_DIRS)
 
@@ -710,6 +739,21 @@ def render_audit(report: AuditReport) -> str:
         f"capability"
     )
     lines.append("this command only reads; it never writes, moves, or deletes.")
+
+    # The one reading of this report that is actively misleading. Compared
+    # against the project's own tree every file is byte-equal to itself, so
+    # `identical` fills up and the report reads as an invitation to migrate —
+    # while `flow project migrate` refuses this exact comparison. Audit is
+    # still allowed to make it: it deletes nothing, and comparing a tree
+    # against itself is a reasonable thing to ask for. It just has to say what
+    # it is looking at.
+    if not report.default_scaffold and overlapping_trees(
+        Path(report.scaffold_dir).resolve(), Path(report.flow_dir).resolve()
+    ):
+        lines.append("")
+        lines.append("NOTE: --scaffold names this project's own tree, so every file is")
+        lines.append("being compared against itself and `identical` below means only")
+        lines.append("that. `flow project migrate` refuses this comparison.")
 
     for bucket in BUCKET_ORDER:
         members = [f for f in report.findings if f.bucket == bucket]

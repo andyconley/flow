@@ -10684,6 +10684,66 @@ class ProjectAuditCommandTests(FlowCliHarness):
     def audit(self, *extra: str) -> subprocess.CompletedProcess[str]:
         return self.run_flow("project", "audit", *extra)
 
+    def test_a_self_pointed_scaffold_says_so(self) -> None:
+        """The one reading of this report that actively misleads.
+
+        Compared against its own tree every file is byte-equal to itself, so
+        `identical` fills up and the report reads as an invitation to migrate
+        — which `flow project migrate` then refuses. Audit still performs the
+        comparison, because it deletes nothing; it just has to say what it is
+        looking at.
+        """
+        self.use_fake_home()
+        self.setup_legacy_project()
+        flow_dir = self.repo / ".flow"
+
+        result = self.audit("--scaffold", str(flow_dir))
+
+        self.assert_ok(result)
+        self.assertIn("names this project's own tree", result.stdout)
+        self.assertIn("migrate` refuses", result.stdout)
+
+    def test_a_scaffold_inside_the_overlay_hits_the_baseline_guard_first(self) -> None:
+        """Not the overlap notice, and that is the right answer.
+
+        A subdirectory of the overlay holds no capability directories, so the
+        no-baseline guard returns before the notice is reached. Its message is
+        the more specific of the two. Pinned so nobody "fixes" the notice to
+        fire here and buries the better diagnosis under it.
+
+        Migrate differs deliberately: its guard runs in `resolve_roots`,
+        upstream of the baseline check, because there the wrong answer deletes
+        the overlay rather than printing a table.
+        """
+        self.use_fake_home()
+        self.setup_legacy_project()
+
+        result = self.audit("--scaffold", str(self.repo / ".flow" / "standards"))
+
+        self.assertIn("no framework baseline", result.stdout)
+        self.assertNotIn("own tree", result.stdout)
+
+    def test_a_normal_audit_prints_no_overlap_notice(self) -> None:
+        """It has to stay quiet on every ordinary run or it becomes noise."""
+        self.use_fake_home()
+        self.setup_legacy_project()
+
+        self.assertNotIn("own tree", self.audit().stdout)
+
+    def test_a_distinct_scaffold_prints_no_overlap_notice(self) -> None:
+        """A non-default scaffold is not by itself an overlap. Without this
+        the notice can be implemented as `not default_scaffold`, which would
+        fire on every legitimate override."""
+        self.use_fake_home()
+        self.setup_legacy_project()
+        other = self.repo / "other-scaffold"
+        shutil.copytree(REPO_ROOT / "scaffolds" / "default", other)
+
+        result = self.audit("--scaffold", str(other))
+
+        self.assert_ok(result)
+        self.assertNotIn("own tree", result.stdout)
+
     def snapshot(self) -> dict:
         """Every path under the project, with content hash and mtime.
 

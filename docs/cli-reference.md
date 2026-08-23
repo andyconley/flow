@@ -548,7 +548,7 @@ Two things are reported outside the buckets, because neither can be safely acted
 
 It exits 1 only when no audit could be produced: there is no `.flow` here, the path resolves inside flow's own home rather than a project, `--root` is not a directory, or the framework scaffold holds none of the capability directories. That last one classifies nothing at all — not in the table and not in `--json` — because without a baseline every file would come back `project-only`, which is wrong rather than clean.
 
-**`--scaffold` decides what `identical` means.** Pointed at a project's own overlay it makes every file identical, which is the bucket a migration deletes, so the payload records whether the comparison used the installed framework. Audit itself still allows it — audit deletes nothing, and comparing a tree against itself is a legitimate thing to ask for. `flow project migrate` refuses it; see that command.
+**`--scaffold` decides what `identical` means.** Pointed at a project's own overlay it makes every file identical, which is the bucket a migration deletes, so the payload records whether the comparison used the installed framework (`default_scaffold`) and the report says so in a note above the buckets. Audit still performs the comparison — it deletes nothing, and comparing a tree against itself is a legitimate thing to ask for — but the note exists because `identical (75)` otherwise reads as an invitation to migrate, and `flow project migrate` refuses this exact comparison. A `--scaffold` pointed at a *subdirectory* of the overlay hits the no-baseline guard first instead, which is the more specific message.
 
 **Nothing here deletes.** Acting on the report is a separate verb, and it reads this one's output.
 
