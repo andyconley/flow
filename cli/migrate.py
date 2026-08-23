@@ -54,6 +54,7 @@ from project import (
     audit_project,
     declared_sources,
     has_framework_baseline,
+    overlapping_trees,
 )
 from sync import (
     read_managed_merge_paths,
@@ -646,35 +647,6 @@ def plan_payload(plan: MigrationPlan) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _overlapping_trees(a: Path, b: Path) -> bool:
-    """True when two resolved paths are the same directory or one contains
-    the other.
-
-    Containment rather than equality, because a subdirectory of the overlay is
-    still the project's own tree and still compares byte-equal to itself.
-    `samefile` covers the gap `resolve()` leaves on a case-insensitive
-    filesystem for the *equality* leg only: `is_relative_to` is a lexical
-    comparison, so a case-differing subdirectory is caught by none of the
-    three. Unreachable in practice, since the baseline gate rejects it a
-    moment later, but the limit is real and worth stating.
-
-    Path-shaped, not content-shaped. A copy of the overlay somewhere else is
-    a different tree by every test here, and migrating against it deletes
-    everything — no guard sees that, and none is proposed: the flag has to
-    stay usable for real scaffolds.
-    """
-    if a == b:
-        return True
-    try:
-        if a.samefile(b):
-            return True
-    except OSError:
-        # Either side missing. Not the same tree by any reading, and a
-        # nonexistent scaffold is caught by the baseline gate anyway.
-        pass
-    return a.is_relative_to(b) or b.is_relative_to(a)
-
-
 def resolve_roots(args) -> tuple[Path, Path] | None:
     """Migrate's root resolution, including the guard against flow's own home.
 
@@ -725,7 +697,7 @@ def resolve_roots(args) -> tuple[Path, Path] | None:
     # Deliberately not `AuditReport.default_scaffold`, which asks "is this the
     # installed framework" and is false for every override — including the
     # legitimate ones the flag exists for.
-    if _overlapping_trees(scaffold_dir.resolve(), flow_dir.resolve()):
+    if overlapping_trees(scaffold_dir.resolve(), flow_dir.resolve()):
         print("--scaffold names this project's own overlay, or part of it")
         print(f"  scaffold: {scaffold_dir}")
         print(f"  project:  {flow_dir}")
