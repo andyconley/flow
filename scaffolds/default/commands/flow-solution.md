@@ -41,6 +41,22 @@ Use this command when:
 - suggested design artifacts (spike, ADR, contracts, diagrams)
 - next-lane recommendation
 
+## C-Lite Run Protocol
+
+For solutioned work, transition through the CLI rather than editing lifecycle
+state by hand:
+
+```bash
+flow run transition <work-id> start-solution
+flow run transition <work-id> approve-solution \
+  --artifact solution=.flow/runs/<work-id>/solution.md \
+  --disposition risk=<owned|accepted>
+```
+
+Do not route to `flow-plan` from a started solution until `approve-solution`
+succeeds. Work that skips solutioning can go from approved definition directly
+to planning with `flow run transition <work-id> start-plan`.
+
 ## Composition
 
 Core roles (always invoked):

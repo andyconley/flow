@@ -34,6 +34,19 @@ Use this command when:
 - acceptance disposition
 - residual-risk summary
 
+## C-Lite Run Protocol
+
+Review must enter and leave the lane through the CLI:
+
+```bash
+flow run transition <work-id> start-review
+flow run transition <work-id> accept-review \
+  --artifact review=.flow/runs/<work-id>/review.md
+```
+
+Do not produce an archive-ready acceptance claim until `accept-review`
+succeeds. If review requests changes, do not advance the run to archive.
+
 ## Composition
 
 Core roles (always invoked):

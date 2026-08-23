@@ -350,6 +350,172 @@ class FlowCliTests(FlowCliHarness):
 
         self.assertRegex(text, r"(?m)^\s*#.*\[\[replaces\]\]")
         self.assertNotIn("replaces", flowtoml.read_toml(manifest))
+
+    def test_run_transition_refuses_invalid_gate_without_writing(self) -> None:
+        self.setup_project()
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+        run_path = self.repo / ".flow" / "runs" / "demo" / "run.json"
+        events_path = self.repo / ".flow" / "runs" / "demo" / "events.jsonl"
+        before_run = run_path.read_text()
+        before_events = events_path.read_text()
+
+        result = self.run_flow("run", "transition", "demo", "start-plan")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("transition refused", result.stdout)
+        self.assertIn("requires definition_approved", result.stdout)
+        self.assertEqual(run_path.read_text(), before_run)
+        self.assertEqual(events_path.read_text(), before_events)
+
+    def test_run_core_path_transitions_to_archive(self) -> None:
+        self.setup_project()
+        commands = (
+            ("start-definition", ()),
+            (
+                "approve-definition",
+                (
+                    "--artifact",
+                    "requirements=.flow/runs/demo/requirements.md",
+                    "--artifact",
+                    "acceptance_criteria=.flow/runs/demo/acceptance.md",
+                ),
+            ),
+            ("start-solution", ()),
+            (
+                "approve-solution",
+                (
+                    "--artifact",
+                    "solution=.flow/runs/demo/solution.md",
+                    "--disposition",
+                    "risk=owned",
+                ),
+            ),
+            ("start-plan", ()),
+            (
+                "approve-plan",
+                (
+                    "--artifact",
+                    "plan=.flow/runs/demo/plan.md",
+                    "--artifact",
+                    "handoff=.flow/runs/demo/handoff.md",
+                    "--artifact",
+                    "validation_plan=.flow/runs/demo/validation.md",
+                ),
+            ),
+            ("start-implementation", ()),
+            (
+                "mark-handback-ready",
+                (
+                    "--artifact",
+                    "implementation_evidence=.flow/runs/demo/validation-results.md",
+                    "--artifact",
+                    "handback=.flow/runs/demo/HANDOFF.md",
+                ),
+            ),
+            ("start-review", ()),
+            (
+                "accept-review",
+                ("--artifact", "review=.flow/runs/demo/review.md"),
+            ),
+            (
+                "archive",
+                (
+                    "--disposition",
+                    "capability_gaps=n/a",
+                    "--disposition",
+                    "memory=n/a",
+                ),
+            ),
+        )
+        for event, extra in commands:
+            with self.subTest(event=event):
+                self.assert_ok(self.run_flow("run", "transition", "demo", event, *extra))
+
+        status = self.run_flow("run", "status", "demo", "--json")
+        self.assert_ok(status)
+        payload = json.loads(status.stdout)
+        self.assertEqual(payload["state"], "archived")
+        self.assertEqual(payload["dispositions"]["capability_gaps"], "n/a")
+        history = self.run_flow("run", "history", "demo", "--json")
+        self.assert_ok(history)
+        self.assertEqual(len(json.loads(history.stdout)["events"]), len(commands))
+        self.assert_ok(self.run_flow("run", "verify", "demo"))
+
+    def test_run_legacy_status_is_read_only_and_inferred(self) -> None:
+        self.setup_project()
+        legacy_dir = self.repo / ".flow" / "runs" / "old-work"
+        legacy_dir.mkdir()
+        (legacy_dir / "PLAN.md").write_text("legacy plan\n")
+
+        status = self.run_flow("run", "status", "old-work", "--json")
+
+        self.assert_ok(status)
+        payload = json.loads(status.stdout)
+        self.assertEqual(payload["state"], "legacy/inferred")
+        self.assertFalse((legacy_dir / "run.json").exists())
+        verify = self.run_flow("run", "verify", "old-work")
+        self.assert_ok(verify)
+        self.assertIn("legacy/inferred", verify.stdout)
+
+    def test_run_scout_archive_creates_minimal_envelope(self) -> None:
+        self.setup_project()
+
+        result = self.run_flow(
+            "run",
+            "transition",
+            "scout-fix",
+            "archive-scout",
+            "--artifact",
+            "scout_summary=.flow/runs/scout-fix/scout-summary.md",
+            "--disposition",
+            "capability_gaps=n/a",
+            "--disposition",
+            "memory=n/a",
+        )
+
+        self.assert_ok(result)
+        status = self.run_flow("run", "status", "scout-fix", "--json")
+        self.assert_ok(status)
+        payload = json.loads(status.stdout)
+        self.assertEqual(payload["state"], "archived")
+        self.assertEqual(payload["lane"], "scout")
+
+    def test_run_pause_and_resume_returns_to_prior_state(self) -> None:
+        self.setup_project()
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+        self.assert_ok(self.run_flow("run", "transition", "demo", "pause", "--note", "waiting"))
+
+        paused = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
+        self.assertEqual(paused["state"], "paused")
+        self.assertEqual(paused["return_state"], "defining")
+        self.assertEqual(paused["return_lane"], "define")
+        self.assertEqual(paused["next_action"], "waiting")
+
+        self.assert_ok(self.run_flow("run", "transition", "demo", "resume"))
+        resumed = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
+        self.assertEqual(resumed["state"], "defining")
+        self.assertEqual(resumed["lane"], "define")
+        self.assertNotIn("return_state", resumed)
+        self.assertNotIn("return_lane", resumed)
+        self.assertNotIn("next_action", resumed)
+
+    def test_lifecycle_commands_reference_c_lite_run_protocol(self) -> None:
+        command_dir = REPO_ROOT / "scaffolds" / "default" / "commands"
+        expected = {
+            "flow-define.md": "flow run transition <work-id> start-definition",
+            "flow-solution.md": "flow run transition <work-id> start-solution",
+            "flow-plan.md": "flow run transition <work-id> start-plan",
+            "flow-implement.md": "flow run transition <work-id> start-implementation",
+            "flow-review.md": "flow run transition <work-id> start-review",
+            "flow-archive.md": "flow run transition <work-id> archive",
+            "flow-scout.md": "flow run transition <work-id> archive-scout",
+            "flow-status.md": "flow run list",
+            "flow-resume.md": "flow run verify",
+        }
+        for name, needle in expected.items():
+            with self.subTest(command=name):
+                self.assertIn(needle, (command_dir / name).read_text())
+
     # -- `flow refresh project`, retired -------------------------------
     #
     # Seven tests here previously asserted that refresh repaired an overlay:
@@ -2101,6 +2267,7 @@ class FlowCliTests(FlowCliHarness):
                 "plugin_usage",
                 "project",
                 "render",
+                "runstate",
                 "session_lookup",
                 "setup",
                 "sync",

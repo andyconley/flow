@@ -48,6 +48,21 @@ Use this command when:
 - adversarial review findings and dispositions
 - next-lane recommendation: `flow-solution`, `flow-plan`, further definition, or defer/reject
 
+## C-Lite Run Protocol
+
+For durable definition work, create or update the run through the CLI rather
+than editing lifecycle state by hand:
+
+```bash
+flow run transition <work-id> start-definition
+flow run transition <work-id> approve-definition \
+  --artifact requirements=.flow/runs/<work-id>/requirements.md \
+  --artifact acceptance_criteria=.flow/runs/<work-id>/acceptance-criteria.md
+```
+
+Do not route to `flow-solution` or `flow-plan` until `approve-definition`
+succeeds. A refused transition is a hard gate, not advisory prose.
+
 ## Composition
 
 Core roles:

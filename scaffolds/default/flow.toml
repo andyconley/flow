@@ -459,3 +459,7 @@ summary = "Classify a repo's `.flow/` overlay against the framework (read-only)"
 [[help.cli_commands]]
 invocation = "flow project migrate"
 summary = "Remove the framework copies `audit` finds; dry run unless `--apply --yes`"
+
+[[help.cli_commands]]
+invocation = "flow run list/status/history/verify/transition"
+summary = "Inspect and hard-gate C-lite workflow run state"

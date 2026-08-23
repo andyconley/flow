@@ -34,6 +34,28 @@ Do not use this command to decide whether work is ready. Use `flow-review` first
 - durable memory updates
 - run completion marker
 
+## C-Lite Run Protocol
+
+Archive closes the run through the CLI:
+
+```bash
+flow run transition <work-id> archive \
+  --disposition capability_gaps=<recorded|n/a> \
+  --disposition memory=<updated|n/a>
+```
+
+For scout work that never escalated into the gated core path, create only the
+minimal closure envelope:
+
+```bash
+flow run transition <work-id> archive-scout \
+  --artifact scout_summary=.flow/runs/<work-id>/scout-summary.md \
+  --disposition capability_gaps=<recorded|n/a> \
+  --disposition memory=<updated|n/a>
+```
+
+Do not mark archive complete until the transition succeeds.
+
 ## Composition
 
 Primary roles:

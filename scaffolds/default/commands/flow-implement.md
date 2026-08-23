@@ -40,6 +40,20 @@ Artifacts should live under:
 - review and validation evidence
 - structured handback
 
+## C-Lite Run Protocol
+
+Implementation must enter and leave the lane through the CLI:
+
+```bash
+flow run transition <work-id> start-implementation
+flow run transition <work-id> mark-handback-ready \
+  --artifact implementation_evidence=.flow/runs/<work-id>/validation-results.md \
+  --artifact handback=.flow/runs/<work-id>/HANDOFF.md
+```
+
+Do not begin implementation until `start-implementation` succeeds. Do not route
+to `flow-review` until `mark-handback-ready` succeeds.
+
 ## Composition
 
 Core roles (always invoked):

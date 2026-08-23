@@ -31,6 +31,26 @@ Do not use scout mode when the task grows into architecture, cross-session execu
 - focused validation
 - concise handback
 
+## C-Lite Run Protocol
+
+Scout does not create a run envelope at start. If scout work grows out of scout
+criteria, stop and create a linked core-path run from a scout summary:
+
+```bash
+flow run transition <work-id> start-definition \
+  --artifact scout_summary=.flow/runs/<work-id>/scout-summary.md
+```
+
+If scout work completes and is archived without escalation, create only the
+minimal closure envelope:
+
+```bash
+flow run transition <work-id> archive-scout \
+  --artifact scout_summary=.flow/runs/<work-id>/scout-summary.md \
+  --disposition capability_gaps=<recorded|n/a> \
+  --disposition memory=<updated|n/a>
+```
+
 ## Scout-Size Criteria
 
 A change qualifies for scout mode when ALL of the following hold:

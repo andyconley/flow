@@ -90,6 +90,81 @@ Print the framework orientation: workflow phases, slash commands, CLI commands, 
 
 Same content as the `/flow-help` slash command. Use this at a shell when you are not inside a Claude session.
 
+### `flow run list`
+
+List workflow runs under the current repo's `.flow/runs/` directory.
+
+Flags:
+
+- `--all` — include archived runs
+- `--json` — emit JSON
+
+Runs with `run.json` are C-lite runs. Existing artifact folders without `run.json` are reported as `legacy/inferred`; reading them does not create state.
+
+### `flow run status <work-id>`
+
+Show one run's current state.
+
+Flags:
+
+- `--json` — emit JSON
+
+For C-lite runs, this reads `.flow/runs/<work-id>/run.json`. For legacy run folders, it reports `legacy/inferred` and lists discovered artifacts.
+
+### `flow run history <work-id>`
+
+Show one run's append-only transition history from `.flow/runs/<work-id>/events.jsonl`.
+
+Flags:
+
+- `--json` — emit JSON
+
+Legacy/inferred runs may have no history; that is reported as an empty event list rather than creating one.
+
+### `flow run verify <work-id>`
+
+Check a run's state/history consistency.
+
+Flags:
+
+- `--json` — emit JSON
+
+For C-lite runs, verification checks schema version, presence of transition history, latest event state, and `last_event`. For legacy/inferred runs, verification succeeds with the explicit message `legacy/inferred: no canonical run.json`.
+
+### `flow run transition <work-id> <event>`
+
+Apply a hard-gated lifecycle transition. Invalid transitions leave `run.json` and `events.jsonl` unchanged.
+
+Flags:
+
+- `--artifact NAME=PATH` — record gate evidence or an artifact pointer; may be repeated
+- `--disposition NAME=VALUE` — record a closure disposition; may be repeated
+- `--note TEXT` — record a next action or transition note
+- `--json` — emit JSON
+
+Core path events:
+
+- `start-definition`
+- `approve-definition` — requires `--artifact requirements=...` and `--artifact acceptance_criteria=...`
+- `start-solution`
+- `approve-solution` — requires `--artifact solution=...` and `--disposition risk=...`
+- `start-plan`
+- `approve-plan` — requires `--artifact plan=...`, `--artifact handoff=...`, and `--artifact validation_plan=...`
+- `start-implementation`
+- `mark-handback-ready` — requires `--artifact implementation_evidence=...` and `--artifact handback=...`
+- `start-review`
+- `accept-review` — requires `--artifact review=...`
+- `archive` — requires `--disposition capability_gaps=...` and `--disposition memory=...`
+
+Support events:
+
+- `pause`
+- `block`
+- `resume`
+- `archive-scout` — creates the minimal scout closure envelope and requires `--artifact scout_summary=...`, `--disposition capability_gaps=...`, and `--disposition memory=...`
+
+`flow run transition` is the only command that writes lifecycle state. `/flow-*` commands call it when they cross gates; they do not hand-edit `run.json`.
+
 ### `flow doctor`
 
 Report machine, install, user-level, and project-level state in one output.

@@ -44,6 +44,22 @@ If the work cannot be understood without chat history, the plan is not done yet.
 - validation expectations
 - next-lane recommendation
 
+## C-Lite Run Protocol
+
+Planning must use the run protocol for lifecycle state:
+
+```bash
+flow run transition <work-id> start-plan
+flow run transition <work-id> approve-plan \
+  --artifact plan=.flow/runs/<work-id>/plan.md \
+  --artifact handoff=.flow/runs/<work-id>/implementation-handoff.md \
+  --artifact validation_plan=.flow/runs/<work-id>/validation-plan.md
+```
+
+Do not route to `flow-implement` until `approve-plan` succeeds. The transition
+is the hard gate that records accepted scope, the implementation handoff, and
+the validation plan.
+
 ## Composition
 
 Core roles (always invoked):

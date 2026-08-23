@@ -32,9 +32,22 @@ This is a state-summary command, not a shaping or implementation command.
 - important blockers or caveats
 - recommended next command
 
+## C-Lite Run Protocol
+
+Read canonical run state before inferring from Markdown:
+
+```bash
+flow run list
+flow run status <work-id>
+flow run verify <work-id>
+```
+
+If a run has no `run.json`, report it as `legacy/inferred`. Do not present
+inferred phase or completion state as authoritative.
+
 ## Status Workflow
 
-1. Identify active or recent runs at the current project level. Note any active runs at parent overlay levels separately as parent context (do not conflate them with the project's own state).
+1. Identify active or recent runs at the current project level, starting with `flow run list`. Note any active runs at parent overlay levels separately as parent context (do not conflate them with the project's own state).
 2. Read current transient work state from STATE.md across stacked overlay levels. Surface project-level prominently; parent-overlay state appears under a separate parent-context heading.
 3. Pull any auto-memory entries relevant to the current focus (from `~/.claude/projects/<project-id>/memory/`). Mention them when they affect the current state readout.
 4. Summarize blockers, caveats, or unresolved decisions.

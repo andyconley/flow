@@ -101,6 +101,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow doctor` | Report machine, install, user-level, and project-level state |
 | `flow project audit` | Classify a repo's `.flow/` overlay against the framework (read-only) |
 | `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
+| `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
 <!-- generated:cli-commands-table:end -->
 
 The table above is derived from `[[help.cli_commands]]` in `flow.toml`.

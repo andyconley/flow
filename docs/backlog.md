@@ -12,7 +12,170 @@ The active list is ordered. Move an item when its priority changes.
 
 ## Active Priorities
 
-### 1. Existing-Project Adoption Playbook
+### 1. C-Lite Workflow Enforcement
+
+Status: archived
+
+Problem:
+
+- flow has strong lane contracts, but the actual run state is still mostly
+  prose and agent discipline
+- status, resume, archive readiness, and gate completion depend on interpreting
+  Markdown and chat context rather than a runtime-neutral state record
+- Claude and Codex need the same project truth when work crosses sessions or
+  runtimes
+
+Include:
+
+- `run.json` as the canonical current run state
+- `events.jsonl` as append-only transition history
+- a small state machine for critical lane gates, not full orchestration
+- `flow run list/status/history/verify/transition`
+- `/flow-status` and `/flow-resume` reading run state before falling back to
+  legacy inference
+- durable define -> solution -> plan -> implement -> review -> archive handoffs
+- a scout escalation envelope so small work can grow without losing context
+- explicit lane boundaries, especially implementation self-review versus
+  independent acceptance review
+
+Done only when:
+
+- a run can be listed, inspected, verified, paused/resumed, and archived from
+  the CLI
+- lane commands write or update the run state as they move through gates
+- invalid critical transitions fail with actionable missing requirements
+- legacy runs remain readable or explicitly marked as legacy/inferred
+- docs, help, and tests describe the new run protocol
+
+Why it matters:
+
+- guardrails should not depend on a runtime remembering prompt instructions
+- the right state should be inspectable after compaction, interruption, or
+  runtime handoff
+- this gives flow enforcement without turning it into a heavy workflow engine
+
+Next step:
+
+- run `/flow-plan` for C-lite workflow enforcement
+
+### 2. Runtime Neutrality and Cross-Runtime Behavior
+
+Status: not started
+
+Problem:
+
+- shared workflow commands are intended to be runtime-neutral, but some
+  continuity assumptions still point at Claude-specific memory or checkpoint
+  surfaces
+- generated files can be checked statically, but runtime command discovery and
+  role behavior still need real smoke evidence
+
+Include:
+
+- remove Claude-specific continuity assumptions from shared command bodies
+- introduce runtime-specific context-provider wording or generated sections for
+  Claude and Codex
+- prove generated commands and agents actually load in both runtimes
+- verify configured role agents use intended model and effort where the runtime
+  supports it
+- add cross-runtime workflow smoke tests around boot, define, plan, review,
+  archive, status, and resume
+- keep project artifacts canonical; runtime memory is a cache or companion, not
+  the workflow source of truth
+
+Why it matters:
+
+- flow's value is portability across supported AI runtimes
+- runtime-specific memory assumptions make cross-runtime handoff accidental
+
+Next step:
+
+- plan after the C-lite state contract is defined so both runtimes share the
+  same source of truth
+
+### 3. Maintainer Supportability
+
+Status: not started
+
+Current:
+
+- `flow doctor`, `flow help`, `flow sync ... --check`, and `flow update --check`
+  provide good first-line diagnostics
+- several failure classes still collapse into broad messages or advisory output
+
+Problem:
+
+- a maintainer still has to manually collect too much evidence to classify a
+  failure
+- `flow doctor` is human-friendly, but it is not a strict gate or structured
+  support artifact
+- update, sync, and runtime drift failures need clearer cause and next-action
+  guidance
+
+Include:
+
+- `flow doctor --json` or `flow support bundle`
+- stable diagnostic categories such as `missing`, `parse_error`,
+  `permission_denied`, `git_unavailable`, `remote_unreachable`,
+  `manifest_invalid`, `managed_conflict`, and `runtime_not_found`
+- `flow doctor --check` or `--strict` with useful nonzero exits for actionable
+  failures
+- better `flow update` remote/tag/changelog failure classification
+- rollback or previous-version recovery path for release installs
+- sync drift output that names cause, target root, source manifest, conflict
+  category, and next action
+- a maintainer incident macro covering commands, cwd, install mode, source
+  revision, stderr, affected runtime, and last known good version
+
+Why it matters:
+
+- support should start with one structured evidence bundle, not ten remembered
+  commands
+- Flow is local and personal, so diagnosability is the operational safety net
+
+Next step:
+
+- plan the support bundle and diagnostic status model
+
+### 4. Telemetry and Usage Freshness
+
+Status: not started
+
+Current:
+
+- usage tracking has a real store and good collector coverage
+- `flow cost active` harvests and normalizes Claude data automatically
+- Codex harvest is still manual before summary/trend views are current
+
+Problem:
+
+- cost and capacity reports can be stale or empty unless the maintainer
+  remembers the right harvest/normalize path
+- hook behavior, plugin usage, cost reads, and freshness signals are not yet
+  presented as one supportable pipeline
+
+Include:
+
+- make Codex harvest freshness less hidden
+- clarify which cost commands harvest automatically and which read stored data
+- improve freshness/staleness reporting in cost and plugin usage views
+- add hook-to-telemetry integration tests
+- add plugin usage CLI boundary tests
+- decide whether a safe `flow cost refresh` command should run harvest and
+  normalize for both supported runtimes
+
+Why it matters:
+
+- telemetry should reduce session-management overhead, not add another hidden
+  maintenance ritual
+- stale usage data is worse than no usage data when it looks current
+
+Next step:
+
+- plan the freshness model and the smallest command surface that makes it
+  obvious
+
+### 5. Adoption and Project Migration
 
 Status: not started
 
@@ -22,156 +185,36 @@ Problem:
   memory, and local habits
 - `flow setup project` handles a clean scaffold, but it does not tell someone
   how to migrate an existing project safely
-
-Include:
-
-- inventory the current project
-- decide what becomes `.flow` source
-- scaffold `.flow`
-- move canonical materials
-- generate runtime adapters
-- verify the migration
-- choose between a structured chat summary and a durable migration artifact
-
-Adoption is done only when the repo has evidence that:
-
-- `.flow` contains the source of truth
-- generated runtime files match the expected surfaces
-- unmanaged files are intentionally preserved
-- collaborators know where to edit
-- README, help, and docs describe the adopted runtime model
-
-Why it matters:
-
-- adoption should feel boring and reversible
-- agents should not rebuild the process from memory each time
-
-Next step:
-
-- write `docs/adoption-playbook.md`, then link it from README and this backlog
-
-### 2. Runtime Surface Inventory and Reconciliation
-
-Status: not started
-
-Problem:
-
-- flow can generate files into `.claude/`, `.agents/skills/`, and `.codex/`
-- existing projects may already have files in those locations
-- the user needs to know what flow would touch before any write happens
-
-The inventory should classify each runtime file:
-
-- move into `.flow` source
-- keep runtime-local and unmanaged
-- replace with generated flow output
-- remove after migration
-
-It should also detect overlaps between generated flow paths and existing
-unmanaged files.
-
-Why it matters:
-
-- a read-only report turns adoption risk into a list
-- runtime-neutral inventory keeps the model honest across Claude and Codex
-
-Next step:
-
-- define a read-only `flow adopt inventory` command or equivalent report
-- defer import/write behavior until the report is useful
-
-### 3. Drift Reporting With Next Actions
-
-Status: partial
-
-Current:
-
-- `flow sync <target> --check` reports changed, stale, and conflicting files
-- `flow doctor` reports sync state and drift status
-
-Problem:
-
-- the current output tells the user that drift exists
-- it does not always tell the user what caused it or what to do next
-
-Improve the output so it names:
-
-- source-changed updates
-- stale managed files
-- merge-protected runtime config
-- unmanaged conflicts
-- the likely next command or manual action
-
-Why it matters:
-
-- existing-project adoption needs operator guidance beyond status labels
-- clear drift output reduces edits to generated files and accidental deletion
-  of runtime-local configuration
-
-Next step:
-
-- improve `--check` output before adding new adoption commands; it is already
-  the first diagnostic surface
-
-### 4. Content-Aware Project Refresh
-
-Status: partial
-
-Current:
-
-- `flow refresh project` copies only missing scaffold files
-
-Problem:
-
-- project overlays drift when framework templates change
-- flow does not yet show whether a copied project file is behind the framework
-
-Need:
-
-- detect framework template changes after a project copied the templates
-- compare project files to newer template versions without overwriting local
-  edits
-- surface recommended merges, conflicts, and "leave local" decisions
-
-Why it matters:
-
-- users should be able to update framework guidance without losing local
-  project choices
-- missing-file refresh is safe, but it does not help when copied files change
-
-Next step:
-
-- define the comparison model: baseline metadata, content hashes, three-way
-  diff, or advisory-only heuristics
-
-### 5. Project Override and Exclusion Model
-
-Status: not started
-
-Problem:
-
 - existing projects may want flow, but not every generated command, agent,
   hook, or runtime target
 - deleting generated files is a bad opt-out because drift checks will keep
   finding them
+- older backlog and docs still carry some project-sync/project-refresh framing
+  that needs reconciliation with the current user-level runtime model
 
-Let a project declare:
+Include:
 
-- do not generate this command
-- do not generate this agent
-- do not register this hook
-- generate only selected runtime targets
+- existing-project adoption playbook
+- read-only runtime surface inventory and reconciliation report
+- explicit project override/exclusion model
+- project setup -> migration -> doctor convergence workflow
+- classification of runtime files: move into `.flow` source, keep unmanaged,
+  replace with generated output, or remove after migration
+- docs cleanup for retired project-sync and project-refresh assumptions
+- README, help, and docs that describe the adopted runtime model after the
+  C-lite run protocol is defined
 
 Make exclusions visible in doctor and check output.
 
 Why it matters:
 
+- adoption should feel boring, reversible, and inspectable
 - adoption works better when projects can take the parts they need
 - explicit exclusions make that choice visible and repeatable
 
 Next step:
 
-- define the manifest shape and precedence rules before implementation
+- plan after C-lite so adoption guidance does not immediately go stale
 
 ## Deferred / Watch
 

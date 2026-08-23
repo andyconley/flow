@@ -40,6 +40,13 @@ from plugin_usage import (  # noqa: E402
     plugin_usage_show_command,
     plugin_usage_snapshot_command,
 )
+from runstate import (  # noqa: E402
+    cmd_history as run_history_command,
+    cmd_list as run_list_command,
+    cmd_status as run_status_command,
+    cmd_transition as run_transition_command,
+    cmd_verify as run_verify_command,
+)
 from migrate import cmd_migrate  # noqa: E402
 from project import cmd_audit  # noqa: E402
 from setup import (  # noqa: E402
@@ -66,6 +73,7 @@ def main() -> int:
             "  flow sync claude --user\n"
             "  flow sync codex --user --check\n"
             "  flow project audit                 (what a repo still copies)\n"
+            "  flow run list                      (workflow run state)\n"
             "  flow doctor\n"
         ),
     )
@@ -407,6 +415,78 @@ def main() -> int:
         help="hook mode: read hook JSON from stdin and branch on hook_event_name",
     )
 
+    run_parser = sub.add_parser(
+        "run",
+        help="inspect and transition C-lite workflow runs",
+        description=(
+            "C-lite run protocol. `run.json` is the canonical current state and "
+            "`events.jsonl` is append-only transition history. `flow run transition` "
+            "is the only command that writes lifecycle state."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  flow run list\n"
+            "  flow run status 20260823-work\n"
+            "  flow run transition 20260823-work start-definition\n"
+            "  flow run transition 20260823-work approve-definition --artifact requirements=.flow/runs/20260823-work/requirements.md --artifact acceptance_criteria=.flow/runs/20260823-work/acceptance-criteria.md\n"
+        ),
+    )
+    run_sub = run_parser.add_subparsers(dest="run_target", required=True, title="run views")
+    run_list_parser = run_sub.add_parser(
+        "list",
+        help="list C-lite and legacy/inferred runs",
+        description="List runs under the current repo's `.flow/runs/` directory.",
+    )
+    run_list_parser.add_argument("--all", action="store_true", help="include archived runs")
+    run_list_parser.add_argument("--json", action="store_true", help="emit JSON")
+
+    run_status_parser = run_sub.add_parser(
+        "status",
+        help="show one run's current state",
+        description="Show canonical run state, or legacy/inferred status when no run.json exists.",
+    )
+    run_status_parser.add_argument("work_id")
+    run_status_parser.add_argument("--json", action="store_true", help="emit JSON")
+
+    run_history_parser = run_sub.add_parser(
+        "history",
+        help="show one run's transition history",
+        description="Read events.jsonl for one run.",
+    )
+    run_history_parser.add_argument("work_id")
+    run_history_parser.add_argument("--json", action="store_true", help="emit JSON")
+
+    run_verify_parser = run_sub.add_parser(
+        "verify",
+        help="verify one run's state/history consistency",
+        description="Check run.json, events.jsonl, and the latest projected state.",
+    )
+    run_verify_parser.add_argument("work_id")
+    run_verify_parser.add_argument("--json", action="store_true", help="emit JSON")
+
+    run_transition_parser = run_sub.add_parser(
+        "transition",
+        help="apply a legal lifecycle transition",
+        description="Hard-gated lifecycle transition. Invalid transitions leave run.json and events.jsonl unchanged.",
+    )
+    run_transition_parser.add_argument("work_id")
+    run_transition_parser.add_argument("event")
+    run_transition_parser.add_argument(
+        "--artifact",
+        action="append",
+        metavar="NAME=PATH",
+        help="record gate evidence or artifact pointer; may be repeated",
+    )
+    run_transition_parser.add_argument(
+        "--disposition",
+        action="append",
+        metavar="NAME=VALUE",
+        help="record a closure disposition such as capability_gaps=n/a; may be repeated",
+    )
+    run_transition_parser.add_argument("--note", help="next action or transition note")
+    run_transition_parser.add_argument("--json", action="store_true", help="emit JSON")
+
     for cost_parser in (
         cost_summary_parser,
         cost_sessions_parser,
@@ -629,6 +709,16 @@ def main() -> int:
         return overlay_status_command()
     if args.command == "overlay" and args.overlay_target == "check":
         return overlay_check_command()
+    if args.command == "run" and args.run_target == "list":
+        return run_list_command(args)
+    if args.command == "run" and args.run_target == "status":
+        return run_status_command(args)
+    if args.command == "run" and args.run_target == "history":
+        return run_history_command(args)
+    if args.command == "run" and args.run_target == "verify":
+        return run_verify_command(args)
+    if args.command == "run" and args.run_target == "transition":
+        return run_transition_command(args)
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

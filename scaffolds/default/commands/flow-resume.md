@@ -30,6 +30,19 @@ Use this command when:
 - current blocker or next step
 - recommended continuation lane
 
+## C-Lite Run Protocol
+
+Resume canonical run state before inferring from artifacts:
+
+```bash
+flow run status <work-id>
+flow run verify <work-id>
+```
+
+If `run.json` is absent, report the selected run as `legacy/inferred` and say
+which artifacts support the inference. Do not write C-lite state as a side
+effect of resume.
+
 ## Guiding Principle
 
 `flow-resume` should prefer continuity over restart unless the old run is clearly obsolete.

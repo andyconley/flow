@@ -109,6 +109,9 @@ other by bare name.
   `diagnostics.py` so `doctor` keeps holding presentation rather than git
   plumbing, and so the status is testable against a tmpdir without shelling
   through the CLI. Never inits, commits, or pushes.
+- `runstate.py` — dependency-free C-lite workflow state. Owns the transition
+  table, `run.json` projection, `events.jsonl` history, legacy/inferred reads,
+  and `flow run` command implementations.
 - `cost.py` — `flow cost`. `summary` and `sessions` only read `turn_norm`;
   `active` deliberately runs the incremental Claude harvest and a normalize
   pass first, since a "what needs attention right now" view must not lag
@@ -232,7 +235,10 @@ Reusable document templates such as handoffs, ADRs, and run summaries.
 
 #### `scaffolds/default/runs/`
 
-Reserved project-local execution log area.
+Reserved project-local execution log area. C-lite runs write `run.json` as the
+current-state projection and `events.jsonl` as append-only transition history
+under `runs/<work-id>/`; older artifact-only folders are read as
+`legacy/inferred`.
 
 ### `tests/`
 

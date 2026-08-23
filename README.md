@@ -257,8 +257,27 @@ Use these to inspect install state, generated runtime surfaces, drift, and comma
 
 - `flow doctor`
   - report machine, user-level, and project-level state
+- `flow run list`
+  - list active C-lite runs and legacy/inferred run artifact folders
+- `flow run status WORK_ID`
+  - show one run's current state from `.flow/runs/<work-id>/run.json`
+- `flow run verify WORK_ID`
+  - check `run.json` against append-only `events.jsonl`
 - `flow help`
   - render the framework overview at the shell
+
+### Workflow Run State
+
+Use these when a `/flow-*` command needs to record or inspect the hard-gated lifecycle state for one work item. `run.json` is the current-state projection; `events.jsonl` is the append-only history. `flow run transition` is the only lifecycle writer.
+
+- `flow run transition WORK_ID EVENT`
+  - apply a legal transition such as `start-definition`, `approve-plan`, `mark-handback-ready`, `accept-review`, or `archive`
+- `--artifact NAME=PATH`
+  - attach required gate evidence such as `requirements`, `plan`, `validation_plan`, `implementation_evidence`, or `review`
+- `--disposition NAME=VALUE`
+  - attach required closure decisions such as `capability_gaps=n/a` and `memory=updated`
+- `flow run history WORK_ID`
+  - read the transition history
 
 ### Usage Store Maintenance
 

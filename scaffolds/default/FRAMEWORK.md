@@ -59,6 +59,8 @@ agents, standards, and templates come from the user-level install.
 - `PROJECT.md` - project identity and context
 - `memory/STATE.md` - transient work state (what is in flight, blocked, or pending right now)
 - `runs/` - per-work-item artifacts
+- `runs/<work-id>/run.json` - C-lite current-state projection for gated workflow runs
+- `runs/<work-id>/events.jsonl` - append-only transition history for that run
 
 Durable project facts and cross-cutting decisions do NOT live in `.flow/memory/` — they live in Claude Code's auto-memory at `~/.claude/projects/<project-id>/memory/`. `flow-archive` writes there explicitly.
 
