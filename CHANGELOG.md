@@ -2,6 +2,64 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.19.0](https://github.com/andyconley/flow/compare/v0.18.0...v0.19.0) (2026-08-23)
+
+### ⚠ BREAKING CHANGES
+
+* **project:** `flow refresh project` now exits 1 in all forms. Use `flow
+setup project` for missing core files and `flow project audit` / `flow
+project migrate` for framework copies a project is still carrying.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+* fix: close the findings from review of the drift guards
+
+The one defect. `sites` was built before `drifted_blocked` was computed, so
+every declaring site of a drifted file went into the edit plan. A file with
+two sites where one resolves and one does not was correctly refused for
+deletion *and* had its resolvable site cut anyway — leaving a file on disk
+the manifest no longer declares, which is the inconsistency the block exists
+to prevent, reached from the other side.
+
+Reproduced before fixing: `drifted_blocked=['commands/flow-plan.md']`,
+`would delete file: False`, `manifest edits:
+['claude.commands.flow-plan.source']`. The unresolvable site came from a
+trailing comment on a `name =` line, which `_NAME_RE` will not match — a
+hand-annotated manifest is exactly the artifact the text-surgery design
+exists to protect.
+
+The edits are now planned twice. Blocking cannot be known until after the
+first pass and the edits must exclude blocked sites, so no single-pass
+ordering works. Two tests: the manifest is byte-identical for a blocked
+file, and the second pass still cuts the declarations of the drifted files
+that are being removed. The latter exists because the first mutation round
+found nothing covering it.
+
+Four text corrections, all of them shipping surfaces:
+
+- `migrate --help` said drifted files are never removed, directly above the
+  `--drifted` flag.
+- The `refresh` subparser's help still described the behaviour it no longer
+  has, in three places.
+- The CLI reference's roll-forward sequence told the reader to run a command
+  that now exits 1.
+- `resolve_roots`'s docstring claimed a shared contract with `audit` that
+  does not exist — `cmd_audit` resolves its own roots and the two now differ
+  deliberately.
+
+Also narrows the `samefile` docstring, which claimed coverage it does not
+have, and drops a doubled word from doctor's drift line.
+
+Deferred and recorded in the run's findings: the audit-side overlap notice
+the plan called for, and a payload asymmetry where `applied.deleted` can
+include files absent from `delete`.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+### Features
+
+* **project:** make overlay drift visible, give it an exit, and guard the destructive paths ([#13](https://github.com/andyconley/flow/issues/13)) ([a5f78c5](https://github.com/andyconley/flow/commit/a5f78c5488c4c419e61d2ee5b4e3679b5e53c428))
+
 ## [0.18.0](https://github.com/andyconley/flow/compare/v0.17.0...v0.18.0) (2026-08-21)
 
 ### Features
