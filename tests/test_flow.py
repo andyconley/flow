@@ -516,6 +516,14 @@ class FlowCliTests(FlowCliHarness):
             with self.subTest(command=name):
                 self.assertIn(needle, (command_dir / name).read_text())
 
+    def test_shared_commands_use_runtime_memory_provider_language(self) -> None:
+        command_dir = REPO_ROOT / "scaffolds" / "default" / "commands"
+        for name in ("flow-boot.md", "flow-status.md", "flow-resume.md", "flow-archive.md"):
+            with self.subTest(command=name):
+                text = (command_dir / name).read_text()
+                self.assertIn("runtime memory provider", text)
+                self.assertNotIn("Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` —", text)
+
     # -- `flow refresh project`, retired -------------------------------
     #
     # Seven tests here previously asserted that refresh repaired an overlay:
@@ -681,6 +689,48 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn('model = "gpt-5.6-luna"', tech_writer_content)
         self.assertIn('model_reasoning_effort = "low"', tech_writer_content)
 
+    def test_runtime_smoke_checks_generated_surfaces(self) -> None:
+        fake_home = self.use_fake_home()
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        result = self.run_flow("runtime", "smoke", "--target", "all", "--json")
+
+        self.assert_ok(result)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["failed"], 0)
+        self.assertEqual(payload["manual_required"], 4)
+        targets = {item["target"]: item for item in payload["targets"]}
+        claude_static = targets["claude"]["static"]
+        codex_static = targets["codex"]["static"]
+        self.assertTrue(any(row["name"] == "command flow-plan C-lite protocol" for row in claude_static))
+        self.assertTrue(any(row["name"] == "agent support-lead" for row in codex_static))
+        self.assertIn("manual_required", {row["status"] for row in targets["codex"]["manual"]})
+
+        text = self.run_flow("runtime", "smoke", "--target", "codex").stdout
+        self.assertIn("manual_required: role agent invocation", text)
+        self.assertIn("summary: failed=0 manual_required=2", text)
+
+    def test_runtime_smoke_fails_on_missing_agent_policy(self) -> None:
+        fake_home = self.use_fake_home()
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+        agent_path = fake_home / ".codex" / "agents" / "support-lead.toml"
+        agent_path.write_text(agent_path.read_text().replace('model_reasoning_effort = "low"\n', ""))
+
+        result = self.run_flow("runtime", "smoke", "--target", "codex", "--json")
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["ok"])
+        failures = [
+            row
+            for target in payload["targets"]
+            for row in target["static"]
+            if row["status"] == "failed"
+        ]
+        self.assertTrue(any(row["name"] == "agent support-lead" for row in failures))
+
     def test_sync_check_detects_codex_drift(self) -> None:
         fake_home = self.use_fake_home()
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
@@ -726,8 +776,9 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("codex drift:      clean", result.stdout)
         self.assertIn("agent policy:     ok (13/13 configured)", result.stdout)
         self.assertIn("codex agents:     ok (13/13 configured)", result.stdout)
-        self.assertIn("claude smoke:", result.stdout)
-        self.assertIn("codex smoke:", result.stdout)
+        self.assertIn("claude smoke:     static ok; 2 manual check(s) required", result.stdout)
+        self.assertIn("codex smoke:      static ok; 2 manual check(s) required", result.stdout)
+        self.assertIn("flow runtime smoke --target claude", result.stdout)
         self.assertIn("-- user-level", result.stdout)
         self.assertIn("-- project:", result.stdout)
 
@@ -742,6 +793,7 @@ class FlowCliTests(FlowCliHarness):
             "sync                generate runtime adapters from the framework scaffold", result.stdout
         )
         self.assertIn("flow sync codex --user --check", result.stdout)
+        self.assertIn("flow runtime smoke --target all", result.stdout)
         self.assertIn("flow project audit", result.stdout)
         # The top-level examples advertised `flow sync claude` and
         # `flow sync codex --check` after those forms had started exiting 1.
@@ -2268,6 +2320,7 @@ class FlowCliTests(FlowCliHarness):
                 "project",
                 "render",
                 "runstate",
+                "runtime_smoke",
                 "session_lookup",
                 "setup",
                 "sync",

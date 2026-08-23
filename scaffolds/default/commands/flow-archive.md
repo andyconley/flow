@@ -24,7 +24,7 @@ Do not use this command to decide whether work is ready. Use `flow-review` first
 - review findings and resolution status
 - validation evidence
 - current transient work state: `.flow/memory/STATE.md` (every stacked overlay level)
-- current durable project memory at `~/.claude/projects/<project-id>/memory/` (Claude Code auto-memory — `project`-type entries)
+- current durable project memory in the active runtime provider, when one exists
 
 ## Primary outputs
 
@@ -89,7 +89,7 @@ The archive command does not replace review. It packages the accepted outcome.
 
    If `flow` is unavailable, record the gaps in the output section as before and say the ledger was not updated.
 6. **Update transient work state** in `.flow/memory/STATE.md` at the **most-specific stacked overlay** (e.g., when archiving in path-nexus, writes go to `~/KB/repos/path-nexus/.flow/memory/STATE.md`, not the workspace's). STATE.md should reflect what is now in flight, blocked, or pending — not durable facts.
-7. **Record durable decisions in auto-memory** at `~/.claude/projects/<project-id>/memory/`. For each cross-cutting decision worth remembering across sessions, write a structured memory file with frontmatter (`type: project`) and add a one-line entry to `MEMORY.md`. See your global CLAUDE.md auto-memory instructions for the exact format. Do NOT write decisions to `.flow/memory/` — that surface no longer exists.
+7. **Record durable decisions in the active runtime memory provider when one exists.** For Claude Code, write auto-memory at `~/.claude/projects/<project-id>/memory/`: for each cross-cutting decision worth remembering across sessions, write a structured memory file with frontmatter (`type: project`) and add a one-line entry to `MEMORY.md`. For Codex, no Flow-managed durable memory provider exists yet; report "n/a — no durable provider" rather than inventing a path. Do NOT write durable decisions to `.flow/memory/`; that file is transient state only.
 8. If the work materially affects a parent overlay's state, surface that in the archive output so it can be picked up in a separate parent-level archive.
 9. Mark the run complete.
 
@@ -126,7 +126,7 @@ The archive command does not replace review. It packages the accepted outcome.
 
 ### Memory Updates
 - STATE (`.flow/memory/STATE.md`): (always present; describe the transient work-state change, or "n/a — work state unchanged")
-- Auto-memory entries written: (always present; list new or updated auto-memory files by name + one-line summary, or "n/a — no durable decisions recorded")
+- Runtime memory entries written: (always present; list new or updated provider files by name + one-line summary, or "n/a — no durable decisions recorded/provider unavailable")
 - Parent-overlay implications: (only if changes here affect a higher overlay)
 ```
 
@@ -136,8 +136,8 @@ The archive command does not replace review. It packages the accepted outcome.
 |---|---|
 | "The code is merged, so archive is unnecessary." | Merge is not memory. Archive is what makes the outcome durable. |
 | "Residual risks are obvious from the diff." | Risks disappear quickly unless they are written down explicitly. |
-| "We can update STATE and auto-memory later." | Later is usually never; archive is the right time to make memory durable. |
-| "STATE.md and auto-memory hold the same kind of thing." | They do not — STATE.md is transient work state at the project; auto-memory holds durable cross-session facts and decisions. Mixing them defeats both. |
+| "We can update STATE and runtime memory later." | Later is usually never; archive is the right time to make memory durable when a provider exists. |
+| "STATE.md and runtime memory hold the same kind of thing." | They do not — STATE.md is transient work state at the project; runtime memory holds durable cross-session facts and decisions. Mixing them defeats both. |
 | "Nothing was missing from the framework, so I'll skip that section." | Write "none observed." An omitted section is indistinguishable from one that was never considered, and the gap notes are only useful as a corpus — a run that silently skips them removes a data point rather than adding a null one. |
 
 ## Red Flags
@@ -160,7 +160,7 @@ Before leaving `flow-archive`, confirm:
 - [ ] any repeat was surfaced to the engineer with its count, and promotion was offered rather than performed
 - [ ] nothing was committed or pushed without being asked for separately
 - [ ] STATE.md was updated (or explicitly marked "n/a")
-- [ ] durable decisions were written to auto-memory (or explicitly marked "n/a — no durable decisions recorded")
+- [ ] durable decisions were written to the active runtime memory provider (or explicitly marked "n/a — no durable decisions recorded/provider unavailable")
 - [ ] writes went to the most-specific overlay; parent-overlay implications surfaced if applicable
 - [ ] the run is clearly marked complete
 

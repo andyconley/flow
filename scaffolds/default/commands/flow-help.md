@@ -32,7 +32,7 @@ Use this command when:
 2. Render the phase machine diagram.
 3. List the available commands with one-line "use when" guidance.
 4. List the available agents with one-line role descriptions and the core+conditional invocation pattern.
-5. Summarize architecture (user-level vs project-level; auto-memory vs STATE.md vs runs).
+5. Summarize architecture (user-level vs project-level; runtime memory provider vs STATE.md vs runs).
 6. List common entry points by intent ("Start a fresh session" → /flow-boot, etc.).
 7. Point at deeper docs (`FRAMEWORK.md`, the maintainer docs at `~/.flow/source/docs/`).
 
@@ -73,7 +73,7 @@ These are the commands you use during work. Claude exposes them as slash command
 | /flow-plan | Idea / bug / request → implementation-ready plan |
 | /flow-implement | Gated multi-phase work; runs land under `.flow/runs/<work-id>/` |
 | /flow-review | Structured review after implementation |
-| /flow-archive | Close a run; STATE.md → transient state; durable decisions → auto-memory |
+| /flow-archive | Close a run; STATE.md → transient state; durable decisions → runtime memory provider |
 | /flow-resume | Pick up interrupted work |
 | /flow-status | Where are we, what's next? |
 | /flow-init-project | Walk through filling in `.flow/PROJECT.md` (right after `flow setup project`) |
@@ -82,9 +82,9 @@ These are the commands you use during work. Claude exposes them as slash command
 
 The table above is derived from `[[claude.commands]]` `summary` fields in `flow.toml`; the Codex adapter uses matching `[[codex.commands]]` entries for its skill surface.
 
-### CLI commands (run from the shell, or ask Claude to run them)
+### CLI commands (run from the shell, or ask the active runtime to run them)
 
-These are *lifecycle* commands: the things you do to install, sync, or check flow itself. Invoke them from a terminal as `flow XXX YYY`, or ask Claude to run them. They are NOT slash commands and won't work as `/flow XXX`.
+These are *lifecycle* commands: the things you do to install, sync, or check flow itself. Invoke them from a terminal as `flow XXX YYY`, or ask the active runtime to run them. They are NOT slash commands and won't work as `/flow XXX`.
 
 <!-- generated:cli-commands-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
 | Command | Use when |
@@ -102,6 +102,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow project audit` | Classify a repo's `.flow/` overlay against the framework (read-only) |
 | `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
 | `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
+| `flow runtime smoke [--target all|claude|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
 <!-- generated:cli-commands-table:end -->
 
 The table above is derived from `[[help.cli_commands]]` in `flow.toml`.
@@ -143,7 +144,7 @@ These agents are **personal working agents**. They define how Claude or Codex wo
 
 - **Framework** (commands, agents, hooks, and standards) lives in user-level runtime surfaces through `flow setup user`: `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`. It is active in every supported runtime session.
 - **Project overlays** at `<repo>/.flow/` are opt-in per repo. Use them only where you want project-specific role assignments, memory, or run artifacts. `/flow-boot` recommends `flow setup project` by default in any repo without an overlay. To silence that recommendation for a repo permanently, ask the runtime to opt out; it will `touch .flow-skip` at the repo root. You can also run that shell command yourself.
-- **Durable facts and decisions** → the runtime's durable memory surface; for Claude Code, that is auto-memory at `~/.claude/projects/<project-id>/memory/`
+- **Durable facts and decisions** → the active runtime's durable memory provider, when one exists; for Claude Code, that is auto-memory at `~/.claude/projects/<project-id>/memory/`; Codex currently has no Flow-managed durable memory provider
 - **Transient work state** → `.flow/memory/STATE.md` (only when an overlay exists)
 - **Run artifacts** → `.flow/runs/<work-id>/` (only when an overlay exists)
 - Overlays stack. In nested projects, such as `~/KB/repos/path-nexus/` inside `~/KB/`, more-specific overlays override on conflicts. Memory writes go to the most-specific overlay.

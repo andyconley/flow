@@ -190,6 +190,7 @@ Use:
 
 - `flow sync claude --user --check`
 - `flow sync codex --user --check`
+- `flow runtime smoke --target all`
 
 These commands:
 
@@ -197,10 +198,17 @@ These commands:
 - report updates or stale managed files
 - do not write changes
 
+`flow runtime smoke` goes one step further than drift checks: it verifies
+freshness plus the generated command, agent, hook, managed-manifest, C-lite
+protocol, and model/effort policy surfaces that local files can prove. It also
+prints the manual checks still required for actual client behavior: command
+discovery, role-agent invocation, and transcript/log evidence that the runtime
+honored model and effort routing.
+
 ## Current Limits
 
 Current limitations of the adapter system:
 
 - no content-aware merge for most generated files
-- no runtime transcript verification for whether Claude or Codex honored configured subagent models
+- no automated client invocation or transcript verification for whether Claude or Codex honored configured subagent models
 - no project migration assistant for changing runtime contracts over time

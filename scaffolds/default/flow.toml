@@ -130,7 +130,7 @@ name = "flow-archive"
 source = "commands/flow-archive.md"
 description = "Closes out completed work and updates durable memory. Use when a slice or run is complete and ready to be archived."
 argument_hint = "[work-id]"
-summary = "Close a run; STATE.md → transient state; durable decisions → auto-memory"
+summary = "Close a run; STATE.md → transient state; durable decisions → runtime memory provider"
 
 [[claude.commands]]
 name = "flow-resume"
@@ -463,3 +463,7 @@ summary = "Remove the framework copies `audit` finds; dry run unless `--apply --
 [[help.cli_commands]]
 invocation = "flow run list/status/history/verify/transition"
 summary = "Inspect and hard-gate C-lite workflow run state"
+
+[[help.cli_commands]]
+invocation = "flow runtime smoke [--target all|claude|codex] [--json]"
+summary = "Check generated runtime surfaces and list manual runtime smoke evidence"

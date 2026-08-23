@@ -22,7 +22,7 @@ This is a state-summary command, not a shaping or implementation command.
 
 - `.flow/runs/` (every stacked overlay level)
 - `.flow/memory/STATE.md` — transient work state at every stacked overlay level
-- Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` — durable project facts and decisions; read `MEMORY.md` as the index
+- active runtime memory provider, when one exists — durable project facts and decisions; for Claude Code, read `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index
 - current project overlays when needed
 
 ## Primary outputs
@@ -49,7 +49,7 @@ inferred phase or completion state as authoritative.
 
 1. Identify active or recent runs at the current project level, starting with `flow run list`. Note any active runs at parent overlay levels separately as parent context (do not conflate them with the project's own state).
 2. Read current transient work state from STATE.md across stacked overlay levels. Surface project-level prominently; parent-overlay state appears under a separate parent-context heading.
-3. Pull any auto-memory entries relevant to the current focus (from `~/.claude/projects/<project-id>/memory/`). Mention them when they affect the current state readout.
+3. Pull durable memory entries relevant to the current focus through the active runtime provider. For Claude Code, use `~/.claude/projects/<project-id>/memory/`. For Codex, no Flow-managed provider exists yet; say that only if it affects the readout, and keep project artifacts plus C-lite run state canonical.
 4. Summarize blockers, caveats, or unresolved decisions.
 5. **Session cost (informational only — never a blocker, never changes the next-command recommendation by itself).** Run `flow cost active` and identify the current session. The `SESSION` column shows whatever label the tool has — a session title when one exists, otherwise a cwd — so match on that label (a title you recognize as this conversation, or this project's path) combined with the least-idle row, which is typically the session you are in. If you cannot match confidently, say so and show the candidates rather than guessing. Report the matched row's ctx/carry and the tool's recommendation as information; the user decides. The store has no concept of a run, so this is deliberately the *session's* cost, not the run's — say "this session," not "this run." If `flow` or the usage store is unavailable, skip this step silently.
 6. Recommend the next command based on the real current state.
@@ -100,7 +100,7 @@ inferred phase or completion state as authoritative.
 Before leaving `flow-status`, confirm:
 
 - [ ] active or recent work is summarized
-- [ ] memory highlights are included
+- [ ] memory highlights are included from project artifacts and any available runtime memory provider
 - [ ] blockers or caveats are explicit
 - [ ] the session-cost check ran (`flow cost active`) — matched by label + least-idle, reported when the store had this session, silent when it didn't, uncertainty said aloud rather than guessed
 - [ ] the next recommended command is explicit

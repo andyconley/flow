@@ -47,6 +47,7 @@ from runstate import (  # noqa: E402
     cmd_transition as run_transition_command,
     cmd_verify as run_verify_command,
 )
+from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
 from project import cmd_audit  # noqa: E402
 from setup import (  # noqa: E402
@@ -72,6 +73,7 @@ def main() -> int:
             "  flow bootstrap\n"
             "  flow sync claude --user\n"
             "  flow sync codex --user --check\n"
+            "  flow runtime smoke --target all\n"
             "  flow project audit                 (what a repo still copies)\n"
             "  flow run list                      (workflow run state)\n"
             "  flow doctor\n"
@@ -487,6 +489,32 @@ def main() -> int:
     run_transition_parser.add_argument("--note", help="next action or transition note")
     run_transition_parser.add_argument("--json", action="store_true", help="emit JSON")
 
+    runtime_parser = sub.add_parser(
+        "runtime",
+        help="inspect generated runtime adapter behavior",
+        description="Runtime adapter diagnostics. These commands prove local generated surfaces and list the manual checks needed for client behavior.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Examples:\n  flow runtime smoke --target all\n  flow runtime smoke --target codex --json\n",
+    )
+    runtime_sub = runtime_parser.add_subparsers(dest="runtime_target", required=True, title="runtime views")
+    runtime_smoke_parser = runtime_sub.add_parser(
+        "smoke",
+        help="check generated Claude/Codex surfaces and list manual smoke evidence",
+        description=(
+            "Read-only smoke check for generated runtime files. Static checks cover "
+            "skills, agents, hooks, managed manifests, C-lite command protocol text, "
+            "and model/effort policy. Actual client command discovery and role-agent "
+            "model usage are reported as manual_required."
+        ),
+    )
+    runtime_smoke_parser.add_argument(
+        "--target",
+        choices=("all", "claude", "codex"),
+        default="all",
+        help="runtime target to check (default: all)",
+    )
+    runtime_smoke_parser.add_argument("--json", action="store_true", help="emit JSON")
+
     for cost_parser in (
         cost_summary_parser,
         cost_sessions_parser,
@@ -719,6 +747,8 @@ def main() -> int:
         return run_verify_command(args)
     if args.command == "run" and args.run_target == "transition":
         return run_transition_command(args)
+    if args.command == "runtime" and args.runtime_target == "smoke":
+        return runtime_smoke_command(args)
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

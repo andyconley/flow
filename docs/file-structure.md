@@ -112,6 +112,10 @@ other by bare name.
 - `runstate.py` — dependency-free C-lite workflow state. Owns the transition
   table, `run.json` projection, `events.jsonl` history, legacy/inferred reads,
   and `flow run` command implementations.
+- `runtime_smoke.py` — read-only runtime adapter smoke checks. Proves generated
+  command, agent, hook, managed-manifest, C-lite protocol, and model/effort
+  surfaces from local files, and reports actual client behavior as manual
+  evidence.
 - `cost.py` — `flow cost`. `summary` and `sessions` only read `turn_norm`;
   `active` deliberately runs the incremental Claude harvest and a normalize
   pass first, since a "what needs attention right now" view must not lag
@@ -227,7 +231,11 @@ Project-specific overlay templates for domain, terminology, UX, integrations, an
 
 #### `scaffolds/default/memory/`
 
-Transient work-state placeholder (`STATE.md`). Durable project facts and decisions live in Claude Code's auto-memory at `~/.claude/projects/<project-id>/memory/`, not in `.flow/memory/`.
+Transient work-state placeholder (`STATE.md`). Durable project facts and
+decisions live in the active runtime memory provider when one exists, not in
+`.flow/memory/`. Claude Code's provider is auto-memory at
+`~/.claude/projects/<project-id>/memory/`; Codex currently has no Flow-managed
+durable memory provider.
 
 #### `scaffolds/default/templates/`
 

@@ -60,7 +60,7 @@ Next step:
 
 ### 2. Runtime Neutrality and Cross-Runtime Behavior
 
-Status: not started
+Status: implemented; ready for review
 
 Problem:
 
@@ -90,8 +90,7 @@ Why it matters:
 
 Next step:
 
-- plan after the C-lite state contract is defined so both runtimes share the
-  same source of truth
+- run `/flow-implement` for `20260823-runtime-neutrality-cross-runtime`
 
 ### 3. Maintainer Supportability
 

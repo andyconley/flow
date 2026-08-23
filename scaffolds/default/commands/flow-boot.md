@@ -20,15 +20,15 @@ Use this command:
 
 Synthesize across:
 
-- the CLAUDE.md context already loaded for the session (user → workspace → project levels)
+- runtime-provided session context already loaded for the session (for Claude Code, the CLAUDE.md hierarchy)
 - the framework operating model (provided via the session-start hook)
 - `/tmp/session_checkpoint.md` if present (within-session continuity from a prior compaction)
-- durable facts and decisions in Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (read `MEMORY.md` as the index)
+- durable facts and decisions in the active runtime memory provider, when one exists
 
 Read explicitly from every stacked overlay level (most-specific to most-general):
 
 - `.flow/PROJECT.md`
-- `.flow/memory/STATE.md` (transient work state only — durable facts live in auto-memory)
+- `.flow/memory/STATE.md` (transient work state only — durable facts live in the runtime memory provider)
 
 Inspect:
 
@@ -43,11 +43,11 @@ Inspect:
 
 ## Boot Workflow
 
-1. Synthesize the CLAUDE.md context already loaded (user, workspace, project) and the session-start hook's framework context.
+1. Synthesize the runtime-provided session context already loaded and the session-start hook's framework context.
 2. Read `/tmp/session_checkpoint.md` if present.
 3. **Freshness check the session checkpoint.** If `/tmp/session_checkpoint.md` exists, compare its "Files modified this session" / "Tasks completed" lists against `git log --stat` since the checkpoint's date. If commits since that date cover the checkpoint's work, treat the checkpoint as **superseded** rather than interrupted, and recommend discarding it in the output.
 4. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
-5. Read the auto-memory index at `~/.claude/projects/<project-id>/memory/MEMORY.md` and pull in any entries relevant to the current focus.
+5. Read durable runtime memory through the active provider and pull in any entries relevant to the current focus. For Claude Code, read `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index. For Codex, no Flow-managed durable memory provider exists yet; use project artifacts and C-lite run state as canonical.
 6. Check for interrupted or active runs across all stacked overlay levels.
 7. **Usage advisory (informational only — never blocks orientation, never changes a recommendation by itself).** Run `flow cost summary --days 7`. If the output includes a Codex capacity line, report it verbatim in the advisory section — and if its `as of` timestamp is more than a day old, say so, since capacity only refreshes when a Codex harvest runs. If there is no capacity line, say nothing about capacity — absence of data is silence, not a warning. Then run `flow cost active`: surface any session the tool recommends acting on (`/clear` or `/compact`), with the tool's own recommendation, as information the user may act on. If `flow` or the usage store is unavailable, skip this step silently.
 8. Identify:
@@ -88,7 +88,7 @@ Inspect:
 - Overlay status: (one of: "active at <path>" | "absent — flow setup project recommended" | "absent — by design (.flow-skip marker present)")
 
 ### Active Memory
-- [Important STATE highlights + relevant auto-memory entries]
+- [Important STATE highlights + relevant runtime memory entries]
 
 ### Active or Interrupted Work
 - [Run or slice summaries; "none active" if clean]
@@ -128,11 +128,11 @@ Inspect:
 
 Before leaving `flow-boot`, confirm:
 
-- [ ] CLAUDE.md context across user/workspace/project was synthesized
+- [ ] runtime-provided session context was synthesized
 - [ ] `/tmp/session_checkpoint.md` was read if present
 - [ ] checkpoint freshness was checked against `git log` since its date (when checkpoint exists)
 - [ ] PROJECT.md and STATE.md were read across all stacked overlay levels
-- [ ] auto-memory MEMORY.md was consulted for relevant durable facts/decisions
+- [ ] durable runtime memory was consulted where the active provider exists; missing provider was treated as companion-context absence, not missing workflow state
 - [ ] interrupted or active runs were checked across all stacked overlay levels
 - [ ] the usage advisory ran (`flow cost summary --days 7` + `flow cost active`) — capacity verbatim with a staleness note past a day, sessions the tool flags surfaced, silent when there was nothing, skipped silently if flow was unavailable
 - [ ] overlay status was reported; `.flow-skip` marker was checked before classifying "by design"; default for missing overlay is "recommended", not "by design"

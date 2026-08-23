@@ -234,6 +234,8 @@ Use these after changing framework content, user overlays, project overlays, com
   - generate Claude runtime files at user level
 - `flow sync codex --user`
   - generate Codex runtime files at user level
+- `flow runtime smoke --target all`
+  - check generated Claude/Codex surfaces and list manual runtime smoke evidence
 
 `--user` is required. Project-level sync was retired: it existed to regenerate
 adapters from a project's own copies of the framework's commands and agents,
@@ -249,6 +251,7 @@ flow sync claude --user
 flow sync codex --user
 flow sync claude --user --check
 flow sync codex --user --check
+flow runtime smoke --target all
 ```
 
 ### Health Checks

@@ -4,7 +4,7 @@ Walk the user through filling in `.flow/PROJECT.md` (and optionally project-spec
 
 ## Overview
 
-After `flow setup project` scaffolds the overlay, the templates are bare placeholders. This command makes filling them in fast and grounded: read what's actually in the project (CLAUDE.md, git history, file structure) and propose concrete content for each section. The user confirms or adjusts; you write the result back to `.flow/PROJECT.md`.
+After `flow setup project` scaffolds the overlay, the templates are bare placeholders. This command makes filling them in fast and grounded: read what's actually in the project (runtime context files, git history, file structure) and propose concrete content for each section. The user confirms or adjusts; you write the result back to `.flow/PROJECT.md`.
 
 ## When to Use
 
@@ -19,10 +19,10 @@ Use this command when:
 ## Primary inputs
 
 - the existing `.flow/PROJECT.md` (template or current version)
-- the CLAUDE.md hierarchy (user, workspace, project) — already in session context
+- runtime-provided context files already in session context (for Claude Code, the CLAUDE.md hierarchy)
 - `git log --oneline -30` plus `git log --stat -5` (recent activity, who is shipping)
 - file structure of the project (presence of `catalog/`, `hackathon/`, `src/`, `tests/`, `docs/`, etc. to infer project type)
-- relevant auto-memory entries at `~/.claude/projects/<project-id>/memory/`
+- relevant entries from the active runtime memory provider, when one exists
 
 ## Primary outputs
 
@@ -45,12 +45,12 @@ Conditional roles (invoked when relevant):
 ## Workflow
 
 1. **Verify scaffold present.** Confirm `.flow/PROJECT.md` exists. If not, recommend `flow setup project` first (shell command — offer to run it).
-2. **Read project context.** Load the CLAUDE.md hierarchy, sample recent git log (`--oneline -30` and `--stat -5`), list top-level files, and check auto-memory for relevant project entries. This is the inference base for the proposals.
+2. **Read project context.** Load the runtime-provided session context, sample recent git log (`--oneline -30` and `--stat -5`), list top-level files, and check the active runtime memory provider for relevant project entries. For Claude Code, that provider is auto-memory at `~/.claude/projects/<project-id>/memory/`; for Codex, no Flow-managed durable memory provider exists yet. This is the inference base for the proposals.
 3. **Walk PROJECT.md section by section.** For each section:
    - Summary (name, type, primary runtime, short description) — propose based on inference; confirm with user.
    - Role providers (product owner, PM, requirements shaping, implementation, acceptance review) — for solo/personal projects propose "Andy" (or the actual git author) for all roles plus "+ Claude" where applicable; for team projects ask explicitly.
    - Collaboration deviations and tightening — propose based on project type; ask for confirmation.
-   - Sources of truth — propose based on inference (issue tracker, ADR location, CLAUDE.md, STATE.md, auto-memory).
+   - Sources of truth — propose based on inference (issue tracker, ADR location, runtime context files, STATE.md, runtime memory provider).
    - Workflow notes — propose preferred small-change and gated-work paths based on observed work patterns.
    - Runtime and integration notes — propose based on file inspection (Dockerfile, package.json, requirements.txt, .github/workflows/, etc.).
 4. **Write the updated `.flow/PROJECT.md`.** Edit the file in place — don't make the user copy-paste.

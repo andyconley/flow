@@ -165,6 +165,37 @@ Support events:
 
 `flow run transition` is the only command that writes lifecycle state. `/flow-*` commands call it when they cross gates; they do not hand-edit `run.json`.
 
+### `flow runtime smoke`
+
+Check generated Claude and Codex runtime adapter surfaces and list the manual
+runtime smoke evidence still required.
+
+Flags:
+
+- `--target all|claude|codex` — runtime target to check (default: all)
+- `--json` — emit JSON
+
+Static checks prove local generated files only:
+
+- managed manifests exist and cover desired outputs
+- generated surfaces are fresh against the current scaffold/user-overlay manifest
+- generated command skills exist
+- command skills include Flow Agent Routing
+- lifecycle command skills include the C-lite run protocol text
+- generated agents exist
+- generated agents contain the model and effort fields resolved from `flow.toml`
+- generated hooks exist
+
+Manual-required checks are intentionally not treated as failures:
+
+- invoke a representative command in Claude and Codex and confirm it loads
+- invoke a low-risk role agent such as `support-lead`
+- inspect transcript or runtime log evidence for configured model and effort
+  where the runtime exposes it
+
+This command is read-only. It exits 1 only when a static check fails. It does
+not claim that local files prove the client honored model routing at runtime.
+
 ### `flow doctor`
 
 Report machine, install, user-level, and project-level state in one output.

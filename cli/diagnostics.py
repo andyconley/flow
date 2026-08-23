@@ -80,8 +80,18 @@ def agent_policy_status(root, manifest: dict, target: str) -> str:
     return f"stale ({present}/{expected} present, {configured}/{expected} configured)"
 
 
-def print_smoke_test_hint(label: str) -> None:
-    print(f"{label} smoke:     manually invoke support-lead and confirm the runtime transcript/logs show the configured model and effort")
+def runtime_smoke_line(label: str) -> str:
+    try:
+        from runtime_smoke import smoke_payload
+
+        payload = smoke_payload(label)
+    except Exception:  # noqa: BLE001 - doctor must survive broken installs.
+        return "unavailable — run `flow runtime smoke --target all`"
+    status = "static ok" if payload.get("ok") else f"{payload.get('failed', 0)} static failure(s)"
+    return (
+        f"{status}; {payload.get('manual_required', 0)} manual check(s) required — "
+        f"run `flow runtime smoke --target {label}`"
+    )
 
 
 def doctor() -> int:
@@ -225,12 +235,12 @@ def doctor() -> int:
     print(f"skills dir:       {'ok' if user_skills_dir.exists() else 'missing'}")
     print(f"agents dir:       {'ok' if user_agents_dir.exists() else 'missing'}")
     print(f"agent policy:     {user_claude_agent_policy}")
-    print_smoke_test_hint("claude")
+    print(f"claude smoke:     {runtime_smoke_line('claude')}")
     print(f"codex sync:       {'ok' if user_codex_managed_ok else 'missing'}")
     print(f"codex drift:      {user_codex_drift}")
     print(f"codex skills:     {'ok' if user_codex_skills_dir.exists() else 'missing'}")
     print(f"codex agents:     {user_codex_agent_policy}")
-    print_smoke_test_hint("codex")
+    print(f"codex smoke:      {runtime_smoke_line('codex')}")
 
     # User overlay: report whether ~/.flow/user/flow.toml is present and what it
     # declares. Customizations apply at sync time via merge_user_overlay.

@@ -20,7 +20,7 @@ Use this command when:
 
 - `.flow/runs/` (every stacked overlay level — most-specific first)
 - `.flow/memory/STATE.md` — transient work state at every stacked overlay level
-- Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` — relevant durable facts/decisions
+- active runtime memory provider, when one exists — relevant durable facts/decisions
 - latest run artifacts and notes
 
 ## Primary outputs
@@ -59,6 +59,9 @@ effect of resume.
    - scout mode
    - gated implementation
 5. Continue the existing artifact chain unless starting fresh is clearly safer.
+6. Treat project artifacts and C-lite run state as canonical. Runtime memory is
+   companion context: read Claude Code auto-memory when available; do not treat
+   missing Codex durable memory as missing workflow state.
 
 ## Output Format
 
