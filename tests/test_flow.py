@@ -846,6 +846,48 @@ class FlowCliTests(FlowCliHarness):
         self.assertFalse(drift_payload["ok"])
         self.assertEqual(drift_payload["diagnostics"][0]["category"], "drift")
 
+    def test_sync_check_json_classifies_stale_managed_output(self) -> None:
+        import io
+        from contextlib import redirect_stdout
+
+        sync = self._load_cli_module("sync")
+        root = self.repo / "sync-root"
+        root.mkdir()
+        stale_path = root / ".codex" / "stale.md"
+        stale_path.parent.mkdir()
+        stale_path.write_text("old managed output\n")
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rc = sync.sync_outputs(
+                root,
+                "codex",
+                {},
+                {stale_path},
+                set(),
+                check=True,
+                as_json=True,
+            )
+
+        self.assertEqual(rc, 1)
+        payload = json.loads(out.getvalue())
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["diagnostics"][0]["category"], "stale")
+        self.assertEqual(payload["diagnostics"][0]["id"], "sync.codex.stale")
+
+    def test_sync_check_json_classifies_unmanaged_conflict(self) -> None:
+        fake_home = self.use_fake_home()
+        conflict = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        conflict.parent.mkdir(parents=True)
+        conflict.write_text("user-owned file\n")
+
+        result = self.run_flow("sync", "codex", "--user", "--check", "--json")
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["diagnostics"][0]["category"], "managed_conflict")
+
     def test_update_json_classifies_develop_mode(self) -> None:
         fake_home = self.use_fake_home()
         config = fake_home / ".flow" / "config.toml"
@@ -865,6 +907,39 @@ class FlowCliTests(FlowCliHarness):
         self.assertEqual(payload["command"], "update")
         self.assertEqual(payload["diagnostics"][0]["category"], "warning")
         self.assertEqual(payload["diagnostics"][0]["severity"], "warning")
+
+    def test_update_json_classifies_no_semver_tags(self) -> None:
+        self.do_install_release()
+        remote = self.make_fake_remote_with_tags(["not-a-version"])
+
+        result = self.run_flow("update", "--check", "--json", "--remote", f"file://{remote}")
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["diagnostics"][0]["category"], "missing")
+        self.assertIn("semver", payload["diagnostics"][0]["detail"])
+
+    def test_update_json_classifies_unreachable_remote(self) -> None:
+        self.do_install_release()
+        remote = self.repo / "does-not-exist.git"
+
+        result = self.run_flow("update", "--check", "--json", "--remote", f"file://{remote}")
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["diagnostics"][0]["category"], "remote_unreachable")
+
+    def test_latest_remote_tag_classifies_missing_git(self) -> None:
+        lifecycle = self._load_cli_module("lifecycle")
+        original = lifecycle._run_git
+        try:
+            lifecycle._run_git = lambda *args, cwd=None: (127, "", "git not found on PATH")
+            result = lifecycle._latest_remote_tag("https://example.invalid/repo.git")
+        finally:
+            lifecycle._run_git = original
+
+        self.assertEqual(result.status, "git_unavailable")
+        self.assertIn("git not found", result.detail)
 
     def test_top_level_help_lists_core_commands_and_examples(self) -> None:
         result = self.run_flow("--help")

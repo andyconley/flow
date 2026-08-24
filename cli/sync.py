@@ -711,18 +711,35 @@ def sync_outputs(
             else:
                 print(f"{target_name} sync check: up to date")
             return 0
-        diag = diagnostic(
-            f"sync.{target_name}.drift",
-            STATUS_FAILED,
-            SEVERITY_ERROR,
-            "drift",
-            f"{len(changed)} update(s), {len(stale)} stale output(s)",
-            target=target_name,
-            detail=", ".join([*(str(path) for path in changed), *(str(path) for path in stale)]),
-            next_action=f"flow sync {target_name} --user",
-        )
+        diagnostics = []
+        if changed:
+            diagnostics.append(
+                diagnostic(
+                    f"sync.{target_name}.drift",
+                    STATUS_FAILED,
+                    SEVERITY_ERROR,
+                    "drift",
+                    f"{len(changed)} generated output(s) need update",
+                    target=target_name,
+                    detail=", ".join(str(path) for path in changed),
+                    next_action=f"flow sync {target_name} --user",
+                )
+            )
+        if stale:
+            diagnostics.append(
+                diagnostic(
+                    f"sync.{target_name}.stale",
+                    STATUS_FAILED,
+                    SEVERITY_ERROR,
+                    "stale",
+                    f"{len(stale)} previously managed output(s) are stale",
+                    target=target_name,
+                    detail=", ".join(str(path) for path in stale),
+                    next_action=f"flow sync {target_name} --user",
+                )
+            )
         if as_json:
-            print_json(support_payload("sync", Path.cwd(), [diag], target=target_name))
+            print_json(support_payload("sync", Path.cwd(), diagnostics, target=target_name))
         else:
             print(f"{target_name} sync check: drift detected")
             for path in changed:

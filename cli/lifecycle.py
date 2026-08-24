@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -212,11 +213,21 @@ def _semver_key(tag: str) -> tuple:
     return ((major, minor, patch), 1 - has_suffix, tag)
 
 
-def _latest_remote_tag(remote: str) -> tuple[str, str] | None:
-    """Return (tag, sha) of the highest semver-ish tag on the remote, or None."""
-    rc, stdout, _stderr = _run_git("ls-remote", "--tags", "--refs", remote)
+@dataclass(frozen=True)
+class LatestRemoteTag:
+    status: str
+    tag: str = ""
+    sha: str = ""
+    detail: str = ""
+
+
+def _latest_remote_tag(remote: str) -> LatestRemoteTag:
+    """Return the highest semver-ish tag on the remote with failure cause."""
+    rc, stdout, stderr = _run_git("ls-remote", "--tags", "--refs", remote)
+    if rc == 127:
+        return LatestRemoteTag("git_unavailable", detail=stderr or "git not found on PATH")
     if rc != 0:
-        return None
+        return LatestRemoteTag("remote_unreachable", detail=stderr or "git ls-remote failed")
     candidates: list[tuple[str, str]] = []
     for line in stdout.splitlines():
         if not line.strip():
@@ -229,9 +240,10 @@ def _latest_remote_tag(remote: str) -> tuple[str, str] | None:
         if SEMVER_TAG_RE.match(tag):
             candidates.append((tag, sha))
     if not candidates:
-        return None
+        return LatestRemoteTag("missing", detail="no semver tags found")
     candidates.sort(key=lambda item: _semver_key(item[0]))
-    return candidates[-1]
+    tag, sha = candidates[-1]
+    return LatestRemoteTag("ok", tag=tag, sha=sha)
 
 
 def _extract_changelog_section(text: str, version: str) -> str | None:
@@ -680,23 +692,33 @@ def update_command(check: bool, resync: bool, remote_override: str | None, as_js
         print(f"remote:  {remote}")
 
     latest = _latest_remote_tag(remote)
-    if latest is None:
+    if latest.status != "ok":
+        category = {
+            "git_unavailable": "git_unavailable",
+            "remote_unreachable": "remote_unreachable",
+            "missing": "missing",
+        }.get(latest.status, "remote_unreachable")
+        next_action = {
+            "git_unavailable": "install git or repair PATH",
+            "remote_unreachable": "check the configured remote and network access",
+            "missing": "publish a semver tag on the configured remote",
+        }.get(latest.status, "check the configured remote and network access")
         diag = diagnostic(
             "update.remote.tags",
             STATUS_FAILED,
             SEVERITY_ERROR,
-            "remote_unreachable",
+            category,
             "could not determine latest tag",
-            detail="no semver tags found, or remote unreachable",
-            next_action="check the configured remote and network access",
+            detail=latest.detail,
+            next_action=next_action,
         )
         if as_json:
             print_json(support_payload("update", Path.cwd(), [diag], install=install, remote=remote))
             return 1
-        print("could not determine latest tag (no semver tags found, or remote unreachable)")
+        print(f"could not determine latest tag ({latest.detail})")
         return 1
 
-    latest_tag, _latest_sha = latest
+    latest_tag = latest.tag
     if not as_json:
         print(f"latest:  {latest_tag}")
 
