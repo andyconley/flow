@@ -220,11 +220,29 @@ Use these when a repo needs a `.flow/` overlay for its own context, transient st
 - `flow refresh project`
   - retired. A project no longer holds framework files, so there is nothing to refresh from the scaffold. Missing core files are `flow setup project`'s job; framework copies still present are `flow project audit` and `flow project migrate`'s.
 - `flow project audit`
-  - classify what a repo's `.flow/` is still carrying, read-only
+  - classify what a repo's `.flow/` still carries and list project-local runtime surfaces that need an adoption decision, read-only
 - `flow project migrate`
   - remove the framework copies audit finds; dry run unless `--apply --yes`
 - `flow bootstrap`
   - validate that the required `.flow/` structure exists
+
+To adopt an older repo, run `flow project audit`. It separates stale framework
+copies inside `.flow/` from project-owned content. It also lists project-local
+runtime directories such as `.claude/`, `.codex/`, and `.agents/`.
+
+Remove stale generated files through the migration/sync workflow. For runtime
+directories that are intentionally project-owned, record the decision in
+`.flow/flow.toml`:
+
+```toml
+[[adoption.exclusions]]
+target = "claude"
+path = ".claude"
+reason = "project keeps hand-authored Claude config"
+```
+
+Valid targets are `claude`, `codex`, and `project`. Paths must stay inside the
+repo and are reported by `flow project audit` and `flow doctor`.
 
 ### Runtime Sync
 

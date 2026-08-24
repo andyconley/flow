@@ -55,6 +55,8 @@ from project import (
     printable,
     has_legacy_active_standards_heading,
     resolve_replaces,
+    SURFACE_EXCLUDED,
+    SURFACE_UNMANAGED,
 )
 from sync import merge_user_overlay, runtime_status, shared_agents
 
@@ -331,10 +333,11 @@ def doctor(as_json: bool = False, check: bool = False) -> int:
     # permanently about a state that is not a fault.
     overlay_line = "n/a"
     drifted_line = None
+    adoption_report = None
     if project_overlay_ok and SCAFFOLD_DIR.exists():
         try:
-            report = audit_project(flow_dir, SCAFFOLD_DIR)
-            counts = report.counts()
+            adoption_report = audit_project(flow_dir, SCAFFOLD_DIR)
+            counts = adoption_report.counts()
             copies = counts["identical"] + counts["orphaned"]
             overlay_line = (
                 "clean"
@@ -423,6 +426,51 @@ def doctor(as_json: bool = False, check: bool = False) -> int:
         user_claude_agent_policy,
         user_codex_agent_policy,
     )
+    if adoption_report is not None:
+        unmanaged = [
+            s for s in adoption_report.runtime_surfaces if s.status == SURFACE_UNMANAGED
+        ]
+        excluded = [
+            s for s in adoption_report.runtime_surfaces if s.status == SURFACE_EXCLUDED
+        ]
+        if unmanaged:
+            diagnostics.append(
+                diagnostic(
+                    "project.adoption.runtime_surfaces",
+                    STATUS_WARNING,
+                    SEVERITY_WARNING,
+                    "manual_required",
+                    f"{len(unmanaged)} project-local runtime surface(s) need an adoption decision",
+                    path=flow_dir.parent,
+                    next_action="flow project audit",
+                )
+            )
+        if excluded:
+            diagnostics.append(
+                diagnostic(
+                    "project.adoption.exclusions",
+                    STATUS_OK,
+                    SEVERITY_INFO,
+                    "ok",
+                    f"{len(excluded)} project-local runtime surface(s) intentionally excluded",
+                    path=flow_dir / "flow.toml",
+                )
+            )
+        if adoption_report.rejected_adoption_exclusions:
+            diagnostics.append(
+                diagnostic(
+                    "project.adoption.exclusions.invalid",
+                    STATUS_FAILED,
+                    SEVERITY_ERROR,
+                    "parse_error",
+                    (
+                        f"{len(adoption_report.rejected_adoption_exclusions)} "
+                        "adoption exclusion declaration(s) are invalid"
+                    ),
+                    path=flow_dir / "flow.toml",
+                    next_action="fix [[adoption.exclusions]] in .flow/flow.toml",
+                )
+            )
     store_path = usage_store.default_store_path(HOME)
     if store_path.exists():
         try:
@@ -582,6 +630,23 @@ def doctor(as_json: bool = False, check: bool = False) -> int:
         print(f"drifted:          {drifted_line} file(s) differ from the framework")
         print("                  customized or stale — nothing local can tell which")
         print("                  `flow project audit` lists them")
+    if adoption_report is not None:
+        unmanaged = [
+            s for s in adoption_report.runtime_surfaces if s.status == SURFACE_UNMANAGED
+        ]
+        excluded = [
+            s for s in adoption_report.runtime_surfaces if s.status == SURFACE_EXCLUDED
+        ]
+        invalid = adoption_report.rejected_adoption_exclusions
+        if unmanaged:
+            print(f"adoption:         {len(unmanaged)} runtime surface(s) need a decision")
+            print("                  `flow project audit` lists them")
+        if excluded:
+            print(f"adoption:         {len(excluded)} runtime surface(s) intentionally excluded")
+        if not unmanaged and not excluded:
+            print("adoption:         no project-local runtime surfaces")
+        if invalid:
+            print(f"adoption config:  {len(invalid)} invalid exclusion declaration(s)")
     _print_replaces(replaces_resolved, replaces_rejected, replaces_error)
     if legacy_heading:
         print("PROJECT.md:       carries the retired `## Active project standards` section")

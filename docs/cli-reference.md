@@ -210,11 +210,18 @@ Current sections:
 - **machine** — Python, flow home, source path, scaffold availability, config, launcher
 - **install** — install mode (develop or release), version (release only), source target (develop only), installed_at timestamp
 - **user-level** — Claude/Codex sync state and drift for `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`
-- **project** — repo `.flow/` presence, manifest, whether the overlay still carries framework copies, how many of its files have drifted from the framework, each `[[replaces]]` wiring's status, and whether `PROJECT.md` still lists the retired project-standards section
+- **project** — repo `.flow/` presence, manifest, whether the overlay still carries framework copies, how many of its files have drifted from the framework, project-local runtime adoption surfaces, each `[[replaces]]` wiring's status, and whether `PROJECT.md` still lists the retired project-standards section
 
 The overlay count and the drift count are reported **separately and never summed**. `overlay:` counts what `flow project migrate` removes by default and can therefore drive to zero, which is what lets that line name that command. `drifted:` counts files that differ from the framework, which is not clearable the same way — removing one is opt-in and may destroy a customization. Summed, the number would name a remedy that cannot reach it, and doctor would report a permanent fault where there is none. A drifted overlay with nothing removable reads `overlay: clean` alongside a `drifted:` line, and both are true.
 
 The `replaces:` block appears only when the project declares wirings. Each is reported as `ok` (the replacement resolves in your user overlay), `absent` (it does not resolve *on this machine* — a wiring names a path under `~/.flow/user/` that a teammate may not have, so this is a gap in your overlay rather than a fault in the project), `unknown` (the `default` names no framework file, so the wiring can never match), or `invalid` (the entry did not validate). In `--check` mode, any warning or error diagnostic makes the command exit nonzero.
+
+The `adoption:` line reports project-local runtime directories that Flow does
+not own through user-level sync. Directories such as `.claude/`, `.codex/`, and
+`.agents/` are `unmanaged` until you remove stale generated content or declare
+intentional project ownership in `.flow/flow.toml` with
+`[[adoption.exclusions]]`. Invalid exclusions appear as `adoption config:` so a
+typo does not hide a real adoption gap.
 
 The JSON payload uses stable diagnostic items with `id`, `status`, `severity`, `category`, `summary`, and optional `target`, `path`, `detail`, and `next_action`. Categories include `missing`, `parse_error`, `permission_denied`, `git_unavailable`, `remote_unreachable`, `manifest_invalid`, `managed_conflict`, `runtime_not_found`, `drift`, `stale`, `manual_required`, `warning`, and `ok`.
 
@@ -656,6 +663,26 @@ Five buckets:
 - **unreadable** — listed on disk but could not be read, so could not be compared
 
 Two things are reported outside the buckets, because neither can be safely acted on. **Symlinks are never classified** — a symlinked capability directory produces innocuous-looking relative keys that resolve outside the overlay, and the whole point of relative keys is that joining one against the root stays inside it. **Manifest sources that are absolute, contain `..`, or start with `~`** are listed as unusable declarations rather than as orphans, and they carry no joinable path at all.
+
+Runtime adoption surfaces appear in their own section. Audit checks
+project-local `.claude/`, `.codex/`, and `.agents/` directories. Each entry is
+`absent`, `unmanaged`, or `excluded`. `unmanaged` means the directory exists and
+Flow needs a decision: move project-owned content into `.flow`, remove stale
+generated files through the migration/sync workflow, or record intent with
+`[[adoption.exclusions]]` in `.flow/flow.toml`:
+
+```toml
+[[adoption.exclusions]]
+target = "claude"
+path = ".claude"
+reason = "project keeps hand-authored Claude config"
+```
+
+Valid targets are `claude`, `codex`, and `project`. Paths must be relative.
+They must not start with `~` or escape the repo with `..`. Invalid entries
+appear in `invalid adoption exclusions` and in the JSON payload under
+`rejected_adoption_exclusions`. Valid entries appear under
+`adoption_exclusions`. The runtime inventory appears under `runtime_surfaces`.
 
 **`differs` cannot be split locally, and the report says so.** A file that differs is either a real customization or a stale copy of a framework file that has since moved on, and nothing on this machine can tell which — the overlay records no provenance. The caveat is printed with the count rather than left in this document, because the count is what gets pasted into a ticket.
 

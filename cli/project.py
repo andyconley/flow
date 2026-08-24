@@ -87,6 +87,44 @@ class RejectedDeclaration:
     reason: str
 
 
+@dataclass(frozen=True)
+class AdoptionExclusion:
+    """One project-owned declaration that a surface is intentionally unmanaged."""
+
+    target: str
+    path: str
+    reason: str | None
+    declared_by: str
+
+
+@dataclass(frozen=True)
+class RejectedAdoptionExclusion:
+    declared_by: str
+    declared_value: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class RuntimeSurface:
+    target: str
+    path: str
+    status: str
+    next_action: str | None = None
+    declared_by: str | None = None
+    reason: str | None = None
+
+
+ADOPTION_TARGETS = ("claude", "codex", "project")
+RUNTIME_SURFACES = (
+    ("claude", ".claude"),
+    ("codex", ".codex"),
+    ("codex", ".agents"),
+)
+SURFACE_ABSENT = "absent"
+SURFACE_UNMANAGED = "unmanaged"
+SURFACE_EXCLUDED = "excluded"
+
+
 def _site(prefix: str, entry: dict, index: int, key: str) -> str:
     """Dotted name for a manifest entry, by `name` when it has one.
 
@@ -118,6 +156,76 @@ def reject_relative(raw: str) -> str | None:
         # is an absolute path that was never checked.
         return "home-relative path"
     return None
+
+
+def declared_adoption_exclusions(
+    manifest: dict,
+) -> tuple[list[AdoptionExclusion], list[RejectedAdoptionExclusion]]:
+    """Parse `[[adoption.exclusions]]` from a project manifest.
+
+    Exclusions are project-owned intent, not runtime config. They say "this
+    project knows this surface exists and Flow should stop treating it as an
+    unresolved adoption issue." The path is still checked with the same
+    relative-path guard as manifest sources because doctor and audit print it,
+    and a future command may consume the same parsed shape.
+    """
+    adoption = manifest.get("adoption", {})
+    entries = adoption.get("exclusions", []) if isinstance(adoption, dict) else []
+    if not isinstance(entries, list):
+        return [], [
+            RejectedAdoptionExclusion(
+                "adoption.exclusions",
+                str(entries),
+                "not an array of tables",
+            )
+        ]
+
+    found: list[AdoptionExclusion] = []
+    rejected: list[RejectedAdoptionExclusion] = []
+    seen: set[tuple[str, str]] = set()
+    for index, entry in enumerate(entries):
+        site = f"adoption.exclusions[{index}]"
+        if not isinstance(entry, dict):
+            rejected.append(RejectedAdoptionExclusion(site, str(entry), "not a table"))
+            continue
+        target = entry.get("target")
+        raw_path = entry.get("path")
+        if not isinstance(target, str) or target not in ADOPTION_TARGETS:
+            rejected.append(
+                RejectedAdoptionExclusion(
+                    site,
+                    str(target),
+                    f"target must be one of {', '.join(ADOPTION_TARGETS)}",
+                )
+            )
+            continue
+        if not isinstance(raw_path, str) or not raw_path:
+            rejected.append(
+                RejectedAdoptionExclusion(site, str(raw_path), "path is not a non-empty string")
+            )
+            continue
+        problem = reject_relative(raw_path)
+        if problem is not None:
+            rejected.append(RejectedAdoptionExclusion(site, raw_path, f"path: {problem}"))
+            continue
+        path = Path(raw_path).as_posix()
+        key = (target, path)
+        if key in seen:
+            rejected.append(
+                RejectedAdoptionExclusion(site, path, "duplicate exclusion for target and path")
+            )
+            continue
+        seen.add(key)
+        reason = entry.get("reason")
+        found.append(
+            AdoptionExclusion(
+                target=target,
+                path=path,
+                reason=reason if isinstance(reason, str) and reason else None,
+                declared_by=site,
+            )
+        )
+    return found, rejected
 
 
 def _classify_declaration(
@@ -456,6 +564,9 @@ class AuditReport:
     scaffold_dir: str
     findings: list[Finding]
     rejected: list[RejectedDeclaration]
+    adoption_exclusions: list[AdoptionExclusion]
+    rejected_adoption_exclusions: list[RejectedAdoptionExclusion]
+    runtime_surfaces: list[RuntimeSurface]
     symlinks: list[str]
     has_baseline: bool
     # Whether the comparison used the installed framework. `--scaffold` pointed
@@ -642,10 +753,61 @@ def has_framework_baseline(scaffold_dir: Path) -> bool:
     return any((scaffold_dir / name).is_dir() for name in CAPABILITY_DIRS)
 
 
+def runtime_surface_inventory(
+    project_root: Path,
+    exclusions: list[AdoptionExclusion],
+) -> list[RuntimeSurface]:
+    by_key = {(item.target, item.path): item for item in exclusions}
+    surfaces: list[RuntimeSurface] = []
+    for target, rel in RUNTIME_SURFACES:
+        exclusion = by_key.get((target, rel))
+        exists = (project_root / rel).exists()
+        if exclusion is not None:
+            surfaces.append(
+                RuntimeSurface(
+                    target=target,
+                    path=rel,
+                    status=SURFACE_EXCLUDED,
+                    declared_by=exclusion.declared_by,
+                    reason=exclusion.reason,
+                )
+            )
+        elif exists:
+            surfaces.append(
+                RuntimeSurface(
+                    target=target,
+                    path=rel,
+                    status=SURFACE_UNMANAGED,
+                    next_action=(
+                        "move project-owned content into .flow, remove stale generated files "
+                        "with flow project migrate, or declare [[adoption.exclusions]]"
+                    ),
+                )
+            )
+        else:
+            surfaces.append(RuntimeSurface(target=target, path=rel, status=SURFACE_ABSENT))
+
+    for exclusion in exclusions:
+        if (exclusion.target, exclusion.path) in {(target, rel) for target, rel in RUNTIME_SURFACES}:
+            continue
+        if exclusion.target != "project":
+            surfaces.append(
+                RuntimeSurface(
+                    target=exclusion.target,
+                    path=exclusion.path,
+                    status=SURFACE_EXCLUDED,
+                    declared_by=exclusion.declared_by,
+                    reason=exclusion.reason,
+                )
+            )
+    return surfaces
+
+
 def audit_project(flow_dir: Path, scaffold_dir: Path) -> AuditReport:
     manifest_path = flow_dir / "flow.toml"
     manifest = read_toml(manifest_path) if manifest_path.is_file() else {}
     declarations, rejected = declared_sources(manifest)
+    adoption_exclusions, rejected_adoption_exclusions = declared_adoption_exclusions(manifest)
 
     # Classification is skipped entirely without a baseline rather than
     # computed and then withheld by the renderer: a JSON consumer reading
@@ -663,6 +825,9 @@ def audit_project(flow_dir: Path, scaffold_dir: Path) -> AuditReport:
         scaffold_dir=str(scaffold_dir),
         findings=findings,
         rejected=rejected,
+        adoption_exclusions=adoption_exclusions,
+        rejected_adoption_exclusions=rejected_adoption_exclusions,
+        runtime_surfaces=runtime_surface_inventory(flow_dir.parent, adoption_exclusions),
         symlinks=symlinks,
         has_baseline=baseline,
         default_scaffold=scaffold_dir.resolve() == SCAFFOLD_DIR.resolve(),
@@ -689,6 +854,26 @@ def audit_payload(report: AuditReport) -> dict:
             {"rel": f.rel, "bucket": f.bucket, "declared_by": list(f.declared_by)}
             for f in report.findings
         ],
+        "runtime_surfaces": [
+            {
+                "target": s.target,
+                "path": s.path,
+                "status": s.status,
+                "next_action": s.next_action,
+                "declared_by": s.declared_by,
+                "reason": s.reason,
+            }
+            for s in report.runtime_surfaces
+        ],
+        "adoption_exclusions": [
+            {
+                "target": e.target,
+                "path": e.path,
+                "reason": e.reason,
+                "declared_by": e.declared_by,
+            }
+            for e in report.adoption_exclusions
+        ],
         "rejected": [
             {
                 "declared_value": r.declared_value,
@@ -696,6 +881,14 @@ def audit_payload(report: AuditReport) -> dict:
                 "reason": r.reason,
             }
             for r in report.rejected
+        ],
+        "rejected_adoption_exclusions": [
+            {
+                "declared_value": r.declared_value,
+                "declared_by": r.declared_by,
+                "reason": r.reason,
+            }
+            for r in report.rejected_adoption_exclusions
         ],
     }
 
@@ -770,6 +963,23 @@ def render_audit(report: AuditReport) -> str:
             )
             lines.append(f"  {printable(finding.rel)}{suffix}")
 
+    lines.append("")
+    lines.append("runtime adoption surfaces — project-local runtime directories")
+    lines.append("  absent:    no project-local runtime surface found")
+    lines.append("  unmanaged: present but not declared as intentional project-owned content")
+    lines.append("  excluded:  intentionally unmanaged through [[adoption.exclusions]]")
+    for surface in report.runtime_surfaces:
+        detail = ""
+        if surface.declared_by:
+            detail = f"   [{surface.declared_by}]"
+        if surface.reason:
+            detail += f" — {printable(surface.reason)}"
+        if surface.next_action:
+            detail += f" — {surface.next_action}"
+        lines.append(
+            f"  {surface.target:<6} {surface.status:<9} {printable(surface.path)}{detail}"
+        )
+
     if report.symlinks:
         lines.append("")
         lines.append(
@@ -786,6 +996,18 @@ def render_audit(report: AuditReport) -> str:
             f"source outside the overlay"
         )
         for record in report.rejected:
+            lines.append(
+                f"  {printable(record.declared_value)}   "
+                f"[{printable(record.declared_by)}: {record.reason}]"
+            )
+
+    if report.rejected_adoption_exclusions:
+        lines.append("")
+        lines.append(
+            f"invalid adoption exclusions ({len(report.rejected_adoption_exclusions)}) — "
+            "[[adoption.exclusions]] entries that cannot be used"
+        )
+        for record in report.rejected_adoption_exclusions:
             lines.append(
                 f"  {printable(record.declared_value)}   "
                 f"[{printable(record.declared_by)}: {record.reason}]"

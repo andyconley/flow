@@ -188,11 +188,15 @@ This is intentionally light right now.
 
 ### `scaffolds/default/`
 
-This is the scaffold source copied into `repo/.flow`.
+This is the framework scaffold source. User-level sync reads most of it through
+`~/.flow/source`. A new project overlay receives only the thin project files it
+owns: `flow.toml`, `PROJECT.md`, `memory/STATE.md`, and `runs/.gitkeep`.
 
-The important rule:
+Rule:
 
-- content here becomes project-local source of truth
+- framework capability content here does not become project-local source of truth
+  unless a legacy project already copied it or a maintainer deliberately moves
+  custom content into `.flow`
 - content here is not itself the generated runtime surface
 
 #### `scaffolds/default/FRAMEWORK.md`
@@ -214,6 +218,10 @@ Machine-readable manifest describing:
 - managed output files
 
 This file is the adapter contract for runtime generation.
+
+Project `.flow/flow.toml` is smaller. It records project-owned state such as
+`[[replaces]]` standard/template wiring and `[[adoption.exclusions]]` entries
+for runtime surfaces that stay unmanaged by decision.
 
 #### `scaffolds/default/agents/`
 

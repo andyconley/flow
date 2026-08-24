@@ -10342,6 +10342,85 @@ class DoctorReplacesReportTests(FlowCliHarness):
 
         self.assertNotIn("PROJECT.md:", section)
 
+    def test_unmanaged_runtime_surfaces_are_visible_in_text_and_json(self) -> None:
+        self._project("")
+        (self.repo / ".claude").mkdir()
+
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        section = self._project_section(result.stdout)
+        self.assertIn("adoption:         1 runtime surface(s) need a decision", section)
+        self.assertIn("flow project audit", section)
+
+        payload = json.loads(self.run_flow("doctor", "--json").stdout)
+        diagnostics = {item["id"]: item for item in payload["diagnostics"]}
+        self.assertEqual(diagnostics["project.adoption.runtime_surfaces"]["status"], "warning")
+        self.assertEqual(
+            diagnostics["project.adoption.runtime_surfaces"]["category"],
+            "manual_required",
+        )
+
+    def test_excluded_runtime_surfaces_are_not_reported_as_unmanaged(self) -> None:
+        self._project(
+            '\n[[adoption.exclusions]]\n'
+            'target = "claude"\n'
+            'path = ".claude"\n'
+            'reason = "kept as project-owned Claude config"\n'
+        )
+        (self.repo / ".claude").mkdir()
+
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        section = self._project_section(result.stdout)
+        self.assertIn("adoption:         1 runtime surface(s) intentionally excluded", section)
+        self.assertNotIn("need a decision", section)
+
+        payload = json.loads(self.run_flow("doctor", "--json").stdout)
+        diagnostics = {item["id"]: item for item in payload["diagnostics"]}
+        self.assertIn("project.adoption.exclusions", diagnostics)
+        self.assertNotIn("project.adoption.runtime_surfaces", diagnostics)
+
+    def test_exclusions_stay_visible_when_other_surfaces_are_unmanaged(self) -> None:
+        self._project(
+            '\n[[adoption.exclusions]]\n'
+            'target = "claude"\n'
+            'path = ".claude"\n'
+            'reason = "kept as project-owned Claude config"\n'
+        )
+        (self.repo / ".claude").mkdir()
+        (self.repo / ".codex").mkdir()
+
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        section = self._project_section(result.stdout)
+        self.assertIn("adoption:         1 runtime surface(s) need a decision", section)
+        self.assertIn("adoption:         1 runtime surface(s) intentionally excluded", section)
+
+        payload = json.loads(self.run_flow("doctor", "--json").stdout)
+        diagnostics = {item["id"]: item for item in payload["diagnostics"]}
+        self.assertIn("project.adoption.runtime_surfaces", diagnostics)
+        self.assertIn("project.adoption.exclusions", diagnostics)
+
+    def test_invalid_adoption_exclusions_are_reported(self) -> None:
+        self._project(
+            '\n[[adoption.exclusions]]\n'
+            'target = "ghost"\n'
+            'path = ".claude"\n'
+        )
+
+        result = self.run_flow("doctor")
+        self.assert_ok(result)
+        section = self._project_section(result.stdout)
+        self.assertIn("adoption config:  1 invalid exclusion declaration(s)", section)
+
+        payload = json.loads(self.run_flow("doctor", "--json").stdout)
+        diagnostics = {item["id"]: item for item in payload["diagnostics"]}
+        self.assertEqual(diagnostics["project.adoption.exclusions.invalid"]["status"], "failed")
+        self.assertEqual(
+            diagnostics["project.adoption.exclusions.invalid"]["category"],
+            "parse_error",
+        )
+
 
 class DoctorDriftReportTests(FlowCliHarness):
     """`flow doctor`'s two overlay counts.
@@ -10622,6 +10701,68 @@ class ProjectReplacesParseTests(unittest.TestCase):
         self.assertEqual(rejected, [], f"template example does not parse: {uncommented}")
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0].default, "standards/testing.md")
+
+
+class ProjectAdoptionExclusionsParseTests(unittest.TestCase):
+    """`declared_adoption_exclusions` — the project-owned intent model."""
+
+    def setUp(self) -> None:
+        self.project = load_cli_module("project")
+
+    def test_reads_an_exclusion_with_reason(self) -> None:
+        found, rejected = self.project.declared_adoption_exclusions(
+            {
+                "adoption": {
+                    "exclusions": [
+                        {
+                            "target": "claude",
+                            "path": ".claude",
+                            "reason": "project keeps hand-authored settings",
+                        }
+                    ]
+                }
+            }
+        )
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].target, "claude")
+        self.assertEqual(found[0].path, ".claude")
+        self.assertEqual(found[0].declared_by, "adoption.exclusions[0]")
+
+    def test_a_missing_table_is_not_an_error(self) -> None:
+        self.assertEqual(self.project.declared_adoption_exclusions({}), ([], []))
+
+    def test_invalid_target_is_rejected(self) -> None:
+        found, rejected = self.project.declared_adoption_exclusions(
+            {"adoption": {"exclusions": [{"target": "ghost", "path": ".claude"}]}}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("target must be one of", rejected[0].reason)
+
+    def test_escaping_path_is_rejected(self) -> None:
+        found, rejected = self.project.declared_adoption_exclusions(
+            {"adoption": {"exclusions": [{"target": "claude", "path": "../.claude"}]}}
+        )
+
+        self.assertEqual(found, [])
+        self.assertIn("escapes the overlay", rejected[0].reason)
+
+    def test_duplicate_target_and_path_are_rejected(self) -> None:
+        found, rejected = self.project.declared_adoption_exclusions(
+            {
+                "adoption": {
+                    "exclusions": [
+                        {"target": "codex", "path": ".codex"},
+                        {"target": "codex", "path": ".codex"},
+                    ]
+                }
+            }
+        )
+
+        self.assertEqual(len(found), 1)
+        self.assertEqual(rejected[0].reason, "duplicate exclusion for target and path")
 
 
 class ProjectReplacesResolveTests(unittest.TestCase):
@@ -11318,6 +11459,66 @@ class ProjectAuditCommandTests(FlowCliHarness):
         self.assertTrue(data["findings"], "fixture produced nothing to check")
         for finding in data["findings"]:
             self.assertFalse(finding["rel"].startswith("/"), finding)
+
+    def test_json_reports_unmanaged_runtime_surfaces(self) -> None:
+        self.use_fake_home()
+        self.setup_legacy_project()
+        (self.repo / ".claude").mkdir()
+
+        result = self.audit("--json")
+        self.assert_ok(result)
+
+        data = json.loads(result.stdout)
+        surfaces = {(s["target"], s["path"]): s for s in data["runtime_surfaces"]}
+        self.assertEqual(surfaces[("claude", ".claude")]["status"], "unmanaged")
+        self.assertIn(
+            "declare [[adoption.exclusions]]",
+            surfaces[("claude", ".claude")]["next_action"],
+        )
+        self.assertEqual(surfaces[("codex", ".codex")]["status"], "absent")
+        self.assertEqual(surfaces[("codex", ".agents")]["status"], "absent")
+
+    def test_text_audit_reports_excluded_runtime_surfaces(self) -> None:
+        self.use_fake_home()
+        self.setup_legacy_project()
+        (self.repo / ".claude").mkdir()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[adoption.exclusions]]\n'
+            + 'target = "claude"\n'
+            + 'path = ".claude"\n'
+            + 'reason = "project keeps hand-authored settings"\n'
+        )
+
+        result = self.audit()
+        self.assert_ok(result)
+        self.assertIn("runtime adoption surfaces", result.stdout)
+        self.assertIn("claude excluded  .claude   [adoption.exclusions[0]]", result.stdout)
+        self.assertIn("project keeps hand-authored settings", result.stdout)
+
+    def test_json_reports_invalid_adoption_exclusions(self) -> None:
+        self.use_fake_home()
+        self.setup_legacy_project()
+        manifest = self.repo / ".flow" / "flow.toml"
+        manifest.write_text(
+            manifest.read_text()
+            + '\n[[adoption.exclusions]]\n'
+            + 'target = "codex"\n'
+            + 'path = "../.codex"\n'
+        )
+
+        result = self.audit("--json")
+        self.assert_ok(result)
+
+        data = json.loads(result.stdout)
+        self.assertEqual(data["adoption_exclusions"], [])
+        self.assertEqual(len(data["rejected_adoption_exclusions"]), 1)
+        self.assertEqual(
+            data["rejected_adoption_exclusions"][0]["declared_by"],
+            "adoption.exclusions[0]",
+        )
+        self.assertIn("escapes the overlay", data["rejected_adoption_exclusions"][0]["reason"])
 
     def test_an_orphaned_declaration_is_reported_with_its_site(self) -> None:
         self.use_fake_home()
