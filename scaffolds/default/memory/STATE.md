@@ -1,6 +1,6 @@
 # Current State
 
-This file holds **transient work state** for this project — what is in flight right now, what is blocked, what to pick up next session. It is **not** a store of durable facts or decisions; those go to Claude Code's auto-memory at `~/.claude/projects/<project-id>/memory/`.
+This file holds **transient work state** for this project — what is in flight right now, what is blocked, what to pick up next session. It is **not** a store of durable facts or decisions; those live in the active runtime memory provider when one exists.
 
 ## What belongs here
 
@@ -11,10 +11,14 @@ This file holds **transient work state** for this project — what is in flight 
 
 ## What does NOT belong here
 
-- durable project facts → write to auto-memory (`project` type)
-- decisions about how the project works → write to auto-memory (`project` type)
-- user preferences or feedback → write to auto-memory (`user` or `feedback` type)
-- pointers to external systems → write to auto-memory (`reference` type)
+- durable project facts → write to the active runtime memory provider when one exists
+- decisions about how the project works → write to the active runtime memory provider when one exists
+- user preferences or feedback → write to the active runtime memory provider when one exists
+- pointers to external systems → write to the active runtime memory provider when one exists
+
+Claude Code's provider is auto-memory at `~/.claude/projects/<project-id>/memory/`.
+Codex currently has no Flow-managed durable memory provider, so keep project
+artifacts and C-lite run state canonical there.
 
 ## When to update
 

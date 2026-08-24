@@ -524,6 +524,16 @@ class FlowCliTests(FlowCliHarness):
                 self.assertIn("runtime memory provider", text)
                 self.assertNotIn("Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` —", text)
 
+    def test_project_scaffold_uses_runtime_memory_provider_language(self) -> None:
+        scaffold_dir = REPO_ROOT / "scaffolds" / "default"
+        for path in (scaffold_dir / "PROJECT.md", scaffold_dir / "memory" / "STATE.md"):
+            with self.subTest(path=path.relative_to(scaffold_dir).as_posix()):
+                text = path.read_text()
+                self.assertIn("runtime memory provider", text)
+                self.assertIn("Codex currently has no Flow-managed durable", text)
+                self.assertNotIn("those go to Claude Code's auto-memory", text)
+                self.assertNotIn("write to auto-memory", text)
+
     # -- `flow refresh project`, retired -------------------------------
     #
     # Seven tests here previously asserted that refresh repaired an overlay:

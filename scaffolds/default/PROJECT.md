@@ -29,7 +29,7 @@
 3. ADRs
 4. Code
 5. `.flow/memory/STATE.md` (transient work state — what is in flight, blocked, or pending right now)
-6. Claude Code auto-memory at `~/.claude/projects/<project-id>/memory/` (durable project facts and decisions)
+6. Active runtime memory provider, when one exists (durable project facts and decisions; Claude Code uses auto-memory at `~/.claude/projects/<project-id>/memory/`; Codex currently has no Flow-managed durable provider)
 
 Standards and templates are not among them: they come from the user-level
 install, not from this overlay. Record here what is true of *this* project —
