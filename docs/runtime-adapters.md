@@ -17,11 +17,11 @@ Each runtime target can be generated at two scopes:
 | Scope | Source of truth | Generated to | When to use |
 |---|---|---|---|
 | **User-level** | Framework scaffold (`~/.flow/source/scaffolds/default/`) **plus** user overlay (`~/.flow/user/`) when present | `~/.claude/`, `~/.agents/skills/`, `~/.codex/` | Always — installs Flow into every supported runtime session |
-| **Project-level** | Project overlay (`<repo>/.flow/`) | `<repo>/.claude/`, `<repo>/.agents/skills/`, `<repo>/.codex/` | Per-repo, when you want project-specific role assignments, memory, and run artifacts |
+| **Project-level** | Project overlay (`<repo>/.flow/`) | retired project-local adapter output | Retired; project overlays now provide context and run artifacts, not generated runtime adapters |
 
 Sync is user-level only (`flow sync claude --user`). Project-mode sync generated a second, repo-local copy of the same adapters from a project's own copies of the framework; it was retired along with those copies. The user-level install provides the universal framework in every session, and a repo's `.flow/` provides that project's context — the two no longer overlap.
 
-Mode-specific differences:
+Historical mode-specific differences:
 
 - **Hook command paths**: Claude user-mode uses `"$HOME"/.claude/hooks/flow-*.sh`; Claude project-mode uses `"$CLAUDE_PROJECT_DIR"/.claude/hooks/flow-*.sh`. Codex user-mode uses `"$HOME"/.codex/hooks/flow-*.sh`; Codex project-mode uses `"$(git rev-parse --show-toplevel)"/.codex/hooks/flow-*.sh`.
 - **Managed manifest `source` fields**: user-mode references the scaffold path (`~/.flow/source/scaffolds/default/commands/flow-boot.md`); project-mode references `.flow/commands/flow-boot.md`. User-overlay entries in user mode reference `~/.flow/user/...` so origin is auditable.

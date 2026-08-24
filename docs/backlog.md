@@ -60,7 +60,7 @@ Next step:
 
 ### 2. Runtime Neutrality and Cross-Runtime Behavior
 
-Status: implemented; ready for review
+Status: archived
 
 Problem:
 
@@ -90,7 +90,8 @@ Why it matters:
 
 Next step:
 
-- run `/flow-implement` for `20260823-runtime-neutrality-cross-runtime`
+- closed by `20260823-runtime-neutrality-cross-runtime`; manual runtime smoke
+  remains optional follow-up evidence when real client proof is needed
 
 ### 3. Maintainer Supportability
 
