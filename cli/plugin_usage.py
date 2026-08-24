@@ -55,6 +55,7 @@ from pathlib import Path
 
 import claude_config
 import usage_store
+import telemetry_freshness
 
 CAPABILITY = "plugin_usage_counters"
 
@@ -616,17 +617,25 @@ def render_usage_section(payload: dict) -> str:
     """
     head = "-- usage: skills & plugins --"
     state = payload.get("state")
+    freshness = payload.get("freshness")
+
+    def degraded(line: str) -> str:
+        lines = [head, f"  {line}"]
+        if freshness and freshness.get("state") != "fresh":
+            action = freshness.get("next_action")
+            suffix = f" — run `{action}`" if action else ""
+            lines.append(f"  freshness: {freshness.get('state')}{suffix}")
+        return "\n".join(lines)
 
     if state == STATE_UNSUPPORTED:
-        return (
-            f"{head}\n"
-            f"  not reported by {payload.get('harness', 'this harness')} —"
+        return degraded(
+            f"not reported by {payload.get('harness', 'this harness')} —"
             " no usage counters exist to sample"
         )
     if state == STATE_STALE:
-        return f"{head}\n  store predates this feature — run `flow setup machine` to migrate"
+        return degraded("store predates this feature — run `flow setup machine` to migrate")
     if state == STATE_EMPTY:
-        return f"{head}\n  no snapshots yet — history starts recording from the next session"
+        return degraded("no snapshots yet — history starts recording from the next session")
 
     lines = [
         f"{head}  ({_plural(payload['snapshots'], 'snapshot')}"
@@ -756,6 +765,10 @@ def render_usage_section(payload: dict) -> str:
             f" {_display_path(payload['inventory_scope'])}"
         )
     lines.append("measured on this machine only")
+    if freshness and freshness.get("state") != "fresh":
+        action = freshness.get("next_action")
+        suffix = f" — run `{action}`" if action else ""
+        lines.append(f"freshness: {freshness.get('state')}{suffix}")
     return "\n".join(lines)
 
 
@@ -824,15 +837,27 @@ def plugin_usage_show_command(as_json: bool = False) -> int:
     """`flow plugin-usage show [--json]` — the same payload doctor renders."""
     conn = _open_store(5000)
     if conn is None:
-        print(render_usage_section({"state": STATE_STALE, "harness": "claude"}))
+        payload = {"state": STATE_STALE, "harness": "claude"}
+        payload["freshness"] = telemetry_freshness.plugin_freshness(payload)
+        print(json.dumps(payload, indent=2, sort_keys=True) if as_json else render_usage_section(payload))
         return 0
     try:
         payload = usage_payload(conn, project_root=Path.cwd())
     except sqlite3.Error as exc:
+        if as_json:
+            payload = {
+                "state": STATE_STALE,
+                "harness": "claude",
+                "error": str(exc),
+            }
+            payload["freshness"] = telemetry_freshness.plugin_freshness(payload)
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
         print(f"usage: store unavailable — {exc}")
         return 0
     finally:
         conn.close()
+    payload["freshness"] = telemetry_freshness.plugin_freshness(payload)
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0

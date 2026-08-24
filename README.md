@@ -293,7 +293,7 @@ Most usage capture happens through Flow commands and hooks. Use these commands w
 Normal path:
 
 - `flow cost active`
-  - harvest Claude sessions and normalize before it answers
+  - harvest Claude sessions, harvest local Codex sessions when present, and normalize before it answers
 - `flow cost verdict --hook`
   - harvest the current transcript from runtime Stop hooks
 - `flow cost warn --hook`
@@ -306,13 +306,15 @@ Manual maintenance:
 - `flow harvest claude --rescan`
   - re-read already-harvested Claude transcripts after collector improvements or historical-data fixes
 - `flow harvest codex`
-  - sweep Codex session files into the usage store
+  - sweep Codex session files into the usage store when you need to backfill or refresh read-only views manually
 - `flow normalize`
   - rebuild the normalized layer after a manual harvest
 
 ### Usage Analysis
 
 Use these to read cost, context growth, active sessions, and token trends. For the capture model, normalization rules, and hook behavior, see [flow cost capture design](docs/specs/2026-08-15-flow-cost-capture-design.md).
+
+Read-only analysis views report telemetry freshness from the store. They do not hide stale data, and they name the manual harvest/normalize path when the data they read may be old.
 
 - `flow cost summary`
   - show token totals by harness/model
@@ -336,7 +338,7 @@ Use these to read cost, context growth, active sessions, and token trends. For t
 - `flow plugin-usage snapshot`
   - record the current counters if they have moved since the last look
 - `flow plugin-usage show`
-  - print the report `flow doctor` also renders as a section
+  - print the report `flow doctor` also renders as a section, including snapshot freshness
 
 **Claude only.** Codex maintains no equivalent counters, so on Codex the section states that rather than rendering an empty table. This is the same capability-gated asymmetry `flow cost baseline` carries for compaction filtering, declared in `data/harness_capabilities.json`.
 

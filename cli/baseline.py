@@ -35,6 +35,7 @@ import sqlite3
 from datetime import date, timedelta
 
 import usage_store
+import telemetry_freshness
 from cost import DEFAULT_WINDOW_DAYS, _bucket_expr, _cutoff, _data_file, render_json
 from paths import HOME, SOURCE_DIR
 
@@ -569,11 +570,12 @@ def baseline_command(
     conn.row_factory = sqlite3.Row
     try:
         rows = [baseline_rows(conn, name, since=since, by_cwd=by_cwd) for name in targets]
+        freshness = telemetry_freshness.usage_freshness(conn)
     finally:
         conn.close()
 
     if as_json:
-        print(render_json({"rows": rows}))
+        print(render_json({"rows": rows, "freshness": freshness}))
         return 0
 
     rendered = [
@@ -582,5 +584,6 @@ def baseline_command(
         else render_baseline_table(row)
         for row in rows
     ]
-    print("\n\n".join(rendered))
+    notes = telemetry_freshness.freshness_notes(freshness, read_only=True)
+    print("\n\n".join(rendered) + ("\n\n" + "\n".join(notes) if notes else ""))
     return 0

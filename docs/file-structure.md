@@ -84,6 +84,8 @@ other by bare name.
 - `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; never writes.
 - `diagnostic_model.py` — shared support diagnostic item model, JSON payload
   shape, and check-mode exit helpers.
+- `telemetry_freshness.py` — shared freshness classification and diagnostic
+  helpers for usage harvests, normalized cost views, and plugin-usage scans.
 - `usage_store.py` — SQLite store for harvested harness usage.
 - `codex_collector.py`, `claude_collector.py` — read each harness's session
   transcripts into the store's raw layer. Pure: no argparse, no printing,

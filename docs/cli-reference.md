@@ -12,7 +12,7 @@
 
 Three **hook entry points** exist only to be called by generated hooks — `flow cost verdict --hook`, `flow cost warn --hook`, and `flow overlay check --hook`. They read hook JSON on stdin and are documented here for anyone reading a `settings.json` entry and wondering what it invokes, not because there is a reason to type them. (`flow cost verdict` also has an interactive `--transcript` mode, which is worth typing.)
 
-The usage-tracking commands form a pipeline, and the order matters: **`harvest` writes raw records → `normalize` projects them into one token convention → `cost` reads the normalized layer.** `flow cost active` and `flow cost verdict` run the first two steps for you; `flow cost summary`, `flow cost sessions`, `flow cost trend`, and `flow cost baseline` do not, so they show whatever the last harvest left behind.
+The usage-tracking commands form a pipeline, and the order matters: **`harvest` writes raw records → `normalize` projects them into one token convention → `cost` reads the normalized layer.** `flow cost active` and `flow cost verdict` run the needed harvest/normalize work for the current surface; `flow cost summary`, `flow cost sessions`, `flow cost trend`, and `flow cost baseline` stay read-only and label freshness so stale data does not look current.
 
 ## Command Reference
 
@@ -324,7 +324,7 @@ Flags:
 - `--session ID` — with `--rescan`, only rewind files whose path contains `ID`
 - `--dry-run` — with `--rescan`, report the scope and exit without writing anything
 
-Use this when you want the store current before a `summary` or `sessions` read. `flow cost active` and `flow cost verdict` run it for you.
+Use this when you want the store current before a read-only cost view. `flow cost active` and `flow cost verdict` run the relevant live harvest path for their own surfaces.
 
 #### When you need `--rescan`
 
@@ -356,9 +356,10 @@ Read Codex session transcripts from `~/.codex/sessions/` into the usage store's 
 Behavior:
 
 - incremental and resumable, the same as the Claude harvest
-- **nothing ever runs this for you.** `flow cost active` harvests Claude only, so Codex rows in `flow cost summary` are as old as the last time you ran this by hand
+- `flow cost active` runs this automatically when `~/.codex/sessions/` exists, because active status is a current-state view
+- read-only views do not run it; they report freshness and name the manual refresh path when Codex data may be stale
 
-Use this whenever you care about Codex totals being current.
+Use this whenever you care about Codex totals being current before `summary`, `sessions`, `trend`, or `baseline`.
 
 ### `flow normalize`
 
@@ -368,7 +369,7 @@ Behavior:
 
 - only rows without a current-version normalized counterpart are recomputed, so this is safe and cheap to re-run
 
-Use this after a harvest, before reading `cost summary` or `cost sessions`. `flow cost active` and `flow cost verdict` run it for you.
+Use this after a manual harvest, before reading `cost summary`, `cost sessions`, `cost trend`, or `cost baseline`. `flow cost active` and `flow cost verdict` normalize for their own current-state reads.
 
 ### `flow cost summary`
 
@@ -380,7 +381,7 @@ Flags:
 - `--all` — show every row ever normalized; cannot be combined with `--days`
 - `--json` — print the same result as JSON instead of an aligned table
 
-Reads only the normalized layer — it does not harvest, so what it shows is as current as your last `flow harvest`. Prints `(no data in range)` when the window is empty.
+Reads only the normalized layer — it does not harvest, so what it shows is as current as your last harvest/normalize pass. It includes freshness metadata in JSON and a freshness note in text output when the store is empty, stale, partial, or unreadable. Prints `(no data in range)` when the window is empty.
 
 **The capacity line is a snapshot with an expiry.** It renders the reading's own `resets at` time beside `as of`, and it disappears entirely once that time passes — an expired gauge is absent, not dimmed. Primary and secondary expire independently. A reading sampled more than halfway through its own window is still shown, with a note: it is valid, but usage has had most of the window to move since.
 
@@ -489,7 +490,7 @@ Per-active-session context percentage, carry above session start, idle time, and
 
 Behavior:
 
-- runs the incremental Claude harvest and a normalize pass **first**, so the answer is current without a separate step
+- runs the incremental Claude harvest, runs the incremental Codex harvest when `~/.codex/sessions/` exists, and runs a normalize pass **first**, so the answer is current without a separate step for local transcripts
 - prints `(no active sessions in range)` when nothing qualifies
 
 Flags:
@@ -560,6 +561,8 @@ The report `flow doctor` renders as a section, standalone.
 Flags:
 
 - `--json` — the payload instead of the rendered section
+
+The JSON payload includes a `freshness` object. In text mode, a freshness line appears when the history is thin, stale, empty, or needs a manual snapshot. This keeps plugin usage in the same support model as cost freshness without treating hook firing counts as deliberate invocations.
 
 **Hook firings are reported separately from deliberate invocations, and this is the point of the surface.** The harness increments a plugin's counter once per hook firing, so a plugin's number measures how many hook events it declares rather than anything a person did. On the machine this was built against, one plugin registering five hook entries read 16,373 while a plugin invoked deliberately read 1 — three orders of magnitude apart, in the same field, meaning different things. They never share a column, and the hook block says so in its own heading.
 

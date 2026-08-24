@@ -26,6 +26,7 @@ from diagnostic_model import (
     support_payload,
 )
 import usage_store
+import telemetry_freshness
 from flowtoml import read_toml
 from fsutil import repo_root
 from lifecycle import read_install_config
@@ -422,6 +423,74 @@ def doctor(as_json: bool = False, check: bool = False) -> int:
         user_claude_agent_policy,
         user_codex_agent_policy,
     )
+    store_path = usage_store.default_store_path(HOME)
+    if store_path.exists():
+        try:
+            import sqlite3
+
+            conn = sqlite3.connect(f"file:{store_path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+            try:
+                usage_freshness = telemetry_freshness.usage_freshness(conn)
+                diagnostics.extend(telemetry_freshness.usage_diagnostics(usage_freshness))
+                try:
+                    import plugin_usage
+
+                    plugin_payload = plugin_usage.usage_payload(
+                        conn, home=HOME, project_root=Path.cwd()
+                    )
+                    diagnostics.append(
+                        telemetry_freshness.plugin_diagnostic(
+                            telemetry_freshness.plugin_freshness(plugin_payload)
+                        )
+                    )
+                except Exception as err:  # noqa: BLE001 - doctor must survive broken stores.
+                    diagnostics.append(
+                        diagnostic(
+                            "telemetry.plugin_usage",
+                            STATUS_WARNING,
+                            SEVERITY_WARNING,
+                            "stale",
+                            "plugin usage freshness could not be determined",
+                            detail=str(err),
+                            next_action="flow setup machine",
+                        )
+                    )
+            finally:
+                conn.close()
+        except Exception as err:  # noqa: BLE001 - doctor must survive broken stores.
+            diagnostics.append(
+                diagnostic(
+                    "telemetry.usage.status",
+                    STATUS_FAILED,
+                    SEVERITY_ERROR,
+                    "parse_error",
+                    "usage freshness could not be determined",
+                    detail=str(err),
+                )
+            )
+    else:
+        diagnostics.append(
+            diagnostic(
+                "telemetry.usage.empty",
+                STATUS_WARNING,
+                SEVERITY_WARNING,
+                "missing",
+                "usage store has not been created",
+                path=store_path,
+                next_action="flow setup machine",
+            )
+        )
+        diagnostics.append(
+            diagnostic(
+                "telemetry.plugin_usage",
+                STATUS_WARNING,
+                SEVERITY_WARNING,
+                "missing",
+                "plugin usage snapshots are unavailable until the usage store exists",
+                next_action="flow setup machine",
+            )
+        )
     if as_json:
         print_json(support_payload("doctor", root, diagnostics, install=read_install_config()))
         return exit_code(diagnostics, check=check, fail_on_warnings=True)
@@ -586,6 +655,7 @@ def _usage_section() -> str:
             payload = plugin_usage.usage_payload(conn, home=HOME, project_root=Path.cwd())
         finally:
             conn.close()
+        payload["freshness"] = telemetry_freshness.plugin_freshness(payload)
         return plugin_usage.render_usage_section(payload)
     except Exception:  # noqa: BLE001 — see docstring
         return "-- usage: skills & plugins --\n  unavailable on this install"

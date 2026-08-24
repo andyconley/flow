@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 
@@ -810,6 +811,8 @@ class FlowCliTests(FlowCliHarness):
         ids = {item["id"] for item in payload["diagnostics"]}
         self.assertIn("user.claude.sync", ids)
         self.assertIn("user.codex.runtime_smoke", ids)
+        self.assertIn("telemetry.usage.empty", ids)
+        self.assertIn("telemetry.plugin_usage", ids)
         smoke = [item for item in payload["diagnostics"] if item["id"] == "user.codex.runtime_smoke"][0]
         self.assertEqual(smoke["category"], "manual_required")
         self.assertEqual(smoke["severity"], "warning")
@@ -826,6 +829,27 @@ class FlowCliTests(FlowCliHarness):
         payload = json.loads(result.stdout)
         self.assertGreaterEqual(payload["warnings"], 1)
         self.assertTrue(any(item["severity"] == "warning" for item in payload["diagnostics"]))
+
+    def test_cost_summary_json_reports_freshness(self) -> None:
+        self.use_fake_home()
+
+        result = self.run_flow("cost", "summary", "--json")
+
+        self.assert_ok(result)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["freshness"]["state"], "empty")
+        self.assertEqual(payload["rows"], [])
+
+    def test_plugin_usage_json_reports_freshness_without_store(self) -> None:
+        self.use_fake_home()
+
+        result = self.run_flow("plugin-usage", "show", "--json")
+
+        self.assert_ok(result)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["state"], "stale")
+        self.assertEqual(payload["freshness"]["state"], "stale")
+        self.assertEqual(payload["freshness"]["next_action"], "flow setup machine")
 
     def test_sync_check_json_classifies_clean_and_drift(self) -> None:
         fake_home = self.use_fake_home()
@@ -2483,6 +2507,7 @@ class FlowCliTests(FlowCliHarness):
                 "session_lookup",
                 "setup",
                 "sync",
+                "telemetry_freshness",
                 "usage_store",
             ],
         )
@@ -5495,7 +5520,7 @@ class CostTests(unittest.TestCase):
         self.conn.close()
         if self._added_cli_path:
             sys.path.remove(str(REPO_ROOT / "cli"))
-        for name in ("usage_store", "cost"):
+        for name in ("usage_store", "cost", "telemetry_freshness"):
             sys.modules.pop(name, None)
 
     def insert_session(
@@ -5506,6 +5531,52 @@ class CostTests(unittest.TestCase):
             (harness, session_id, title, cwd, f"/tmp/{session_id}.jsonl"),
         )
         return cur.lastrowid
+
+    def record_harvest(self, harness: str, harvested_at: str) -> None:
+        self.conn.execute(
+            "INSERT INTO harvest"
+            " (harness, source_path, host_id, last_size, last_offset, last_line_no,"
+            "  harvested_at, collector_version)"
+            " VALUES (?, ?, '', 1, 1, 1, ?, 1)",
+            (harness, f"/tmp/{harness}.jsonl", harvested_at),
+        )
+
+    def test_usage_freshness_classifies_stale_and_fresh_harnesses(self) -> None:
+        from datetime import datetime
+
+        import telemetry_freshness
+
+        now = datetime.fromisoformat("2026-01-10T12:00:00+00:00").timestamp()
+        self.record_harvest("claude", "2026-01-10T11:30:00+00:00")
+        self.record_harvest("codex", "2026-01-10T09:00:00+00:00")
+
+        status = telemetry_freshness.usage_freshness(self.conn, now=now)
+
+        self.assertEqual(status["state"], "partial")
+        self.assertEqual(status["harnesses"]["claude"]["state"], "fresh")
+        self.assertEqual(status["harnesses"]["codex"]["state"], "stale")
+        self.assertEqual(
+            status["harnesses"]["codex"]["next_action"],
+            "flow harvest codex && flow normalize",
+        )
+
+    def test_cost_active_harvests_codex_when_local_sessions_exist(self) -> None:
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(home, ignore_errors=True))
+        codex_root = home / ".codex" / "sessions"
+        codex_root.mkdir(parents=True)
+        calls = []
+
+        def fake_codex_harvest(conn, root):
+            calls.append(root)
+            return {"files": 0, "turns": 0, "activity": 0, "skipped": 0, "failures": []}
+
+        with unittest.mock.patch.object(self.cost, "HOME", home):
+            with unittest.mock.patch.object(self.cost, "codex_harvest_all", fake_codex_harvest):
+                result = self.cost.cost_active_command()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(calls, [codex_root])
 
     def insert_turn(
         self,
@@ -8096,7 +8167,7 @@ class BaselineTests(unittest.TestCase):
         self.conn.close()
         if self._added_cli_path:
             sys.path.remove(str(REPO_ROOT / "cli"))
-        for name in ("usage_store", "baseline", "cost"):
+        for name in ("usage_store", "baseline", "cost", "telemetry_freshness"):
             sys.modules.pop(name, None)
 
     def seed(
@@ -8792,7 +8863,7 @@ class PluginUsageTests(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
         if self._added_cli_path:
             sys.path.remove(str(REPO_ROOT / "cli"))
-        for name in ("plugin_usage", "claude_config", "usage_store"):
+        for name in ("plugin_usage", "claude_config", "usage_store", "telemetry_freshness"):
             sys.modules.pop(name, None)
 
     # -- fixtures --------------------------------------------------------

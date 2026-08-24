@@ -57,6 +57,8 @@ from claude_collector import default_sessions_root as claude_sessions_root
 from claude_collector import harvest_all as claude_harvest_all
 from claude_collector import harvest_file as claude_harvest_file
 from codex_collector import HARNESS as CODEX_HARNESS
+from codex_collector import default_sessions_root as codex_sessions_root
+from codex_collector import harvest_all as codex_harvest_all
 from codex_collector import harvest_file as codex_harvest_file
 from hookio import log_hook_error as _log_hook_error
 from hookio import read_hook_stdin as _read_hook_stdin
@@ -64,6 +66,7 @@ from hookio import safe_key as _safe_session_id
 from normalize import normalize_all
 from paths import HOME, SOURCE_DIR
 from session_lookup import lookup_session_for_path
+import telemetry_freshness
 
 DEFAULT_WINDOW_DAYS = 7
 DEFAULT_SESSIONS_LIMIT = 20
@@ -1161,11 +1164,12 @@ def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False
     try:
         rows = summary_rows(conn, since)
         gauge = capacity_gauge(conn, since)
+        freshness = telemetry_freshness.usage_freshness(conn)
     finally:
         conn.close()
 
     if as_json:
-        payload = {"rows": rows}
+        payload = {"rows": rows, "freshness": freshness}
         if gauge is not None:
             payload["capacity"] = gauge
         print(render_json(payload))
@@ -1174,6 +1178,10 @@ def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False
         if gauge is not None:
             print()
             print(_render_gauge_line(gauge))
+        notes = telemetry_freshness.freshness_notes(freshness, read_only=True)
+        if notes:
+            print()
+            print("\n".join(notes))
 
     return 0
 
@@ -1201,13 +1209,21 @@ def cost_sessions_command(
     conn.row_factory = sqlite3.Row
     try:
         rows = sessions_rows(conn, since, row_limit)
+        freshness = telemetry_freshness.usage_freshness(conn)
     finally:
         conn.close()
 
     # Same envelope as `cost summary`'s --json — {"rows": [...]}, so a caller
     # never needs to know which subcommand produced a payload before reading
     # payload["rows"] out of it.
-    print(render_json({"rows": rows}) if as_json else render_table(rows))
+    if as_json:
+        print(render_json({"rows": rows, "freshness": freshness}))
+    else:
+        print(render_table(rows))
+        notes = telemetry_freshness.freshness_notes(freshness, read_only=True)
+        if notes:
+            print()
+            print("\n".join(notes))
     return 0
 
 
@@ -1292,16 +1308,19 @@ def cost_trend_command(
     try:
         rows = trend_rows(conn, since, bucket=bucket, harness=harness)
         floor = coverage_floor(conn)
+        freshness = telemetry_freshness.usage_freshness(conn)
     finally:
         conn.close()
 
-    notes = _coverage_notes(floor, since, harness)
+    notes = _coverage_notes(floor, since, harness) + telemetry_freshness.freshness_notes(
+        freshness, read_only=True
+    )
     if as_json:
         # `coverage` rides alongside `rows` rather than being folded into
         # them: it is a property of the store, not of any bucket, and a
         # caller checking whether its window was fully covered should not
         # have to infer that from which rows happen to be present.
-        print(render_json({"rows": rows, "coverage": floor}))
+        print(render_json({"rows": rows, "coverage": floor, "freshness": freshness}))
     else:
         print(_render_trend_table(rows, notes))
     return 0
@@ -1401,14 +1420,29 @@ def cost_active_command(
                 line = failure["line"]
                 where = f":{line}" if line is not None else ""
                 print(f"note: skipped {failure['path']}{where} — {failure['reason']}")
+        codex_root = codex_sessions_root(HOME)
+        if codex_root.is_dir():
+            summary = codex_harvest_all(conn, codex_root)
+            for failure in summary["failures"]:
+                line = failure["line"]
+                where = f":{line}" if line is not None else ""
+                print(f"note: skipped {failure['path']}{where} — {failure['reason']}")
         norm_result = normalize_all(conn)
         for failure in norm_result["failures"]:
             print(f"note: could not normalize turn_raw id {failure['turn_raw_id']} — {failure['reason']}")
         rows = active_rows(conn, within)
+        freshness = telemetry_freshness.usage_freshness(conn)
     finally:
         conn.close()
 
-    print(render_json({"rows": rows}) if as_json else _render_active_table(rows))
+    if as_json:
+        print(render_json({"rows": rows, "freshness": freshness}))
+    else:
+        print(_render_active_table(rows))
+        notes = telemetry_freshness.freshness_notes(freshness, read_only=False)
+        if notes:
+            print()
+            print("\n".join(notes))
     return 0
 
 

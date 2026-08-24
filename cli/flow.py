@@ -258,7 +258,7 @@ def main() -> int:
     cost_active_parser = cost_sub.add_parser(
         "active",
         help="context status + /clear-or-/compact recommendation per active session",
-        description="Per-active-session context percentage, carry above session start, idle time, and a /clear-or-/compact recommendation — worst carry first. Harvests and normalizes incrementally before answering. Supersedes token-report --active.",
+        description="Per-active-session context percentage, carry above session start, idle time, and a /clear-or-/compact recommendation — worst carry first. Harvests local Claude/Codex sessions and normalizes incrementally before answering. Supersedes token-report --active.",
     )
     cost_active_parser.add_argument(
         "--within",
