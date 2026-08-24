@@ -77,6 +77,7 @@ def main() -> int:
             "  flow project audit                 (what a repo still copies)\n"
             "  flow run list                      (workflow run state)\n"
             "  flow doctor\n"
+            "  flow doctor --json\n"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, title="commands")
@@ -552,11 +553,13 @@ def main() -> int:
         help="show framework overview (phase machine, commands, agents, architecture)",
         description="Print the framework orientation: workflow phases, slash commands, CLI commands, agents, and architecture. Same content as the `/flow-help` slash command — invoke this at the shell when you are not in a Claude session.",
     )
-    sub.add_parser(
+    doctor_parser = sub.add_parser(
         "doctor",
         help="report machine, repo, and runtime sync state",
         description="Inspect the current machine install, repo framework, and generated runtime adapter state.",
     )
+    doctor_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
+    doctor_parser.add_argument("--check", action="store_true", help="exit nonzero when warning- or error-severity diagnostics exist")
     sub.add_parser(
         "bootstrap",
         help="validate that the required repo/.flow structure exists",
@@ -574,6 +577,7 @@ def main() -> int:
             "Examples:\n"
             "  flow sync claude --user\n"
             "  flow sync claude --user --check\n"
+            "  flow sync claude --user --check --json\n"
             "  flow sync codex --user\n"
             "  flow sync codex --user --check\n"
         ),
@@ -588,6 +592,7 @@ def main() -> int:
         action="store_true",
         help="report drift without writing files",
     )
+    sync.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
     sync.add_argument(
         "--user",
         action="store_true",
@@ -634,6 +639,7 @@ def main() -> int:
         epilog=(
             "Examples:\n"
             "  flow update --check\n"
+            "  flow update --check --json\n"
             "  flow update\n"
             "  flow update --resync\n"
         ),
@@ -653,6 +659,7 @@ def main() -> int:
         metavar="URL",
         help="override the remote URL configured in ~/.flow/config.toml",
     )
+    update_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
 
     args = parser.parse_args()
 
@@ -752,15 +759,17 @@ def main() -> int:
     if args.command == "help":
         return help_command()
     if args.command == "doctor":
-        return doctor()
+        return doctor(as_json=args.json, check=args.check)
     if args.command == "bootstrap":
         return bootstrap()
     if args.command == "sync":
-        return sync_target(args.target, check=args.check, user_mode=args.user)
+        return sync_target(args.target, check=args.check, user_mode=args.user, as_json=args.json)
     if args.command == "install":
         return install_command(release=args.release, develop_path=args.develop)
     if args.command == "update":
-        return update_command(check=args.check, resync=args.resync, remote_override=args.remote)
+        if args.json and not args.check:
+            parser.error("flow update --json requires --check")
+        return update_command(check=args.check, resync=args.resync, remote_override=args.remote, as_json=args.json)
     return 1
 
 

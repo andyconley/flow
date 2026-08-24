@@ -260,6 +260,10 @@ Use these to inspect install state, generated runtime surfaces, drift, and comma
 
 - `flow doctor`
   - report machine, user-level, and project-level state
+- `flow doctor --json`
+  - emit a structured diagnostic payload for support triage
+- `flow doctor --check`
+  - exit nonzero on warning- or error-severity diagnostics
 - `flow run list`
   - list active C-lite runs and legacy/inferred run artifact folders
 - `flow run status WORK_ID`

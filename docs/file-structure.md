@@ -82,6 +82,8 @@ other by bare name.
 - `setup.py` — machine, project, and user setup, plus project refresh.
 - `lifecycle.py` — two-mode install, release staging, and update.
 - `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; never writes.
+- `diagnostic_model.py` — shared support diagnostic item model, JSON payload
+  shape, and check-mode exit helpers.
 - `usage_store.py` — SQLite store for harvested harness usage.
 - `codex_collector.py`, `claude_collector.py` — read each harness's session
   transcripts into the store's raw layer. Pure: no argparse, no printing,

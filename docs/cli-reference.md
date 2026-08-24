@@ -200,6 +200,11 @@ not claim that local files prove the client honored model routing at runtime.
 
 Report machine, install, user-level, and project-level state in one output.
 
+Flags:
+
+- `--json` — emit the same support facts as a structured diagnostic payload.
+- `--check` — exit nonzero when any error- or warning-severity diagnostic is present.
+
 Current sections:
 
 - **machine** — Python, flow home, source path, scaffold availability, config, launcher
@@ -209,7 +214,9 @@ Current sections:
 
 The overlay count and the drift count are reported **separately and never summed**. `overlay:` counts what `flow project migrate` removes by default and can therefore drive to zero, which is what lets that line name that command. `drifted:` counts files that differ from the framework, which is not clearable the same way — removing one is opt-in and may destroy a customization. Summed, the number would name a remedy that cannot reach it, and doctor would report a permanent fault where there is none. A drifted overlay with nothing removable reads `overlay: clean` alongside a `drifted:` line, and both are true.
 
-The `replaces:` block appears only when the project declares wirings. Each is reported as `ok` (the replacement resolves in your user overlay), `absent` (it does not resolve *on this machine* — a wiring names a path under `~/.flow/user/` that a teammate may not have, so this is a gap in your overlay rather than a fault in the project), `unknown` (the `default` names no framework file, so the wiring can never match), or `invalid` (the entry did not validate). None of them change doctor's exit code.
+The `replaces:` block appears only when the project declares wirings. Each is reported as `ok` (the replacement resolves in your user overlay), `absent` (it does not resolve *on this machine* — a wiring names a path under `~/.flow/user/` that a teammate may not have, so this is a gap in your overlay rather than a fault in the project), `unknown` (the `default` names no framework file, so the wiring can never match), or `invalid` (the entry did not validate). In `--check` mode, any warning or error diagnostic makes the command exit nonzero.
+
+The JSON payload uses stable diagnostic items with `id`, `status`, `severity`, `category`, `summary`, and optional `target`, `path`, `detail`, and `next_action`. Categories include `missing`, `parse_error`, `permission_denied`, `git_unavailable`, `remote_unreachable`, `manifest_invalid`, `managed_conflict`, `runtime_not_found`, `drift`, `stale`, `manual_required`, `warning`, and `ok`.
 
 Use this as the main diagnostics command.
 
@@ -260,6 +267,7 @@ Flags:
 - `--check` — report current vs latest version without applying. When a newer version is available, also fetches `CHANGELOG.md` from the remote at the new tag (via a sparse partial-clone — only the one file is actually downloaded) and prints the `## [<version>]` section so you can see what's in the available release. Falls back silently if no CHANGELOG entry exists for that version.
 - `--resync` — after applying, also run `flow sync claude --user` and `flow sync codex --user`
 - `--remote URL` — override the remote configured in `~/.flow/config.toml` (useful for testing)
+- `--json` — with `--check`, emit classified update diagnostics for support automation
 
 The update is atomic: staging is validated before any rename happens, so a failed clone, broken staging, or swap error leaves the existing install intact. A successful update keeps no rollback state — to revert, run `flow update --remote <url>` against an older tag or re-run `install-flow.sh --release` from a checkout at the desired version.
 
@@ -284,6 +292,8 @@ The Codex twin. Outputs `~/.agents/skills/...`, `~/.codex/agents/...`, `~/.codex
 ### `flow sync <target> --user --check`
 
 Report drift without writing files. Exits 1 when the generated surface is out of date, which is the difference between this and `flow project audit` — drift in a generated adapter is a repairable fault, so it fails; a contaminated project overlay is a normal state, so that does not.
+
+Add `--json` to emit the same result as a structured diagnostic payload. Sync check diagnostics use the shared category vocabulary, including `ok`, `drift`, `stale`, `managed_conflict`, `manifest_invalid`, `missing`, and `runtime_not_found`.
 
 ### `flow sync <target>` without `--user`
 

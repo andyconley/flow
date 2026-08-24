@@ -795,6 +795,77 @@ class FlowCliTests(FlowCliHarness):
         project_section = result.stdout.split("-- project:", 1)[1]
         self.assertIn("overlay:", project_section)
 
+    def test_doctor_json_reports_support_diagnostics(self) -> None:
+        fake_home = self.use_fake_home()
+        self.setup_project()
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        result = self.run_flow("doctor", "--json")
+
+        self.assert_ok(result)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["command"], "doctor")
+        self.assertIn("diagnostics", payload)
+        ids = {item["id"] for item in payload["diagnostics"]}
+        self.assertIn("user.claude.sync", ids)
+        self.assertIn("user.codex.runtime_smoke", ids)
+        smoke = [item for item in payload["diagnostics"] if item["id"] == "user.codex.runtime_smoke"][0]
+        self.assertEqual(smoke["category"], "manual_required")
+        self.assertEqual(smoke["severity"], "warning")
+
+    def test_doctor_check_fails_on_warning_grade_states(self) -> None:
+        self.use_fake_home()
+        self.setup_project()
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        result = self.run_flow("doctor", "--check", "--json")
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertGreaterEqual(payload["warnings"], 1)
+        self.assertTrue(any(item["severity"] == "warning" for item in payload["diagnostics"]))
+
+    def test_sync_check_json_classifies_clean_and_drift(self) -> None:
+        fake_home = self.use_fake_home()
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        clean = self.run_flow("sync", "codex", "--user", "--check", "--json")
+        self.assert_ok(clean)
+        clean_payload = json.loads(clean.stdout)
+        self.assertTrue(clean_payload["ok"])
+        self.assertEqual(clean_payload["diagnostics"][0]["category"], "ok")
+
+        skill_path = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
+        skill_path.write_text(skill_path.read_text() + "\nmanual drift\n")
+
+        drift = self.run_flow("sync", "codex", "--user", "--check", "--json")
+        self.assertEqual(drift.returncode, 1)
+        drift_payload = json.loads(drift.stdout)
+        self.assertFalse(drift_payload["ok"])
+        self.assertEqual(drift_payload["diagnostics"][0]["category"], "drift")
+
+    def test_update_json_classifies_develop_mode(self) -> None:
+        fake_home = self.use_fake_home()
+        config = fake_home / ".flow" / "config.toml"
+        config.write_text(
+            "[flow]\n"
+            "source_home = \"~/.flow/source\"\n"
+            "launcher = \"~/.local/bin/flow\"\n\n"
+            "[install]\n"
+            "mode = \"develop\"\n"
+            f"source_target = \"{REPO_ROOT}\"\n"
+        )
+
+        result = self.run_flow("update", "--check", "--json")
+
+        self.assert_ok(result)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["command"], "update")
+        self.assertEqual(payload["diagnostics"][0]["category"], "warning")
+        self.assertEqual(payload["diagnostics"][0]["severity"], "warning")
+
     def test_top_level_help_lists_core_commands_and_examples(self) -> None:
         result = self.run_flow("--help")
         self.assert_ok(result)
@@ -803,6 +874,7 @@ class FlowCliTests(FlowCliHarness):
             "sync                generate runtime adapters from the framework scaffold", result.stdout
         )
         self.assertIn("flow sync codex --user --check", result.stdout)
+        self.assertIn("flow doctor --json", result.stdout)
         self.assertIn("flow runtime smoke --target all", result.stdout)
         self.assertIn("flow project audit", result.stdout)
         # The top-level examples advertised `flow sync claude` and
@@ -815,6 +887,7 @@ class FlowCliTests(FlowCliHarness):
         self.assert_ok(result)
         self.assertIn("Generate runtime-facing adapters", result.stdout)
         self.assertIn("--user", result.stdout)
+        self.assertIn("--json", result.stdout)
         self.assertIn("claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.", result.stdout)
         self.assertIn("codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.", result.stdout)
         self.assertIn("flow sync claude --user", result.stdout)
@@ -2314,6 +2387,7 @@ class FlowCliTests(FlowCliHarness):
                 "claude_config",
                 "codex_collector",
                 "cost",
+                "diagnostic_model",
                 "diagnostics",
                 "flowtoml",
                 "fsutil",

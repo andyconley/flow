@@ -31,6 +31,17 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from diagnostic_model import (
+    SEVERITY_ERROR,
+    SEVERITY_INFO,
+    SEVERITY_WARNING,
+    STATUS_FAILED,
+    STATUS_OK,
+    STATUS_WARNING,
+    diagnostic,
+    print_json,
+    support_payload,
+)
 from flowtoml import read_toml
 from fsutil import _remove_path, ensure_dir
 from paths import (
@@ -620,11 +631,23 @@ def _convert_to_develop(clone: Path) -> int:
     return 0
 
 
-def update_command(check: bool, resync: bool, remote_override: str | None) -> int:
+def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False) -> int:
     install = read_install_config()
     mode = install.get("mode", "unknown")
 
     if mode == INSTALL_MODE_DEVELOP:
+        diag = diagnostic(
+            "update.mode",
+            STATUS_WARNING,
+            SEVERITY_WARNING,
+            "warning",
+            "develop install; flow update does not apply",
+            detail=f"source target: {install.get('source_target', '<clone>')}",
+            next_action="git -C <clone> pull --ff-only; flow sync claude --user; flow sync codex --user",
+        )
+        if as_json:
+            print_json(support_payload("update", Path.cwd(), [diag], install=install))
+            return 0
         target = install.get("source_target", "<clone>")
         print("develop install — flow update does not apply.")
         print("To roll forward in develop mode, pull and re-sync manually:")
@@ -634,6 +657,17 @@ def update_command(check: bool, resync: bool, remote_override: str | None) -> in
         return 0
 
     if mode != INSTALL_MODE_RELEASE:
+        diag = diagnostic(
+            "update.mode",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "missing",
+            f"install mode is {mode!r}; cannot run flow update",
+            next_action="re-run install-flow.sh to stamp install metadata, then try again",
+        )
+        if as_json:
+            print_json(support_payload("update", Path.cwd(), [diag], install=install))
+            return 1
         print(f"install mode is {mode!r}; cannot run flow update")
         print("re-run install-flow.sh to stamp install metadata, then try again")
         return 1
@@ -641,23 +675,57 @@ def update_command(check: bool, resync: bool, remote_override: str | None) -> in
     current_version = install.get("version", "unknown")
     remote = remote_override or install.get("remote") or DEFAULT_REMOTE
 
-    print(f"current: {current_version}")
-    print(f"remote:  {remote}")
+    if not as_json:
+        print(f"current: {current_version}")
+        print(f"remote:  {remote}")
 
     latest = _latest_remote_tag(remote)
     if latest is None:
+        diag = diagnostic(
+            "update.remote.tags",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "remote_unreachable",
+            "could not determine latest tag",
+            detail="no semver tags found, or remote unreachable",
+            next_action="check the configured remote and network access",
+        )
+        if as_json:
+            print_json(support_payload("update", Path.cwd(), [diag], install=install, remote=remote))
+            return 1
         print("could not determine latest tag (no semver tags found, or remote unreachable)")
         return 1
 
     latest_tag, _latest_sha = latest
-    print(f"latest:  {latest_tag}")
+    if not as_json:
+        print(f"latest:  {latest_tag}")
 
     if latest_tag == current_version:
+        diag = diagnostic(
+            "update.version",
+            STATUS_OK,
+            SEVERITY_INFO,
+            "ok",
+            "already at the latest tag",
+            detail=f"current={current_version}, latest={latest_tag}",
+        )
+        if as_json:
+            print_json(support_payload("update", Path.cwd(), [diag], install=install, remote=remote, latest=latest_tag))
+            return 0
         print("already at the latest tag")
         return 0
 
     if check:
-        print(f"update available: {current_version} -> {latest_tag}")
+        diagnostics = [
+            diagnostic(
+                "update.version",
+                STATUS_WARNING,
+                SEVERITY_WARNING,
+                "stale",
+                f"update available: {current_version} -> {latest_tag}",
+                next_action="flow update",
+            )
+        ]
         # Best-effort preview of what's in the available version: fetch
         # CHANGELOG.md from the remote at `latest_tag` and print the section
         # for that version. Failure is silent — the version comparison is the
@@ -666,8 +734,43 @@ def update_command(check: bool, resync: bool, remote_override: str | None) -> in
         if changelog_text:
             section = _extract_changelog_section(changelog_text, latest_tag)
             if section:
-                print()
-                print(section)
+                if not as_json:
+                    print(f"update available: {current_version} -> {latest_tag}")
+                    print()
+                    print(section)
+            elif as_json:
+                diagnostics.append(
+                    diagnostic(
+                        "update.changelog",
+                        STATUS_WARNING,
+                        SEVERITY_WARNING,
+                        "warning",
+                        "changelog section was not found for latest tag",
+                    )
+                )
+        elif as_json:
+            diagnostics.append(
+                diagnostic(
+                    "update.changelog",
+                    STATUS_WARNING,
+                    SEVERITY_WARNING,
+                    "warning",
+                    "changelog preview unavailable",
+                )
+            )
+        if as_json:
+            print_json(
+                support_payload(
+                    "update",
+                    Path.cwd(),
+                    diagnostics,
+                    install=install,
+                    remote=remote,
+                    latest=latest_tag,
+                )
+            )
+        elif not changelog_text or not _extract_changelog_section(changelog_text, latest_tag):
+            print(f"update available: {current_version} -> {latest_tag}")
         return 0
 
     apply_rc = _apply_release_update(remote, latest_tag, install)

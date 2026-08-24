@@ -22,6 +22,15 @@ import json
 import sys
 from pathlib import Path
 
+from diagnostic_model import (
+    SEVERITY_ERROR,
+    SEVERITY_INFO,
+    STATUS_FAILED,
+    STATUS_OK,
+    diagnostic,
+    print_json,
+    support_payload,
+)
 from flowtoml import read_toml
 from fsutil import (
     ensure_dir,
@@ -661,27 +670,65 @@ def sync_outputs(
     mergeable_paths: set[Path],
     check: bool,
     merge_protected: set[Path] | None = None,
+    as_json: bool = False,
 ) -> int:
     merge_protected = merge_protected or set()
     conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
     removed: list[Path] = []
 
     if conflicts:
-        print(f"sync {target_name} found unmanaged conflicts:")
-        for path in conflicts:
-            print(f"- {path}")
-        print("resolve them manually or move the source of truth into `.flow/` first")
+        diag = diagnostic(
+            f"sync.{target_name}.conflict",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "managed_conflict",
+            f"{len(conflicts)} unmanaged target conflict(s)",
+            target=target_name,
+            detail=", ".join(str(path) for path in conflicts),
+            next_action="resolve conflicts manually or move the source of truth into `.flow/` first",
+        )
+        if as_json:
+            print_json(support_payload("sync", Path.cwd(), [diag], target=target_name))
+        else:
+            print(f"sync {target_name} found unmanaged conflicts:")
+            for path in conflicts:
+                print(f"- {path}")
+            print("resolve them manually or move the source of truth into `.flow/` first")
         return 1
 
     if check:
         if not changed and not stale:
-            print(f"{target_name} sync check: up to date")
+            diag = diagnostic(
+                f"sync.{target_name}.drift",
+                STATUS_OK,
+                SEVERITY_INFO,
+                "ok",
+                f"{target_name} generated surfaces are up to date",
+                target=target_name,
+            )
+            if as_json:
+                print_json(support_payload("sync", Path.cwd(), [diag], target=target_name))
+            else:
+                print(f"{target_name} sync check: up to date")
             return 0
-        print(f"{target_name} sync check: drift detected")
-        for path in changed:
-            print(f"- update: {path}")
-        for path in stale:
-            print(f"- remove: {path}")
+        diag = diagnostic(
+            f"sync.{target_name}.drift",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "drift",
+            f"{len(changed)} update(s), {len(stale)} stale output(s)",
+            target=target_name,
+            detail=", ".join([*(str(path) for path in changed), *(str(path) for path in stale)]),
+            next_action=f"flow sync {target_name} --user",
+        )
+        if as_json:
+            print_json(support_payload("sync", Path.cwd(), [diag], target=target_name))
+        else:
+            print(f"{target_name} sync check: drift detected")
+            for path in changed:
+                print(f"- update: {path}")
+            for path in stale:
+                print(f"- remove: {path}")
         return 1
 
     for path in stale:
@@ -723,7 +770,7 @@ def desired_outputs_for_target(
     raise ValueError(f"unsupported sync target: {target}")
 
 
-def sync_target(target: str, check: bool = False, user_mode: bool = False) -> int:
+def sync_target(target: str, check: bool = False, user_mode: bool = False, as_json: bool = False) -> int:
     """Generate a runtime's adapters from the framework scaffold.
 
     User level only. Project-level sync existed to regenerate adapters from a
@@ -736,15 +783,40 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False) -> in
     exit code would carry on believing its adapters were current.
     """
     if not user_mode:
-        print("project-level sync was retired; runtime surfaces are user-level")
-        print(f"run `flow sync {target} --user` instead")
-        print("to remove a repo's leftover project adapters, run `flow project migrate`")
+        diag = diagnostic(
+            f"sync.{target}.scope",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "runtime_not_found",
+            "project-level sync was retired; runtime surfaces are user-level",
+            target=target,
+            next_action=f"flow sync {target} --user",
+        )
+        if as_json:
+            print_json(support_payload("sync", Path.cwd(), [diag], target=target))
+        else:
+            print("project-level sync was retired; runtime surfaces are user-level")
+            print(f"run `flow sync {target} --user` instead")
+            print("to remove a repo's leftover project adapters, run `flow project migrate`")
         return 1
 
     root = HOME
     flow_dir = SCAFFOLD_DIR
     if not flow_dir.exists():
-        print("framework scaffold missing; re-run install-flow.sh first")
+        diag = diagnostic(
+            f"sync.{target}.scaffold",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "missing",
+            "framework scaffold missing",
+            target=target,
+            path=flow_dir,
+            next_action="re-run install-flow.sh",
+        )
+        if as_json:
+            print_json(support_payload("sync", Path.cwd(), [diag], target=target))
+        else:
+            print("framework scaffold missing; re-run install-flow.sh first")
         return 1
     scope_label = "user-level"
 
@@ -753,12 +825,34 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False) -> in
         # if present.
         manifest_path, manifest = merge_user_overlay(flow_dir)
     except FileNotFoundError as err:
-        print(str(err))
+        diag = diagnostic(
+            f"sync.{target}.manifest",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "missing",
+            str(err),
+            target=target,
+        )
+        if as_json:
+            print_json(support_payload("sync", Path.cwd(), [diag], target=target))
+        else:
+            print(str(err))
         return 1
 
     runtime = manifest.get(target)
     if not isinstance(runtime, dict):
-        print(f"sync target is not configured in scaffold flow.toml: {target}")
+        diag = diagnostic(
+            f"sync.{target}.runtime",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "runtime_not_found",
+            f"sync target is not configured in scaffold flow.toml: {target}",
+            target=target,
+        )
+        if as_json:
+            print_json(support_payload("sync", Path.cwd(), [diag], target=target))
+        else:
+            print(f"sync target is not configured in scaffold flow.toml: {target}")
         return 1
 
     previous_managed = read_managed_paths(root, root / runtime["managed_manifest"])
@@ -770,12 +864,30 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False) -> in
     except (ValueError, FileNotFoundError) as err:
         # A misnamed hook script (must be flow-*) or a hook script missing
         # from its source dir — fail loudly before anything is written.
-        print(str(err))
+        diag = diagnostic(
+            f"sync.{target}.manifest",
+            STATUS_FAILED,
+            SEVERITY_ERROR,
+            "manifest_invalid",
+            str(err),
+            target=target,
+        )
+        if as_json:
+            print_json(support_payload("sync", Path.cwd(), [diag], target=target))
+        else:
+            print(str(err))
         return 1
     result = sync_outputs(
-        root, target, desired, previous_managed, mergeable_paths, check=check, merge_protected=merge_protected
+        root,
+        target,
+        desired,
+        previous_managed,
+        mergeable_paths,
+        check=check,
+        merge_protected=merge_protected,
+        as_json=as_json,
     )
-    if result == 0:
+    if result == 0 and not as_json:
         verb = "check" if check else "sync"
         print(f"{scope_label} {target} {verb} complete from {manifest_path}")
     return result

@@ -12,6 +12,19 @@ omitted section reads as "checked and fine" when it may mean "never checked."
 import sys
 from pathlib import Path
 
+from diagnostic_model import (
+    SEVERITY_ERROR,
+    SEVERITY_INFO,
+    SEVERITY_WARNING,
+    STATUS_FAILED,
+    STATUS_NOT_APPLICABLE,
+    STATUS_OK,
+    STATUS_WARNING,
+    diagnostic,
+    exit_code,
+    print_json,
+    support_payload,
+)
 import usage_store
 from flowtoml import read_toml
 from fsutil import repo_root
@@ -94,7 +107,201 @@ def runtime_smoke_line(label: str) -> str:
     )
 
 
-def doctor() -> int:
+def _doctor_diagnostics(
+    root: Path,
+    flow_dir: Path,
+    root_is_flow_home: bool,
+    project_overlay_ok: bool,
+    project_manifest_ok: bool,
+    overlay_line: str,
+    drifted_line,
+    replaces_error,
+    user_claude_managed_ok: bool,
+    user_claude_drift: str,
+    user_codex_managed_ok: bool,
+    user_codex_drift: str,
+    user_claude_agent_policy: str,
+    user_codex_agent_policy: str,
+) -> list:
+    items = [
+        diagnostic(
+            "machine.source",
+            STATUS_OK if SOURCE_DIR.exists() else STATUS_FAILED,
+            SEVERITY_INFO if SOURCE_DIR.exists() else SEVERITY_ERROR,
+            "ok" if SOURCE_DIR.exists() else "missing",
+            "framework source is present" if SOURCE_DIR.exists() else "framework source is missing",
+            path=SOURCE_DIR,
+            next_action=None if SOURCE_DIR.exists() else "re-run install-flow.sh",
+        ),
+        diagnostic(
+            "machine.scaffold",
+            STATUS_OK if SCAFFOLD_DIR.exists() else STATUS_FAILED,
+            SEVERITY_INFO if SCAFFOLD_DIR.exists() else SEVERITY_ERROR,
+            "ok" if SCAFFOLD_DIR.exists() else "missing",
+            "framework scaffold is present" if SCAFFOLD_DIR.exists() else "framework scaffold is missing",
+            path=SCAFFOLD_DIR,
+            next_action=None if SCAFFOLD_DIR.exists() else "re-run install-flow.sh",
+        ),
+        diagnostic(
+            "machine.config",
+            STATUS_OK if FLOW_CONFIG.exists() else STATUS_FAILED,
+            SEVERITY_INFO if FLOW_CONFIG.exists() else SEVERITY_ERROR,
+            "ok" if FLOW_CONFIG.exists() else "missing",
+            "flow config is present" if FLOW_CONFIG.exists() else "flow config is missing",
+            path=FLOW_CONFIG,
+            next_action=None if FLOW_CONFIG.exists() else "run flow setup machine",
+        ),
+        diagnostic(
+            "machine.launcher",
+            STATUS_OK if (USER_BIN_DIR / "flow").exists() else STATUS_FAILED,
+            SEVERITY_INFO if (USER_BIN_DIR / "flow").exists() else SEVERITY_ERROR,
+            "ok" if (USER_BIN_DIR / "flow").exists() else "missing",
+            "flow launcher is present" if (USER_BIN_DIR / "flow").exists() else "flow launcher is missing",
+            path=USER_BIN_DIR / "flow",
+            next_action=None if (USER_BIN_DIR / "flow").exists() else "run flow setup machine",
+        ),
+    ]
+
+    install = read_install_config()
+    mode = install.get("mode", "unknown")
+    items.append(
+        diagnostic(
+            "install.mode",
+            STATUS_OK if mode in (INSTALL_MODE_DEVELOP, INSTALL_MODE_RELEASE) else STATUS_FAILED,
+            SEVERITY_INFO if mode in (INSTALL_MODE_DEVELOP, INSTALL_MODE_RELEASE) else SEVERITY_ERROR,
+            "ok" if mode in (INSTALL_MODE_DEVELOP, INSTALL_MODE_RELEASE) else "missing",
+            f"install mode is {mode}",
+            next_action=None if mode in (INSTALL_MODE_DEVELOP, INSTALL_MODE_RELEASE) else "re-run install-flow.sh to stamp install metadata",
+        )
+    )
+
+    for target, managed_ok, drift, policy in (
+        ("claude", user_claude_managed_ok, user_claude_drift, user_claude_agent_policy),
+        ("codex", user_codex_managed_ok, user_codex_drift, user_codex_agent_policy),
+    ):
+        items.append(
+            diagnostic(
+                f"user.{target}.sync",
+                STATUS_OK if managed_ok else STATUS_FAILED,
+                SEVERITY_INFO if managed_ok else SEVERITY_ERROR,
+                "ok" if managed_ok else "missing",
+                f"{target} managed manifest is present" if managed_ok else f"{target} managed manifest is missing",
+                target=target,
+                next_action=None if managed_ok else f"flow sync {target} --user",
+            )
+        )
+        drift_ok = drift == "clean"
+        items.append(
+            diagnostic(
+                f"user.{target}.drift",
+                STATUS_OK if drift_ok else STATUS_FAILED,
+                SEVERITY_INFO if drift_ok else SEVERITY_ERROR,
+                "ok" if drift_ok else ("managed_conflict" if drift == "conflict" else "drift" if drift == "stale" else "manifest_invalid"),
+                f"{target} generated surface drift is {drift}",
+                target=target,
+                next_action=None if drift_ok else f"flow sync {target} --user --check",
+            )
+        )
+        policy_ok = policy.startswith("ok ")
+        items.append(
+            diagnostic(
+                f"user.{target}.agent_policy",
+                STATUS_OK if policy_ok else STATUS_FAILED,
+                SEVERITY_INFO if policy_ok else SEVERITY_ERROR,
+                "ok" if policy_ok else "stale",
+                f"{target} agent policy: {policy}",
+                target=target,
+                next_action=None if policy_ok else f"flow sync {target} --user",
+            )
+        )
+        smoke_line = runtime_smoke_line(target)
+        smoke_ok = smoke_line.startswith("static ok")
+        items.append(
+            diagnostic(
+                f"user.{target}.runtime_smoke",
+                STATUS_WARNING if smoke_ok and "manual check" in smoke_line else STATUS_FAILED,
+                SEVERITY_WARNING if smoke_ok else SEVERITY_ERROR,
+                "manual_required" if smoke_ok else "runtime_not_found",
+                smoke_line,
+                target=target,
+                next_action=f"flow runtime smoke --target {target}",
+            )
+        )
+
+    if root_is_flow_home:
+        items.append(
+            diagnostic(
+                "project.overlay",
+                STATUS_NOT_APPLICABLE,
+                SEVERITY_INFO,
+                "ok",
+                "not running inside a project overlay",
+                path=flow_dir,
+                next_action="run doctor from inside a repo to check a project",
+            )
+        )
+    else:
+        items.append(
+            diagnostic(
+                "project.overlay",
+                STATUS_OK if project_overlay_ok else STATUS_FAILED,
+                SEVERITY_INFO if project_overlay_ok else SEVERITY_ERROR,
+                "ok" if project_overlay_ok else "missing",
+                "project overlay is present" if project_overlay_ok else "project overlay is missing",
+                path=flow_dir,
+                next_action=None if project_overlay_ok else "flow setup project",
+            )
+        )
+        items.append(
+            diagnostic(
+                "project.manifest",
+                STATUS_OK if project_manifest_ok else STATUS_FAILED,
+                SEVERITY_INFO if project_manifest_ok else SEVERITY_ERROR,
+                "ok" if project_manifest_ok else "missing",
+                "project manifest is present" if project_manifest_ok else "project manifest is missing",
+                path=flow_dir / "flow.toml",
+                next_action=None if project_manifest_ok else "flow setup project",
+            )
+        )
+        items.append(
+            diagnostic(
+                "project.framework_copies",
+                STATUS_OK if overlay_line == "clean" or overlay_line == "n/a" else STATUS_WARNING,
+                SEVERITY_INFO if overlay_line == "clean" or overlay_line == "n/a" else SEVERITY_WARNING,
+                "ok" if overlay_line == "clean" or overlay_line == "n/a" else "stale",
+                f"project overlay: {overlay_line}",
+                path=flow_dir,
+                next_action=None if overlay_line == "clean" or overlay_line == "n/a" else "flow project migrate",
+            )
+        )
+        if drifted_line is not None:
+            items.append(
+                diagnostic(
+                    "project.framework_drift",
+                    STATUS_WARNING,
+                    SEVERITY_WARNING,
+                    "drift",
+                    f"{drifted_line} project file(s) differ from the framework",
+                    path=flow_dir,
+                    next_action="flow project audit",
+                )
+            )
+        if replaces_error is not None:
+            items.append(
+                diagnostic(
+                    "project.replaces",
+                    STATUS_FAILED,
+                    SEVERITY_ERROR,
+                    "parse_error",
+                    f"replacement wiring cannot be read: {replaces_error}",
+                    path=flow_dir / "flow.toml",
+                )
+            )
+
+    return items
+
+
+def doctor(as_json: bool = False, check: bool = False) -> int:
     root = repo_root()
     flow_dir = root / ".flow"
     # Run from $HOME, `repo_root` finds no project and falls back to the working
@@ -199,6 +406,26 @@ def doctor() -> int:
             user_claude_drift = "error"
             user_codex_drift = "error"
 
+    diagnostics = _doctor_diagnostics(
+        root,
+        flow_dir,
+        root_is_flow_home,
+        project_overlay_ok,
+        project_manifest_ok,
+        overlay_line,
+        drifted_line,
+        replaces_error,
+        user_claude_managed_ok,
+        user_claude_drift,
+        user_codex_managed_ok,
+        user_codex_drift,
+        user_claude_agent_policy,
+        user_codex_agent_policy,
+    )
+    if as_json:
+        print_json(support_payload("doctor", root, diagnostics, install=read_install_config()))
+        return exit_code(diagnostics, check=check, fail_on_warnings=True)
+
     print(f"python:           {sys.executable}")
     print(f"flow home:        {FLOW_HOME}")
     print(f"source:           {SOURCE_DIR}")
@@ -278,7 +505,7 @@ def doctor() -> int:
         print("                  run doctor from inside a repo to check a project")
         print()
         print(_usage_section())
-        return 0
+        return exit_code(diagnostics, check=check, fail_on_warnings=True)
     print(f"repo .flow:       {'ok' if project_overlay_ok else 'missing'}")
     print(f"manifest:         {'ok' if project_manifest_ok else 'missing'}")
     print(f"overlay:          {overlay_line}")
@@ -292,7 +519,7 @@ def doctor() -> int:
         print("                  the files it lists are not part of an overlay any more")
     print()
     print(_usage_section())
-    return 0
+    return exit_code(diagnostics, check=check, fail_on_warnings=True)
 
 
 def _print_replaces(resolved: list, rejected: list, error) -> None:
