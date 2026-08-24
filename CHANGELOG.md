@@ -2,6 +2,25 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.20.0](https://github.com/andyconley/flow/compare/v0.19.2...v0.20.0) (2026-08-24)
+
+### Features
+
+* add c-lite workflow run enforcement ([7e97f75](https://github.com/andyconley/flow/commit/7e97f75b42716d5732ffc702a35aa9573b29809d))
+* add project adoption runtime inventory ([afbe7df](https://github.com/andyconley/flow/commit/afbe7dfe2904674b244d6c78be9ace613069412e))
+* add runtime adapter smoke checks ([f9594e0](https://github.com/andyconley/flow/commit/f9594e04b96d9db548a6def1647c4795b569bed7))
+* add structured support diagnostics ([2164a86](https://github.com/andyconley/flow/commit/2164a86a2fc02c358d01eb51b99a16f241696b03))
+* add telemetry freshness diagnostics ([a6b8c9b](https://github.com/andyconley/flow/commit/a6b8c9b5e6be766fc7f09da6913b6fbaca30437e))
+
+### Bug Fixes
+
+* classify support diagnostic edge cases ([69957b6](https://github.com/andyconley/flow/commit/69957b6517451431ec824a03ff53780cf699cbd1))
+* neutralize project scaffold memory guidance ([e0795d8](https://github.com/andyconley/flow/commit/e0795d8da837ad861959978fba2f14c7202b52b5))
+
+### Documentation
+
+* close runtime neutrality backlog item ([1615ea2](https://github.com/andyconley/flow/commit/1615ea2528f45329d2ff0406e3bf3e3b82ab0c6b))
+
 ## [0.19.2](https://github.com/andyconley/flow/compare/v0.19.1...v0.19.2) (2026-08-23)
 
 ### Documentation
