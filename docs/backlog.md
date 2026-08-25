@@ -334,3 +334,31 @@ Status: observed 2 times, promoted from the capability-gap ledger
 Archive is deliberately human-invoked, but no lane tells the engineer to run it and no lane can trigger it. A run therefore completes with its handback intact and its capability gaps never captured, silently. The gap-capture loop depends on a step that nothing in the phase machine asks for.
 
 Second sighting. Four slices were planned, implemented, reviewed, merged, and released across several days before the closing lane ran, and it ran only because the engineer asked for it directly. The handbacks recommended it each time, which is the orchestrator compensating rather than the phase machine working. Nothing in a lane triggers the step that captures gaps, so the corpus depends on the engineer remembering.
+
+### No Lane For Recurring Operational Runs
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+Every execution lane assumes a change to a repository that lands in a commit. A recurring operational run collects from several sources, produces judgement-bearing output, and writes to an external system of record where each write is immediately visible to other people and not revertible by any repository operation. It has no lane, no run-artifact home, and no place to record what was written where.
+
+Second sighting. The absence of a run-artifact home for operational work is what made the errors expensive: reconstructing what a prior run wrote to an external system required re-reading that system, and three wrong writes surfaced only because a person happened to open one record. A lane that writes outward needs a durable record of what it wrote, which is exactly what no lane provides.
+
+Third sighting, and a one-off rather than a recurring run, which shows the gap is not about recurrence but about direction of write. Work that began as a read-only question escalated mid-session into an irreversible write to an external system of record. There was no run, no work id and no artifact home at any point, and the escalation from question to production change crossed no gate, because no lane exists for work whose output is not a commit.
+
+### Role Output Not Verified Before Durable Use
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+Role agents return confident, specific, fabricated detail and nothing in the framework requires the orchestrator to check it before it lands in a durable record. Observed on two of three roles in a single closing lane: invented command flags, invented counts, and an invented failure mode, all written in the register of verified fact. The lower-cost tiers are the likeliest to fabricate and are also the tiers assigned to the roles whose output is meant to be durable. No lane distinguishes a claim a role read from one it produced.
+
+Role agents stated inferences in the register of fact; nothing in the lane requires their claims be checked against source before entering a durable artifact.
+
+Third sighting. A mechanical-tier role was given a brief of verified facts and told not to invent, and still promoted a descriptive observation into a hard requirement - reporting an incidental property of one client's request as a constraint the server imposes. The distortion was not invention but modal drift: an is restated as a must. Briefing a role with correct facts does not constrain the register it writes them in, and nothing in the lane checks that the strength of a claim survived the round trip.
+
+### Destructive Work Has No Recovery Verification Gate
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+A lane will accept a slice that adds a file-deleting command on fixture tests and a dry run alone. Nothing asks whether the recovery path was exercised, so a command shipped with its restore route asserted by a test of the backup's contents and never once walked end to end. The verification happened afterwards, because the engineer asked for it, and it passed — but nothing in the phase machine would have noticed if it had not. Deletion and recovery are one feature and only one of them has an evidence requirement.
+
+Second sighting, and the inverse case: the destructive step had no recovery path at all. An irreversible production deletion was carried out behind pre-flight identity checks, an abort gate on dependent records, an ordering constraint, and a post-verification query - every one of which the orchestrator invented, because no lane requires them and no standard says an action with no undo must establish that fact before it runs. The engineer had to ask to be checked with at each step; nothing in the phase machine would have asked on its own.
