@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.20.1](https://github.com/andyconley/flow/compare/v0.20.0...v0.20.1) (2026-08-25)
+
+### Documentation
+
+* promote three repeat capability gaps to Deferred / Watch ([0da4ae0](https://github.com/andyconley/flow/commit/0da4ae016badb9fd21673e20bf0398d7c3aee9e6))
+
 ## [0.20.0](https://github.com/andyconley/flow/compare/v0.19.2...v0.20.0) (2026-08-24)
 
 ### Features
