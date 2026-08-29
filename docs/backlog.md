@@ -362,3 +362,13 @@ Status: observed 2 times, promoted from the capability-gap ledger
 A lane will accept a slice that adds a file-deleting command on fixture tests and a dry run alone. Nothing asks whether the recovery path was exercised, so a command shipped with its restore route asserted by a test of the backup's contents and never once walked end to end. The verification happened afterwards, because the engineer asked for it, and it passed — but nothing in the phase machine would have noticed if it had not. Deletion and recovery are one feature and only one of them has an evidence requirement.
 
 Second sighting, and the inverse case: the destructive step had no recovery path at all. An irreversible production deletion was carried out behind pre-flight identity checks, an abort gate on dependent records, an ordering constraint, and a post-verification query - every one of which the orchestrator invented, because no lane requires them and no standard says an action with no undo must establish that fact before it runs. The engineer had to ask to be checked with at each step; nothing in the phase machine would have asked on its own.
+
+### Plan Claims Carry No Evidence Burden
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+The evidence standard requires an inventory in briefs that ask someone to find what is missing. A plan is not that kind of brief, so its claims about existing code carry no burden at all, and an implementation lane will act on them as settled context. Observed: a plan asserted a factual claim about existing test code that was one search away from being checked, was not checked, and was wrong. The recommendation it supported was still correct, but only because that had been verified separately.
+
+A plan named external work items without any requirement to verify each against its system of record first; several turned out stale, already owned, or differently sized than the plan assumed.
+
+Factual claims written into a durable procedural artifact carry no evidence burden. Executable content can be recorded without ever being executed, and measured-sounding assertions without ever being measured.
