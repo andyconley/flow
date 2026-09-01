@@ -23,6 +23,41 @@ import release_candidate  # noqa: E402
 sys.path.pop(0)
 
 
+def workflow_contract_findings(text: str) -> set[str]:
+    """Return named safety-contract violations for mutation testing."""
+    def block(name: str, next_name: str | None) -> str:
+        start = text.index(f"  {name}:\n")
+        end = text.index(f"  {next_name}:\n", start) if next_name else len(text)
+        return text[start:end]
+
+    findings = set()
+    analyze = block("analyze", "validate-candidate")
+    candidate = block("validate-candidate", "publish")
+    publish = block("publish", "verify-published")
+    verify = block("verify-published", None)
+    if "needs: [analyze, validate-candidate]" not in publish:
+        findings.add("publish-dependency")
+    if "GITHUB_TOKEN" in analyze or "secrets.GITHUB_TOKEN" in candidate:
+        findings.add("analysis-credential")
+    if "ref: main" in text or text.count("persist-credentials: false") != 4:
+        findings.add("exact-checkout")
+    if '--expected-digest "${{ needs.validate-candidate.outputs.evidence_digest }}"' not in publish:
+        findings.add("evidence-digest")
+    if "continue-on-error" in text or "always()" in text:
+        findings.add("failure-bypass")
+    if "needs.analyze.outputs.release_required == 'true'" not in candidate or "needs.analyze.outputs.release_required == 'true'" not in publish:
+        findings.add("no-release-publish")
+    if "published verification failed" not in verify or "publication prevented" in verify.lower():
+        findings.add("public-failure-classification")
+    run_lines = [line for line in text.splitlines() if line.lstrip().startswith("run:")]
+    if any("new_release_notes" in line for line in run_lines):
+        findings.add("notes-shell-interpolation")
+    uses = [line.split("uses:", 1)[1].strip().split()[0] for line in text.splitlines() if "uses:" in line]
+    if any(not __import__("re").search(r"@[0-9a-f]{40}$", value) for value in uses):
+        findings.add("mutable-action-ref")
+    return findings
+
+
 def load_gate():
     spec = importlib.util.spec_from_file_location("release_gate_workflow_test", GATE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -49,6 +84,24 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("needs: analyze", self.job_block("validate-candidate", "publish"))
         self.assertIn("needs: [analyze, validate-candidate]", self.job_block("publish", "verify-published"))
         self.assertIn("needs: [analyze, validate-candidate, publish]", self.job_block("verify-published", None))
+
+    def test_workflow_has_no_named_contract_findings(self) -> None:
+        self.assertEqual(workflow_contract_findings(self.text), set())
+
+    def test_required_source_mutations_are_detected(self) -> None:
+        mutations = {
+            "publish-dependency": lambda text: text.replace("needs: [analyze, validate-candidate]", "needs: analyze", 1),
+            "analysis-credential": lambda text: text.replace("FLOW_RELEASE_MODE: preview", "FLOW_RELEASE_MODE: preview\n          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", 1),
+            "exact-checkout": lambda text: text.replace("ref: ${{ github.sha }}", "ref: main", 1),
+            "evidence-digest": lambda text: text.replace('            --expected-digest "${{ needs.validate-candidate.outputs.evidence_digest }}"\n', "", 1),
+            "failure-bypass": lambda text: text.replace("runs-on: ubuntu-latest", "runs-on: ubuntu-latest\n    continue-on-error: true", 1),
+            "no-release-publish": lambda text: text.replace("needs.analyze.outputs.release_required == 'true'", "needs.analyze.outputs.release_required == 'false'", 1),
+            "public-failure-classification": lambda text: text.replace("published verification failed", "publication prevented", 1),
+            "notes-shell-interpolation": lambda text: text.replace("run: python3 scripts/release_gate.py compare-analysis", "run: echo \"${{ steps.preview.outputs.new_release_notes }}\"", 1),
+        }
+        for expected, mutate in mutations.items():
+            with self.subTest(expected=expected):
+                self.assertIn(expected, workflow_contract_findings(mutate(self.text)))
 
     def test_only_publish_has_write_permissions_and_token(self) -> None:
         header = self.text[:self.text.index("jobs:\n")]
@@ -98,6 +151,15 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertNotIn(value, self.text)
         self.assertIn("cancel-in-progress: false", self.text)
+
+    def test_publisher_failure_is_reconciled_without_retry_or_mutation(self) -> None:
+        publish = self.job_block("publish", "verify-published")
+        self.assertIn("failure() && steps.semantic.outcome == 'failure'", publish)
+        self.assertIn("scripts/release_reconcile.py", publish)
+        self.assertIn("partial-publication.json", publish)
+        self.assertEqual(publish.count("name: Publish once"), 1)
+        for forbidden in ("git push --force", "git tag -d", "gh release delete"):
+            self.assertNotIn(forbidden, publish)
 
     def test_release_notes_are_data_not_shell_source(self) -> None:
         run_lines = [line for line in self.text.splitlines() if line.lstrip().startswith("run:")]
@@ -193,6 +255,55 @@ class CandidateRunnerIntegrationTests(unittest.TestCase):
         with unittest.mock.patch.object(release_candidate, "_flow", return_value=(1, json.dumps(allowed))):
             code, _output = release_candidate._doctor_check(Path("/isolated"))
         self.assertEqual(code, 1)
+
+    def test_every_injected_runner_failure_stops_later_checks(self) -> None:
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
+        ).strip()
+        previous_tag = subprocess.check_output(
+            ["git", "describe", "--tags", "--abbrev=0"], cwd=REPO_ROOT, text=True
+        ).strip()
+        previous_commit = subprocess.check_output(
+            ["git", "rev-parse", f"{previous_tag}^{{commit}}"], cwd=REPO_ROOT, text=True
+        ).strip()
+        previous_version = previous_tag.removeprefix("v")
+        major, minor, _patch = (int(value) for value in previous_version.split("."))
+        next_version = f"{major}.{minor + 1}.0"
+        env = {
+            "FLOW_RELEASE_REQUIRED": "true",
+            "FLOW_RELEASE_PREVIOUS_VERSION": previous_version,
+            "FLOW_RELEASE_PREVIOUS_TAG": previous_tag,
+            "FLOW_RELEASE_PREVIOUS_COMMIT": previous_commit,
+            "FLOW_RELEASE_VERSION": next_version,
+            "FLOW_RELEASE_TAG": f"v{next_version}",
+            "FLOW_RELEASE_NOTES": "## Test\n\n* injected runner failures\n",
+            "FLOW_RELEASE_NEW_RELEASE_GIT_HEAD": source_sha,
+            "FLOW_RELEASE_SOURCE_SHA": source_sha,
+            "FLOW_RELEASE_REPOSITORY": "andyconley/flow",
+            "FLOW_RELEASE_WORKFLOW": "test",
+            "FLOW_RELEASE_RUN_ID": "2",
+            "FLOW_RELEASE_RUN_ATTEMPT": "1",
+            "FLOW_RELEASE_CREATED_AT": "2026-09-01T00:00:00Z",
+        }
+        plan = self.gate.plan_from_environment(env)
+        overrides = {check_id: (lambda: (0, "stubbed pass\n")) for check_id in self.gate.STABLE_CHECK_IDS}
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            plan_path = root / "release-plan.json"
+            self.gate.write_plan(plan_path, plan)
+            for index, check_id in enumerate(self.gate.STABLE_CHECK_IDS):
+                with self.subTest(check_id=check_id):
+                    evidence, exit_code = release_candidate.run_candidate(
+                        plan_path,
+                        root / check_id / "release-evidence.json",
+                        check_id,
+                        overrides,
+                    )
+                    self.assertEqual(exit_code, 1)
+                    self.assertEqual(evidence["checks"][index]["result"], "failed")
+                    self.assertTrue(all(
+                        check["result"] == "not_run" for check in evidence["checks"][index + 1:]
+                    ))
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 from release_gate import (
     EVIDENCE_SCHEMA_VERSION,
@@ -242,7 +242,12 @@ def _log_result(
     }
 
 
-def run_candidate(plan_path: Path, output: Path, fail_check: str | None = None) -> tuple[dict, int]:
+def run_candidate(
+    plan_path: Path,
+    output: Path,
+    fail_check: str | None = None,
+    command_overrides: Mapping[str, Callable[[], Result]] | None = None,
+) -> tuple[dict, int]:
     plan = load_plan(plan_path)
     if not plan["release_required"]:
         raise ContractError("candidate validation cannot run for a no-release plan")
@@ -290,6 +295,10 @@ def run_candidate(plan_path: Path, output: Path, fail_check: str | None = None) 
             "runtime-smoke-static": lambda: _flow(fresh_home, "runtime", "smoke", "--target", "all"),
             "representative-cli": lambda: _flow(fresh_home, "update", "--check", "--json", "--remote", candidate_remote),
         }
+        if command_overrides is not None:
+            if set(command_overrides) != set(STABLE_CHECK_IDS):
+                raise ContractError("test command overrides must cover every stable check")
+            commands = dict(command_overrides)
 
         for check_id in STABLE_CHECK_IDS:
             started = time.monotonic()

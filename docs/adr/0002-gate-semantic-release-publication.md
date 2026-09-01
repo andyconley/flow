@@ -47,6 +47,12 @@ deletion, or blind retry. Pre-publication failures write nothing. Partial or
 post-publication failures preserve actual state and repair forward with a
 corrective commit.
 
+If the publisher itself fails, a failure-only readback captures the plan,
+candidate evidence, pre-publish baselines, and observed branch, tag, and GitHub
+release state. Operators diagnose that artifact using the
+[release failure runbook](../release-runbook.md); the readback never retries or
+mutates publication.
+
 ## Consequences
 
 - Release-producing runs take longer and a flaky blocker stops publication.

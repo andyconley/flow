@@ -22,13 +22,13 @@ jobs:
       tag: ${{ steps.plan.outputs.tag }}
       plan_artifact_name: ${{ steps.names.outputs.plan_artifact_name }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
 
@@ -69,7 +69,7 @@ jobs:
 
       - name: Analyze release without live credentials
         id: preview
-        uses: cycjimmy/semantic-release-action@v6
+        uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
         with:
           semantic_version: 25.0.9
           dry_run: true
@@ -107,7 +107,7 @@ jobs:
         run: echo "plan_artifact_name=release-plan-${RUN_ID}-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
       - name: Upload release plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.names.outputs.plan_artifact_name }}
           path: .release/release-plan.json
@@ -122,7 +122,7 @@ jobs:
       evidence_digest: ${{ steps.candidate.outputs.evidence_digest }}
       evidence_artifact_name: ${{ steps.names.outputs.evidence_artifact_name }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.analyze.outputs.source_sha }}
           fetch-depth: 0
@@ -135,7 +135,7 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: echo "evidence_artifact_name=release-evidence-${RUN_ID}-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.analyze.outputs.plan_artifact_name }}
           path: .release
@@ -157,7 +157,7 @@ jobs:
           --defer-exit
 
       - name: Upload candidate evidence and logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.names.outputs.evidence_artifact_name }}
           path: |
@@ -171,6 +171,7 @@ jobs:
           python3 scripts/release_gate.py validate-evidence
           --plan .release/release-plan.json
           --evidence .release/release-evidence.json
+          --logs-root .release
           --expected-digest "${{ steps.candidate.outputs.evidence_digest }}"
 
   publish:
@@ -188,13 +189,13 @@ jobs:
       publication_digest: ${{ steps.publication.outputs.publication_digest }}
       release_commit: ${{ steps.publication.outputs.release_commit }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.analyze.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
 
@@ -205,12 +206,12 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: echo "publication_artifact_name=release-publication-${RUN_ID}-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.analyze.outputs.plan_artifact_name }}
           path: .release
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.validate-candidate.outputs.evidence_artifact_name }}
           path: .release
@@ -224,6 +225,7 @@ jobs:
           python3 scripts/release_gate.py validate-evidence \
             --plan .release/release-plan.json \
             --evidence .release/release-evidence.json \
+            --logs-root .release \
             --expected-digest "${{ needs.validate-candidate.outputs.evidence_digest }}"
 
       - name: Refresh live baseline before repeated analysis
@@ -254,7 +256,7 @@ jobs:
 
       - name: Repeat release analysis without live credentials
         id: preview
-        uses: cycjimmy/semantic-release-action@v6
+        uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
         with:
           semantic_version: 25.0.9
           dry_run: true
@@ -293,7 +295,7 @@ jobs:
 
       - name: Publish once
         id: semantic
-        uses: cycjimmy/semantic-release-action@v6
+        uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
         with:
           semantic_version: 25.0.9
           extra_plugins: |
@@ -303,6 +305,29 @@ jobs:
         env:
           FLOW_RELEASE_MODE: publish
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Capture remote state after publisher failure
+        if: ${{ failure() && steps.semantic.outcome == 'failure' }}
+        run: >-
+          python3 scripts/release_reconcile.py
+          --plan .release/release-plan.json
+          --repository-url https://github.com/${{ github.repository }}.git
+          --github-repository ${{ github.repository }}
+          --output .release/partial-publication.json
+
+      - name: Upload publisher-failure evidence
+        if: ${{ failure() && steps.semantic.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-publication-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .release/release-plan.json
+            .release/release-evidence.json
+            .release/pre-publish-baseline.json
+            .release/immediate-pre-publish-baseline.json
+            .release/partial-publication.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Validate structured publication result
         id: publication
@@ -319,7 +344,7 @@ jobs:
           --github-output "$GITHUB_OUTPUT"
 
       - name: Upload publication evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.names.outputs.publication_artifact_name }}
           path: |
@@ -336,23 +361,23 @@ jobs:
       needs.publish.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.analyze.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.analyze.outputs.plan_artifact_name }}
           path: .release
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.validate-candidate.outputs.evidence_artifact_name }}
           path: .release
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.publish.outputs.publication_artifact_name }}
           path: .release
@@ -368,7 +393,7 @@ jobs:
           --defer-exit
 
       - name: Upload public verification evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-verification-${{ github.run_id }}-${{ github.run_attempt }}
           path: .release/published-verification.json

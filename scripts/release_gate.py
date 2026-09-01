@@ -221,7 +221,12 @@ def write_plan(path: str | Path, data: Any) -> str:
     return write_canonical_json(path, validate_plan(data))
 
 
-def validate_evidence(data: Any, *, plan: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def validate_evidence(
+    data: Any,
+    *,
+    plan: Mapping[str, Any] | None = None,
+    logs_root: str | Path | None = None,
+) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ContractError("release evidence must be an object")
     _require_exact_keys(data, {
@@ -235,7 +240,8 @@ def validate_evidence(data: Any, *, plan: Mapping[str, Any] | None = None) -> di
     _sha(data["source_sha"], "source_sha")
     version = _semver(data["candidate_version"], "candidate_version")
     _tag(data["candidate_tag"], version, "candidate_tag")
-    _sha(data["runner_sha"], "runner_sha")
+    if _sha(data["runner_sha"], "runner_sha") != data["source_sha"]:
+        raise ContractError("runner_sha must match source_sha")
     repository = data["candidate_repository"]
     if not isinstance(repository, dict):
         raise ContractError("candidate_repository must be an object")
@@ -264,9 +270,15 @@ def validate_evidence(data: Any, *, plan: Mapping[str, Any] | None = None) -> di
             raise ContractError(f"checks[{index}].result must be passed, failed, or not_run")
         if not isinstance(check["duration_ms"], int) or isinstance(check["duration_ms"], bool) or check["duration_ms"] < 0:
             raise ContractError(f"checks[{index}].duration_ms must be a non-negative integer")
-        _safe_relative_path(check["log_path"], f"checks[{index}].log_path")
+        log_path = _safe_relative_path(check["log_path"], f"checks[{index}].log_path")
         if not SHA256_RE.fullmatch(_string(check["log_sha256"], f"checks[{index}].log_sha256")):
             raise ContractError(f"checks[{index}].log_sha256 must be a lowercase SHA-256 digest")
+        if logs_root is not None:
+            resolved_log = Path(logs_root) / log_path
+            if not resolved_log.is_file():
+                raise ContractError(f"checks[{index}] log file is missing: {log_path}")
+            if file_sha256(resolved_log) != check["log_sha256"]:
+                raise ContractError(f"checks[{index}] log digest mismatch: {log_path}")
         passed = check["result"] == "passed"
         if check["result"] == "not_run":
             if check["exit_code"] is not None or check["duration_ms"] != 0:
@@ -305,12 +317,17 @@ def validate_evidence(data: Any, *, plan: Mapping[str, Any] | None = None) -> di
     return data
 
 
-def load_evidence(path: str | Path, *, plan: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def load_evidence(
+    path: str | Path,
+    *,
+    plan: Mapping[str, Any] | None = None,
+    logs_root: str | Path | None = None,
+) -> dict[str, Any]:
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError(f"cannot read release evidence: {exc}") from exc
-    return validate_evidence(data, plan=plan)
+    return validate_evidence(data, plan=plan, logs_root=logs_root)
 
 
 def write_evidence(path: str | Path, data: Any, *, plan: Mapping[str, Any] | None = None) -> str:
@@ -442,13 +459,13 @@ def verify_remote_baseline(plan: Mapping[str, Any], repository: str | Path, remo
     latest_tag = tags[0] if tags else ""
     latest_commit = git("rev-parse", f"{latest_tag}^{{commit}}") if latest_tag else ""
     previous = plan["previous_release"]
+    candidate_tag = plan["predicted_release"]["tag"] if plan["release_required"] else ""
     if main_sha != plan["source_sha"]:
         raise ContractError("remote main moved after release analysis")
-    if latest_tag != previous["tag"] or latest_commit != previous["commit"]:
-        raise ContractError("latest remote release tag moved after release analysis")
-    candidate_tag = plan["predicted_release"]["tag"] if plan["release_required"] else ""
     if candidate_tag and candidate_tag in tags:
         raise ContractError("predicted release tag already exists remotely")
+    if latest_tag != previous["tag"] or latest_commit != previous["commit"]:
+        raise ContractError("latest remote release tag moved after release analysis")
     return {
         "schema_version": 1,
         "captured_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -588,6 +605,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_evidence = sub.add_parser("validate-evidence")
     check_evidence.add_argument("--plan", required=True)
     check_evidence.add_argument("--evidence", required=True)
+    check_evidence.add_argument("--logs-root", required=True)
     check_evidence.add_argument("--expected-digest")
     check_evidence.add_argument("--github-output")
     compare = sub.add_parser("compare-analysis")
@@ -624,7 +642,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _append_github_outputs(args.github_output, _plan_outputs(plan, digest))
         elif args.command == "validate-evidence":
             plan = load_plan(args.plan)
-            evidence = load_evidence(args.evidence, plan=plan)
+            evidence = load_evidence(args.evidence, plan=plan, logs_root=args.logs_root)
             digest = file_sha256(args.evidence)
             if args.expected_digest:
                 _assert_digest(digest, args.expected_digest, "release evidence")

@@ -19,7 +19,7 @@ SPEC.loader.exec_module(release_gate)
 
 SOURCE_SHA = "a" * 40
 PREVIOUS_SHA = "b" * 40
-RUNNER_SHA = "c" * 40
+RUNNER_SHA = SOURCE_SHA
 LOG_SHA = "d" * 64
 
 
@@ -202,6 +202,33 @@ class EvidenceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(release_gate.ContractError, "safe relative"):
             release_gate.validate_evidence(evidence)
 
+    def test_runner_must_be_the_planned_source(self):
+        evidence = valid_evidence()
+        evidence["runner_sha"] = "c" * 40
+        with self.assertRaisesRegex(release_gate.ContractError, "runner_sha"):
+            release_gate.validate_evidence(evidence)
+
+    def test_uploaded_logs_must_exist_and_match_their_digests(self):
+        plan = valid_plan()
+        evidence = valid_evidence(plan)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for check in evidence["checks"]:
+                log = root / check["log_path"]
+                log.parent.mkdir(parents=True, exist_ok=True)
+                log.write_text(check["id"], encoding="utf-8")
+                check["log_sha256"] = release_gate.file_sha256(log)
+            release_gate.validate_evidence(evidence, plan=plan, logs_root=root)
+            first_log = root / evidence["checks"][0]["log_path"]
+            first_original = first_log.read_text(encoding="utf-8")
+            first_log.write_text("tampered", encoding="utf-8")
+            with self.assertRaisesRegex(release_gate.ContractError, "log digest mismatch"):
+                release_gate.validate_evidence(evidence, plan=plan, logs_root=root)
+            first_log.write_text(first_original, encoding="utf-8")
+            (root / evidence["checks"][1]["log_path"]).unlink()
+            with self.assertRaisesRegex(release_gate.ContractError, "log file is missing"):
+                release_gate.validate_evidence(evidence, plan=plan, logs_root=root)
+
     def test_each_failed_check_blocks_fake_publisher(self):
         plan = valid_plan()
         for index, check_id in enumerate(release_gate.STABLE_CHECK_IDS):
@@ -215,9 +242,17 @@ class EvidenceContractTests(unittest.TestCase):
                     later["duration_ms"] = 0
                 evidence["overall_result"] = "failed"
                 calls = []
+                external_state = {"main": SOURCE_SHA, "tags": [], "releases": [], "changelog": "unchanged"}
+                before = copy.deepcopy(external_state)
                 with self.assertRaisesRegex(release_gate.ContractError, "did not pass"):
-                    release_gate.authorize_publication(plan, evidence, copy.deepcopy(plan), lambda: calls.append("publish"))
+                    release_gate.authorize_publication(
+                        plan,
+                        evidence,
+                        copy.deepcopy(plan),
+                        lambda: (calls.append("publish"), external_state["tags"].append("v0.22.0")),
+                    )
                 self.assertEqual(calls, [])
+                self.assertEqual(external_state, before)
 
     def test_evidence_rejects_a_check_running_after_failure(self):
         evidence = valid_evidence()

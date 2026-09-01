@@ -451,6 +451,9 @@ and upgrade path. A pre-publication failure writes nothing; a failure after
 publication stays visible and is repaired by a corrective commit rather than by
 deleting or rewriting the release.
 
+Maintainers should use the symptom-first [release failure runbook](docs/release-runbook.md)
+for candidate failures, possible partial publication, and failed public verification.
+
 Static Claude and Codex adapter checks run in the automated gate. Live client
 command discovery, applied model routing, identity, and provider capability
 grants remain manual release checks because a GitHub runner cannot prove them.

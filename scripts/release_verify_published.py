@@ -10,6 +10,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,12 +38,16 @@ def _release_body(repository: str, tag: str, fixture: Path | None) -> tuple[str,
     if fixture:
         payload = json.loads(fixture.read_text(encoding="utf-8"))
     else:
-        output = _checked(
-            ["gh", "api", f"repos/{repository}/releases/tags/{tag}"],
-            cwd=Path.cwd(),
-            env=_clean_env(),
+        url = f"https://api.github.com/repos/{repository}/releases/tags/{urllib.parse.quote(tag, safe='')}"
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "flow-release-verifier"},
         )
-        payload = json.loads(output)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = json.load(response)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise ContractError(f"cannot read public GitHub release: {exc}") from exc
     if payload.get("tag_name") != tag:
         raise ContractError("GitHub release tag does not match the release plan")
     body = payload.get("body")
@@ -78,7 +85,7 @@ def verify(
     release_fixture: Path | None,
 ) -> dict:
     plan = load_plan(plan_path)
-    evidence = load_evidence(evidence_path, plan=plan)
+    evidence = load_evidence(evidence_path, plan=plan, logs_root=evidence_path.parent)
     if evidence["overall_result"] != "passed":
         raise ContractError("published verification requires passing candidate evidence")
     if not plan["release_required"]:

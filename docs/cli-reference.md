@@ -1037,3 +1037,6 @@ Live Claude/Codex command discovery, applied model and effort routing, external
 identity, and actual provider grants remain manual. Never satisfy a failed gate
 with `continue-on-error`, a force push, tag deletion, release deletion, or a
 manual bypass.
+
+If any release job fails, follow the [release failure runbook](release-runbook.md)
+before retrying or changing remote state.
