@@ -1,0 +1,7 @@
+[framework]
+name = "flow"
+version = 1
+kind = "project"
+
+# Project-specific standards and templates may be wired from the user overlay
+# with [[replaces]] entries. This project currently uses framework defaults.

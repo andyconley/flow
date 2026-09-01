@@ -1,0 +1,31 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/orchestration-safety-contract/acceptance-criteria.md",
+    "handback": ".flow/runs/orchestration-safety-contract/HANDOFF.md",
+    "handoff": ".flow/runs/orchestration-safety-contract/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/orchestration-safety-contract/validation-results.md",
+    "plan": ".flow/runs/orchestration-safety-contract/plan.md",
+    "requirements": ".flow/runs/orchestration-safety-contract/requirements.md",
+    "review": ".flow/runs/orchestration-safety-contract/review/quality-review.md",
+    "validation_plan": ".flow/runs/orchestration-safety-contract/validation-plan.md"
+  },
+  "created_at": "2026-08-31T21:37:52Z",
+  "dispositions": {},
+  "gates": {
+    "accept-review": "2026-09-01T13:26:18Z",
+    "approve-definition": "2026-08-31T21:37:52Z",
+    "approve-plan": "2026-08-31T21:42:05Z",
+    "mark-handback-ready": "2026-09-01T13:26:18Z",
+    "start-definition": "2026-08-31T21:37:52Z",
+    "start-implementation": "2026-09-01T12:48:27Z",
+    "start-plan": "2026-08-31T21:37:52Z",
+    "start-review": "2026-09-01T13:26:18Z"
+  },
+  "lane": "review",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
+  "schema_version": 1,
+  "state": "review_accepted",
+  "updated_at": "2026-09-01T13:26:18Z",
+  "work_id": "orchestration-safety-contract"
+}
