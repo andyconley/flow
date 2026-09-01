@@ -274,7 +274,14 @@ def validate_evidence(
         if not SHA256_RE.fullmatch(_string(check["log_sha256"], f"checks[{index}].log_sha256")):
             raise ContractError(f"checks[{index}].log_sha256 must be a lowercase SHA-256 digest")
         if logs_root is not None:
-            resolved_log = Path(logs_root) / log_path
+            root = Path(logs_root).resolve()
+            unresolved_log = root / log_path
+            try:
+                resolved_log = unresolved_log.resolve(strict=True)
+            except OSError as exc:
+                raise ContractError(f"checks[{index}] log file is missing: {log_path}") from exc
+            if not resolved_log.is_relative_to(root) or unresolved_log.is_symlink():
+                raise ContractError(f"checks[{index}] log escapes the evidence root: {log_path}")
             if not resolved_log.is_file():
                 raise ContractError(f"checks[{index}] log file is missing: {log_path}")
             if file_sha256(resolved_log) != check["log_sha256"]:

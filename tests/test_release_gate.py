@@ -229,6 +229,25 @@ class EvidenceContractTests(unittest.TestCase):
             with self.assertRaisesRegex(release_gate.ContractError, "log file is missing"):
                 release_gate.validate_evidence(evidence, plan=plan, logs_root=root)
 
+    def test_uploaded_log_symlink_cannot_escape_evidence_root(self):
+        plan = valid_plan()
+        evidence = valid_evidence(plan)
+        with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as outside:
+            root = Path(temp)
+            for check in evidence["checks"]:
+                log = root / check["log_path"]
+                log.parent.mkdir(parents=True, exist_ok=True)
+                log.write_text(check["id"], encoding="utf-8")
+                check["log_sha256"] = release_gate.file_sha256(log)
+            escaped = Path(outside) / "escaped.log"
+            escaped.write_text("outside", encoding="utf-8")
+            first = root / evidence["checks"][0]["log_path"]
+            first.unlink()
+            first.symlink_to(escaped)
+            evidence["checks"][0]["log_sha256"] = release_gate.file_sha256(escaped)
+            with self.assertRaisesRegex(release_gate.ContractError, "escapes the evidence root"):
+                release_gate.validate_evidence(evidence, plan=plan, logs_root=root)
+
     def test_each_failed_check_blocks_fake_publisher(self):
         plan = valid_plan()
         for index, check_id in enumerate(release_gate.STABLE_CHECK_IDS):
