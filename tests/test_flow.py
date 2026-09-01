@@ -176,6 +176,536 @@ class FlowCliHarness(unittest.TestCase):
         return fake_home
 
 
+class OrchestrationValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.root = Path(self._tempdir.name)
+        (self.root / ".git").mkdir()
+        self.work_id = "orchestration-demo"
+        self.module = load_cli_module("orchestration")
+        for name, body in (
+            ("brief.md", "brief\n"),
+            ("input.md", "input\n"),
+            ("output.md", "output\n"),
+            ("reconciliation.md", "resolved\n"),
+            ("verification.md", "verified\n"),
+        ):
+            self._write(f".flow/runs/{self.work_id}/{name}", body)
+
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
+
+    def _write(self, relative: str, body: str = "synthetic evidence\n") -> str:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
+        return relative
+
+    @staticmethod
+    def _identity(identifier: str) -> dict[str, str]:
+        return {"kind": "agent", "id": identifier}
+
+    def _manifest(self) -> dict:
+        run_dir = f".flow/runs/{self.work_id}"
+        return {
+            "schema_version": 1,
+            "work_id": self.work_id,
+            "mode": "single",
+            "risk": {
+                "hard_triggers": [],
+                "aggravating_factors": [],
+                "classification": "standard",
+                "rationale": "local synthetic standard-risk work",
+            },
+            "assignments": [{
+                "id": "producer",
+                "lane": "implement",
+                "role": "lead-developer",
+                "provider": self._identity("producer-agent"),
+                "brief_path": f"{run_dir}/brief.md",
+                "input_evidence": [f"{run_dir}/input.md"],
+                "read_scopes": ["cli"],
+                "write_scopes": [run_dir],
+                "read_only": False,
+                "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+                "output": {"path": f"{run_dir}/output.md", "format": "markdown"},
+                "success_criteria": ["output exists"],
+                "claim_statuses": ["observed", "recommended"],
+                "coordination": {"mode": "concurrent", "group": "primary"},
+            }],
+            "shared_state": [],
+            "reconciliation": {
+                "artifact_path": f"{run_dir}/reconciliation.md",
+                "status": "resolved",
+                "claims": [{
+                    "id": "observed-output",
+                    "status": "observed",
+                    "evidence": [f"{run_dir}/output.md"],
+                    "supports": [],
+                    "disposition": "accepted",
+                }],
+            },
+            "verification": {
+                "producer_assignments": ["producer"],
+                "evidence_collector_assignment": "producer",
+                "verifier_assignment": "producer",
+                "independent": False,
+                "artifact_path": f"{run_dir}/verification.md",
+            },
+        }
+
+    def _findings(self, manifest: dict, stage: str = "dispatch") -> list:
+        return self.module.validate_manifest(manifest, self.work_id, stage, root=self.root)
+
+    def test_dispatch_accepts_manifest_and_additive_fields(self) -> None:
+        manifest = self._manifest()
+        manifest["future"] = {"ignored": True}
+        manifest["assignments"][0]["future"] = "ignored"
+        self.assertEqual(self._findings(manifest), [])
+
+    def test_risk_calculation_covers_all_triggers_and_thresholds(self) -> None:
+        for trigger in self.module.HARD_TRIGGERS:
+            with self.subTest(trigger=trigger):
+                self.assertEqual(self.module.calculated_risk([trigger], []), "high")
+        self.assertEqual(self.module.calculated_risk([], []), "standard")
+        self.assertEqual(self.module.calculated_risk([], ["weak_rollback"]), "standard")
+        self.assertEqual(self.module.calculated_risk([], ["weak_rollback", "large_blast_radius"]), "high")
+        self.assertEqual(self.module.calculated_risk([], ["weak_rollback", "large_blast_radius", "author_only_validation"]), "high")
+
+    def test_dispatch_rejects_conflicting_risk_and_unknown_vocabulary(self) -> None:
+        manifest = self._manifest()
+        manifest["risk"]["classification"] = "standard"
+        manifest["risk"]["hard_triggers"] = ["invented"]
+        rules = {finding.rule for finding in self._findings(manifest)}
+        self.assertIn("controlled-risk-trigger", rules)
+        self.assertIn("calculated-risk", rules)
+
+    def test_dispatch_rejects_missing_and_unknown_capabilities(self) -> None:
+        for status in ("missing", "unknown"):
+            manifest = self._manifest()
+            manifest["assignments"][0]["required_capabilities"][0]["status"] = status
+            with self.subTest(status=status):
+                self.assertIn("required-capability-confirmed", {finding.rule for finding in self._findings(manifest)})
+
+    def test_dispatch_rejects_unsafe_paths_and_output_scope_mismatch(self) -> None:
+        manifest = self._manifest()
+        manifest["assignments"][0]["brief_path"] = "../../secret"
+        manifest["assignments"][0]["output"]["path"] = "docs/output.md"
+        rules = {finding.rule for finding in self._findings(manifest)}
+        self.assertIn("safe-repository-path", rules)
+        self.assertIn("output-within-write-scope", rules)
+
+    def test_dispatch_overlap_requires_shared_serialization(self) -> None:
+        manifest = self._manifest()
+        second = json.loads(json.dumps(manifest["assignments"][0]))
+        second["id"] = "reviewer"
+        second["provider"]["id"] = "reviewer-agent"
+        second["write_scopes"] = [f".flow/runs/{self.work_id}/output.md"]
+        manifest["assignments"].append(second)
+        self.assertIn("concurrent-write-overlap", {finding.rule for finding in self._findings(manifest)})
+        for assignment in manifest["assignments"]:
+            assignment["coordination"] = {"mode": "serialized", "group": "one"}
+        self.assertNotIn("concurrent-write-overlap", {finding.rule for finding in self._findings(manifest)})
+
+    def test_dispatch_accepts_read_only_run_output(self) -> None:
+        manifest = self._manifest()
+        assignment = manifest["assignments"][0]
+        assignment["read_only"] = True
+        assignment["write_scopes"] = []
+        self.assertEqual(self._findings(manifest), [])
+
+    def _add_shared_mutation(self, manifest: dict, mutation: str = "structural") -> None:
+        evidence = {
+            name: self._write(f".flow/runs/{self.work_id}/{name}.json", "{}\n")
+            for name in ("baseline", "execution", "readback", "comparison")
+        }
+        manifest["mode"] = "shared-mutation"
+        manifest["risk"] = {
+            "hard_triggers": ["production_or_shared_external_mutation"],
+            "aggravating_factors": [],
+            "classification": "high",
+            "rationale": "synthetic shared external mutation",
+        }
+        manifest["shared_state"] = [{
+            "id": "external-record",
+            "kind": "synthetic-file",
+            "identity": "fixture://external-record",
+            "mutation_type": mutation,
+            "owner_assignment": "producer",
+            "write_region": "record/body",
+            "coordination": {"mode": "serialized", "group": "external"},
+            "baseline_artifact": evidence["baseline"],
+            "baseline_captured_at": "2026-09-01T12:00:00Z",
+            "baseline_source_identity": "fixture-v1",
+            "expected_delta": "replace synthetic value",
+            "recovery_state": "exercised",
+            "execution_result_artifact": evidence["execution"],
+            "readback_artifact": evidence["readback"],
+            "comparison_artifact": evidence["comparison"],
+            "unexpected_delta_status": "none",
+            "unexpected_delta_disposition": "",
+        }]
+
+    def _add_read_only_reviewer(self, manifest: dict, identifier: str) -> None:
+        run_dir = f".flow/runs/{self.work_id}"
+        manifest["assignments"].append({
+            "id": f"review-{identifier}",
+            "lane": "review",
+            "role": "quality-reviewer",
+            "provider": self._identity(identifier),
+            "brief_path": f"{run_dir}/brief.md",
+            "input_evidence": [f"{run_dir}/output.md"],
+            "read_scopes": [run_dir],
+            "write_scopes": [],
+            "read_only": True,
+            "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+            "output": {"path": f"{run_dir}/verification.md", "format": "markdown"},
+            "success_criteria": ["independent verdict recorded"],
+            "claim_statuses": ["observed", "inferred"],
+            "coordination": {"mode": "serialized", "group": "acceptance"},
+        })
+
+    def test_handback_enforces_mutation_recovery_and_delta_disposition(self) -> None:
+        manifest = self._manifest()
+        self._add_shared_mutation(manifest, "destructive")
+        self.assertEqual(self._findings(manifest, "handback"), [])
+        manifest["shared_state"][0]["recovery_state"] = "available_unexercised"
+        manifest["shared_state"][0]["unexpected_delta_status"] = "unresolved"
+        rules = {finding.rule for finding in self._findings(manifest, "handback")}
+        self.assertIn("destructive-recovery", rules)
+        self.assertIn("unexpected-delta-disposition", rules)
+        manifest["shared_state"][0]["recovery_state"] = "irreversible_acknowledged"
+        manifest["shared_state"][0]["unexpected_delta_status"] = "none"
+        rules = {finding.rule for finding in self._findings(manifest, "handback")}
+        self.assertIn("irreversible-safeguards", rules)
+
+    def test_shared_mutation_requires_calculated_hard_trigger(self) -> None:
+        manifest = self._manifest()
+        self._add_shared_mutation(manifest)
+        manifest["risk"] = {
+            "hard_triggers": [],
+            "aggravating_factors": [],
+            "classification": "standard",
+            "rationale": "incorrectly omitted shared mutation",
+        }
+        self.assertIn("shared-mutation-risk-trigger", {finding.rule for finding in self._findings(manifest)})
+
+    def test_artifact_references_must_be_regular_files(self) -> None:
+        manifest = self._manifest()
+        manifest["assignments"][0]["brief_path"] = f".flow/runs/{self.work_id}"
+        self.assertIn("referenced-artifact-exists", {finding.rule for finding in self._findings(manifest)})
+
+    def test_shared_structural_mutations_serialize_even_across_declared_regions(self) -> None:
+        manifest = self._manifest()
+        self._add_shared_mutation(manifest, "structural")
+        second = json.loads(json.dumps(manifest["shared_state"][0]))
+        second["id"] = "external-record-two"
+        second["write_region"] = "record/title"
+        second["coordination"] = {"mode": "concurrent", "group": "other"}
+        manifest["shared_state"][0]["coordination"] = {"mode": "concurrent", "group": "first"}
+        manifest["shared_state"].append(second)
+        self.assertIn("shared-region-conflict", {finding.rule for finding in self._findings(manifest)})
+        for target in manifest["shared_state"]:
+            target["mutation_type"] = "additive"
+        self.assertNotIn("shared-region-conflict", {finding.rule for finding in self._findings(manifest)})
+
+    def test_handback_enforces_claim_provenance(self) -> None:
+        manifest = self._manifest()
+        manifest["reconciliation"]["claims"].extend([
+            {"id": "inference", "status": "inferred", "supports": [], "disposition": "accepted"},
+            {"id": "recommendation", "status": "recommended", "decision_owner": {}, "disposition": "accepted"},
+            {"id": "unverified", "status": "unverified", "disposition": "accepted"},
+        ])
+        rules = {finding.rule for finding in self._findings(manifest, "handback")}
+        self.assertIn("inference-support", rules)
+        self.assertIn("recommendation-owner", rules)
+        self.assertIn("unverified-not-fact", rules)
+
+    def test_handback_accepts_all_claim_classes_with_required_lineage(self) -> None:
+        manifest = self._manifest()
+        manifest["reconciliation"]["claims"].extend([
+            {"id": "inference", "status": "inferred", "supports": ["observed-output"], "disposition": "accepted"},
+            {"id": "recommendation", "status": "recommended", "decision_owner": self._identity("owner-agent"), "disposition": "accepted"},
+            {"id": "unverified", "status": "unverified", "disposition": "deferred"},
+        ])
+        self.assertEqual(self._findings(manifest, "handback"), [])
+
+    def test_acceptance_requires_independent_high_risk_verifier(self) -> None:
+        manifest = self._manifest()
+        manifest["risk"] = {
+            "hard_triggers": ["production_or_shared_external_mutation"],
+            "aggravating_factors": [],
+            "classification": "high",
+            "rationale": "shared external mutation",
+        }
+        self.assertIn("independent-high-risk-verifier", {finding.rule for finding in self._findings(manifest, "acceptance")})
+        self._add_read_only_reviewer(manifest, "independent-agent")
+        manifest["verification"]["verifier_assignment"] = "review-independent-agent"
+        manifest["verification"]["independent"] = True
+        self.assertEqual(self._findings(manifest, "acceptance"), [])
+
+    def test_acceptance_verifier_must_differ_from_evidence_collector(self) -> None:
+        manifest = self._manifest()
+        manifest["risk"] = {
+            "hard_triggers": ["security_or_privacy_boundary"],
+            "aggravating_factors": [],
+            "classification": "high",
+            "rationale": "synthetic identity separation check",
+        }
+        manifest["verification"]["evidence_collector_assignment"] = "review-collector-agent"
+        manifest["verification"]["verifier_assignment"] = "review-collector-agent"
+        manifest["verification"]["independent"] = True
+        self._add_read_only_reviewer(manifest, "collector-agent")
+        rules = {finding.rule for finding in self._findings(manifest, "acceptance")}
+        self.assertIn("independent-high-risk-verifier", rules)
+
+    def test_acceptance_cannot_swap_producer_and_verifier_role_labels(self) -> None:
+        manifest = self._manifest()
+        manifest["risk"] = {
+            "hard_triggers": ["security_or_privacy_boundary"],
+            "aggravating_factors": [],
+            "classification": "high",
+            "rationale": "synthetic role binding check",
+        }
+        self._add_read_only_reviewer(manifest, "reviewer-agent")
+        manifest["verification"] = {
+            "producer_assignments": ["review-reviewer-agent"],
+            "evidence_collector_assignment": "review-reviewer-agent",
+            "verifier_assignment": "producer",
+            "independent": True,
+            "artifact_path": f".flow/runs/{self.work_id}/verification.md",
+        }
+        rules = {finding.rule for finding in self._findings(manifest, "acceptance")}
+        self.assertIn("writable-producer-binding", rules)
+        self.assertIn("read-only-high-risk-verifier", rules)
+
+    def test_invalid_top_level_and_work_id_fail_closed(self) -> None:
+        rules = {finding.rule for finding in self.module.validate_manifest([], self.work_id, "dispatch", root=self.root)}
+        self.assertIn("manifest-object", rules)
+        manifest = self._manifest()
+        manifest["work_id"] = "wrong"
+        self.assertIn("containing-run-identity", {finding.rule for finding in self._findings(manifest)})
+
+    def test_malformed_nested_controlled_values_return_findings(self) -> None:
+        manifest = self._manifest()
+        manifest["mode"] = {}
+        manifest["risk"]["hard_triggers"] = [{}]
+        manifest["risk"]["aggravating_factors"] = [[]]
+        manifest["assignments"][0]["provider"]["kind"] = {}
+        manifest["assignments"][0]["required_capabilities"][0]["status"] = {}
+        manifest["assignments"][0]["claim_statuses"] = [{}]
+        manifest["assignments"][0]["coordination"]["mode"] = {}
+        rules = {finding.rule for finding in self._findings(manifest)}
+        self.assertTrue({"controlled-mode", "controlled-risk-trigger", "controlled-risk-factor", "identity-provenance", "capability-status", "claim-status-expectation", "coordination-contract"}.issubset(rules))
+
+        manifest = self._manifest()
+        self._add_shared_mutation(manifest, "destructive")
+        manifest["shared_state"][0]["recovery_state"] = {}
+        manifest["shared_state"][0]["unexpected_delta_status"] = {}
+        rules = {finding.rule for finding in self._findings(manifest, "handback")}
+        self.assertIn("recovery-posture", rules)
+        self.assertIn("unexpected-delta-status", rules)
+
+    def test_malformed_nested_reference_ids_return_findings(self) -> None:
+        manifest = self._manifest()
+        self._add_shared_mutation(manifest)
+        manifest["shared_state"][0]["owner_assignment"] = {}
+        self.assertIn("known-assignment-owner", {finding.rule for finding in self._findings(manifest)})
+
+        manifest = self._manifest()
+        manifest["reconciliation"]["claims"].append({
+            "id": "bad-inference", "status": "inferred", "supports": [{}], "disposition": "deferred"
+        })
+        self.assertIn("inference-support", {finding.rule for finding in self._findings(manifest, "handback")})
+
+        manifest = self._manifest()
+        manifest["verification"]["producer_assignments"] = [{}]
+        rules = {finding.rule for finding in self._findings(manifest, "acceptance")}
+        self.assertIn("producer-assignment-inventory", rules)
+
+
+class OrchestrationCliTests(FlowCliHarness):
+    def _write_valid_manifest(self, work_id: str = "demo") -> None:
+        run_dir = self.repo / ".flow" / "runs" / work_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        for name in ("brief.md", "input.md", "output.md", "reconciliation.md", "verification.md"):
+            (run_dir / name).write_text(f"{name}\n")
+        relative = f".flow/runs/{work_id}"
+        identity = {"kind": "agent", "id": "producer-agent"}
+        manifest = {
+            "schema_version": 1,
+            "work_id": work_id,
+            "mode": "single",
+            "risk": {"hard_triggers": [], "aggravating_factors": [], "classification": "standard", "rationale": "synthetic local run"},
+            "assignments": [{
+                "id": "producer", "lane": "implement", "role": "lead-developer",
+                "provider": identity, "brief_path": f"{relative}/brief.md",
+                "input_evidence": [f"{relative}/input.md"], "read_scopes": ["cli"],
+                "write_scopes": [relative], "read_only": False,
+                "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+                "output": {"path": f"{relative}/output.md", "format": "markdown"},
+                "success_criteria": ["output exists"], "claim_statuses": ["observed"],
+                "coordination": {"mode": "concurrent", "group": "primary"},
+            }],
+            "shared_state": [],
+            "reconciliation": {"artifact_path": f"{relative}/reconciliation.md", "status": "resolved", "claims": [{"id": "output", "status": "observed", "evidence": [f"{relative}/output.md"], "disposition": "accepted"}]},
+            "verification": {"producer_assignments": ["producer"], "evidence_collector_assignment": "producer", "verifier_assignment": "producer", "independent": False, "artifact_path": f"{relative}/verification.md"},
+        }
+        (run_dir / "orchestration.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+    def test_validate_orchestration_distinguishes_missing_and_invalid(self) -> None:
+        self.setup_project()
+        missing = self.run_flow("run", "validate-orchestration", "demo", "--stage", "dispatch", "--json")
+        self.assertEqual(missing.returncode, 1)
+        payload = json.loads(missing.stdout)
+        self.assertEqual(payload["stage"], "dispatch")
+        self.assertEqual(payload["findings"][0]["rule"], "orchestration-run-exists")
+        manifest = self.repo / ".flow" / "runs" / "demo" / "orchestration.json"
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        no_manifest = self.run_flow("run", "validate-orchestration", "demo", "--stage", "dispatch", "--json")
+        self.assertEqual(json.loads(no_manifest.stdout)["findings"][0]["rule"], "orchestration-manifest-exists")
+        manifest.write_text("{broken")
+        invalid = self.run_flow("run", "validate-orchestration", "demo", "--stage", "dispatch", "--json")
+        self.assertEqual(invalid.returncode, 1)
+        self.assertEqual(json.loads(invalid.stdout)["findings"][0]["rule"], "valid-json")
+
+    def test_work_id_traversal_is_refused_without_writing(self) -> None:
+        self.setup_project()
+        escaped = self.repo.parent / "escaped-run"
+        result = self.run_flow("run", "transition", "../escaped-run", "start-definition")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid work id", result.stdout)
+        self.assertFalse((escaped / "run.json").exists())
+        validate = self.run_flow("run", "validate-orchestration", "../escaped", "--stage", "dispatch", "--json")
+        self.assertEqual(validate.returncode, 1)
+        self.assertEqual(json.loads(validate.stdout)["findings"][0]["rule"], "safe-work-id")
+
+    def test_legacy_run_names_with_spaces_remain_readable(self) -> None:
+        self.setup_project()
+        run_dir = self.repo / ".flow" / "runs" / "legacy run 2025"
+        run_dir.mkdir()
+        (run_dir / "PLAN.md").write_text("legacy\n")
+        status = self.run_flow("run", "status", "legacy run 2025", "--json")
+        self.assert_ok(status)
+        self.assertEqual(json.loads(status.stdout)["state"], "legacy/inferred")
+        self.assert_ok(self.run_flow("run", "verify", "legacy run 2025"))
+
+    def test_new_run_is_revision_two_and_failed_gate_is_atomic(self) -> None:
+        self.setup_project()
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+        run_path = self.repo / ".flow" / "runs" / "demo" / "run.json"
+        events_path = self.repo / ".flow" / "runs" / "demo" / "events.jsonl"
+        payload = json.loads(run_path.read_text())
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["protocol_revision"], 2)
+        before = (run_path.read_bytes(), events_path.read_bytes())
+        refused = self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("orchestration_manifest", refused.stdout)
+        self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
+
+    def test_complete_revision_two_lifecycle_reaches_archive(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        manifest_arg = "orchestration_manifest=.flow/runs/demo/orchestration.json"
+        commands = (
+            ("start-definition", ()),
+            ("approve-definition", ("--artifact", "requirements=.flow/runs/demo/requirements.md", "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md", "--artifact", manifest_arg)),
+            ("start-plan", ()),
+            ("approve-plan", ("--artifact", "plan=.flow/runs/demo/plan.md", "--artifact", "handoff=.flow/runs/demo/handoff.md", "--artifact", "validation_plan=.flow/runs/demo/validation.md")),
+            ("start-implementation", ()),
+            ("mark-handback-ready", ("--artifact", "implementation_evidence=.flow/runs/demo/output.md", "--artifact", "handback=.flow/runs/demo/output.md")),
+            ("start-review", ()),
+            ("accept-review", ("--artifact", "review=.flow/runs/demo/verification.md")),
+            ("archive", ("--disposition", "capability_gaps=n/a", "--disposition", "memory=n/a")),
+        )
+        for event, extra in commands:
+            with self.subTest(event=event):
+                self.assert_ok(self.run_flow("run", "transition", "demo", event, *extra))
+        status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
+        self.assertEqual(status["state"], "archived")
+        self.assertEqual(status["protocol_revision"], 2)
+
+    def test_revision_two_stage_refusals_leave_lifecycle_files_unchanged(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        run_path = run_dir / "run.json"
+        events_path = run_dir / "events.jsonl"
+        manifest_path = run_dir / "orchestration.json"
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+
+        manifest = json.loads(manifest_path.read_text())
+        manifest["assignments"][0]["required_capabilities"][0]["status"] = "unknown"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        before = (run_path.read_bytes(), events_path.read_bytes())
+        refused = self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
+
+        manifest["assignments"][0]["required_capabilities"][0]["status"] = "confirmed"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        ))
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-plan"))
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "approve-plan",
+            "--artifact", "plan=.flow/runs/demo/plan.md",
+            "--artifact", "handoff=.flow/runs/demo/handoff.md",
+            "--artifact", "validation_plan=.flow/runs/demo/validation.md",
+        ))
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-implementation"))
+
+        output_path = run_dir / "output.md"
+        output_body = output_path.read_text()
+        output_path.unlink()
+        before = (run_path.read_bytes(), events_path.read_bytes())
+        refused = self.run_flow(
+            "run", "transition", "demo", "mark-handback-ready",
+            "--artifact", "implementation_evidence=.flow/runs/demo/output.md",
+            "--artifact", "handback=.flow/runs/demo/output.md",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
+        output_path.write_text(output_body)
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "mark-handback-ready",
+            "--artifact", "implementation_evidence=.flow/runs/demo/output.md",
+            "--artifact", "handback=.flow/runs/demo/output.md",
+        ))
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-review"))
+
+        manifest = json.loads(manifest_path.read_text())
+        manifest["risk"] = {
+            "hard_triggers": ["production_or_shared_external_mutation"],
+            "aggravating_factors": [],
+            "classification": "high",
+            "rationale": "synthetic high-risk acceptance check",
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        before = (run_path.read_bytes(), events_path.read_bytes())
+        refused = self.run_flow(
+            "run", "transition", "demo", "accept-review",
+            "--artifact", "review=.flow/runs/demo/verification.md",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("independent-high-risk-verifier", refused.stdout)
+        self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
+
+
 class FlowCliTests(FlowCliHarness):
     # ------------------------------------------------------------------
     # Two-mode install helpers
@@ -431,6 +961,13 @@ class FlowCliTests(FlowCliHarness):
         for event, extra in commands:
             with self.subTest(event=event):
                 self.assert_ok(self.run_flow("run", "transition", "demo", event, *extra))
+                if event == "start-definition":
+                    # Simulate a run created before protocol revision 2. This
+                    # remains the full-path compatibility control.
+                    run_path = self.repo / ".flow" / "runs" / "demo" / "run.json"
+                    payload = json.loads(run_path.read_text())
+                    payload.pop("protocol_revision")
+                    run_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
         status = self.run_flow("run", "status", "demo", "--json")
         self.assert_ok(status)
@@ -2497,6 +3034,7 @@ class FlowCliTests(FlowCliHarness):
                 "lifecycle",
                 "migrate",
                 "normalize",
+                "orchestration",
                 "overlay",
                 "paths",
                 "plugin_usage",

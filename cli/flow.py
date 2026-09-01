@@ -35,6 +35,7 @@ from gaps import cmd_add, cmd_list, cmd_promote  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
+from orchestration import cmd_validate as orchestration_validate_command  # noqa: E402
 from overlay import overlay_check_command, overlay_status_command  # noqa: E402
 from plugin_usage import (  # noqa: E402
     plugin_usage_show_command,
@@ -490,6 +491,23 @@ def main() -> int:
     run_transition_parser.add_argument("--note", help="next action or transition note")
     run_transition_parser.add_argument("--json", action="store_true", help="emit JSON")
 
+    run_orchestration_parser = run_sub.add_parser(
+        "validate-orchestration",
+        help="validate a run's orchestration safety contract",
+        description=(
+            "Read-only structural validation of the run-local orchestration manifest. "
+            "Checks declarations, not hidden runtime grants or semantic truth."
+        ),
+    )
+    run_orchestration_parser.add_argument("work_id")
+    run_orchestration_parser.add_argument(
+        "--stage",
+        required=True,
+        choices=("dispatch", "handback", "acceptance"),
+        help="contract stage to validate",
+    )
+    run_orchestration_parser.add_argument("--json", action="store_true", help="emit JSON")
+
     runtime_parser = sub.add_parser(
         "runtime",
         help="inspect generated runtime adapter behavior",
@@ -754,6 +772,8 @@ def main() -> int:
         return run_verify_command(args)
     if args.command == "run" and args.run_target == "transition":
         return run_transition_command(args)
+    if args.command == "run" and args.run_target == "validate-orchestration":
+        return orchestration_validate_command(args)
     if args.command == "runtime" and args.runtime_target == "smoke":
         return runtime_smoke_command(args)
     if args.command == "help":

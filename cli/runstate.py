@@ -14,9 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from fsutil import ensure_dir, repo_root, write_atomic
+from orchestration import manifest_path, valid_work_id, validate_orchestration
 
 
 SCHEMA_VERSION = 1
+PROTOCOL_REVISION_CURRENT = 2
 RUNS_DIR = Path(".flow") / "runs"
 RUN_FILE = "run.json"
 EVENTS_FILE = "events.jsonl"
@@ -206,6 +208,10 @@ def _runs_root(root: Path | None = None) -> Path:
 
 
 def _run_dir(work_id: str, root: Path | None = None) -> Path:
+    if not valid_work_id(work_id):
+        raise ValueError(
+            "work id must be a non-empty run-directory name and may not contain path separators"
+        )
     return _runs_root(root) / work_id
 
 
@@ -330,6 +336,73 @@ def _missing_gate_items(payload: dict[str, Any], transition: Transition) -> list
     return missing
 
 
+ORCHESTRATION_STAGES = {
+    "approve-definition": "dispatch",
+    "approve-solution": "dispatch",
+    "approve-plan": "dispatch",
+    "mark-handback-ready": "handback",
+    "accept-review": "acceptance",
+}
+
+
+def _protocol_revision(payload: dict[str, Any]) -> int:
+    revision = payload.get("protocol_revision", 1)
+    if isinstance(revision, bool) or revision not in {1, PROTOCOL_REVISION_CURRENT}:
+        raise ValueError(
+            f"protocol_revision: expected 1 or {PROTOCOL_REVISION_CURRENT}"
+        )
+    return revision
+
+
+def _orchestration_gate_errors(
+    work_id: str,
+    event_name: str,
+    payload: dict[str, Any],
+    *,
+    root: Path | None = None,
+) -> list[str]:
+    try:
+        revision = _protocol_revision(payload)
+    except ValueError as exc:
+        return [str(exc)]
+    artifacts = payload.get("artifacts", {})
+    expected_path = manifest_path(work_id, root)
+    expected_relative = expected_path.relative_to((root or repo_root()).resolve()).as_posix()
+    declared = artifacts.get("orchestration_manifest")
+
+    stage = ORCHESTRATION_STAGES.get(event_name)
+    if revision == PROTOCOL_REVISION_CURRENT and stage:
+        if not declared:
+            return [f"missing for orchestration {stage}: artifact:orchestration_manifest"]
+        if declared != expected_relative:
+            return [
+                "orchestration_manifest must use the canonical run-local path: "
+                f"{expected_relative}"
+            ]
+        ok, _, findings = validate_orchestration(work_id, stage, root=root)
+        if not ok:
+            return [
+                f"orchestration {stage}: {finding.field} [{finding.rule}]: "
+                f"{finding.message}; {finding.action}"
+                for finding in findings
+            ]
+
+    if event_name == "archive-scout" and (declared or expected_path.exists()):
+        if declared and declared != expected_relative:
+            return [
+                "orchestration_manifest must use the canonical run-local path: "
+                f"{expected_relative}"
+            ]
+        ok, _, findings = validate_orchestration(work_id, "acceptance", root=root)
+        if not ok:
+            return [
+                f"orchestration acceptance: {finding.field} [{finding.rule}]: "
+                f"{finding.message}; {finding.action}"
+                for finding in findings
+            ]
+    return []
+
+
 def apply_transition(
     work_id: str,
     event_name: str,
@@ -339,6 +412,10 @@ def apply_transition(
     note: str | None = None,
     root: Path | None = None,
 ) -> tuple[bool, dict[str, Any], list[str]]:
+    if not valid_work_id(work_id):
+        return False, {}, [
+            "invalid work id: use a non-empty single directory name without path separators"
+        ]
     if event_name not in TRANSITIONS:
         return False, {}, [f"unknown event: {event_name}"]
     transition = TRANSITIONS[event_name]
@@ -354,11 +431,17 @@ def apply_transition(
     now = _now()
     payload = dict(current or {})
     payload.setdefault("schema_version", SCHEMA_VERSION)
+    if current is None:
+        payload["protocol_revision"] = PROTOCOL_REVISION_CURRENT
     payload.setdefault("work_id", work_id)
     payload.setdefault("created_at", now)
-    payload.setdefault("artifacts", {})
-    payload.setdefault("dispositions", {})
-    payload.setdefault("gates", {})
+    payload["artifacts"] = dict(payload.get("artifacts", {}))
+    payload["dispositions"] = dict(payload.get("dispositions", {}))
+    payload["gates"] = dict(payload.get("gates", {}))
+    previous_manifest = payload["artifacts"].get("orchestration_manifest")
+    replacement_manifest = (artifacts or {}).get("orchestration_manifest")
+    if previous_manifest and replacement_manifest and previous_manifest != replacement_manifest:
+        return False, current or {}, ["orchestration_manifest cannot be replaced after it is recorded"]
     payload["artifacts"].update(artifacts or {})
     payload["dispositions"].update(dispositions or {})
 
@@ -366,6 +449,12 @@ def apply_transition(
     if missing:
         gate = f" for {transition.gate}" if transition.gate else ""
         return False, current or {}, [f"missing{gate}: {item}" for item in missing]
+
+    orchestration_errors = _orchestration_gate_errors(
+        work_id, event_name, payload, root=root
+    )
+    if orchestration_errors:
+        return False, current or {}, orchestration_errors
 
     previous_state = current_state
     if transition.to_state == STATE_RETURN:
@@ -416,6 +505,11 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
     if payload.get("schema_version") != SCHEMA_VERSION:
         ok = False
         messages.append(f"schema_version: expected {SCHEMA_VERSION}")
+    try:
+        _protocol_revision(payload)
+    except ValueError as exc:
+        ok = False
+        messages.append(str(exc))
     try:
         events = _load_events(work_id, root)
     except ValueError as exc:
@@ -483,7 +577,7 @@ def cmd_list(args) -> int:
 def cmd_status(args) -> int:
     try:
         payload = status(args.work_id)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print(str(exc))
         return 1
     if args.json:
@@ -513,7 +607,7 @@ def cmd_history(args) -> int:
 def cmd_verify(args) -> int:
     try:
         ok, messages, payload = verify(args.work_id)
-    except (FileNotFoundError, json.JSONDecodeError) as exc:
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
         print(str(exc))
         return 1
     if args.json:
