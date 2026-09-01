@@ -46,6 +46,39 @@ Why a single path contract: everything downstream — `flow sync`, managed manif
 
 `flow install --release` / `flow install --develop <path>` converts an existing install between modes. The clone is never deleted by either direction; the user controls its lifecycle.
 
+#### Release Validation Gate
+
+The GitHub release pipeline is a four-stage evidence chain:
+
+1. `analyze` runs semantic-release preview for the exact pushed SHA against a
+   temporary local bare remote. It has no GitHub write token and writes a
+   versioned release-plan artifact.
+2. `validate-candidate` creates the predicted tag only in another local bare
+   remote and drives the existing test, staging, bootstrap-install, update,
+   setup, sync, doctor, and runtime-smoke surfaces. It writes a versioned
+   evidence artifact with one result per stable check.
+3. `publish` is the only write-capable job. It rechecks `main`, the previous
+   tag, both artifact digests, and a second semantic-release preview before one
+   publication attempt.
+4. `verify-published` reads back the public tag, generated changelog commit,
+   GitHub release, notes, fresh install, and upgrade path.
+
+The plan digest binds candidate evidence to the original analysis; the evidence
+digest binds publication to the completed candidate gate. Human-oriented
+semantic-release logs are never an input. Release notes cross shell boundaries
+only as environment or file data.
+
+`@semantic-release/git` is expected to add one generated release commit after
+the validated source commit. The public verifier therefore requires exactly one
+parent equal to the planned source, exactly one changed path (`CHANGELOG.md`),
+the configured release-commit subject, and the predicted tag. It does not
+weaken that relationship to a loose descendant check.
+
+Publication is not transactional: the Git commit or tag can exist before the
+GitHub release step finishes. The workflow never force-pushes, deletes a tag or
+release, bypasses a failed check, or retries publication blindly. It records
+actual public state and repairs forward with a new corrective commit.
+
 #### User Overlay
 
 `~/.flow/user/` is the user's personal customization layer. It mirrors `scaffolds/default/`'s layout:

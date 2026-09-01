@@ -1011,3 +1011,25 @@ Use this when:
 - switching to release mode for a non-contributor install
 
 After first install, `flow update` is the release update path. `flow install --release` and `flow install --develop <path>` are mode-conversion commands; they convert an existing install without re-running `install-flow.sh`.
+
+## Maintainer Release Gate
+
+A push to `main` first produces a credential-free semantic-release plan for the
+exact pushed SHA. A no-release result is a green no-op. A release result must
+pass the local candidate gate before the publisher receives a write token.
+
+Pre-publication blockers are the full Python suite, generated-help drift,
+release staging and transitive imports, tracked-tree cleanliness, candidate
+fresh install and prior-version upgrade, machine and user setup, both runtime
+sync checks, `flow doctor --check`, static runtime smoke, and a representative
+CLI invocation. Evidence and per-check logs are retained as workflow artifacts.
+
+After publication, a read-only job verifies the tag and changelog-only release
+commit, GitHub release and non-empty notes, public fresh install, and public
+upgrade. A failure here means a release exists and needs a corrective commit;
+it does not mean publication was prevented.
+
+Live Claude/Codex command discovery, applied model and effort routing, external
+identity, and actual provider grants remain manual. Never satisfy a failed gate
+with `continue-on-error`, a force push, tag deletion, release deletion, or a
+manual bypass.

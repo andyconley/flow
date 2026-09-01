@@ -442,7 +442,18 @@ The framework is usable, but not finished. Main gaps:
 
 `main` is the active development branch. Develop installs point `~/.flow/source` at a checkout; release installs follow tagged releases and can lag behind `main` until a new tag is cut.
 
-Releases are automated from Conventional Commits on `main`. The release workflow updates `CHANGELOG.md`, tags the new version, and creates the GitHub release.
+Releases are automated from Conventional Commits on `main`, but publication is
+not the first step. The workflow analyzes the exact pushed commit without a
+GitHub write token, validates a local candidate through the real install and
+update paths, and gives write permission only to the publication job after that
+evidence passes. It then verifies the public tag, release notes, fresh install,
+and upgrade path. A pre-publication failure writes nothing; a failure after
+publication stays visible and is repaired by a corrective commit rather than by
+deleting or rewriting the release.
+
+Static Claude and Codex adapter checks run in the automated gate. Live client
+command discovery, applied model routing, identity, and provider capability
+grants remain manual release checks because a GitHub runner cannot prove them.
 
 For a release-impacting documentation change, use a Conventional Commit type and scope that matches the behavior being described.
 
