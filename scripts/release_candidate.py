@@ -143,6 +143,30 @@ def _flow(home: Path, *args: str) -> Result:
     return _run([str(home / ".local" / "bin" / "flow"), *args], cwd=home, env=_clean_env(home))
 
 
+def _setup_user(home: Path) -> Result:
+    setup = _flow(home, "setup", "user")
+    if setup[0]:
+        return setup
+    overlay = home / ".flow" / "user"
+    overlay.mkdir(parents=True, exist_ok=True)
+    manifest = overlay / "flow.toml"
+    if not manifest.exists():
+        manifest.write_text("# Empty candidate overlay; release checks require clean VCS state.\n", encoding="utf-8")
+    env = _clean_env(home)
+    env.update({
+        "GIT_AUTHOR_NAME": "Flow Release Gate",
+        "GIT_AUTHOR_EMAIL": "release-gate@example.invalid",
+        "GIT_COMMITTER_NAME": "Flow Release Gate",
+        "GIT_COMMITTER_EMAIL": "release-gate@example.invalid",
+    })
+    return _combine(
+        setup,
+        _run(["git", "init", "-b", "main"], cwd=overlay, env=env),
+        _run(["git", "add", "flow.toml"], cwd=overlay, env=env),
+        _run(["git", "commit", "-m", "test: seed isolated release overlay"], cwd=overlay, env=env),
+    )
+
+
 def _combine(*results: Result) -> Result:
     output: list[str] = []
     for code, text in results:
@@ -221,7 +245,7 @@ def run_candidate(plan_path: Path, output: Path, fail_check: str | None = None) 
             "candidate-fresh-install": fresh_install,
             "candidate-upgrade": upgrade,
             "setup-machine": lambda: _flow(fresh_home, "setup", "machine"),
-            "setup-user": lambda: _flow(fresh_home, "setup", "user"),
+            "setup-user": lambda: _setup_user(fresh_home),
             "claude-sync-check": lambda: _flow(fresh_home, "sync", "claude", "--user", "--check"),
             "codex-sync-check": lambda: _flow(fresh_home, "sync", "codex", "--user", "--check"),
             "doctor-check": lambda: _flow(fresh_home, "doctor", "--check"),
