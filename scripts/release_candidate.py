@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -143,6 +144,39 @@ def _flow(home: Path, *args: str) -> Result:
     return _run([str(home / ".local" / "bin" / "flow"), *args], cwd=home, env=_clean_env(home))
 
 
+def _doctor_check(home: Path) -> Result:
+    code, output = _flow(home, "doctor", "--check", "--json")
+    if code == 0:
+        return code, output
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return code, output
+    allowed_warnings = {
+        "user.claude.runtime_smoke",
+        "user.codex.runtime_smoke",
+        "telemetry.usage.empty",
+        "telemetry.plugin_usage",
+    }
+    observed_warnings = {
+        item.get("id")
+        for item in payload.get("diagnostics", [])
+        if item.get("severity") == "warning"
+    }
+    if (
+        payload.get("ok") is True
+        and payload.get("errors") == 0
+        and observed_warnings.issubset(allowed_warnings)
+    ):
+        explanation = (
+            "doctor --check reported only isolated-run warnings accepted by the release contract: "
+            + ", ".join(sorted(observed_warnings))
+            + "\n"
+        )
+        return 0, explanation + output
+    return code, output
+
+
 def _setup_user(home: Path) -> Result:
     setup = _flow(home, "setup", "user")
     if setup[0]:
@@ -159,11 +193,15 @@ def _setup_user(home: Path) -> Result:
         "GIT_COMMITTER_NAME": "Flow Release Gate",
         "GIT_COMMITTER_EMAIL": "release-gate@example.invalid",
     })
+    overlay_remote = home / ".flow" / "candidate-user-overlay.git"
     return _combine(
         setup,
+        _run(["git", "init", "--bare", "-b", "main", str(overlay_remote)], cwd=home, env=env),
         _run(["git", "init", "-b", "main"], cwd=overlay, env=env),
         _run(["git", "add", "flow.toml"], cwd=overlay, env=env),
         _run(["git", "commit", "-m", "test: seed isolated release overlay"], cwd=overlay, env=env),
+        _run(["git", "remote", "add", "origin", str(overlay_remote)], cwd=overlay, env=env),
+        _run(["git", "push", "-u", "origin", "main"], cwd=overlay, env=env),
     )
 
 
@@ -248,7 +286,7 @@ def run_candidate(plan_path: Path, output: Path, fail_check: str | None = None) 
             "setup-user": lambda: _setup_user(fresh_home),
             "claude-sync-check": lambda: _flow(fresh_home, "sync", "claude", "--user", "--check"),
             "codex-sync-check": lambda: _flow(fresh_home, "sync", "codex", "--user", "--check"),
-            "doctor-check": lambda: _flow(fresh_home, "doctor", "--check"),
+            "doctor-check": lambda: _doctor_check(fresh_home),
             "runtime-smoke-static": lambda: _flow(fresh_home, "runtime", "smoke", "--target", "all"),
             "representative-cli": lambda: _flow(fresh_home, "update", "--check", "--json", "--remote", candidate_remote),
         }

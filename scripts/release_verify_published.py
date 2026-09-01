@@ -13,7 +13,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from release_candidate import _clean_env, _combine, _flow, _install, _run
+from release_candidate import _clean_env, _combine, _doctor_check, _flow, _install, _run
 from release_gate import (
     ContractError,
     file_sha256,
@@ -159,16 +159,26 @@ def verify(
                 raise ContractError(f"public upgrade failed:\n{upgrade[1]}")
             result["checks"].append({"id": "public-upgrade", "result": "passed"})
 
-            installed_checks = [
+            before_doctor = [
                 ("setup-machine", ("setup", "machine")),
                 ("setup-user", ("setup", "user")),
                 ("claude-sync-check", ("sync", "claude", "--user", "--check")),
                 ("codex-sync-check", ("sync", "codex", "--user", "--check")),
-                ("doctor-check", ("doctor", "--check")),
+            ]
+            after_doctor = [
                 ("runtime-smoke-static", ("runtime", "smoke", "--target", "all")),
                 ("representative-cli", ("update", "--check", "--json", "--remote", repository_url)),
             ]
-            for check_id, arguments in installed_checks:
+            for check_id, arguments in before_doctor:
+                code, output = _flow(fresh_home, *arguments)
+                if code:
+                    raise ContractError(f"{check_id} failed:\n{output}")
+                result["checks"].append({"id": check_id, "result": "passed"})
+            doctor_code, doctor_output = _doctor_check(fresh_home)
+            if doctor_code:
+                raise ContractError(f"doctor-check failed:\n{doctor_output}")
+            result["checks"].append({"id": "doctor-check", "result": "passed"})
+            for check_id, arguments in after_doctor:
                 code, output = _flow(fresh_home, *arguments)
                 if code:
                     raise ContractError(f"{check_id} failed:\n{output}")

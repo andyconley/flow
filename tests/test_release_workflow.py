@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 
@@ -17,6 +18,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 GATE_PATH = REPO_ROOT / "scripts" / "release_gate.py"
 CANDIDATE_PATH = REPO_ROOT / "scripts" / "release_candidate.py"
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import release_candidate  # noqa: E402
+sys.path.pop(0)
 
 
 def load_gate():
@@ -168,6 +172,27 @@ class CandidateRunnerIntegrationTests(unittest.TestCase):
             self.assertEqual(evidence["checks"][0]["result"], "failed")
             self.assertTrue(all(check["result"] == "not_run" for check in evidence["checks"][1:]))
             self.assertTrue(all(check["exit_code"] is None for check in evidence["checks"][1:]))
+
+    def test_doctor_contract_accepts_only_named_isolated_runner_warnings(self) -> None:
+        allowed = {
+            "ok": True,
+            "errors": 0,
+            "diagnostics": [
+                {"id": "user.claude.runtime_smoke", "severity": "warning"},
+                {"id": "user.codex.runtime_smoke", "severity": "warning"},
+                {"id": "telemetry.usage.empty", "severity": "warning"},
+                {"id": "telemetry.plugin_usage", "severity": "warning"},
+            ],
+        }
+        with unittest.mock.patch.object(release_candidate, "_flow", return_value=(1, json.dumps(allowed))):
+            code, output = release_candidate._doctor_check(Path("/isolated"))
+        self.assertEqual(code, 0)
+        self.assertIn("accepted by the release contract", output)
+
+        allowed["diagnostics"].append({"id": "machine.config", "severity": "warning"})
+        with unittest.mock.patch.object(release_candidate, "_flow", return_value=(1, json.dumps(allowed))):
+            code, _output = release_candidate._doctor_check(Path("/isolated"))
+        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":
