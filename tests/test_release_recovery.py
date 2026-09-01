@@ -89,6 +89,12 @@ class RemoteBaselineIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(release_gate.ContractError, "already exists"):
             release_gate.verify_remote_baseline(self.plan, self.work, "origin")
 
+    def test_moved_previous_tag_is_rejected(self) -> None:
+        _git(self.work, "tag", "-f", "v0.21.0", self.source)
+        _git(self.work, "push", "--force", "origin", "v0.21.0")
+        with self.assertRaisesRegex(release_gate.ContractError, "latest remote release tag moved"):
+            release_gate.verify_remote_baseline(self.plan, self.work, "origin")
+
 
 class PublicationReconciliationTests(unittest.TestCase):
     def _plan_file(self, root: Path) -> Path:
