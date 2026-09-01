@@ -7750,7 +7750,18 @@ class OverlayVcsTests(unittest.TestCase):
         self._git(d, "checkout", "main")
         (d / "c.md").write_text("main\n")
         self._git(d, "commit", "-am", "main")
-        subprocess.run(["git", "merge", "other"], cwd=d, capture_output=True)
+        subprocess.run(
+            ["git", "merge", "other"],
+            cwd=d,
+            capture_output=True,
+            env={
+                **os.environ,
+                "GIT_AUTHOR_NAME": "t",
+                "GIT_AUTHOR_EMAIL": "t@e",
+                "GIT_COMMITTER_NAME": "t",
+                "GIT_COMMITTER_EMAIL": "t@e",
+            },
+        )
 
         status = self.overlay.overlay_vcs_status(d)
         self.assertEqual(status["dirty"], ["c.md"], "a conflicted file is one entry, not field soup")

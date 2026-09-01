@@ -266,10 +266,14 @@ def run_candidate(
         previous_bare = temp_root / "previous.git"
         candidate_remote = create_candidate_remote(plan, candidate_bare)
         previous_remote = create_previous_remote(plan, previous_bare)
+        test_home = temp_root / "test-home"
         fresh_home = temp_root / "fresh-home"
         upgrade_home = temp_root / "upgrade-home"
+        test_home.mkdir()
         fresh_home.mkdir()
         upgrade_home.mkdir()
+        (test_home / ".flow").mkdir()
+        (test_home / ".flow" / "source").symlink_to(REPO_ROOT)
 
         def fresh_install() -> Result:
             return _install(candidate_remote, fresh_home)
@@ -281,7 +285,10 @@ def run_candidate(
             return _combine(install_result, _flow(upgrade_home, "update", "--remote", candidate_remote))
 
         commands: dict[str, Callable[[], Result]] = {
-            "python-test-suite": lambda: _run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"]),
+            "python-test-suite": lambda: _run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+                env=_clean_env(test_home),
+            ),
             "generated-help": lambda: _run([sys.executable, "scripts/regenerate-flow-help.py", "--check"]),
             "release-staging": _release_staging,
             "clean-tracked-tree": _tracked_tree_clean,
