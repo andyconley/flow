@@ -2,6 +2,20 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.21.0](https://github.com/andyconley/flow/compare/v0.20.2...v0.21.0) (2026-09-01)
+
+### Features
+
+* **orchestration:** enforce safe run contracts ([c706079](https://github.com/andyconley/flow/commit/c706079c11edfe4770785af6557d26c3eff099d0))
+
+### Documentation
+
+* **standards:** define orchestration safety ([1074b38](https://github.com/andyconley/flow/commit/1074b38d009b0934defcda27742e1190dc42d51d))
+
+### Maintenance
+
+* **flow:** record orchestration safety run ([c1577f4](https://github.com/andyconley/flow/commit/c1577f45a219133284f11f05662417965da2572d))
+
 ## [0.20.2](https://github.com/andyconley/flow/compare/v0.20.1...v0.20.2) (2026-08-29)
 
 ### Documentation
