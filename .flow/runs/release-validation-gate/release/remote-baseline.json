@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-01T21:01:00Z",
+  "repository": "github.com/andyconley/flow",
+  "method": ["git ls-remote origin", "gh release view v0.21.0"],
+  "main_sha": "2f48aad0c5c147867534a750355973c6ee11ac66",
+  "latest_tag": "v0.21.0",
+  "latest_tag_commit": "f15859523ed1508aa83b5f3516ef0786c20c7ca9",
+  "latest_release_url": "https://github.com/andyconley/flow/releases/tag/v0.21.0",
+  "latest_release_published_at": "2026-09-01T13:28:38Z",
+  "purpose": "dispatch baseline only; refresh immediately before any external write"
+}

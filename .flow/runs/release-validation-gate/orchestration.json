@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "work_id": "release-validation-gate",
+  "mode": "shared-mutation",
+  "risk": {
+    "hard_triggers": ["production_or_shared_external_mutation"],
+    "aggravating_factors": ["large_blast_radius", "weak_rollback"],
+    "classification": "high",
+    "rationale": "Implementation changes the only write-capable release workflow and the accepted slice culminates in serialized mutation of the shared GitHub repository. Publication is non-transactional and must repair forward."
+  },
+  "assignments": [
+    {
+      "id": "implementation",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/release-validation-gate/briefs/implementation.md",
+      "input_evidence": [
+        ".flow/runs/release-validation-gate/requirements.md",
+        ".flow/runs/release-validation-gate/acceptance-criteria.md",
+        ".flow/runs/release-validation-gate/plan.md",
+        ".flow/runs/release-validation-gate/implementation-handoff.md"
+      ],
+      "read_scopes": [".github", "release.config.cjs", "install.sh", "install-flow.sh", "cli", "scripts", "tests", "docs", ".flow/runs/release-validation-gate"],
+      "write_scopes": [".github", "release.config.cjs", "scripts", "tests", "docs", ".flow/runs/release-validation-gate", ".flow/memory/STATE.md"],
+      "read_only": false,
+      "required_capabilities": [
+        {"name": "filesystem-write", "status": "confirmed"},
+        {"name": "git-commit", "status": "confirmed"},
+        {"name": "github-publish", "status": "confirmed"}
+      ],
+      "output": {"path": ".flow/runs/release-validation-gate/implementation-evidence.md", "format": "markdown"},
+      "success_criteria": ["all accepted slices are implemented", "candidate evidence blocks publication", "commits follow Conventional Commits"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "implementation-and-publication"}
+    },
+    {
+      "id": "test-validation",
+      "lane": "validate",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "release_gate_validation"},
+      "brief_path": ".flow/runs/release-validation-gate/briefs/test-validation.md",
+      "input_evidence": [
+        ".flow/runs/release-validation-gate/acceptance-criteria.md",
+        ".flow/runs/release-validation-gate/validation-plan.md"
+      ],
+      "read_scopes": [".github", "release.config.cjs", "scripts", "tests", ".flow/runs/release-validation-gate"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/release-validation-gate/review/test-validation.md", "format": "markdown"},
+      "success_criteria": ["proof matrix covers every acceptance criterion", "mutation checks are named and reproducible"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "validation-review"}
+    },
+    {
+      "id": "security-verification",
+      "lane": "review",
+      "role": "security-reviewer",
+      "provider": {"kind": "agent", "id": "release_gate_security"},
+      "brief_path": ".flow/runs/release-validation-gate/briefs/security-verification.md",
+      "input_evidence": [
+        ".flow/runs/release-validation-gate/acceptance-criteria.md",
+        ".flow/runs/release-validation-gate/validation-plan.md"
+      ],
+      "read_scopes": [".github", "release.config.cjs", "scripts", "tests", ".flow/runs/release-validation-gate"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/release-validation-gate/review/security-review.md", "format": "markdown"},
+      "success_criteria": ["token and permission boundaries are independently verified", "artifact and shell injection paths are reviewed", "publication ownership remains serialized"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "independent-acceptance"}
+    },
+    {
+      "id": "quality-acceptance",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {"kind": "agent", "id": "release_gate_quality"},
+      "brief_path": ".flow/runs/release-validation-gate/briefs/quality-acceptance.md",
+      "input_evidence": [
+        ".flow/runs/release-validation-gate/requirements.md",
+        ".flow/runs/release-validation-gate/acceptance-criteria.md",
+        ".flow/runs/release-validation-gate/plan.md"
+      ],
+      "read_scopes": [".github", "release.config.cjs", "scripts", "tests", "docs", ".flow/runs/release-validation-gate"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/release-validation-gate/review/quality-review.md", "format": "markdown"},
+      "success_criteria": ["every acceptance criterion has an evidence-backed verdict", "findings are dispositioned before handback"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "independent-acceptance"}
+    },
+    {
+      "id": "operational-review",
+      "lane": "review",
+      "role": "sre",
+      "provider": {"kind": "agent", "id": "release_gate_sre"},
+      "brief_path": ".flow/runs/release-validation-gate/briefs/operational-review.md",
+      "input_evidence": [
+        ".flow/runs/release-validation-gate/plan.md",
+        ".flow/runs/release-validation-gate/validation-plan.md"
+      ],
+      "read_scopes": [".github", "scripts", "docs", ".flow/runs/release-validation-gate"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/release-validation-gate/review/operational-review.md", "format": "markdown"},
+      "success_criteria": ["failure visibility and repair-forward operations are reviewable", "release concurrency and post-publication checks are verified"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "operational-acceptance"}
+    },
+    {
+      "id": "handback",
+      "lane": "handback",
+      "role": "tech-writer",
+      "provider": {"kind": "agent", "id": "release_gate_handback"},
+      "brief_path": ".flow/runs/release-validation-gate/briefs/handback.md",
+      "input_evidence": [
+        ".flow/runs/release-validation-gate/implementation-handoff.md",
+        ".flow/runs/release-validation-gate/validation-plan.md"
+      ],
+      "read_scopes": [".flow/runs/release-validation-gate", ".github", "scripts", "tests", "docs"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/release-validation-gate/HANDOFF.md", "format": "markdown"},
+      "success_criteria": ["handback distinguishes shipped proof from limitations", "resume and repair-forward actions are explicit"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "handback"}
+    }
+  ],
+  "shared_state": [
+    {
+      "id": "github-flow-release",
+      "kind": "github-repository",
+      "identity": "github.com/andyconley/flow",
+      "mutation_type": "structural",
+      "owner_assignment": "implementation",
+      "write_region": "refs/heads/main, refs/tags/vNEXT, releases/vNEXT, CHANGELOG.md release commit",
+      "coordination": {"mode": "serialized", "group": "implementation-and-publication"},
+      "baseline_artifact": ".flow/runs/release-validation-gate/release/remote-baseline.json",
+      "baseline_captured_at": "2026-09-01T21:01:00Z",
+      "baseline_source_identity": "git ls-remote origin plus gh release view v0.21.0",
+      "expected_delta": "push reviewed feature commits to main, allow the gated workflow to create exactly one next semantic version tag, one GitHub release with non-empty notes, and one changelog-only release commit",
+      "recovery_state": "available_unexercised",
+      "recovery_safeguards": "No force push, tag deletion, release deletion, bypass, or blind retry. Refresh baseline immediately before push; fail closed on branch or tag drift; inspect partial publication and repair forward with a corrective commit.",
+      "execution_result_artifact": ".flow/runs/release-validation-gate/release/execution-result.json",
+      "readback_artifact": ".flow/runs/release-validation-gate/release/post-write-readback.json",
+      "comparison_artifact": ".flow/runs/release-validation-gate/release/post-write-comparison.md",
+      "unexpected_delta_status": "none",
+      "unexpected_delta_disposition": ""
+    }
+  ],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/release-validation-gate/findings-reconciliation.md",
+    "status": "resolved",
+    "claims": []
+  },
+  "verification": {
+    "producer_assignments": ["implementation"],
+    "evidence_collector_assignment": "implementation",
+    "verifier_assignment": "security-verification",
+    "independent": true,
+    "artifact_path": ".flow/runs/release-validation-gate/review/security-review.md"
+  }
+}
