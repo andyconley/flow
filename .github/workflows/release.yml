@@ -5,82 +5,368 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
-    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+  analyze:
     runs-on: ubuntu-latest
+    outputs:
+      release_required: ${{ steps.plan.outputs.release_required }}
+      plan_digest: ${{ steps.plan.outputs.plan_digest }}
+      source_sha: ${{ steps.plan.outputs.source_sha }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      plan_artifact_name: ${{ steps.names.outputs.plan_artifact_name }}
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-node@v5
         with:
           node-version: 24
 
-      - uses: cycjimmy/semantic-release-action@v6
-        id: semantic
+      - name: Record source and previous release
+        id: baseline
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          previous_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)"
+          test -n "$previous_tag"
+          previous_version="${previous_tag#v}"
+          previous_commit="$(git rev-parse "${previous_tag}^{commit}")"
+          captured_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          echo "previous_version=$previous_version" >> "$GITHUB_OUTPUT"
+          echo "previous_commit=$previous_commit" >> "$GITHUB_OUTPUT"
+          echo "captured_at=$captured_at" >> "$GITHUB_OUTPUT"
+
+      - name: Build credential-free preview remote
+        id: mirror
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mirror="$RUNNER_TEMP/flow-preview.git"
+          git init --bare "$mirror"
+          git push "$mirror" "$SOURCE_SHA:refs/heads/main"
+          git push "$mirror" --tags
+          git --git-dir="$mirror" symbolic-ref HEAD refs/heads/main
+          test "$(git --git-dir="$mirror" rev-parse refs/heads/main)" = "$SOURCE_SHA"
+          echo "repository_url=file://$mirror" >> "$GITHUB_OUTPUT"
+
+      - name: Analyze release without live credentials
+        id: preview
+        uses: cycjimmy/semantic-release-action@v6
         with:
           semantic_version: 25.0.9
-          # conventionalcommits must stay on 9.x. Version 10 renders through
-          # @conventional-changelog/template, while release-notes-generator
-          # writes through conventional-changelog-writer@8. The mismatch does
-          # not fail the build: commit-analyzer still resolves the version
-          # correctly and generateNotes reports success, so the only symptom
-          # is a release whose notes are an empty header. That is how 0.12.0
-          # and 0.13.0 shipped blank.
-          #
-          # Upgrading gains nothing. Rendering this repo's own 0.13.0 range
-          # through 10.4.0 on writer 9 produces a changelog body byte-identical
-          # to the one 9.3.1 produces, and the single real behavioural change
-          # in 10.x -- the whatBump rewrite -- is unreachable here, because
-          # commit-analyzer resolves bumps from releaseRules and never calls
-          # the preset's whatBump.
-          #
-          # The pin is also not what holds this repo back. semantic-release
-          # pins conventional-changelog-writer@8, conventional-commits-parser@6,
-          # conventional-commits-filter@5 and conventional-changelog-angular@8
-          # itself. Moving the preset alone makes it the only new-generation
-          # package in an old-generation tree, which is the state that broke.
-          # Unpin when release-notes-generator depends on writer 9, not before.
+          dry_run: true
+          repository_url: ${{ steps.mirror.outputs.repository_url }}
+          extra_plugins: |
+            conventional-changelog-conventionalcommits@9.3.1
+        env:
+          FLOW_RELEASE_MODE: preview
+
+      - name: Write validated release plan
+        id: plan
+        env:
+          FLOW_RELEASE_REQUIRED: ${{ steps.preview.outputs.new_release_published || 'false' }}
+          FLOW_RELEASE_NEW_RELEASE_VERSION: ${{ steps.preview.outputs.new_release_version }}
+          FLOW_RELEASE_NEW_RELEASE_GIT_TAG: ${{ steps.preview.outputs.new_release_git_tag }}
+          FLOW_RELEASE_NEW_RELEASE_GIT_HEAD: ${{ steps.preview.outputs.new_release_git_head }}
+          FLOW_RELEASE_NEW_RELEASE_NOTES: ${{ steps.preview.outputs.new_release_notes }}
+          FLOW_RELEASE_PREVIOUS_VERSION: ${{ steps.preview.outputs.last_release_version || steps.baseline.outputs.previous_version }}
+          FLOW_RELEASE_PREVIOUS_TAG: ${{ steps.preview.outputs.last_release_git_tag || steps.baseline.outputs.previous_tag }}
+          FLOW_RELEASE_PREVIOUS_COMMIT: ${{ steps.preview.outputs.last_release_git_head || steps.baseline.outputs.previous_commit }}
+          FLOW_RELEASE_SOURCE_SHA: ${{ github.sha }}
+          FLOW_RELEASE_REPOSITORY: ${{ github.repository }}
+          FLOW_RELEASE_WORKFLOW: ${{ github.workflow }}
+          FLOW_RELEASE_RUN_ID: ${{ github.run_id }}
+          FLOW_RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          FLOW_RELEASE_CREATED_AT: ${{ steps.baseline.outputs.captured_at }}
+        run: python3 scripts/release_gate.py plan --output .release/release-plan.json --github-output "$GITHUB_OUTPUT"
+
+      - name: Name release-plan artifact
+        id: names
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: echo "plan_artifact_name=release-plan-${RUN_ID}-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.names.outputs.plan_artifact_name }}
+          path: .release/release-plan.json
+          if-no-files-found: error
+          retention-days: 14
+
+  validate-candidate:
+    needs: analyze
+    if: needs.analyze.outputs.release_required == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      evidence_digest: ${{ steps.candidate.outputs.evidence_digest }}
+      evidence_artifact_name: ${{ steps.names.outputs.evidence_artifact_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.analyze.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Name candidate-evidence artifact
+        id: names
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: echo "evidence_artifact_name=release-evidence-${RUN_ID}-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.analyze.outputs.plan_artifact_name }}
+          path: .release
+
+      - name: Validate exact release plan
+        run: >-
+          python3 scripts/release_gate.py validate-plan
+          --plan .release/release-plan.json
+          --expected-digest "${{ needs.analyze.outputs.plan_digest }}"
+          --expected-source-sha "${{ needs.analyze.outputs.source_sha }}"
+
+      - name: Run deterministic candidate gate
+        id: candidate
+        run: >-
+          python3 scripts/release_candidate.py
+          --plan .release/release-plan.json
+          --output .release/release-evidence.json
+          --github-output "$GITHUB_OUTPUT"
+          --defer-exit
+
+      - name: Upload candidate evidence and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.names.outputs.evidence_artifact_name }}
+          path: |
+            .release/release-evidence.json
+            .release/logs
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce passing candidate evidence
+        run: >-
+          python3 scripts/release_gate.py validate-evidence
+          --plan .release/release-plan.json
+          --evidence .release/release-evidence.json
+          --expected-digest "${{ steps.candidate.outputs.evidence_digest }}"
+
+  publish:
+    needs: [analyze, validate-candidate]
+    if: >-
+      needs.analyze.outputs.release_required == 'true' &&
+      needs.validate-candidate.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      publication_artifact_name: ${{ steps.names.outputs.publication_artifact_name }}
+      publication_digest: ${{ steps.publication.outputs.publication_digest }}
+      release_commit: ${{ steps.publication.outputs.release_commit }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.analyze.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Name publication artifact
+        id: names
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: echo "publication_artifact_name=release-publication-${RUN_ID}-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.analyze.outputs.plan_artifact_name }}
+          path: .release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.validate-candidate.outputs.evidence_artifact_name }}
+          path: .release
+
+      - name: Validate plan and candidate evidence
+        run: |
+          python3 scripts/release_gate.py validate-plan \
+            --plan .release/release-plan.json \
+            --expected-digest "${{ needs.analyze.outputs.plan_digest }}" \
+            --expected-source-sha "${{ needs.analyze.outputs.source_sha }}"
+          python3 scripts/release_gate.py validate-evidence \
+            --plan .release/release-plan.json \
+            --evidence .release/release-evidence.json \
+            --expected-digest "${{ needs.validate-candidate.outputs.evidence_digest }}"
+
+      - name: Refresh live baseline before repeated analysis
+        run: >-
+          python3 scripts/release_gate.py verify-remote-baseline
+          --plan .release/release-plan.json
+          --repository .
+          --remote origin
+          --output .release/pre-publish-baseline.json
+
+      - name: Build second credential-free preview remote
+        id: mirror
+        env:
+          SOURCE_SHA: ${{ needs.analyze.outputs.source_sha }}
+        run: |
+          mirror="$RUNNER_TEMP/flow-repeat-preview.git"
+          git init --bare "$mirror"
+          git push "$mirror" "$SOURCE_SHA:refs/heads/main"
+          git push "$mirror" --tags
+          git --git-dir="$mirror" symbolic-ref HEAD refs/heads/main
+          echo "repository_url=file://$mirror" >> "$GITHUB_OUTPUT"
+
+      - name: Repeat release analysis without live credentials
+        id: preview
+        uses: cycjimmy/semantic-release-action@v6
+        with:
+          semantic_version: 25.0.9
+          dry_run: true
+          repository_url: ${{ steps.mirror.outputs.repository_url }}
+          extra_plugins: |
+            conventional-changelog-conventionalcommits@9.3.1
+        env:
+          FLOW_RELEASE_MODE: preview
+
+      - name: Reject release-analysis drift
+        env:
+          FLOW_RELEASE_REQUIRED: ${{ steps.preview.outputs.new_release_published || 'false' }}
+          FLOW_RELEASE_NEW_RELEASE_VERSION: ${{ steps.preview.outputs.new_release_version }}
+          FLOW_RELEASE_NEW_RELEASE_GIT_TAG: ${{ steps.preview.outputs.new_release_git_tag }}
+          FLOW_RELEASE_NEW_RELEASE_GIT_HEAD: ${{ steps.preview.outputs.new_release_git_head }}
+          FLOW_RELEASE_NEW_RELEASE_NOTES: ${{ steps.preview.outputs.new_release_notes }}
+          FLOW_RELEASE_PREVIOUS_VERSION: ${{ steps.preview.outputs.last_release_version }}
+          FLOW_RELEASE_PREVIOUS_TAG: ${{ steps.preview.outputs.last_release_git_tag }}
+          FLOW_RELEASE_PREVIOUS_COMMIT: ${{ steps.preview.outputs.last_release_git_head }}
+          FLOW_RELEASE_SOURCE_SHA: ${{ needs.analyze.outputs.source_sha }}
+          FLOW_RELEASE_REPOSITORY: ${{ github.repository }}
+          FLOW_RELEASE_WORKFLOW: ${{ github.workflow }}
+          FLOW_RELEASE_RUN_ID: ${{ github.run_id }}
+          FLOW_RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          FLOW_RELEASE_CREATED_AT: repeated-analysis
+        run: python3 scripts/release_gate.py compare-analysis --plan .release/release-plan.json
+
+      - name: Refresh live baseline immediately before publication
+        run: >-
+          python3 scripts/release_gate.py verify-remote-baseline
+          --plan .release/release-plan.json
+          --repository .
+          --remote origin
+          --output .release/immediate-pre-publish-baseline.json
+
+      - name: Publish once
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v6
+        with:
+          semantic_version: 25.0.9
           extra_plugins: |
             @semantic-release/changelog@7.0.0
             @semantic-release/git@11.0.1
             conventional-changelog-conventionalcommits@9.3.1
         env:
+          FLOW_RELEASE_MODE: publish
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # A release that describes nothing is the failure this repo already
-      # shipped twice without noticing. Every type in release.config.cjs is
-      # visible, so any commit able to trigger a release is also able to be
-      # rendered: a published release with no entries means the notes pipeline
-      # broke, whatever the cause. This detects rather than prevents -- the
-      # release is already out by the time it runs -- so its job is to make the
-      # next occurrence loud instead of silent.
-      - name: Verify the release describes itself
-        if: steps.semantic.outputs.new_release_published == 'true'
+      - name: Validate structured publication result
+        id: publication
         env:
-          # Passed as env, never inline interpolation: these notes are built
-          # from commit messages and must not reach the shell as code.
-          RELEASE_NOTES: ${{ steps.semantic.outputs.new_release_notes }}
-          RELEASE_VERSION: ${{ steps.semantic.outputs.new_release_version }}
+          FLOW_RELEASE_NEW_RELEASE_PUBLISHED: ${{ steps.semantic.outputs.new_release_published }}
+          FLOW_RELEASE_NEW_RELEASE_VERSION: ${{ steps.semantic.outputs.new_release_version }}
+          FLOW_RELEASE_NEW_RELEASE_GIT_TAG: ${{ steps.semantic.outputs.new_release_git_tag }}
+          FLOW_RELEASE_NEW_RELEASE_GIT_HEAD: ${{ steps.semantic.outputs.new_release_git_head }}
+          FLOW_RELEASE_NEW_RELEASE_NOTES: ${{ steps.semantic.outputs.new_release_notes }}
+        run: >-
+          python3 scripts/release_gate.py validate-publication
+          --plan .release/release-plan.json
+          --output .release/publication-result.json
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload publication evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.names.outputs.publication_artifact_name }}
+          path: |
+            .release/publication-result.json
+            .release/pre-publish-baseline.json
+            .release/immediate-pre-publish-baseline.json
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-published:
+    needs: [analyze, validate-candidate, publish]
+    if: >-
+      needs.analyze.outputs.release_required == 'true' &&
+      needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.analyze.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.analyze.outputs.plan_artifact_name }}
+          path: .release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.validate-candidate.outputs.evidence_artifact_name }}
+          path: .release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish.outputs.publication_artifact_name }}
+          path: .release
+
+      - name: Verify public release and consumer paths
+        run: >-
+          python3 scripts/release_verify_published.py
+          --plan .release/release-plan.json
+          --evidence .release/release-evidence.json
+          --repository-url https://github.com/${{ github.repository }}.git
+          --github-repository ${{ github.repository }}
+          --output .release/published-verification.json
+          --defer-exit
+
+      - name: Upload public verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release/published-verification.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce public verification result
         run: |
-          entries=$(printf '%s\n' "$RELEASE_NOTES" | grep -c '^[*-] ' || true)
-          if [ "$entries" -eq 0 ]; then
-            echo "::error::Released $RELEASE_VERSION with no entries in its notes."
-            echo "The version resolved but nothing rendered, which is what a"
-            echo "preset/writer generation mismatch looks like. See the pin"
-            echo "comment above and check conventional-changelog-conventionalcommits."
-            echo "--- notes as published ---"
-            printf '%s\n' "$RELEASE_NOTES"
-            exit 1
-          fi
-          echo "Released $RELEASE_VERSION with $entries rendered entries."
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('.release/published-verification.json').read_text())
+          if result.get('overall_result') != 'passed':
+              raise SystemExit('published verification failed; preserve the release and repair forward')
+          PY
