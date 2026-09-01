@@ -52,14 +52,20 @@ jobs:
         id: mirror
         env:
           SOURCE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           mirror="$RUNNER_TEMP/flow-preview.git"
+          work="$RUNNER_TEMP/flow-preview-work"
+          canonical="https://github.com/${REPOSITORY}.git"
           git init --bare "$mirror"
           git push "$mirror" "$SOURCE_SHA:refs/heads/main"
           git push "$mirror" --tags
           git --git-dir="$mirror" symbolic-ref HEAD refs/heads/main
           test "$(git --git-dir="$mirror" rev-parse refs/heads/main)" = "$SOURCE_SHA"
-          echo "repository_url=file://$mirror" >> "$GITHUB_OUTPUT"
+          git clone --quiet --branch main "$mirror" "$work"
+          git -C "$work" config "url.file://$mirror.insteadOf" "$canonical"
+          echo "repository_url=$canonical" >> "$GITHUB_OUTPUT"
+          echo "working_directory=$work" >> "$GITHUB_OUTPUT"
 
       - name: Analyze release without live credentials
         id: preview
@@ -68,6 +74,7 @@ jobs:
           semantic_version: 25.0.9
           dry_run: true
           repository_url: ${{ steps.mirror.outputs.repository_url }}
+          working_directory: ${{ steps.mirror.outputs.working_directory }}
           extra_plugins: |
             conventional-changelog-conventionalcommits@9.3.1
         env:
@@ -231,13 +238,19 @@ jobs:
         id: mirror
         env:
           SOURCE_SHA: ${{ needs.analyze.outputs.source_sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           mirror="$RUNNER_TEMP/flow-repeat-preview.git"
+          work="$RUNNER_TEMP/flow-repeat-preview-work"
+          canonical="https://github.com/${REPOSITORY}.git"
           git init --bare "$mirror"
           git push "$mirror" "$SOURCE_SHA:refs/heads/main"
           git push "$mirror" --tags
           git --git-dir="$mirror" symbolic-ref HEAD refs/heads/main
-          echo "repository_url=file://$mirror" >> "$GITHUB_OUTPUT"
+          git clone --quiet --branch main "$mirror" "$work"
+          git -C "$work" config "url.file://$mirror.insteadOf" "$canonical"
+          echo "repository_url=$canonical" >> "$GITHUB_OUTPUT"
+          echo "working_directory=$work" >> "$GITHUB_OUTPUT"
 
       - name: Repeat release analysis without live credentials
         id: preview
@@ -246,6 +259,7 @@ jobs:
           semantic_version: 25.0.9
           dry_run: true
           repository_url: ${{ steps.mirror.outputs.repository_url }}
+          working_directory: ${{ steps.mirror.outputs.working_directory }}
           extra_plugins: |
             conventional-changelog-conventionalcommits@9.3.1
         env:
