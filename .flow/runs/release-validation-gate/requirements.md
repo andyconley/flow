@@ -32,4 +32,3 @@ Flow's `main` workflow currently gives semantic-release write permission and inv
 - Do not parse semantic-release console prose as an API.
 - Pass release notes and artifact values through files, validated action outputs, or environment variables rather than executable shell interpolation.
 - Keep the canonical checkout's unrelated `docs/backlog.md` edit outside this work.
-

@@ -6,4 +6,3 @@
 - Read scope: current workflow and existing test surfaces.
 - Output: `research/validation-strategy.md`.
 - Constraint: analysis only; do not edit repository files.
-

@@ -110,4 +110,3 @@ Restore the implementation after every mutation and name the failing test. Recor
 - Independent quality acceptance against the original requirements
 
 For the transition release that introduces the gate, repeat the v0.21.0 manual pre-push checks because the old workflow cannot validate itself retroactively. After push, wait for the new workflow, verify the public artifact, and record the workflow URL, source SHA, release commit, tag, notes, changelog, installations, and limitations.
-

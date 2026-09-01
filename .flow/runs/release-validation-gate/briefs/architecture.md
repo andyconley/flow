@@ -6,4 +6,3 @@
 - Read scope: release workflow, semantic-release configuration, installers, lifecycle code, tests, and approved engagement decisions.
 - Output: `research/architecture.md`.
 - Constraint: analysis only; do not edit repository files.
-

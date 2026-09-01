@@ -6,4 +6,3 @@
 - Read scope: repository, run artifacts, role outputs, and user decisions.
 - Write scope: this run directory only.
 - Success: lifecycle plan approval succeeds and the run verifies.
-

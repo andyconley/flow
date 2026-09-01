@@ -6,4 +6,3 @@
 - Read scope: approved engagement decisions and current release behavior.
 - Output: `research/product-scope.md`.
 - Constraint: analysis only; do not edit repository files.
-

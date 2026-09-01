@@ -24,4 +24,3 @@
 ## Open conflicts
 
 - None.
-

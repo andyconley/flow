@@ -165,4 +165,3 @@ Exit evidence: the released workflow itself blocks publication until determinist
 - Preview and publication can drift if shared policy or exact-SHA checks are incomplete.
 - Semantic-release publication is not transactional; partial success requires state inspection and repair forward.
 - The new workflow must prove itself while changing the mechanism that publishes it, requiring a documented manual pre-push gate for this transition release.
-

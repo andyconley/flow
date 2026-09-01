@@ -8,4 +8,3 @@
 - Write scope: `.github`, `release.config.cjs`, `scripts`, `tests`, `docs`, and this run's artifacts. Do not touch the canonical checkout's `docs/backlog.md`.
 - Shared mutation: only this assignment may push or publish. Refresh remote/tag/release baseline immediately before a write, stop on drift, never force or bypass, and record execution, readback, and comparison evidence.
 - Success: every acceptance criterion is implemented and validated, review findings are resolved, commits are conventional, and publication is proven or explicitly stopped before mutation.
-

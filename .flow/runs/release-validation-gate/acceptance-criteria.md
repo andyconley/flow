@@ -14,4 +14,3 @@
 12. Workflow ordering, conditions, permissions, no-release behavior, identity propagation, failure/no-write behavior, and structured contracts have automated tests that do not publish a real release.
 13. Maintainer documentation distinguishes pre-publication blockers, post-publication checks, and manual live-client checks.
 14. Existing semantic version rules and release-note rendering remain behaviorally unchanged.
-
