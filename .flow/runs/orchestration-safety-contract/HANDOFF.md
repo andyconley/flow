@@ -15,18 +15,22 @@ Implemented the orchestration safety contract across the validator, C-lite lifec
 - Architect: lifecycle/artifact boundary and compatibility.
 - Security reviewer: PASS after remediating six findings.
 - Quality reviewer: APPROVE; no critical or important issues.
-- SRE/release-readiness review: manual release gate required.
+- SRE/release-readiness review: manual release gate completed.
 - Technical writer: this handback and durable validation record.
 
 ## Proof
 
 Focused tests (25), the final 718-test suite, help/diff and release-staging checks, isolated develop and release-mode candidate installs, both sync checks, doctor, static runtime smoke, lifecycle byte-preservation checks, and all five planned mutation checks passed. Four client-level discovery/model-routing checks remain explicitly manual and unverified. See [validation-results.md](validation-results.md) and [findings-reconciliation.md](findings-reconciliation.md).
 
-## Remaining release gate
+## Release verification
 
-Before push, record the exact source SHA, final remote/diff/staged-path review, and confirmation that the canonical checkout's unrelated `docs/backlog.md` edit is absent. The release workflow currently does not enforce the already-completed test, staging, install, and runtime checks, so this remains a required manual gate.
+The manual pre-push gate was completed, including exact source SHA, final remote/diff/staged-path review, and confirmation that the canonical checkout's unrelated `docs/backlog.md` edit was absent. The release workflow still does not enforce these checks automatically.
 
-After push, verify semantic-release, the expected tag and release commit, GitHub release and rendered notes, changelog entry, and fresh/update installs in an isolated home with setup, both syncs, doctor, runtime smoke, and `validate-orchestration`. These tag/commit/GitHub/changelog/released-install results are pending and must not be reported as complete yet.
+v0.21.0 was released successfully. Release commit `f158595` is on `origin/main`; the [GitHub release](https://github.com/andyconley/flow/releases/tag/v0.21.0) has non-empty notes and `CHANGELOG.md` contains the release entry. Fresh v0.21.0 installation and v0.20.2 to v0.21.0 update both passed setup, both syncs, `flow doctor --check`, static runtime smoke, and the expected structured `validate-orchestration` refusal.
+
+## Archive summary
+
+Implementation, review, validation, publication, and released-artifact verification are complete. The run is ready for archive.
 
 ## Residual risk
 

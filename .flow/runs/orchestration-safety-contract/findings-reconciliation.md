@@ -4,7 +4,7 @@
 
 - Security review: PASS; no open security findings.
 - Quality review: APPROVE; no critical or important issues.
-- Release readiness: manual pre-push gate required; candidate tests, staging, install, runtime, review, and diff evidence are complete. Final remote/staged-path inspection remains before push.
+- Release readiness: READY; manual pre-push and post-publish artifact checks completed.
 
 ## Remediated findings
 
@@ -19,9 +19,13 @@
 
 - Duplicate aggravating factors may over-classify work as high risk; this is a quality-review suggestion and is not release-blocking for the current contract.
 - External-region overlap and runtime capability/identity checks remain declaration-level or manual by design.
-- The release workflow does not enforce the full validation suite. For this release, the documented manual pre-push gate is required; automating that gate is follow-up work.
+- The release workflow does not enforce the full validation suite. The documented manual gate was completed for v0.21.0; automating it remains follow-up work.
 
 ## Deviations
 
 - No product scope deviation was recorded.
-- All post-push release evidence remains explicitly pending rather than inferred from candidate checks.
+- All post-push release evidence was verified and recorded in `validation-results.md`.
+
+## Archive summary
+
+All review findings are dispositioned, release readiness is complete, and fresh-install and update-path verification passed.

@@ -6,3 +6,4 @@
 {"artifacts": {"handback": ".flow/runs/orchestration-safety-contract/HANDOFF.md", "implementation_evidence": ".flow/runs/orchestration-safety-contract/validation-results.md"}, "at": "2026-09-01T13:26:18Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-01T13:26:18Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
 {"artifacts": {"review": ".flow/runs/orchestration-safety-contract/review/quality-review.md"}, "at": "2026-09-01T13:26:18Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}
+{"artifacts": {}, "at": "2026-09-01T13:34:56Z", "dispositions": {"capability_gaps": "recorded", "memory": "n/a"}, "event": "archive", "from": "review_accepted", "to": "archived"}

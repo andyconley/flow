@@ -4,7 +4,7 @@
 
 - Requirements, acceptance criteria, plan, implementation handoff, and validation plan are in this run directory.
 - Current-state research is under `research/`.
-- Review evidence is under `review/`: security review (PASS), quality review (APPROVE), and release readiness (manual pre-push gate required).
+- Review evidence is under `review/`: security review (PASS), quality review (APPROVE), and release readiness (manual pre-push gate completed).
 - The implementation diff includes the orchestration validator, lifecycle integration, standards/templates, documentation, and focused tests.
 
 ## Completed evidence
@@ -23,10 +23,16 @@
 - Final release-staging/import regression: passed; the transitive CLI roster includes `orchestration.py`.
 - Isolated release-mode candidate install from the final worktree: passed for setup, both runtime sync checks, `flow doctor --check`, and static runtime smoke. The installer stamped the base tag `v0.20.2`; this is candidate-shape evidence, not proof that the feature exists in the published v0.20.2 artifact.
 
-## Pending evidence
+## Release evidence
 
-- Push, semantic-release result, release commit, GitHub release/tag, changelog entry, rendered notes, and released-install/update proof: pending.
+- v0.21.0 was published successfully. Release commit `f158595` is on `origin/main`.
+- GitHub release: https://github.com/andyconley/flow/releases/tag/v0.21.0; rendered notes are non-empty and `CHANGELOG.md` contains the release entry.
+- Fresh v0.21.0 install and v0.20.2 to v0.21.0 update both passed setup, both sync checks, `flow doctor --check`, static runtime smoke, and the expected structured `validate-orchestration` refusal.
 
 ## Limitations
 
 The validator checks declarations, paths, referenced regular files, and lifecycle atomicity. It cannot prove external identity ownership, semantic truth of evidence, actual capability grants, or transactional behavior of arbitrary external APIs. Those remain human or adapter responsibilities.
+
+## Archive summary
+
+Implementation, review, validation, publication, and released-artifact verification are complete. The four manual client discovery/model-routing checks remain explicitly unverified limitations.

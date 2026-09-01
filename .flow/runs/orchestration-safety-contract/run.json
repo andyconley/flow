@@ -10,22 +10,26 @@
     "validation_plan": ".flow/runs/orchestration-safety-contract/validation-plan.md"
   },
   "created_at": "2026-08-31T21:37:52Z",
-  "dispositions": {},
+  "dispositions": {
+    "capability_gaps": "recorded",
+    "memory": "n/a"
+  },
   "gates": {
     "accept-review": "2026-09-01T13:26:18Z",
     "approve-definition": "2026-08-31T21:37:52Z",
     "approve-plan": "2026-08-31T21:42:05Z",
+    "archive": "2026-09-01T13:34:56Z",
     "mark-handback-ready": "2026-09-01T13:26:18Z",
     "start-definition": "2026-08-31T21:37:52Z",
     "start-implementation": "2026-09-01T12:48:27Z",
     "start-plan": "2026-08-31T21:37:52Z",
     "start-review": "2026-09-01T13:26:18Z"
   },
-  "lane": "review",
-  "last_event": "accept-review",
-  "phase": "review_accepted",
+  "lane": "archive",
+  "last_event": "archive",
+  "phase": "archived",
   "schema_version": 1,
-  "state": "review_accepted",
-  "updated_at": "2026-09-01T13:26:18Z",
+  "state": "archived",
+  "updated_at": "2026-09-01T13:34:56Z",
   "work_id": "orchestration-safety-contract"
 }

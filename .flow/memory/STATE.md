@@ -2,16 +2,15 @@
 
 ## Active work
 
-- Work item: `orchestration-safety-contract`
-- Phase: planning
-- Goal: add an enforceable orchestration contract, shared-state mutation safety, claim provenance, and risk-based independent verification, then publish a complete Flow release.
+- None.
 
-## Constraints
+## Recently completed
 
-- Preserve the unrelated `docs/backlog.md` changes in the canonical checkout.
-- Build from `origin/main` in the isolated `codex/orchestration-safety` worktree.
-- Maintain revision-1 and `legacy/inferred` run compatibility.
+- `orchestration-safety-contract` implemented, reviewed, validated, and released as `v0.21.0`.
+- Revision-1 and `legacy/inferred` run compatibility were preserved.
+- The unrelated `docs/backlog.md` change in the canonical checkout was not touched.
 
-## Next step
+## Follow-up
 
-- Approve the captured plan and route the work to `flow-implement`.
+- Automate the release validation gate tracked as `release-publishes-before-validation`.
+- Add live client discovery and model-routing coverage tracked as `runtime-smoke-cannot-exercise-client-discovery`.
