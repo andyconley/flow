@@ -51,6 +51,10 @@ flow run transition <work-id> archive-scout \
   --disposition memory=<updated|n/a>
 ```
 
+## Orchestration safety
+
+Ordinary scouts remain lightweight. If a scout delegates or mutates shared external state, follow `standards/orchestration.md`, create the canonical manifest, run `flow run validate-orchestration <work-id> --stage dispatch` before the action, and pass `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` to `archive-scout`; closure conditionally validates acceptance.
+
 ## Scout-Size Criteria
 
 A change qualifies for scout mode when ALL of the following hold:

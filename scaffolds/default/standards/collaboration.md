@@ -28,6 +28,8 @@ At minimum, every project should assign providers for:
 
 ## Provider failure
 
+Provider briefs, capabilities, ownership, concurrency, and handback claims are governed by `standards/orchestration.md` whenever work is delegated or touches shared state. Record the machine contract in `.flow/runs/<work-id>/orchestration.json`; do not rely on chat-only assignments.
+
 A declared provider can fail to run — an agent dies on an overload response, a
 subagent never returns, a human is unavailable. Three outcomes are possible and
 they are not equivalent:

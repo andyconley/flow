@@ -61,6 +61,7 @@ agents, standards, and templates come from the user-level install.
 - `runs/` - per-work-item artifacts
 - `runs/<work-id>/run.json` - C-lite current-state projection for gated workflow runs
 - `runs/<work-id>/events.jsonl` - append-only transition history for that run
+- `runs/<work-id>/orchestration.json` - protocol-revision-2 orchestration contract
 
 Durable project facts and cross-cutting decisions do NOT live in `.flow/memory/`.
 They live in the active runtime's durable memory provider when one exists. For
@@ -77,6 +78,7 @@ artifacts as canonical and runtime memory as companion context:
 - canonical project identity: `.flow/PROJECT.md`
 - canonical transient work state: `.flow/memory/STATE.md`
 - canonical run lifecycle: `.flow/runs/<work-id>/run.json` and `events.jsonl`
+- canonical revision-2 orchestration contract: `.flow/runs/<work-id>/orchestration.json`
 - durable memory provider, when available: runtime-specific companion memory
 
 When a command mentions durable runtime memory, resolve it through the active

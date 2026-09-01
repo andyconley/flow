@@ -205,6 +205,8 @@ prints the manual checks still required for actual client behavior: command
 discovery, role-agent invocation, and transcript/log evidence that the runtime
 honored model and effort routing.
 
+Orchestration guidance is authored once in the canonical command sources and rendered into both runtime surfaces. The generated files do not grant capabilities or prove provider identity; `confirmed`, `missing`, and `unknown` in a run's orchestration contract remain evidence declarations that the runtime cannot silently upgrade.
+
 ## Current Limits
 
 Current limitations of the adapter system:

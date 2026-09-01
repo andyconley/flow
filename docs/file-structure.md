@@ -257,7 +257,9 @@ Reusable document templates such as handoffs, ADRs, and run summaries.
 
 Reserved project-local execution log area. C-lite runs write `run.json` as the
 current-state projection and `events.jsonl` as append-only transition history
-under `runs/<work-id>/`; older artifact-only folders are read as
+under `runs/<work-id>/`. Protocol-revision-2 runs add `orchestration.json` as
+the versioned machine contract for assignments, shared-state mutations, claim
+reconciliation, and verification. Older artifact-only folders are read as
 `legacy/inferred`.
 
 ### `tests/`

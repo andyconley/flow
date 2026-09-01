@@ -6,6 +6,8 @@ could have failed.
 
 ## What a brief must carry
 
+`standards/orchestration.md` defines the enforceable brief fields, claim classes, reconciliation, and verifier-identity rules. This standard explains the quality of the evidence those fields reference.
+
 Any brief that asks someone to review, audit, or look for what is missing must
 state what already exists. Without it, "X is missing" is an unsupported finding
 — the reviewer had no way to distinguish absent from unfound.

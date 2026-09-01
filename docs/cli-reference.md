@@ -131,9 +131,22 @@ Flags:
 
 For C-lite runs, verification checks schema version, presence of transition history, latest event state, and `last_event`. For legacy/inferred runs, verification succeeds with the explicit message `legacy/inferred: no canonical run.json`.
 
+### `flow run validate-orchestration <work-id> --stage <stage>`
+
+Read-only validation of `.flow/runs/<work-id>/orchestration.json`.
+
+Flags:
+
+- `--stage dispatch|handback|acceptance` — required cumulative validation stage
+- `--json` — emit stable `ok`, `stage`, `manifest`, and `findings` fields
+
+Dispatch checks briefs, evidence inventories, declared capabilities, output ownership, risk, and concurrency. Handback adds outputs, reconciliation, baseline, recovery, readback, comparison, and unexpected-delta checks. Acceptance adds identity provenance and high-risk verifier independence. Diagnostics identify the field, subject, rule, and corrective action without printing referenced artifact contents.
+
+The command validates declarations. It cannot query hidden runtime grants, prove semantic truth, or establish transactional behavior for arbitrary external systems.
+
 ### `flow run transition <work-id> <event>`
 
-Apply a hard-gated lifecycle transition. Invalid transitions leave `run.json` and `events.jsonl` unchanged.
+Apply a hard-gated lifecycle transition. Invalid transitions and orchestration refusals leave `run.json` and `events.jsonl` unchanged.
 
 Flags:
 
@@ -164,6 +177,8 @@ Support events:
 - `archive-scout` — creates the minimal scout closure envelope and requires `--artifact scout_summary=...`, `--disposition capability_gaps=...`, and `--disposition memory=...`
 
 `flow run transition` is the only command that writes lifecycle state. `/flow-*` commands call it when they cross gates; they do not hand-edit `run.json`.
+
+New runs are protocol revision 2 while `run.json` remains schema 1. Their definition, solution, and plan approvals require `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` and dispatch validation. Handback and review acceptance re-run the later stages. Runs without `protocol_revision` are revision 1 and retain the previous behavior. A scout remains lightweight unless it supplies an orchestration manifest, in which case `archive-scout` validates acceptance.
 
 ### `flow runtime smoke`
 

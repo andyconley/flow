@@ -47,6 +47,10 @@ flow run transition <work-id> accept-review \
 Do not produce an archive-ready acceptance claim until `accept-review`
 succeeds. If review requests changes, do not advance the run to archive.
 
+## Orchestration safety
+
+Follow `standards/orchestration.md`. Reconcile claim provenance and provider identities, run `flow run validate-orchestration <work-id> --stage acceptance`, and require a verifier distinct from producer and evidence collector for high-risk work. Revision-2 `accept-review` rechecks it.
+
 ## Composition
 
 Core roles (always invoked):

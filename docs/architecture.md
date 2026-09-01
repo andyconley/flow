@@ -149,10 +149,11 @@ Per-project source of truth for **project-specific** content only:
 - `runs/<work-id>/...` — per-task execution artifacts
 - `runs/<work-id>/run.json` — C-lite current-state projection for gated workflow runs
 - `runs/<work-id>/events.jsonl` — append-only transition history for that run
+- `runs/<work-id>/orchestration.json` — revisioned assignment, shared-state, claim, and verification contract for protocol-revision-2 runs
 
 The framework content (commands, agents, standards) is NOT duplicated here in the user-level install model — it's served from the user-level install. Projects only opt into the overlay layer when they actually need project-specific role assignments, memory, or run artifacts.
 
-Workflow run state is dependency-free and local to the project overlay. `flow run transition` owns lifecycle writes against `run.json` and `events.jsonl`; `/flow-*` commands call that CLI when they cross critical gates. Existing run folders without `run.json` remain readable as `legacy/inferred` and are not migrated as a side effect of status or resume.
+Workflow run state is dependency-free and local to the project overlay. `flow run transition` owns lifecycle writes against `run.json` and `events.jsonl`; `/flow-*` commands call that CLI when they cross critical gates. Detailed orchestration state stays separate and is validated before revision-2 dispatch, handback, and acceptance writes. Existing no-revision runs retain revision-1 behavior; folders without `run.json` remain readable as `legacy/inferred`.
 
 Runtime memory is companion context, not the workflow source of truth. Claude
 Code has a Flow-known durable memory provider at

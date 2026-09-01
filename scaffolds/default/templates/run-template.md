@@ -5,6 +5,8 @@
 - owner:
 - mode:
 - canonical artifacts:
+- protocol revision:
+- orchestration manifest (revision 2): `.flow/runs/<work-id>/orchestration.json`
 
 ## Requirements
 
@@ -18,6 +20,8 @@
 - affected areas:
 - validation plan:
 - review needs:
+- risk triggers and calculated classification:
+- assignment ownership, capabilities, and coordination:
 
 ## Status
 

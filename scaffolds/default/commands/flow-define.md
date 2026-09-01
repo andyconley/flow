@@ -63,6 +63,10 @@ flow run transition <work-id> approve-definition \
 Do not route to `flow-solution` or `flow-plan` until `approve-definition`
 succeeds. A refused transition is a hard gate, not advisory prose.
 
+## Orchestration safety
+
+Revision-2 runs persist `orchestration_manifest=.flow/runs/<work-id>/orchestration.json`. Follow `standards/orchestration.md` and run `flow run validate-orchestration <work-id> --stage dispatch` immediately before delegation or shared mutation; `approve-definition` rechecks it.
+
 ## Composition
 
 Core roles:

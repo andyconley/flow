@@ -60,6 +60,10 @@ Do not route to `flow-implement` until `approve-plan` succeeds. The transition
 is the hard gate that records accepted scope, the implementation handoff, and
 the validation plan.
 
+## Orchestration safety
+
+For revision-2 work, persist the canonical orchestration manifest and run `flow run validate-orchestration <work-id> --stage dispatch` immediately before dispatch or shared mutation. `approve-plan` rechecks the contract. Use `standards/orchestration.md` and its templates.
+
 ## Composition
 
 Core roles (always invoked):

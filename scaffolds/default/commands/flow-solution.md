@@ -57,6 +57,10 @@ Do not route to `flow-plan` from a started solution until `approve-solution`
 succeeds. Work that skips solutioning can go from approved definition directly
 to planning with `flow run transition <work-id> start-plan`.
 
+## Orchestration safety
+
+Revision-2 approval persists the canonical orchestration manifest and rechecks `flow run validate-orchestration <work-id> --stage dispatch`. Follow `standards/orchestration.md`; validate immediately before any provider dispatch or shared mutation.
+
 ## Composition
 
 Core roles (always invoked):

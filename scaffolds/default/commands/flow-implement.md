@@ -54,6 +54,10 @@ flow run transition <work-id> mark-handback-ready \
 Do not begin implementation until `start-implementation` succeeds. Do not route
 to `flow-review` until `mark-handback-ready` succeeds.
 
+## Orchestration safety
+
+Follow `standards/orchestration.md`. Run `flow run validate-orchestration <work-id> --stage dispatch` immediately before each provider dispatch or shared mutation, reconcile material claims, then run the `handback` stage before the lifecycle handback gate. Revision-2 `mark-handback-ready` rechecks it.
+
 ## Composition
 
 Core roles (always invoked):

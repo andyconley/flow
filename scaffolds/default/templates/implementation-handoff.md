@@ -67,6 +67,8 @@ Optional prioritization or urgency context.
 - logs review required:
 - mutation check (ran / not run / why):
 - validated in (environment, and known deltas from the original):
+- orchestration manifest and stage results (when delegated, shared-state, or revision-2 gated work):
+- verifier identity and independence (required for high-risk work):
 
 ## Required handback
 
@@ -75,3 +77,4 @@ Optional prioritization or urgency context.
 - deploy/runtime status
 - deviations from plan
 - follow-up bugs, risks, or tech debt
+- claims reconciled and external-mutation records completed

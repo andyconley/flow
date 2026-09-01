@@ -288,12 +288,14 @@ Use these to inspect install state, generated runtime surfaces, drift, and comma
   - show one run's current state from `.flow/runs/<work-id>/run.json`
 - `flow run verify WORK_ID`
   - check `run.json` against append-only `events.jsonl`
+- `flow run validate-orchestration WORK_ID --stage dispatch|handback|acceptance`
+  - structurally validate assignments, shared-state records, claim reconciliation, and verifier independence
 - `flow help`
   - render the framework overview at the shell
 
 ### Workflow Run State
 
-Use these when a `/flow-*` command needs to record or inspect the hard-gated lifecycle state for one work item. `run.json` is the current-state projection; `events.jsonl` is the append-only history. `flow run transition` is the only lifecycle writer.
+Use these when a `/flow-*` command needs to record or inspect the hard-gated lifecycle state for one work item. `run.json` is the current-state projection; `events.jsonl` is the append-only history. Revision-2 runs keep the detailed contract in `orchestration.json`. `flow run transition` is the only lifecycle writer.
 
 - `flow run transition WORK_ID EVENT`
   - apply a legal transition such as `start-definition`, `approve-plan`, `mark-handback-ready`, `accept-review`, or `archive`
@@ -303,6 +305,8 @@ Use these when a `/flow-*` command needs to record or inspect the hard-gated lif
   - attach required closure decisions such as `capability_gaps=n/a` and `memory=updated`
 - `flow run history WORK_ID`
   - read the transition history
+
+New runs receive protocol revision 2. Their approval, handback, and acceptance gates re-run the matching orchestration validation before any lifecycle write. Older runs without a revision remain revision 1. The validator proves declared structure and referenced evidence, not hidden runtime permissions or semantic truth.
 
 ### Usage Store Maintenance
 
