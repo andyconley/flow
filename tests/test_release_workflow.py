@@ -134,7 +134,8 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertEqual(self.text.count("FLOW_RELEASE_MODE: preview"), 2)
         self.assertEqual(self.text.count("FLOW_RELEASE_MODE: publish"), 1)
         self.assertEqual(self.text.count("name: Publish once"), 1)
-        self.assertIn("repository_url: ${{ steps.mirror.outputs.repository_url }}", self.text)
+        self.assertEqual(self.text.count("FLOW_RELEASE_REPOSITORY_URL: ${{ steps.mirror.outputs.repository_url }}"), 2)
+        self.assertNotIn("repository_url: ${{ steps.mirror.outputs.repository_url }}", self.text)
         self.assertIn("verify-remote-baseline", self.text)
         self.assertIn("compare-analysis", self.text)
 

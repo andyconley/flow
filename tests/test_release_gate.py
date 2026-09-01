@@ -392,8 +392,12 @@ class PublicationResultTests(unittest.TestCase):
 
 
 class PolicyAndCliTests(unittest.TestCase):
-    def run_node_full_config(self, mode):
+    def run_node_full_config(self, mode, repository_url=None):
         env = {**os.environ, "FLOW_RELEASE_MODE": mode}
+        if repository_url is None:
+            env.pop("FLOW_RELEASE_REPOSITORY_URL", None)
+        else:
+            env["FLOW_RELEASE_REPOSITORY_URL"] = repository_url
         return subprocess.run(
             ["node", "-e", "console.log(JSON.stringify(require('./release.config.cjs')))"],
             cwd=REPO_ROOT, env=env, text=True, capture_output=True,
@@ -445,6 +449,13 @@ class PolicyAndCliTests(unittest.TestCase):
         self.assertIn({"type": "chore", "scope": "release", "release": False}, rules)
         visible_types = preview["plugins"][1][1]["presetConfig"]["types"]
         self.assertTrue(all(item["hidden"] is False for item in visible_types))
+
+    def test_preview_repository_url_is_canonical_config_not_action_alias(self):
+        canonical = "https://github.com/andyconley/flow.git"
+        preview = json.loads(self.run_node_full_config("preview", canonical).stdout)
+        self.assertEqual(preview["repositoryUrl"], canonical)
+        invalid = self.run_node_full_config("preview", "/tmp/local-mirror")
+        self.assertNotEqual(invalid.returncode, 0)
 
     def test_cli_plan_and_validate_emit_controlled_outputs(self):
         with tempfile.TemporaryDirectory() as temp:

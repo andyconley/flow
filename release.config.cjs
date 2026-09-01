@@ -1,8 +1,13 @@
 /* Preview and publication share this release policy. Preview stays read-only. */
 const mode = process.env.FLOW_RELEASE_MODE;
+const repositoryUrl = process.env.FLOW_RELEASE_REPOSITORY_URL;
 
 if (mode !== "preview" && mode !== "publish") {
   throw new Error("FLOW_RELEASE_MODE must be set explicitly to 'preview' or 'publish'");
+}
+
+if (repositoryUrl && !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(repositoryUrl)) {
+  throw new Error("FLOW_RELEASE_REPOSITORY_URL must be a canonical GitHub HTTPS clone URL");
 }
 
 const analyzer = [
@@ -64,5 +69,6 @@ const mutatingPlugins = [
 module.exports = {
   branches: ["main"],
   tagFormat: "v${version}",
+  ...(repositoryUrl ? { repositoryUrl } : {}),
   plugins: [analyzer, notes, ...(mode === "publish" ? mutatingPlugins : [])]
 };

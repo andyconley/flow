@@ -73,12 +73,12 @@ jobs:
         with:
           semantic_version: 25.0.9
           dry_run: true
-          repository_url: ${{ steps.mirror.outputs.repository_url }}
           working_directory: ${{ steps.mirror.outputs.working_directory }}
           extra_plugins: |
             conventional-changelog-conventionalcommits@9.3.1
         env:
           FLOW_RELEASE_MODE: preview
+          FLOW_RELEASE_REPOSITORY_URL: ${{ steps.mirror.outputs.repository_url }}
 
       - name: Write validated release plan
         id: plan
@@ -260,12 +260,12 @@ jobs:
         with:
           semantic_version: 25.0.9
           dry_run: true
-          repository_url: ${{ steps.mirror.outputs.repository_url }}
           working_directory: ${{ steps.mirror.outputs.working_directory }}
           extra_plugins: |
             conventional-changelog-conventionalcommits@9.3.1
         env:
           FLOW_RELEASE_MODE: preview
+          FLOW_RELEASE_REPOSITORY_URL: ${{ steps.mirror.outputs.repository_url }}
 
       - name: Reject release-analysis drift
         env:
