@@ -1,0 +1,36 @@
+>> querying file:///private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/candidate.git for the latest release...
+>> latest release: v0.22.0
+>> downloading v0.22.0 into a temporary directory...
+Note: switching to 'e05178b78420db53c3f7431448e1d188cc958441'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+>> running install-flow.sh --release...
+Installed flow (release mode).
+Source:    /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/source
+Launcher:  /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.local/bin/flow
+Config:    /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/config.toml
+Python:    /opt/homebrew/bin/python3.12 (3.12.13)
+Version:   v0.22.0
+
+Make sure /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.local/bin is on your PATH.
+
+flow v0.22.0 installed. Next steps:
+  flow setup machine
+  flow setup user
+
+After that, /flow-* slash commands are active in every Claude session.
+Run `flow update` to roll forward to newer tagged releases later.

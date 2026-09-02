@@ -1,0 +1,4 @@
+flow home ready: /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow
+config:     /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow/config.toml
+usage store: created /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow/usage.db (schema v6)
+next: run `flow setup project` inside a repository

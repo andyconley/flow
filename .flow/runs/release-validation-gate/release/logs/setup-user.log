@@ -1,0 +1,81 @@
+Installing flow at user level…
+
+claude sync wrote managed files:
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-boot/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-scout/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-define/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-solution/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-plan/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-implement/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-review/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-archive/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-resume/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-status/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-init-project/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/skills/flow-help/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/architect.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/solution-architect.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/business-analyst.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/quality-reviewer.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/data-engineer.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/lead-developer.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/product-manager.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/security-reviewer.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/sre.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/support-lead.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/tech-writer.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/test-engineer.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/agents/ux-specialist.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/hooks/flow-session-start.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/hooks/flow-managed-write-reminder.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/hooks/flow-plugin-usage.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/hooks/flow-token-verdict.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/hooks/flow-context-warning.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/hooks/flow-overlay-reminder.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/settings.json
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.claude/flow.managed.toml
+user-level claude sync complete from /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/source/scaffolds/default/flow.toml
+
+codex sync wrote managed files:
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-boot/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-define/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-solution/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-plan/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-scout/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-implement/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-review/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-resume/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-status/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-archive/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-help/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.agents/skills/flow-init-project/SKILL.md
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/architect.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/solution-architect.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/business-analyst.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/quality-reviewer.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/data-engineer.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/lead-developer.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/product-manager.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/security-reviewer.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/sre.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/support-lead.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/tech-writer.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/test-engineer.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/agents/ux-specialist.toml
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/hooks/flow-token-verdict.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/hooks/flow-context-warning.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/hooks/flow-overlay-reminder.sh
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/hooks.json
+- /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.codex/flow.managed.toml
+user-level codex sync complete from /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/source/scaffolds/default/flow.toml
+
+user-level setup complete
+next: open a fresh Claude Code session anywhere and try `/flow-boot`
+Initialized empty Git repository in /private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/candidate-user-overlay.git/
+Initialized empty Git repository in /private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/user/.git/
+[main (root-commit) 503d4d5] test: seed isolated release overlay
+ 1 file changed, 1 insertion(+)
+ create mode 100644 flow.toml
+To /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/candidate-user-overlay.git
+ * [new branch]      main -> main
+branch 'main' set up to track 'origin/main'.

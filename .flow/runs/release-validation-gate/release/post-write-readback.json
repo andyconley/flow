@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-09-02T12:53:27.822811Z",
+  "repository": "github.com/andyconley/flow",
+  "overall_result": "passed",
+  "classification": "published-verification-passed",
+  "main_sha": "f5f45565c64f881f9ba07c85d23fb95e90cb292b",
+  "tag": "v0.22.0",
+  "tag_commit": "f5f45565c64f881f9ba07c85d23fb95e90cb292b",
+  "release_commit": "f5f45565c64f881f9ba07c85d23fb95e90cb292b",
+  "release_commit_parent": "e05178b78420db53c3f7431448e1d188cc958441",
+  "release_commit_files": ["CHANGELOG.md"],
+  "release_url": "https://github.com/andyconley/flow/releases/tag/v0.22.0",
+  "release_is_draft": false,
+  "release_is_prerelease": false,
+  "plan_digest": "b503b30400e1d56dec75fc850bea71dd4456eec3496ad76d8e9a12c0a1823e7d",
+  "evidence_digest": "f762fbccbc20ba8a9a01a80d88b0bfe7b51f1de2e9d9dc1e2d38911b129f2166",
+  "notes_digest": "a5108415ccf74682b00ad77b01e16b8db81e7656a8ba8679a1b73384402f036f",
+  "checks": [
+    "tag-and-generated-commit",
+    "github-release-and-notes",
+    "public-fresh-install",
+    "public-upgrade",
+    "setup-machine",
+    "setup-user",
+    "claude-sync-check",
+    "codex-sync-check",
+    "doctor-check",
+    "runtime-smoke-static",
+    "representative-cli"
+  ]
+}

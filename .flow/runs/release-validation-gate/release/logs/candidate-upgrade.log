@@ -1,0 +1,47 @@
+>> querying file:///private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/previous.git for the latest release...
+>> latest release: v0.21.0
+>> downloading v0.21.0 into a temporary directory...
+Note: switching to 'f15859523ed1508aa83b5f3516ef0786c20c7ca9'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+>> running install-flow.sh --release...
+Installed flow (release mode).
+Source:    /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/upgrade-home/.flow/source
+Launcher:  /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/upgrade-home/.local/bin/flow
+Config:    /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/upgrade-home/.flow/config.toml
+Python:    /opt/homebrew/bin/python3.12 (3.12.13)
+Version:   v0.21.0
+
+Make sure /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/upgrade-home/.local/bin is on your PATH.
+
+flow v0.21.0 installed. Next steps:
+  flow setup machine
+  flow setup user
+
+After that, /flow-* slash commands are active in every Claude session.
+Run `flow update` to roll forward to newer tagged releases later.
+current: v0.21.0
+remote:  file:///private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/candidate.git
+latest:  v0.22.0
+fetching v0.22.0 from file:///private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/candidate.git…
+updated to v0.22.0
+
+usage store: created /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/upgrade-home/.flow/usage.db (schema v6)
+
+Re-sync user-level adapters to pick up any new commands, agents, or hooks:
+  flow sync claude --user
+  flow sync codex --user

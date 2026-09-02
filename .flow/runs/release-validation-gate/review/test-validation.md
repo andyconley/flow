@@ -2,77 +2,57 @@
 
 ## Verdict
 
-**PASS for pre-publication implementation validation.** The release gate's
-deterministic contracts, failure matrix, workflow mutation checks, and recovery
-path pass at reviewed commit `ebdaf02bb62d99eff7f83edd6e7745f33be532df`.
-
-This is not publication evidence. The retained candidate plan and evidence are
-bound to `777670320a65ec713947bea7ca043d3321b5cee0`; they are useful historical
-evidence only and cannot authorize the reviewed commit. Regenerate the preview,
-candidate evidence, and logs for the final immutable pre-push SHA, then let the
-hosted workflow produce the public-release proof.
+**PASS — shipped and publicly verified.** Hosted run
+[`33632240778`](https://github.com/andyconley/flow/actions/runs/33632240778)
+released `v0.22.0` from validated source
+`e05178b78420db53c3f7431448e1d188cc958441`. The workflow completed its
+candidate gate before publication and its public verifier after publication.
+All retained hosted artifacts validate and the live GitHub tag/release agree
+with them.
 
 ## Test Coverage Analysis
 
 ### Current Coverage
 
-- `python3 -m unittest tests.test_release_workflow tests.test_release_gate -v`
-  passed: **44 tests**.
-- `git diff --check` passed.
-- The workflow contract test finds no current violations: ordering and job
-  dependencies, exact-SHA checkout, read-only defaults, publish-only write
-  token, no-release conditions, no bypass/force/delete path, artifact digest
-  binding, immutable action references, safe note transport, and repair-forward
-  wording.
-- `test_every_injected_runner_failure_stops_later_checks` injects a failure at
-  every one of the thirteen stable candidate checks and proves that later checks
-  are recorded as `not_run`. `test_each_failed_check_blocks_fake_publisher`
-  independently proves every failed evidence check prevents the fake publisher.
-- `test_required_source_mutations_are_detected` applies each required workflow
-  mutant to an in-memory copy of the checked-in workflow and asserts its named
-  detector fires: missing candidate dependency, analysis credential, moving
-  checkout, missing evidence digest, failure bypass, no-release publication,
-  incorrect public-failure classification, and shell interpolation of notes.
-  The checked-in workflow then has zero findings. This is source-text mutation
-  coverage; it intentionally leaves the working file unchanged.
-- Release-plan/evidence tests reject identity, digest, ordering, log, runner,
-  and publication-shape drift. The latest containment test also rejects a log
-  symlink escaping the uploaded evidence root.
-- Recovery tests cover moved main, existing candidate tag, clean/partial/
-  incomplete publisher-failure reconciliation, and GitHub release fixtures with
-  empty-notes rejection.
+- Hosted `analyze` produced a release-required plan for `v0.22.0`, source
+  `e05178b...`, and prior release `v0.21.0`. The retained plan digest is
+  `b503b304...`.
+- Hosted `validate-candidate` passed all **13/13** deterministic checks. The
+  retained evidence binds its source, runner, candidate-main, and local-only
+  candidate-tag SHA to `e05178b...`; retained log hashes validate. Its Python
+  suite log records **770 tests passed**.
+- Both hosted pre-publication baseline artifacts record `main` at `e05178b...`,
+  latest tag `v0.21.0`, and an absent candidate tag before the one publisher
+  invocation.
+- The publication result matches the plan's version, tag, source, and notes
+  digest. It created release commit
+  `f5f45565c64f881f9ba07c85d23fb95e90cb292b`; that commit has the validated
+  source as its sole parent and changes only `CHANGELOG.md`.
+- Live readback confirms `main` and `refs/tags/v0.22.0` resolve to
+  `f5f45565...`; the public [GitHub release](https://github.com/andyconley/flow/releases/tag/v0.22.0)
+  exists with non-empty notes. The release notes digest agrees with the plan and
+  publication artifact.
+- Hosted `verify-published` passed all **11/11** checks: tag/generated commit,
+  GitHub release/notes, public fresh install, public upgrade, machine and user
+  setup, Claude and Codex sync checks, doctor, static runtime smoke, and
+  representative CLI behavior. Its retained evidence digest is `f762fbcc...`.
+- Local test validation remains green: workflow/gate contracts (45 tests),
+  candidate integration including all thirteen injected-failure paths (3 tests),
+  and recovery tests (7 tests). The workflow mutation matrix detects all eight
+  required unsafe source changes.
 
-### Coverage Gaps
+### Remaining Gaps
 
-- No public release has occurred yet, so tag ancestry, generated changelog,
-  GitHub release notes, public fresh install, public upgrade, and hosted job
-  ordering remain public-only proof.
-- The candidate run retained in this work directory passed all thirteen checks,
-  but its source SHA is stale (`7776703` rather than `ebdaf02`). A new final-SHA
-  run is mandatory.
-- The full repository suite was previously exercised by the candidate run, but
-  this review reran the proportionate focused release suite. The final candidate
-  gate must repeat the full suite at the final SHA.
-- The workflow receives real Actions integration only after the transition push;
-  local tests deliberately use fake/local boundaries and do not publish.
-
-## Required Pre-Push and Public Proof
-
-1. Freeze the intended source commit, refresh remote/tag baseline, and generate
-   a semantic-release preview for that exact SHA.
-2. Run `scripts/release_candidate.py` for that plan. It must pass all thirteen
-   checks and produce matching evidence/log digests.
-3. Confirm the branch and tag baseline immediately before push. Do not reuse the
-   stale `7776703` evidence.
-4. After the transition push, retain the hosted workflow URL and artifacts;
-   verify the tag/release/changelog/notes and public fresh-install and upgrade
-   results. Any failed public verifier is a red repair-forward event, not a
-   prevented publication.
+- None that block this release. The candidate and public verifier use isolated
+  environments; telemetry history and real interactive Claude/Codex client
+  sessions remain intentionally outside deterministic CI and are documented
+  operational limitations, not release-gate failures.
 
 ## Verification Notes
 
-- Manual checks: use `docs/release-runbook.md` if the hosted candidate,
-  publisher, or public verification phase fails; preserve artifacts and remote
-  state before a corrective commit.
-- Runtime checks: hosted Actions is the remaining integration boundary. The
-  publisher must execute exactly once only after candidate success.
+- Artifact integrity was rechecked with `validate-plan` and
+  `validate-evidence --logs-root` against the hosted plan, evidence, and logs.
+- The hosted public verifier is the authoritative proof for the published tag,
+  release, consumer install, and upgrade paths. Future failures remain
+  repair-forward events under `docs/release-runbook.md`; no delete, rewrite, or
+  blind retry path is authorized.

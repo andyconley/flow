@@ -1,0 +1,81 @@
+Installing flow at user level…
+
+claude sync wrote managed files:
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-boot/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-scout/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-define/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-solution/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-plan/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-implement/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-review/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-archive/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-resume/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-status/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-init-project/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/skills/flow-help/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/architect.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/solution-architect.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/business-analyst.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/quality-reviewer.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/data-engineer.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/lead-developer.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/product-manager.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/security-reviewer.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/sre.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/support-lead.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/tech-writer.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/test-engineer.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/agents/ux-specialist.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/hooks/flow-session-start.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/hooks/flow-managed-write-reminder.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/hooks/flow-plugin-usage.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/hooks/flow-token-verdict.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/hooks/flow-context-warning.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/hooks/flow-overlay-reminder.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/settings.json
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.claude/flow.managed.toml
+user-level claude sync complete from /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow/source/scaffolds/default/flow.toml
+
+codex sync wrote managed files:
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-boot/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-define/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-solution/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-plan/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-scout/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-implement/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-review/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-resume/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-status/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-archive/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-help/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.agents/skills/flow-init-project/SKILL.md
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/architect.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/solution-architect.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/business-analyst.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/quality-reviewer.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/data-engineer.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/lead-developer.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/product-manager.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/security-reviewer.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/sre.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/support-lead.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/tech-writer.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/test-engineer.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/agents/ux-specialist.toml
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/hooks/flow-token-verdict.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/hooks/flow-context-warning.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/hooks/flow-overlay-reminder.sh
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/hooks.json
+- /tmp/flow-release-candidate-sk_2ra__/fresh-home/.codex/flow.managed.toml
+user-level codex sync complete from /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow/source/scaffolds/default/flow.toml
+
+user-level setup complete
+next: open a fresh Claude Code session anywhere and try `/flow-boot`
+Initialized empty Git repository in /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow/candidate-user-overlay.git/
+Initialized empty Git repository in /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow/user/.git/
+[main (root-commit) 1379d5c] test: seed isolated release overlay
+ 1 file changed, 1 insertion(+)
+ create mode 100644 flow.toml
+To /tmp/flow-release-candidate-sk_2ra__/fresh-home/.flow/candidate-user-overlay.git
+ * [new branch]      main -> main
+branch 'main' set up to track 'origin/main'.

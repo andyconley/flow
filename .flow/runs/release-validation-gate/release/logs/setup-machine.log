@@ -1,0 +1,4 @@
+flow home ready: /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow
+config:     /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/config.toml
+usage store: created /var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/usage.db (schema v6)
+next: run `flow setup project` inside a repository

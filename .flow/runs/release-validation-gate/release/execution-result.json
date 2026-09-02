@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "status": "committed",
+  "repository": "github.com/andyconley/flow",
+  "workflow_run_id": 33632240778,
+  "workflow_run_url": "https://github.com/andyconley/flow/actions/runs/33632240778",
+  "source_sha": "e05178b78420db53c3f7431448e1d188cc958441",
+  "version": "0.22.0",
+  "tag": "v0.22.0",
+  "release_commit": "f5f45565c64f881f9ba07c85d23fb95e90cb292b",
+  "release_url": "https://github.com/andyconley/flow/releases/tag/v0.22.0",
+  "published_at": "2026-09-02T12:53:11Z",
+  "mutation": {
+    "main_before": "e05178b78420db53c3f7431448e1d188cc958441",
+    "main_after": "f5f45565c64f881f9ba07c85d23fb95e90cb292b",
+    "created_tag": "v0.22.0",
+    "created_release": "v0.22.0",
+    "generated_commit_parent": "e05178b78420db53c3f7431448e1d188cc958441",
+    "generated_commit_files": ["CHANGELOG.md"]
+  },
+  "jobs": {
+    "analyze": "passed",
+    "validate-candidate": "passed",
+    "publish": "passed",
+    "verify-published": "passed"
+  },
+  "prior_safe_failures": [
+    {
+      "workflow_run_id": 33564014091,
+      "source_sha": "5b62eca",
+      "failed_job": "analyze",
+      "remote_write_occurred": false
+    },
+    {
+      "workflow_run_id": 33565098215,
+      "source_sha": "cad5129",
+      "failed_job": "validate-candidate",
+      "remote_write_occurred": false
+    }
+  ]
+}

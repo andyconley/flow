@@ -1,0 +1,47 @@
+>> querying file:///tmp/flow-release-candidate-sk_2ra__/previous.git for the latest release...
+>> latest release: v0.21.0
+>> downloading v0.21.0 into a temporary directory...
+Note: switching to 'f15859523ed1508aa83b5f3516ef0786c20c7ca9'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+>> running install-flow.sh --release...
+Installed flow (release mode).
+Source:    /tmp/flow-release-candidate-sk_2ra__/upgrade-home/.flow/source
+Launcher:  /tmp/flow-release-candidate-sk_2ra__/upgrade-home/.local/bin/flow
+Config:    /tmp/flow-release-candidate-sk_2ra__/upgrade-home/.flow/config.toml
+Python:    /usr/bin/python3.12 (3.12.3)
+Version:   v0.21.0
+
+Make sure /tmp/flow-release-candidate-sk_2ra__/upgrade-home/.local/bin is on your PATH.
+
+flow v0.21.0 installed. Next steps:
+  flow setup machine
+  flow setup user
+
+After that, /flow-* slash commands are active in every Claude session.
+Run `flow update` to roll forward to newer tagged releases later.
+current: v0.21.0
+remote:  file:///tmp/flow-release-candidate-sk_2ra__/candidate.git
+latest:  v0.22.0
+fetching v0.22.0 from file:///tmp/flow-release-candidate-sk_2ra__/candidate.git…
+updated to v0.22.0
+
+usage store: created /tmp/flow-release-candidate-sk_2ra__/upgrade-home/.flow/usage.db (schema v6)
+
+Re-sync user-level adapters to pick up any new commands, agents, or hooks:
+  flow sync claude --user
+  flow sync codex --user

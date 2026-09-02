@@ -1,0 +1,148 @@
+doctor --check reported only isolated-run warnings accepted by the release contract: telemetry.plugin_usage, telemetry.usage.empty, user.claude.runtime_smoke, user.codex.runtime_smoke
+{
+  "command": "doctor",
+  "diagnostics": [
+    {
+      "category": "ok",
+      "id": "machine.source",
+      "path": "/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/source",
+      "severity": "info",
+      "status": "ok",
+      "summary": "framework source is present"
+    },
+    {
+      "category": "ok",
+      "id": "machine.scaffold",
+      "path": "/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/source/scaffolds/default",
+      "severity": "info",
+      "status": "ok",
+      "summary": "framework scaffold is present"
+    },
+    {
+      "category": "ok",
+      "id": "machine.config",
+      "path": "/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow/config.toml",
+      "severity": "info",
+      "status": "ok",
+      "summary": "flow config is present"
+    },
+    {
+      "category": "ok",
+      "id": "machine.launcher",
+      "path": "/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.local/bin/flow",
+      "severity": "info",
+      "status": "ok",
+      "summary": "flow launcher is present"
+    },
+    {
+      "category": "ok",
+      "id": "install.mode",
+      "severity": "info",
+      "status": "ok",
+      "summary": "install mode is release"
+    },
+    {
+      "category": "ok",
+      "id": "user.claude.sync",
+      "severity": "info",
+      "status": "ok",
+      "summary": "claude managed manifest is present",
+      "target": "claude"
+    },
+    {
+      "category": "ok",
+      "id": "user.claude.drift",
+      "severity": "info",
+      "status": "ok",
+      "summary": "claude generated surface drift is clean",
+      "target": "claude"
+    },
+    {
+      "category": "ok",
+      "id": "user.claude.agent_policy",
+      "severity": "info",
+      "status": "ok",
+      "summary": "claude agent policy: ok (13/13 configured)",
+      "target": "claude"
+    },
+    {
+      "category": "manual_required",
+      "id": "user.claude.runtime_smoke",
+      "next_action": "flow runtime smoke --target claude",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "static ok; 2 manual check(s) required \u2014 run `flow runtime smoke --target claude`",
+      "target": "claude"
+    },
+    {
+      "category": "ok",
+      "id": "user.codex.sync",
+      "severity": "info",
+      "status": "ok",
+      "summary": "codex managed manifest is present",
+      "target": "codex"
+    },
+    {
+      "category": "ok",
+      "id": "user.codex.drift",
+      "severity": "info",
+      "status": "ok",
+      "summary": "codex generated surface drift is clean",
+      "target": "codex"
+    },
+    {
+      "category": "ok",
+      "id": "user.codex.agent_policy",
+      "severity": "info",
+      "status": "ok",
+      "summary": "codex agent policy: ok (13/13 configured)",
+      "target": "codex"
+    },
+    {
+      "category": "manual_required",
+      "id": "user.codex.runtime_smoke",
+      "next_action": "flow runtime smoke --target codex",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "static ok; 2 manual check(s) required \u2014 run `flow runtime smoke --target codex`",
+      "target": "codex"
+    },
+    {
+      "category": "ok",
+      "id": "project.overlay",
+      "next_action": "run doctor from inside a repo to check a project",
+      "path": "/private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home/.flow",
+      "severity": "info",
+      "status": "not_applicable",
+      "summary": "not running inside a project overlay"
+    },
+    {
+      "category": "missing",
+      "id": "telemetry.usage.empty",
+      "next_action": "flow harvest claude && flow harvest codex && flow normalize",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "no usage harvests recorded"
+    },
+    {
+      "category": "missing",
+      "id": "telemetry.plugin_usage",
+      "next_action": "flow plugin-usage snapshot",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "no plugin usage snapshots recorded",
+      "target": "claude"
+    }
+  ],
+  "errors": 0,
+  "generated_at": "2026-09-02T03:19:23Z",
+  "install": {
+    "installed_at": "2026-09-02T03:19:09Z",
+    "mode": "release",
+    "remote": "file:///private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/candidate.git",
+    "version": "v0.22.0"
+  },
+  "ok": true,
+  "root": "/private/var/folders/5v/bm01ggyj1sv2900pdfmgmz440000gn/T/flow-release-candidate-ngh8kv8z/fresh-home",
+  "warnings": 4
+}

@@ -2,121 +2,97 @@
 
 ## Review Summary
 
-**Verdict:** REQUEST CHANGES (interim)
+**Verdict:** APPROVE — SHIPPED
 
-**Overview:** Commit `298cca2` resolves the prior authentication blocker and
-adds the requested failure, mutation, remote-baseline, and recovery coverage.
-The implementation is materially ready, with 49 focused tests and 767 full-suite
-tests passing on the current SHA. Final acceptance is still blocked locally by
-stale candidate evidence, one uncovered prior-tag drift case, and full-branch
-diff hygiene; public release evidence is necessarily pending until publication.
+**Overview:** Flow `v0.22.0` is published and the release gate is accepted.
+Hosted run `33632240778` completed successfully from source
+`e05178b78420db53c3f7431448e1d188cc958441`; all thirteen candidate checks and
+all eleven public verification checks passed. Live Git and GitHub release state
+match the hosted plan, publication result, and verification evidence.
 
 ## Criterion-by-Criterion Verdict
 
-| # | Verdict | Evidence and remaining gap |
+| # | Verdict | Evidence |
 |---|---|---|
-| 1 | PASS by current contract | `.github/workflows/release.yml:117-181` requires candidate success before publication. All eight workflow mutations are detected by `tests/test_release_workflow.py:88-105`. A fresh candidate artifact for current SHA `298cca2` is still required. |
-| 2 | PASS by current contract | Analysis still checks out `github.sha`, disables persisted credentials, uses only a local preview remote, and emits a versioned plan (`.github/workflows/release.yml:25-100`). Current retained plan evidence targets older SHA `7776703`, so it is historical rather than authorization for this commit. |
-| 3 | PASS | No-release conditions remain explicit and the no-release-to-publication mutation is detected. |
-| 4 | PASS in code; evidence refresh required | `scripts/release_candidate.py:283-297` retains all thirteen required checks. The older evidence proves those checks at `7776703`; the current full suite passes at `298cca2`, but a complete current-SHA candidate run has not yet replaced the retained evidence. |
-| 5 | PASS in code; evidence refresh required | Candidate/previous local remotes and exact tag/SHA bindings are unchanged. Current retained install/upgrade proof is for `7776703`, not `298cca2`. |
-| 6 | PASS by mutation/integration contract | `tests/test_release_workflow.py:256-310` induces each of the thirteen runner failures and proves later checks do not run. `tests/test_release_gate.py:232-257` proves every failed evidence position leaves the fake publication boundary and modeled external state unchanged. The runner itself writes candidate tags only to temporary local repositories. |
-| 7 | PARTIAL | Moved-main and existing-candidate-tag cases now use real temporary remotes (`tests/test_release_recovery.py:52-95`), and repeated analysis/digest guards remain tested. A changed prior release tag/commit is still not covered, despite being an explicit acceptance case. |
-| 8 | PASS by local contract; public proof pending | Generated release commit shape remains strict and unit tested. Actual `v0.22.0` tag ancestry can only be accepted after publication. |
-| 9 | PASS in implementation; public proof pending | `scripts/release_verify_published.py:37-59` now reads the public GitHub API through credential-free `urllib`, removing the clean-runner `gh auth` failure. This review successfully read public release `v0.21.0` through that exact function. Fixture coverage rejects empty notes. Full `v0.22.0` tag, release, install, and upgrade proof awaits publication. |
-| 10 | PASS by local contract; public proof pending | Publisher failure now triggers read-only reconciliation and artifact upload (`.github/workflows/release.yml:309-330`). `scripts/release_reconcile.py` and `tests/test_release_recovery.py:98-140` distinguish no observed write, partial publication, and incomplete inspection. The new runbook requires preservation and repair forward. |
-| 11 | PASS statically | Workflow permissions still default to read-only and only `publish` receives write permissions. Every external action is now pinned to a full commit SHA. |
-| 12 | PARTIAL | Ordering, conditions, permission isolation, contracts, all thirteen runner failures, all eight required workflow mutations, and recovery classifications are automated. The prior-tag drift case and an end-to-end local Git test of the complete published verifier remain absent. |
-| 13 | PASS | The README, ADR, CLI guide, architecture guide, and new symptom-first `docs/release-runbook.md` distinguish candidate blockers, possible partial publication, published verification failures, manual checks, and repair-forward handling. |
-| 14 | PASS locally | Analyzer, version rules, release-note rendering, branch, tag format, and pinned semantic-release/plugin versions remain shared and behaviorally unchanged. Hosted preview/publication parity remains pending. |
+| 1 | PASS | Hosted publication ran only after the credential-free analysis and all thirteen candidate checks succeeded. The completed workflow conclusion is `success`. |
+| 2 | PASS | The hosted plan identifies source SHA `e05178b...`, run `33632240778`, the pinned release policy, and predicted `v0.22.0`. Its SHA-256 digest is `b503b30400e1d56dec75fc850bea71dd4456eec3496ad76d8e9a12c0a1823e7d`. |
+| 3 | PASS | No-release behavior and its prohibited workflow mutation remain covered. This release-required path proceeded through every gated job. |
+| 4 | PASS | Hosted evidence contains all thirteen stable candidate checks once and in order, all passed, with every retained log hash validated. |
+| 5 | PASS | The candidate branch/tag resolved to exact source SHA `e05178b...`; candidate fresh install and upgrade passed. Public `v0.22.0` now resolves to generated release commit `f5f4556...`. |
+| 6 | PASS | Tests cover all thirteen injected runner failures, and earlier hosted failure `33565098215` demonstrated that a candidate failure blocks publication before the write-capable job. |
+| 7 | PASS | Remote drift cases remain covered. Hosted publication captured the baseline twice: immediately before repeated analysis and immediately before publication; both recorded `main=e05178b...`, prior tag `v0.21.0=f158595...`, and absent `v0.22.0`. |
+| 8 | PASS | Public `v0.22.0` and `origin/main` both resolve to `f5f45565c64f881f9ba07c85d23fb95e90cb292b`. That generated release commit has exactly one parent, planned source `e05178b...`, and modifies only `CHANGELOG.md`. |
+| 9 | PASS | The public GitHub release exists, is neither draft nor prerelease, and its body exactly equals the planned notes. Hosted public fresh install and public upgrade both passed. |
+| 10 | PASS | Publication succeeded without reconciliation. Failure recovery and repair-forward behavior remain covered by focused tests and the prior fail-closed hosted runs. |
+| 11 | PASS | Workflow permissions remain read-only by default; only publication receives write access. The successful hosted run used the immutably pinned external Actions. |
+| 12 | PASS | The focused suite passed 52 tests before push. Hosted full discovery passed 770 tests, all thirteen candidate checks passed, all eleven public checks passed, and existing tests cover all eight workflow mutations and thirteen injected runner failures. |
+| 13 | PASS | Maintainer documentation distinguishes pre-publication blockers, partial publication, post-publication failure, manual limitations, and repair-forward recovery. The shipped evidence now supplies the previously pending public proof. |
+| 14 | PASS | Preview and publication agreed on version `0.22.0`, tag `v0.22.0`, release type `minor`, fifteen rendered entries, and notes digest `a5108415ccf74682b00ad77b01e16b8db81e7656a8ba8679a1b73384402f036f`. The live release body has the same digest. |
 
 ## Critical Issues
 
-- None. The prior clean-runner authentication failure is resolved.
+- None.
 
 ## Important Issues
 
-- [`.flow/runs/release-validation-gate/release/candidate-plan.json:1`] The retained
-  plan and candidate evidence authorize SHA `7776703`, while the reviewed branch
-  is now `298cca2`. Rerun the real credential-free preview and all thirteen
-  candidate checks at the final current SHA, replace the plan/evidence/logs, and
-  validate their digests before publication. The current 767-test run proves the
-  repository suite, but it is not a substitute for the install, upgrade, setup,
-  sync, doctor, and runtime candidate chain.
-
-- [`tests/test_release_recovery.py:52`] Remote-baseline integration now covers
-  exact state, moved `main`, and an existing predicted tag, but not the explicit
-  changed-prior-release identity failure. Add a case that moves or replaces
-  `v0.21.0` (including the peeled commit identity) and prove
-  `verify_remote_baseline` rejects it. This closes the remaining unsupported
-  portion of acceptance criteria 7 and 12.
-
-- [`.flow/runs/release-validation-gate/acceptance-criteria.md:17`] The remediation
-  delta itself passes `git diff --check 7776703..HEAD`, but the required full
-  branch check `git diff --check origin/main...HEAD` still fails on extra EOF
-  blank lines across previously committed run artifacts. Remove those blank lines
-  and rerun the full-branch check before handback.
-
-- [`.flow/runs/release-validation-gate/validation-results.md:3`] The durable
-  validation summary is stale: it still reports 37 focused tests, 754 full tests,
-  pending mutation proof, and pending reviews. The retained older candidate log
-  actually reports 755 tests, while the reviewer has now run 49 focused and 767
-  full tests at `298cca2`. Refresh this file and `implementation-evidence.md` from
-  the final current-SHA candidate run so the handback does not contradict its
-  evidence.
+- None.
 
 ## Suggestions
 
-- [`tests/test_release_recovery.py:143`] Add one complete local-Git fixture for
-  `release_verify_published.verify`, not only `_release_body`. It should build an
-  actual changelog-only release commit/tag, use a release JSON fixture, stub only
-  consumer commands, and assert both the passing result and a persisted
-  repair-forward failure result. The public run will provide final proof, but
-  this would catch orchestration mistakes before publication.
+- Preserve the hosted plan, candidate evidence and logs, publication result,
+  both pre-publication baselines, public verification result, and workflow URL in
+  the run closeout. Together they form the reproducible authorization and
+  publication chain for `v0.22.0`.
 
-- [`scripts/release_gate.py:276`] Evidence log paths are textually constrained,
-  but the validator does not resolve paths and reject a symlink escaping
-  `logs_root`. Artifact producers are trusted within the workflow, so this is not
-  a release blocker here; a resolved-path containment check would make the
-  artifact boundary fully strict.
+- Preserve failed hosted runs `33564014091` and `33565098215` alongside the
+  successful run as operational evidence that preview and candidate failures
+  stop before production writes.
 
 ## What's Done Well
 
-- Credential-free public lookup is now simple, read-only, and independently
-  proven against an existing release.
-- All thirteen candidate failure positions and all eight named workflow safety
-  mutations are executable tests rather than prose claims; they passed during
-  this review.
-- Failure-only remote reconciliation captures branch, tag, and GitHub release
-  observations without retrying or mutating state, and the runbook gives operators
-  a concrete repair-forward path.
-- Candidate evidence validation now requires `runner_sha == source_sha` and
-  recomputes every uploaded log digest in both validation and publication jobs.
-- External actions are pinned immutably while retaining readable version comments.
-- Commit `298cca2 fix(release): close validation review gaps` follows Conventional
-  Commits and keeps the remediation cohesive.
+- The final workflow proved the complete intended sequence on a clean GitHub
+  runner: credential-free analysis, deterministic candidate validation, repeated
+  drift analysis, immediate baseline refresh, one publication, and public
+  consumer verification.
+- Artifact linkage is exact. The candidate evidence points to the hosted plan
+  digest, and the published verification points to both the hosted plan and
+  candidate evidence digests.
+- The publication boundary produced a narrow generated commit with the planned
+  parent, subject, and sole `CHANGELOG.md` modification.
+- Public notes are not merely similar to preview output; the live GitHub release
+  body is byte-for-byte equal to the planned notes and has the planned digest.
+- The two earlier hosted failures were repaired at their actual integration
+  boundaries without weakening validation, and the final run confirms those
+  repairs under the target runner environment.
 
 ## Verification Story
 
-- Tests reviewed: yes. `python3 -m unittest tests.test_release_gate
-  tests.test_release_workflow tests.test_release_recovery` passed 49 tests.
-  `python3 -m unittest discover -s tests -p 'test_*.py'` passed 767 tests at
-  current SHA `298cca2` in 159.472 seconds.
-- Build/runtime checks reviewed: partially current. The prior thirteen-check
-  candidate bundle is internally consistent but belongs to SHA `7776703`; it
-  must be regenerated for `298cca2`.
-- Mutation check: ran. All eight required workflow mutations were detected, and
-  every one of the thirteen injected candidate failures stopped later checks.
-- Public read check: ran against existing `v0.21.0`; credential-free lookup
-  returned the expected release URL and a non-empty 565-character body.
-- Diff hygiene: remediation delta passes; full `origin/main...HEAD` diff fails on
-  documented EOF blank lines in earlier run artifacts.
-- Validated against: current source for focused/full automated tests; older exact
-  source for the retained candidate installation chain; existing public `v0.21.0`
-  for credential-free API lookup. No `v0.22.0` publication or public consumer
-  evidence exists yet.
-- Remaining risks: current-SHA candidate proof, prior-tag drift coverage, durable
-  evidence refresh, and full-branch diff hygiene remain before publication. After
-  publication, verify tag/release-commit shape, release notes, public fresh install,
-  public upgrade, setup, sync, doctor, and runtime smoke before final acceptance.
-  Data migration and UX review do not apply to this workflow/tooling change.
+- Tests reviewed: yes. Hosted `python-test-suite` passed 770 tests in 65.360
+  seconds. The pre-push focused release suite passed 52 tests. Candidate fresh
+  install, upgrade, setup, sync, doctor, static smoke, and representative CLI
+  checks all passed.
+- Build/runtime checks reviewed: yes. Hosted run
+  `https://github.com/andyconley/flow/actions/runs/33632240778` completed with
+  successful `analyze`, `validate-candidate`, `publish`, and `verify-published`
+  jobs.
+- Artifact validation: passed. The hosted plan digest is
+  `b503b30400e1d56dec75fc850bea71dd4456eec3496ad76d8e9a12c0a1823e7d`;
+  the candidate evidence digest is
+  `f762fbccbc20ba8a9a01a80d88b0bfe7b51f1de2e9d9dc1e2d38911b129f2166`.
+  Plan, evidence, all log hashes, publication result, and cross-artifact digest
+  references passed validation.
+- Publication validation: passed. The structured result records release commit
+  `f5f45565c64f881f9ba07c85d23fb95e90cb292b`; live `origin/main` and public
+  `v0.22.0` resolve to that commit, whose only change is `CHANGELOG.md` and whose
+  sole parent is `e05178b...`.
+- Public verification: passed. The release is public, non-draft, and
+  non-prerelease at `https://github.com/andyconley/flow/releases/tag/v0.22.0`.
+  Its notes exactly match the plan. The hosted verifier passed tag/commit shape,
+  release notes, public fresh install, public upgrade, setup, both sync checks,
+  doctor, static smoke, and representative CLI.
+- Remaining risks: no release-gate acceptance blockers remain. Semantic-release
+  publication is inherently non-transactional, so the documented reconciliation
+  and repair-forward path remains necessary for future failures. Live
+  Claude/Codex discovery, applied routing, external identity, and provider grants
+  remain intentionally manual limitations rather than claims proven by this
+  release. Data migration and UX review do not apply.

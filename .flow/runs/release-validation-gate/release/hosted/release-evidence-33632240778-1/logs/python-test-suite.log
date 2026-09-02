@@ -1,0 +1,90 @@
+..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................fatal: repository '/tmp/tmpoua5uq8g/does-not-exist.git' does not exist
+..Cloning into '/tmp/tmpw8afl8se/user.clone-tmp'...
+done.
+.Cloning into '/tmp/tmpg7z1b__9/user.clone-tmp'...
+done.
+.Initialized empty Git repository in /tmp/tmpeu5im4dr/user/.git/
+...........................................................hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+To /tmp/tmpptx1h4qq/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+.hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+To /tmp/tmp7ptc8o64/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /tmp/tmp7ptc8o64/remote.git
+ * [new tag]         v0.22.0 -> v0.22.0
+.hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+To /tmp/tmp020f3yuf/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /tmp/tmp020f3yuf/remote.git
+   3ab1bbf..32eba24  main -> main
+.hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+To /tmp/tmpoiykq6ap/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /tmp/tmpoiykq6ap/remote.git
+ + c8342a4...3ab1bbf v0.21.0 -> v0.21.0 (forced update)
+..............
+----------------------------------------------------------------------
+Ran 770 tests in 65.360s
+
+OK
+(no active sessions in range)
+
+freshness: no usage harvests recorded yet; run `flow harvest claude`, `flow harvest codex`, then `flow normalize`.
+ignoring managed path outside the root: ../../escape.md
+ignoring managed path outside the root: /tmp/tmpqmz436n5/victim.txt
+ignoring managed path outside the root: /tmp/tmp3p5_iyve/victim.txt
+claude sync wrote managed files:
+- removed: /tmp/tmp3p5_iyve/repo/.claude/ok.md
+ignoring managed path outside the root: /tmp/tmp4lq11dj3/victim.txt

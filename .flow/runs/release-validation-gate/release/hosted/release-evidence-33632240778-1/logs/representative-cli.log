@@ -1,0 +1,26 @@
+{
+  "command": "update",
+  "diagnostics": [
+    {
+      "category": "ok",
+      "detail": "current=v0.22.0, latest=v0.22.0",
+      "id": "update.version",
+      "severity": "info",
+      "status": "ok",
+      "summary": "already at the latest tag"
+    }
+  ],
+  "errors": 0,
+  "generated_at": "2026-09-02T12:52:33Z",
+  "install": {
+    "installed_at": "2026-09-02T12:52:31Z",
+    "mode": "release",
+    "remote": "file:///tmp/flow-release-candidate-sk_2ra__/candidate.git",
+    "version": "v0.22.0"
+  },
+  "latest": "v0.22.0",
+  "ok": true,
+  "remote": "file:///tmp/flow-release-candidate-sk_2ra__/candidate.git",
+  "root": "/tmp/flow-release-candidate-sk_2ra__/fresh-home",
+  "warnings": 0
+}
