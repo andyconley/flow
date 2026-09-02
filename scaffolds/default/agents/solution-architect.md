@@ -12,8 +12,6 @@ tools:
   - Write
   - Grep
   - Glob
-  - WebSearch
-  - WebFetch
 model: opus
 ---
 

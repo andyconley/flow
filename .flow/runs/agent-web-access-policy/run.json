@@ -1,0 +1,38 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+    "handback": ".flow/runs/agent-web-access-policy/HANDOFF.md",
+    "handoff": ".flow/runs/agent-web-access-policy/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/agent-web-access-policy/validation-results.md",
+    "orchestration_manifest": ".flow/runs/agent-web-access-policy/orchestration.json",
+    "plan": ".flow/runs/agent-web-access-policy/plan.md",
+    "requirements": ".flow/runs/agent-web-access-policy/requirements.md",
+    "review": ".flow/runs/agent-web-access-policy/review.md",
+    "solution": ".flow/runs/agent-web-access-policy/solution.md",
+    "validation_plan": ".flow/runs/agent-web-access-policy/validation-plan.md"
+  },
+  "created_at": "2026-09-02T13:47:18Z",
+  "dispositions": {
+    "risk": "owned"
+  },
+  "gates": {
+    "accept-review": "2026-09-02T18:53:45Z",
+    "approve-definition": "2026-09-02T17:10:56Z",
+    "approve-plan": "2026-09-02T17:31:57Z",
+    "approve-solution": "2026-09-02T17:23:40Z",
+    "mark-handback-ready": "2026-09-02T18:53:15Z",
+    "start-definition": "2026-09-02T13:47:18Z",
+    "start-implementation": "2026-09-02T18:25:28Z",
+    "start-plan": "2026-09-02T17:26:59Z",
+    "start-review": "2026-09-02T18:53:15Z",
+    "start-solution": "2026-09-02T17:10:57Z"
+  },
+  "lane": "review",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "review_accepted",
+  "updated_at": "2026-09-02T18:53:45Z",
+  "work_id": "agent-web-access-policy"
+}

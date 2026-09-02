@@ -99,9 +99,21 @@ How it merges:
   - Entries in the user manifest with the same `name` as a framework entry **replace** it (override).
   - Entries with a new `name` are **appended** (addition).
   - The merged manifest drives adapter generation. Generated SKILLs, agent files, and hook registrations embed or point at the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.
+- **Agent capability exceptions merge separately from agents.** The framework
+  capability catalog supplies global defaults. Framework and user
+  `[[agent_capability_overrides]]` entries merge by `(agent, capability)`, so an
+  unrelated same-name agent replacement cannot erase a lower-layer denial.
+  Omission preserves the lower exception. Every override requires a rationale;
+  an overlay may explicitly re-enable a lower denial but cannot redefine the
+  framework catalog or default.
 - **Standards and templates are *not* merged at sync time** — they're not embedded into adapters; they're referenced by name at runtime. The runtime resolution order is documented in `FRAMEWORK.md` under "Overlay resolution for standards and templates": project `[[replaces]]` wiring > user overlay > framework default. Projects still do not *hold* standards or templates — a `[[replaces]]` entry names a replacement that lives in the user overlay. `flow doctor` reports whether each wiring resolves on this machine.
 
 The user overlay is opt-in. Without `~/.flow/user/flow.toml`, sync behavior is identical to the framework-only baseline. `flow doctor` reports whether the overlay is present and what it declares.
+
+Overlay parsing is fail-closed. A malformed `~/.flow/user/flow.toml` stops sync
+before any managed output changes; Flow no longer warns and continues with the
+framework alone. Repair the TOML and use sync check before applying generation.
+This prevents a syntax error from silently discarding a capability exception.
 
 ### Versioning the overlay
 
@@ -249,6 +261,37 @@ Current examples:
 - Claude receives generated `.claude/agents/*.md` files with manifest-resolved `model` and `effort`
 - Codex receives generated `.codex/agents/*.toml` files with `developer_instructions`, `model`, and `model_reasoning_effort`
 
+### Agent Capabilities
+
+Agent capability policy follows the same semantic-to-native boundary as model
+routing, but has a separate resolver because tool permission and model choice
+are different policy domains.
+
+The framework catalog currently defines the boolean `web_research` capability
+as enabled by default with `explicit-task-or-brief` authorization. A keyed
+exception ledger supplies opt-outs and deliberate higher-layer re-enables.
+Resolution occurs after the agent inventory and exception layers merge and
+before either runtime writes output. Invalid types, unknown agents or
+capabilities, duplicate exception keys, missing rationales, redundant enables,
+or overlay catalog redefinition fail generation.
+
+The resolved boolean crosses an adapter boundary:
+
+- Claude normalizes `WebSearch` and `WebFetch` in the role's tools list.
+- Codex emits the coupled `web_search` mode and `tools.web_search` boolean.
+- Both receive the same generated task-authorization and external-content
+  guidance.
+
+Every Claude agent governed by an active catalog must declare `tools:` in its
+source, even when opted out. Omission can inherit runtime tools, so the adapter
+rejects it instead of treating absence as a denial. An explicit empty list is
+valid.
+
+This is a deliberately small capability mechanism, not a policy language. It
+supports known boolean capabilities only; provider payloads, conditional grants,
+credentials, and per-task technical enforcement remain outside the boundary.
+See [ADR 0003](adr/0003-semantic-agent-capabilities.md).
+
 ## Managed vs Unmanaged Boundaries
 
 Generated runtime files are tracked in runtime-specific managed manifests:
@@ -317,6 +360,20 @@ Reason:
 - the important behavior is end-to-end scaffold and sync behavior
 - managed-file semantics are easiest to verify through real temp repos
 - runtime generation drift is a contract behavior, not just a helper-function detail
+
+Capability validation follows that boundary: pure tests cover defaulting,
+exception precedence, rationale rules, and invalid input; fake-home integration
+tests parse every generated Claude and Codex agent. This establishes
+configuration parity only. Live tool availability, account policy, runtime
+enforcement, and agent compliance require separate evidence and are not claimed.
+
+## Capability Rollback
+
+The manifest, resolver, adapter mappings, and shared guidance ship as one change
+and should be reverted together. After installing a prior tagged Flow release
+or a corrective release, run both user sync commands to regenerate Claude and
+Codex outputs. No persistent data migration is required; generated agent files
+are replaceable projections of canonical source.
 
 See:
 

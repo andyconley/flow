@@ -1,0 +1,451 @@
+{
+  "schema_version": 1,
+  "work_id": "agent-web-access-policy",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": ["security_or_privacy_boundary"],
+    "aggravating_factors": ["large_blast_radius"],
+    "classification": "high",
+    "rationale": "The work expands external web capability across every Flow role and both supported runtimes, while introducing explicit local-only exceptions."
+  },
+  "assignments": [
+    {
+      "id": "definition-capture",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/definition-capture.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/research/requirements.md",
+        ".flow/runs/agent-web-access-policy/research/product.md",
+        ".flow/runs/agent-web-access-policy/research/architecture.md",
+        ".flow/runs/agent-web-access-policy/research/security.md",
+        ".flow/runs/agent-web-access-policy/research/testability.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+        ".flow/runs/agent-web-access-policy/findings-reconciliation.md",
+        ".flow/runs/agent-web-access-policy/orchestration.json"
+      ],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/requirements.md", "format": "markdown"},
+      "success_criteria": ["approved requirements capture every reviewed mitigation", "acceptance boundary is configuration-only"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "artifact-capture"}
+    },
+    {
+      "id": "architecture-research",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {"kind": "agent", "id": "web_access_architecture"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/architecture-research.md",
+      "input_evidence": ["scaffolds/default/flow.toml", "cli/render.py", "cli/sync.py"],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "web-research", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/research/architecture.md", "format": "markdown"},
+      "success_criteria": ["both runtime mappings and inheritance behavior are evidenced"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "definition-research"}
+    },
+    {
+      "id": "product-research",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {"kind": "agent", "id": "web_access_product"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/product-research.md",
+      "input_evidence": ["scaffolds/default/agents/product-manager.md", "scaffolds/default/standards/research-evidence.md"],
+      "read_scopes": ["scaffolds/default", "docs"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/research/product.md", "format": "markdown"},
+      "success_criteria": ["value, non-goals, and proof boundary are explicit"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "definition-research"}
+    },
+    {
+      "id": "testability-review",
+      "lane": "define",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "web_access_testability"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/testability-review.md",
+      "input_evidence": ["tests/test_flow.py", "cli/render.py", "cli/sync.py"],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/research/testability.md", "format": "markdown"},
+      "success_criteria": ["configuration proof covers inventory, both adapters, and negative cases"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "definition-research"}
+    },
+    {
+      "id": "security-review",
+      "lane": "define",
+      "role": "security-reviewer",
+      "provider": {"kind": "agent", "id": "web_access_security"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/security-review.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/research/requirements.md",
+        ".flow/runs/agent-web-access-policy/research/product.md",
+        ".flow/runs/agent-web-access-policy/research/architecture.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/research/security.md", "format": "markdown"},
+      "success_criteria": ["external trust boundary and fail-closed opt-out risks are dispositioned"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "independent-verification"}
+    },
+    {
+      "id": "solution-design",
+      "lane": "solution",
+      "role": "solution-architect",
+      "provider": {"kind": "agent", "id": "web_access_architecture"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/solution-design.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+        ".flow/runs/agent-web-access-policy/research/architecture.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "web-research", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/solution/solution-design.md", "format": "markdown"},
+      "success_criteria": ["at least two viable designs are compared", "one design is recommended with native runtime mappings"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "solutioning"}
+    },
+    {
+      "id": "platform-architecture-review",
+      "lane": "solution",
+      "role": "architect",
+      "provider": {"kind": "agent", "id": "web_access_platform_architect"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/platform-architecture-review.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/research/architecture.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/solution/architecture-review.md", "format": "markdown"},
+      "success_criteria": ["reusable capability boundary and overlay precedence are reviewed"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "solution-review"}
+    },
+    {
+      "id": "solution-security-review",
+      "lane": "solution",
+      "role": "security-reviewer",
+      "provider": {"kind": "agent", "id": "web_access_security"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/solution-security-review.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/research/security.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/solution/security-review.md", "format": "markdown"},
+      "success_criteria": ["recommended design preserves explicit denial and untrusted-content controls"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "independent-verification"}
+    },
+    {
+      "id": "solution-test-review",
+      "lane": "solution",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "web_access_testability"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/solution-test-review.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+        ".flow/runs/agent-web-access-policy/research/testability.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/solution/test-review.md", "format": "markdown"},
+      "success_criteria": ["configuration proof is deterministic and covers native mappings plus override cases"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "solution-review"}
+    },
+    {
+      "id": "solution-capture",
+      "lane": "solution",
+      "role": "solution-architect",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/solution-capture.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/solution/solution-design.md",
+        ".flow/runs/agent-web-access-policy/solution/architecture-review.md",
+        ".flow/runs/agent-web-access-policy/solution/security-review.md",
+        ".flow/runs/agent-web-access-policy/solution/test-review.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [
+        ".flow/runs/agent-web-access-policy/solution.md",
+        ".flow/runs/agent-web-access-policy/findings-reconciliation.md",
+        ".flow/runs/agent-web-access-policy/orchestration.json"
+      ],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/solution.md", "format": "markdown"},
+      "success_criteria": ["approved design records exact schema, mappings, precedence, chunks, and owned risks"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "artifact-capture"}
+    },
+    {
+      "id": "plan-business-analysis",
+      "lane": "plan",
+      "role": "business-analyst",
+      "provider": {"kind": "agent", "id": "web_access_plan_ba"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/plan-business-analysis.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+        ".flow/runs/agent-web-access-policy/solution.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/planning/business-analysis.md", "format": "markdown"},
+      "success_criteria": ["desired outcome, scope, contracts, and acceptance traceability are explicit"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "plan-shaping"}
+    },
+    {
+      "id": "plan-product",
+      "lane": "plan",
+      "role": "product-manager",
+      "provider": {"kind": "agent", "id": "web_access_plan_pm"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/plan-product.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/solution.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/planning/product.md", "format": "markdown"},
+      "success_criteria": ["atomic release scope, migration cost, and observable done conditions are explicit"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "plan-shaping"}
+    },
+    {
+      "id": "plan-architecture",
+      "lane": "plan",
+      "role": "architect",
+      "provider": {"kind": "agent", "id": "web_access_plan_arch"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/plan-architecture.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/solution.md",
+        ".flow/runs/agent-web-access-policy/solution/architecture-review.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/planning/architecture.md", "format": "markdown"},
+      "success_criteria": ["module boundaries, invariants, sequence, and ownership are implementation-ready"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "plan-shaping"}
+    },
+    {
+      "id": "plan-test",
+      "lane": "plan",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "web_access_testability"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/plan-test.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+        ".flow/runs/agent-web-access-policy/solution/test-review.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/planning/test.md", "format": "markdown"},
+      "success_criteria": ["unit, integration, atomicity, and release proof are explicit and bounded"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "plan-shaping"}
+    },
+    {
+      "id": "plan-capture",
+      "lane": "plan",
+      "role": "business-analyst",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/plan-capture.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/planning/business-analysis.md",
+        ".flow/runs/agent-web-access-policy/planning/product.md",
+        ".flow/runs/agent-web-access-policy/planning/architecture.md",
+        ".flow/runs/agent-web-access-policy/planning/test.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [
+        ".flow/runs/agent-web-access-policy/plan.md",
+        ".flow/runs/agent-web-access-policy/implementation-handoff.md",
+        ".flow/runs/agent-web-access-policy/validation-plan.md",
+        ".flow/runs/agent-web-access-policy/findings-reconciliation.md",
+        ".flow/runs/agent-web-access-policy/orchestration.json"
+      ],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/plan.md", "format": "markdown"},
+      "success_criteria": ["another engineer can implement and release without private chat context"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "artifact-capture"}
+    },
+    {
+      "id": "implementation-core",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/implementation-core.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/solution.md",
+        ".flow/runs/agent-web-access-policy/plan.md"
+      ],
+      "read_scopes": ["cli", "scaffolds/default", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": ["cli/agent_capabilities.py", "cli/sync.py", "cli/render.py", "scaffolds/default/flow.toml", "scaffolds/default/agents/solution-architect.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": "cli/agent_capabilities.py", "format": "python"},
+      "success_criteria": ["one semantic policy maps safely to both runtimes before writes"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "implementation"}
+    },
+    {
+      "id": "implementation-tests",
+      "lane": "implement",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "web_access_testability"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/implementation-tests.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+        ".flow/runs/agent-web-access-policy/validation-plan.md"
+      ],
+      "read_scopes": ["cli", "scaffolds/default", "tests", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": ["tests/test_agent_capabilities.py", "tests/test_flow.py"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": "tests/test_agent_capabilities.py", "format": "python"},
+      "success_criteria": ["configuration, precedence, native mappings, and atomic failure are proven"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "implementation"}
+    },
+    {
+      "id": "implementation-docs",
+      "lane": "implement",
+      "role": "architect",
+      "provider": {"kind": "agent", "id": "web_access_platform_architect"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/implementation-docs.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/solution.md",
+        ".flow/runs/agent-web-access-policy/plan.md"
+      ],
+      "read_scopes": ["docs", "cli", "scaffolds/default", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": ["docs/adr/0003-semantic-agent-capabilities.md", "docs/runtime-adapters.md", "docs/architecture.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": "docs/adr/0003-semantic-agent-capabilities.md", "format": "markdown"},
+      "success_criteria": ["decision, migration, mapping, rollback, and proof boundaries are durable"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "implementation"}
+    },
+    {
+      "id": "implementation-security-review",
+      "lane": "review",
+      "role": "security-reviewer",
+      "provider": {"kind": "agent", "id": "web_access_security"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/implementation-security-review.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/requirements.md",
+        ".flow/runs/agent-web-access-policy/plan.md",
+        ".flow/runs/agent-web-access-policy/implementation-notes.md"
+      ],
+      "read_scopes": ["cli", "scaffolds/default", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/reviews/security.md", "format": "markdown"},
+      "success_criteria": ["permission expansion and fail-closed behavior have no open blocker"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "implementation-review"}
+    },
+    {
+      "id": "implementation-quality-review",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {"kind": "agent", "id": "web_access_architecture"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/implementation-quality-review.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/acceptance-criteria.md",
+        ".flow/runs/agent-web-access-policy/plan.md",
+        ".flow/runs/agent-web-access-policy/validation-results.md"
+      ],
+      "read_scopes": ["cli", "scaffolds/default", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/reviews/quality.md", "format": "markdown"},
+      "success_criteria": ["acceptance review has zero open findings and preserves nonclaims"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "implementation-review"}
+    },
+    {
+      "id": "implementation-capture",
+      "lane": "implement",
+      "role": "tech-writer",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/agent-web-access-policy/briefs/implementation-capture.md",
+      "input_evidence": [
+        ".flow/runs/agent-web-access-policy/reviews/security.md",
+        ".flow/runs/agent-web-access-policy/reviews/quality.md"
+      ],
+      "read_scopes": ["cli", "scaffolds/default", "tests", "docs", ".flow/runs/agent-web-access-policy"],
+      "write_scopes": [
+        ".flow/runs/agent-web-access-policy/current-state.md",
+        ".flow/runs/agent-web-access-policy/implementation-notes.md",
+        ".flow/runs/agent-web-access-policy/validation-results.md",
+        ".flow/runs/agent-web-access-policy/HANDOFF.md",
+        ".flow/runs/agent-web-access-policy/review.md",
+        ".flow/runs/agent-web-access-policy/orchestration.json"
+      ],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/agent-web-access-policy/HANDOFF.md", "format": "markdown"},
+      "success_criteria": ["handback states delivered change, proof, remaining release actions, and residual risk"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "artifact-capture"}
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/agent-web-access-policy/findings-reconciliation.md",
+    "status": "resolved",
+    "claims": []
+  },
+  "verification": {
+    "producer_assignments": ["definition-capture", "solution-capture", "plan-capture", "implementation-core", "implementation-tests", "implementation-docs", "implementation-capture"],
+    "evidence_collector_assignment": "implementation-capture",
+    "verifier_assignment": "implementation-quality-review",
+    "independent": true,
+    "artifact_path": ".flow/runs/agent-web-access-policy/reviews/quality.md"
+  }
+}

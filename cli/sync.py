@@ -22,6 +22,7 @@ import json
 import sys
 from pathlib import Path
 
+from agent_capabilities import resolve_agent_capabilities
 from diagnostic_model import (
     SEVERITY_ERROR,
     SEVERITY_INFO,
@@ -179,16 +180,22 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
 
     user_manifest_path = USER_OVERLAY_DIR / "flow.toml"
     if not user_manifest_path.exists():
+        manifest["_agent_capability_decisions"] = resolve_agent_capabilities(
+            manifest,
+            None,
+            manifest.get("agents", []),
+            framework_source=str(framework_manifest_path),
+            overlay_source=str(user_manifest_path),
+        )
         return framework_manifest_path, manifest
 
     try:
         user_manifest = read_toml(user_manifest_path)
     except Exception as err:
-        sys.stderr.write(
-            f"warning: failed to parse user overlay {user_manifest_path}: {err}\n"
-            "proceeding with framework-only manifest\n"
+        raise ValueError(
+            f"invalid user overlay {user_manifest_path}: {err}; "
+            "fix the TOML before syncing so capability exceptions cannot be ignored"
         )
-        return framework_manifest_path, manifest
 
     def merge_named(framework_list: list, user_list: list) -> list:
         if not user_list:
@@ -225,6 +232,13 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     manifest["agents"] = merge_named(
         manifest.get("agents", []),
         user_manifest.get("agents", []),
+    )
+    manifest["_agent_capability_decisions"] = resolve_agent_capabilities(
+        manifest,
+        user_manifest,
+        manifest.get("agents", []),
+        framework_source=str(framework_manifest_path),
+        overlay_source=str(user_manifest_path),
     )
 
     return framework_manifest_path, manifest
@@ -453,6 +467,7 @@ def desired_claude_outputs(
             source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
             runtime_policy_for_agent(manifest, "claude", agent),
+            manifest.get("_agent_capability_decisions", {}).get(agent["name"]),
         )
         outputs[target] = content
         managed_entries.append(
@@ -554,6 +569,7 @@ def desired_codex_outputs(
             source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
             runtime_policy_for_agent(manifest, "codex", agent),
+            manifest.get("_agent_capability_decisions", {}).get(agent["name"]),
         )
         managed_entries.append(
             {
@@ -841,12 +857,12 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False, as_js
         # Reads the framework scaffold and layers in ~/.flow/user/flow.toml
         # if present.
         manifest_path, manifest = merge_user_overlay(flow_dir)
-    except FileNotFoundError as err:
+    except (FileNotFoundError, ValueError) as err:
         diag = diagnostic(
             f"sync.{target}.manifest",
             STATUS_FAILED,
             SEVERITY_ERROR,
-            "missing",
+            "missing" if isinstance(err, FileNotFoundError) else "manifest_invalid",
             str(err),
             target=target,
         )

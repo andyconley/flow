@@ -6,6 +6,22 @@ version = 1
 flow_dir = ".flow"
 source_of_truth = ".flow"
 
+# Semantic agent capability intent is resolved once, after the framework and
+# user agent inventory is merged, then translated by each runtime adapter.
+[agent_capabilities.web_research]
+default = true
+authorization = "explicit-task-or-brief"
+
+# Per-agent exceptions are keyed independently from [[agents]], so an overlay
+# that replaces an agent body cannot erase a lower-layer denial by omission.
+# Every exception, including an intentional re-enable, requires a rationale.
+#
+# [[agent_capability_overrides]]
+# agent = "example-local-only-role"
+# capability = "web_research"
+# enabled = false
+# rationale = "This role must remain local-only."
+
 # Declared dependencies on upstream standards. Each block names the upstream
 # source, the version flow is pinned to, and where the verbatim vendor mirror
 # lives. Run `scripts/refresh-conventional-commits.py` to roll a vendor forward.

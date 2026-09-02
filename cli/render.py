@@ -15,6 +15,11 @@ one runtime.
 import json
 from pathlib import Path
 
+from agent_capabilities import (
+    CapabilityPolicyError,
+    WEB_RESEARCH,
+    guidance_for,
+)
 from fsutil import rel_posix
 from paths import (
     CODEX_SKILL_DIR,
@@ -277,20 +282,59 @@ def render_skill_from_command(
     return "\n".join(lines)
 
 
-def render_claude_agent(source_ref: str, body: str, policy: dict) -> str:
+def render_claude_agent(
+    source_ref: str,
+    body: str,
+    policy: dict,
+    capabilities: dict | None = None,
+) -> str:
     frontmatter, content = parse_frontmatter(body)
     for key, value in policy.items():
         if value:
             frontmatter[key] = value
+    decision = capabilities.get(WEB_RESEARCH) if capabilities else None
+    if decision is not None:
+        if "tools" not in frontmatter:
+            raise CapabilityPolicyError(
+                "missing-claude-tools",
+                "an active capability policy requires an explicit source tools list",
+                source=source_ref,
+                capability=WEB_RESEARCH,
+                remediation="add a tools: list to the source agent; an explicit empty list is valid",
+            )
+        tools = frontmatter.get("tools", [])
+        if "tools" in frontmatter and not isinstance(tools, list):
+            raise CapabilityPolicyError(
+                "invalid-claude-tools",
+                "source tools must be a YAML list",
+                source=source_ref,
+                capability=WEB_RESEARCH,
+                remediation="declare tools: followed by zero or more list entries",
+            )
+        normalized = [tool for tool in tools if tool not in {"WebSearch", "WebFetch"}]
+        if decision.enabled:
+            normalized.extend(["WebSearch", "WebFetch"])
+        if "tools" in frontmatter or decision.enabled:
+            frontmatter["tools"] = normalized
+        content = f"{content.rstrip()}\n\n{guidance_for(decision)}\n"
     marker = f"<!-- {GENERATED_MARKER} Edit `{source_ref}` and run `flow sync claude --user`. -->"
     lines = render_yaml_frontmatter(frontmatter)
     lines.extend(["", marker, "", content.rstrip(), ""])
     return "\n".join(lines)
 
 
-def render_codex_agent(name: str, source_ref: str, body: str, policy: dict) -> str:
+def render_codex_agent(
+    name: str,
+    source_ref: str,
+    body: str,
+    policy: dict,
+    capabilities: dict | None = None,
+) -> str:
     frontmatter, content = parse_frontmatter(body)
     description = str(frontmatter.get("description", f"Flow agent: {name}"))
+    decision = capabilities.get(WEB_RESEARCH) if capabilities else None
+    if decision is not None:
+        content = f"{content.rstrip()}\n\n{guidance_for(decision)}\n"
     safe_body = content.rstrip().replace('"""', '""\\"')
     lines = [
         f"name = {toml_string(name)}",
@@ -303,6 +347,17 @@ def render_codex_agent(name: str, source_ref: str, body: str, policy: dict) -> s
     effort = policy.get("model_reasoning_effort")
     if effort:
         lines.append(f"model_reasoning_effort = {toml_string(effort)}")
+    if decision is not None:
+        lines.append(
+            f'web_search = {toml_string("live" if decision.enabled else "disabled")}'
+        )
+        lines.extend(
+            [
+                "",
+                "[tools]",
+                f"web_search = {'true' if decision.enabled else 'false'}",
+            ]
+        )
     lines.extend(
         [
             "",
