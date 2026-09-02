@@ -8,3 +8,4 @@
 {"artifacts": {"handback": ".flow/runs/agent-web-access-policy/HANDOFF.md", "implementation_evidence": ".flow/runs/agent-web-access-policy/validation-results.md"}, "at": "2026-09-02T18:53:15Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-02T18:53:15Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
 {"artifacts": {"review": ".flow/runs/agent-web-access-policy/review.md"}, "at": "2026-09-02T18:53:45Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}
+{"artifacts": {}, "at": "2026-09-02T19:08:31Z", "dispositions": {"capability_gaps": "recorded", "memory": "updated"}, "event": "archive", "from": "review_accepted", "to": "archived"}

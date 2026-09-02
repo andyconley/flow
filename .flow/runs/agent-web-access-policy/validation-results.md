@@ -1,6 +1,6 @@
 # Validation Results: Agent Web Access Policy
 
-- Status: local implementation validation passed; corrective release validation pending.
+- Status: released and public verification passed.
 - Approved claim: **web capability configuration passed**.
 
 ## Automated tests
@@ -24,6 +24,22 @@
   a following bare clone lost an object directory during copy.
 - Corrective action: disable Git auto-GC and maintenance for the disposable
   fixture commands. This changes test isolation only, not product behavior.
+
+## Hosted release attempt 2
+
+- GitHub Actions run `33670991492` analyzed source commit
+  `b4153ba63170b27fa4ac8f70aefd6d09572bd360` and published v0.23.0.
+- Analyze, candidate validation, publication, and published verification all
+  passed.
+- Candidate evidence reported every deterministic check passed, including the
+  Python suite, fresh install, prior-version upgrade, setup, Claude and Codex
+  sync checks, doctor, static runtime smoke, and representative CLI checks.
+- Published verification independently passed the public tag and generated
+  commit, nonempty GitHub release notes, public fresh install, public upgrade,
+  setup, both sync adapters, doctor, static smoke, and representative CLI.
+- Generated release commit:
+  `00a23c13cf2c57b66f7d1205f1d030b134bf6547`.
+- Public release: https://github.com/andyconley/flow/releases/tag/v0.23.0
 
 ## Mutation check
 

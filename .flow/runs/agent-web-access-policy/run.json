@@ -13,6 +13,8 @@
   },
   "created_at": "2026-09-02T13:47:18Z",
   "dispositions": {
+    "capability_gaps": "recorded",
+    "memory": "updated",
     "risk": "owned"
   },
   "gates": {
@@ -20,6 +22,7 @@
     "approve-definition": "2026-09-02T17:10:56Z",
     "approve-plan": "2026-09-02T17:31:57Z",
     "approve-solution": "2026-09-02T17:23:40Z",
+    "archive": "2026-09-02T19:08:31Z",
     "mark-handback-ready": "2026-09-02T18:53:15Z",
     "start-definition": "2026-09-02T13:47:18Z",
     "start-implementation": "2026-09-02T18:25:28Z",
@@ -27,12 +30,12 @@
     "start-review": "2026-09-02T18:53:15Z",
     "start-solution": "2026-09-02T17:10:57Z"
   },
-  "lane": "review",
-  "last_event": "accept-review",
-  "phase": "review_accepted",
+  "lane": "archive",
+  "last_event": "archive",
+  "phase": "archived",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "review_accepted",
-  "updated_at": "2026-09-02T18:53:45Z",
+  "state": "archived",
+  "updated_at": "2026-09-02T19:08:31Z",
   "work_id": "agent-web-access-policy"
 }

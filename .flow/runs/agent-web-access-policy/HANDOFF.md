@@ -2,10 +2,8 @@
 
 ## Status
 
-Implementation is locally validated and approved for release. The first hosted
-candidate stopped before publication on a disposable Git-fixture race. The
-fixture is stabilized and a corrective release attempt is next; hosted release
-evidence and archive remain.
+Released as v0.23.0. The exact candidate and public release passed all hosted
+gates. Archive closeout is in progress.
 
 ## Delivered
 
@@ -27,14 +25,16 @@ evidence and archive remain.
 - Mutation check proved the inventory test detects a missing native tool.
 - Isolated setup, both sync checks, doctor, and static runtime smoke passed.
 - Security and architecture/acceptance review have zero open findings.
+- GitHub Actions run `33670991492` passed analyze, candidate validation,
+  publication, and published verification.
+- Public tag and release notes, fresh install, prior-version upgrade, setup,
+  Claude and Codex sync checks, doctor, static smoke, and representative CLI
+  checks passed.
 
 ## Remaining actions
 
-1. Commit the release-fixture stabilization and push to `main`.
-2. Verify the fresh release workflow predicts and publishes v0.23.0.
-3. Verify public tag, release notes, fresh install, and prior-version upgrade.
-4. Update this handoff and validation evidence with final release identifiers.
-5. Archive the run and publish the closeout state.
+1. Archive the accepted run.
+2. Publish the archive-only closeout commit without starting another release.
 
 ## Release recovery
 
@@ -43,6 +43,10 @@ evidence and archive remain.
   skipped; no public release state changed.
 - Recovery: Git auto-maintenance is disabled only inside disposable test
   repositories, and both focused stress and complete local validation pass.
+- Attempt 2: GitHub Actions run `33670991492` passed.
+- Source commit: `b4153ba63170b27fa4ac8f70aefd6d09572bd360`.
+- Release commit: `00a23c13cf2c57b66f7d1205f1d030b134bf6547`.
+- Public release: https://github.com/andyconley/flow/releases/tag/v0.23.0
 
 ## Residual risk
 
