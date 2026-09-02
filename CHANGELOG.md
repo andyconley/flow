@@ -2,6 +2,20 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.23.0](https://github.com/andyconley/flow/compare/v0.22.0...v0.23.0) (2026-09-02)
+
+### Features
+
+* **agents:** add semantic web research policy ([95968e9](https://github.com/andyconley/flow/commit/95968e9cea6061d3d9004b1bfcab675470536284))
+
+### Tests
+
+* **release:** stabilize disposable git fixtures ([b4153ba](https://github.com/andyconley/flow/commit/b4153ba63170b27fa4ac8f70aefd6d09572bd360))
+
+### Maintenance
+
+* **release:** record v0.22.0 verification [skip ci] ([65da447](https://github.com/andyconley/flow/commit/65da447290c0ae0e475433cb251f9646873711c3))
+
 ## [0.22.0](https://github.com/andyconley/flow/compare/v0.21.0...v0.22.0) (2026-09-02)
 
 ### Features
