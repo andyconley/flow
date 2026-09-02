@@ -1,14 +1,29 @@
 # Validation Results: Agent Web Access Policy
 
-- Status: local implementation validation passed; release validation pending.
+- Status: local implementation validation passed; corrective release validation pending.
 - Approved claim: **web capability configuration passed**.
 
 ## Automated tests
 
 - `/opt/homebrew/bin/python3.12 -m unittest discover -s tests -p 'test_*.py'`
   — 789 tests passed in 179.129 seconds.
+- After the hosted Linux fixture failure, the two affected update tests passed
+  ten consecutive focused runs and the full 789-test suite passed again in
+  186.882 seconds.
 - Focused resolver and adapter tests passed after the final fail-closed fix.
 - `git diff --check` passed.
+
+## Hosted release attempt 1
+
+- GitHub Actions run `33670068165` analyzed source commit
+  `95968e9cea6061d3d9004b1bfcab675470536284` and predicted v0.23.0.
+- Candidate validation stopped at `python-test-suite`; publish and verify were
+  skipped, so no tag or GitHub release was created.
+- The two errors were filesystem races in disposable Git repositories: a
+  detached auto-maintenance writer overlapped temporary-directory teardown and
+  a following bare clone lost an object directory during copy.
+- Corrective action: disable Git auto-GC and maintenance for the disposable
+  fixture commands. This changes test isolation only, not product behavior.
 
 ## Mutation check
 

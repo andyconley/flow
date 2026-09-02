@@ -793,13 +793,19 @@ class FlowCliTests(FlowCliHarness):
         env["GIT_AUTHOR_EMAIL"] = "test@example.com"
         env["GIT_COMMITTER_NAME"] = "test"
         env["GIT_COMMITTER_EMAIL"] = "test@example.com"
-        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=work, check=True, env=env)
-        subprocess.run(["git", "add", "-A"], cwd=work, check=True, env=env)
-        subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=work, check=True, env=env)
+        # CI's Git may start detached auto-maintenance after commands return.
+        # These repositories live inside a TemporaryDirectory, so a detached
+        # writer races teardown and can also make a following bare clone lose
+        # object directories mid-copy. Disable maintenance for this disposable
+        # fixture rather than retrying filesystem races.
+        git = ["git", "-c", "gc.auto=0", "-c", "maintenance.auto=false"]
+        subprocess.run([*git, "init", "-q", "-b", "main"], cwd=work, check=True, env=env)
+        subprocess.run([*git, "add", "-A"], cwd=work, check=True, env=env)
+        subprocess.run([*git, "commit", "-q", "-m", "initial"], cwd=work, check=True, env=env)
         for tag in tags:
-            subprocess.run(["git", "tag", tag], cwd=work, check=True, env=env)
+            subprocess.run([*git, "tag", tag], cwd=work, check=True, env=env)
         subprocess.run(
-            ["git", "clone", "--bare", "-q", str(work), str(bare)], check=True, env=env
+            [*git, "clone", "--bare", "-q", str(work), str(bare)], check=True, env=env
         )
         return bare
 

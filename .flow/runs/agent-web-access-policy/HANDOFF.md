@@ -2,7 +2,9 @@
 
 ## Status
 
-Implementation is locally validated and approved for release. Hosted release
+Implementation is locally validated and approved for release. The first hosted
+candidate stopped before publication on a disposable Git-fixture race. The
+fixture is stabilized and a corrective release attempt is next; hosted release
 evidence and archive remain.
 
 ## Delivered
@@ -20,17 +22,27 @@ evidence and archive remain.
 ## Proof
 
 - 789-test full suite passed.
+- The two affected tests passed ten consecutive corrective stress runs, then
+  the full 789-test suite passed again in 186.882 seconds.
 - Mutation check proved the inventory test detects a missing native tool.
 - Isolated setup, both sync checks, doctor, and static runtime smoke passed.
 - Security and architecture/acceptance review have zero open findings.
 
 ## Remaining actions
 
-1. Commit with a `feat(agents)` Conventional Commit and push to `main`.
-2. Verify the release workflow predicts and publishes v0.23.0.
+1. Commit the release-fixture stabilization and push to `main`.
+2. Verify the fresh release workflow predicts and publishes v0.23.0.
 3. Verify public tag, release notes, fresh install, and prior-version upgrade.
-4. Update this handoff and validation evidence with release identifiers.
+4. Update this handoff and validation evidence with final release identifiers.
 5. Archive the run and publish the closeout state.
+
+## Release recovery
+
+- Attempt 1: GitHub Actions run `33670068165`.
+- Result: candidate validation failed; publication and verification were
+  skipped; no public release state changed.
+- Recovery: Git auto-maintenance is disabled only inside disposable test
+  repositories, and both focused stress and complete local validation pass.
 
 ## Residual risk
 
