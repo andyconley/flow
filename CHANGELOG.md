@@ -2,6 +2,41 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.22.0](https://github.com/andyconley/flow/compare/v0.21.0...v0.22.0) (2026-09-02)
+
+### Features
+
+* **release:** add validated release planning contracts ([f8fd9d5](https://github.com/andyconley/flow/commit/f8fd9d521edab6b838986659bcde4ad38bccb3b4))
+* **release:** validate candidate and published artifacts ([83918bc](https://github.com/andyconley/flow/commit/83918bc40cac0b49f37810022152d294fe0ea2b9))
+
+### Bug Fixes
+
+* **release:** classify isolated doctor warnings ([7776703](https://github.com/andyconley/flow/commit/777670320a65ec713947bea7ca043d3321b5cee0))
+* **release:** close validation review gaps ([298cca2](https://github.com/andyconley/flow/commit/298cca27063251814f44bf2178fb9c2c156ecdd3))
+* **release:** contain uploaded validation logs ([ebdaf02](https://github.com/andyconley/flow/commit/ebdaf02bb62d99eff7f83edd6e7745f33be532df))
+* **release:** isolate candidate test environment ([e05178b](https://github.com/andyconley/flow/commit/e05178b78420db53c3f7431448e1d188cc958441))
+* **release:** preserve canonical preview URL ([cad5129](https://github.com/andyconley/flow/commit/cad51290fd22735a46e73da901f0314d70558515))
+* **release:** seed candidate overlay for doctor ([96eeb76](https://github.com/andyconley/flow/commit/96eeb7650329e1164909283f344a0f83962243c3))
+* **release:** stabilize preview note links ([02a8254](https://github.com/andyconley/flow/commit/02a8254a3d0e2d96bc33c373ae9ff5de98bb7ebb))
+
+### Documentation
+
+* **release:** document release gate operations ([cf00921](https://github.com/andyconley/flow/commit/cf0092122534f027aae7791322c1e187d27345fc))
+
+### Tests
+
+* **release:** cover prior tag drift ([8719b8b](https://github.com/andyconley/flow/commit/8719b8b390cf591519d5e8c8a2920c90d65fbb35))
+
+### Continuous Integration
+
+* **release:** gate publication on candidate evidence ([0393e46](https://github.com/andyconley/flow/commit/0393e469cc1c15d780bcb2e3cd5599b24d109e9d))
+
+### Maintenance
+
+* **flow:** record release gate reviews ([5b62eca](https://github.com/andyconley/flow/commit/5b62ecab14353b15851296d2151c06dcbaf899ec))
+* **flow:** record release validation gate run ([e61c74d](https://github.com/andyconley/flow/commit/e61c74d15df5a06e5942a7166f2251ac7b697703))
+* **release:** record v0.21.0 verification ([2f48aad](https://github.com/andyconley/flow/commit/2f48aad0c5c147867534a750355973c6ee11ac66))
+
 ## [0.21.0](https://github.com/andyconley/flow/compare/v0.20.2...v0.21.0) (2026-09-01)
 
 ### Features
