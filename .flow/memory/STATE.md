@@ -6,6 +6,12 @@
 
 ## Recently completed
 
+- `session-model-recommendation` accepted at `62100b7` and archived. Flow now
+  provides quality-first advisory parent-model recommendations for boot,
+  resume, define, solution, and plan across Claude and Codex. The release proof
+  includes 935 repository tests, all ten authenticated entry cells, and all
+  eight configured model/effort mappings.
+
 - `archive-legacy-import` stage6 accepted at `e2a2a11` and archived.
   All three review findings are resolved. Delivery is tracked in PR17 and its
   automated release workflow.
@@ -26,6 +32,14 @@
 
 ## Next step
 
+- Delivery of `62100b7` beyond the local `main` checkout remains a separate
+  release action. Re-run the authenticated entry and mapping evidence when
+  model mappings, client versions, or account entitlement changes.
+- Optional session-model advice follow-up: make the non-JSON context view show
+  declared model details and evidence limitations, and render structured
+  disposition identifiers as readable prose.
+- Capability gap `archive-final-source-artifact` was observed once during
+  closeout and awaits an explicit backlog-promotion decision.
 - Deferred backlog: runtime memory capability and bounded recall, review rework
   transition (four observations), and runtime evidence completion manifest.
   All three gaps are promoted into `docs/backlog.md`; implementation is deferred.
