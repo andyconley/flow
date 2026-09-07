@@ -129,6 +129,19 @@ selector without network access. It does not verify current remote status or
 prove that the source or reviewer assertion is true. Retain only relevant,
 authorized content, without credentials.
 
+These inputs are rejected without publication:
+
+- An approving request with no `closure_evidence` entry.
+- A `local` evidence entry carrying `url` or `captured_at`; use `external_capture`
+  for that retained source, and keep ordinary local entries local.
+- A changed selected file whose digest no longer matches the reviewed request.
+- An old fingerprint reused for a new action after another review has committed.
+
+The executable fixture builder in `tests/archive_legacy_runtime_eval.py` creates
+complete requests with real fixture identities, selectors and digests. It validates
+their structure before any live client is invoked. Fixtures stay isolated from
+production run folders.
+
 Missing evidence or contradictory completion claims should receive `unresolved`
 or `reject` with an explanation. Structural validation cannot decide whether a
 plausible handoff actually establishes closure.
@@ -203,3 +216,5 @@ hide that uncertainty. Keep the original request for explicit retry; a still
 unconfirmed durability result remains uncertain. Missing FTS5 affects retrieval,
 not archive closure or ordinary define/solution work, and never selects a fallback
 ranker.
+
+Stage 6 build and runtime evidence is summarized in [the validation record](archive-legacy-import-validation.md).
