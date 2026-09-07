@@ -1105,7 +1105,7 @@ Inspect bounded evidence for one qualified record. Historical and unknown status
 remain explicit; inspection never establishes current authority. `--json` uses
 the same output form. Equal work IDs in different overlays remain distinct.
 
-### `flow archive import preview|review|rescan`
+### `flow archive import`
 
 Reviewed import covers legacy folders without `run.json`, using an existing
 valid overlay identity. It never writes canonical lifecycle closure. Preview

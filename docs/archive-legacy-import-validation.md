@@ -7,10 +7,25 @@ was imported as part of validation.
 
 ## Build evidence
 
-The final product implementation is `e33a4c4`. The focused legacy suite passes
+The initial product implementation is `e33a4c4`. Its focused legacy suite passes
 35 tests, including a real lock-release interleaving that preserves the original
 action receipt after a competing withdrawal. The full suite passes 908 tests in 81.335 seconds. Final delivery
 checks are recorded in the implementation run's validation ledger.
+
+Acceptance review then found three gaps in request revalidation, rescan preview,
+and publication reporting when readback fails. The corrective patch adds ten
+regression tests. All 45 focused legacy tests pass, independently repeated by the
+quality reviewer. Running the final publication/integration tests against the
+pre-repair source produces eight expected failures, retained in the run's
+`research/repair/baseline-red.log`. The repair also passes 20 actual CLI calls
+covering local and retained external evidence, preview, repair, and replay.
+The previous docs-only delivery had an invalid combined command heading; the
+repair corrects it and all six CLI-reference checks pass.
+The complete suite then passes 918 tests in 82.953 seconds.
+
+The live model evidence below remains the original bounded evidence. This repair
+changes neither generated adapter guidance nor ranking; its new proof covers the
+CLI consent and result boundaries rather than repeating model interpretation.
 
 These concrete builds were probed successfully; version numbers alone do not
 establish FTS5 capability:

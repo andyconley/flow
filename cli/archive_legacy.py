@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import copy
 import json
 import os
 from pathlib import Path
@@ -193,7 +194,7 @@ def preview(root, work_id=None):
 
 def _load_record(record):
     if isinstance(record, dict):
-        return record
+        return copy.deepcopy(record)
     return json.loads(Path(record).read_text())
 
 
@@ -330,6 +331,11 @@ def review(root, work_id, record_path, apply=False, yes=False):
         if not yes:
             raise ArchiveError("writes require --apply --yes")
         with writer_lock(root):
+            locked_request = _load_record(record_path)
+            validate_review(locked_request, persisted=False)
+            if semantic_payload(locked_request) != semantic_payload(request):
+                raise ArchiveError("stale consent; review record changed while acquiring the writer lock; validate the current request again")
+            request = locked_request
             locked = observe(root, work_id)
             if not _usable(locked) or locked.get("identity") != request["identity"]:
                 return _result(locked, state="unavailable", review_commit="not_committed")
@@ -400,6 +406,40 @@ def review(root, work_id, record_path, apply=False, yes=False):
         return _failure(work_id, error, review_commit="not_committed" if apply else None)
 
 
+def _rescan_preview(root, observation):
+    """Describe proposed work separately from outcomes; never create derived files."""
+    from archive_store import cache_dir
+    abstract = {"action": "not_needed", "reason": "only approved valid reviews can regenerate content"}
+    index = {"action": "skipped", "reason": "only approved valid reviews refresh the projection"}
+    if observation.get("eligible"):
+        from archive_extract import extract_legacy
+        generated = extract_legacy(root, observation["review"], observation["identity"]["source_id"])
+        changed = observation["envelope"].get("generated") != generated
+        abstract = {"action": "regenerate" if changed else "not_needed",
+                    "reason": "generated content differs" if changed else "generated content is unchanged"}
+        path = contained(cache_dir(root) / "index.sqlite3", root)
+        index = ({"action": "refresh"} if path.exists() else {
+            "action": "skipped", "reason": "no established projection",
+            "remedy": "run flow index rebuild to create the first index"})
+    result = _result(observation)
+    result["proposed_operations"] = {
+        "abstract": abstract, "index": index,
+        "coverage": {"action": "refresh", "qualified_id": observation["qualified_id"]},
+    }
+    return result
+
+
+def _rescan_unavailable(work_id, qualified_id, error, publication, observation=None):
+    remedy = "preview current content and retry explicit rescan; review authority is unchanged"
+    current = observation or {"work_id": work_id, "qualified_id": qualified_id}
+    result = _result(current, state="unavailable",
+                     abstract={"state": publication, "reason": str(error), "remedy": remedy},
+                     index={"state": "skipped", "reason": "content publication or readback unavailable", "remedy": remedy},
+                     coverage={"state": "skipped", "reason": "content publication or readback unavailable", "remedy": remedy})
+    result.update(reason=str(error), remedy=remedy)
+    return result
+
+
 def rescan(root, work_id, base_fingerprint=None, apply=False, yes=False):
     root = Path(root).resolve()
     try:
@@ -410,25 +450,23 @@ def rescan(root, work_id, base_fingerprint=None, apply=False, yes=False):
             raise ArchiveError("rescan writes require current --base-fingerprint, --apply and --yes")
         if apply and base_fingerprint != observation["fingerprint"]:
             raise ArchiveError("stale consent; preview the current base")
+        if not apply:
+            return _rescan_preview(root, observation)
         if not observation.get("eligible"):
-            coverage = {"state": "not_needed"}
-            if apply:
-                with writer_lock(root):
-                    if observe(root, work_id).get("fingerprint") != base_fingerprint:
-                        raise ArchiveError("stale consent; preview the current base")
-                    from archive_service import refresh_coverage
-                    try:
-                        refresh_coverage(root, work_id)
-                        coverage = {"state": "completed"}
-                    except (OSError, ValueError) as error:
-                        return _result(observation, state="unavailable", coverage={
-                            "state": "failed", "reason": str(error),
-                            "remedy": "restore derived storage and retry the targeted rescan"})
-            return _result(observation, state="complete" if apply else "preview",
+            with writer_lock(root):
+                if observe(root, work_id).get("fingerprint") != base_fingerprint:
+                    raise ArchiveError("stale consent; preview the current base")
+                from archive_service import refresh_coverage
+                try:
+                    refresh_coverage(root, work_id)
+                    coverage = {"state": "completed"}
+                except (OSError, ValueError) as error:
+                    return _result(observation, state="unavailable", coverage={
+                        "state": "failed", "reason": str(error),
+                        "remedy": "restore derived storage and retry the targeted rescan"})
+            return _result(observation, state="complete",
                            abstract={"state": "not_needed", "reason": "only approved valid reviews can regenerate content"},
                            coverage=coverage)
-        if not apply:
-            return _result(observation)
         with writer_lock(root):
             locked = observe(root, work_id)
             if locked.get("fingerprint") != base_fingerprint or not locked.get("eligible"):
@@ -443,15 +481,32 @@ def rescan(root, work_id, base_fingerprint=None, apply=False, yes=False):
                 validate_legacy_envelope(updated)
                 if observe(root, work_id).get("fingerprint") != base_fingerprint:
                     raise ArchiveError("source changed during generation; preview again")
+                path = envelope_path(root, work_id)
+                previous_bytes = path.read_bytes()
                 try:
-                    write_envelope(root, work_id, updated, file_digest(envelope_path(root, work_id)))
+                    write_envelope(root, work_id, updated, file_digest(path))
                 except OSError as error:
-                    path = envelope_path(root, work_id)
-                    visible = path.exists() and path.read_bytes() == encode(updated)
-                    return _result(observe(root, work_id), state="unavailable",
-                                   abstract={"state": "uncertain" if visible else "not_committed", "reason": str(error),
-                                             "remedy": "preview current content and retry explicit rescan; review authority is unchanged"})
-        after = observe(root, work_id)
+                    # Readback is optional evidence, not a prerequisite for reporting
+                    # an attempted publication. Changed or unreadable bytes cannot
+                    # prove that replacement did not happen.
+                    publication, after = "uncertain", None
+                    try:
+                        if path.read_bytes() == previous_bytes:
+                            publication = "not_committed"
+                        observed = observe(root, work_id)
+                        if _usable(observed):
+                            after = observed
+                    except (OSError, ValueError):
+                        pass
+                    return _rescan_unavailable(work_id, locked["qualified_id"], error, publication, after)
+        try:
+            after = observe(root, work_id)
+        except (OSError, ValueError) as error:
+            return _rescan_unavailable(work_id, locked["qualified_id"], error,
+                                       "committed" if changed else "not_needed")
+        if not _usable(after):
+            return _rescan_unavailable(work_id, locked["qualified_id"], "current authority readback unavailable",
+                                       "committed" if changed else "not_needed", after)
         index, coverage = _derived_outcomes(root, work_id)
         partial = any(item.get("state") == "failed" for item in (index, coverage))
         return _result(after, state="partial" if partial else "complete",

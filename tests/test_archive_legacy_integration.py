@@ -284,6 +284,51 @@ class LegacyIntegrationTests(unittest.TestCase):
         self.assertEqual(result['reason'], 'no_hit_fits')
         self.assertLessEqual(len(query.serialized(result).encode()), 2000)
 
+    def test_rescan_preview_proposes_missing_content_and_preserves_every_file(self):
+        self.fixture()
+        self.apply(self.request())
+        value = json.loads(self.envelope().read_text())
+        value['generated'] = None
+        self.envelope().write_text(json.dumps(value))
+        before = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        result = legacy.rescan(self.root, 'legacy')
+        proposed = result['proposed_operations']
+        self.assertEqual(result['state'], 'preview')
+        self.assertEqual(proposed['abstract']['action'], 'regenerate')
+        self.assertEqual(proposed['index']['action'], 'skipped')
+        self.assertEqual(proposed['coverage']['action'], 'refresh')
+        self.assertEqual(proposed['coverage']['qualified_id'], legacy.observe(self.root, 'legacy')['qualified_id'])
+        self.assertEqual(before, {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*') if path.is_file()})
+        applied = legacy.rescan(self.root, 'legacy', result['fingerprint'], apply=True, yes=True)
+        self.assertEqual(applied['abstract']['state'], 'committed', applied)
+        self.assertIsNotNone(json.loads(self.envelope().read_text())['generated'])
+
+    def test_rescan_preview_distinguishes_noop_and_established_projection(self):
+        self.approve()
+        base = legacy.observe(self.root, 'legacy')['fingerprint']
+        self.assertEqual(legacy.rescan(self.root, 'legacy', base, apply=True, yes=True)['abstract']['state'], 'not_needed')
+        query.rebuild(self.root)
+        before = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        result = legacy.rescan(self.root, 'legacy')
+        proposed = result['proposed_operations']
+        self.assertEqual(proposed['abstract']['action'], 'not_needed')
+        self.assertEqual(proposed['index']['action'], 'refresh')
+        self.assertEqual(proposed['coverage']['action'], 'refresh')
+        self.assertEqual(before, {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*') if path.is_file()})
+
+    def test_excluded_rescan_preview_proposes_only_coverage_refresh(self):
+        self.fixture()
+        self.apply(self.request())
+        self.apply(self.request(action='withdraw'))
+        before = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        result = legacy.rescan(self.root, 'legacy')
+        proposed = result['proposed_operations']
+        self.assertEqual(proposed['abstract']['action'], 'not_needed')
+        self.assertEqual(proposed['index']['action'], 'skipped')
+        self.assertEqual(proposed['coverage']['action'], 'refresh')
+        self.assertEqual(proposed['coverage']['qualified_id'], legacy.observe(self.root, 'legacy')['qualified_id'])
+        self.assertEqual(before, {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*') if path.is_file()})
+
 
 if __name__ == '__main__':
     unittest.main()

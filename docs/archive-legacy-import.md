@@ -103,7 +103,10 @@ flow archive import review older-work --record review.json --apply --yes --json
 ```
 
 Validation is read-only. Apply rechecks the source and current fingerprint under
-the overlay writer lock. Stale consent needs a new preview and reviewed request.
+the overlay writer lock. It also rereads the operator record under that lock and
+rejects semantic drift in the reread request; changes to JSON formatting alone
+do not change its semantic payload. The request record remains excluded from the
+candidate fingerprint. Stale consent needs a new preview and reviewed request.
 The CLI assigns review IDs, recording timestamps and revision digests. It never
 writes a canonical `run.json` or lifecycle event to manufacture closure.
 
@@ -185,9 +188,16 @@ flow index rebuild --json
 Rescan preserves review/history/refinement bytes. If generated content changes,
 a retained refinement may become visibly stale until explicitly revalidated.
 Rescan cannot grant approval, repair corrupt authority or accept changed evidence.
-It updates only the target's coverage row and refreshes an established projection;
-first index creation remains explicit. Canonical backfill continues to exclude
-legacy candidates.
+Preview is read-only and adds a `proposed_operations` object to the result. Its
+`abstract` action is `regenerate` when approved content is missing or differs,
+otherwise `not_needed`; its `coverage` action is targeted `refresh`. Its `index`
+action is `refresh` for eligible content when an established index exists, or
+`skipped` with a remedy to run `flow index rebuild` when the first index does not
+yet exist. Excluded candidates propose only coverage refresh. Apply rechecks the
+current fingerprint before attempting those operations. Rescan updates only
+the target's coverage row and refreshes an established projection; first index
+creation remains explicit. Canonical backfill continues to exclude legacy
+candidates.
 
 Retrieval uses the same per-overlay SQLite store, transient merged BM25 corpus,
 ancestor search and response byte caps. Current legacy provenance and evidence
@@ -216,5 +226,13 @@ hide that uncertainty. Keep the original request for explicit retry; a still
 unconfirmed durability result remains uncertain. Missing FTS5 affects retrieval,
 not archive closure or ordinary define/solution work, and never selects a fallback
 ranker.
+
+For rescan, a write error after content replacement remains `abstract.state:
+"uncertain"` even when the follow-up readback is also unavailable; the result
+reports the qualified identity and an inspection/retry remedy, while the current
+revision is unknown. A successful write followed by unavailable readback retains
+`abstract.state: "committed"`; an error during the write remains uncertain even
+if replacement bytes are visible. Inspect authority with a fresh preview and use
+its current fingerprint for an explicit rescan retry.
 
 Stage 6 build and runtime evidence is summarized in [the validation record](archive-legacy-import-validation.md).
