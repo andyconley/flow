@@ -220,3 +220,42 @@ class LegacyPublicationTests(unittest.TestCase):
         self.assertEqual(result["missing_evidence_roles"], ["closure_evidence", "final_outcome"])
         self.assertEqual(len(result["available_evidence"]), 2)
         self.assertTrue(all(row["status"] == "available_unreviewed_source" for row in result["available_evidence"]))
+
+    def test_invalid_and_unavailable_operations_keep_outcome_contract(self):
+        required = {"review_commit", "replayed", "action_revision", "current_revision",
+                    "effective_disposition", "evidence_condition", "abstract", "index", "coverage"}
+        results = [legacy.review(self.root, "legacy", {}),
+                   legacy.review(self.root, "legacy", self.root / "missing.json", apply=True, yes=True),
+                   legacy.rescan(self.root, "legacy", apply=True)]
+        for result in results:
+            self.assertTrue(required.issubset(result), result)
+            self.assertFalse(result["replayed"])
+            self.assertEqual(result["abstract"]["state"], "not_needed")
+
+    def test_post_replace_unreadable_readback_never_claims_not_committed(self):
+        request = self._request()
+        original = legacy.atomic_write
+        def publish_then_fail(path, data, root):
+            original(path, data, root)
+            # Simulate replacement followed by a durability error and lost read access.
+            legacy.observe = lambda *args, **kwargs: (_ for _ in ()).throw(OSError("readback unavailable"))
+            raise OSError("directory fsync failed")
+        with patch.object(legacy, "observe", wraps=legacy.observe), patch.object(legacy, "atomic_write", side_effect=publish_then_fail):
+            result = legacy.review(self.root, "legacy", request, apply=True, yes=True)
+        self.assertEqual(result["review_commit"], "uncertain", result)
+        self.assertIsNone(result["current_revision"])
+        self.assertEqual(result["action_revision"], legacy.observe(self.root, "legacy")["review"]["revision_digest"])
+
+    def test_excluded_rescan_reports_actual_coverage_work_and_failure(self):
+        legacy.review(self.root, "legacy", self._request("unresolved"), apply=True, yes=True)
+        before = (self.root / ".flow/runs/legacy/abstract.json").read_bytes()
+        base = legacy.observe(self.root, "legacy")["fingerprint"]
+        result = legacy.rescan(self.root, "legacy", base, apply=True, yes=True)
+        self.assertEqual(result["coverage"]["state"], "completed")
+        self.assertEqual(result["abstract"]["state"], "not_needed")
+        with patch("archive_service.refresh_coverage", side_effect=OSError("coverage unavailable")):
+            result = legacy.rescan(self.root, "legacy", base, apply=True, yes=True)
+        self.assertEqual(result["state"], "unavailable")
+        self.assertEqual(result["coverage"]["state"], "failed")
+        self.assertIsNone(result["review_commit"])
+        self.assertEqual(before, (self.root / ".flow/runs/legacy/abstract.json").read_bytes())

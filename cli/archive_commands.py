@@ -76,8 +76,7 @@ def dispatch(args):
             if args.import_action == "preview":
                 result = archive_legacy.preview(root, args.work_id)
             elif args.import_action == "review":
-                record = json.loads(Path(args.record).read_text())
-                result = archive_legacy.review(root, args.work_id, record, apply=args.apply, yes=args.yes)
+                result = archive_legacy.review(root, args.work_id, args.record, apply=args.apply, yes=args.yes)
             else:
                 result = archive_legacy.rescan(root, args.work_id, base_fingerprint=args.base_fingerprint, apply=args.apply, yes=args.yes)
         elif args.archive_action == "backfill":

@@ -48,6 +48,17 @@ def _file(root, path, files):
     return files[relative]
 
 
+def _failure(work_id, error, *, unavailable=False, review_commit=None, observation=None):
+    """Keep the operation contract intact when validation or storage fails."""
+    result = _result(observation or {"work_id": work_id},
+                     state="unavailable" if unavailable else "invalid_request",
+                     review_commit=review_commit)
+    result.update(reason=str(error), remedy=(
+        "restore accessible local storage and retry the original request" if unavailable
+        else "correct the request or preview the current evidence and base"))
+    return result
+
+
 def _read_history(root, work, files, current):
     """Read only the reachable chain. Orphan files can never supply authority."""
     history, seen = {}, set()
@@ -352,23 +363,40 @@ def review(root, work_id, record_path, apply=False, yes=False):
             try:
                 _publish_review(root, locked, updated)
             except OSError as error:
-                after = observe(root, work_id)
-                if (after.get("review") or {}).get("revision_digest") == updated_review["revision_digest"]:
+                try:
+                    after = observe(root, work_id)
+                except (OSError, ValueError):
+                    return _result({"work_id": work_id, "diagnostics": [{
+                        "code": "publication_readback_unavailable", "detail": str(error),
+                        "remedy": "retain the original action ID and retry; publication could not be confirmed"}]},
+                        state="unavailable", review_commit="uncertain",
+                        action_revision=updated_review["revision_digest"],
+                        abstract={"state": "uncertain"})
+                if after.get("fingerprint") != locked["fingerprint"]:
                     return _result(after, state="unavailable", review_commit="uncertain",
+                                   action_revision=updated_review["revision_digest"],
                                    abstract={"state": "uncertain", "reason": str(error), "remedy": "retry the same action ID; do not roll back"})
                 raise
-        after = observe(root, work_id)
+        try:
+            after = observe(root, work_id)
+        except (OSError, ValueError) as error:
+            return _result({"work_id": work_id, "diagnostics": [{
+                "code": "post_commit_read_unavailable", "detail": str(error),
+                "remedy": "inspect current authority and retry the original action"}]},
+                state="unavailable", review_commit="committed",
+                action_revision=updated_review["revision_digest"],
+                abstract={"state": "failed" if generation_error else "committed"},
+                index={"state": "skipped", "reason": "current authority unavailable"},
+                coverage={"state": "skipped", "reason": "current authority unavailable"})
         index, coverage = _derived_outcomes(root, work_id)
         abstract = {"state": "failed", "reason": generation_error, "remedy": "run flow archive import rescan " + work_id} if generation_error else {"state": "committed"}
         partial = generation_error is not None or any(item.get("state") == "failed" for item in (index, coverage))
         return _result(after, state="partial" if partial else "complete", review_commit="committed",
                        abstract=abstract, index=index, coverage=coverage)
     except OSError as error:
-        return {"state": "unavailable", "reason": str(error), "review_commit": "not_committed" if apply else None,
-                "remedy": "restore accessible local storage and retry the original request"}
+        return _failure(work_id, error, unavailable=True, review_commit="not_committed" if apply else None)
     except (ValueError, KeyError, TypeError, IndexError) as error:
-        return {"state": "invalid_request", "reason": str(error), "review_commit": "not_committed" if apply else None,
-                "remedy": "correct the request or preview the current evidence and base"}
+        return _failure(work_id, error, review_commit="not_committed" if apply else None)
 
 
 def rescan(root, work_id, base_fingerprint=None, apply=False, yes=False):
@@ -382,14 +410,22 @@ def rescan(root, work_id, base_fingerprint=None, apply=False, yes=False):
         if apply and base_fingerprint != observation["fingerprint"]:
             raise ArchiveError("stale consent; preview the current base")
         if not observation.get("eligible"):
+            coverage = {"state": "not_needed"}
             if apply:
                 with writer_lock(root):
                     if observe(root, work_id).get("fingerprint") != base_fingerprint:
                         raise ArchiveError("stale consent; preview the current base")
                     from archive_service import refresh_coverage
-                    refresh_coverage(root, work_id)
+                    try:
+                        refresh_coverage(root, work_id)
+                        coverage = {"state": "completed"}
+                    except (OSError, ValueError) as error:
+                        return _result(observation, state="unavailable", coverage={
+                            "state": "failed", "reason": str(error),
+                            "remedy": "restore derived storage and retry the targeted rescan"})
             return _result(observation, state="complete" if apply else "preview",
-                           abstract={"state": "not_needed", "reason": "only approved valid reviews can regenerate content"})
+                           abstract={"state": "not_needed", "reason": "only approved valid reviews can regenerate content"},
+                           coverage=coverage)
         if not apply:
             return _result(observation)
         with writer_lock(root):
@@ -420,6 +456,6 @@ def rescan(root, work_id, base_fingerprint=None, apply=False, yes=False):
         return _result(after, state="partial" if partial else "complete",
                        abstract={"state": "committed" if changed else "not_needed"}, index=index, coverage=coverage)
     except OSError as error:
-        return {"state": "unavailable", "reason": str(error), "review_commit": None, "remedy": "restore local storage and preview again"}
+        return _failure(work_id, error, unavailable=True)
     except (ValueError, KeyError, TypeError, IndexError) as error:
-        return {"state": "invalid_request", "reason": str(error), "review_commit": None, "remedy": "repair selected evidence or request and preview again"}
+        return _failure(work_id, error)
