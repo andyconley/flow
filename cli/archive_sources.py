@@ -43,11 +43,74 @@ def _validate_control_envelope(envelope):
     """Validate the durable authority portion without trusting abstract prose."""
     if not isinstance(envelope, dict) or type(envelope.get("schema_version")) is not int or envelope.get("schema_version") != 1:
         raise ValueError("unsupported abstract schema; do not downgrade")
+    if "legacy_review" in envelope:
+        raise ValueError("legacy review cannot supply canonical schema1 authority")
     identity = envelope.get("identity")
     qualified(identity)
     declaration_digest(identity, envelope.get("declarations", {}))
     if not isinstance(envelope.get("provenance"), dict):
         raise ValueError("missing provenance")
+
+
+def _legacy_record(root, work, source_id, files, compact):
+    """Keep independently validated legacy controls even when prose is unusable."""
+    from archive_legacy import observe
+    observation = observe(root, work)
+    files.update(observation.get("files", {}))
+    identity = {"source_id": source_id, "work_id": work}
+    review = observation.get("review")
+    condition = observation.get("evidence_condition", observation.get("evidence", {}).get("condition", "unverifiable"))
+    disposition = observation.get("effective_disposition")
+    if not disposition and review:
+        disposition = {"approve": "approved", "reapprove": "approved", "withdraw": "withdrawn",
+                       "reject": "rejected", "unresolved": "unresolved"}.get(review.get("action"))
+    eligible = bool(observation.get("eligible", False))
+    row = {"work_id": work, "identity": identity, "qualified_id": qualified(identity),
+           "authority_type": "reviewed_legacy", "legacy_eligible": eligible,
+           "effective_disposition": disposition, "evidence_condition": condition,
+           "closure_status": "not_canonical", "declaration_status": "none", "declarations": {},
+           "envelope": None, "content_current": False,
+           "diagnostics": list(observation.get("diagnostics", []))}
+    if not eligible:
+        row["diagnostics"].append({"code": "legacy_excluded", "qualified_id": row["qualified_id"],
+                                   "disposition": disposition, "evidence_condition": condition,
+                                   "remedy": "inspect the current review and evidence; rescan never grants approval"})
+    value = observation.get("envelope")
+    if isinstance(value, dict):
+        declarations = value.get("declarations", {})
+        if not isinstance(declarations, dict) or declarations.get("supersedes"):
+            row["declaration_status"] = "unverified"
+            row["legacy_eligible"] = False
+            row["diagnostics"].append({"code": "unsupported_legacy_supersession", "remedy": "review unsupported controls; do not infer authority"})
+        try:
+            validate_envelope(value)
+            if value["identity"] != identity:
+                raise ValueError("legacy abstract identity mismatch")
+            if value.get("generated") and row["legacy_eligible"]:
+                pointers = [pointer for field in value["generated"]["fields"].values() for pointer in field["sources"]]
+                if effective_view(value)["refinement_state"] == "applied":
+                    pointers.extend(pointer for field in value["refinement"]["patches"].values() for pointer in field["sources"])
+                for pointer in pointers:
+                    if pointer["source_id"] != source_id:
+                        raise ValueError("legacy prose evidence is outside owning source")
+                    path = contained(root / ".flow" / pointer["path"], root)
+                    key = path.relative_to(root).as_posix()
+                    files[key] = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else "absent"
+                    verify_pointer(root, pointer)
+                row["envelope"] = value
+                row["content_current"] = True
+        except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
+            row["diagnostics"].append({"code": "invalid_abstract_content", "detail": str(error),
+                                       "remedy": "preview flow archive import rescan " + work + "; preserve review authority"})
+    # Without a valid control chain the extent of corrupt authority is unknown.
+    unsafe = observation.get("candidate_state") in {"invalid_review", "canonical_collision", "identity_unavailable"}
+    if unsafe:
+        row["legacy_eligible"] = False
+        row["content_current"] = False
+        row["envelope"] = None
+    if compact:
+        row.pop("envelope", None)
+    return row, unsafe
 
 
 def _observe(root, compact=False):
@@ -71,7 +134,43 @@ def _observe(root, compact=False):
     inventory = []
     for work in directories:
         directory = contained(runs / work, root)
-        if not (directory / "run.json").exists():
+        abstract = directory / "abstract.json"
+        legacy = not (directory / "run.json").exists()
+        ambiguous_control = False
+        # Look for a retained legacy envelope before classifying canonical state,
+        # so a later run.json cannot silently take over an imported identity.
+        if abstract.exists() and not legacy:
+            try:
+                candidate = json.loads(abstract.read_bytes())
+                ambiguous_control = not isinstance(candidate, dict)
+                legacy = isinstance(candidate, dict) and (candidate.get("schema_version") == 2 or "legacy_review" in candidate)
+            except (OSError, ValueError):
+                ambiguous_control = True
+            if ambiguous_control:
+                # A damaged first review has no prior history directory. A new
+                # active run must not erase the uncertainty of that authority.
+                inventory.append(work)
+                for authority_path in (abstract, directory / "run.json"):
+                    try:
+                        read(authority_path)
+                    except (OSError, ValueError):
+                        files[authority_path.relative_to(root).as_posix()] = "unreadable"
+                diagnostics.append({"code": "ambiguous_archive_authority", "work_id": work,
+                                    "remedy": "reconcile malformed archive controls with canonical state before retrieval"})
+                continue
+        if legacy:
+            if not abstract.exists():
+                continue  # Unreviewed folders are coverage, never graph authority.
+            inventory.append(work)
+            try:
+                row, unsafe = _legacy_record(root, work, source_id, files, compact)
+                records.append(row)
+                if unsafe:
+                    diagnostics.append({"code": "invalid_legacy_authority", "work_id": work,
+                                        "detail": row["diagnostics"]})
+            except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
+                files[abstract.relative_to(root).as_posix()] = hashlib.sha256(abstract.read_bytes()).hexdigest()
+                diagnostics.append({"code": "invalid_legacy_authority", "work_id": work, "detail": str(error)})
             continue
         try:
             # Active lane work is neither an archived candidate nor authority

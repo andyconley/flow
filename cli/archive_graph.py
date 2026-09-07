@@ -19,7 +19,9 @@ def resolve_graph(sources):
             for identity, row in records.items():
                 if source_order.get(row["identity"]["source_id"], -1) >= position:
                     unknown.add(identity)
-    unknown.update(key for key, row in records.items() if row.get("closure_status") != "anchored")
+    unknown.update(key for key, row in records.items()
+                   if (not row.get("legacy_eligible") if row.get("authority_type") == "reviewed_legacy"
+                       else row.get("closure_status") != "anchored"))
     edges = {}
     for identity, row in records.items():
         targets = []
@@ -33,6 +35,13 @@ def resolve_graph(sources):
                     raise ValueError("downward supersession is not allowed")
                 if row.get("declaration_status") != "anchored":
                     raise ValueError("declaration lacks matching closure anchor")
+                if records[target].get("authority_type") == "reviewed_legacy" and not records[target].get("legacy_eligible"):
+                    # A known excluded target does not invalidate the origin's
+                    # independent canonical closure. This relationship grants
+                    # neither current nor superseded authority to the target.
+                    diagnostics.append({"code": "unresolved_legacy_target", "qualified_id": identity, "target": target,
+                                        "remedy": "inspect the target review; never infer approval from this relationship"})
+                    continue
                 targets.append(target)
             except (ValueError, KeyError, TypeError) as error:
                 unknown.add(identity)

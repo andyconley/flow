@@ -263,7 +263,10 @@ def _derived_outcomes(root, work):
     index = {"state": "skipped", "reason": "legacy projection integration unavailable"}
     try:
         from archive_service import refresh_coverage
-        refresh_coverage(root, work)
+        from archive_store import ensure_ignore
+        with writer_lock(root):
+            ensure_ignore(root)
+            refresh_coverage(root, work)
         coverage = {"state": "completed"}
     except ImportError:
         pass
