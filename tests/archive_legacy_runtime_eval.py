@@ -25,6 +25,7 @@ from unittest.mock import patch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "cli"))
 import archive_legacy
+from archive_legacy_model import validate_review
 import archive_preflight
 import archive_query
 import archive_store
@@ -97,7 +98,8 @@ def review_record(root, work, source_id, action, scenario, fingerprint, suffix):
     ]
     if scenario == "capture-sufficient":
         for item in evidence:
-            item.update({"url": "https://example.invalid/flow/fixture/legacy", "captured_at": "2026-09-07T00:00:00Z", "source_identifier": "fixture-capture-001"})
+            if item["kind"] == "external_capture":
+                item.update({"url": "https://example.invalid/flow/fixture/legacy", "captured_at": "2026-09-07T00:00:00Z", "source_identifier": "fixture-capture-001"})
     positive = action in {"approve", "reapprove"}
     return {
         "schema_version": 1, "identity": {"source_id": source_id, "work_id": work},
@@ -155,6 +157,7 @@ def materialize(root, scenario, snapshots=None):
     observed = archive_legacy.observe(root, work)
     action = "approve" if scenario not in {"plausible-nonclosure", "conflicting-evidence"} else "unresolved"
     request = review_record(root, work, source_id, action, scenario, observed["fingerprint"], "genesis")
+    validate_review(request)
     request_path = root / "review-request.json"
     write(request_path, json.dumps(request, indent=2, sort_keys=True) + "\n")
     result = {"preview": archive_legacy.preview(root, work), "request": str(request_path), "source_id": source_id,
@@ -382,10 +385,14 @@ def main():
     parser.add_argument("destination", type=Path)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--runtime", choices=RUNTIMES, help="execute one provider; all fixtures remain prepared")
+    parser.add_argument("--scenario", choices=CHUNK1 + CHUNK2 + CHUNK3, help="execute one scenario; preserve earlier attempts")
     args = parser.parse_args()
     inventory = prepare(args.destination)
     if args.execute:
-        items = [step for cell in json.loads(inventory.read_text())["cells"] if args.runtime is None or cell["runtime"] == args.runtime for step in cell.get("sub_attempts", [cell])]
+        items = [step for cell in json.loads(inventory.read_text())["cells"]
+                 if (args.runtime is None or cell["runtime"] == args.runtime)
+                 and (args.scenario is None or cell["scenario"] == args.scenario)
+                 for step in cell.get("sub_attempts", [cell])]
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = {pool.submit(invoke, item, args.destination): item["id"] for item in items}
             for future in as_completed(futures):
