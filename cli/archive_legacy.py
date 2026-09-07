@@ -392,6 +392,7 @@ def review(root, work_id, record_path, apply=False, yes=False):
         abstract = {"state": "failed", "reason": generation_error, "remedy": "run flow archive import rescan " + work_id} if generation_error else {"state": "committed"}
         partial = generation_error is not None or any(item.get("state") == "failed" for item in (index, coverage))
         return _result(after, state="partial" if partial else "complete", review_commit="committed",
+                       action_revision=updated_review["revision_digest"],
                        abstract=abstract, index=index, coverage=coverage)
     except OSError as error:
         return _failure(work_id, error, unavailable=True, review_commit="not_committed" if apply else None)

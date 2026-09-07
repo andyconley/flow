@@ -259,3 +259,28 @@ class LegacyPublicationTests(unittest.TestCase):
         self.assertEqual(result["coverage"]["state"], "failed")
         self.assertIsNone(result["review_commit"])
         self.assertEqual(before, (self.root / ".flow/runs/legacy/abstract.json").read_bytes())
+
+    def test_action_receipt_stays_distinct_from_later_observed_revision(self):
+        from contextlib import contextmanager
+        request = self._request()
+        original_lock = legacy.writer_lock
+        interleaved = False
+
+        @contextmanager
+        def release_to_competing_writer(root):
+            nonlocal interleaved
+            with original_lock(root):
+                yield
+            if not interleaved:
+                interleaved = True
+                withdrawal = self._request('withdraw', 'competing-withdrawal')
+                self.assertEqual(legacy.review(root, 'legacy', withdrawal, apply=True, yes=True)['review_commit'], 'committed')
+
+        with patch.object(legacy, 'writer_lock', release_to_competing_writer):
+            result = legacy.review(self.root, 'legacy', request, apply=True, yes=True)
+        current = legacy.observe(self.root, 'legacy')
+        self.assertEqual(result['review_commit'], 'committed')
+        self.assertEqual(result['action_revision'], current['chain'][0]['revision_digest'])
+        self.assertEqual(result['current_revision'], current['review']['revision_digest'])
+        self.assertNotEqual(result['action_revision'], result['current_revision'])
+        self.assertEqual(result['effective_disposition'], 'withdrawn')
