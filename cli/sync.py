@@ -39,6 +39,7 @@ from fsutil import (
     rel_posix,
     remove_empty_parents,
 )
+from model_policy import merge_session_model_profiles, runtime_policy_for_agent
 from paths import (
     GENERATED_MARKER,
     HOME,
@@ -129,22 +130,6 @@ def shared_agents(manifest: dict) -> list:
     return manifest.get("agents", [])
 
 
-def runtime_policy_for_agent(manifest: dict, target: str, agent: dict) -> dict:
-    tiers = manifest.get("model_tiers", {})
-    tier = agent.get("model_tier")
-    policy = dict(tiers.get(tier, {}).get(target, {}))
-
-    runtime_override = agent.get(target)
-    if isinstance(runtime_override, dict):
-        policy.update(runtime_override)
-
-    for key in ("model", "effort", "model_reasoning_effort"):
-        if key in agent:
-            policy[key] = agent[key]
-
-    return policy
-
-
 def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     """Load the framework manifest and merge in `~/.flow/user/flow.toml` if it exists.
 
@@ -160,12 +145,13 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
         entry in-place (override), preserving order.
       - User entries with a new `name` are **appended** (addition).
 
-    User-overlay support is intentionally scoped to commands and agents — the
-    embedded surfaces. Standards and templates are *referenced* by name at
-    runtime; user customization for those follows the resolution-order
-    convention documented in `FRAMEWORK.md` (project `[[replaces]]` wiring >
-    user overlay > framework default), not this merge step. A project can name
-    a replacement but never holds one.
+    Session model profiles are also merged here. A user runtime entry replaces
+    the corresponding framework profile/runtime entry atomically; profile
+    descriptions remain framework-owned. Standards and templates are
+    *referenced* by name at runtime; user customization for those follows the
+    resolution-order convention documented in `FRAMEWORK.md` (project
+    `[[replaces]]` wiring > user overlay > framework default), not this merge
+    step. A project can name a replacement but never holds one.
     """
     framework_manifest_path = framework_dir / "flow.toml"
     if not framework_manifest_path.exists():
@@ -180,6 +166,12 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
 
     user_manifest_path = USER_OVERLAY_DIR / "flow.toml"
     if not user_manifest_path.exists():
+        manifest["session_model_profiles"] = merge_session_model_profiles(
+            manifest,
+            None,
+            framework_source=str(framework_manifest_path),
+            user_source=str(user_manifest_path),
+        )
         manifest["_agent_capability_decisions"] = resolve_agent_capabilities(
             manifest,
             None,
@@ -232,6 +224,12 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     manifest["agents"] = merge_named(
         manifest.get("agents", []),
         user_manifest.get("agents", []),
+    )
+    manifest["session_model_profiles"] = merge_session_model_profiles(
+        manifest,
+        user_manifest,
+        framework_source=str(framework_manifest_path),
+        user_source=str(user_manifest_path),
     )
     manifest["_agent_capability_decisions"] = resolve_agent_capabilities(
         manifest,
@@ -430,7 +428,7 @@ def desired_claude_outputs(
     skill_defaults = runtime.get("skill_defaults", {})
     agent_defaults = runtime.get("agent_defaults", {})
     agents = shared_agents(manifest)
-    routing_hints = routing_hints_for("claude", agents, manifest.get("model_tiers", {}))
+    routing_hints = routing_hints_for("claude", agents, manifest)
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()
@@ -531,7 +529,7 @@ def desired_codex_outputs(
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
     runtime = manifest["codex"]
     agents = shared_agents(manifest)
-    routing_hints = routing_hints_for("codex", agents, manifest.get("model_tiers", {}))
+    routing_hints = routing_hints_for("codex", agents, manifest)
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()

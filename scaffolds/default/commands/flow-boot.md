@@ -49,12 +49,18 @@ Inspect:
 4. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
 5. Read durable runtime memory through the active provider and pull in any entries relevant to the current focus. For Claude Code, read `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index. For Codex, no Flow-managed durable memory provider exists yet; use project artifacts and C-lite run state as canonical.
 6. Check for interrupted or active runs across all stacked overlay levels.
-7. **Usage advisory (informational only — never blocks orientation, never changes a recommendation by itself).** Run `flow cost summary --days 7`. If the output includes a Codex capacity line, report it verbatim in the advisory section — and if its `as of` timestamp is more than a day old, say so, since capacity only refreshes when a Codex harvest runs. If there is no capacity line, say nothing about capacity — absence of data is silence, not a warning. Then run `flow cost active`: surface any session the tool recommends acting on (`/clear` or `/compact`), with the tool's own recommendation, as information the user may act on. If `flow` or the usage store is unavailable, skip this step silently.
-8. Identify:
+7. Identify:
    - the project's operating model and any project-specific role assignments
    - the active standards and overlays that matter right now
    - active or interrupted work
    - memory caveats, blockers, or migration notes
+8. **Session model advice.** After orientation is complete, read
+   `standards/session-model-advice.md`, run
+   `flow model context --runtime <active-runtime> --lane boot --json`, assess
+   the next meaningful work, and resolve the selected profile. Report the
+   recommendation, current-parent provenance, and evidence limits separately.
+   Unknown scope is provisional. This is advisory, performs no switch, adds no
+   approval question, and does not change the next-command decision by itself.
 9. **Overlay-setup check.** If the current project (cwd's git repo) has no `.flow/` overlay:
    - Check for an explicit opt-out marker `.flow-skip` at the project root.
    - If `.flow-skip` exists, treat the absence as **"by design"** — the user has explicitly opted out. Do not recommend setup.
@@ -96,9 +102,11 @@ Inspect:
 ### Session Checkpoint
 - [Status: "current" | "superseded by commits since <date> — safe to discard" | "no checkpoint present"]
 
-### Usage Advisory (omit the section entirely when there is nothing to say)
-- [Codex capacity line verbatim, when present]
-- [Any active session the tool flags for /clear or /compact, with its recommendation — informational, the user decides]
+### Session Model Advice
+- Coordinator recommendation: [profile, native model/effort or unresolved, disposition, reason]
+- Active parent: [observed | declared | unknown, with source when known]
+- Evidence limits: [history, availability, or scope limits]
+- Switch performed: no
 
 ### Sources of Truth
 - [Files that matter right now]
@@ -134,7 +142,7 @@ Before leaving `flow-boot`, confirm:
 - [ ] PROJECT.md and STATE.md were read across all stacked overlay levels
 - [ ] durable runtime memory was consulted where the active provider exists; missing provider was treated as companion-context absence, not missing workflow state
 - [ ] interrupted or active runs were checked across all stacked overlay levels
-- [ ] the usage advisory ran (`flow cost summary --days 7` + `flow cost active`) — capacity verbatim with a staleness note past a day, sessions the tool flags surfaced, silent when there was nothing, skipped silently if flow was unavailable
+- [ ] session model advice used the read-only context/resolve seams after orientation; missing or stale evidence stayed visible and no switch or extra gate was claimed
 - [ ] overlay status was reported; `.flow-skip` marker was checked before classifying "by design"; default for missing overlay is "recommended", not "by design"
 - [ ] the next recommended command is explicit
 

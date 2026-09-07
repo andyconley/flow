@@ -55,11 +55,17 @@ effect of resume.
    - current blocker
    - next step
    - missing evidence or missing artifacts
-4. Recommend whether to continue in:
+4. Read `standards/session-model-advice.md`, run
+   `flow model context --runtime <active-runtime> --lane resume --json`, and
+   assess the reconstructed next work. Resolve the selected profile and report
+   recommendation, active-parent provenance, and evidence limits separately.
+   Reuse matching prior advice unless the reconstructed work or evidence
+   changed materially. This is advisory, performs no switch, and adds no gate.
+5. Recommend whether to continue in:
    - scout mode
    - gated implementation
-5. Continue the existing artifact chain unless starting fresh is clearly safer.
-6. Treat project artifacts and C-lite run state as canonical. Runtime memory is
+6. Continue the existing artifact chain unless starting fresh is clearly safer.
+7. Treat project artifacts and C-lite run state as canonical. Runtime memory is
    companion context: read Claude Code auto-memory when available; do not treat
    missing Codex durable memory as missing workflow state.
 
@@ -84,6 +90,12 @@ effect of resume.
 ### Recommended Continuation
 - `flow-scout` | `flow-implement`
 - Why:
+
+### Session Model Advice
+- Coordinator recommendation: [profile, native model/effort or unresolved, disposition, reason]
+- Active parent: [observed | declared | unknown, with source when known]
+- Evidence limits: [history, availability, or scope limits]
+- Switch performed: no
 ```
 
 ## Common Rationalizations

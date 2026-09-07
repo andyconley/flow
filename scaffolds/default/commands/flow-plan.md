@@ -99,23 +99,28 @@ For appropriately-scoped problems, your first reply must contain three things an
 
 Only enter this phase after the Phase 1 hard checkpoint passes.
 
-1. Define desired outcome.
-2. Define in-scope and out-of-scope items.
-3. Identify required states when UI is involved:
+1. Read `standards/session-model-advice.md`, run
+   `flow model context --runtime <active-runtime> --lane plan --json`, assess
+   the confirmed planning work, and resolve the coordinator profile. Report
+   this parent-session recommendation before shaping. Keep it separate from
+   effective delegated-agent assignments. It is advisory, performs no switch,
+   asks no new approval question, and does not block planning.
+2. Define desired outcome.
+3. Define in-scope and out-of-scope items.
+4. Identify required states when UI is involved:
    - loading
    - empty
    - error
    - success
    - confirmation
-4. Define contract expectations for whichever apply to this work:
+5. Define contract expectations for whichever apply to this work:
    - UI/UX contract (states, interaction patterns, accessibility)
    - API shape (request/response, error envelope)
    - data shape (schema, invariants, migration concerns)
    - workflow contract (events, transitions, idempotency)
    - document structure (sections, audience, level of detail)
    - other contract types as relevant
-5. Define validation expectations.
-6. **Cost posture check (informational only).** Run `flow cost active`. If the tool recommends acting on this session (`/clear` or `/compact`), note that for the lane recommendation. If `flow cost summary --days 7` prints a Codex capacity line, report it **with the `resets at` time it carries** — the percentage alone is not a fact about now, and quoting it without its expiry is what once presented a six-day-old reading as current. If no capacity line appears, say nothing about capacity: the command omits an expired reading on purpose, and "absent" is the answer, not a gap to fill from memory. A line marked as sampled late in its own window should be passed on with that caveat attached. Nothing here blocks shaping or changes the recommended lane by itself. If `flow` or the usage store is unavailable, skip this step silently.
+6. Define validation expectations.
 
 ### Phase 3 — Capture
 
@@ -153,6 +158,12 @@ Only enter this phase after Phase 2's shaping work is complete and the engineer 
 ### Recommended Lane
 - `flow-scout` | `flow-implement`
 - Why:
+
+### Session Model Advice
+- Coordinator recommendation: [profile, native model/effort or unresolved, disposition, reason]
+- Active parent: [observed | declared | unknown, with source when known]
+- Effective delegated assignments: [role -> model/effort, kept separate from coordinator advice]
+- Switch performed: no
 ```
 
 ## Anti-Pattern: Skipping the Engagement

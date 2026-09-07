@@ -168,6 +168,14 @@ Confirm:
 
 Clarify the problem before researching or writing requirements.
 
+After the engineer confirms the subject and scope, read
+`standards/session-model-advice.md`, run
+`flow model context --runtime <active-runtime> --lane define --json`, assess
+the next meaningful definition work, and resolve the selected profile. Report
+the recommendation and active-parent provenance separately before substantive
+discovery. The advice is advisory and provisional when scope is still unclear,
+performs no switch, adds no approval question, and does not block this phase.
+
 Cover:
 
 - problem or opportunity
@@ -275,6 +283,11 @@ Routing:
 
 ### Desired Outcome
 - [Outcome]
+
+### Session Model Advice
+- Coordinator recommendation: [profile, native model/effort or unresolved, disposition, reason]
+- Active parent: [observed | declared | unknown, with source when known]
+- Switch performed: no
 
 ### Evidence
 - Research needed: yes | no

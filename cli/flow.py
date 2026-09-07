@@ -35,6 +35,8 @@ from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from gaps import cmd_add, cmd_list, cmd_promote  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
+from model_advice import context_command as model_context_command  # noqa: E402
+from model_advice import resolve_command as model_resolve_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
 from orchestration import cmd_validate as orchestration_validate_command  # noqa: E402
 from overlay import overlay_check_command, overlay_status_command  # noqa: E402
@@ -535,6 +537,38 @@ def main() -> int:
     )
     runtime_smoke_parser.add_argument("--json", action="store_true", help="emit JSON")
 
+    model_parser = sub.add_parser(
+        "model",
+        help="inspect read-only facts and runtime mappings for advisory session model selection",
+        description="Read-only session model context and profile resolution. These commands never switch the parent model or configure delegated agents.",
+    )
+    model_sub = model_parser.add_subparsers(dest="model_target", required=True, title="model views")
+    model_context_parser = model_sub.add_parser(
+        "context",
+        help="collect evidence-qualified facts for the shared session model rubric",
+    )
+    model_context_parser.add_argument("--runtime", required=True, choices=("claude", "codex"))
+    model_context_parser.add_argument(
+        "--lane",
+        required=True,
+        choices=("boot", "define", "solution", "plan", "resume"),
+    )
+    model_context_parser.add_argument("--parent-model", help="record a user-declared current parent model")
+    model_context_parser.add_argument("--parent-effort", help="record user-declared runtime-native effort")
+    model_context_parser.add_argument("--parent-source", help="label the declaration source")
+    model_context_parser.add_argument("--json", action="store_true", help="emit JSON")
+    model_resolve_parser = model_sub.add_parser(
+        "resolve",
+        help="resolve an agent-selected semantic profile for one runtime",
+    )
+    model_resolve_parser.add_argument("--runtime", required=True, choices=("claude", "codex"))
+    model_resolve_parser.add_argument(
+        "--profile",
+        required=True,
+        choices=("mechanical", "working", "judgment", "demanding"),
+    )
+    model_resolve_parser.add_argument("--json", action="store_true", help="emit JSON")
+
     for cost_parser in (
         cost_summary_parser,
         cost_sessions_parser,
@@ -784,6 +818,10 @@ def main() -> int:
         return orchestration_validate_command(args)
     if args.command == "runtime" and args.runtime_target == "smoke":
         return runtime_smoke_command(args)
+    if args.command == "model" and args.model_target == "context":
+        return model_context_command(args)
+    if args.command == "model" and args.model_target == "resolve":
+        return model_resolve_command(args)
     if args.command == "help":
         return help_command()
     if args.command == "doctor":

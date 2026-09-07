@@ -180,6 +180,48 @@ Support events:
 
 New runs are protocol revision 2 while `run.json` remains schema 1. Their definition, solution, and plan approvals require `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` and dispatch validation. Handback and review acceptance re-run the later stages. Runs without `protocol_revision` are revision 1 and retain the previous behavior. A scout remains lightweight unless it supplies an orchestration manifest, in which case `archive-scout` validates acceptance.
 
+### `flow model context`
+
+Collect the read-only facts used by the shared parent-session model rubric.
+
+```bash
+flow model context --runtime codex --lane plan --json
+flow model context --runtime claude --lane boot --parent-model claude-opus-5
+```
+
+Required flags:
+
+- `--runtime claude|codex`
+- `--lane boot|define|solution|plan|resume`
+
+Optional parent model and effort flags record a user declaration. CLI input
+cannot prove same-session observation, so it remains `declared`. The JSON
+envelope keeps profile resolution, mapping provenance, availability, active
+parent identity, project-attributed seven-day history, global capacity, and
+limitations separate.
+
+The command opens only an existing compatible usage store with SQLite
+`mode=ro` and `query_only`. It never creates, migrates, harvests, normalizes,
+or writes the store. Absent, partial, unreadable, incompatible, and stale
+evidence remain explicit and never become zero consumption or a performance
+claim.
+
+### `flow model resolve`
+
+Resolve a semantic profile after an agent assesses the work under
+`standards/session-model-advice.md`.
+
+```bash
+flow model resolve --runtime codex --profile judgment --json
+```
+
+Profiles are `mechanical`, `working`, `judgment`, and `demanding`.
+Results are `resolved`, `unresolved`, `disabled`, or `invalid`. A resolved
+mapping reports the runtime-native model, effort, source, verification date,
+and configuration provenance; availability remains separately qualified. The
+command does not select a profile, call a model, switch the parent session, or
+configure delegated agents.
+
 ### `flow runtime smoke`
 
 Check generated Claude and Codex runtime adapter surfaces and list the manual
@@ -196,6 +238,8 @@ Static checks prove local generated files only:
 - generated surfaces are fresh against the current scaffold/user-overlay manifest
 - generated command skills exist
 - command skills include Flow Agent Routing
+- every routing-table row equals the effective generated-agent policy after
+  tier, runtime-specific, and generic overrides
 - lifecycle command skills include the C-lite run protocol text
 - generated agents exist
 - generated agents contain the model and effort fields resolved from `flow.toml`

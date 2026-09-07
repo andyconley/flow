@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from model_policy import runtime_policy_for_agent
 from paths import HOME, SCAFFOLD_DIR
 from render import codex_skill_dir, manifest_ref_for
 from sync import (
@@ -19,7 +20,6 @@ from sync import (
     merge_user_overlay,
     read_managed_paths,
     runtime_status,
-    runtime_policy_for_agent,
     shared_agents,
 )
 
@@ -132,6 +132,35 @@ def _check_target(root: Path, manifest_path: Path, manifest: dict[str, Any], tar
         text = skill_path.read_text()
         if "Flow Agent Routing" in text:
             static.append(_check(f"command {name}", "passed", "generated skill and routing table present", skill_path))
+            missing_rows = []
+            for agent in shared_agents(manifest):
+                policy = runtime_policy_for_agent(manifest, target, agent)
+                effort_field = "model_reasoning_effort" if target == "codex" else "effort"
+                effort = policy.get(effort_field, "")
+                expected = (
+                    f"| {agent.get('name', '')} | {agent.get('model_tier', '')} | "
+                    f"{policy.get('model', '')} | {effort} |"
+                )
+                if expected not in text:
+                    missing_rows.append(agent.get("name", ""))
+            if missing_rows:
+                static.append(
+                    _check(
+                        f"command {name} routing parity",
+                        "failed",
+                        f"effective agent rows differ: {', '.join(missing_rows)}",
+                        skill_path,
+                    )
+                )
+            else:
+                static.append(
+                    _check(
+                        f"command {name} routing parity",
+                        "passed",
+                        "routing rows match effective generated-agent policy",
+                        skill_path,
+                    )
+                )
         else:
             static.append(_check(f"command {name}", "failed", "routing table missing", skill_path))
         needle = C_LITE_COMMAND_NEEDLES.get(name)

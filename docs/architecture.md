@@ -246,6 +246,27 @@ Current examples:
 
 `flow-define` is the early requirements lane: it turns feature or architectural-capability ideas into approved requirements, with research and adversarial review before routing to `flow-solution` or `flow-plan`. Bug-shaped work remains in `flow-plan` until Flow grows a separate defect-definition lane.
 
+### Session model advice
+
+Parent-session advice has two deterministic CLI seams and one judgment seam.
+`flow model context` reads effective profile mappings, qualified parent
+identity, and bounded existing usage evidence. `flow model resolve` maps an
+agent-selected semantic profile to one runtime's native model and effort. The
+shared `standards/session-model-advice.md` rubric assesses task characteristics
+and selects the profile.
+
+The boundary prevents telemetry from becoming a hidden router. Context reads use
+an existing SQLite store in read-only, query-only mode and do not create,
+migrate, harvest, or normalize data. Usage and capacity describe consumption,
+freshness, and attribution; they do not prove model quality or speed. Missing
+or incompatible evidence stays unknown.
+
+Session profiles are framework defaults with atomic user replacement per
+profile/runtime. Project overlays do not own them. Parent advice, observed or
+declared active identity, mapping availability, and effective delegated-agent
+settings remain separate values. No advice command changes client
+configuration, and cross-provider comparison requires an explicit request.
+
 ### Agents
 
 Agents are registered once and adapted per runtime.

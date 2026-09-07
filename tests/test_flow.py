@@ -3408,6 +3408,8 @@ class FlowCliTests(FlowCliHarness):
                 "jsonl_watermark",
                 "lifecycle",
                 "migrate",
+                "model_advice",
+                "model_policy",
                 "normalize",
                 "orchestration",
                 "overlay",

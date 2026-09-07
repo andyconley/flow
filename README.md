@@ -254,6 +254,12 @@ Use these after changing framework content, user overlays, project overlays, com
   - generate Codex runtime files at user level
 - `flow runtime smoke --target all`
   - check generated Claude/Codex surfaces and list manual runtime smoke evidence
+- `flow model context --runtime codex --lane plan --json`
+  - read the active runtime's configured parent-session profiles and bounded
+    local evidence without harvesting, normalizing, migrating, or writing
+- `flow model resolve --runtime codex --profile judgment --json`
+  - resolve an agent-selected semantic profile to its configured native model
+    and effort; this is advisory and does not switch the session
 
 `--user` is required. Project-level sync was retired: it existed to regenerate
 adapters from a project's own copies of the framework's commands and agents,
@@ -271,6 +277,21 @@ flow sync claude --user --check
 flow sync codex --user --check
 flow runtime smoke --target all
 ```
+
+### Session model advice
+
+Boot, resume, define, solution, and plan use one qualitative rubric to recommend
+the parent-session profile for the next meaningful work. The recommendation
+prioritizes quality and confidence, then supported speed considerations. Cost
+and capacity remain informative and cannot lower the required posture by
+themselves.
+
+Flow keeps this separate from delegated-agent routing. It reports configured
+mapping, active-parent evidence, availability, and usage-history limits as
+separate facts, and it never claims that a recommendation switched the current
+session. User profile overrides live under `session_model_profiles` and replace
+one profile/runtime entry atomically; projects do not override these preferences.
+See [ADR 0007](docs/adr/0007-separate-session-model-advice-from-runtime-control.md).
 
 ### Health Checks
 

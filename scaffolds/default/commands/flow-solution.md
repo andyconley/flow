@@ -152,12 +152,18 @@ For appropriately-scoped problems, your first reply must contain three things an
 
 Only enter this phase after the Phase 1 hard checkpoint passes.
 
-1. **Search for precedent.** Check service catalog and existing repos for similar solutions to mirror before designing greenfield.
-2. **Explore options.** At least two viable approaches. If only one option exists, explain why alternatives were rejected.
-3. **Walk the architecture dimensions.** Apply the five dimensions from `architecture.md`: domain boundaries, interfaces/data flow, state/persistence, operational shape, decision durability.
-4. **Make tradeoffs explicit.** Complexity, reversibility, operational cost, time-to-deliver. Name the dimensions you're trading on.
-5. **Recommend or facilitate.** Offer a recommendation with rationale, or facilitate the engineer's choice when they have the context.
-6. **Cost posture check (informational only).** Run `flow cost active`. If the tool recommends acting on this session (`/clear` or `/compact`), note that when proposing chunks — a heavy session is a reason to *suggest* /clear before a long chunk starts, or to *suggest* that mechanical chunks could be routed to smaller-model agents; the suggestion rides alongside the chunk proposal and never reshapes it. If `flow cost summary --days 7` shows a Codex capacity line, note it verbatim — no interpretation. Nothing here blocks solutioning, changes which option is technically right, or alters the chunks the work itself calls for. If `flow` or the usage store is unavailable, skip this step silently.
+1. **Advise on the parent model.** Read
+   `standards/session-model-advice.md`, run
+   `flow model context --runtime <active-runtime> --lane solution --json`,
+   assess the confirmed work, and resolve the selected profile. Report the
+   recommendation and active-parent provenance separately before exploration.
+   This advice is advisory, performs no switch, asks no new approval question,
+   and does not block solutioning.
+2. **Search for precedent.** Check service catalog and existing repos for similar solutions to mirror before designing greenfield.
+3. **Explore options.** At least two viable approaches. If only one option exists, explain why alternatives were rejected.
+4. **Walk the architecture dimensions.** Apply the five dimensions from `architecture.md`: domain boundaries, interfaces/data flow, state/persistence, operational shape, decision durability.
+5. **Make tradeoffs explicit.** Complexity, reversibility, operational cost, time-to-deliver. Name the dimensions you're trading on.
+6. **Recommend or facilitate.** Offer a recommendation with rationale, or facilitate the engineer's choice when they have the context.
 
 ### Phase 3 — Capture
 
@@ -192,6 +198,12 @@ Only enter this phase after the engineer has either accepted the recommendation 
 
 ### Recommendation
 - [Chosen option + rationale, or "engineer's call — here's how I'd decide"]
+
+### Session Model Advice
+- Coordinator recommendation: [profile, native model/effort or unresolved, disposition, reason]
+- Active parent: [observed | declared | unknown, with source when known]
+- Effective delegated assignments: [role -> model/effort, kept separate from coordinator advice]
+- Switch performed: no
 
 ### Proposed chunks
 [Vertical slices for `flow-plan` to shape; each independently mergeable]

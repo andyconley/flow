@@ -21,6 +21,7 @@ from agent_capabilities import (
     guidance_for,
 )
 from fsutil import rel_posix
+from model_policy import runtime_policy_for_agent
 from paths import (
     CODEX_SKILL_DIR,
     GENERATED_MARKER,
@@ -101,7 +102,7 @@ def toml_string(value: str) -> str:
     return json.dumps(value)
 
 
-def routing_hints_for(target: str, agents: list[dict], model_tiers: dict) -> str:
+def routing_hints_for(target: str, agents: list[dict], manifest: dict) -> str:
     if not agents:
         return ""
     lines = [
@@ -114,8 +115,9 @@ def routing_hints_for(target: str, agents: list[dict], model_tiers: dict) -> str
     ]
     for agent in sorted(agents, key=lambda a: a.get("name", "")):
         tier = agent.get("model_tier", "")
-        runtime_policy = model_tiers.get(tier, {}).get(target, {})
-        effort = runtime_policy.get("model_reasoning_effort", runtime_policy.get("effort", ""))
+        runtime_policy = runtime_policy_for_agent(manifest, target, agent)
+        effort_field = "model_reasoning_effort" if target == "codex" else "effort"
+        effort = runtime_policy.get(effort_field, "")
         lines.append(
             f"| {agent.get('name', '')} | {tier} | {runtime_policy.get('model', '')} | {effort} |"
         )
