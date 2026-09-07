@@ -44,6 +44,40 @@ def build_envelope(root, run, source_id, previous, origin):
     return value
 
 
+def _legacy_coverage(root, work):
+    from archive_legacy import observe
+    observation = observe(root, work)
+    review = observation.get("review")
+    disposition = observation.get("effective_disposition")
+    if not disposition and review:
+        disposition = {"approve": "approved", "reapprove": "approved", "withdraw": "withdrawn", "reject": "rejected", "unresolved": "unresolved"}.get(review.get("action"))
+    condition = observation.get("evidence_condition", observation.get("evidence", {}).get("condition", "unverifiable"))
+    conditions = ["legacy_" + disposition if disposition else "legacy_awaiting_review"]
+    if observation.get("candidate_state") in {"invalid_review", "canonical_collision", "identity_unavailable"}:
+        conditions.append(observation["candidate_state"])
+    if condition == "evidence_stale":
+        conditions.append("legacy_evidence_stale")
+    content = "not_applicable"
+    value = observation.get("envelope")
+    if disposition == "approved":
+        content = "generation_gap"
+        if isinstance(value, dict) and value.get("generated"):
+            try:
+                validate_envelope(value)
+                content = "available"
+                for field in value["generated"]["fields"].values():
+                    for source in field["sources"]:
+                        verify_pointer(root, source)
+            except (OSError, ValueError, KeyError, TypeError, IndexError):
+                content = "invalid_content"
+        if content != "available":
+            conditions.append("legacy_" + content)
+    return {"work_id": work, "eligible": False, "retrieval_eligible": bool(observation.get("eligible")),
+            "conditions": conditions, "action": "skip", "review_disposition": disposition,
+            "evidence_condition": condition, "content_condition": content,
+            "base_digest": file_digest(envelope_path(root, work)), "diagnostics": observation.get("diagnostics", [])}
+
+
 def inventory(root, work_ids=None):
     directory = contained(Path(root) / ".flow" / "runs", root)
     rows = []
@@ -55,9 +89,30 @@ def inventory(root, work_ids=None):
             continue
         row = {"work_id": path.name, "eligible": False, "conditions": [], "action": "skip"}
         try:
+            existing = load_envelope(root, path.name)
+            legacy_control = isinstance(existing, dict) and (existing.get("schema_version") == 2 or "legacy_review" in existing)
+        except (OSError, ValueError, TypeError):
+            legacy_control = False
+            existing = None
+        if (path / "run.json").exists() and (path / "abstract.json").exists() and not isinstance(existing, dict):
+            try:
+                canonical_archived = load_run(root, path.name).get("state") == "archived"
+            except (OSError, ValueError, TypeError, AttributeError):
+                canonical_archived = False
+            rows.append({**row, "conditions": ["malformed_abstract" if canonical_archived else "ambiguous_archive_authority"],
+                         "authority_condition": "ambiguous_archive_authority", "action": "review",
+                         "detail": "reconcile malformed archive controls with canonical state; do not choose authority implicitly"})
+            continue
+        if legacy_control or not (path / "run.json").exists():
+            try:
+                rows.append(_legacy_coverage(root, path.name))
+            except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
+                rows.append({**row, "conditions": ["legacy_invalid_review"], "detail": str(error)})
+            continue
+        try:
             run = load_run(root, path.name)
         except FileNotFoundError:
-            row["conditions"] = ["legacy_awaiting_review"]
+            row["conditions"] = ["invalid_canonical"]
             rows.append(row)
             continue
         except (OSError, ValueError, TypeError) as error:

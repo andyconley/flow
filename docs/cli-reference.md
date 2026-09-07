@@ -1105,6 +1105,42 @@ Inspect bounded evidence for one qualified record. Historical and unknown status
 remain explicit; inspection never establishes current authority. `--json` uses
 the same output form. Equal work IDs in different overlays remain distinct.
 
+### `flow archive import`
+
+Reviewed import covers legacy folders without `run.json`, using an existing
+valid overlay identity. It never writes canonical lifecycle closure. Preview
+and review validation are read-only; publication requires a reviewed request,
+current base fingerprint and explicit consent.
+
+```bash
+flow archive import preview [WORK_ID] --json
+flow archive import review WORK_ID --record review.json --json
+flow archive import review WORK_ID --record review.json --apply --yes --json
+flow archive import rescan WORK_ID --json
+flow archive import rescan WORK_ID --base-fingerprint VALUE --apply --yes --json
+```
+
+Actions are `approve` (genesis), `reapprove`, `reject`, `unresolved` and `withdraw`.
+Positive actions require selected final-outcome and closure evidence. Negative
+actions do not require old positive evidence to remain readable. The current
+schema-2 envelope is authoritative; reachable prior reviews are immutable history.
+Replaying an old approval returns its receipt alongside the latest disposition.
+It never reactivates a withdrawn record or repairs derived stores.
+
+Rescan repairs one approved abstract with valid evidence while preserving review,
+history and refinement bytes. It cannot grant approval or accept changed evidence.
+It refreshes only the target coverage row and an established projection; first
+index creation stays explicit. Canonical backfill excludes these candidates.
+
+Results distinguish `action_revision` from `current_revision`, `review_commit`
+from evidence validity, and abstract/index/coverage outcomes. Exit 0 means a
+successful preview, validation or completed operation; inspect JSON `state` and
+individual outcomes to distinguish them. Exit 2 means invalid input or conflict,
+3 confirmed publication with
+partial downstream work, and 4 unavailable or uncertain. A post-replace durability
+failure requires the original action ID for retry; do not assume rollback.
+See [review records, capture provenance and recovery examples](archive-legacy-import.md).
+
 ### `flow archive backfill`
 
 Preview missing canonical archive repairs with no writes. Other lifecycle states

@@ -69,6 +69,16 @@ retrieval selection. Do not call it a returned or ranked hit, or imply that
 retrieval found it. Keep the retrieval miss visible alongside that evidence.
 Retrieval introduces no lifecycle veto, inferred supersession or new approval gate.
 
+A `reviewed_legacy` hit has explicit reviewer-backed authority, not canonical
+lifecycle closure. Preserve that provenance and any unknown historical date;
+reviewer identity is declared, not authenticated or necessarily independent.
+Apply the same conflict and applicability dispositions to these hits. Withdrawal
+or stale evidence excludes a legacy decision; a cached result cannot restore
+approval. Rescan repairs generated content only and never substitutes for an
+explicit evidence-backed reapproval. When current authority is unavailable, keep
+that limitation visible rather than treating an older receipt as current.
+
+
 ## Primary inputs
 
 - approved requirements (feature definition + acceptance criteria + high-level success criteria)

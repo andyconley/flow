@@ -17,7 +17,7 @@ from archive_sources import assess_source, discover_context
 from archive_store import ArchiveError, cache_dir, read_projection, projection_record, projection_rows, publish_projection, update_projection, writer_lock
 
 TOKENIZER_VERSION = 1
-VERSIONS = {"schema": 1, "extractor": 1, "tokenizer": TOKENIZER_VERSION, "ranker": "fts5-bm25-1"}
+VERSIONS = {"schema": 1, "legacy": 1, "extractor": 1, "tokenizer": TOKENIZER_VERSION, "ranker": "fts5-bm25-1"}
 EXITS = {"complete": 0, "no_matches": 0, "invalid_request": 2, "partial": 3, "unavailable": 4, "preflight_required": 4}
 
 
@@ -132,7 +132,7 @@ def _stream_ranked(sources, graph, query, component, work_type, since, include_s
             os.unlink(name)
 
 
-def rebuild(root, incremental=False):
+def rebuild(root, incremental=False, coverage_work_id=None):
     root = Path(root).resolve()
     try:
         ignore = root / ".flow" / ".gitignore"
@@ -153,7 +153,7 @@ def rebuild(root, incremental=False):
                 publish_projection(root, records, source["fingerprint"], VERSIONS, verify)
             from archive_service import refresh_coverage
             try:
-                refresh_coverage(root)
+                refresh_coverage(root, coverage_work_id)
             except (OSError, ValueError) as error:
                 return {"state": "partial", "indexed": len(records), "reason": "coverage observation not persisted: " + str(error), "remedy": "rerun flow index rebuild"}
             return {"state": "complete", "indexed": len(records), "rejected": len(source["records"]) - len(records), "diagnostics": source["diagnostics"], "fingerprint": source["fingerprint"]}
@@ -306,6 +306,14 @@ def search(root, query, lane="define", sources=None, current_only=False, compone
                        and any(item.get("code") == "invalid_abstract_content" for item in row.get("diagnostics", []))
                        for source in context for row in source.get("records", []))
     try:
+        if since:
+            for source in ready_sources:
+                with projection_rows(Path(source["root"])) as (_, cursor):
+                    for _, raw in cursor:
+                        row = json.loads(raw)
+                        if row.get("authority_type") == "reviewed_legacy" and effective_view(row["envelope"])["fields"]["closed_at"]["state"] == "unknown":
+                            graph["diagnostics"].append({"code": "unknown_legacy_date_omitted", "qualified_id": row["qualified_id"],
+                                                        "remedy": "omit the date filter to include decisions with unknown historical closure dates"})
         with _stream_ranked(ready_sources, graph, query, component, work_type, since, include_superseded, k) as (ordered, total_matches, uncertain_matches):
             state = "partial" if unavailable or uncertain_matches or selected_uncertainty or content_gaps else "complete" if total_matches else "no_matches"
             if not searched:

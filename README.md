@@ -470,6 +470,12 @@ Archive transitions attempt source-grounded abstracts after closure. Use
 `flow archive backfill` to preview canonical repairs, then `--apply --yes` when
 ready. `flow index rebuild` builds the current overlay's disposable projection;
 `flow archive search "topic" --lane define --json` searches it and its ancestors.
+
+For older work without `run.json`, `flow archive import preview --json` starts a
+[reviewed legacy import](docs/archive-legacy-import.md). Explicit evidence-backed
+review controls inclusion; withdrawal remains effective when index refresh fails.
+`flow archive import rescan WORK_ID` previews generated-content repair without
+changing approval.
 Run `flow doctor` if retrieval requests FTS5 preflight. Missing FTS5 leaves Flow
 usable with retrieval unavailable; there is no alternate scorer fallback.
 

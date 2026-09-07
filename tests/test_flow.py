@@ -3384,6 +3384,8 @@ class FlowCliTests(FlowCliHarness):
                 "archive_commands",
                 "archive_extract",
                 "archive_graph",
+                "archive_legacy",
+                "archive_legacy_model",
                 "archive_model",
                 "archive_preflight",
                 "archive_query",
