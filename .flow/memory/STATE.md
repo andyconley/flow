@@ -6,6 +6,10 @@
 
 ## Recently completed
 
+- `archive-legacy-import` stage6 accepted at `e2a2a11` and archived.
+  All three review findings are resolved. Delivery is tracked in PR17 and its
+  automated release workflow.
+
 - `archive-retrieval` stages 1–5 accepted at `ea92460` and archived; all four acceptance
   findings resolved. Closeout artifacts are in `.flow/runs/archive-retrieval/`.
   Delivery is tracked in PR16 and its release workflow.
@@ -22,9 +26,8 @@
 
 ## Next step
 
-- Separate delivery: stage 6 reviewed legacy import.
 - Deferred backlog: runtime memory capability and bounded recall, review rework
-  transition (three observations), and runtime evidence completion manifest.
+  transition (four observations), and runtime evidence completion manifest.
   All three gaps are promoted into `docs/backlog.md`; implementation is deferred.
 - Optional follow-up: clearer review-only backfill status.
 

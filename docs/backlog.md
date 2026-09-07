@@ -375,7 +375,7 @@ Factual claims written into a durable procedural artifact carry no evidence burd
 
 ### Runtime Memory Capability Contract
 
-Status: observed once, promoted from the capability-gap ledger
+Status: observed 2 times, promoted from the capability-gap ledger
 
 Flow lacks a runtime memory capability contract distinguishing readable companion memory, supported explicit writes, and verified persistence. Archive reporting conflates the absence of a Flow-managed writer with the absence of durable runtime memory, and boot and resume lack a dependable bounded recall path for archived decisions.
 
@@ -407,7 +407,7 @@ this item is prioritized.
 
 ### Review Rework Transition
 
-Status: observed 3 times, promoted from the capability-gap ledger
+Status: observed 4 times, promoted from the capability-gap ledger
 
 Flow lacks an explicit transition from review back to implementation for required corrections to an approved plan.
 
@@ -416,6 +416,6 @@ findings, correction evidence, and independent re-review before acceptance.
 
 ### Runtime Evidence Completion Manifest
 
-Status: observed once, promoted from the capability-gap ledger
+Status: observed 2 times, promoted from the capability-gap ledger
 
 Flow lacks a completion manifest that connects prepared runtime evaluation cases to execution artifacts and reviewed outcomes.
