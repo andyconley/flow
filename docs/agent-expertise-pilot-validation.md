@@ -1,18 +1,20 @@
 # Agent expertise pilot validation
 
-Two-arm comparisons on two constructed support tickets. This record supports a
+Two-arm comparisons on four constructed cases across the three pilot roles. This record supports a
 `/flow-define` decision on whether to continue the expertise capability. It is
 not an acceptance test of the pattern, and it makes no claim about behavior on
-tickets other than the two run.
+cases other than the four run.
 
 The question it addresses is the one left open in
 `agent-expertise-provenance-handoff.md` and restated in the discovery handoff:
 whether an expertise addition changes an agent's output or only lengthens its
 prompt.
 
-The first ticket (SUP-4471) tests whether the entries fire when their triggers
-are present. The second (SUP-4602) tests whether they fire when they should
-not. The Limits and Reading sections at the end cover both.
+SUP-4471 tests whether the `support-lead` entries fire when their triggers are
+present; SUP-4602 tests whether they fire when they should not, and drove a
+repair re-run against both. BA-1180 and OPS-2291 apply the same counter-test to
+`business-analyst` and `sre`. The Limits and Reading sections at the end cover
+all four.
 
 ## Method
 
@@ -194,6 +196,81 @@ reasoning from the renewal risk and the hard date. Weighing investigation
 against stakes cuts both ways: it withdraws effort from the single seat and
 front-loads relief on the at-risk account.
 
+## Counter-tests for the other two pilot roles
+
+The same design was applied to `business-analyst` and `sre`, with the pilot
+entries as authored — neither role has a sufficiency entry, so the prediction
+was that both would over-fire the way `support-lead` v1 did. Both cases and
+rubrics were written before any arm ran.
+
+`request-ba-1180.md` is a statutory invoice field: the rule is attached and
+fixes label and format, legal has settled scope and retroactivity, the data is
+already held, and two comparable field additions shipped inside a sprint. There
+is no job behind the request to reframe and no behavioral question to elicit
+past instances of. One genuine judgment call is left open (the rule does not
+specify placement) and one item is already with its owner.
+
+`incident-ops-2291.md` is a sev-4 with zero impact: an expired certificate on
+an internal-only dashboard, seven hours down entirely outside working hours,
+access logs confirming zero requests. The timeline is machine timestamps end to
+end and contains no human action, which is the trigger the "reconstruct what
+was known at the time" entry names. Conditions are recorded as established, and
+an inventory diff run during the incident already confirmed the scope was one
+host.
+
+| | BA control | BA treatment | SRE control | SRE treatment |
+| --- | --- | --- | --- | --- |
+| P1 Acts / defines | Full | Full | Full | Full |
+| P2 Uses settled evidence | Full | Full | Full | Full |
+| P3 Proportionate | Full | Full | Full | Partial |
+| P4 Names the judgment call | Full | Full | Full | Full |
+| O1 | Clean | Clean | Clean | Clean |
+| O2 | Clean | Clean | Clean | Clean |
+| O3 | Clean | Clean | Clean | Tripped |
+| O4 | Clean | Clean | Clean | Clean |
+| O5 | Clean | Tripped | Clean | Tripped |
+
+The prediction was wrong. Neither role over-fires the way `support-lead` v1
+did, and no arm withheld its deliverable.
+
+Both treatments produced the sufficiency behavior in prose without having an
+entry for it. The business-analyst wrote: "the job behind it is the same size
+as the field ... There is no larger unmet need hiding underneath. Recording
+that explicitly so the next role does not go looking for one." The sre wrote:
+"there is no human decision to reconstruct here." In both cases the entry named
+its own trigger and reported it absent, which is what the support-lead
+sufficiency entry had to be authored to produce.
+
+Both treatments tripped O5 by running a premortem the case did not warrant, and
+the two trips differ in value. The business-analyst's premortem produced three
+scenarios and then stated that all three were already carried in the sections
+above — a redundant section, costing attention and nothing else. The sre's
+premortem was on the Terraform import rather than the incident, and produced a
+real risk the control had waved past as "routine, reversible": state import
+overwriting hand-tuned configuration, and the module's certificate issuance
+racing the freshly installed manual one.
+
+The sre treatment is the only arm scored Partial on proportion. It proposed
+four actions plus a report-only rollout period against the control's two, and
+the control was better calibrated about not building policy from one data
+point. But its two extra items are not padding: the exemption-with-expiry field
+came out of asking what the inventory diff newly makes possible, and it names
+the failure the control's unqualified "run the diff on a schedule" walks into —
+a diff that files tickets nobody closes gets muted within a quarter.
+
+### Why support-lead failed and these did not
+
+The costs are not the same shape. A support-lead that keeps a question open
+withholds an answer from a person who is waiting; the cost lands outside the
+team and inside a customer's day. A business-analyst or sre that keeps a
+question open adds a section to a document someone will read anyway. The
+first is a wait, the second is attention.
+
+That suggests over-firing is worth guarding against in proportion to whether
+the role's output gates someone else's wait, rather than uniformly across the
+corpus. On this evidence a sufficiency entry earns its place in `support-lead`
+and is not yet justified for the other two.
+
 ## Limits
 
 - Two tickets, one run per arm on each. No variance estimate. A second run of
@@ -207,7 +284,14 @@ front-loads relief on the at-risk account.
   Flow subagent dispatch. The dispatch boundary named in the discovery handoff
   remains unverified on both runtimes.
 - Still not tested: whether the observed behaviors are role-specific or generic
-  diagnostic hygiene that any role would produce from the same ticket.
+  diagnostic hygiene that any role would produce from the same ticket. The
+  counter-tests use a different case per role, so they do not answer this
+  either — they show each role's entries behaving sensibly on its own routine
+  work, not that another role would behave differently on the same input.
+- The two role counter-tests scored the treatments as acceptable partly on the
+  judgment that a redundant document section is cheap. That judgment is the
+  scorer's, was not pre-registered as a threshold, and someone who reads
+  unnecessary sections as a real cost would score both O5 trips harder.
 - The sufficiency entry was authored against a failure the counter-test
   produced, and tested on the ticket that produced it. That is a repair
   confirmed on its own case, not a generalization. A ticket neither ticket
@@ -228,5 +312,13 @@ The more useful finding is about method rather than about these entries. A
 one-directional test would have shipped the five-entry set, because on the
 ticket it was written for the set performs well. The failure was only visible
 from the opposite direction, and the repair for it improved both cases. Entry
-sets should be authored and tested in pairs of opposing tickets, and the
-counter-ticket belongs in the corpus alongside the entry it constrains.
+sets should be authored and tested in pairs of opposing cases, and the
+counter-case belongs in the corpus alongside the entry it constrains.
+
+The role counter-tests then narrowed where that matters. Over-firing was a real
+cost in `support-lead`, where holding a question open makes a customer wait,
+and was not in `business-analyst` or `sre`, where it adds a section to a
+document. Sufficiency is not a term the whole corpus needs — it is owed by
+roles whose output gates someone else's wait. Both other treatments produced
+the behavior unprompted, which is a reason to test for it per role rather than
+to author it everywhere in advance.
