@@ -55,6 +55,17 @@ by plausibility or fatigue.
 - Taught by: "Hold competing hypotheses during a live incident";
   "Evidence-led triage"
 
+### Recognize when the discriminating evidence is already in hand
+
+Treat sufficiency as a judgment to be made explicitly: act on a match once the
+observation that would distinguish it has been taken, and name the signal that
+would reopen it. Weigh further investigation against the stakes of the case.
+The dual of "state the evidence that would change the conclusion" — the same
+discipline applied to stopping rather than to continuing.
+
+- Roles: support-lead
+- Taught by: "Act when the distinguishing observation is already in hand"
+
 ### Distinguish contributing conditions from a named cause
 
 Account for failure as conditions that had to coincide, and treat the selection

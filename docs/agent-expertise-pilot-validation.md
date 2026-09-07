@@ -146,6 +146,54 @@ was an at-risk enterprise renewal where over-investigation was cheap relative
 to closing a regression; SUP-4602 is one self-serve seat where it is not. None
 of the five entries conditions on stakes.
 
+## Repair: the sufficiency entry (treatment v2)
+
+The gap the counter-test identified was closed with a sixth support-lead entry,
+"Act when the distinguishing observation is already in hand", and a matching
+term in `flow:competencies`. Both tickets were re-run against the amended
+definition, delivery unchanged.
+
+The entry is sourced from the passage in Croskerry the first five drew on but
+never used — the dual-process claim rather than the bias catalog. The paper's
+own position is that the remedy is not to think harder everywhere but to
+recognize the conditions under which fast pattern matching is unreliable and
+switch modes deliberately. Its required behavior adds the two things the
+counter-test showed missing: cite the already-taken observation and act on it
+while naming the signal that would reopen the case, and weigh remaining
+investigation against the stakes of the report.
+
+| | v1 | v2 |
+| --- | --- | --- |
+| SUP-4602 P1 Answers | Partial | Full |
+| SUP-4602 P3 Proportionate | Absent | Full |
+| SUP-4602 O1 Re-requests supplied evidence | Tripped | Clean |
+| SUP-4602 O2 Withholds the workaround | Tripped | Clean |
+| SUP-4602 O3 Keeps closed hypotheses alive | Tripped | Clean |
+| SUP-4602 O4 Escalates as a precondition | Tripped | Clean |
+| SUP-4602 O5 Length without added action | Tripped | Clean |
+| SUP-4471 B1-B5 | Full | Full |
+| SUP-4471 N1-N3 | Clean | Clean |
+
+On SUP-4602 v2 marks steps 1 and 2 "Already done", asks the reporter for
+nothing, states the reopening signal explicitly, and closes: "No engineering
+escalation on SUP-4602. Resolve with the workaround." It gives the stakes
+reason in the same line — a single self-serve seat with no renewal event "does
+not warrant carrying an open question further." It keeps the affordance finding
+that both earlier arms produced, routed to product without blocking the reply.
+
+On SUP-4471 nothing regressed, which was the risk worth testing. v2 still
+refuses the match, and states why in the entry's own terms: KI-388 "is a match,
+not a confirmation; the distinguishing observation has not been taken."
+
+The stakes clause also improved the trap ticket, which was not anticipated.
+v1 gathered evidence and escalated after it. v2 sends the workaround
+immediately as an explicit interim measure to protect the month-end deadline,
+has support produce a known-good re-export so the customer can stop re-keying,
+and escalates in parallel with evidence-gathering rather than after it —
+reasoning from the renewal risk and the hard date. Weighing investigation
+against stakes cuts both ways: it withdraws effort from the single seat and
+front-loads relief on the at-risk account.
+
 ## Limits
 
 - Two tickets, one run per arm on each. No variance estimate. A second run of
@@ -160,6 +208,10 @@ of the five entries conditions on stakes.
   remains unverified on both runtimes.
 - Still not tested: whether the observed behaviors are role-specific or generic
   diagnostic hygiene that any role would produce from the same ticket.
+- The sufficiency entry was authored against a failure the counter-test
+  produced, and tested on the ticket that produced it. That is a repair
+  confirmed on its own case, not a generalization. A ticket neither ticket
+  resembles has not been tried.
 
 ## Reading
 
@@ -168,8 +220,13 @@ known-issue match is a trap it produces a materially better answer; on a ticket
 where the match is correct it produces a worse one, by keeping a settled
 question open and spending a customer's time and an engineering touch on it.
 
-That is enough to justify spending on serialization, and not enough to ship the
-current five support-lead entries as a baseline. The gap the counter-test
-identifies — no sufficiency trigger, no conditioning on stakes — is an
-authoring gap, and it is cheaper to close before the corpus format is fixed
-than after.
+That is enough to justify spending on serialization. The gap the counter-test
+identified — no sufficiency trigger, no conditioning on stakes — was an
+authoring gap, and the six-entry set no longer shows it on either ticket.
+
+The more useful finding is about method rather than about these entries. A
+one-directional test would have shipped the five-entry set, because on the
+ticket it was written for the set performs well. The failure was only visible
+from the opposite direction, and the repair for it improved both cases. Entry
+sets should be authored and tested in pairs of opposing tickets, and the
+counter-ticket belongs in the corpus alongside the entry it constrains.

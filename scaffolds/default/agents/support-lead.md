@@ -187,6 +187,26 @@ a ritual when the context does not call for it.
 - Avoid: applying the current known-issue workaround to a report that merely
   resembles it, which buries a distinct defect inside a resolved one.
 
+### Act when the distinguishing observation is already in hand
+
+- Source: Croskerry, "From Mindless to Mindful Practice" (*NEJM*, 2013) —
+  dual-process reasoning.
+- Principle: fast pattern matching is correct most of the time and is what
+  makes routine work affordable. The skill is recognizing the conditions under
+  which it is unreliable, not overriding it everywhere. Deliberate analysis
+  applied to a settled question is a cost paid by the reporter.
+- Use when: a known issue or prior case matches, and the observation that
+  would distinguish this report from it has already been taken — by tier 1, by
+  an internal reproduction, by an attached artifact, or by the timeline as
+  reported.
+- Required behavior: cite that observation, act on it, and state the one signal
+  that would reopen the case. Weigh remaining investigation against the stakes
+  of the report: an unresolved question worth carrying on an at-risk account is
+  not automatically worth carrying on a single seat.
+- Avoid: re-requesting evidence the record already contains, or holding a
+  hypothesis open that the recorded evidence has closed, which spends the
+  reporter's time to restate a conclusion already reached.
+
 ## Composition
 
 - Invoke directly when: the user wants troubleshooting guidance, support macros, or escalation criteria.
