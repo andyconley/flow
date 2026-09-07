@@ -367,7 +367,7 @@ def invoke(item, destination):
     authority_root = cwd.parent if cwd.name == "child" else cwd
     before = {str(p.relative_to(authority_root)): sha(p) for p in authority_root.rglob("*") if p.is_file() and ".flow" in p.relative_to(authority_root).parts and "runtime-home" not in p.relative_to(authority_root).parts}
     started_at = datetime.now(timezone.utc).isoformat()
-    argv = (["claude", "--print", "--verbose", "--output-format", "stream-json", "--permission-mode", "dontAsk", "--allowedTools", "Read,Bash,Glob,Grep", text]
+    argv = (["claude", "--print", "--verbose", "--output-format", "stream-json", "--permission-mode", "dontAsk", "--allowedTools", "Read,Bash,Glob,Grep", "--", text]
             if item["runtime"] == "claude" else
             ["codex", "exec", "--json", "--sandbox", "workspace-write", "--skip-git-repo-check", "-C", str(cwd), text])
     outcome = run(argv, cwd, {**os.environ, "NO_COLOR": "1"}, timeout=180)
@@ -381,10 +381,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("destination", type=Path)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--runtime", choices=RUNTIMES, help="execute one provider; all fixtures remain prepared")
     args = parser.parse_args()
     inventory = prepare(args.destination)
     if args.execute:
-        items = [step for cell in json.loads(inventory.read_text())["cells"] for step in cell.get("sub_attempts", [cell])]
+        items = [step for cell in json.loads(inventory.read_text())["cells"] if args.runtime is None or cell["runtime"] == args.runtime for step in cell.get("sub_attempts", [cell])]
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = {pool.submit(invoke, item, args.destination): item["id"] for item in items}
             for future in as_completed(futures):
