@@ -2,6 +2,27 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.24.0](https://github.com/andyconley/flow/compare/v0.23.0...v0.24.0) (2026-09-07)
+
+### Features
+
+* **archive:** add bounded ancestor decision retrieval ([dd9e040](https://github.com/andyconley/flow/commit/dd9e040aca49135672339e5f2ff0446bcf526f77))
+* **archive:** deliver bounded ancestor decision retrieval ([c26a89e](https://github.com/andyconley/flow/commit/c26a89e84cedb76ac34a7046b8681ae7f0d28876))
+
+### Bug Fixes
+
+* **archive:** preserve closure and authority through retrieval failures ([ea92460](https://github.com/andyconley/flow/commit/ea92460baca4851fc997eea7a179d5a12bc3eefc))
+* **archive:** preserve evidence provenance and query boundaries ([2268e4a](https://github.com/andyconley/flow/commit/2268e4a177096cf1c764a5765307aa4650cd49ee))
+
+### Documentation
+
+* **archive:** record implementation validation ([7c8f340](https://github.com/andyconley/flow/commit/7c8f3404bf9366d7f48c56a8f0c8520880cf8f8c))
+* **backlog:** record archive closeout capability gaps ([56cf3d4](https://github.com/andyconley/flow/commit/56cf3d49e55fc3f93fc1a2a6c2635d0e2d6bf7e9))
+
+### Maintenance
+
+* **flow:** archive agent web access policy [skip ci] ([7b6f9d6](https://github.com/andyconley/flow/commit/7b6f9d615607e70e784b83e976be04ee13695313))
+
 ## [0.23.0](https://github.com/andyconley/flow/compare/v0.22.0...v0.23.0) (2026-09-02)
 
 ### Features
