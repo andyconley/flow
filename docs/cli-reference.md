@@ -1085,6 +1085,20 @@ Search checks source fingerprints and never repairs ancestor state. An explicit
 narrower rerequest replaces the logical active selection; it cannot erase old
 transcript tokens or material prior dispositions.
 
+Starting or advancing valid non-archived work does not invalidate an unchanged
+archive projection. New closures, removed archived records, changed source
+evidence and malformed authority still affect freshness. If only generated or
+refined prose is malformed, validated anchored supersession controls remain
+effective. Search excludes the malformed prose and reports partial results with
+an `invalid_abstract_content` diagnostic; historical hits retain their links.
+
+Malformed overlay identity metadata is an enrichment failure, so archive closure
+still proceeds and retrieval reports the unavailable source. Restore identity
+from version control or backup. SQLite disk-full and storage I/O failures report
+`temporary_storage_unavailable`: check free space, `TMPDIR` permissions and
+archive database storage before retrying. Missing FTS5 retains its separate
+interpreter/preflight remedy.
+
 ### `flow archive inspect UUID:WORK_ID`
 
 Inspect bounded evidence for one qualified record. Historical and unknown status

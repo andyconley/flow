@@ -103,7 +103,14 @@ def ensure_ignore(root):
 def read_identity(root):
     path = contained(Path(root) / ".flow" / "identity.json", root)
     value = json.loads(path.read_text())
-    if value.get("schema_version") != 1 or str(uuid.UUID(value.get("source_id", ""))) != value["source_id"]:
+    valid = (isinstance(value, dict) and type(value.get("schema_version")) is int
+             and value["schema_version"] == 1 and isinstance(value.get("source_id"), str))
+    if valid:
+        try:
+            valid = str(uuid.UUID(value["source_id"])) == value["source_id"]
+        except ValueError:
+            valid = False
+    if not valid:
         raise ArchiveError("invalid overlay identity; restore identity.json from version control or backup")
     return value["source_id"]
 

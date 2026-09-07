@@ -224,6 +224,22 @@ def instant(value):
     return parsed.astimezone(timezone.utc)
 
 
+def sqlite_storage_failure(error):
+    """Recognize storage failures without mistaking them for missing FTS5.
+
+    Python 3.11 exposes SQLite result codes; 3.10 needs the engine's messages.
+    Extended result codes preserve the primary code in their low byte.
+    """
+    code = getattr(error, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        # SQLITE_READONLY, SQLITE_IOERR, SQLITE_FULL, SQLITE_CANTOPEN.
+        return (code & 0xff) in {8, 10, 13, 14}
+    return str(error).casefold() in {
+        "attempt to write a readonly database", "disk i/o error",
+        "database or disk is full", "unable to open database file",
+    }
+
+
 def search(root, query, lane="define", sources=None, current_only=False, component=None, work_type=None, since=None, include_superseded=False, top_k=None, max_output_bytes=None):
     from archive_preflight import current
     k = top_k if top_k is not None else (8 if lane == "solution" else 5)
@@ -286,9 +302,12 @@ def search(root, query, lane="define", sources=None, current_only=False, compone
                 unavailable.append({"source_id": source["source_id"], "reason": str(error), "remedy": "run flow index rebuild in " + source["root"]})
     graph = resolve_graph(context)
     selected_uncertainty = any(row["identity"]["source_id"] in selected and graph["records"].get(row["qualified_id"], {}).get("status") == "unknown" for source in context for row in source.get("records", []))
+    content_gaps = any(row["identity"]["source_id"] in selected
+                       and any(item.get("code") == "invalid_abstract_content" for item in row.get("diagnostics", []))
+                       for source in context for row in source.get("records", []))
     try:
         with _stream_ranked(ready_sources, graph, query, component, work_type, since, include_superseded, k) as (ordered, total_matches, uncertain_matches):
-            state = "partial" if unavailable or uncertain_matches or selected_uncertainty else "complete" if total_matches else "no_matches"
+            state = "partial" if unavailable or uncertain_matches or selected_uncertainty or content_gaps else "complete" if total_matches else "no_matches"
             if not searched:
                 state = "unavailable"
             value = {"state": state, "context_sources": [{"source_id": s["source_id"], "root": s["root"], "state": s["state"], "fingerprint": s.get("fingerprint")} for s in context], "searched_sources": searched, "unavailable_sources": unavailable, "uncertain_matches": uncertain_matches, "diagnostics": graph["diagnostics"], "count_scope": "verified_selected_sources", "selection_id": digest({"query": query, "sources": [(s["source_id"], s.get("fingerprint")) for s in context], "filters": [sources, current_only, component, work_type, since, include_superseded], "caps": [k, limit]})}
@@ -304,6 +323,10 @@ def search(root, query, lane="define", sources=None, current_only=False, compone
         if str(error).startswith("invalid_closure_date:"):
             return pack({"state": "unavailable", "reason": "invalid_closure_date", "remedy": "inspect the named run's canonical closure date and regenerate its abstract after correcting evidence", "detail": str(error)}, [], k, limit)
         return pack({"state": "unavailable", "reason": "source_changed_during_query", "remedy": "retry after source writes finish; rebuild the owning index if stale", "detail": str(error)}, [], k, limit)
-    except (sqlite3.Error, ValueError, KeyError, TypeError) as error:
+    except sqlite3.Error as error:
+        if sqlite_storage_failure(error):
+            return pack({"state": "unavailable", "reason": "temporary_storage_unavailable", "remedy": "provide a writable temporary directory via TMPDIR and sufficient free space; check archive database storage if the I/O error persists; retry retrieval", "detail": str(error)}, [], k, limit)
+        return pack({"state": "unavailable", "reason": "fts5_failed_after_preflight", "remedy": "run flow doctor and select an FTS5-enabled interpreter", "detail": str(error)}, [], k, limit)
+    except (ValueError, KeyError, TypeError) as error:
         return pack({"state": "unavailable", "reason": "fts5_failed_after_preflight", "remedy": "run flow doctor and select an FTS5-enabled interpreter", "detail": str(error)}, [], k, limit)
     return result

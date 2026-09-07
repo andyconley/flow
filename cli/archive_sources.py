@@ -6,6 +6,7 @@ from pathlib import Path
 from archive_model import declaration_digest, digest, qualified, validate_envelope, effective_view
 from archive_store import contained, read_identity
 from archive_extract import verify_pointer
+from runstate import STATE_ARCHIVED, STATE_BLOCKED, STATE_LANES, STATE_LEGACY, STATE_PAUSED
 
 
 def discover_context(root):
@@ -38,6 +39,17 @@ def discover_context(root):
     return result
 
 
+def _validate_control_envelope(envelope):
+    """Validate the durable authority portion without trusting abstract prose."""
+    if not isinstance(envelope, dict) or type(envelope.get("schema_version")) is not int or envelope.get("schema_version") != 1:
+        raise ValueError("unsupported abstract schema; do not downgrade")
+    identity = envelope.get("identity")
+    qualified(identity)
+    declaration_digest(identity, envelope.get("declarations", {}))
+    if not isinstance(envelope.get("provenance"), dict):
+        raise ValueError("missing provenance")
+
+
 def _observe(root, compact=False):
     root = Path(root).resolve()
     overlay = root / ".flow"
@@ -47,22 +59,39 @@ def _observe(root, compact=False):
         raw = path.read_bytes()
         files[path.relative_to(root).as_posix()] = hashlib.sha256(raw).hexdigest()
         return raw
+    def read_untracked(path):
+        """Read enough to classify a run without making active work projection input."""
+        return contained(path, root).read_bytes()
     source_id = read_identity(root)
     read(overlay / "identity.json")
     if (overlay / "components.json").exists():
         read(overlay / "components.json")
     runs = contained(overlay / "runs", root)
-    inventory = sorted(p.name for p in runs.iterdir() if p.is_dir()) if runs.exists() else []
-    for work in inventory:
+    directories = sorted(p.name for p in runs.iterdir() if p.is_dir()) if runs.exists() else []
+    inventory = []
+    for work in directories:
         directory = contained(runs / work, root)
         if not (directory / "run.json").exists():
             continue
         try:
-            run = json.loads(read(directory / "run.json"))
+            # Active lane work is neither an archived candidate nor authority
+            # context.  Its normal lifecycle writes must not stale a durable
+            # archive projection.  A malformed run cannot be classified safely,
+            # so retain it as invalid authority input and fail closed.
+            raw_run = read_untracked(directory / "run.json")
+            run = json.loads(raw_run)
+            if not isinstance(run, dict):
+                raise ValueError("canonical run must be an object")
             if run.get("work_id") != work:
                 raise ValueError("canonical work ID mismatch")
-            if run.get("state") != "archived":
-                continue
+            state = run.get("state")
+            known_non_archived = set(STATE_LANES) | {STATE_PAUSED, STATE_BLOCKED, STATE_LEGACY}
+            if state != STATE_ARCHIVED:
+                if state in known_non_archived:
+                    continue
+                raise ValueError("unrecognized canonical run state")
+            inventory.append(work)
+            files[(directory / "run.json").relative_to(root).as_posix()] = hashlib.sha256(raw_run).hexdigest()
             identity = {"source_id": source_id, "work_id": work}
             row = {"work_id": work, "identity": identity, "qualified_id": qualified(identity), "run": run, "envelope": None, "declarations": {}, "declaration_status": "none", "diagnostics": []}
             events = []
@@ -74,10 +103,9 @@ def _observe(root, compact=False):
             path = directory / "abstract.json"
             if path.exists():
                 envelope = json.loads(read(path))
-                validate_envelope(envelope)
+                _validate_control_envelope(envelope)
                 if envelope["identity"] != identity:
                     raise ValueError("abstract identity mismatch")
-                row["envelope"] = envelope
                 row["declarations"] = envelope.get("declarations", {})
                 edges = row["declarations"].get("supersedes", [])
                 expected = closures[0].get("dispositions", {}).get("archive_declarations") if len(closures) == 1 else None
@@ -92,18 +120,30 @@ def _observe(root, compact=False):
                             verify_pointer(root, pointer)
                         except (OSError, ValueError, KeyError, TypeError):
                             row["declaration_status"] = "unverified"
+                # Generated and refinement prose may be malformed without
+                # invalidating an otherwise anchored declaration.  Keep that
+                # durable graph authority, but never expose malformed prose as
+                # a searchable abstract.
+                content_valid = True
+                try:
+                    validate_envelope(envelope)
+                except (ValueError, KeyError, TypeError) as error:
+                    content_valid = False
+                    row["diagnostics"].append({"code": "invalid_abstract_content", "detail": str(error), "remedy": "repair or regenerate generated/refinement content; anchored declarations remain graph evidence"})
+                if content_valid:
+                    row["envelope"] = envelope
                 # Every evidence-bearing input must still match its recorded bytes.
                 pointers = []
                 generated = envelope.get("generated")
-                if generated:
+                if generated and content_valid:
                     for field in generated["fields"].values():
                         pointers.extend(field["sources"])
-                if generated and effective_view(envelope)["refinement_state"] == "applied":
+                if generated and content_valid and effective_view(envelope)["refinement_state"] == "applied":
                     for patch in (envelope.get("refinement") or {}).get("patches", {}).values():
                         pointers.extend(patch["sources"])
                 for selection in row["declarations"].get("selections", []):
                     pointers.append(selection["source"])
-                row["content_current"] = bool(generated)
+                row["content_current"] = bool(generated) and content_valid
                 for pointer in pointers:
                     if pointer["source_id"] != source_id:
                         row["content_current"] = False
@@ -137,6 +177,12 @@ def _observe(root, compact=False):
                 row["declarations"] = {"supersedes": [{"target": edge["target"], "whole_run": edge["whole_run"]} for edge in row["declarations"].get("supersedes", [])]}
             records.append(row)
         except (OSError, ValueError, KeyError, TypeError) as error:
+            if work not in inventory:
+                inventory.append(work)
+                try:
+                    raw_run = read(directory / "run.json")
+                except (OSError, ValueError):
+                    pass
             diagnostics.append({"code": "invalid_run", "work_id": work, "detail": str(error)})
     fingerprint = digest({"inventory": inventory, "files": files, "diagnostics": diagnostics})
     return {"root": str(root), "source_id": source_id, "records": records, "inventory": inventory, "files": files, "fingerprint": fingerprint, "diagnostics": diagnostics, "state": "partial" if diagnostics else "ready"}

@@ -9,6 +9,10 @@ def resolve_graph(sources):
             source_order[source["source_id"]] = position
         for row in source.get("records", []):
             records[row["qualified_id"]] = row
+            # Prose failures are visible without invalidating independent,
+            # verified closure and supersession controls.
+            diagnostics.extend({"qualified_id": row["qualified_id"], **item}
+                               for item in row.get("diagnostics", []))
     # Incomplete child contexts can carry overrides to any ancestor, never siblings.
     for position, source in enumerate(sources):
         if source.get("state") not in {"ready"}:

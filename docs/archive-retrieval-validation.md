@@ -5,6 +5,20 @@ ancestor-aware retrieval and define/solution behavior. Reviewed legacy import
 remains a separate delivery. This record supports implementation review; it is
 not release approval or a guarantee about arbitrary model responses.
 
+Acceptance review of `7c8f340` found four defects beyond that initial evidence:
+malformed identity could block closure, active lane work invalidated archive
+indexes, malformed prose discarded valid controls, and SQLite storage failures
+received an FTS5 remedy. The correction tests in
+`tests/test_archive_acceptance_repairs.py` exercise those cases, including real
+lifecycle transitions and historical supersession links. They fail against the
+original implementation and pass with the corrections. Storage failures are
+injected at the query boundary; actual disk exhaustion is not claimed.
+
+The corrected local suite passed **873 tests**. Seven new regression tests cover
+the four findings, including Python 3.10 message-based storage diagnostics and
+extended SQLite error codes. No generated lane instructions changed in this
+correction, so the earlier provider traces retain their stated scope and limits.
+
 ## Automated evidence
 
 The local full suite passed 866 tests on macOS arm64, Homebrew CPython 3.12.13
