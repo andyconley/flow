@@ -7,7 +7,7 @@ from archive_service import backfill, mutate
 
 
 def register(sub):
-    archive = sub.add_parser("archive", help="inspect, retrieve and repair canonical archived decisions")
+    archive = sub.add_parser("archive", help="inspect, retrieve and repair archived and reviewed legacy decisions")
     commands = archive.add_subparsers(dest="archive_action", required=True)
     search = commands.add_parser("search", help="bounded ancestor-aware BM25 retrieval; requires install/doctor FTS5 preflight")
     search.add_argument("query")
@@ -22,6 +22,23 @@ def register(sub):
     search.add_argument("--top-k", type=int)
     search.add_argument("--max-output-bytes", type=int, help=f"full UTF-8 response bytes, minimum {minimum_budget()}; not model tokens")
     search.add_argument("--json", action="store_true", help="canonical JSON (also the default bounded block format)")
+    imports = commands.add_parser("import", help="review legacy evidence without fabricating canonical closure")
+    import_commands = imports.add_subparsers(dest="import_action", required=True)
+    preview = import_commands.add_parser("preview", help="read-only legacy candidates and evidence; never grants approval")
+    preview.add_argument("work_id", nargs="?")
+    preview.add_argument("--json", action="store_true")
+    review = import_commands.add_parser("review", help="validate a reviewer record; writes require --apply --yes and its current fingerprint")
+    review.add_argument("work_id")
+    review.add_argument("--record", required=True)
+    review.add_argument("--apply", action="store_true")
+    review.add_argument("--yes", action="store_true")
+    review.add_argument("--json", action="store_true")
+    rescan = import_commands.add_parser("rescan", help="repair one legacy abstract without changing review authority; read-only by default")
+    rescan.add_argument("work_id")
+    rescan.add_argument("--base-fingerprint")
+    rescan.add_argument("--apply", action="store_true")
+    rescan.add_argument("--yes", action="store_true")
+    rescan.add_argument("--json", action="store_true")
     backfill = commands.add_parser("backfill", help="preview canonical archived repairs; legacy import excluded")
     backfill.add_argument("--rescan", action="store_true")
     backfill.add_argument("--work-id", action="append")
@@ -54,6 +71,15 @@ def dispatch(args):
             result = rebuild(root)
         elif args.archive_action == "search":
             result = search(root, args.query, lane=args.lane, sources=args.source, current_only=args.current_only, component=args.component, work_type=args.work_type, since=args.since, include_superseded=args.include_superseded, top_k=args.top_k, max_output_bytes=args.max_output_bytes)
+        elif args.archive_action == "import":
+            import archive_legacy
+            if args.import_action == "preview":
+                result = archive_legacy.preview(root, args.work_id)
+            elif args.import_action == "review":
+                record = json.loads(Path(args.record).read_text())
+                result = archive_legacy.review(root, args.work_id, record, apply=args.apply, yes=args.yes)
+            else:
+                result = archive_legacy.rescan(root, args.work_id, base_fingerprint=args.base_fingerprint, apply=args.apply, yes=args.yes)
         elif args.archive_action == "backfill":
             result = backfill(root, rescan=args.rescan, apply=args.apply, yes=args.yes, work_ids=args.work_id)
         elif args.archive_action in {"declare", "refine"}:
@@ -81,4 +107,4 @@ def dispatch(args):
     except (OSError, ValueError, KeyError, TypeError) as error:
         result = {"state": "invalid_request", "reason": str(error)}
     print(serialized(result), end="")
-    return EXITS.get(result["state"], 0 if result["state"] == "preview" else 4)
+    return result.get("exit_code", EXITS.get(result["state"], 0 if result["state"] == "preview" else 4))

@@ -217,3 +217,74 @@ def verify_pointer(root, pointer):
             value = value[int(key)] if isinstance(value, list) else value[key]
         return value
     raise ValueError("unsupported evidence selector")
+
+
+def _selected_field(root, pointers):
+    """Build a field from verified selections without synthesizing source text."""
+    matches = [known(verify_pointer(root, source), source) for source in pointers]
+    if not matches:
+        return unknown("not stated in the selected final source")
+    if len({canonical_value(match["value"]) for match in matches}) == 1:
+        return {**matches[0], "sources": [match["sources"][0] for match in matches]}
+    return {"state": "conflicted", "value": None, "sources": [match["sources"][0] for match in matches],
+            "reason": "multiple selected passages differ; explicit source selection required", "alternatives": matches}
+
+
+def extract_legacy(root, review, source_id):
+    """Extract from reviewer-selected final evidence, without a canonical run.
+
+    Eligibility is the review adapter's responsibility. Source resolution, text
+    section parsing, field validation and deterministic encoding are shared with
+    canonical extraction. No fabricated lifecycle object enters extract().
+    """
+    root = Path(root).resolve()
+    if review["identity"]["source_id"] != source_id:
+        raise ValueError("legacy review is outside owning source")
+    pointers = review["selected_final_outcome_sources"]
+    fields = {name: unknown("not stated in the selected final source") for name in FIELDS}
+    fields["decision"] = _selected_field(root, pointers)
+    documents = {}
+    for source in pointers:
+        path = _selected_path(root, source["path"])
+        raw = path.read_bytes()
+        documents[source["path"]] = (hashlib.sha256(raw).hexdigest(), sections(raw.decode("utf-8")))
+    for name, headings in HEADINGS.items():
+        selected = []
+        for path, (sha, parsed) in documents.items():
+            for heading, occurrence, text in parsed:
+                if heading in headings:
+                    selected.append({**review["identity"], "path": path, "digest": sha,
+                                     "selector": f"heading:{heading}:{occurrence}"})
+        fields[name] = _selected_field(root, selected)
+    selections = review.get("field_selections", [])
+    for name in FIELDS:
+        selected = [s for s in selections if s["field"] == name]
+        if not selected:
+            continue
+        if name == "component":
+            if len(selected) != 1:
+                raise ValueError("component requires one explicit selection")
+            selection = selected[0]
+            verify_pointer(root, selection["source"])
+            value = selection.get("value")
+            catalog = json.loads(contained(root / ".flow" / "components.json", root).read_text())
+            if catalog.get("schema_version") != 1 or not isinstance(value, dict) or value.get("source_id") != source_id:
+                raise ValueError("invalid component authority")
+            entries = [entry for entry in catalog.get("components", []) if entry.get("component_id") == value.get("component_id")]
+            if len(entries) != 1:
+                raise ValueError("component is not declared unambiguously in components.json")
+            fields[name] = known({"source_id": source_id, **entries[0]}, selection["source"])
+        else:
+            fields[name] = _selected_field(root, [s["source"] for s in selected])
+    closed = review.get("closed_at", {"state": "unknown"})
+    if closed["state"] == "known":
+        verify_pointer(root, closed["source"])
+        fields["closed_at"] = known(closed["value"], closed["source"])
+    else:
+        fields["closed_at"] = unknown("historical closure date was not established by the review; review time is not closure time")
+    for field in fields.values():
+        validate_field(field)
+    return {"extractor_version": EXTRACTOR_VERSION,
+            "source_digest": digest({"identity": review["identity"], "documents": documents,
+                                     "selections": selections, "closed_at": closed, "final_sources": pointers}),
+            "fields": fields}
