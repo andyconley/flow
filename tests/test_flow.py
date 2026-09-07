@@ -1059,6 +1059,22 @@ class FlowCliTests(FlowCliHarness):
             with self.subTest(command=name):
                 self.assertIn(needle, (command_dir / name).read_text())
 
+    def test_archive_command_registers_its_final_outcome_source(self) -> None:
+        text = (
+            REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-archive.md"
+        ).read_text()
+
+        self.assertIn(
+            "--artifact archive=.flow/runs/<work-id>/archive.md",
+            text,
+        )
+        self.assertIn("write the completed Archive Summary", text)
+        self.assertIn("`Work Closed` heading", text)
+        self.assertLess(
+            text.index("write the completed Archive Summary"),
+            text.index("flow run transition <work-id> archive"),
+        )
+
     def test_shared_commands_use_runtime_memory_provider_language(self) -> None:
         command_dir = REPO_ROOT / "scaffolds" / "default" / "commands"
         for name in ("flow-boot.md", "flow-status.md", "flow-resume.md", "flow-archive.md"):

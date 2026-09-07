@@ -38,8 +38,16 @@ Do not use this command to decide whether work is ready. Use `flow-review` first
 
 Archive closes the run through the CLI:
 
+Before invoking the transition, write the completed Archive Summary from this
+command's Output Format to `.flow/runs/<work-id>/archive.md`. Keep the
+`Work Closed` heading and source its contents from the accepted review and
+validation artifacts. Register that file as the canonical archive artifact so
+deterministic abstract generation does not have to fall back to an older
+handback.
+
 ```bash
 flow run transition <work-id> archive \
+  --artifact archive=.flow/runs/<work-id>/archive.md \
   --disposition capability_gaps=<recorded|n/a> \
   --disposition memory=<updated|n/a>
 ```
@@ -91,7 +99,11 @@ The archive command does not replace review. It packages the accepted outcome.
 6. **Update transient work state** in `.flow/memory/STATE.md` at the **most-specific stacked overlay** (e.g., when archiving in path-nexus, writes go to `~/KB/repos/path-nexus/.flow/memory/STATE.md`, not the workspace's). STATE.md should reflect what is now in flight, blocked, or pending — not durable facts.
 7. **Record durable decisions in the active runtime memory provider when one exists.** For Claude Code, write auto-memory at `~/.claude/projects/<project-id>/memory/`: for each cross-cutting decision worth remembering across sessions, write a structured memory file with frontmatter (`type: project`) and add a one-line entry to `MEMORY.md`. For Codex, no Flow-managed durable memory provider exists yet; report "n/a — no durable provider" rather than inventing a path. Do NOT write durable decisions to `.flow/memory/`; that file is transient state only.
 8. If the work materially affects a parent overlay's state, surface that in the archive output so it can be picked up in a separate parent-level archive.
-9. Mark the run complete.
+9. Write the completed Archive Summary to
+   `.flow/runs/<work-id>/archive.md`. Confirm that `Work Closed` states the
+   accepted final outcome, then register it with `--artifact archive=...` on
+   the archive transition.
+10. Mark the run complete.
 
 ## Output Format
 
@@ -162,6 +174,7 @@ Before leaving `flow-archive`, confirm:
 - [ ] STATE.md was updated (or explicitly marked "n/a")
 - [ ] durable decisions were written to the active runtime memory provider (or explicitly marked "n/a — no durable decisions recorded/provider unavailable")
 - [ ] writes went to the most-specific overlay; parent-overlay implications surfaced if applicable
+- [ ] the Archive Summary was written to the canonical run-local `archive.md`, contains a source-backed `Work Closed` section, and was registered as the archive artifact
 - [ ] the run is clearly marked complete
 
 ## Finish Criteria

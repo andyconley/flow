@@ -419,3 +419,16 @@ findings, correction evidence, and independent re-review before acceptance.
 Status: observed 2 times, promoted from the capability-gap ledger
 
 Flow lacks a completion manifest that connects prepared runtime evaluation cases to execution artifacts and reviewed outcomes.
+
+### Archive Final Source Artifact
+
+Status: addressed in the archive command; observed once and promoted from the
+capability-gap ledger
+
+Flow archive can close without ensuring that the declared final source contains the structured outcome section required for deterministic abstract generation, forcing manual source repair and backfill.
+
+The archive lane now writes its completed summary to the canonical run-local
+archive artifact before closure, keeps a source-backed `Work Closed` section,
+and registers that artifact on the lifecycle transition. Enrichment remains
+downstream from closure, so an unexpected publication failure still cannot
+undo the archived state.
