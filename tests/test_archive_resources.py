@@ -128,7 +128,7 @@ class ArchiveResourceTests(unittest.TestCase):
             return real_record(*args, **kwargs)
 
         with patch.object(query, "projection_record", side_effect=counted):
-            result = query.search(self.root, "SQLite", top_k=1_000_000, max_output_bytes=1200)
+            result = query.search(self.root, "SQLite", top_k=10**30, max_output_bytes=1200)
         self.assertEqual(result["shown"], 0)
         self.assertEqual(result["total_matches"], 24)
         self.assertEqual(result["reason"], "no_hit_fits")

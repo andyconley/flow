@@ -62,6 +62,11 @@ conform to it merely because it ranked highly. Do this even without another
 genuine conflict, including ancestor and child-specific precedents. When the
 abstract is insufficient, consult its source pointer or explicitly retain an
 unavailable/unresolved disposition. Never invent the missing conditions.
+
+When manual source inspection finds evidence after a no-match or unavailable
+retrieval, identify it as manually inspected evidence outside the active
+retrieval selection. Do not call it a returned or ranked hit, or imply that
+retrieval found it. Keep the retrieval miss visible alongside that evidence.
 Retrieval introduces no lifecycle veto, inferred supersession or new approval gate.
 
 ## Primary inputs

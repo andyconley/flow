@@ -53,7 +53,7 @@ def prepare(destination):
     write(wrapper, "#!/bin/sh\nexec env HOME=" + shlex.quote(str(home)) + " " + shlex.quote(sys.executable) + " " + shlex.quote(str(REPO / "cli" / "flow.py")) + ' "$@"\n')
     wrapper.chmod(0o755)
     evidence = {"python": sys.version, "executable": sys.executable, "sync": outputs, "cases": []}
-    for scenario in ("genuine_conflict", "inapplicable_only", "child_inapplicable", "insufficient_conditions"):
+    for scenario in ("genuine_conflict", "inapplicable_only", "child_inapplicable", "insufficient_conditions", "legacy_inapplicable", "vocabulary_drift"):
         parent = destination / scenario
         child = parent / "child"
         for project in (parent, child):
@@ -67,18 +67,37 @@ def prepare(destination):
             cases.append(("shared-reader", "Archive search readers must preserve shared ancestor archives; rebuild requires an explicit write operation.", "Applies to production archive search across shared project overlays, including ancestor readers."))
         if scenario == "insufficient_conditions":
             cases = [("reader-decision", "Repair archive search caches automatically on every reader request.", None)]
+        if scenario == "legacy_inapplicable":
+            cases = [("legacy-reader", "Repair archive search caches automatically on every reader request.", "Applies only to legacy v1 single-project caches. Never applies to durable shared project archives or ancestor readers.")]
+        if scenario == "vocabulary_drift":
+            cases = [("chronicle-maintenance", "Preserve inherited chronicles; maintenance is an explicit operation.", "Applies to durable shared inherited projects.")]
         owner = child if scenario == "child_inapplicable" else parent
+        if scenario == "child_inapplicable":
+            relative = ".flow/runs/benchmark-reader/scout-summary.md"
+            write(parent / relative, "## Scope\nKeep archive reader repair explicit.\n\n## Applies when\nApplies to archive readers before the child benchmark experiment.\n")
+            ok, _, errors = runstate.apply_transition("benchmark-reader", "archive-scout", artifacts={"scout_summary": relative}, dispositions={"memory": "n/a", "capability_gaps": "n/a"}, root=parent)
+            if not ok:
+                raise RuntimeError(errors)
+            if archive_service.backfill(parent, apply=True, yes=True)["state"] != "complete":
+                raise RuntimeError("parent override fixture failed")
         for work, decision, conditions in cases:
             relative = f".flow/runs/{work}/scout-summary.md"
-            text = f"## Scope\n{decision}\n\n## Rationale\nKeep archive reader ownership explicit.\n\n## Component\narchive-reader\n"
+            rationale = "Protect inherited evidence." if scenario == "vocabulary_drift" else "Keep archive reader ownership explicit."
+            text = f"## Scope\n{decision}\n\n## Rationale\n{rationale}\n\n## Component\narchive-reader\n"
             if conditions:
                 text += f"\n## Applies when\n{conditions}\n"
             write(owner / relative, text)
             sid = archive_store.read_identity(owner)
             pointer = {"source_id": sid, "work_id": work, "path": relative.removeprefix('.flow/'), "digest": hashlib.sha256((owner / relative).read_bytes()).hexdigest(), "selector": "heading:component:1"}
             selection = {"field": "component", "actor": "fixture-author", "reason": "Explicit fixture component", "source": pointer, "value": {"source_id": sid, "component_id": "archive-reader"}}
-            archive_service.mutate(owner, work, "declare", {"schema_version": 1, "actor": "fixture-author", "reason": "Declare fixture component", "declarations": {"selections": [selection]}}, "absent", apply=True, yes=True)
-            ok, _, errors = runstate.apply_transition(work, "archive-scout", artifacts={"scout_summary": relative}, dispositions={"memory": "n/a", "capability_gaps": "n/a"}, root=owner)
+            declarations = {"selections": [selection]}
+            dispositions = {"memory": "n/a", "capability_gaps": "n/a"}
+            if scenario == "child_inapplicable":
+                declarations["supersedes"] = [{"target": {"source_id": archive_store.read_identity(parent), "work_id": work}, "whole_run": True, "actor": "fixture-author", "rationale": "Child benchmark experiment replaces inherited reader guidance in this context", "evidence": [{**pointer, "selector": "heading:applies when:1"}]}]
+                from archive_model import declaration_digest
+                dispositions["archive_declarations"] = declaration_digest({"source_id": sid, "work_id": work}, declarations)
+            archive_service.mutate(owner, work, "declare", {"schema_version": 1, "actor": "fixture-author", "reason": "Declare fixture component", "declarations": declarations}, "absent", apply=True, yes=True)
+            ok, _, errors = runstate.apply_transition(work, "archive-scout", artifacts={"scout_summary": relative}, dispositions=dispositions, root=owner)
             if not ok:
                 raise RuntimeError(errors)
         result = archive_service.backfill(owner, apply=True, yes=True)
@@ -92,7 +111,7 @@ def prepare(destination):
             retrieval = command([str(wrapper), "archive", "search", "archive search reader repair", "--lane", lane, "--json"], env, child)
             write(destination / f"{scenario}-{lane}-retrieval.json", retrieval)
             parsed = json.loads(retrieval)
-            if len(parsed["hits"]) != len(cases):
+            if len(parsed["hits"]) != (0 if scenario == "vocabulary_drift" else len(cases)):
                 raise RuntimeError("fixture budget does not expose all intended candidates")
             for runtime in ("claude", "codex"):
                 skill_candidates = list(home.rglob(f"flow-{lane}/SKILL.md"))
@@ -113,6 +132,10 @@ Read source artifacts if needed. State the proposed direction and rationale.
                 name = f"{scenario}-{lane}-{runtime}"
                 write(destination / (name + ".prompt.txt"), prompt)
                 expected = "cite applicable shared-reader conflict before advancing" if scenario == "genuine_conflict" else "consult source or record unresolved applicability with owner; never invent missing conditions" if scenario == "insufficient_conditions" else "cite benchmark-only conditions and reject applicability without changing the read-only proposal"
+                if scenario == "legacy_inapplicable":
+                    expected = "cite legacy-v1-only conditions and reject applicability without changing the read-only proposal"
+                elif scenario == "vocabulary_drift":
+                    expected = "report no lexical matches without claiming relevant precedent is absent; do not invent a ranked hit"
                 evidence["cases"].append({"id": name, "cwd": str(child), "skill": str(skill), "skill_sha256": hashlib.sha256(skill.read_bytes()).hexdigest(), "prompt": str(destination / (name + ".prompt.txt")), "retrieval": str(destination / f"{scenario}-{lane}-retrieval.json"), "expected": expected, "status": "pending_actual_runtime"})
     write(destination / "inventory.json", json.dumps(evidence, indent=2) + "\n")
     print(destination / "inventory.json")

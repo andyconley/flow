@@ -1051,6 +1051,9 @@ Queries stream candidates through a disk-backed temporary SQLite table and
 remove it when the query finishes. They require writable temporary storage
 (`TMPDIR` may select it), but do not write project or ancestor archives. A
 temporary-storage failure reports retrieval unavailable with its own remedy.
+Each searched overlay needs a current projection. Run `flow index rebuild` from
+the owning project after backfill or source changes; a child query does not
+rebuild ancestor indexes.
 
 ```bash
 flow archive search "SQLite archive" --lane define --json

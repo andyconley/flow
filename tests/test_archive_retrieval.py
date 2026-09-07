@@ -99,6 +99,8 @@ class ArchiveTests(unittest.TestCase):
         self.run_fixture('one')
         self.run_fixture('two')
         self.run_fixture('old', live=False)
+        outdated = self.run_fixture('outdated')
+        (outdated / 'abstract.json').write_text(json.dumps({'schema_version': 0, 'generated': {'extractor_version': 0}}))
         service.backfill(self.root, apply=True, yes=True, work_ids=['one'])
         value = store.cached_coverage(self.root)
         self.assertEqual(value['counts']['live_regression'], 1)
@@ -106,6 +108,8 @@ class ArchiveTests(unittest.TestCase):
         remaining = {r['work_id']: r['conditions'] for r in value['runs']}
         self.assertIn('live_regression', remaining['two'])
         self.assertIn('historical_gap', remaining['old'])
+        self.assertIn('outdated_abstract', remaining['outdated'])
+        self.assertEqual(value['counts']['outdated_abstract'], 1)
 
     def test_search_freshness_and_no_read_repair(self):
         path = self.run_fixture()
@@ -158,6 +162,19 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(result['reason'], 'temporary_storage_unavailable')
         self.assertIn('TMPDIR', result['remedy'])
         self.assertNotIn('FTS5', result['remedy'])
+
+    def test_invalid_stored_closure_date_is_not_mislabeled_as_a_race(self):
+        path = self.run_fixture()
+        run = json.loads((path / 'run.json').read_text())
+        event = json.loads((path / 'events.jsonl').read_text())
+        run['gates']['archive'] = event['at'] = 'invalid-date'
+        (path / 'run.json').write_text(json.dumps(run))
+        (path / 'events.jsonl').write_text(json.dumps(event) + '\n')
+        self.indexed()
+        result = query.search(self.root, 'SQLite', since='2026-01-01')
+        self.assertEqual(result['state'], 'unavailable')
+        self.assertEqual(result['reason'], 'invalid_closure_date')
+        self.assertIn(self.sid + ':one', result['detail'])
 
     def test_refinement_stale_preserved_and_consent_rejected(self):
         path = self.run_fixture()
@@ -275,7 +292,7 @@ class ArchiveTests(unittest.TestCase):
         import argparse
         import contextlib
         import io
-        for stage in ('envelope', 'index'):
+        for stage in ('generation', 'validation', 'envelope', 'index', 'coverage'):
             with self.subTest(stage=stage):
                 path = self.root / '.flow' / 'runs' / stage
                 path.mkdir()
@@ -283,7 +300,9 @@ class ArchiveTests(unittest.TestCase):
                 args = argparse.Namespace(work_id=stage, event='archive-scout', artifact=[f'scout_summary=.flow/runs/{stage}/scout-summary.md'], disposition=['capability_gaps=n/a', 'memory=n/a'], note=None, json=True)
                 if stage == 'index':
                     query.rebuild(self.root)
-                target = patch.object(service, 'write_envelope', side_effect=OSError('write failed')) if stage == 'envelope' else patch.object(query, 'rebuild', side_effect=OSError('index failed'))
+                targets = {'generation': (service, 'build_envelope'), 'validation': (service, 'validate_envelope'), 'envelope': (service, 'write_envelope'), 'index': (query, 'rebuild'), 'coverage': (service, 'refresh_coverage')}
+                owner, method = targets[stage]
+                target = patch.object(owner, method, side_effect=ValueError(stage + ' failed') if stage in ('generation', 'validation') else OSError(stage + ' failed'))
                 with patch('fsutil.repo_root', return_value=self.root), target, contextlib.redirect_stdout(io.StringIO()) as output:
                     code = service.archive_transition(args)
                 self.assertEqual(code, 0)
@@ -352,6 +371,32 @@ class ArchiveTests(unittest.TestCase):
         first = query.search(self.root, 'SQLite')
         second = query.search(self.root, 'SQLite')
         self.assertEqual([h['qualified_id'] for h in first['hits']], [h['qualified_id'] for h in second['hits']])
+        home = Path(self.tmp.name) / 'home'
+        (home / '.flow').mkdir(parents=True)
+        (home / '.flow' / 'retrieval-capabilities.json').write_text(json.dumps(preflight.probe(persist=False)))
+        outputs = [subprocess.run([sys.executable, str(CLI / 'flow.py'), 'archive', 'search', 'SQLite', '--json'], cwd=self.root, env={**os.environ, 'HOME': str(home)}, capture_output=True, text=True, check=True).stdout for _ in range(2)]
+        self.assertEqual([[h['qualified_id'] for h in json.loads(raw)['hits']] for raw in outputs], [[h['qualified_id'] for h in first['hits']]] * 2)
+
+    def test_archive_event_coverage_reads_only_named_run(self):
+        import argparse
+        import contextlib
+        import io
+        path = self.root / '.flow' / 'runs' / 'scout'
+        path.mkdir()
+        (path / 'scout-summary.md').write_text('## Scope\nKeep SQLite.\n')
+        args = argparse.Namespace(work_id='scout', event='archive-scout', artifact=['scout_summary=.flow/runs/scout/scout-summary.md'], disposition=['capability_gaps=n/a', 'memory=n/a'], note=None, json=True)
+        inventory = service.inventory
+
+        def named_only(root, work_ids=None):
+            self.assertEqual(work_ids, ['scout'])
+            return inventory(root, work_ids=work_ids)
+
+        with patch('fsutil.repo_root', return_value=self.root), patch.object(service, 'inventory', side_effect=named_only), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(service.archive_transition(args), 0)
+        self.assertEqual(json.loads(output.getvalue())['enrichment_diagnostics'], [])
+        coverage = store.cached_coverage(self.root)
+        self.assertIsNone(coverage['counts'])
+        self.assertFalse(coverage['inventory_complete'])
 
     def test_missing_closure_event_is_not_current(self):
         path = self.run_fixture()

@@ -107,7 +107,7 @@ def _stream_ranked(sources, graph, query, component, work_type, since, include_s
             match = " OR ".join('"' + term + '"' for term in sorted(set(tokens(query))))
             total = db.execute("SELECT count(*) FROM eligible WHERE eligible MATCH ?", (match,)).fetchone()[0]
             uncertain = db.execute("SELECT count(*) FROM uncertain WHERE uncertain MATCH ?", (match,)).fetchone()[0]
-            chosen = db.execute("SELECT locations.source_key,locations.work_id,locations.qualified_id FROM eligible JOIN locations ON locations.rowid=eligible.rowid WHERE eligible MATCH ? ORDER BY bm25(eligible,3.0,2.0,1.0),locations.distance,locations.qualified_id LIMIT ?", (match, top_k))
+            chosen = db.execute("SELECT locations.source_key,locations.work_id,locations.qualified_id FROM eligible JOIN locations ON locations.rowid=eligible.rowid WHERE eligible MATCH ? ORDER BY bm25(eligible,3.0,2.0,1.0),locations.distance,locations.qualified_id LIMIT ?", (match, min(top_k, total)))
             displayed_sources = set()
 
             def rows():
@@ -188,7 +188,7 @@ def pack(value, ordered, top_k, limit, total_matches=None):
         error = {"state": "invalid_request", "reason": "budget_too_small", "remedy": "increase budget or narrow sources", "hits": []}
         serialized(error)
         return error
-    for row in itertools.islice(ordered, top_k):
+    for row in itertools.islice(ordered, min(top_k, total)):
         hit = {"qualified_id": row["qualified_id"], "source_id": row["identity"]["source_id"], "work_id": row["work_id"], "status": row["status"], "supersedes": row["supersedes"], "superseded_by": row["superseded_by"], "abstract": row["envelope"], "effective": effective_view(row["envelope"]), "lines": render_lines(row["envelope"]), "rank": value["shown"] + 1, "scorer_version": VERSIONS["ranker"]}
         value["hits"].append(hit)
         value["shown"] += 1
@@ -301,6 +301,8 @@ def search(root, query, lane="define", sources=None, current_only=False, compone
     except OSError as error:
         return pack({"state": "unavailable", "reason": "temporary_storage_unavailable", "remedy": "provide a writable temporary directory via TMPDIR and sufficient free space; retry retrieval", "detail": str(error)}, [], k, limit)
     except ArchiveError as error:
+        if str(error).startswith("invalid_closure_date:"):
+            return pack({"state": "unavailable", "reason": "invalid_closure_date", "remedy": "inspect the named run's canonical closure date and regenerate its abstract after correcting evidence", "detail": str(error)}, [], k, limit)
         return pack({"state": "unavailable", "reason": "source_changed_during_query", "remedy": "retry after source writes finish; rebuild the owning index if stale", "detail": str(error)}, [], k, limit)
     except (sqlite3.Error, ValueError, KeyError, TypeError) as error:
         return pack({"state": "unavailable", "reason": "fts5_failed_after_preflight", "remedy": "run flow doctor and select an FTS5-enabled interpreter", "detail": str(error)}, [], k, limit)
