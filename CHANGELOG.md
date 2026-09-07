@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.25.0](https://github.com/andyconley/flow/compare/v0.24.0...v0.25.0) (2026-09-07)
+
+### Features
+
+* **archive:** add reviewed legacy import and withdrawal ([304102f](https://github.com/andyconley/flow/commit/304102f8286f63d0f5bf8b0f801df82b6b1bbc37))
+
 ## [0.24.0](https://github.com/andyconley/flow/compare/v0.23.0...v0.24.0) (2026-09-07)
 
 ### Features
