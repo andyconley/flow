@@ -378,3 +378,35 @@ are replaceable projections of canonical source.
 See:
 
 - [/Users/andyconley/src/flow/tests/test_flow.py](/Users/andyconley/src/flow/tests/test_flow.py)
+
+## Archive retrieval boundaries
+
+Canonical evidence belongs to each overlay: identity.json, optional components.json,
+run-local abstract.json and immutable abstract-history revisions. Abstracts keep
+generated prose, declarations, refinement and provenance under distinct writers.
+Runstate remains the only lifecycle writer. Archive coordinates best-effort
+publication after closure; downstream failure does not roll closure back.
+
+The context graph reads valid lifecycle-anchored whole-run declarations before
+candidate filtering, including superseders without searchable prose. Child
+supersession affects that context and descendants, not unrelated siblings.
+Duplicate source UUIDs and incomplete control evidence cannot establish current
+status. Query-time source assessment does not repair ancestor state.
+
+Derived `.flow/.cache/archive/` stores ordinary SQLite and cached coverage. BM25
+statistics exist only in a transient merged query table; per-overlay scores are
+never merged. Install/update and doctor probe FTS5 for the actual interpreter and
+record a machine-local receipt. Missing capability disables retrieval explicitly
+without disabling Flow or choosing a machine-dependent alternate ranker.
+
+The merged query table is temporary and disk-backed. Projection rows stream
+through ranking, and response packing loads only the prefix that can fit the
+byte budget. Compact source observations retain control and freshness facts
+without holding every abstract. Temporary storage is required; project and
+ancestor stores remain untouched by queries.
+
+Define/solution inspect candidate conditions and visibly disposition conflict or
+inapplicability before advancing proposals. A ranker test cannot prove that agent
+behavior; acceptance requires the four lane/runtime cells and source-linked
+proposal artifacts. Environment verification and real-lane acceptance remain
+separate from local implementation tests.

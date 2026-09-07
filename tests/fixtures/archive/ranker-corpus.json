@@ -1,0 +1,1252 @@
+{
+  "description": "Frozen, hand-authored corpus for comparing two lexical rankers. The corpus deliberately contains plausible but inapplicable precedent; expected lists measure recall under the harness cap, while inapplicable lists are evidence the lane must inspect conditions rather than obey a match.",
+  "documents": [
+    {
+      "id": "grandparent/clite-workflow",
+      "overlay": "grandparent",
+      "component": "lifecycle",
+      "work_type": "feature",
+      "closed_at": "2026-08-23",
+      "superseded": false,
+      "decision": "Keep the C-lite lifecycle dependency-free with an internal transition table.",
+      "conditions": "Applies to the core flow run CLI; external orchestration behavior remains out of scope.",
+      "rationale": "The lightweight command boundary can enforce lifecycle transitions without a third-party engine.",
+      "pointer": ".flow/runs/20260823-clite-workflow-enforcement/RUN.md",
+      "origin": "adapted",
+      "source_note": "Adapted from archived dependency decision."
+    },
+    {
+      "id": "grandparent/runtime-neutrality",
+      "overlay": "grandparent",
+      "component": "runtime",
+      "work_type": "feature",
+      "closed_at": "2026-08-24",
+      "superseded": false,
+      "decision": "Treat project artifacts and C-lite run state as canonical across Claude and Codex.",
+      "conditions": "Static smoke checks prove generated surfaces only, not provider behavior.",
+      "rationale": "Runtime memory is provider-specific companion context.",
+      "pointer": ".flow/runs/20260823-runtime-neutrality-cross-runtime/HANDOFF.md",
+      "origin": "adapted",
+      "source_note": "Adapted from archived handoff."
+    },
+    {
+      "id": "parent/adoption-audit",
+      "overlay": "parent",
+      "component": "adoption",
+      "work_type": "feature",
+      "closed_at": "2026-08-24",
+      "superseded": false,
+      "decision": "Provide a read-only runtime-surface inventory before any cleanup.",
+      "conditions": "User-owned runtime files require an explicit apply path before rewrite or deletion.",
+      "rationale": "Inventory separates managed, unmanaged, and excluded runtime surfaces.",
+      "pointer": ".flow/runs/20260824-adoption-project-migration/HANDOFF.md",
+      "origin": "adapted",
+      "source_note": "Adapted from archived handoff."
+    },
+    {
+      "id": "parent/web-capability",
+      "overlay": "parent",
+      "component": "agent-policy",
+      "work_type": "feature",
+      "closed_at": "2026-09-02",
+      "superseded": false,
+      "decision": "Keep web capability configuration separate from live provider enforcement claims.",
+      "conditions": "Applies to generated agent policy and static validation; it does not authorize external research.",
+      "rationale": "Local configuration checks cannot prove delegated runtime compliance.",
+      "pointer": ".flow/runs/agent-web-access-policy/validation-results.md",
+      "origin": "adapted",
+      "source_note": "Adapted from archived validation."
+    },
+    {
+      "id": "parent/fts-capability",
+      "overlay": "parent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-28",
+      "superseded": false,
+      "decision": "Detect optional database search capability at runtime and report the interpreter and remedy.",
+      "conditions": "Use when a local optional extension may be absent; unavailable is distinct from empty results.",
+      "rationale": "A support matrix cannot guarantee the bundled SQLite feature on every interpreter.",
+      "pointer": "synthetic://parent/fts-capability",
+      "origin": "synthetic",
+      "source_note": "Synthetic runtime-capability stress case."
+    },
+    {
+      "id": "parent/overlay-stack",
+      "overlay": "parent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-29",
+      "superseded": false,
+      "decision": "Search the current overlay and ancestors in nearest-to-farthest order.",
+      "conditions": "Exclude sibling and unrelated overlays; report an unreadable ancestor as partial search.",
+      "rationale": "Shared policy is inherited through the overlay stack.",
+      "pointer": "synthetic://parent/overlay-stack",
+      "origin": "synthetic",
+      "source_note": "Synthetic cross-overlay baseline."
+    },
+    {
+      "id": "parent/contract-v1",
+      "overlay": "parent",
+      "component": "api",
+      "work_type": "feature",
+      "closed_at": "2026-07-15",
+      "superseded": true,
+      "decision": "Return unqualified work identifiers in archive query results.",
+      "conditions": "Historical contract only; replaced by qualified identities.",
+      "rationale": "Initial prototype addressed a single project.",
+      "pointer": "synthetic://parent/contract-v1",
+      "origin": "synthetic",
+      "source_note": "Synthetic superseded predecessor."
+    },
+    {
+      "id": "parent/contract-v2",
+      "overlay": "parent",
+      "component": "api",
+      "work_type": "feature",
+      "closed_at": "2026-08-18",
+      "superseded": false,
+      "decision": "Return source-qualified identities and authoritative artifact pointers for every archive hit.",
+      "conditions": "Required whenever more than one overlay can supply the same work id.",
+      "rationale": "Qualified identity prevents parent and child records from colliding.",
+      "pointer": "synthetic://parent/contract-v2",
+      "origin": "synthetic",
+      "source_note": "Synthetic current successor."
+    },
+    {
+      "id": "parent/token-cap",
+      "overlay": "parent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-30",
+      "superseded": false,
+      "decision": "Apply one combined response size cap after filtering and global ordering.",
+      "conditions": "Metadata counts toward the returned block; a no-fit response names the limit.",
+      "rationale": "Per-overlay caps can exceed lane context bounds.",
+      "pointer": "synthetic://parent/token-cap",
+      "origin": "synthetic",
+      "source_note": "Synthetic cap case."
+    },
+    {
+      "id": "parent/cache-health",
+      "overlay": "parent",
+      "component": "diagnostics",
+      "work_type": "feature",
+      "closed_at": "2026-08-27",
+      "superseded": false,
+      "decision": "Doctor reports absent or stale coverage cache as unknown and does not scan during check.",
+      "conditions": "Advisory diagnostics must preserve doctor check exit behavior.",
+      "rationale": "A cheap read must not claim a fresh corpus assessment.",
+      "pointer": "synthetic://parent/cache-health",
+      "origin": "synthetic",
+      "source_note": "Synthetic freshness case."
+    },
+    {
+      "id": "parent/release-process",
+      "overlay": "parent",
+      "component": "release",
+      "work_type": "process",
+      "closed_at": "2026-08-25",
+      "superseded": false,
+      "decision": "Validate a release with a real documentation smoke commit before tagging.",
+      "conditions": "Applies to semantic release automation, not archive retrieval ranking.",
+      "rationale": "Generated release notes need an observed conventional commit.",
+      "pointer": "synthetic://parent/release-process",
+      "origin": "synthetic",
+      "source_note": "Synthetic wrong-component false-positive case."
+    },
+    {
+      "id": "parent/agent-summaries",
+      "overlay": "parent",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-08-26",
+      "superseded": false,
+      "decision": "Require agent-authored summaries before storing any run history.",
+      "conditions": "Applies only to an experimental remote knowledge service.",
+      "rationale": "The prototype had no deterministic source extractor.",
+      "pointer": "synthetic://parent/agent-summaries",
+      "origin": "synthetic",
+      "source_note": "Synthetic same-vocabulary inapplicable precedent."
+    },
+    {
+      "id": "grandparent/legacy-import",
+      "overlay": "grandparent",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-08-20",
+      "superseded": false,
+      "decision": "Import every legacy folder that has a STATE.md file.",
+      "conditions": "Applies to a retired migration script with trusted folder ownership.",
+      "rationale": "The previous repository had no mixed-quality history.",
+      "pointer": "synthetic://grandparent/legacy-import",
+      "origin": "synthetic",
+      "source_note": "Synthetic close-vocabulary inapplicable precedent."
+    },
+    {
+      "id": "grandparent/secure-redaction",
+      "overlay": "grandparent",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-08-19",
+      "superseded": false,
+      "decision": "Redact all rationale text from abstracts before indexing.",
+      "conditions": "Applies to a regulated tenant whose rationales can contain customer data.",
+      "rationale": "Tenant policy prohibits local storage of that category.",
+      "pointer": "synthetic://grandparent/secure-redaction",
+      "origin": "synthetic",
+      "source_note": "Synthetic scope-bound false positive."
+    },
+    {
+      "id": "project/archive-extraction",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-09-01",
+      "superseded": false,
+      "decision": "Generate versioned abstracts with deterministic offline extraction and optional agent refinement.",
+      "conditions": "Missing rationale and applicability conditions must be recorded as unknown; no network or model is required.",
+      "rationale": "Closure must survive enrichment failures and backfill must reproduce generated output.",
+      "pointer": "synthetic://project/archive-extraction",
+      "origin": "synthetic",
+      "source_note": "Synthetic target decision."
+    },
+    {
+      "id": "project/legacy-review",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-09-01",
+      "superseded": false,
+      "decision": "Keep legacy import behind reviewed closure evidence and explicit apply confirmation.",
+      "conditions": "Folder presence and STATE.md alone are insufficient; legacy remains an independent delivery stage.",
+      "rationale": "Older folders may lack durable closure state.",
+      "pointer": "synthetic://project/legacy-review",
+      "origin": "synthetic",
+      "source_note": "Synthetic target decision."
+    },
+    {
+      "id": "project/coverage-repair",
+      "overlay": "project",
+      "component": "coverage",
+      "work_type": "bug",
+      "closed_at": "2026-09-01",
+      "superseded": false,
+      "decision": "Repair only the named coverage cohort and retain all unrelated gap flags.",
+      "conditions": "A failed extractor leaves the run eligible for later backfill even when closure succeeds.",
+      "rationale": "Aggregate counters can hide live regressions.",
+      "pointer": "synthetic://project/coverage-repair",
+      "origin": "synthetic",
+      "source_note": "Synthetic target decision."
+    },
+    {
+      "id": "project/qualified-identity",
+      "overlay": "project",
+      "component": "api",
+      "work_type": "feature",
+      "closed_at": "2026-09-02",
+      "superseded": false,
+      "decision": "Use source-qualified identities for duplicate work ids across parent and project overlays.",
+      "conditions": "The source and pointer remain in every candidate response.",
+      "rationale": "Archive results must be independently addressable.",
+      "pointer": "synthetic://project/qualified-identity",
+      "origin": "synthetic",
+      "source_note": "Synthetic duplicate-id target."
+    },
+    {
+      "id": "project/overlay-stack",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-02",
+      "superseded": false,
+      "decision": "Include parent and grandparent overlays by default, with explicit source narrowing.",
+      "conditions": "Current project is nearest; unrelated overlay data never enters the candidate set.",
+      "rationale": "Inherited decisions are useful only when source boundaries stay visible.",
+      "pointer": "synthetic://project/overlay-stack",
+      "origin": "synthetic",
+      "source_note": "Synthetic target decision with duplicate work id."
+    },
+    {
+      "id": "project/fts-fallback",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-03",
+      "superseded": false,
+      "decision": "Use a portable lexical fallback when the interpreter cannot create an FTS5 table.",
+      "conditions": "The fallback preserves filters, caps, and deterministic ties; it does not claim phrase-query support.",
+      "rationale": "Unsupported capability must not stop lane work or archive closure.",
+      "pointer": "synthetic://project/fts-fallback",
+      "origin": "synthetic",
+      "source_note": "Synthetic option-comparison target."
+    },
+    {
+      "id": "project/fts-index",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-03",
+      "superseded": false,
+      "decision": "Keep the archive index derived, rebuildable, and local to each overlay.",
+      "conditions": "Interrupted rebuild reports stale or unavailable state, never a fresh partial index.",
+      "rationale": "Durable abstracts remain authoritative while indexes are projections.",
+      "pointer": "synthetic://project/fts-index",
+      "origin": "synthetic",
+      "source_note": "Synthetic target decision."
+    },
+    {
+      "id": "project/query-contract",
+      "overlay": "project",
+      "component": "api",
+      "work_type": "feature",
+      "closed_at": "2026-09-03",
+      "superseded": false,
+      "decision": "Return candidates rather than applicability assertions from archive search.",
+      "conditions": "Each hit includes decision, rationale, conditions, supersession state, provenance, and source pointers.",
+      "rationale": "Lexical rank is not evidence that a precedent governs a proposal.",
+      "pointer": "synthetic://project/query-contract",
+      "origin": "synthetic",
+      "source_note": "Synthetic target decision."
+    },
+    {
+      "id": "project/child-only-redaction",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-09-04",
+      "superseded": false,
+      "decision": "Redact rationale fields in abstracts for the child confidential project.",
+      "conditions": "Applies only when project classification is confidential; parent policy remains unchanged elsewhere.",
+      "rationale": "The child overlay handles restricted incident material.",
+      "pointer": "synthetic://project/child-only-redaction",
+      "origin": "synthetic",
+      "source_note": "Synthetic child-scope override."
+    },
+    {
+      "id": "project/foreign-keys",
+      "overlay": "project",
+      "component": "database",
+      "work_type": "feature",
+      "closed_at": "2026-09-04",
+      "superseded": false,
+      "decision": "Enable foreign key checks for the billing migration.",
+      "conditions": "Applies only to the billing database migration.",
+      "rationale": "The migration needs relational integrity validation.",
+      "pointer": "synthetic://project/foreign-keys",
+      "origin": "synthetic",
+      "source_note": "Synthetic wrong-component lexical distractor."
+    },
+    {
+      "id": "project/unicode-paths",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "bug",
+      "closed_at": "2026-09-04",
+      "superseded": false,
+      "decision": "Normalize r\u00e9sum\u00e9-like Unicode terms, case, and punctuation before lexical matching.",
+      "conditions": "Plain-token search must treat Caf\u00e9, caf\u00e9, and cafe punctuation variants consistently.",
+      "rationale": "User queries and run abstracts contain mixed Unicode punctuation.",
+      "pointer": "synthetic://project/unicode-paths",
+      "origin": "synthetic",
+      "source_note": "Synthetic normalization target."
+    },
+    {
+      "id": "project/unknown-conditions",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "bug",
+      "closed_at": "2026-09-04",
+      "superseded": false,
+      "decision": "Mark unavailable applicability conditions as unknown in the abstract.",
+      "conditions": "Unknown.",
+      "rationale": "Extraction must not invent scope from adjacent artifact text.",
+      "pointer": "synthetic://project/unknown-conditions",
+      "origin": "synthetic",
+      "source_note": "Synthetic unknown-fact target."
+    },
+    {
+      "id": "project/alpha-tie",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-05",
+      "superseded": false,
+      "decision": "Store archive candidates with stable deterministic ordering.",
+      "conditions": "Applies when lexical scores tie for the same selected sources.",
+      "rationale": "Repeated lane entry must produce inspectable output.",
+      "pointer": "synthetic://project/alpha-tie",
+      "origin": "synthetic",
+      "source_note": "Synthetic tie fixture A."
+    },
+    {
+      "id": "project/beta-tie",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-05",
+      "superseded": false,
+      "decision": "Store archive candidates with stable deterministic ordering.",
+      "conditions": "Applies when lexical scores tie for the same selected sources.",
+      "rationale": "Repeated lane entry must produce inspectable output.",
+      "pointer": "synthetic://project/beta-tie",
+      "origin": "synthetic",
+      "source_note": "Synthetic tie fixture B."
+    },
+    {
+      "id": "project/superseded-search",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-12",
+      "superseded": true,
+      "decision": "Search only the current project index.",
+      "conditions": "Historical design replaced by ancestor-aware scope.",
+      "rationale": "The prototype had no overlay model.",
+      "pointer": "synthetic://project/superseded-search",
+      "origin": "synthetic",
+      "source_note": "Synthetic superseded result."
+    },
+    {
+      "id": "project/current-search",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-05",
+      "superseded": false,
+      "decision": "Search current and ancestor overlays with global ordering and one combined cap.",
+      "conditions": "Superseded decisions are excluded unless historical inspection is requested.",
+      "rationale": "A combined result must fit the lane response budget.",
+      "pointer": "synthetic://project/current-search",
+      "origin": "synthetic",
+      "source_note": "Synthetic current successor."
+    },
+    {
+      "id": "unrelated/tenant-index",
+      "overlay": "unrelated",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-05",
+      "superseded": false,
+      "decision": "Use a tenant-wide archive index for every project.",
+      "conditions": "Applies to a centrally governed mono-repository.",
+      "rationale": "The tenant uses shared authorization.",
+      "pointer": "synthetic://unrelated/tenant-index",
+      "origin": "synthetic",
+      "source_note": "Synthetic exclusion fixture."
+    },
+    {
+      "id": "grandparent/wording-drift",
+      "overlay": "grandparent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-11",
+      "superseded": false,
+      "decision": "Retain a rebuildable local index of durable abstracts.",
+      "conditions": "Applies to the catalogue of historical notes.",
+      "rationale": "Cached views can be regenerated after interruption.",
+      "pointer": "synthetic://grandparent/wording-drift",
+      "origin": "synthetic",
+      "source_note": "Synthetic vocabulary-bridge positive; original incorrectly labelled a miss."
+    },
+    {
+      "id": "parent/common-terms",
+      "overlay": "parent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-10",
+      "superseded": false,
+      "decision": "Use local archive search results in the flow command.",
+      "conditions": "General guidance only; no ranking rule is specified.",
+      "rationale": "Search should be useful.",
+      "pointer": "synthetic://parent/common-terms",
+      "origin": "synthetic",
+      "source_note": "Synthetic generic-term distractor."
+    },
+    {
+      "id": "project/rare-token",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-05",
+      "superseded": false,
+      "decision": "Preserve the quasar-17 token in archive result provenance.",
+      "conditions": "Applies to a migration identifier and not to general archive search.",
+      "rationale": "The rare identifier must remain traceable.",
+      "pointer": "synthetic://project/rare-token",
+      "origin": "synthetic",
+      "source_note": "Synthetic rare-term discriminator."
+    },
+    {
+      "id": "parent/old-archive",
+      "overlay": "parent",
+      "component": "archive",
+      "work_type": "bug",
+      "closed_at": "2025-12-31",
+      "superseded": false,
+      "decision": "Write an abstract after a completed archive closure.",
+      "conditions": "Old format lacks conditions and provenance fields.",
+      "rationale": "Historical archive script predates versioned abstracts.",
+      "pointer": "synthetic://parent/old-archive",
+      "origin": "synthetic",
+      "source_note": "Synthetic recency-filter fixture."
+    },
+    {
+      "id": "project/scout-closure",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "scout",
+      "closed_at": "2026-09-05",
+      "superseded": false,
+      "decision": "Include canonically archived scout closures in deterministic abstract backfill.",
+      "conditions": "Only state=archived records are eligible; active and handback-ready records are excluded.",
+      "rationale": "Scout work is valid corpus material once closed.",
+      "pointer": "synthetic://project/scout-closure",
+      "origin": "synthetic",
+      "source_note": "Synthetic work-type target."
+    },
+    {
+      "id": "grandparent/lexical-drift",
+      "overlay": "grandparent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-11",
+      "superseded": false,
+      "decision": "Retain a workstation catalogue of closed deliberations.",
+      "conditions": "Applies across inherited repositories.",
+      "rationale": "Earlier resolutions inform later proposals.",
+      "pointer": "synthetic://grandparent/lexical-drift",
+      "origin": "synthetic",
+      "source_note": "Deliberate zero-overlap semantic paraphrase; lexical retrieval should miss."
+    },
+    {
+      "id": "parent/broad-archive-policy",
+      "overlay": "parent",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-08-21",
+      "superseded": false,
+      "decision": "Archive decision policy keeps durable source pointers with each abstract.",
+      "conditions": "Applies to ordinary archive records in inherited overlays.",
+      "rationale": "Archive policy needs inspectable evidence.",
+      "pointer": "synthetic://extension/broad-archive-policy",
+      "origin": "synthetic",
+      "source_note": "Synthetic loose-filter target."
+    },
+    {
+      "id": "project/broad-archive-policy",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-09-05",
+      "superseded": false,
+      "decision": "Archive decision policy records current proposal dispositions.",
+      "conditions": "Applies to the current project archive lane.",
+      "rationale": "Archive policy makes conflicts visible.",
+      "pointer": "synthetic://extension/project-broad-archive-policy",
+      "origin": "synthetic",
+      "source_note": "Synthetic loose-filter target."
+    },
+    {
+      "id": "grandparent/broad-archive-policy",
+      "overlay": "grandparent",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-08-03",
+      "superseded": false,
+      "decision": "Archive decision policy preserves reviewed evidence.",
+      "conditions": "Applies to a parent historical overlay.",
+      "rationale": "Archive policy supports later review.",
+      "pointer": "synthetic://extension/grandparent-broad-archive-policy",
+      "origin": "synthetic",
+      "source_note": "Synthetic loose-filter target."
+    },
+    {
+      "id": "parent/search-archive-policy",
+      "overlay": "parent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-22",
+      "superseded": false,
+      "decision": "Archive decision policy is indexed by the search service.",
+      "conditions": "Applies to search implementation rather than archive proposal behavior.",
+      "rationale": "Search consumes archive policy documents.",
+      "pointer": "synthetic://extension/search-archive-policy",
+      "origin": "synthetic",
+      "source_note": "Synthetic same-vocabulary different-component candidate."
+    },
+    {
+      "id": "parent/old-policy",
+      "overlay": "parent",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2025-10-01",
+      "superseded": false,
+      "decision": "Archive policy applies source pointers before closure.",
+      "conditions": "Applies to the retired v0 archive format.",
+      "rationale": "Archive policy was originally one project only.",
+      "pointer": "synthetic://extension/old-policy",
+      "origin": "synthetic",
+      "source_note": "Synthetic old-record candidate."
+    },
+    {
+      "id": "project/recent-policy",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-09-06",
+      "superseded": false,
+      "decision": "Archive policy applies source pointers after deterministic closure.",
+      "conditions": "Applies to the current v1 archive format.",
+      "rationale": "Archive policy now records provenance separately.",
+      "pointer": "synthetic://extension/recent-policy",
+      "origin": "synthetic",
+      "source_note": "Synthetic current-record target."
+    },
+    {
+      "id": "parent/ae-743",
+      "overlay": "parent",
+      "component": "archive",
+      "work_type": "bug",
+      "closed_at": "2026-08-31",
+      "superseded": false,
+      "decision": "AE-743 archive apply repairs only the named missing abstract.",
+      "conditions": "AE-743 is the closure-extraction defect.",
+      "rationale": "The archive apply operation must leave other cohorts intact.",
+      "pointer": "synthetic://extension/ae-743",
+      "origin": "synthetic",
+      "source_note": "Synthetic identifier target."
+    },
+    {
+      "id": "project/ae-744",
+      "overlay": "project",
+      "component": "archive",
+      "work_type": "bug",
+      "closed_at": "2026-09-01",
+      "superseded": false,
+      "decision": "AE-744 archive apply follows AE-743 terminology but repairs malformed metadata.",
+      "conditions": "AE-744 is a metadata validation defect, distinct from AE-743 extraction.",
+      "rationale": "Archive apply needs an identifier-specific repair path.",
+      "pointer": "synthetic://extension/ae-744",
+      "origin": "synthetic",
+      "source_note": "Synthetic adjacent-identifier false positive."
+    },
+    {
+      "id": "project/flowindex-rebuild",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-09-06",
+      "superseded": false,
+      "decision": "FlowIndex.rebuild() writes a replacement projection only after validation.",
+      "conditions": "The FlowIndex.rebuild() call must preserve the last usable index on interruption.",
+      "rationale": "The code identifier names the atomic rebuild boundary.",
+      "pointer": "synthetic://extension/flowindex-rebuild",
+      "origin": "synthetic",
+      "source_note": "Synthetic punctuation/case identifier target."
+    },
+    {
+      "id": "parent/flowindex-inspect",
+      "overlay": "parent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-30",
+      "superseded": false,
+      "decision": "FlowIndex.inspect() reports archive index health without rebuilding.",
+      "conditions": "FlowIndex.inspect() is a diagnostic operation, not FlowIndex.rebuild().",
+      "rationale": "Index inspection must stay read-only.",
+      "pointer": "synthetic://extension/flowindex-inspect",
+      "origin": "synthetic",
+      "source_note": "Synthetic code-identifier close match."
+    },
+    {
+      "id": "project/repeated-coverage",
+      "overlay": "project",
+      "component": "coverage",
+      "work_type": "bug",
+      "closed_at": "2026-09-06",
+      "superseded": false,
+      "decision": "Archive coverage repair clears only the repaired run identity.",
+      "conditions": "Archive coverage remains flagged for every unrelated failed extractor.",
+      "rationale": "Repeated archive coverage wording must not merge cohorts.",
+      "pointer": "synthetic://extension/repeated-coverage",
+      "origin": "synthetic",
+      "source_note": "Synthetic repeated-term target."
+    },
+    {
+      "id": "parent/repeated-archive",
+      "overlay": "parent",
+      "component": "archive",
+      "work_type": "feature",
+      "closed_at": "2026-08-29",
+      "superseded": false,
+      "decision": "Archive archive archive records should retain an archive pointer.",
+      "conditions": "Applies to a documentation example, not coverage repair.",
+      "rationale": "Repeated archive terms are instructional prose only.",
+      "pointer": "synthetic://extension/repeated-archive",
+      "origin": "synthetic",
+      "source_note": "Synthetic repeated-term false positive."
+    },
+    {
+      "id": "grandparent/cafe-composed",
+      "overlay": "grandparent",
+      "component": "search",
+      "work_type": "bug",
+      "closed_at": "2026-08-26",
+      "superseded": false,
+      "decision": "Caf\u00e9 query normalization preserves a composed Unicode archive label.",
+      "conditions": "Applies when a query contains the composed caf\u00e9 spelling.",
+      "rationale": "Archive search accepts user-entered labels.",
+      "pointer": "synthetic://extension/cafe-composed",
+      "origin": "synthetic",
+      "source_note": "Synthetic composed-Unicode target."
+    },
+    {
+      "id": "project/cafe-decomposed",
+      "overlay": "project",
+      "component": "search",
+      "work_type": "bug",
+      "closed_at": "2026-09-06",
+      "superseded": false,
+      "decision": "Cafe\u0301 query normalization preserves a decomposed Unicode archive label.",
+      "conditions": "Applies when a query contains the decomposed cafe\u0301 spelling.",
+      "rationale": "Archive search must compare canonically equivalent labels.",
+      "pointer": "synthetic://extension/cafe-decomposed",
+      "origin": "synthetic",
+      "source_note": "Synthetic decomposed-Unicode target."
+    },
+    {
+      "id": "parent/semantic-silence",
+      "overlay": "parent",
+      "component": "search",
+      "work_type": "feature",
+      "closed_at": "2026-08-24",
+      "superseded": false,
+      "decision": "Keep cached projections reconstructible from durable records.",
+      "conditions": "Applies to a recovery proposal after interrupted index work.",
+      "rationale": "Durable records outlive a damaged projection.",
+      "pointer": "synthetic://extension/semantic-silence",
+      "origin": "synthetic",
+      "source_note": "Synthetic zero-token-overlap semantic target."
+    }
+  ],
+  "cases": [
+    {
+      "id": "ancestor-applicable-overlay-scope",
+      "query": "ancestor overlay search combined cap",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "parent/overlay-stack",
+        "project/overlay-stack",
+        "project/current-search"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "cite inherited overlay decision and adapt scope",
+      "notes": "Applicable parent precedent across the default stack.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [
+        "unrelated/tenant-index"
+      ]
+    },
+    {
+      "id": "duplicate-work-id-sources",
+      "query": "qualified identity source pointer duplicate work id",
+      "filters": {
+        "component": "api"
+      },
+      "expected": [
+        "parent/contract-v2",
+        "project/qualified-identity"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "preserve both source-qualified candidates",
+      "notes": "Same conceptual identity appears in two overlays.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "superseded-default-exclusion",
+      "query": "current ancestor search index",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "project/current-search"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "use current decision; historical record is excluded",
+      "notes": "Superseded project search record must not consume a default slot.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "historical-supersession-inspection",
+      "query": "current project search index",
+      "filters": {
+        "component": "search",
+        "include_superseded": true,
+        "sources": [
+          "project"
+        ]
+      },
+      "expected": [
+        "project/current-search",
+        "project/superseded-search"
+      ],
+      "inapplicable": [],
+      "cross_overlay": false,
+      "expected_lexical_miss": false,
+      "expected_disposition": "show historical chain as inspection evidence",
+      "notes": "Opt-in historical query.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "wrong-component-filter",
+      "query": "archive search release validation",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "project/current-search"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "ignore wrong-component release precedent",
+      "notes": "Wrong-component hit must be filtered before cap accounting.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [
+        "parent/release-process"
+      ]
+    },
+    {
+      "id": "same-component-agent-summary-false-positive",
+      "query": "archive abstracts deterministic extraction agent refinement",
+      "filters": {
+        "component": "archive"
+      },
+      "expected": [
+        "project/archive-extraction"
+      ],
+      "inapplicable": [
+        "parent/agent-summaries"
+      ],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "reject remote agent-summary precedent under its experimental-service condition",
+      "notes": "Plausible close-vocabulary ancestor false positive.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "same-component-legacy-false-positive",
+      "query": "legacy archive closure state import",
+      "filters": {
+        "component": "archive"
+      },
+      "expected": [
+        "project/legacy-review"
+      ],
+      "inapplicable": [
+        "grandparent/legacy-import"
+      ],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "reject folder-presence precedent and retain reviewed evidence",
+      "notes": "Second plausible close-vocabulary cross-overlay false positive.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "child-scope-redaction",
+      "query": "redact rationale archive abstract",
+      "filters": {
+        "component": "archive"
+      },
+      "expected": [
+        "project/child-only-redaction"
+      ],
+      "inapplicable": [
+        "grandparent/secure-redaction"
+      ],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "cite confidential-child condition; do not generalize parent precedent",
+      "notes": "Child-specific override and source conditions.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "unknown-conditions",
+      "query": "unknown applicability conditions abstract",
+      "filters": {
+        "component": "archive"
+      },
+      "expected": [
+        "project/unknown-conditions"
+      ],
+      "inapplicable": [],
+      "cross_overlay": false,
+      "expected_lexical_miss": false,
+      "expected_disposition": "fetch pointer or record unresolved evidence; never infer scope",
+      "notes": "Unknown is a response state, not a false condition.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "vocabulary-drift-catalogue",
+      "query": "rebuildable local index durable abstracts",
+      "filters": {
+        "component": "search",
+        "sources": [
+          "grandparent"
+        ]
+      },
+      "expected": [
+        "grandparent/wording-drift"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "record lexical miss if absent; do not treat it as ranker failure",
+      "notes": "Corrected positive vocabulary bridge; negative counterpart is vocabulary-drift-zero-overlap.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "rare-discriminator",
+      "query": "quasar-17 archive provenance",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "project/rare-token"
+      ],
+      "inapplicable": [
+        "parent/common-terms"
+      ],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "retain rare-token candidate; generic search language is not governing",
+      "notes": "Rare discriminating term versus generic repeated words.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "unicode-case-punctuation",
+      "query": "CAFE resume punctuation",
+      "filters": {
+        "component": "search",
+        "sources": [
+          "project"
+        ]
+      },
+      "expected": [
+        "project/unicode-paths"
+      ],
+      "inapplicable": [],
+      "cross_overlay": false,
+      "expected_lexical_miss": false,
+      "expected_disposition": "normalize lexical form while retaining source text",
+      "notes": "Case, accent, and punctuation normalization.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "stable-tie",
+      "query": "stable deterministic ordering archive candidates",
+      "filters": {
+        "component": "search",
+        "sources": [
+          "project"
+        ]
+      },
+      "expected": [
+        "project/alpha-tie",
+        "project/beta-tie"
+      ],
+      "inapplicable": [],
+      "cross_overlay": false,
+      "expected_lexical_miss": false,
+      "expected_disposition": "return the same ordering on repeated unchanged runs",
+      "notes": "Fixture does not prescribe which tie-break rule wins.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "runtime-capability-option",
+      "query": "interpreter FTS5 unavailable remedy fallback",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "parent/fts-capability",
+        "project/fts-fallback"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "surface capability evidence; do not equate unavailable with no matches",
+      "notes": "Cross-overlay option and diagnostic evidence.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "recency-filter",
+      "query": "archive abstract format",
+      "filters": {
+        "component": "archive",
+        "since": "2026-08-01"
+      },
+      "expected": [
+        "project/archive-extraction",
+        "project/unknown-conditions",
+        "project/legacy-review",
+        "project/child-only-redaction"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "exclude older abstract format from current proposal",
+      "notes": "Recency is applied before ranking. These targets have no exact query token under the fixed tokenizer; abstract/abstracts differs without stemming. Retained to expose lexical limitations, not scored as cap losses.",
+      "expected_lexical_miss_ids": [
+        "project/archive-extraction",
+        "project/legacy-review",
+        "project/child-only-redaction"
+      ],
+      "expected_filtered_out": [
+        "parent/old-archive"
+      ]
+    },
+    {
+      "id": "work-type-filter",
+      "query": "archived scout closure abstract backfill",
+      "filters": {
+        "component": "archive",
+        "work_type": "scout"
+      },
+      "expected": [
+        "project/scout-closure"
+      ],
+      "inapplicable": [],
+      "cross_overlay": false,
+      "expected_lexical_miss": false,
+      "expected_disposition": "use scout eligibility decision only",
+      "notes": "Work-type filtering before ranking.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [
+        "project/archive-extraction"
+      ]
+    },
+    {
+      "id": "coverage-partial-repair",
+      "query": "coverage repair live regression backfill",
+      "filters": {
+        "component": "coverage"
+      },
+      "expected": [
+        "project/coverage-repair"
+      ],
+      "inapplicable": [],
+      "cross_overlay": false,
+      "expected_lexical_miss": false,
+      "expected_disposition": "adapt repair to retain unrelated cohort flags",
+      "notes": "Exact current decision should be surfaced for a conflicting repair proposal.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "actual-runtime-source",
+      "query": "runtime generated static smoke canonical artifacts",
+      "filters": {
+        "component": "runtime"
+      },
+      "expected": [
+        "grandparent/runtime-neutrality"
+      ],
+      "inapplicable": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": false,
+      "expected_disposition": "cite static-proof condition and avoid live-runtime claim",
+      "notes": "Source-grounded adapted archived decision.",
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": []
+    },
+    {
+      "id": "vocabulary-drift-zero-overlap",
+      "query": "persistent summaries prior decisions",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "grandparent/lexical-drift"
+      ],
+      "inapplicable": [],
+      "expected_filtered_out": [],
+      "cross_overlay": true,
+      "expected_lexical_miss": true,
+      "expected_lexical_miss_ids": [
+        "grandparent/lexical-drift"
+      ],
+      "expected_disposition": "No lexical hit cannot establish absence of a precedent; explicit narrower/source lookup may be needed.",
+      "notes": "Deliberate zero-overlap paraphrase added after fixture audit; no scorer tuning."
+    },
+    {
+      "id": "broad-no-component-no-recency",
+      "query": "archive decision policy",
+      "filters": {},
+      "expected": [
+        "parent/broad-archive-policy",
+        "project/broad-archive-policy",
+        "grandparent/broad-archive-policy"
+      ],
+      "inapplicable": [
+        "parent/search-archive-policy"
+      ],
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [],
+      "cross_overlay": true,
+      "expected_disposition": "use archive-scope candidates and reject the search-service precedent as a different proposal domain",
+      "notes": "Broad query deliberately admits generic overlapping archive policy prose."
+    },
+    {
+      "id": "narrow-component-counterpart",
+      "query": "archive decision policy",
+      "filters": {
+        "component": "archive"
+      },
+      "expected": [
+        "parent/broad-archive-policy",
+        "project/broad-archive-policy",
+        "grandparent/broad-archive-policy"
+      ],
+      "inapplicable": [],
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [
+        "parent/search-archive-policy"
+      ],
+      "cross_overlay": true,
+      "expected_disposition": "show that component filtering removes the same-vocabulary search record before ranking",
+      "notes": "Narrow counterpart to broad-no-component-no-recency."
+    },
+    {
+      "id": "loose-and-narrow-recency",
+      "query": "archive policy source pointers",
+      "filters": {
+        "component": "archive"
+      },
+      "expected": [
+        "parent/broad-archive-policy",
+        "project/recent-policy",
+        "parent/old-policy"
+      ],
+      "inapplicable": [],
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [],
+      "cross_overlay": true,
+      "expected_disposition": "consider dates as context because no recency constraint was supplied",
+      "notes": "Loose recency counterpart; old policy remains eligible."
+    },
+    {
+      "id": "narrow-recency-counterpart",
+      "query": "archive policy source pointers",
+      "filters": {
+        "component": "archive",
+        "since": "2026-08-01"
+      },
+      "expected": [
+        "parent/broad-archive-policy",
+        "project/recent-policy"
+      ],
+      "inapplicable": [],
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [
+        "parent/old-policy"
+      ],
+      "cross_overlay": true,
+      "expected_disposition": "exclude retired v0 policy before ranking",
+      "notes": "Narrow recency counterpart to loose-and-narrow-recency."
+    },
+    {
+      "id": "adjacent-identifiers",
+      "query": "AE-743 archive apply",
+      "filters": {
+        "component": "archive"
+      },
+      "expected": [
+        "parent/ae-743"
+      ],
+      "inapplicable": [
+        "project/ae-744"
+      ],
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [],
+      "cross_overlay": true,
+      "expected_disposition": "use AE-743 closure-extraction evidence and reject AE-744 despite shared AE-743 prose",
+      "notes": "Adjacent identifiers exercise token handling without declaring a required top rank."
+    },
+    {
+      "id": "code-identifier-punctuation-case",
+      "query": "flowindex rebuild archive",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "project/flowindex-rebuild"
+      ],
+      "inapplicable": [
+        "parent/flowindex-inspect"
+      ],
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [],
+      "cross_overlay": true,
+      "expected_disposition": "cite rebuild atomicity and reject inspect-only behavior",
+      "notes": "Camel case, dot, parentheses, and case-folding are all present in source text."
+    },
+    {
+      "id": "repeated-query-terms",
+      "query": "archive archive coverage repair",
+      "filters": {},
+      "expected": [
+        "project/repeated-coverage"
+      ],
+      "inapplicable": [
+        "parent/repeated-archive"
+      ],
+      "expected_lexical_miss_ids": [],
+      "expected_filtered_out": [],
+      "cross_overlay": true,
+      "expected_disposition": "apply the cohort-specific repair; repeated archive prose is not comparable evidence",
+      "notes": "Repeated terms must not be interpreted as a relevance assertion."
+    },
+    {
+      "id": "unicode-equivalence-and-zero-overlap",
+      "query": "cafe archive label",
+      "filters": {
+        "component": "search"
+      },
+      "expected": [
+        "grandparent/cafe-composed",
+        "project/cafe-decomposed",
+        "parent/semantic-silence"
+      ],
+      "inapplicable": [],
+      "expected_lexical_miss_ids": [
+        "parent/semantic-silence"
+      ],
+      "expected_filtered_out": [],
+      "cross_overlay": true,
+      "expected_disposition": "retrieve canonically equivalent cafe labels; record the reconstruction precedent as an expected lexical miss if absent",
+      "notes": "Composed and decomposed Unicode are applicable normalization targets; semantic-silence has no shared query token by design."
+    }
+  ]
+}

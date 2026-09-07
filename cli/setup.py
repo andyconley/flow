@@ -164,6 +164,13 @@ def setup_project() -> int:
     root = repo_root()
     target = root / ".flow"
     ensure_dir(target)
+    from archive_store import writer_lock, ensure_identity, ensure_ignore
+    try:
+        with writer_lock(root):
+            ensure_ignore(root)
+            ensure_identity(root)
+    except (OSError, ValueError) as error:
+        print(f"archive identity unavailable: {error}; restore identity before retrieval")
 
     for rel in _PROJECT_SCAFFOLD_PATHS:
         ensure_dir((target / rel).parent)

@@ -16,6 +16,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # The `# noqa: E402` markers are load-bearing, not decoration: these imports
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
+from archive_commands import register as register_archive, dispatch as dispatch_archive  # noqa: E402
 from baseline import baseline_command  # noqa: E402
 from cost import (  # noqa: E402
     BUCKET_DAY,
@@ -303,7 +304,7 @@ def main() -> int:
     plugin_usage_parser = sub.add_parser(
         "plugin-usage",
         help="sample and report which installed plugins and skills are actually used",
-        description="Samples the plugin and skill usage counters the harness maintains in its own config into flow's store, and reports movement over time. Separate from `flow doctor`, which renders the same read model but never writes: doctor is read-only by contract.",
+        description="Samples the plugin and skill usage counters the harness maintains in its own config into flow's store, and reports movement over time. Separate from `flow doctor`, which renders this read model without writing it; doctor may refresh only its machine FTS5 capability receipt.",
     )
     plugin_usage_sub = plugin_usage_parser.add_subparsers(
         dest="plugin_usage_target", required=True
@@ -571,12 +572,14 @@ def main() -> int:
         help="show framework overview (phase machine, commands, agents, architecture)",
         description="Print the framework orientation: workflow phases, slash commands, CLI commands, agents, and architecture. Same content as the `/flow-help` slash command — invoke this at the shell when you are not in a Claude session.",
     )
+    register_archive(sub)
+
     doctor_parser = sub.add_parser(
         "doctor",
         help="report machine, repo, and runtime sync state",
         description="Inspect the current machine install, repo framework, and generated runtime adapter state.",
     )
-    doctor_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
+    doctor_parser.add_argument("--json", action="store_true", help="emit diagnostics; doctor may refresh its machine FTS5 receipt, never project data")
     doctor_parser.add_argument("--check", action="store_true", help="exit nonzero when warning- or error-severity diagnostics exist")
     sub.add_parser(
         "bootstrap",
@@ -770,7 +773,12 @@ def main() -> int:
         return run_history_command(args)
     if args.command == "run" and args.run_target == "verify":
         return run_verify_command(args)
+    if args.command in {"archive", "index"}:
+        return dispatch_archive(args)
     if args.command == "run" and args.run_target == "transition":
+        if args.event in {"archive", "archive-scout"}:
+            from archive_service import archive_transition
+            return archive_transition(args)
         return run_transition_command(args)
     if args.command == "run" and args.run_target == "validate-orchestration":
         return orchestration_validate_command(args)
@@ -785,11 +793,19 @@ def main() -> int:
     if args.command == "sync":
         return sync_target(args.target, check=args.check, user_mode=args.user, as_json=args.json)
     if args.command == "install":
-        return install_command(release=args.release, develop_path=args.develop)
+        result = install_command(release=args.release, develop_path=args.develop)
+        if result == 0:
+            from archive_preflight import report
+            report()
+        return result
     if args.command == "update":
         if args.json and not args.check:
             parser.error("flow update --json requires --check")
-        return update_command(check=args.check, resync=args.resync, remote_override=args.remote, as_json=args.json)
+        result = update_command(check=args.check, resync=args.resync, remote_override=args.remote, as_json=args.json)
+        if result == 0 and not args.check:
+            from archive_preflight import report
+            report()
+        return result
     return 1
 
 

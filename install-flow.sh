@@ -251,6 +251,8 @@ if ! "${BIN_DIR}/flow" --help >/dev/null 2>&1; then
   exit 1
 fi
 
+"${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/archive_preflight.py" || true
+
 echo "Installed flow (${MODE} mode)."
 echo "Source:    ${SOURCE_DIR}"
 echo "Launcher:  ${BIN_DIR}/flow"

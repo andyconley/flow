@@ -372,3 +372,50 @@ The evidence standard requires an inventory in briefs that ask someone to find w
 A plan named external work items without any requirement to verify each against its system of record first; several turned out stale, already owned, or differently sized than the plan assumed.
 
 Factual claims written into a durable procedural artifact carry no evidence burden. Executable content can be recorded without ever being executed, and measured-sounding assertions without ever being measured.
+
+### Runtime Memory Capability Contract
+
+Status: observed once, promoted from the capability-gap ledger
+
+Flow lacks a runtime memory capability contract distinguishing readable companion memory, supported explicit writes, and verified persistence. Archive reporting conflates the absence of a Flow-managed writer with the absence of durable runtime memory, and boot and resume lack a dependable bounded recall path for archived decisions.
+
+Deferred; no implementation is included in archive retrieval stages 1–5.
+
+Scope to define:
+
+- Separate memory read availability, explicit write support, and verified writes
+  in archive, boot, and resume reporting. Background memory generation must not
+  be reported as a completed write.
+- Keep run artifacts and ADRs canonical, with native runtime memory as companion
+  context. Use supported provider interfaces without editing generated memory
+  internals or creating a duplicate decision store.
+- Assess bounded archive retrieval for boot and resume as additional lane scope,
+  preserving source attribution and supersession handling without loading full
+  histories into resident context.
+
+Acceptance targets for definition:
+
+- Readable memory with no supported writer is reported distinctly from an
+  unavailable provider; neither implies that canonical decisions were lost.
+- A fresh session can recover a selected archived decision with its source and
+  current status; the Flow recall path works with native memory disabled.
+- A write is reported as verified only when the provider supplies confirmation.
+  Unsupported or unconfirmed writes leave archive closure and lanes usable.
+
+Next step: define provider capabilities and the bounded recall contract when
+this item is prioritized.
+
+### Review Rework Transition
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+Flow lacks an explicit transition from review back to implementation for required corrections to an approved plan.
+
+Define a changes-requested route that preserves the approved plan, review
+findings, correction evidence, and independent re-review before acceptance.
+
+### Runtime Evidence Completion Manifest
+
+Status: observed once, promoted from the capability-gap ledger
+
+Flow lacks a completion manifest that connects prepared runtime evaluation cases to execution artifacts and reviewed outcomes.

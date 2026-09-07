@@ -172,3 +172,21 @@ Before leaving `flow-archive`, confirm:
 - validation status is explicit
 - durable memory reflects the new reality
 - remaining risks are recorded rather than implied
+
+## Archive enrichment and recovery
+
+Normal `archive` and `archive-scout` transitions attempt deterministic abstract
+publication after successful closure. Read `enrichment_diagnostics` separately
+from the lifecycle result. Missing source facts stay unknown; missing usable
+final artifacts are a repairable generation failure. Do not rerun or undo closure
+because abstract, index or coverage writes failed.
+
+Use `flow archive backfill` to preview canonical repairs; applying requires
+`--apply --yes`. Legacy folders are reported only. Use `--rescan` for changed
+sources; retained refinements become explicitly stale when their generated base
+changes. Replacing/refining prose requires the `flow archive refine` preview and
+current base digest, preserving prior revisions. Prepare explicit whole-run
+supersession through `flow archive declare` before closure; ordinary rescan or
+index rebuild must never infer or replace that intent. Run `flow index rebuild`
+in the affected project for disposable projection repair. Do not auto-repair
+ancestor overlays or run user-data backfill merely because a diagnostic suggests it.

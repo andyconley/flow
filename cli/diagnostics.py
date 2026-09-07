@@ -1,6 +1,8 @@
-"""Read-only reporting: doctor, help, and bootstrap.
+"""Reporting: doctor, help, and bootstrap.
 
-These three never write. `doctor` in particular is a diagnosis, not a repair —
+Doctor may refresh its machine FTS5 capability receipt after a probe. No project
+abstract, coverage or index is repaired. Otherwise these commands never write.
+`doctor` is a diagnosis, not a repair —
 it reports what is missing and names the command that fixes it, rather than
 fixing anything itself. A reporting command that silently repairs makes the
 next run look healthy for the wrong reason, and hides how the machine drifted.
@@ -9,6 +11,7 @@ Every state renders a line, including the healthy and the absent ones. An
 omitted section reads as "checked and fine" when it may mean "never checked."
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -539,10 +542,25 @@ def doctor(as_json: bool = False, check: bool = False) -> int:
                 next_action="flow setup machine",
             )
         )
+    from archive_preflight import probe
+    from archive_store import cached_coverage
+    retrieval_capability = probe()
+    try:
+        archive_coverage = cached_coverage(root)
+    except (OSError, ValueError):
+        archive_coverage = {"state": "unknown", "counts": None, "observed_at": None}
+    diagnostics.append(diagnostic(
+        "retrieval.fts5", STATUS_OK if retrieval_capability["state"] == "available" else STATUS_WARNING,
+        "info", "capability", "FTS5 retrieval " + retrieval_capability["state"],
+        detail=str(retrieval_capability["runtime"]), next_action=retrieval_capability["remedy"]))
     if as_json:
-        print_json(support_payload("doctor", root, diagnostics, install=read_install_config()))
+        print_json(support_payload("doctor", root, diagnostics, install=read_install_config(), retrieval_capability=retrieval_capability, archive_coverage=archive_coverage))
         return exit_code(diagnostics, check=check, fail_on_warnings=True)
 
+    print("retrieval FTS5:    " + retrieval_capability["state"])
+    if retrieval_capability["state"] != "available":
+        print("  " + retrieval_capability["remedy"])
+    print("archive coverage: " + json.dumps(archive_coverage, sort_keys=True))
     print(f"python:           {sys.executable}")
     print(f"flow home:        {FLOW_HOME}")
     print(f"source:           {SOURCE_DIR}")
