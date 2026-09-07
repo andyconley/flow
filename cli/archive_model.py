@@ -78,6 +78,19 @@ def validate_field(field):
                 raise ValueError("conflict alternatives must be source-backed known values")
 
 
+def validate_refinement(refinement):
+    if refinement is None:
+        return
+    if not isinstance(refinement, dict) or not all(isinstance(refinement.get(k), str) and refinement[k] for k in ("revision", "actor", "reason", "base_generated_digest")) or not SHA256_RE.fullmatch(refinement["base_generated_digest"]):
+        raise ValueError("refinement requires revision, actor, reason and base digest")
+    if not isinstance(refinement.get("patches"), dict) or not refinement["patches"]:
+        raise ValueError("refinement requires patches")
+    for name, patch in refinement["patches"].items():
+        if name not in {"decision", "rationale", "applies_when"}:
+            raise ValueError("refinement cannot change control fields")
+        validate_field(patch)
+
+
 def validate_declarations(declarations, identity):
     if not isinstance(declarations, dict):
         raise ValueError("declarations must be an object")
@@ -109,8 +122,15 @@ def declaration_digest(identity, declarations):
 
 
 def validate_envelope(value):
-    if not isinstance(value, dict) or type(value.get("schema_version")) is not int or value.get("schema_version") != 1:
+    if not isinstance(value, dict) or type(value.get("schema_version")) is not int:
         raise ValueError("unsupported abstract schema; do not downgrade")
+    if value["schema_version"] == 2:
+        from archive_legacy_model import validate_legacy_envelope
+        return validate_legacy_envelope(value)
+    if value["schema_version"] != 1:
+        raise ValueError("unsupported abstract schema; do not downgrade")
+    if "legacy_review" in value:
+        raise ValueError("legacy review requires reviewed-legacy schema 2")
     qualified(value.get("identity"))
     validate_declarations(value.get("declarations", {}), value["identity"])
     generated = value.get("generated")
@@ -122,16 +142,7 @@ def validate_envelope(value):
             raise ValueError("incomplete generated field set")
         for field in fields.values():
             validate_field(field)
-    refinement = value.get("refinement")
-    if refinement:
-        if not isinstance(refinement, dict) or not all(isinstance(refinement.get(k), str) and refinement[k] for k in ("revision", "actor", "reason", "base_generated_digest")) or not SHA256_RE.fullmatch(refinement["base_generated_digest"]):
-            raise ValueError("refinement requires revision, actor, reason and base digest")
-        if not isinstance(refinement.get("patches"), dict) or not refinement["patches"]:
-            raise ValueError("refinement requires patches")
-        for name, patch in refinement["patches"].items():
-            if name not in {"decision", "rationale", "applies_when"}:
-                raise ValueError("refinement cannot change control fields")
-            validate_field(patch)
+    validate_refinement(value.get("refinement"))
     if not isinstance(value.get("provenance"), dict):
         raise ValueError("missing provenance")
     canonical_json(value)
