@@ -217,6 +217,62 @@ class LegacyIntegrationTests(unittest.TestCase):
         self.assertEqual(rows[0]['conditions'], ['legacy_awaiting_review'])
         self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
+    def test_external_capture_is_offline_and_changed_bytes_are_excluded(self):
+        import socket
+        self.fixture()
+        record = self.request()
+        for item in record['evidence']:
+            item.update(kind='external_capture', url='https://example.invalid/review/legacy', captured_at='2026-09-07T00:00:00Z')
+        with patch.object(socket, 'socket', side_effect=AssertionError('offline path opened a network socket')):
+            self.apply(record)
+            query.rebuild(self.root)
+            result = query.search(self.root, 'archive retrieval')
+        self.assertEqual(result['shown'], 1, result)
+        self.assertEqual(result['hits'][0]['abstract']['legacy_review']['evidence'][0]['kind'], 'external_capture')
+        (self.envelope().parent / 'HANDOFF.md').write_text('Capture contents changed')
+        self.assertEqual(query.search(self.root, 'archive retrieval')['shown'], 0)
+        self.assertEqual(legacy.observe(self.root, 'legacy')['evidence_condition'], 'evidence_stale')
+
+    def test_known_historical_date_uses_reviewed_evidence_not_recording_time(self):
+        self.fixture()
+        record = self.request()
+        record['closed_at'] = {'state': 'known', 'value': '2020-02-03T00:00:00Z', 'source': record['evidence'][1]['source']}
+        self.apply(record)
+        query.rebuild(self.root)
+        result = query.search(self.root, 'archive retrieval', since='2019-01-01')
+        self.assertEqual(result['shown'], 1)
+        self.assertEqual(result['hits'][0]['effective']['fields']['closed_at']['value'], '2020-02-03T00:00:00Z')
+        self.assertEqual(query.search(self.root, 'archive retrieval', since='2021-01-01')['shown'], 0)
+
+    def test_long_reachable_history_is_validated_but_not_returned(self):
+        from archive_legacy_model import make_review
+        self.approve()
+        value = json.loads(self.envelope().read_text())
+        current = value['legacy_review']
+        directory = self.envelope().parent / 'abstract-history/reviews'
+        directory.mkdir(parents=True, exist_ok=True)
+        for number in range(100):
+            (directory / (current['revision_digest'] + '.json')).write_bytes(store.encode(current))
+            request = copy.deepcopy(current)
+            for key in ['review_id', 'revision_digest', 'semantic_payload_digest', 'recorded_at', 'previous_revision_digest']:
+                request.pop(key, None)
+            request.update(action='reapprove', action_id='history-' + str(number))
+            current = make_review(request, review_id=current['review_id'], previous_revision_digest=current['revision_digest'], recorded_at='2026-09-07T00:00:00Z')
+        value['legacy_review'] = current
+        self.envelope().write_bytes(store.encode(value))
+        self.assertEqual(len(legacy.observe(self.root, 'legacy')['chain']), 101)
+        query.rebuild(self.root)
+        result = query.search(self.root, 'archive retrieval')
+        self.assertEqual(result['shown'], 1, result)
+        raw = query.serialized(result)
+        self.assertNotIn('history-0"', raw)
+        self.assertIn('history-99', raw)
+        self.assertLessEqual(len(raw.encode()), result['max_output_bytes'])
+        oldest = directory / (json.loads(next(directory.iterdir()).read_text())['revision_digest'] + '.json')
+        oldest.unlink()
+        self.assertFalse(legacy.observe(self.root, 'legacy')['eligible'])
+        self.assertEqual(query.search(self.root, 'archive retrieval')['shown'], 0)
+
     def test_no_fit_preserves_whole_authority_and_no_full_history(self):
         self.approve()
         record = self.request(action='reapprove')

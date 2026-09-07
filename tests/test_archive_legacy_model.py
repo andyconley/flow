@@ -95,3 +95,18 @@ class LegacyModelTests(unittest.TestCase):
         validate_legacy_envelope(legacy)
         validate_envelope(legacy)
 
+
+    def test_strict_timestamp_and_unknown_schema_inputs(self):
+        for timestamp in ['2026-09-07 12:00:00+00:00', '2026-09-07T12:00:00', '2026-09-07Z12:00:00Z']:
+            value = request()
+            value['evidence'][0].update(kind='external_capture', url='https://example.invalid/capture', captured_at=timestamp)
+            with self.subTest(timestamp=timestamp), self.assertRaises(ValueError):
+                validate_review(value)
+        for schema in [True, 1.0, 2, None, []]:
+            value = request(); value['schema_version'] = schema
+            with self.subTest(schema=schema), self.assertRaises(ValueError):
+                validate_review(value)
+        for relationship in [1, 0, {}, [], None]:
+            value = request(); value['reviewer_is_author'] = relationship
+            with self.subTest(relationship=relationship), self.assertRaises(ValueError):
+                validate_review(value)

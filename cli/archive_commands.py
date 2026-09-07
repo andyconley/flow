@@ -1,5 +1,6 @@
 """Argparse registration and presentation for archive operations."""
 import json
+import archive_legacy
 from pathlib import Path
 from fsutil import repo_root
 from archive_query import EXITS, rebuild, search, serialized, pack, minimum_budget
@@ -72,7 +73,6 @@ def dispatch(args):
         elif args.archive_action == "search":
             result = search(root, args.query, lane=args.lane, sources=args.source, current_only=args.current_only, component=args.component, work_type=args.work_type, since=args.since, include_superseded=args.include_superseded, top_k=args.top_k, max_output_bytes=args.max_output_bytes)
         elif args.archive_action == "import":
-            import archive_legacy
             if args.import_action == "preview":
                 result = archive_legacy.preview(root, args.work_id)
             elif args.import_action == "review":
