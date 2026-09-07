@@ -81,7 +81,7 @@ other by bare name.
   it against disk.
 - `setup.py` — machine, project, and user setup, plus project refresh.
 - `lifecycle.py` — two-mode install, release staging, and update.
-- `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; never writes.
+- `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; doctor may refresh only its machine FTS5 capability receipt, never project state.
 - `diagnostic_model.py` — shared support diagnostic item model, JSON payload
   shape, and check-mode exit helpers.
 - `telemetry_freshness.py` — shared freshness classification and diagnostic

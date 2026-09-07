@@ -33,6 +33,46 @@ Use this command when:
 
 **When NOT to use:** bug reports or defect investigations that already have expected/actual behavior; route those to `flow-plan` for now. Do not use this once requirements are already approved; route to `flow-solution` or `flow-plan`.
 
+## Archive retrieval and proposal evidence
+
+After the engineer confirms the entry subject/scope, before proposal shaping,
+run `flow archive search "<confirmed subject>" --lane define --json` once for
+this lane entry. Preserve the first engagement response requirements. Default
+search includes ancestor overlays. Keep the returned `selection_id` as the
+logical active selection; later turns reuse it, not another automatic search.
+Implement/scout do not gain automatic retrieval from this contract.
+
+Handle retrieval exit codes deliberately: 0 complete/no_matches; 2 invalid
+request; 3 partial; 4 unavailable/preflight_required. A retrieval failure never
+aborts this lane. Missing/stale preflight directs the operator to `flow doctor`;
+do not first probe FTS5 here or silently use another scorer. Partial results have
+subset counts and missing-source uncertainty. No matches is not proof that no
+relevant decision exists. Respect the full-response byte ceiling; it is not a
+measured model-token count.
+
+For an explicit narrower rerequest, replace the logical active selection. Do not
+append all earlier hits again or claim retained transcript tokens were erased.
+Keep material dispositions and unresolved questions in the proposal/handoff even
+when the active selection changes.
+
+Before advancing a proposal that appears to contradict a retrieved current
+decision, visibly cite the qualified source and record one disposition:
+
+- Adapt the proposal to honor applicable guidance.
+- Reject applicability using the pointed source's actual conditions.
+- Propose supersession with rationale and an explicit engineer approval decision.
+- Record unresolved applicability, missing evidence and an owner in the proposal
+  and subsequent handoff.
+
+A rank or BM25 score establishes neither applicability nor authority. For a
+same-component, close-vocabulary, plausible but inapplicable current hit, cite
+its source conditions and explain the mismatch; do not change the proposal to
+conform to it merely because it ranked highly. Do this even without another
+genuine conflict, including ancestor and child-specific precedents. When the
+abstract is insufficient, consult its source pointer or explicitly retain an
+unavailable/unresolved disposition. Never invent the missing conditions.
+Retrieval introduces no lifecycle veto, inferred supersession or new approval gate.
+
 ## Primary inputs
 
 - idea, feature concept, capability request, or project-scope question

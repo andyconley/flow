@@ -463,3 +463,17 @@ For a release-impacting documentation change, use a Conventional Commit type and
 ## License
 
 Flow is released under the [MIT License](LICENSE).
+
+### Archive retrieval
+
+Archive transitions attempt source-grounded abstracts after closure. Use
+`flow archive backfill` to preview canonical repairs, then `--apply --yes` when
+ready. `flow index rebuild` builds the current overlay's disposable projection;
+`flow archive search "topic" --lane define --json` searches it and its ancestors.
+Run `flow doctor` if retrieval requests FTS5 preflight. Missing FTS5 leaves Flow
+usable with retrieval unavailable; there is no alternate scorer fallback.
+
+Results carry applicability conditions, qualified sources, uncertainty and exact
+UTF-8 byte limits. Define/solution must address conflicts and reject inapplicable
+precedent using source evidence. See the [CLI reference](docs/cli-reference.md)
+for filters, repair consent, refinement ownership and response states.

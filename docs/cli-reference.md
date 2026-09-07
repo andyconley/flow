@@ -1040,3 +1040,108 @@ manual bypass.
 
 If any release job fails, follow the [release failure runbook](release-runbook.md)
 before retrying or changing remote state.
+
+### `flow archive search QUERY`
+
+Search current and ancestor archive decisions with BM25 over one transient,
+merged post-filter corpus. SQLite storage stays per overlay. Run `flow doctor`
+with Flow's selected interpreter first if retrieval reports `preflight_required`.
+Install/update and doctor probe FTS5; search never substitutes another ranker.
+Queries stream candidates through a disk-backed temporary SQLite table and
+remove it when the query finishes. They require writable temporary storage
+(`TMPDIR` may select it), but do not write project or ancestor archives. A
+temporary-storage failure reports retrieval unavailable with its own remedy.
+
+```bash
+flow archive search "SQLite archive" --lane define --json
+flow archive search "AE-743" --lane solution --current-only --json
+flow archive search "archive" --source SOURCE_UUID --component SOURCE_UUID:COMPONENT_ID
+```
+
+Filters: `--source` (repeatable) or `--current-only`, `--component UUID:ID`,
+`--work-type TYPE`, `--since ISO8601`, and `--include-superseded`. Source filters
+narrow candidates, not the context graph: filtering out a superseder does not
+make its target current again. Component labels and incidental mentions are not
+component identity. Unknown dates do not match an explicit recency bound.
+
+Defaults are 5 hits/16384 UTF-8 bytes for define and 8 hits/32768 bytes for
+solution. `--top-k` and `--max-output-bytes` override them; minimum request budget
+is computed from the mandatory serialized error envelope and shown in --help. Both default output and `--json` use a canonical JSON block whose
+full serialization is counted, including metadata and `actual_output_bytes`.
+These limits are not measured model-token counts. An invalid tiny budget returns
+a transport error; valid no-fit responses explain the zero-hit result.
+
+Exit codes: 0 complete/no_matches; 2 invalid_request; 3 partial; 4 unavailable or
+preflight_required. Partial counts cover only the verified selected subset;
+`shown + withheld = total_matches`, with uncertain matches reported separately.
+Callers must handle nonzero retrieval without aborting define/solution or archive
+closure. Lexical candidates are not assertions of applicability or authority.
+
+A missing/stale projection requires an explicit rebuild in its owning project.
+Search checks source fingerprints and never repairs ancestor state. An explicit
+narrower rerequest replaces the logical active selection; it cannot erase old
+transcript tokens or material prior dispositions.
+
+### `flow archive inspect UUID:WORK_ID`
+
+Inspect bounded evidence for one qualified record. Historical and unknown status
+remain explicit; inspection never establishes current authority. `--json` uses
+the same output form. Equal work IDs in different overlays remain distinct.
+
+### `flow archive backfill`
+
+Preview missing canonical archive repairs with no writes. Other lifecycle states
+are excluded; legacy folders are reported but never imported. `--work-id` narrows
+the preview. Apply requires both flags:
+
+```bash
+flow archive backfill --json
+flow archive backfill --apply --yes --json
+flow archive backfill --rescan --work-id WORK_ID --apply --yes --json
+```
+
+Backfill can initialize a missing overlay identity only when no retained qualified
+evidence would be retargeted. Restore a lost identity from backup/version control.
+Malformed and unsupported versions are reported for review; no blind downgrade
+or stripping of controls is performed. Rescan preserves refinements and explicit
+declarations. A changed generated base makes retained refinement visibly stale;
+fresh generated content becomes effective with a warning. Replacing refinement
+prose uses explicit current-base consent through `flow archive refine`.
+
+### `flow archive declare WORK_ID`
+
+Preview owned declarations with `--input FILE --base-digest SHA256`. For a first
+absent envelope use `--base-digest absent`. Applying requires `--apply --yes`.
+Input has `schema_version: 1`, `actor`, `reason` and a `declarations` object with
+`selections` and/or `supersedes`. Selections name a field and source pointer;
+supersession entries name a qualified target, `whole_run: true`, rationale,
+actor and evidence pointers. Prepare supersession before normal closure anchors
+its canonical digest. Historical anchored intent cannot be rewritten by rescan.
+
+### `flow archive refine WORK_ID`
+
+Preview source-supported prose changes with `--input FILE --base-digest SHA256`;
+apply requires `--apply --yes` against that current envelope digest. Input has
+`schema_version: 1`, `actor`, `reason`, `base_generated_digest` and `patches` for
+only decision/rationale/applies_when. Each patch is an evidence-bearing field:
+`state`, `value`, `sources` (and `reason` for unknown/conflicted states).
+
+Source pointers carry source_id, work_id, overlay-relative path, selector and
+file SHA256 digest. Markdown selectors use `heading:<lowercase heading>:<occurrence>`;
+lifecycle pointers use JSON pointers. Previous refinements are retained immutably.
+Stale consent, escaped paths and unsupported control mutations are refused.
+
+### `flow index rebuild`
+
+Rebuild the current overlay's disposable ordinary SQLite projection from canonical
+archive envelopes and lifecycle/control evidence. It never generates abstracts,
+allocates identities, repairs sources or changes declaration/refinement content.
+Use `--json` for structured results. Run from the affected ancestor directory to
+repair that source explicitly. Rebuild validates a temporary database and source
+fingerprints before replacement; interrupted work retains the prior index or an
+explicit stale/unavailable result.
+
+Doctor may refresh `~/.flow/retrieval-capabilities.json` after its FTS5 probe.
+That is its only new write: archive coverage is a cached, last-observed read,
+and doctor never scans or repairs project archive records/indexes. Retrieval
+advisories do not change `doctor --check` when other diagnostics stay fixed.

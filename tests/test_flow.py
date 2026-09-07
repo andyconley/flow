@@ -809,12 +809,11 @@ class FlowCliTests(FlowCliHarness):
         )
         return bare
 
-    def test_setup_project_creates_exactly_four_paths(self) -> None:
+    def test_setup_project_creates_only_declared_project_and_archive_paths(self) -> None:
         """The whole contract of the thinned scaffold, as a set equality.
 
-        Deliberately not four `assertTrue`s: those pass just as happily when a
-        fifth file appears, and a fifth file is precisely the regression this
-        slice exists to prevent.
+        Assert the complete additive archive identity/cache contract as a set;
+        no framework capability files may leak into project scaffolding.
         """
         self.setup_project()
         flow_dir = self.repo / ".flow"
@@ -827,7 +826,7 @@ class FlowCliTests(FlowCliHarness):
 
         self.assertEqual(
             created,
-            {"flow.toml", "PROJECT.md", "memory/STATE.md", "runs/.gitkeep"},
+            {"flow.toml", "PROJECT.md", "memory/STATE.md", "runs/.gitkeep", "identity.json", ".gitignore", ".cache/archive/write.lock"},
         )
 
     def test_setup_project_creates_no_framework_md(self) -> None:
@@ -3382,6 +3381,16 @@ class FlowCliTests(FlowCliHarness):
             victims,
             [
                 "agent_capabilities",
+                "archive_commands",
+                "archive_extract",
+                "archive_graph",
+                "archive_model",
+                "archive_preflight",
+                "archive_query",
+                "archive_service",
+                "archive_sources",
+                "archive_store",
+
                 "baseline",
                 "claude_collector",
                 "claude_config",
