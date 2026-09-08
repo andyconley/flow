@@ -99,6 +99,16 @@ How it merges:
   - Entries in the user manifest with the same `name` as a framework entry **replace** it (override).
   - Entries with a new `name` are **appended** (addition).
   - The merged manifest drives adapter generation. Generated SKILLs, agent files, and hook registrations embed or point at the user's content where applicable, and the managed manifest records `~/.flow/user/...` as the source path so the origin is auditable.
+- **Expertise corpora merge by union, not replacement.** `cli/expertise.py`
+  composes a role's `## Expertise` section from the framework's
+  `expertise/<role>.jsonld` plus the user's, when the role declares
+  `generation_mode = "composed"`. Unlike the manifest merge above, a user entry
+  never replaces a baseline entry: the user's `experience` layer renders first
+  and is labelled, and every baseline entry is retained. Replacement is right
+  for a role body and wrong for a corpus, where it would silently drop entries
+  the user never meant to remove. A corpus that cannot be read fails the sync
+  rather than being skipped, because an agent quietly missing its expertise is
+  the one failure the generated file cannot show on its face.
 - **Agent capability exceptions merge separately from agents.** The framework
   capability catalog supplies global defaults. Framework and user
   `[[agent_capability_overrides]]` entries merge by `(agent, capability)`, so an

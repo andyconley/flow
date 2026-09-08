@@ -32,6 +32,7 @@ from diagnostic_model import (
     print_json,
     support_payload,
 )
+from expertise import compose, corpus_for
 from flowtoml import read_toml
 from fsutil import (
     ensure_dir,
@@ -421,6 +422,24 @@ def hook_script_source(hook: dict) -> Path:
     return SOURCE_DIR / "hooks" / hook["script"]
 
 
+def agent_body(agent: dict, entry_root: Path, flow_dir: Path, agent_defaults: dict) -> str:
+    """Read an agent source, composing its expertise corpus when declared.
+
+    The baseline corpus is read from the framework scaffold even when the body
+    itself came from the user overlay: overriding a role's instructions is not
+    a statement about its expertise, and a user who replaces a body should not
+    silently lose the entries that body was validated with. The user's own
+    `experience` layer merges on top.
+    """
+    body = (entry_root / agent["source"]).read_text()
+    mode = agent.get("generation_mode", agent_defaults.get("generation_mode", "verbatim"))
+    if mode == "verbatim":
+        return body
+    if mode != "composed":
+        raise ValueError(f"unsupported agent generation mode: {mode}")
+    return compose(body, corpus_for(agent["name"], flow_dir, USER_OVERLAY_DIR))
+
+
 def desired_claude_outputs(
     root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
@@ -456,14 +475,10 @@ def desired_claude_outputs(
         source_rel = agent["source"]
         entry_root = agent.get("_root", flow_dir)
         entry_origin = agent.get("_origin", "framework")
-        source_path = entry_root / source_rel
         target = root / runtime["agent_dir"] / f'{agent["name"]}.md'
-        generation_mode = agent.get("generation_mode", agent_defaults.get("generation_mode", "verbatim"))
-        if generation_mode != "verbatim":
-            raise ValueError(f"unsupported agent generation mode: {generation_mode}")
         content = render_claude_agent(
             source_ref_for(source_rel, entry_origin),
-            source_path.read_text(),
+            agent_body(agent, entry_root, flow_dir, agent_defaults),
             runtime_policy_for_agent(manifest, "claude", agent),
             manifest.get("_agent_capability_decisions", {}).get(agent["name"]),
         )
@@ -560,12 +575,11 @@ def desired_codex_outputs(
         source_rel = agent["source"]
         entry_root = agent.get("_root", flow_dir)
         entry_origin = agent.get("_origin", "framework")
-        source_path = entry_root / source_rel
         target = root / runtime["agent_dir"] / f'{agent["name"]}.toml'
         outputs[target] = render_codex_agent(
             agent["name"],
             source_ref_for(source_rel, entry_origin),
-            source_path.read_text(),
+            agent_body(agent, entry_root, flow_dir, runtime.get("agent_defaults", {})),
             runtime_policy_for_agent(manifest, "codex", agent),
             manifest.get("_agent_capability_decisions", {}).get(agent["name"]),
         )
