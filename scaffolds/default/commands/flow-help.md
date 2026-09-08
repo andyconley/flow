@@ -73,7 +73,7 @@ These are the commands you use during work. Claude exposes them as slash command
 | /flow-plan | Idea / bug / request → implementation-ready plan |
 | /flow-implement | Gated multi-phase work; runs land under `.flow/runs/<work-id>/` |
 | /flow-review | Structured review after implementation |
-| /flow-archive | Close a run; STATE.md → transient state; durable decisions → runtime memory provider |
+| /flow-archive | Close a run; preserve canonical evidence; update companion memory when available |
 | /flow-resume | Pick up interrupted work |
 | /flow-status | Where are we, what's next? |
 | /flow-init-project | Walk through filling in `.flow/PROJECT.md` (right after `flow setup project`) |
@@ -102,6 +102,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow project audit` | Classify a repo's `.flow/` overlay against the framework (read-only) |
 | `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
 | `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
+| `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
 | `flow runtime smoke [--target all|claude|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |
 | `flow model resolve --runtime <runtime> --profile <profile> [--json]` | Resolve an agent-selected session profile without changing runtime configuration |
@@ -146,9 +147,9 @@ These agents are **personal working agents**. They define how Claude or Codex wo
 
 - **Framework** (commands, agents, hooks, and standards) lives in user-level runtime surfaces through `flow setup user`: `~/.claude/`, `~/.agents/skills/`, and `~/.codex/`. It is active in every supported runtime session.
 - **Project overlays** at `<repo>/.flow/` are opt-in per repo. Use them only where you want project-specific role assignments, memory, or run artifacts. `/flow-boot` recommends `flow setup project` by default in any repo without an overlay. To silence that recommendation for a repo permanently, ask the runtime to opt out; it will `touch .flow-skip` at the repo root. You can also run that shell command yourself.
-- **Durable facts and decisions** → the active runtime's durable memory provider, when one exists; for Claude Code, that is auto-memory at `~/.claude/projects/<project-id>/memory/`; Codex currently has no Flow-managed durable memory provider
+- **Canonical decision evidence** → lifecycle-backed run artifacts, archive envelopes/declarations, and ADRs
 - **Transient work state** → `.flow/memory/STATE.md` (only when an overlay exists)
-- **Run artifacts** → `.flow/runs/<work-id>/` (only when an overlay exists)
+- **Companion recall** → the active runtime's memory provider, when one exists; for Claude Code, that is auto-memory at `~/.claude/projects/<project-id>/memory/`; Codex currently has no Flow-managed durable memory provider
 - Overlays stack. In nested projects, such as `~/KB/repos/path-nexus/` inside `~/KB/`, more-specific overlays override on conflicts. Memory writes go to the most-specific overlay.
 
 ## Common entry points

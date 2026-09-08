@@ -1062,6 +1062,13 @@ A push to `main` first produces a credential-free semantic-release plan for the
 exact pushed SHA. A no-release result is a green no-op. A release result must
 pass the local candidate gate before the publisher receives a write token.
 
+Release-impacting commits may include one optional `Release-Note: <text>`
+trailer. Flow validates the single-line 1-240 UTF-8 byte value, including its
+formatting-safety restrictions, and renders all valid trailers in commit order
+under `### Highlights` before the ordinary
+Conventional Commit sections. Malformed trailers fail analysis; absent trailers
+leave the ordinary notes unchanged.
+
 Pre-publication blockers are the full Python suite, generated-help drift,
 release staging and transitive imports, tracked-tree cleanliness, candidate
 fresh install and prior-version upgrade, machine and user setup, both runtime

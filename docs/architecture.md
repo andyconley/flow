@@ -68,6 +68,12 @@ digest binds publication to the completed candidate gate. Human-oriented
 semantic-release logs are never an input. Release notes cross shell boundaries
 only as environment or file data.
 
+An optional `Release-Note:` commit trailer supplies a concise capability
+outcome. A local `generateNotes` plugin validates and renders those trailers
+before the ordinary Conventional Commit sections. Preview and publish load the
+same ordered plugin list from the selected source SHA, so combined notes remain
+bound to the plan digest, repeated analysis, publication, and public readback.
+
 `@semantic-release/git` is expected to add one generated release commit after
 the validated source commit. The public verifier therefore requires exactly one
 parent equal to the planned source, exactly one changed path (`CHANGELOG.md`),
@@ -200,8 +206,8 @@ The session-start hook is responsible for detecting whether the current project 
 Per-project source of truth for **project-specific** content only:
 
 - `PROJECT.md` — role assignments, sources of truth, project distinctives
-- `memory/STATE.md` — transient work state (what is in flight, blocked, pending). Durable facts and decisions live in the active runtime memory provider when one exists, not here.
-- `runs/<work-id>/...` — per-task execution artifacts
+- `memory/STATE.md` — transient work state (what is in flight, blocked, pending), not durable decision authority
+- `runs/<work-id>/...` — canonical per-task execution artifacts, including accepted archive evidence
 - `runs/<work-id>/run.json` — C-lite current-state projection for gated workflow runs
 - `runs/<work-id>/events.jsonl` — append-only transition history for that run
 - `runs/<work-id>/orchestration.json` — revisioned assignment, shared-state, claim, and verification contract for protocol-revision-2 runs
@@ -210,11 +216,12 @@ The framework content (commands, agents, standards) is NOT duplicated here in th
 
 Workflow run state is dependency-free and local to the project overlay. `flow run transition` owns lifecycle writes against `run.json` and `events.jsonl`; `/flow-*` commands call that CLI when they cross critical gates. Detailed orchestration state stays separate and is validated before revision-2 dispatch, handback, and acceptance writes. Existing no-revision runs retain revision-1 behavior; folders without `run.json` remain readable as `legacy/inferred`.
 
-Runtime memory is companion context, not the workflow source of truth. Claude
-Code has a Flow-known durable memory provider at
+Lifecycle-backed run artifacts, archive envelopes and declarations, and ADRs
+are the canonical evidence for project decisions. Runtime memory is optional
+companion context, not the workflow source of truth. Claude Code has a
+Flow-known durable memory provider at
 `~/.claude/projects/<project-id>/memory/`; Codex currently has no equivalent
-Flow-managed provider. In both runtimes, project `.flow/` artifacts and C-lite
-run state remain canonical.
+Flow-managed provider. Its absence does not remove or weaken canonical evidence.
 
 ### Stacked Overlays
 

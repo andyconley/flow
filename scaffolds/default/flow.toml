@@ -215,9 +215,9 @@ summary = "Structured review after implementation"
 [[claude.commands]]
 name = "flow-archive"
 source = "commands/flow-archive.md"
-description = "Closes out completed work and updates durable memory. Use when a slice or run is complete and ready to be archived."
+description = "Closes accepted work, records canonical archive evidence, and updates companion memory when available. Use when a slice or run is complete and ready to be archived."
 argument_hint = "[work-id]"
-summary = "Close a run; STATE.md → transient state; durable decisions → runtime memory provider"
+summary = "Close a run; preserve canonical evidence; update companion memory when available"
 
 [[claude.commands]]
 name = "flow-resume"
@@ -485,7 +485,7 @@ description = "Summarizes current execution state. Use when the question is wher
 [[codex.commands]]
 name = "flow-archive"
 source = "commands/flow-archive.md"
-description = "Closes out completed work and updates durable memory. Use when a slice or run is complete and ready to be archived."
+description = "Closes accepted work, records canonical archive evidence, and updates companion memory when available. Use when a slice or run is complete and ready to be archived."
 argument_hint = "[work-id]"
 
 [[codex.commands]]
@@ -553,6 +553,10 @@ summary = "Remove the framework copies `audit` finds; dry run unless `--apply --
 [[help.cli_commands]]
 invocation = "flow run list/status/history/verify/transition"
 summary = "Inspect and hard-gate C-lite workflow run state"
+
+[[help.cli_commands]]
+invocation = "flow archive search/backfill/inspect/refine/import"
+summary = "Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports"
 
 [[help.cli_commands]]
 invocation = "flow runtime smoke [--target all|claude|codex] [--json]"

@@ -9,6 +9,16 @@ The Flow maintainer who pushed the release-impacting commit owns initial
 diagnosis. Escalate to a repository administrator before changing branch
 protection, workflow permissions, or any remote release state.
 
+If analysis fails while generating notes, inspect `Release-Note:` trailers in
+the commits since the prior tag. Each commit may contain at most one, with a
+single-line value of 1-240 UTF-8 bytes, no control or bidirectional-formatting
+characters or HTML comment delimiters, and no Markdown heading prefix. Do not
+try to correct it in a later commit or edit the
+workflow's predicted notes; the invalid commit remains in the analyzed range.
+Amend or remove that unreleased commit before retrying. If it has already
+reached shared history, stop and choose an explicit history-repair procedure
+with the repository administrator.
+
 ## Candidate validation failed
 
 **Symptoms:** `validate-candidate` is red; `publish` and `verify-published` are

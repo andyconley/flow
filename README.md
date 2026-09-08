@@ -44,7 +44,7 @@ The main workflow commands are:
 - [`/flow-plan`](scaffolds/default/commands/flow-plan.md) — shape approved requirements or bug-shaped work into an implementation-ready plan
 - [`/flow-implement`](scaffolds/default/commands/flow-implement.md) — run gated implementation with durable artifacts
 - [`/flow-review`](scaffolds/default/commands/flow-review.md) — judge implementation against intent and validation evidence
-- [`/flow-archive`](scaffolds/default/commands/flow-archive.md) — close accepted work and update durable memory
+- [`/flow-archive`](scaffolds/default/commands/flow-archive.md) — close accepted work, preserve canonical archive evidence, and update companion memory when available
 - [`/flow-scout`](scaffolds/default/commands/flow-scout.md) — handle small focused changes that meet the scout-size criteria
 - [`/flow-resume`](scaffolds/default/commands/flow-resume.md) and [`/flow-status`](scaffolds/default/commands/flow-status.md) — recover or summarize current work state
 - [`/flow-help`](scaffolds/default/commands/flow-help.md) and [`/flow-init-project`](scaffolds/default/commands/flow-init-project.md) — orient to Flow or initialize project-overlay context
@@ -171,7 +171,7 @@ flow install --develop ~/personal/flow          # copied directory → symlink t
 flow doctor
 ```
 
-**Optional: per-project overlay** (only for repos that need project-specific roles, durable memory, or run artifacts):
+**Optional: per-project overlay** (only for repos that need project-specific roles, transient state, or run artifacts):
 
 ```bash
 cd /path/to/project
@@ -193,6 +193,28 @@ flow sync codex --user
 Use the CLI by intent. Most day-to-day work happens through `/flow-*` workflow commands; shell commands install, sync, inspect, and maintain the framework.
 
 This is the command map, not the full reference. For detailed flags and behavior, see [cli-reference.md](docs/cli-reference.md).
+
+<!-- generated:cli-commands-table:begin (regenerate with `scripts/regenerate-flow-help.py`) -->
+| Command | Use when |
+|---|---|
+| `flow help` | This overview, but rendered at the shell (same content as `/flow-help`) |
+| `flow setup machine` | First-time machine setup — creates `~/.flow/` support directories |
+| `flow setup user` | Install flow at user level (active in every supported runtime session) |
+| `flow setup project` | Scaffold `.flow/` overlay into the current repo |
+| `flow sync claude [--user] [--check]` | Generate or check Claude adapters |
+| `flow sync codex [--user] [--check]` | Generate or check Codex adapters |
+| `flow install --release / flow install --develop <path>` | Convert the local install between modes (symlink ↔ copy) |
+| `flow update [--check] [--resync]` | Roll a release install forward to the latest tagged release |
+| `flow bootstrap` | Validate the current repo's `.flow/` structure |
+| `flow doctor` | Report machine, install, user-level, and project-level state |
+| `flow project audit` | Classify a repo's `.flow/` overlay against the framework (read-only) |
+| `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
+| `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
+| `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
+| `flow runtime smoke [--target all|claude|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
+| `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |
+| `flow model resolve --runtime <runtime> --profile <profile> [--json]` | Resolve an agent-selected session profile without changing runtime configuration |
+<!-- generated:cli-commands-table:end -->
 
 ### Install and Update
 
@@ -480,12 +502,12 @@ command discovery, applied model routing, identity, and provider capability
 grants remain manual release checks because a GitHub runner cannot prove them.
 
 For a release-impacting documentation change, use a Conventional Commit type and scope that matches the behavior being described.
+An optional `Release-Note: <text>` commit trailer adds a concise capability
+outcome above the generated change sections. See the [commit standard](scaffolds/default/standards/git-commits.md)
+and [ADR 0009](docs/adr/0009-add-curated-release-highlights.md) for its bounded
+input contract and exact-SHA release path.
 
-## License
-
-Flow is released under the [MIT License](LICENSE).
-
-### Archive retrieval
+## Archive retrieval
 
 Archive transitions attempt source-grounded abstracts after closure. Use
 `flow archive backfill` to preview canonical repairs, then `--apply --yes` when
@@ -503,4 +525,12 @@ usable with retrieval unavailable; there is no alternate scorer fallback.
 Results carry applicability conditions, qualified sources, uncertainty and exact
 UTF-8 byte limits. Define/solution must address conflicts and reject inapplicable
 precedent using source evidence. See the [CLI reference](docs/cli-reference.md)
-for filters, repair consent, refinement ownership and response states.
+for filters, repair consent, refinement ownership and response states. The
+[ranking ADR](docs/adr/0004-rank-archive-candidates-with-bm25.md), [evidence
+ownership ADR](docs/adr/0005-own-archive-evidence-per-overlay.md), and
+[validation record](docs/archive-retrieval-validation.md) explain the design
+boundary and its tested limits.
+
+## License
+
+Flow is released under the [MIT License](LICENSE).

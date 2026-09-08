@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate the three flow-help.md tables from flow.toml.
+"""Regenerate Flow help tables from flow.toml.
 
-Tables generated (each between `<!-- generated:<name>:begin -->` /
-`<!-- generated:<name>:end -->` markers in flow-help.md):
+Tables are generated between `<!-- generated:<name>:begin -->` /
+`<!-- generated:<name>:end -->` markers. The command and agent tables live in
+flow-help.md; README.md receives the same CLI command table:
 
   - slash-commands-table — from `[[claude.commands]]` `summary` fields,
     in the order they appear in flow.toml
@@ -30,6 +31,7 @@ import tomllib
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_TOML = REPO_ROOT / "scaffolds" / "default" / "flow.toml"
 FLOW_HELP = REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-help.md"
+README = REPO_ROOT / "README.md"
 
 
 def read_toml(path: Path) -> dict:
@@ -106,17 +108,20 @@ BUILDERS = {
 }
 
 
-def replace_section(text: str, marker: str, content: str) -> str:
+def replace_section(text: str, marker: str, content: str, *, target: Path = FLOW_HELP) -> str:
     """Replace the body between `<!-- generated:<marker>:begin ... -->` and `<!-- generated:<marker>:end -->`."""
     begin_re = re.compile(rf"(<!-- generated:{re.escape(marker)}:begin[^>]*-->)")
     end_re = re.compile(rf"(<!-- generated:{re.escape(marker)}:end -->)")
 
     begin_match = begin_re.search(text)
     if not begin_match:
-        raise SystemExit(f"could not find begin marker for {marker} in flow-help.md")
+        raise SystemExit(f"could not find begin marker for {marker} in {target.name}")
     end_match = end_re.search(text, begin_match.end())
     if not end_match:
-        raise SystemExit(f"could not find end marker for {marker} in flow-help.md (after begin at {begin_match.start()})")
+        raise SystemExit(
+            f"could not find end marker for {marker} in {target.name} "
+            f"(after begin at {begin_match.start()})"
+        )
 
     return (
         text[: begin_match.end()]
@@ -135,44 +140,56 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="exit 1 with a diff if regeneration would change flow-help.md; do not write",
+        help="exit 1 with a diff if regeneration would change generated help targets; do not write",
     )
     args = parser.parse_args()
 
     if not FLOW_TOML.exists():
         sys.stderr.write(f"flow.toml not found at {FLOW_TOML}\n")
         return 1
-    if not FLOW_HELP.exists():
-        sys.stderr.write(f"flow-help.md not found at {FLOW_HELP}\n")
-        return 1
-
     data = read_toml(FLOW_TOML)
-    original = FLOW_HELP.read_text()
-    rewritten = original
-    for marker, builder in BUILDERS.items():
-        rewritten = replace_section(rewritten, marker, builder(data))
+    targets = {
+        FLOW_HELP: tuple(BUILDERS),
+        README: ("cli-commands-table",),
+    }
+    stale: list[tuple[Path, str, str]] = []
+    for target, markers in targets.items():
+        if not target.exists():
+            sys.stderr.write(f"generated help target not found at {target}\n")
+            return 1
+        original = target.read_text()
+        rewritten = original
+        for marker in markers:
+            rewritten = replace_section(
+                rewritten, marker, BUILDERS[marker](data), target=target
+            )
+        if rewritten != original:
+            stale.append((target, original, rewritten))
 
-    if rewritten == original:
-        print(f"{FLOW_HELP.relative_to(REPO_ROOT)} is up to date.")
+    if not stale:
+        for target in targets:
+            print(f"{target.relative_to(REPO_ROOT)} is up to date.")
         return 0
 
     if args.check:
-        sys.stderr.write(
-            "".join(
-                difflib.unified_diff(
-                    original.splitlines(keepends=True),
-                    rewritten.splitlines(keepends=True),
-                    fromfile=str(FLOW_HELP.relative_to(REPO_ROOT)) + " (on disk)",
-                    tofile=str(FLOW_HELP.relative_to(REPO_ROOT)) + " (regenerated)",
+        for target, original, rewritten in stale:
+            sys.stderr.write(
+                "".join(
+                    difflib.unified_diff(
+                        original.splitlines(keepends=True),
+                        rewritten.splitlines(keepends=True),
+                        fromfile=str(target.relative_to(REPO_ROOT)) + " (on disk)",
+                        tofile=str(target.relative_to(REPO_ROOT)) + " (regenerated)",
+                    )
                 )
             )
-        )
-        sys.stderr.write("\nflow-help.md is out of date.\n")
+        sys.stderr.write("\ngenerated Flow help is out of date.\n")
         sys.stderr.write("run `python3 scripts/regenerate-flow-help.py` to apply.\n")
         return 1
 
-    FLOW_HELP.write_text(rewritten)
-    print(f"updated {FLOW_HELP.relative_to(REPO_ROOT)}")
+    for target, _original, rewritten in stale:
+        target.write_text(rewritten)
+        print(f"updated {target.relative_to(REPO_ROOT)}")
     return 0
 
 

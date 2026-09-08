@@ -63,12 +63,13 @@ agents, standards, and templates come from the user-level install.
 - `runs/<work-id>/events.jsonl` - append-only transition history for that run
 - `runs/<work-id>/orchestration.json` - protocol-revision-2 orchestration contract
 
-Durable project facts and cross-cutting decisions do NOT live in `.flow/memory/`.
-They live in the active runtime's durable memory provider when one exists. For
-Claude Code, that provider is auto-memory at
-`~/.claude/projects/<project-id>/memory/`. Codex currently has no equivalent
-Flow-managed durable memory provider, so project artifacts and C-lite run state
-remain canonical there.
+Durable project decisions do NOT live in `.flow/memory/`. Their canonical
+evidence lives in lifecycle-backed run artifacts, archive envelopes and
+declarations, and ADRs. The active runtime may copy distilled facts into a
+companion memory provider. Claude Code uses auto-memory at
+`~/.claude/projects/<project-id>/memory/`; Codex currently has no equivalent
+Flow-managed provider. Missing companion memory does not weaken canonical
+project evidence.
 
 ## Runtime context providers
 
@@ -76,10 +77,11 @@ Flow's shared commands are runtime-neutral. They treat project `.flow/`
 artifacts as canonical and runtime memory as companion context:
 
 - canonical project identity: `.flow/PROJECT.md`
-- canonical transient work state: `.flow/memory/STATE.md`
+- transient orientation: `.flow/memory/STATE.md`
 - canonical run lifecycle: `.flow/runs/<work-id>/run.json` and `events.jsonl`
 - canonical revision-2 orchestration contract: `.flow/runs/<work-id>/orchestration.json`
-- durable memory provider, when available: runtime-specific companion memory
+- canonical accepted decisions: run artifacts, archive envelopes/declarations, and ADRs
+- companion recall, when available: runtime-specific memory
 
 When a command mentions durable runtime memory, resolve it through the active
 provider. Claude Code uses `~/.claude/projects/<project-id>/memory/`. Codex has
@@ -97,7 +99,7 @@ By default, use:
 3. relevant standards and templates, resolved as below
 4. ADRs and code
 5. `.flow/memory/STATE.md` (transient work state — read from every stacked overlay level)
-6. the active runtime memory provider, when one exists (durable project facts and decisions; for Claude Code, consult `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index)
+6. the active runtime memory provider, when one exists (companion recall only; for Claude Code, consult `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index and verify material claims against canonical evidence)
 
 ## Overlay resolution for standards and templates
 

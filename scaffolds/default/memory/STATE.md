@@ -1,6 +1,6 @@
 # Current State
 
-This file holds **transient work state** for this project — what is in flight right now, what is blocked, what to pick up next session. It is **not** a store of durable facts or decisions; those live in the active runtime memory provider when one exists.
+This file holds **transient work state** for this project — what is in flight right now, what is blocked, what to pick up next session. It is **not** durable decision authority. Canonical evidence lives in lifecycle-backed run artifacts, archive envelopes and declarations, and ADRs. A runtime memory provider may retain companion recall when one exists.
 
 ## What belongs here
 
@@ -11,14 +11,14 @@ This file holds **transient work state** for this project — what is in flight 
 
 ## What does NOT belong here
 
-- durable project facts → write to the active runtime memory provider when one exists
-- decisions about how the project works → write to the active runtime memory provider when one exists
-- user preferences or feedback → write to the active runtime memory provider when one exists
-- pointers to external systems → write to the active runtime memory provider when one exists
+- durable decision evidence → preserve it in the relevant run artifact, archive envelope/declaration, or ADR
+- decisions about how the project works → record them in an ADR or other accepted project artifact
+- user preferences or feedback → record them in the owning project artifact; optionally copy a concise reminder to companion runtime memory
+- durable external references → record them in the artifact whose claim they support
 
 Claude Code's provider is auto-memory at `~/.claude/projects/<project-id>/memory/`.
-Codex currently has no Flow-managed durable memory provider, so keep project
-artifacts and C-lite run state canonical there.
+Codex currently has no Flow-managed durable memory provider. In either runtime,
+companion memory may aid recall but cannot replace canonical evidence.
 
 ## When to update
 

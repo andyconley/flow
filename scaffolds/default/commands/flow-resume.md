@@ -20,7 +20,7 @@ Use this command when:
 
 - `.flow/runs/` (every stacked overlay level — most-specific first)
 - `.flow/memory/STATE.md` — transient work state at every stacked overlay level
-- active runtime memory provider, when one exists — relevant durable facts/decisions
+- active runtime memory provider, when one exists — relevant companion recall
 - latest run artifacts and notes
 
 ## Primary outputs

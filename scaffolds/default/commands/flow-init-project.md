@@ -50,7 +50,7 @@ Conditional roles (invoked when relevant):
    - Summary (name, type, primary runtime, short description) — propose based on inference; confirm with user.
    - Role providers (product owner, PM, requirements shaping, implementation, acceptance review) — for solo/personal projects propose "Andy" (or the actual git author) for all roles plus "+ Claude" where applicable; for team projects ask explicitly.
    - Collaboration deviations and tightening — propose based on project type; ask for confirmation.
-   - Sources of truth — propose based on inference (issue tracker, ADR location, runtime context files, STATE.md, runtime memory provider).
+   - Sources of truth — propose based on inference (issue tracker, ADR location, code, and lifecycle-backed run/archive evidence). List STATE.md as transient orientation and any runtime memory provider as companion recall.
    - Workflow notes — propose preferred small-change and gated-work paths based on observed work patterns.
    - Runtime and integration notes — propose based on file inspection (Dockerfile, package.json, requirements.txt, .github/workflows/, etc.).
 4. **Write the updated `.flow/PROJECT.md`.** Edit the file in place — don't make the user copy-paste.

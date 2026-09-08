@@ -49,6 +49,7 @@ POLICY_VERSIONS = {
     "@semantic-release/changelog": "7.0.0",
     "@semantic-release/git": "11.0.1",
     "conventional-changelog-conventionalcommits": "9.3.1",
+    "flow-release-highlights": "1",
 }
 
 
@@ -144,7 +145,7 @@ def _safe_relative_path(value: Any, name: str) -> str:
 
 
 def _policy_identity(versions: Mapping[str, str]) -> str:
-    return canonical_digest({"versions": dict(versions), "config": "release.config.cjs", "revision": 1})
+    return canonical_digest({"versions": dict(versions), "config": "release.config.cjs", "revision": 2})
 
 
 def validate_plan(data: Any) -> dict[str, Any]:

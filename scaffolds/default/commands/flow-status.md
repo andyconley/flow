@@ -22,7 +22,7 @@ This is a state-summary command, not a shaping or implementation command.
 
 - `.flow/runs/` (every stacked overlay level)
 - `.flow/memory/STATE.md` — transient work state at every stacked overlay level
-- active runtime memory provider, when one exists — durable project facts and decisions; for Claude Code, read `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index
+- active runtime memory provider, when one exists — companion recall; for Claude Code, read `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index and verify material claims against canonical evidence
 - current project overlays when needed
 
 ## Primary outputs
@@ -49,7 +49,7 @@ inferred phase or completion state as authoritative.
 
 1. Identify active or recent runs at the current project level, starting with `flow run list`. Note any active runs at parent overlay levels separately as parent context (do not conflate them with the project's own state).
 2. Read current transient work state from STATE.md across stacked overlay levels. Surface project-level prominently; parent-overlay state appears under a separate parent-context heading.
-3. Pull durable memory entries relevant to the current focus through the active runtime provider. For Claude Code, use `~/.claude/projects/<project-id>/memory/`. For Codex, no Flow-managed provider exists yet; say that only if it affects the readout, and keep project artifacts plus C-lite run state canonical.
+3. Pull companion memory entries relevant to the current focus through the active runtime provider. For Claude Code, use `~/.claude/projects/<project-id>/memory/`. Verify material claims against lifecycle-backed run artifacts, archive evidence, ADRs, and code. For Codex, no Flow-managed provider exists yet; say that only if it affects the readout.
 4. Summarize blockers, caveats, or unresolved decisions.
 5. **Session cost (informational only — never a blocker, never changes the next-command recommendation by itself).** Run `flow cost active` and identify the current session. The `SESSION` column shows whatever label the tool has — a session title when one exists, otherwise a cwd — so match on that label (a title you recognize as this conversation, or this project's path) combined with the least-idle row, which is typically the session you are in. If you cannot match confidently, say so and show the candidates rather than guessing. Report the matched row's ctx/carry and the tool's recommendation as information; the user decides. The store has no concept of a run, so this is deliberately the *session's* cost, not the run's — say "this session," not "this run." If `flow` or the usage store is unavailable, skip this step silently.
 6. Recommend the next command based on the real current state.
@@ -84,7 +84,7 @@ inferred phase or completion state as authoritative.
 
 | Rationalization | Reality |
 |---|---|
-| "I'll just infer the current state from memory." | Status exists because active work and durable memory drift apart. |
+| "I'll just infer the current state from memory." | Status exists because active work and companion memory drift apart. |
 | "Recent work is enough; we don't need blockers." | A status readout without blockers is only half-useful. |
 | "The next command is obvious." | If it isn't written down, collaborators often diverge. |
 

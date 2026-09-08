@@ -135,6 +135,23 @@ class PlanContractTests(unittest.TestCase):
         changed["source_sha"] = "e" * 40
         self.assertNotEqual(release_gate.canonical_digest(plan), release_gate.canonical_digest(changed))
 
+    def test_repeated_analysis_binds_release_highlight_bytes(self):
+        plan = valid_plan()
+        plan["predicted_release"]["notes"] = "### Highlights\n\n- Archive retrieval finds current decisions.\n"
+        plan["predicted_release"]["notes_sha256"] = hashlib.sha256(
+            plan["predicted_release"]["notes"].encode("utf-8")
+        ).hexdigest()
+        release_gate.validate_plan(plan)
+        repeated = copy.deepcopy(plan)
+        repeated["predicted_release"]["notes"] = repeated["predicted_release"]["notes"].replace(
+            "current", "prior", 1
+        )
+        repeated["predicted_release"]["notes_sha256"] = hashlib.sha256(
+            repeated["predicted_release"]["notes"].encode("utf-8")
+        ).hexdigest()
+        with self.assertRaisesRegex(release_gate.ContractError, "drifted"):
+            release_gate.compare_analysis(plan, repeated)
+
     def test_canonical_writer_digest_matches_file(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "plan.json"
@@ -423,6 +440,7 @@ class PolicyAndCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), [
             "@semantic-release/commit-analyzer",
+            "./scripts/release-highlights.cjs",
             "@semantic-release/release-notes-generator",
         ])
 
@@ -431,8 +449,8 @@ class PolicyAndCliTests(unittest.TestCase):
         publish_result = self.run_node_config("publish")
         self.assertEqual(publish_result.returncode, 0, publish_result.stderr)
         publish = json.loads(publish_result.stdout)
-        self.assertEqual(publish[:2], preview)
-        self.assertEqual(publish[2:], [
+        self.assertEqual(publish[:3], preview)
+        self.assertEqual(publish[3:], [
             "@semantic-release/changelog", "@semantic-release/git", "@semantic-release/github"
         ])
 
@@ -441,13 +459,14 @@ class PolicyAndCliTests(unittest.TestCase):
         publish = json.loads(self.run_node_full_config("publish").stdout)
         self.assertEqual(preview["branches"], ["main"])
         self.assertEqual(preview["tagFormat"], "v${version}")
-        self.assertEqual(preview["plugins"], publish["plugins"][:2])
+        self.assertEqual(preview["plugins"], publish["plugins"][:3])
         rules = preview["plugins"][0][1]["releaseRules"]
         self.assertIn({"breaking": True, "release": "minor"}, rules)
         self.assertIn({"type": "docs", "scope": "framework", "release": "minor"}, rules)
         self.assertIn({"type": "docs", "release": "patch"}, rules)
         self.assertIn({"type": "chore", "scope": "release", "release": False}, rules)
-        visible_types = preview["plugins"][1][1]["presetConfig"]["types"]
+        self.assertEqual(preview["plugins"][1], "./scripts/release-highlights.cjs")
+        visible_types = preview["plugins"][2][1]["presetConfig"]["types"]
         self.assertTrue(all(item["hidden"] is False for item in visible_types))
 
     def test_preview_repository_url_is_canonical_config_not_action_alias(self):

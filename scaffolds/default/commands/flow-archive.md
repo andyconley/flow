@@ -1,6 +1,6 @@
 # flow-archive
 
-Use `flow-archive` to close out a completed slice or run and convert short-lived execution into durable project memory.
+Use `flow-archive` to close out a completed slice or run, preserve canonical archive evidence, and update companion recall when available.
 
 ## Overview
 
@@ -24,14 +24,14 @@ Do not use this command to decide whether work is ready. Use `flow-review` first
 - review findings and resolution status
 - validation evidence
 - current transient work state: `.flow/memory/STATE.md` (every stacked overlay level)
-- current durable project memory in the active runtime provider, when one exists
+- current companion project memory in the active runtime provider, when one exists
 
 ## Primary outputs
 
 - completion summary
 - validation summary
 - residual-risk and follow-up summary
-- durable memory updates
+- canonical archive evidence plus optional companion-memory updates
 - run completion marker
 
 ## C-Lite Run Protocol
@@ -97,7 +97,7 @@ The archive command does not replace review. It packages the accepted outcome.
 
    If `flow` is unavailable, record the gaps in the output section as before and say the ledger was not updated.
 6. **Update transient work state** in `.flow/memory/STATE.md` at the **most-specific stacked overlay** (e.g., when archiving in path-nexus, writes go to `~/KB/repos/path-nexus/.flow/memory/STATE.md`, not the workspace's). STATE.md should reflect what is now in flight, blocked, or pending — not durable facts.
-7. **Record durable decisions in the active runtime memory provider when one exists.** For Claude Code, write auto-memory at `~/.claude/projects/<project-id>/memory/`: for each cross-cutting decision worth remembering across sessions, write a structured memory file with frontmatter (`type: project`) and add a one-line entry to `MEMORY.md`. For Codex, no Flow-managed durable memory provider exists yet; report "n/a — no durable provider" rather than inventing a path. Do NOT write durable decisions to `.flow/memory/`; that file is transient state only.
+7. **Copy useful recall into the active runtime memory provider when one exists.** Canonical decision evidence stays in lifecycle-backed run artifacts, archive envelopes/declarations, and ADRs. For Claude Code, write a concise companion entry under `~/.claude/projects/<project-id>/memory/` with frontmatter (`type: project`) and add a one-line index entry to `MEMORY.md`. For Codex, no Flow-managed durable memory provider exists yet; report "n/a — no durable provider" rather than inventing a path. Do NOT write durable decisions to `.flow/memory/`; that file is transient state only.
 8. If the work materially affects a parent overlay's state, surface that in the archive output so it can be picked up in a separate parent-level archive.
 9. Write the completed Archive Summary to
    `.flow/runs/<work-id>/archive.md`. Confirm that `Work Closed` states the
@@ -138,7 +138,7 @@ The archive command does not replace review. It packages the accepted outcome.
 
 ### Memory Updates
 - STATE (`.flow/memory/STATE.md`): (always present; describe the transient work-state change, or "n/a — work state unchanged")
-- Runtime memory entries written: (always present; list new or updated provider files by name + one-line summary, or "n/a — no durable decisions recorded/provider unavailable")
+- Runtime memory entries written: (always present; list new or updated companion entries by name + one-line summary, or "n/a — no companion entries recorded/provider unavailable")
 - Parent-overlay implications: (only if changes here affect a higher overlay)
 ```
 
@@ -148,8 +148,8 @@ The archive command does not replace review. It packages the accepted outcome.
 |---|---|
 | "The code is merged, so archive is unnecessary." | Merge is not memory. Archive is what makes the outcome durable. |
 | "Residual risks are obvious from the diff." | Risks disappear quickly unless they are written down explicitly. |
-| "We can update STATE and runtime memory later." | Later is usually never; archive is the right time to make memory durable when a provider exists. |
-| "STATE.md and runtime memory hold the same kind of thing." | They do not — STATE.md is transient work state at the project; runtime memory holds durable cross-session facts and decisions. Mixing them defeats both. |
+| "We can update STATE and runtime memory later." | Later is usually never; archive is the right time to update transient orientation and companion recall after canonical evidence is secured. |
+| "STATE.md and runtime memory hold the same kind of thing." | They do not — STATE.md is transient work state at the project; runtime memory is optional companion recall. Neither replaces canonical decision evidence. |
 | "Nothing was missing from the framework, so I'll skip that section." | Write "none observed." An omitted section is indistinguishable from one that was never considered, and the gap notes are only useful as a corpus — a run that silently skips them removes a data point rather than adding a null one. |
 
 ## Red Flags
@@ -172,7 +172,7 @@ Before leaving `flow-archive`, confirm:
 - [ ] any repeat was surfaced to the engineer with its count, and promotion was offered rather than performed
 - [ ] nothing was committed or pushed without being asked for separately
 - [ ] STATE.md was updated (or explicitly marked "n/a")
-- [ ] durable decisions were written to the active runtime memory provider (or explicitly marked "n/a — no durable decisions recorded/provider unavailable")
+- [ ] useful companion recall was written to the active runtime memory provider (or explicitly marked "n/a — no companion entries recorded/provider unavailable")
 - [ ] writes went to the most-specific overlay; parent-overlay implications surfaced if applicable
 - [ ] the Archive Summary was written to the canonical run-local `archive.md`, contains a source-backed `Work Closed` section, and was registered as the archive artifact
 - [ ] the run is clearly marked complete
@@ -183,7 +183,7 @@ Before leaving `flow-archive`, confirm:
 
 - the closed work is summarized clearly
 - validation status is explicit
-- durable memory reflects the new reality
+- canonical archive evidence records the accepted outcome and companion memory reflects it when available
 - remaining risks are recorded rather than implied
 
 ## Archive enrichment and recovery

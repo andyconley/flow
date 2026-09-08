@@ -23,12 +23,12 @@ Synthesize across:
 - runtime-provided session context already loaded for the session (for Claude Code, the CLAUDE.md hierarchy)
 - the framework operating model (provided via the session-start hook)
 - `/tmp/session_checkpoint.md` if present (within-session continuity from a prior compaction)
-- durable facts and decisions in the active runtime memory provider, when one exists
+- relevant companion recall in the active runtime memory provider, when one exists
 
 Read explicitly from every stacked overlay level (most-specific to most-general):
 
 - `.flow/PROJECT.md`
-- `.flow/memory/STATE.md` (transient work state only — durable facts live in the runtime memory provider)
+- `.flow/memory/STATE.md` (transient work state only)
 
 Inspect:
 
@@ -47,7 +47,7 @@ Inspect:
 2. Read `/tmp/session_checkpoint.md` if present.
 3. **Freshness check the session checkpoint.** If `/tmp/session_checkpoint.md` exists, compare its "Files modified this session" / "Tasks completed" lists against `git log --stat` since the checkpoint's date. If commits since that date cover the checkpoint's work, treat the checkpoint as **superseded** rather than interrupted, and recommend discarding it in the output.
 4. Read project overlay files from every stacked overlay level (most-specific to most-general): `PROJECT.md` and `memory/STATE.md`. Merge with more-specific overriding on conflicts.
-5. Read durable runtime memory through the active provider and pull in any entries relevant to the current focus. For Claude Code, read `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index. For Codex, no Flow-managed durable memory provider exists yet; use project artifacts and C-lite run state as canonical.
+5. Read companion runtime memory through the active provider and pull in any entries relevant to the current focus. For Claude Code, read `~/.claude/projects/<project-id>/memory/MEMORY.md` as the index. Verify material claims against lifecycle-backed run artifacts, archive evidence, ADRs, and code. For Codex, no Flow-managed durable memory provider exists yet; use those canonical sources directly.
 6. Check for interrupted or active runs across all stacked overlay levels.
 7. Identify:
    - the project's operating model and any project-specific role assignments

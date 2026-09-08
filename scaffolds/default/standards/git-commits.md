@@ -25,6 +25,14 @@ Every commit to a flow-aware repo, by every contributor — human or agent. This
 - **`[optional body]`** — one blank line after the description; one or more paragraphs explaining the why, not just the what.
 - **`[optional footer(s)]`** — one blank line after the body. Token-value pairs in `git trailer` shape (e.g. `Refs: #123`, `Reviewed-by: name`, `Co-Authored-By: name <email>`). `BREAKING CHANGE: <description>` or `BREAKING-CHANGE: <description>` (uppercase) signals a breaking change when no `!` was used in the prefix.
 
+Flow's own release repository also accepts one optional `Release-Note: <text>`
+trailer per commit. Use it for a concise capability outcome that commit subjects
+alone will not explain. The value must be one line, 1-240 UTF-8 bytes, contain
+no control or bidirectional-formatting characters or HTML comment delimiters,
+and must not start with a Markdown heading. It affects
+release-note presentation only; Conventional Commit type still controls version
+selection.
+
 ## Types
 
 Required by the spec:

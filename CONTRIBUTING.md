@@ -64,7 +64,12 @@ feat: add definition-stage research artifacts
 
 Release automation reads those commit messages. `feat:` produces a minor release, `fix:` produces a patch release, and breaking-change markers produce a major release. `docs:` also produces a patch release. Use `docs(framework):`, `docs(commands):`, `docs(agents):`, or `docs(standards):` when a documentation change materially changes Flow behavior; those scopes produce a minor release.
 
-The changelog is generated from commits. Put longer design context in the docs, specs, or architecture notes changed by the work.
+The changelog is generated from commits. Put longer design context in the docs,
+specs, or architecture notes changed by the work. When several commits deliver
+one capability, a release-impacting commit may include one optional
+`Release-Note: <text>` trailer for the concise reader-facing outcome. Keep it to
+one line and 1-240 UTF-8 bytes; do not use control or bidirectional-formatting
+characters, HTML comment delimiters, or a Markdown heading prefix.
 
 ## Generated Files
 

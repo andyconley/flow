@@ -67,7 +67,10 @@ By default, use this order:
 2. project overlay and active standards
 3. design or Storybook contract when UI is involved
 4. code and ADRs
-5. durable memory
+5. lifecycle-backed run artifacts and archive evidence
+
+Runtime memory, when available, is companion recall. Verify material claims
+against the durable sources above before acting on them.
 
 If chat changes intended behavior, the durable artifacts should be updated.
 

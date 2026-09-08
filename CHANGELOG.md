@@ -4,6 +4,10 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ## [0.26.0](https://github.com/andyconley/flow/compare/v0.25.0...v0.26.0) (2026-09-08)
 
+Archive final-source repair now registers the accepted final outcome as the
+source used for generated evidence. This corrects source selection without
+changing the retrieval and legacy-import capabilities delivered earlier.
+
 ### Features
 
 * **agents:** add sourced expertise entries to three pilot roles ([f9993e0](https://github.com/andyconley/flow/commit/f9993e0b4ef8a8a96e419f99fcadf1781c991e68))
@@ -25,11 +29,22 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ## [0.25.0](https://github.com/andyconley/flow/compare/v0.24.0...v0.25.0) (2026-09-07)
 
+Reviewed legacy import adds an explicit human-confirmation path for older run
+folders that lack canonical lifecycle closure evidence. It remains distinct
+from canonical backfill and can be withdrawn independently.
+
 ### Features
 
 * **archive:** add reviewed legacy import and withdrawal ([304102f](https://github.com/andyconley/flow/commit/304102f8286f63d0f5bf8b0f801df82b6b1bbc37))
 
 ## [0.24.0](https://github.com/andyconley/flow/compare/v0.23.0...v0.24.0) (2026-09-07)
+
+Archive retrieval stages 1-5 add source-backed offline abstracts, canonical
+backfill, disposable per-overlay SQLite projections, and bounded BM25 search
+across the current overlay and its ancestors. Define and solution surface
+retrieved evidence and require an observable disposition for genuine conflicts
+and plausible but inapplicable precedent. Retrieval or enrichment failures stay
+explicit while Flow and archive closure continue to work.
 
 ### Features
 

@@ -48,6 +48,8 @@ const notes = [
   }
 ];
 
+const highlights = "./scripts/release-highlights.cjs";
+
 const mutatingPlugins = [
   [
     "@semantic-release/changelog",
@@ -70,5 +72,5 @@ module.exports = {
   branches: ["main"],
   tagFormat: "v${version}",
   ...(repositoryUrl ? { repositoryUrl } : {}),
-  plugins: [analyzer, notes, ...(mode === "publish" ? mutatingPlugins : [])]
+  plugins: [analyzer, highlights, notes, ...(mode === "publish" ? mutatingPlugins : [])]
 };

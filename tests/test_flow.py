@@ -2992,10 +2992,10 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("no semver tags", result.stderr + result.stdout)
 
     def test_regenerate_flow_help_check_is_clean(self) -> None:
-        """Drift test for flow-help.md.
+        """Drift test for the generated Flow help targets.
 
         Asserts that `scripts/regenerate-flow-help.py --check` exits clean —
-        i.e., the generated tables in flow-help.md match what flow.toml
+        i.e., the generated tables in flow-help.md and README.md match flow.toml
         currently says. Catches the case where someone adds/edits a command,
         agent, or CLI summary in flow.toml without re-running the generator.
         Fast, no network, no fake home.
@@ -3011,11 +3011,38 @@ class FlowCliTests(FlowCliHarness):
         )
         if result.returncode != 0:
             self.fail(
-                "flow-help.md is out of sync with flow.toml.\n"
+                "generated Flow help is out of sync with flow.toml.\n"
                 "run `python3 scripts/regenerate-flow-help.py` to regenerate.\n\n"
                 f"stdout:\n{result.stdout}\n"
                 f"stderr:\n{result.stderr}"
             )
+
+        def generated_cli_table(path: Path) -> str:
+            content = path.read_text()
+            match = re.search(
+                r"<!-- generated:cli-commands-table:begin[^>]*-->(.*?)"
+                r"<!-- generated:cli-commands-table:end -->",
+                content,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"missing generated CLI table in {path}")
+            return match.group(1).strip()  # type: ignore[union-attr]
+
+        flow_help = REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-help.md"
+        self.assertEqual(generated_cli_table(flow_help), generated_cli_table(REPO_ROOT / "README.md"))
+        self.assertIn("flow archive search/backfill/inspect/refine/import", generated_cli_table(flow_help))
+
+    def test_archive_cli_help_reaches_both_runtime_adapters(self) -> None:
+        fake_home = self.use_fake_home()
+        archive_row = "flow archive search/backfill/inspect/refine/import"
+
+        self.assert_ok(self.run_flow("sync", "claude", "--user"))
+        self.assert_ok(self.run_flow("sync", "codex", "--user"))
+
+        claude_help = fake_home / ".claude" / "skills" / "flow-help" / "SKILL.md"
+        codex_help = fake_home / ".agents" / "skills" / "flow-help" / "SKILL.md"
+        self.assertIn(archive_row, claude_help.read_text())
+        self.assertIn(archive_row, codex_help.read_text())
 
     def test_refresh_script_dry_run_resolves_upstream(self) -> None:
         """Smoke-test that the maintainer refresh script is callable and reaches upstream.

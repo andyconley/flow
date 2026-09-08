@@ -8,6 +8,7 @@ The main `flow` repo currently uses this structure:
 flow/
   cli/
     flow.py            entrypoint: argparse declaration and dispatch
+    archive_*.py       archive evidence, legacy review, projection, and retrieval
     claude_collector.py Claude Code session transcripts -> usage store raw layer
     codex_collector.py Codex session transcripts -> usage store raw layer
     cost.py            flow cost: summary/sessions read turn_norm; active pipelines first
@@ -83,6 +84,20 @@ other by bare name.
 - `setup.py` — machine, project, and user setup, plus project refresh.
 - `lifecycle.py` — two-mode install, release staging, and update.
 - `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; doctor may refresh only its machine FTS5 capability receipt, never project state.
+- `archive_commands.py` — argparse registration and presentation for archive
+  search, backfill, inspect, refine, declaration, and reviewed legacy import.
+- `archive_model.py`, `archive_legacy_model.py` — pure canonical-envelope,
+  refinement, supersession, and reviewed-legacy schema rules.
+- `archive_extract.py`, `archive_service.py`, `archive_legacy.py` — deterministic
+  source extraction and coordinated canonical publication. Archive closure is
+  owned by runstate and survives enrichment or projection failure.
+- `archive_sources.py`, `archive_graph.py`, `archive_query.py` — read-only
+  stacked-overlay discovery, source-backed supersession, filters, transient
+  merged-corpus FTS5 BM25 ranking, and bounded response packing.
+- `archive_store.py` — contained atomic archive writes and disposable
+  per-overlay SQLite projections under `.flow/.cache/archive/`.
+- `archive_preflight.py` — machine-local FTS5 capability receipts used by
+  install, doctor, and retrieval diagnostics.
 - `diagnostic_model.py` — shared support diagnostic item model, JSON payload
   shape, and check-mode exit helpers.
 - `telemetry_freshness.py` — shared freshness classification and diagnostic
@@ -253,11 +268,13 @@ Project-specific overlay templates for domain, terminology, UX, integrations, an
 
 #### `scaffolds/default/memory/`
 
-Transient work-state placeholder (`STATE.md`). Durable project facts and
-decisions live in the active runtime memory provider when one exists, not in
-`.flow/memory/`. Claude Code's provider is auto-memory at
+Transient work-state placeholder (`STATE.md`). Canonical decision evidence
+lives in lifecycle-backed run artifacts, archive envelopes and declarations,
+and ADRs, not in `.flow/memory/`. Claude Code can also retain companion context
+in auto-memory at
 `~/.claude/projects/<project-id>/memory/`; Codex currently has no Flow-managed
-durable memory provider.
+durable memory provider. Missing companion memory does not make project evidence
+incomplete.
 
 #### `scaffolds/default/templates/`
 
@@ -271,6 +288,12 @@ under `runs/<work-id>/`. Protocol-revision-2 runs add `orchestration.json` as
 the versioned machine contract for assignments, shared-state mutations, claim
 reconciliation, and verification. Older artifact-only folders are read as
 `legacy/inferred`.
+
+Archived runs may also hold canonical `abstract.json` envelopes and explicit
+declarations. `.flow/.cache/archive/` holds derived per-overlay SQLite
+projections and coverage observations; it is disposable and never a source of
+decision authority. Cross-overlay BM25 corpus statistics exist only in the
+transient query-time table.
 
 ### `tests/`
 

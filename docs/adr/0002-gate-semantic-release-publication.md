@@ -29,6 +29,11 @@ Action's structured outputs become a strict, versioned release plan whose digest
 binds the exact source SHA, previous release, predicted version and tag, and
 release-note digest.
 
+[ADR 0009](0009-add-curated-release-highlights.md) extends that shared
+release-note policy with a local `generateNotes` plugin for bounded
+`Release-Note:` trailers. It runs before the ordinary notes generator, and its
+output enters the same plan digest and repeated-analysis path.
+
 Candidate validation creates the predicted tag only in a local bare remote and
 drives Flow's real install and update paths in isolated homes. A second
 versioned artifact records every stable check and the plan digest. Publication
