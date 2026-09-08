@@ -114,7 +114,11 @@ How it merges:
   for a role body and wrong for a corpus, where it would silently drop entries
   the user never meant to remove. A corpus that cannot be read fails the sync
   rather than being skipped, because an agent quietly missing its expertise is
-  the one failure the generated file cannot show on its face.
+  the one failure the generated file cannot show on its face. `teaches` edges
+  are resolved against the merged competency vocabulary at the same point —
+  framework terms union the user's — so an entry teaching an undefined term,
+  or naming a term the vocabulary has since renamed, fails the sync instead of
+  rendering a competency that does not exist.
 - **Agent capability exceptions merge separately from agents.** The framework
   capability catalog supplies global defaults. Framework and user
   `[[agent_capability_overrides]]` entries merge by `(agent, capability)`, so an

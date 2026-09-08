@@ -188,5 +188,124 @@ class CitationTests(unittest.TestCase):
         self.assertEqual(line, 'Cook, *How Complex Systems Fail* — thesis 8; Allspaw, "Blameless PostMortems".')
 
 
+def write_vocabulary(directory: Path, terms: dict) -> Path:
+    target = directory / "expertise"
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / "competencies.md"
+    blocks = ["# Competencies", ""]
+    for name, taught in terms.items():
+        blocks += [f"### {name}", "", "A definition.", ""]
+        listed = "; ".join(f'"{title}"' for title in taught)
+        blocks += [f"- Taught by: {listed}" if taught else "- Taught by:", ""]
+    path.write_text("\n".join(blocks))
+    return path
+
+
+def teaching(name, term_name, term_id=None):
+    return entry(name, teaches=[{
+        "@type": "DefinedTerm",
+        "@id": term_id or "flow:competency/" + expertise._slug(term_name),
+        "name": term_name,
+    }])
+
+
+class TeachesJoinTests(unittest.TestCase):
+    """A `teaches` edge that resolves to nothing renders a competency the
+    vocabulary does not define. Caught at load, so sync fails rather than
+    shipping the dangling edge."""
+
+    def _corpus(self, entries, terms):
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name)
+        write_corpus(root / "fw", "sre", entries)
+        write_vocabulary(root / "fw", terms)
+        return expertise.corpus_for("sre", root / "fw", root / "user")
+
+    def test_a_resolvable_edge_loads(self):
+        loaded = self._corpus([teaching("E", "Ask non-leading questions")],
+                              {"Ask non-leading questions": ["E"]})
+        self.assertEqual(len(loaded), 1)
+
+    def test_unknown_term_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([teaching("E", "No such term")], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "unknown-competency")
+        self.assertIn("no-such-term", str(caught.exception))
+
+    def test_unqualified_reference_is_refused(self):
+        bad = entry("E", teaches=[{"@type": "DefinedTerm", "@id": "ask-non-leading-questions"}])
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([bad], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "unqualified-competency-reference")
+
+    def test_stale_term_name_is_refused(self):
+        """The id resolves but the wording does not: a renamed term leaves the
+        entry rendering a competency that no longer reads that way."""
+        stale = teaching("E", "Ask non-leading questions")
+        stale["teaches"][0]["name"] = "Ask open questions"
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([stale], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "stale-competency-name")
+
+    def test_an_entry_may_teach_nothing(self):
+        loaded = self._corpus([entry("E")], {"Ask non-leading questions": []})
+        self.assertEqual(len(loaded), 1)
+
+    def test_experience_entry_may_teach_a_user_defined_term(self):
+        """Vocabularies union like corpora do. Validating a user's entries
+        against flow's terms alone would force them to edit framework files."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            framework, user = root / "fw", root / "user"
+            write_corpus(framework, "sre", [])
+            write_vocabulary(framework, {"Ask non-leading questions": []})
+            write_corpus(user, "sre", [teaching("Mine", "My own term")])
+            write_vocabulary(user, {"My own term": ["Mine"]})
+            loaded = expertise.corpus_for("sre", framework, user)
+            self.assertEqual([e["name"] for e in loaded], ["Mine"])
+
+    def test_user_term_does_not_have_to_exist_in_the_framework(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            write_corpus(root / "fw", "sre", [])
+            write_vocabulary(root / "fw", {"Framework term": []})
+            write_corpus(root / "user", "sre", [teaching("Mine", "Absent everywhere")])
+            write_vocabulary(root / "user", {"Different term": []})
+            with self.assertRaises(ValueError) as caught:
+                expertise.corpus_for("sre", root / "fw", root / "user")
+            self.assertEqual(caught.exception.rule, "unknown-competency")
+
+
+class ReverseJoinTests(unittest.TestCase):
+    """The vocabulary's `Taught by:` lists are the other half of the join.
+    Framework-authored, so this is checked before release rather than in every
+    user's sync."""
+
+    def test_shipped_corpus_and_vocabulary_agree(self):
+        self.assertEqual(
+            expertise.reverse_join_problems(SCAFFOLD, COMPOSED_ROLES), []
+        )
+
+    def test_a_term_claiming_an_entry_that_does_not_teach_it_is_reported(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "fw"
+            write_corpus(root, "sre", [teaching("Real", "Held term")])
+            write_vocabulary(root, {"Held term": ["Real", "Imaginary"]})
+            problems = expertise.reverse_join_problems(root, ("sre",))
+            self.assertEqual(len(problems), 1)
+            self.assertIn("Imaginary", problems[0])
+
+    def test_an_entry_teaching_a_term_that_does_not_list_it_is_reported(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "fw"
+            write_corpus(root, "sre", [teaching("Real", "Held term")])
+            write_vocabulary(root, {"Held term": []})
+            problems = expertise.reverse_join_problems(root, ("sre",))
+            self.assertEqual(len(problems), 2)
+            self.assertTrue(any("lists no entry" in p for p in problems))
+            self.assertTrue(any("does not list it" in p for p in problems))
+
+
 if __name__ == "__main__":
     unittest.main()

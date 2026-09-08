@@ -148,8 +148,14 @@ teach it, and every entry names the term it teaches. Seventeen edges each way,
 five terms held by two entries, no term claiming an entry that does not claim
 it back.
 
-Both halves are authored by hand, so they can disagree. Until composition
-reads them, nothing enforces agreement — a check belongs with whatever first
-consumes the join. Under ADR 0008 these become `teaches` edges on the entry,
-and this file becomes the `DefinedTermSet` they point into; the reverse listing
-here is then derived rather than authored.
+Both halves are authored by hand, so they can disagree, and each half is
+checked where a disagreement would do damage. An entry teaching a term no
+vocabulary defines fails the sync: the edge would render a competency that
+does not exist, and a user's own experience entries can reach this. The
+`Taught by:` lists here are checked by test instead — they are
+framework-authored prose a user cannot break, so failing their sync over our
+bookkeeping would spend their time on it.
+
+Under ADR 0008 this file becomes the `DefinedTermSet` the entries point into
+and the reverse listing becomes derived, at which point the disagreement stops
+being possible rather than being guarded against.
