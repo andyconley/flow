@@ -2,6 +2,27 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.26.0](https://github.com/andyconley/flow/compare/v0.25.0...v0.26.0) (2026-09-08)
+
+### Features
+
+* **agents:** add sourced expertise entries to three pilot roles ([f9993e0](https://github.com/andyconley/flow/commit/f9993e0b4ef8a8a96e419f99fcadf1781c991e68))
+* **expertise:** add competency vocabulary for the pilot roles ([fc2985d](https://github.com/andyconley/flow/commit/fc2985d6f8778d5dbf9109c3d4f2798ae1771f46))
+* **expertise:** add sufficiency entry to support-lead ([4233fad](https://github.com/andyconley/flow/commit/4233fad4456e4290c87467e5b95e2f03f6c05b0e))
+* **expertise:** agent expertise entries for the three pilot roles ([7f306ff](https://github.com/andyconley/flow/commit/7f306ff343ebbab45a365c6d432c436cf3fedcdb))
+* **model:** add session model advice ([62100b7](https://github.com/andyconley/flow/commit/62100b7d91912f38d345c665c0ff7e73b0f9fc0b))
+
+### Bug Fixes
+
+* **archive:** register final outcome source ([5528121](https://github.com/andyconley/flow/commit/552812136254f590b4bebcab163e0d92346bf482))
+
+### Documentation
+
+* **expertise:** add routine-ticket counter-test to the pilot validation ([82d4863](https://github.com/andyconley/flow/commit/82d4863782d05963706f94e375e22198169b5828))
+* **expertise:** counter-test business-analyst and sre ([aa235c8](https://github.com/andyconley/flow/commit/aa235c8c8d144be72e80308e49e00ab9e565aacf))
+* **expertise:** record two-arm validation of the support-lead pilot ([080ef11](https://github.com/andyconley/flow/commit/080ef114ec4fdbf71f670b4c9084c46284519c70))
+* record model advice archive ([e7d23dd](https://github.com/andyconley/flow/commit/e7d23dd8c674cfad2638dea711591e2c231d48fe))
+
 ## [0.25.0](https://github.com/andyconley/flow/compare/v0.24.0...v0.25.0) (2026-09-07)
 
 ### Features
