@@ -145,5 +145,5 @@ clean outcome, not a gap to fill by analogy.
 
 The `teaches` reference is recorded here, entry-side rather than in the agent
 files. Completing the join in both directions means adding a `Teaches:` line to
-each entry, which is mechanical but changes the authored entry shape and is
-better done once the storage format is settled.
+each entry. ADR 0008 settled the authored entry shape, so this is now unblocked
+and mechanical.
