@@ -259,6 +259,7 @@ model_tier = "judgment"
 [[agents]]
 name = "business-analyst"
 source = "agents/business-analyst.md"
+generation_mode = "composed"
 summary = "Problem framing, acceptance criteria"
 model_tier = "working"
 
@@ -295,12 +296,14 @@ model_tier = "judgment"
 [[agents]]
 name = "sre"
 source = "agents/sre.md"
+generation_mode = "composed"
 summary = "Rollout, runtime, observability"
 model_tier = "working"
 
 [[agents]]
 name = "support-lead"
 source = "agents/support-lead.md"
+generation_mode = "composed"
 summary = "Operator-facing notes, troubleshooting"
 model_tier = "mechanical"
 

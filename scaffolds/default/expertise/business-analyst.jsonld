@@ -1,0 +1,183 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "flow": "https://andyconley.github.io/flow/ns#",
+    "teaches": {
+      "@id": "https://schema.org/teaches",
+      "@type": "@id"
+    }
+  },
+  "@graph": [
+    {
+      "@id": "flow:entry/business-analyst/reframe-a-product-request-as-the-job-behind-it",
+      "@type": "LearningResource",
+      "name": "Reframe a product request as the job behind it",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "business-analyst"
+      },
+      "flow:layer": "baseline",
+      "abstract": "a request phrased as a thing to build has already chosen a solution. The unit worth analyzing is what the requester is trying to accomplish, which usually survives longer than the artifact they named.",
+      "flow:trigger": "the incoming request names a feature, screen, field, or system rather than an outcome or a difficulty.",
+      "flow:requiredBehavior": "state the request as given, then state the underlying job and who holds it. Where the two diverge, say what the divergence would change about scope. Carry both forward — do not discard the original wording.",
+      "flow:failureMode": "accepting the named artifact as the requirement, or silently substituting your own reframing for what the requester actually asked.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Article",
+            "author": "Theodore Levitt",
+            "name": "Marketing Myopia",
+            "isPartOf": "Harvard Business Review",
+            "datePublished": "1960",
+            "@id": "flow:work/levitt-marketing-myopia"
+          }
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/restate-a-solution-shaped-request-as-the-outcome-behind-it",
+          "name": "Restate a solution-shaped request as the outcome behind it"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/business-analyst/elicit-past-behavior-not-stated-intent",
+      "@type": "LearningResource",
+      "name": "Elicit past behavior, not stated intent",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "business-analyst"
+      },
+      "flow:layer": "baseline",
+      "abstract": "people describe what they have already done far more reliably than what they would do. Questions about a hypothetical product return social responses, not information.",
+      "flow:trigger": "gathering requirements from a stakeholder, customer, operator, or internal advocate.",
+      "flow:requiredBehavior": "ask for specific past instances — the last time this happened, what they did, what it cost them, what they tried first. Record the instance, not the generalization drawn from it. When enthusiasm arrives in place of an instance, redirect to the most recent occurrence.",
+      "flow:failureMode": "treating agreement, interest, or a stated willingness to use something as evidence that the requirement is real.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Book",
+            "author": "Rob Fitzpatrick",
+            "name": "The Mom Test",
+            "datePublished": "2013",
+            "@id": "flow:work/fitzpatrick-the-mom-test"
+          },
+          "flow:locator": "chapter 1"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/ask-non-leading-questions",
+          "name": "Ask non-leading questions"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement",
+      "@type": "LearningResource",
+      "name": "Mark the evidentiary status of every statement",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "business-analyst"
+      },
+      "flow:layer": "baseline",
+      "abstract": "a label attached early travels downstream as established fact. Each handoff inherits it without the qualification it carried when it was written.",
+      "flow:trigger": "writing any definition, problem statement, or requirement that another role will act on.",
+      "flow:requiredBehavior": "label each statement as observed, inferred, assumed, or decided, and keep the four visibly separate in the artifact. An assumption carries what would confirm or refute it.",
+      "flow:failureMode": "writing an inference in the declarative voice of an observation, which is how an assumption becomes a constraint nobody remembers agreeing to.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "ScholarlyArticle",
+            "author": "Pat Croskerry",
+            "name": "From Mindless to Mindful Practice — Cognitive Bias and Clinical Decision Making",
+            "isPartOf": "New England Journal of Medicine",
+            "datePublished": "2013",
+            "pagination": "2445-2448",
+            "sameAs": "https://doi.org/10.1056/NEJMp1303712",
+            "@id": "flow:work/croskerry-mindless-to-mindful"
+          },
+          "flow:locator": "the diagnosis-momentum effect"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/separate-observation-interpretation-assumption-and-decision",
+          "name": "Separate observation, interpretation, assumption, and decision"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/business-analyst/leave-a-requirement-undefined-while-the-evidence-is-thin",
+      "@type": "LearningResource",
+      "name": "Leave a requirement undefined while the evidence is thin",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "business-analyst"
+      },
+      "flow:layer": "baseline",
+      "abstract": "an explicitly unresolved requirement stays under investigation. A prematurely written one stops the investigation and starts driving work.",
+      "flow:trigger": "acceptance criteria are being asked for before the problem, the affected users, or the current workflow are actually understood.",
+      "flow:requiredBehavior": "name the specific requirement as not yet defined, state what evidence would define it, and say who can produce that evidence. Route the rest of the definition forward without it.",
+      "flow:failureMode": "writing plausible criteria to clear the section, or filling the gap with a solution shape borrowed from a similar past feature.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "ScholarlyArticle",
+            "author": "Pat Croskerry",
+            "name": "From Mindless to Mindful Practice — Cognitive Bias and Clinical Decision Making",
+            "isPartOf": "New England Journal of Medicine",
+            "datePublished": "2013",
+            "pagination": "2445-2448",
+            "sameAs": "https://doi.org/10.1056/NEJMp1303712",
+            "@id": "flow:work/croskerry-mindless-to-mindful"
+          },
+          "flow:locator": "premature closure and the “not yet diagnosed” category"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/state-the-evidence-that-would-change-the-conclusion",
+          "name": "State the evidence that would change the conclusion"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/business-analyst/premortem-the-definition-before-it-is-approved",
+      "@type": "LearningResource",
+      "name": "Premortem the definition before it is approved",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "business-analyst"
+      },
+      "flow:layer": "baseline",
+      "abstract": "imagining a failure that has already happened surfaces concrete causes that forward-looking risk questions do not reach, and it gives objections a legitimate form.",
+      "flow:trigger": "a definition is about to be approved and handed to solutioning or planning.",
+      "flow:requiredBehavior": "pose the failure as accomplished — this was built, it met every criterion here, and the user was not helped — then collect the reasons before evaluating any of them. Fold survivors into non-goals, assumptions, or the evidence that would change the requirement.",
+      "flow:failureMode": "replacing the accomplished-failure framing with an abstract \"what could go wrong\", or filtering the list as it is generated.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Article",
+            "author": "Gary Klein",
+            "name": "Performing a Project Premortem",
+            "isPartOf": "Harvard Business Review",
+            "datePublished": "2007",
+            "@id": "flow:work/klein-project-premortem"
+          }
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/surface-dissent-by-treating-failure-as-already-accomplished",
+          "name": "Surface dissent by treating failure as already accomplished"
+        }
+      ]
+    }
+  ]
+}

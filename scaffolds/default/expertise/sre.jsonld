@@ -1,0 +1,229 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "flow": "https://andyconley.github.io/flow/ns#",
+    "teaches": {
+      "@id": "https://schema.org/teaches",
+      "@type": "@id"
+    }
+  },
+  "@graph": [
+    {
+      "@id": "flow:entry/sre/contributing-conditions-instead-of-a-root-cause",
+      "@type": "LearningResource",
+      "name": "Contributing conditions instead of a root cause",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "sre"
+      },
+      "flow:layer": "baseline",
+      "abstract": "consequential failure needs several conditions to line up at once, so naming one of them as the cause is a choice about where to stop looking. The narrower the causal story, the narrower the defenses built from it.",
+      "flow:trigger": "reviewing an incident, a near miss, or a failure that a change is meant to prevent.",
+      "flow:requiredBehavior": "list the conditions that had to hold together, and for each one say which defense was supposed to catch it and why it did not. Include the detection gap as a finding in its own right, separate from the trigger.",
+      "flow:failureMode": "writing a single-cause account, or listing conditions and then promoting one of them to \"the\" cause in the summary line.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Book",
+            "author": "Richard I. Cook",
+            "name": "How Complex Systems Fail",
+            "datePublished": "1998",
+            "version": "rev. 2002",
+            "@id": "flow:work/cook-how-complex-systems-fail"
+          },
+          "flow:locator": "theses 3, 7, and 15"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/distinguish-contributing-conditions-from-a-named-cause",
+          "name": "Distinguish contributing conditions from a named cause"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/sre/reconstruct-what-was-known-at-the-time",
+      "@type": "LearningResource",
+      "name": "Reconstruct what was known at the time",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "sre"
+      },
+      "flow:layer": "baseline",
+      "abstract": "once the ending is known the path to it looks obvious, which makes every operator decision along the way look worse than it was. Retroactive obviousness is a finding about the system's signals, not about the operator.",
+      "flow:trigger": "any part of the timeline involves a human decision, including a decision to wait or to do nothing.",
+      "flow:requiredBehavior": "for each decision point, record what the operator believed, what the instruments were showing, what other readings were live, and what pressure they were under. Then treat any gap between the signal and the situation as a defect to fix.",
+      "flow:failureMode": "phrasing a timeline entry as a failure to notice, escalate, or check — that wording has already assigned blame and closed the question.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Book",
+            "author": "Richard I. Cook",
+            "name": "How Complex Systems Fail",
+            "datePublished": "1998",
+            "version": "rev. 2002",
+            "@id": "flow:work/cook-how-complex-systems-fail"
+          },
+          "flow:locator": "thesis 8"
+        },
+        {
+          "citation": {
+            "@type": "Article",
+            "author": "John Allspaw",
+            "name": "Blameless PostMortems and a Just Culture",
+            "isPartOf": "Etsy Code as Craft",
+            "datePublished": "2012",
+            "sameAs": "https://www.etsy.com/codeascraft/blameless-postmortems-and-a-just-culture/",
+            "@id": "flow:work/allspaw-blameless-postmortems"
+          }
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/account-for-hindsight-when-judging-past-decisions",
+          "name": "Account for hindsight when judging past decisions"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/sre/postmortem-output-is-a-change-to-conditions",
+      "@type": "LearningResource",
+      "name": "Postmortem output is a change to conditions",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "sre"
+      },
+      "flow:layer": "baseline",
+      "abstract": "the surface narrative names a person and an action; the explanatory account names the tools, signals, procedures, and staffing that made the action reasonable. Only the second kind produces something to change.",
+      "flow:trigger": "producing findings or actions from any incident review.",
+      "flow:requiredBehavior": "every action item names a condition — a signal, a tool, a default, a procedure, a staffing or timing constraint — and the change to it. An action whose object is a person's future attentiveness is not an action.",
+      "flow:failureMode": "adopting blameless language while the outcome is still a lesson delivered to an individual, which teaches the team to withhold detail.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Article",
+            "author": "John Allspaw",
+            "name": "Blameless PostMortems and a Just Culture",
+            "isPartOf": "Etsy Code as Craft",
+            "datePublished": "2012",
+            "sameAs": "https://www.etsy.com/codeascraft/blameless-postmortems-and-a-just-culture/",
+            "@id": "flow:work/allspaw-blameless-postmortems"
+          },
+          "flow:locator": "first and second stories"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/direct-corrective-action-at-conditions-rather-than-at-individuals",
+          "name": "Direct corrective action at conditions rather than at individuals"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/sre/state-what-a-mitigation-newly-makes-possible",
+      "@type": "LearningResource",
+      "name": "State what a mitigation newly makes possible",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "sre"
+      },
+      "flow:layer": "baseline",
+      "abstract": "every change to a running system creates interactions that did not exist before it. A fix is also a new failure surface, and it arrives with less operational experience behind it than the thing it replaced.",
+      "flow:trigger": "recommending a retry, timeout, failover, circuit breaker, cache, autoscaling rule, or any other mitigation.",
+      "flow:requiredBehavior": "name the failure mode the mitigation introduces and how it would be detected. Say what the system does when the mitigation itself misfires — retries amplifying load, a failover flapping, a stale cache served as fresh.",
+      "flow:failureMode": "presenting a mitigation as a net reduction in risk without accounting for the risk it adds.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Book",
+            "author": "Richard I. Cook",
+            "name": "How Complex Systems Fail",
+            "datePublished": "1998",
+            "version": "rev. 2002",
+            "@id": "flow:work/cook-how-complex-systems-fail"
+          },
+          "flow:locator": "thesis 14"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/make-applicability-conditions-explicit-alongside-a-recommended-pattern",
+          "name": "Make applicability conditions explicit alongside a recommended pattern"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/sre/premortem-a-change-before-it-rolls",
+      "@type": "LearningResource",
+      "name": "Premortem a change before it rolls",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "sre"
+      },
+      "flow:layer": "baseline",
+      "abstract": "imagining the rollout as already failed retrieves concrete scenarios that a forward-looking risk review does not reach, and it makes raising an objection the assigned task rather than an act of dissent.",
+      "flow:trigger": "a migration, cutover, schema change, or high-blast-radius rollout is about to be scheduled.",
+      "flow:requiredBehavior": "pose it as done and broken — this rolled out as planned and took the service down — collect causes before evaluating any, then map the survivors onto rollback triggers, guardrail metrics, and the staging of the rollout.",
+      "flow:failureMode": "substituting a generic risk list, or letting the loudest scenario displace the quieter ones before all are captured.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Article",
+            "author": "Gary Klein",
+            "name": "Performing a Project Premortem",
+            "isPartOf": "Harvard Business Review",
+            "datePublished": "2007",
+            "@id": "flow:work/klein-project-premortem"
+          }
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/surface-dissent-by-treating-failure-as-already-accomplished",
+          "name": "Surface dissent by treating failure as already accomplished"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/sre/hold-competing-hypotheses-during-a-live-incident",
+      "@type": "LearningResource",
+      "name": "Hold competing hypotheses during a live incident",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "sre"
+      },
+      "flow:layer": "baseline",
+      "abstract": "fast pattern matching is right most of the time and wrong in exactly the cases that become incidents. Awareness of that does not correct it; a required pause at a fixed point does.",
+      "flow:trigger": "designing incident response, or advising on an active incident where a cause has been proposed and mitigation is about to begin.",
+      "flow:requiredBehavior": "before committing to a mitigation, require at least one named alternative explanation and the observation that would separate it from the current one. Record which observation was taken and what it ruled out.",
+      "flow:failureMode": "mitigating on the first familiar signature, and treating a mitigation that appeared to work as confirmation of the diagnosis behind it.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "ScholarlyArticle",
+            "author": "Pat Croskerry",
+            "name": "From Mindless to Mindful Practice — Cognitive Bias and Clinical Decision Making",
+            "isPartOf": "New England Journal of Medicine",
+            "datePublished": "2013",
+            "pagination": "2445-2448",
+            "sameAs": "https://doi.org/10.1056/NEJMp1303712",
+            "@id": "flow:work/croskerry-mindless-to-mindful"
+          },
+          "flow:locator": "cognitive forcing strategies and the diagnostic time-out"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/preserve-competing-hypotheses-until-evidence-rules-them-out",
+          "name": "Preserve competing hypotheses until evidence rules them out"
+        }
+      ]
+    }
+  ]
+}

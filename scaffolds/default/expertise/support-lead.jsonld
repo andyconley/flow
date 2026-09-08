@@ -1,0 +1,234 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "flow": "https://andyconley.github.io/flow/ns#",
+    "teaches": {
+      "@id": "https://schema.org/teaches",
+      "@type": "@id"
+    }
+  },
+  "@graph": [
+    {
+      "@id": "flow:entry/support-lead/evidence-led-triage",
+      "@type": "LearningResource",
+      "name": "Evidence-led triage",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "support-lead"
+      },
+      "flow:layer": "baseline",
+      "abstract": "a plausible explanation is not evidence. The first cause that fits suppresses the search for a better one, and stopping at plausible is the common way a triage conclusion turns out wrong.",
+      "flow:trigger": "a report is incomplete, intermittent, or admits more than one cause.",
+      "flow:requiredBehavior": "record symptom, timeline, environment, observed evidence, live hypotheses, tests run, and remaining uncertainty as separate items. Keep at least one alternative alive until an observation rules it out.",
+      "flow:failureMode": "converting the first familiar symptom pattern into a root-cause claim.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "ScholarlyArticle",
+            "author": "Pat Croskerry",
+            "name": "From Mindless to Mindful Practice — Cognitive Bias and Clinical Decision Making",
+            "isPartOf": "New England Journal of Medicine",
+            "datePublished": "2013",
+            "pagination": "2445-2448",
+            "sameAs": "https://doi.org/10.1056/NEJMp1303712",
+            "@id": "flow:work/croskerry-mindless-to-mindful"
+          },
+          "flow:locator": "anchoring and premature closure"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/preserve-competing-hypotheses-until-evidence-rules-them-out",
+          "name": "Preserve competing hypotheses until evidence rules them out"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff",
+      "@type": "LearningResource",
+      "name": "Carry hypothesis and fact separately across a handoff",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "support-lead"
+      },
+      "flow:layer": "baseline",
+      "abstract": "a label survives a handoff better than the doubt attached to it. The next person receives the hypothesis as a finding and investigates from there instead of from the evidence.",
+      "flow:trigger": "escalating, reassigning, or writing up an unresolved case.",
+      "flow:requiredBehavior": "the escalation packet states what was observed, what was reproduced and under what conditions, what is currently believed and on what basis, what was ruled out and by which observation, and what is still open. A belief never appears without its basis.",
+      "flow:failureMode": "leading the packet with a suspected cause, or dropping ruled-out leads so the next person repeats them.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "ScholarlyArticle",
+            "author": "Pat Croskerry",
+            "name": "From Mindless to Mindful Practice — Cognitive Bias and Clinical Decision Making",
+            "isPartOf": "New England Journal of Medicine",
+            "datePublished": "2013",
+            "pagination": "2445-2448",
+            "sameAs": "https://doi.org/10.1056/NEJMp1303712",
+            "@id": "flow:work/croskerry-mindless-to-mindful"
+          },
+          "flow:locator": "diagnosis momentum"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/separate-observation-interpretation-assumption-and-decision",
+          "name": "Separate observation, interpretation, assumption, and decision"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description",
+      "@type": "LearningResource",
+      "name": "Ask for the last occurrence, not a description",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "support-lead"
+      },
+      "flow:layer": "baseline",
+      "abstract": "reporters summarize and interpret before they reach you. The specific most recent instance is recallable in detail; the general account of it has already been smoothed into a theory.",
+      "flow:trigger": "taking a report, or clarifying one that arrives as a conclusion (\"the sync is broken\", \"it's slow for everyone\").",
+      "flow:requiredBehavior": "ask for the last time it happened, what they were doing immediately before, what they saw, and what they did next. Prefer open prompts over yes-or-no confirmations of your own theory, and let a pause run rather than filling it.",
+      "flow:failureMode": "asking whether a suspected condition was present, which supplies the answer and contaminates the only account you have.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Book",
+            "author": "Rob Fitzpatrick",
+            "name": "The Mom Test",
+            "datePublished": "2013",
+            "@id": "flow:work/fitzpatrick-the-mom-test"
+          },
+          "flow:locator": "chapter 1"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/ask-non-leading-questions",
+          "name": "Ask non-leading questions"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/support-lead/do-not-read-the-user-s-actions-as-obvious-errors",
+      "@type": "LearningResource",
+      "name": "Do not read the user's actions as obvious errors",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "support-lead"
+      },
+      "flow:layer": "baseline",
+      "abstract": "knowing the outcome makes the correct path look plain, and the user's choice look careless. What they did made sense given what the product was showing them at the time.",
+      "flow:trigger": "the report involves a user action that contributed to the problem, including a misconfiguration or a skipped step.",
+      "flow:requiredBehavior": "describe what the interface, docs, or defaults afforded at that moment, and record the mismatch as a product finding routed to discovery. Guidance to the user is separate from the finding, and does not substitute for it.",
+      "flow:failureMode": "closing a case as user error, which discards the signal and teaches the reporter to supply less detail next time.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "Book",
+            "author": "Richard I. Cook",
+            "name": "How Complex Systems Fail",
+            "datePublished": "1998",
+            "version": "rev. 2002",
+            "@id": "flow:work/cook-how-complex-systems-fail"
+          },
+          "flow:locator": "thesis 8"
+        },
+        {
+          "citation": {
+            "@type": "Article",
+            "author": "John Allspaw",
+            "name": "Blameless PostMortems and a Just Culture",
+            "isPartOf": "Etsy Code as Craft",
+            "datePublished": "2012",
+            "sameAs": "https://www.etsy.com/codeascraft/blameless-postmortems-and-a-just-culture/",
+            "@id": "flow:work/allspaw-blameless-postmortems"
+          }
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/account-for-hindsight-when-judging-past-decisions",
+          "name": "Account for hindsight when judging past decisions"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently",
+      "@type": "LearningResource",
+      "name": "Discount the failure mode you saw most recently",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "support-lead"
+      },
+      "flow:layer": "baseline",
+      "abstract": "the causes that come to mind fastest are the ones seen most recently, not the ones most likely here. Recent volume crowds out rare failures that present the same way.",
+      "flow:trigger": "the symptom matches a pattern from a recent incident, release, or cluster of tickets.",
+      "flow:requiredBehavior": "state the recent case you are matching against and the observation that distinguishes this report from it. Take that observation before acting on the match.",
+      "flow:failureMode": "applying the current known-issue workaround to a report that merely resembles it, which buries a distinct defect inside a resolved one.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "ScholarlyArticle",
+            "author": "Pat Croskerry",
+            "name": "From Mindless to Mindful Practice — Cognitive Bias and Clinical Decision Making",
+            "isPartOf": "New England Journal of Medicine",
+            "datePublished": "2013",
+            "pagination": "2445-2448",
+            "sameAs": "https://doi.org/10.1056/NEJMp1303712",
+            "@id": "flow:work/croskerry-mindless-to-mindful"
+          },
+          "flow:locator": "availability"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/test-a-familiar-pattern-match-before-acting-on-it",
+          "name": "Test a familiar pattern match before acting on it"
+        }
+      ]
+    },
+    {
+      "@id": "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand",
+      "@type": "LearningResource",
+      "name": "Act when the distinguishing observation is already in hand",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "support-lead"
+      },
+      "flow:layer": "baseline",
+      "abstract": "fast pattern matching is correct most of the time and is what makes routine work affordable. The skill is recognizing the conditions under which it is unreliable, not overriding it everywhere. Deliberate analysis applied to a settled question is a cost paid by the reporter.",
+      "flow:trigger": "a known issue or prior case matches, and the observation that would distinguish this report from it has already been taken — by tier 1, by an internal reproduction, by an attached artifact, or by the timeline as reported.",
+      "flow:requiredBehavior": "cite that observation, act on it, and state the one signal that would reopen the case. Weigh remaining investigation against the stakes of the report: an unresolved question worth carrying on an at-risk account is not automatically worth carrying on a single seat.",
+      "flow:failureMode": "re-requesting evidence the record already contains, or holding a hypothesis open that the recorded evidence has closed, which spends the reporter's time to restate a conclusion already reached.",
+      "flow:source": [
+        {
+          "citation": {
+            "@type": "ScholarlyArticle",
+            "author": "Pat Croskerry",
+            "name": "From Mindless to Mindful Practice — Cognitive Bias and Clinical Decision Making",
+            "isPartOf": "New England Journal of Medicine",
+            "datePublished": "2013",
+            "pagination": "2445-2448",
+            "sameAs": "https://doi.org/10.1056/NEJMp1303712",
+            "@id": "flow:work/croskerry-mindless-to-mindful"
+          },
+          "flow:locator": "dual-process reasoning"
+        }
+      ],
+      "teaches": [
+        {
+          "@type": "DefinedTerm",
+          "@id": "flow:competency/recognize-when-the-discriminating-evidence-is-already-in-hand",
+          "name": "Recognize when the discriminating evidence is already in hand"
+        }
+      ]
+    }
+  ]
+}

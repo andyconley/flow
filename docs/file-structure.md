@@ -53,6 +53,7 @@ flow/
       flow.toml
       agents/
       commands/
+      expertise/
       memory/
       project/
       runs/
@@ -226,6 +227,15 @@ for runtime surfaces that stay unmanaged by decision.
 #### `scaffolds/default/agents/`
 
 Reusable role definitions. These are portable role prompts and operating contracts.
+A role marked `generation_mode = "composed"` in `flow.toml` has its `## Expertise`
+section generated from `expertise/<role>.jsonld` at sync time rather than authored
+here.
+
+#### `scaffolds/default/expertise/`
+
+Per-role expertise corpora as JSON-LD (ADR 0008), plus `competencies.md`, the
+vocabulary entries teach. Each role owns its own entries and citations; a source
+cited by several roles, or by one role at several pinpoints, is expected.
 
 #### `scaffolds/default/commands/`
 
@@ -335,6 +345,7 @@ The user overlay mirrors `scaffolds/default/`'s shape:
   flow.toml              — registers user-authored commands, agents, and hooks
   agents/<name>.md       — overriding or new agents
   commands/<name>.md     — overriding or new commands
+  expertise/<role>.jsonld — your own expertise entries, merged with the baseline
   hooks/flow-<name>.sh   — overriding or new hook scripts (must be flow-*)
   standards/<name>.md    — overriding or new standards (runtime-resolved)
   templates/<name>.md    — overriding or new templates (runtime-resolved)

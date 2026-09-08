@@ -3416,6 +3416,7 @@ class FlowCliTests(FlowCliHarness):
                 "cost",
                 "diagnostic_model",
                 "diagnostics",
+                "expertise",
                 "flowtoml",
                 "fsutil",
                 "gaps",
