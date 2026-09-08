@@ -12,6 +12,11 @@
   includes 935 repository tests, all ten authenticated entry cells, and all
   eight configured model/effort mappings.
 
+- `v0.26.0` published and passed the release workflow at `6603baf`. The release
+  includes session model advice and the archive final-source fix. The final
+  repository suite passed 936 tests, both generated adapters were current, and
+  runtime smoke reported no failures.
+
 - `archive-legacy-import` stage6 accepted at `e2a2a11` and archived.
   All three review findings are resolved. Delivery is tracked in PR17 and its
   automated release workflow.
@@ -32,14 +37,11 @@
 
 ## Next step
 
-- Delivery of `62100b7` beyond the local `main` checkout remains a separate
-  release action. Re-run the authenticated entry and mapping evidence when
-  model mappings, client versions, or account entitlement changes.
+- Re-run the authenticated entry and mapping evidence when model mappings,
+  client versions, or account entitlement changes.
 - Optional session-model advice follow-up: make the non-JSON context view show
   declared model details and evidence limitations, and render structured
   disposition identifiers as readable prose.
-- Capability gap `archive-final-source-artifact` was observed once during
-  closeout and awaits an explicit backlog-promotion decision.
 - Deferred backlog: runtime memory capability and bounded recall, review rework
   transition (four observations), and runtime evidence completion manifest.
   All three gaps are promoted into `docs/backlog.md`; implementation is deferred.
