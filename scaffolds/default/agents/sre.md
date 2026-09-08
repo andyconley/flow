@@ -124,6 +124,7 @@ ritual when the context does not call for it.
   detection gap as a finding in its own right, separate from the trigger.
 - Avoid: writing a single-cause account, or listing conditions and then
   promoting one of them to "the" cause in the summary line.
+- Teaches: "Distinguish contributing conditions from a named cause"
 
 ### Reconstruct what was known at the time
 
@@ -140,6 +141,7 @@ ritual when the context does not call for it.
   situation as a defect to fix.
 - Avoid: phrasing a timeline entry as a failure to notice, escalate, or check —
   that wording has already assigned blame and closed the question.
+- Teaches: "Account for hindsight when judging past decisions"
 
 ### Postmortem output is a change to conditions
 
@@ -154,6 +156,8 @@ ritual when the context does not call for it.
   An action whose object is a person's future attentiveness is not an action.
 - Avoid: adopting blameless language while the outcome is still a lesson
   delivered to an individual, which teaches the team to withhold detail.
+- Teaches: "Direct corrective action at conditions rather than at
+  individuals"
 
 ### State what a mitigation newly makes possible
 
@@ -169,6 +173,8 @@ ritual when the context does not call for it.
   as fresh.
 - Avoid: presenting a mitigation as a net reduction in risk without accounting
   for the risk it adds.
+- Teaches: "Make applicability conditions explicit alongside a recommended
+  pattern"
 
 ### Premortem a change before it rolls
 
@@ -185,6 +191,7 @@ ritual when the context does not call for it.
   rollout.
 - Avoid: substituting a generic risk list, or letting the loudest scenario
   displace the quieter ones before all are captured.
+- Teaches: "Surface dissent by treating failure as already accomplished"
 
 ### Hold competing hypotheses during a live incident
 
@@ -200,6 +207,7 @@ ritual when the context does not call for it.
   the current one. Record which observation was taken and what it ruled out.
 - Avoid: mitigating on the first familiar signature, and treating a mitigation
   that appeared to work as confirmation of the diagnosis behind it.
+- Teaches: "Preserve competing hypotheses until evidence rules them out"
 
 ## Composition
 

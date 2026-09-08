@@ -144,6 +144,7 @@ a ritual when the context does not call for it.
   about scope. Carry both forward — do not discard the original wording.
 - Avoid: accepting the named artifact as the requirement, or silently
   substituting your own reframing for what the requester actually asked.
+- Teaches: "Restate a solution-shaped request as the outcome behind it"
 
 ### Elicit past behavior, not stated intent
 
@@ -159,6 +160,7 @@ a ritual when the context does not call for it.
   place of an instance, redirect to the most recent occurrence.
 - Avoid: treating agreement, interest, or a stated willingness to use something
   as evidence that the requirement is real.
+- Teaches: "Ask non-leading questions"
 
 ### Mark the evidentiary status of every statement
 
@@ -173,6 +175,7 @@ a ritual when the context does not call for it.
   carries what would confirm or refute it.
 - Avoid: writing an inference in the declarative voice of an observation, which
   is how an assumption becomes a constraint nobody remembers agreeing to.
+- Teaches: "Separate observation, interpretation, assumption, and decision"
 
 ### Leave a requirement undefined while the evidence is thin
 
@@ -187,6 +190,7 @@ a ritual when the context does not call for it.
   the rest of the definition forward without it.
 - Avoid: writing plausible criteria to clear the section, or filling the gap
   with a solution shape borrowed from a similar past feature.
+- Teaches: "State the evidence that would change the conclusion"
 
 ### Premortem the definition before it is approved
 
@@ -203,6 +207,7 @@ a ritual when the context does not call for it.
   the evidence that would change the requirement.
 - Avoid: replacing the accomplished-failure framing with an abstract "what could
   go wrong", or filtering the list as it is generated.
+- Teaches: "Surface dissent by treating failure as already accomplished"
 
 ## Composition
 

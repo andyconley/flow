@@ -141,9 +141,15 @@ Every pilot entry maps to exactly one term, and every term is taught by at
 least one entry. Roles outside the pilot hold no terms yet; an empty set is a
 clean outcome, not a gap to fill by analogy.
 
-## Open
+## Consistency
 
-The `teaches` reference is recorded here, entry-side rather than in the agent
-files. Completing the join in both directions means adding a `Teaches:` line to
-each entry. ADR 0008 settled the authored entry shape, so this is now unblocked
-and mechanical.
+The join is recorded in both directions: every term lists the entries that
+teach it, and every entry names the term it teaches. Seventeen edges each way,
+five terms held by two entries, no term claiming an entry that does not claim
+it back.
+
+Both halves are authored by hand, so they can disagree. Until composition
+reads them, nothing enforces agreement — a check belongs with whatever first
+consumes the join. Under ADR 0008 these become `teaches` edges on the entry,
+and this file becomes the `DefinedTermSet` they point into; the reverse listing
+here is then derived rather than authored.

@@ -125,6 +125,7 @@ a ritual when the context does not call for it.
   live hypotheses, tests run, and remaining uncertainty as separate items. Keep
   at least one alternative alive until an observation rules it out.
 - Avoid: converting the first familiar symptom pattern into a root-cause claim.
+- Teaches: "Preserve competing hypotheses until evidence rules them out"
 
 ### Carry hypothesis and fact separately across a handoff
 
@@ -140,6 +141,7 @@ a ritual when the context does not call for it.
   A belief never appears without its basis.
 - Avoid: leading the packet with a suspected cause, or dropping ruled-out leads
   so the next person repeats them.
+- Teaches: "Separate observation, interpretation, assumption, and decision"
 
 ### Ask for the last occurrence, not a description
 
@@ -155,6 +157,7 @@ a ritual when the context does not call for it.
   rather than filling it.
 - Avoid: asking whether a suspected condition was present, which supplies the
   answer and contaminates the only account you have.
+- Teaches: "Ask non-leading questions"
 
 ### Do not read the user's actions as obvious errors
 
@@ -171,6 +174,7 @@ a ritual when the context does not call for it.
   substitute for it.
 - Avoid: closing a case as user error, which discards the signal and teaches the
   reporter to supply less detail next time.
+- Teaches: "Account for hindsight when judging past decisions"
 
 ### Discount the failure mode you saw most recently
 
@@ -186,6 +190,7 @@ a ritual when the context does not call for it.
   before acting on the match.
 - Avoid: applying the current known-issue workaround to a report that merely
   resembles it, which buries a distinct defect inside a resolved one.
+- Teaches: "Test a familiar pattern match before acting on it"
 
 ### Act when the distinguishing observation is already in hand
 
@@ -206,6 +211,7 @@ a ritual when the context does not call for it.
 - Avoid: re-requesting evidence the record already contains, or holding a
   hypothesis open that the recorded evidence has closed, which spends the
   reporter's time to restate a conclusion already reached.
+- Teaches: "Recognize when the discriminating evidence is already in hand"
 
 ## Composition
 
