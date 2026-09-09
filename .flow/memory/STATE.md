@@ -6,6 +6,12 @@
 
 ## Recently completed
 
+- `agent-expertise-join-validation-refinement` accepted at `210bdf7`. It
+  completes the teaches-join validation refinement with strict DefinedTerm
+  validation, a sync-boundary regression test, and isolated Claude/Codex
+  candidate-source proof. The branch is ready for merge; live-client smoke
+  checks remain post-install follow-up.
+
 - `archive-retrieval-documentation` accepted at `fadaac3` and archived. Archive
   retrieval is now discoverable in the changelog, README, and generated Claude
   and Codex help. The v0.24 public release body was reconciled, and future
@@ -43,6 +49,9 @@
 - `orchestration-safety-contract` implemented, reviewed, validated, and released as `v0.21.0`.
 
 ## Next step
+
+- Promote `feat/expertise-join-validation` to `main`, refresh the develop
+  install, and run the four documented live-client smoke checks.
 
 - Observe the release workflow for the archive-retrieval documentation delivery
   and confirm the first production release containing a `Release-Note:`
