@@ -3,12 +3,14 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 sys.path.insert(0, str(REPO_ROOT / "cli"))
 import expertise  # noqa: E402
+import sync  # noqa: E402
 
 SCAFFOLD = REPO_ROOT / "scaffolds" / "default"
 COMPOSED_ROLES = ("business-analyst", "sre", "support-lead")
@@ -238,6 +240,8 @@ class TeachesJoinTests(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             self._corpus([bad], {"Ask non-leading questions": ["E"]})
         self.assertEqual(caught.exception.rule, "unqualified-competency-reference")
+        self.assertTrue(caught.exception.source)
+        self.assertIn("reference the term", caught.exception.remediation)
 
     def test_stale_term_name_is_refused(self):
         """The id resolves but the wording does not: a renamed term leaves the
@@ -247,6 +251,62 @@ class TeachesJoinTests(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             self._corpus([stale], {"Ask non-leading questions": ["E"]})
         self.assertEqual(caught.exception.rule, "stale-competency-name")
+        self.assertTrue(caught.exception.source)
+        self.assertIn("update the entry", caught.exception.remediation)
+
+    def test_missing_term_name_is_refused(self):
+        missing_name = teaching("E", "Ask non-leading questions")
+        del missing_name["teaches"][0]["name"]
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([missing_name], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "missing-competency-name")
+        self.assertIn("exact competency", caught.exception.remediation)
+
+    def test_non_object_term_is_refused(self):
+        malformed = entry("E", teaches=["not a term"])
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([malformed], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "invalid-competency-reference")
+
+    def test_missing_term_type_is_refused(self):
+        malformed = teaching("E", "Ask non-leading questions")
+        del malformed["teaches"][0]["@type"]
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([malformed], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "invalid-competency-reference")
+        self.assertTrue(caught.exception.source)
+        self.assertIn("DefinedTerm", caught.exception.remediation)
+
+    def test_wrong_term_type_is_refused(self):
+        malformed = teaching("E", "Ask non-leading questions")
+        malformed["teaches"][0]["@type"] = "Thing"
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([malformed], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "invalid-competency-reference")
+        self.assertTrue(caught.exception.source)
+        self.assertIn("DefinedTerm", caught.exception.remediation)
+
+    def test_single_term_object_is_refused(self):
+        malformed = entry("E", teaches=teaching("unused", "Ask non-leading questions")["teaches"][0])
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([malformed], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "invalid-teaches-list")
+
+    def test_empty_term_object_is_refused(self):
+        malformed = entry("E", teaches={})
+        with self.assertRaises(ValueError) as caught:
+            self._corpus([malformed], {"Ask non-leading questions": ["E"]})
+        self.assertEqual(caught.exception.rule, "invalid-teaches-list")
+
+    def test_user_term_cannot_replace_framework_display_name(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            write_corpus(root / "fw", "sre", [])
+            write_vocabulary(root / "fw", {"Ask non-leading questions": []})
+            write_vocabulary(root / "user", {"Ask Non Leading Questions": []})
+            with self.assertRaises(ValueError) as caught:
+                expertise.corpus_for("sre", root / "fw", root / "user")
+        self.assertEqual(caught.exception.rule, "conflicting-competency-name")
 
     def test_an_entry_may_teach_nothing(self):
         loaded = self._corpus([entry("E")], {"Ask non-leading questions": []})
@@ -305,6 +365,28 @@ class ReverseJoinTests(unittest.TestCase):
             self.assertEqual(len(problems), 2)
             self.assertTrue(any("lists no entry" in p for p in problems))
             self.assertTrue(any("does not list it" in p for p in problems))
+
+    def test_reverse_list_drift_does_not_block_composition(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "fw"
+            write_corpus(root, "sre", [teaching("Real", "Held term")])
+            write_vocabulary(root, {"Held term": []})
+            self.assertEqual([entry["name"] for entry in expertise.corpus_for("sre", root, None)], ["Real"])
+            self.assertTrue(expertise.reverse_join_problems(root, ("sre",)))
+
+    def test_reverse_list_drift_does_not_block_agent_body(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            framework, user = root / "fw", root / "user"
+            write_corpus(framework, "sre", [teaching("Real", "Held term")])
+            write_vocabulary(framework, {"Held term": []})
+            (framework / "agents").mkdir(parents=True)
+            (framework / "agents" / "sre.md").write_text("# SRE\n")
+            agent = {"name": "sre", "source": "agents/sre.md", "generation_mode": "composed"}
+            with mock.patch.object(sync, "USER_OVERLAY_DIR", user):
+                rendered = sync.agent_body(agent, framework, framework, {})
+            self.assertIn("## Expertise", rendered)
+            self.assertTrue(expertise.reverse_join_problems(framework, ("sre",)))
 
 
 if __name__ == "__main__":

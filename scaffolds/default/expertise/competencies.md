@@ -127,7 +127,7 @@ separate this one from it, before the match drives action.
 
 ## Coverage
 
-Eleven terms across the sixteen pilot entries. Five terms are held by more than
+Eleven terms across the seventeen pilot entries. Five terms are held by more than
 one role, which is the mechanism working as intended rather than a sign of
 overlap to remove.
 
@@ -135,7 +135,7 @@ overlap to remove.
 |---|---|---|
 | business-analyst | 5 | 5 |
 | sre | 6 | 6 |
-| support-lead | 5 | 5 |
+| support-lead | 6 | 5 |
 
 Every pilot entry maps to exactly one term, and every term is taught by at
 least one entry. Roles outside the pilot hold no terms yet; an empty set is a

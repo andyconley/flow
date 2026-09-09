@@ -117,8 +117,9 @@ How it merges:
   the one failure the generated file cannot show on its face. `teaches` edges
   are resolved against the merged competency vocabulary at the same point —
   framework terms union the user's — so an entry teaching an undefined term,
-  or naming a term the vocabulary has since renamed, fails the sync instead of
-  rendering a competency that does not exist.
+  naming a term the vocabulary has since renamed, omitting the term's display
+  name, or using a malformed reference fails the sync instead of rendering a
+  competency that does not exist.
 - **Agent capability exceptions merge separately from agents.** The framework
   capability catalog supplies global defaults. Framework and user
   `[[agent_capability_overrides]]` entries merge by `(agent, capability)`, so an

@@ -117,7 +117,16 @@ def vocabulary(framework_dir: Path, user_dir: Path | None) -> dict[str, str]:
     """
     terms = _terms(framework_dir / "expertise" / VOCABULARY)
     if user_dir is not None:
-        terms.update(_terms(user_dir / "expertise" / VOCABULARY))
+        user_path = user_dir / "expertise" / VOCABULARY
+        for key, name in _terms(user_path).items():
+            if key in terms and terms[key] != name:
+                raise ExpertiseError(
+                    "conflicting-competency-name",
+                    f'user vocabulary names "{key}" as "{name}" but the framework defines "{terms[key]}"',
+                    source=str(user_path),
+                    remediation="use the framework term name, or choose a distinct term name",
+                )
+            terms[key] = name
     return terms
 
 
@@ -130,7 +139,31 @@ def _validate_teaches(entries: list[dict], terms: dict[str, str], source: Path) 
     that wording.
     """
     for entry in entries:
-        for term in entry.get("teaches") or []:
+        taught = entry.get("teaches", [])
+        if taught is None:
+            taught = []
+        if not isinstance(taught, list):
+            raise ExpertiseError(
+                "invalid-teaches-list",
+                f'entry {entry["name"]} has a non-list teaches value',
+                source=str(source),
+                remediation="set teaches to a list of DefinedTerm objects",
+            )
+        for term in taught:
+            if not isinstance(term, dict):
+                raise ExpertiseError(
+                    "invalid-competency-reference",
+                    f'entry {entry["name"]} has a non-object teaches value',
+                    source=str(source),
+                    remediation="make each teaches value a DefinedTerm object",
+                )
+            if term.get("@type") != "DefinedTerm":
+                raise ExpertiseError(
+                    "invalid-competency-reference",
+                    f'entry {entry["name"]} teaches a value whose @type is not DefinedTerm',
+                    source=str(source),
+                    remediation='set each teaches value @type to "DefinedTerm"',
+                )
             raw = str(term.get("@id", ""))
             if not raw.startswith(COMPETENCY_PREFIX):
                 raise ExpertiseError(
@@ -148,7 +181,14 @@ def _validate_teaches(entries: list[dict], terms: dict[str, str], source: Path) 
                     remediation=f"add the term to expertise/{VOCABULARY}, or correct the reference",
                 )
             declared = " ".join(str(term.get("name", "")).split())
-            if declared and declared != terms[key]:
+            if not declared:
+                raise ExpertiseError(
+                    "missing-competency-name",
+                    f'entry {entry["name"]} teaches "{key}" without the vocabulary display name',
+                    source=str(source),
+                    remediation="set teaches name to the exact competency vocabulary heading",
+                )
+            if declared != terms[key]:
                 raise ExpertiseError(
                     "stale-competency-name",
                     f'entry {entry["name"]} names its term "{declared}" but the vocabulary defines "{terms[key]}"',

@@ -130,7 +130,11 @@ these, sharing one `@context`.
     }
   ],
   "teaches": [
-    { "@type": "DefinedTerm", "@id": "flow:competency/test-a-familiar-pattern-match-before-acting" }
+    {
+      "@type": "DefinedTerm",
+      "@id": "flow:competency/test-a-familiar-pattern-match-before-acting",
+      "name": "Test a familiar pattern match before acting"
+    }
   ]
 }
 ```
