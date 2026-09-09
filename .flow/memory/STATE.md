@@ -6,6 +6,13 @@
 
 ## Recently completed
 
+- `archive-retrieval-documentation` accepted at `fadaac3` and archived. Archive
+  retrieval is now discoverable in the changelog, README, and generated Claude
+  and Codex help. The v0.24 public release body was reconciled, and future
+  curated highlights stay inside the exact-SHA semantic-release path. The
+  repository and external-state evidence passed independent quality and test
+  review.
+
 - `session-model-recommendation` accepted at `62100b7` and archived. Flow now
   provides quality-first advisory parent-model recommendations for boot,
   resume, define, solution, and plan across Claude and Codex. The release proof
@@ -37,6 +44,9 @@
 
 ## Next step
 
+- Observe the release workflow for the archive-retrieval documentation delivery
+  and confirm the first production release containing a `Release-Note:`
+  trailer.
 - Re-run the authenticated entry and mapping evidence when model mappings,
   client versions, or account entitlement changes.
 - Optional session-model advice follow-up: make the non-JSON context view show
