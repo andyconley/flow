@@ -2,6 +2,28 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+### Highlights
+
+- Archive retrieval is now visible in public docs and generated release highlights.
+
+
+## [0.27.0](https://github.com/andyconley/flow/compare/v0.26.0...v0.27.0) (2026-09-09)
+
+### Features
+
+* **expertise:** complete the teaches join ([9eb576e](https://github.com/andyconley/flow/commit/9eb576e601fbe4147ed7b0f3175b2838aca92942))
+* **expertise:** compose role expertise into agents at sync time ([38d555b](https://github.com/andyconley/flow/commit/38d555b22227f01176aeb36190ba64b7bb7ccf5a))
+* **expertise:** compose role expertise into agents at sync time ([42c7ed5](https://github.com/andyconley/flow/commit/42c7ed58194219222681282aa981b52291b7cb12))
+* **release:** expose archive capability outcomes ([fadaac3](https://github.com/andyconley/flow/commit/fadaac396f3417fb942b425cfda5eeee74cc03f9))
+
+### Documentation
+
+* **adr:** author expertise entries as JSON-LD, owned per role ([3258a4b](https://github.com/andyconley/flow/commit/3258a4beeca80cae600b3b1fc743b1e4d333de07))
+* **adr:** settle expertise serialization ([c965a8f](https://github.com/andyconley/flow/commit/c965a8fa3022d268022755443e1c3eea7637da74))
+* **adr:** settle expertise serialization as Markdown with referenced sources ([19233a2](https://github.com/andyconley/flow/commit/19233a2241b63c8ed7850ef15ba02d566fea0830))
+* **state:** record archive retrieval documentation ([f3b1ac1](https://github.com/andyconley/flow/commit/f3b1ac1272f052cba23ad62719fce1e940a561b1))
+* **state:** record v0.26.0 release ([6c80e80](https://github.com/andyconley/flow/commit/6c80e8050d974b1939c8f0b7a7fe3d73a7f29dc3))
+
 ## [0.26.0](https://github.com/andyconley/flow/compare/v0.25.0...v0.26.0) (2026-09-08)
 
 Archive final-source repair now registers the accepted final outcome as the
