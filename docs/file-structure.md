@@ -251,6 +251,9 @@ here.
 Per-role expertise corpora as JSON-LD (ADR 0008), plus `competencies.md`, the
 vocabulary entries teach. Each role owns its own entries and citations; a source
 cited by several roles, or by one role at several pinpoints, is expected.
+The shipped composed cohort is exactly six roles: architect, business analyst,
+lead developer, SRE, support lead, and test engineer. Product manager and
+quality reviewer remain base agents without shipped framework corpora.
 
 #### `scaffolds/default/commands/`
 

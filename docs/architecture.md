@@ -119,7 +119,13 @@ How it merges:
   framework terms union the user's — so an entry teaching an undefined term,
   naming a term the vocabulary has since renamed, omitting the term's display
   name, or using a malformed reference fails the sync instead of rendering a
-  competency that does not exist.
+  competency that does not exist. The shipped composed cohort is exactly six
+  roles: `architect`, `business-analyst`, `lead-developer`, `sre`,
+  `support-lead`, and `test-engineer`. Architect, lead developer, and test
+  engineer are the evidence-backed additions in this release. Product manager
+  and quality reviewer remain invocable base agents without framework expertise
+  composition. Each corpus remains role-owned even when sources or vocabulary
+  terms are shared.
 - **Agent capability exceptions merge separately from agents.** The framework
   capability catalog supplies global defaults. Framework and user
   `[[agent_capability_overrides]]` entries merge by `(agent, capability)`, so an

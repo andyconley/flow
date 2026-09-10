@@ -1,0 +1,7 @@
+command: /opt/homebrew/bin/python3.12 scripts/regenerate-flow-help.py --check
+candidate_T: 4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33
+start_utc: 2026-09-10T11:57:13Z
+scaffolds/default/commands/flow-help.md is up to date.
+README.md is up to date.
+end_utc: 2026-09-10T11:57:13Z
+exit_code: 0

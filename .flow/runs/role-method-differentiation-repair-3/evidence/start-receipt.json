@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-10T02:12:18Z",
+  "purpose": "Freeze the retained three-role sources and both failed evidence trees before any repair-3 production mutation.",
+  "repository": {
+    "head": "2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208",
+    "tracked_diff_sha256": "b9064132a010c763f97cf9f4302b1ac079fc8d14bc5b13cf3787966c08bca97c"
+  },
+  "protected_inventory": {
+    "path": ".flow/runs/role-method-differentiation-repair-3/evidence/preservation-inventory.json",
+    "sha256": "72364da707c1b3b8f5ad381aa73bdbd7158bb9d1fbc8d1f22011739910c757b6"
+  },
+  "release_evidence_map": {
+    "path": ".flow/runs/role-method-differentiation-repair-3/evidence/release-evidence-map.json",
+    "sha256": "020335aa0c5e79221fd172d970b442329b7e24b62c016b303b3c46c277d99f6c"
+  },
+  "files": {
+    "scaffolds/default/agents/architect.md": "3bbb040d5f3b038841d6fd9bde8e4f4d9c015c32317a5970a0d6d93eecd323b5",
+    "scaffolds/default/agents/lead-developer.md": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+    "scaffolds/default/agents/test-engineer.md": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+    "scaffolds/default/expertise/architect.jsonld": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+    "scaffolds/default/expertise/lead-developer.jsonld": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+    "scaffolds/default/expertise/test-engineer.jsonld": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89"
+  },
+  "evidence_trees": [
+    {
+      "path": "docs/evidence/agent-expertise-expansion",
+      "file_count": 31,
+      "digest_method": "SHA-256 over sorted repository-relative path, NUL, file SHA-256, newline records",
+      "sha256": "4471f811c3637d002b7f9a2405d2fa54fe36b6338d2345cca09ae8b78f2888db"
+    },
+    {
+      "path": "docs/evidence/role-method-differentiation",
+      "file_count": 42,
+      "digest_method": "SHA-256 over sorted repository-relative path, NUL, file SHA-256, newline records",
+      "sha256": "82982c4a671852ed2510e46c481acc0c143f6a82c8360bd7dc26a1fc1ac610ad"
+    }
+  ]
+}

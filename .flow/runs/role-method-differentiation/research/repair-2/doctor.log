@@ -1,0 +1,67 @@
+retrieval FTS5:    available
+archive coverage: {"counts": {"backfilled": 1, "historical_gap": 8, "legacy_awaiting_review": 1, "not_archived": 1}, "freshness": "last_observed", "inventory_complete": true, "observed_at": "2026-09-07T23:41:23.518788+00:00", "runs": [{"action": "skip", "base_digest": "absent", "conditions": ["legacy_awaiting_review"], "content_condition": "not_applicable", "diagnostics": [], "eligible": false, "evidence_condition": "valid", "retrieval_eligible": false, "review_disposition": "awaiting_review", "work_id": "20260809-105804-agent-model-routing"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "20260823-clite-workflow-enforcement"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "20260823-runtime-neutrality-cross-runtime"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "20260824-adoption-project-migration"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "20260824-maintainer-supportability"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "20260824-scout-backlog-runtime-docs"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "20260824-telemetry-usage-freshness"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "agent-web-access-policy"}, {"action": "skip", "base_digest": "94c1c61c30b3e26fcbc9186e3c3c2aa6de63cd71351aeba80c350615e7d70bc5", "conditions": [], "eligible": true, "work_id": "archive-final-source-artifact"}, {"action": "skip", "base_digest": "9dc6e5e8e7d7fbb0d5a23d2ab80b2b754c81d54fc79eeb4872e90f78d3be2a7b", "conditions": [], "eligible": true, "work_id": "archive-legacy-import"}, {"action": "skip", "base_digest": "352173b9823d316568e658d62d026a5a3c29d1dd9efe6b4a92982dbecc85abca", "conditions": [], "eligible": true, "work_id": "archive-retrieval"}, {"action": "skip", "base_digest": "4fc49aae4ef2381b97059da4685884d4b5c2a79e11ac6be862b91d3d2d9dedf6", "conditions": [], "eligible": true, "work_id": "archive-retrieval-documentation"}, {"action": "generate", "base_digest": "absent", "conditions": ["historical_gap"], "eligible": true, "work_id": "orchestration-safety-contract"}, {"action": "skip", "base_digest": "38901582ede709f494b273ab027141e2d91484f27be8204891963e1789bfa895", "conditions": [], "eligible": true, "work_id": "refresh-release-state-v0-26"}, {"action": "skip", "conditions": ["not_archived"], "eligible": false, "work_id": "release-validation-gate"}, {"action": "skip", "base_digest": "35142ad21e653a36120195aea412449344833f77a341d504607e43a87a3897bf", "conditions": ["backfilled"], "eligible": true, "work_id": "session-model-recommendation"}], "schema_version": 1, "scope": "/Users/andyconley/src/flow", "state": "observed"}
+python:           /opt/homebrew/opt/python@3.12/bin/python3.12
+flow home:        /Users/andyconley/.flow
+source:           /Users/andyconley/.flow/source
+scaffold:         ok
+config:           ok
+launcher:         ok
+usage store:      ok (schema v6, 180 sessions, 16375 turns)
+
+-- install --
+mode:             develop
+source target:    /Users/andyconley/src/flow
+installed at:     2026-08-09T15:05:20Z
+update check:     n/a (develop install — pull the clone manually)
+
+-- user-level (active in every supported runtime session) --
+claude sync:      ok
+claude drift:     clean
+skills dir:       ok
+agents dir:       ok
+agent policy:     ok (13/13 configured)
+claude smoke:     static ok; 2 manual check(s) required — run `flow runtime smoke --target claude`
+codex sync:       ok
+codex drift:      clean
+codex skills:     ok
+codex agents:     ok (13/13 configured)
+codex smoke:      static ok; 2 manual check(s) required — run `flow runtime smoke --target codex`
+user overlay:     none (/Users/andyconley/.flow/user/flow.toml absent)
+  vcs:            untracked — run `flow setup user --overlay-repo <url>` to give it history
+
+-- project: /Users/andyconley/src/flow --
+repo .flow:       ok
+manifest:         ok
+overlay:          clean
+adoption:         1 runtime surface(s) need a decision
+                  `flow project audit` lists them
+
+-- usage: skills & plugins --  (6 snapshots since 2026-09-07)
+
+skills, by counter
+  implement-with-gates  2026-05-07      74
+  flow-implement        2026-07-13      51
+  drain-queue           2026-04-17      22
+  flow-boot             2026-09-07       9  +1 at last change
+  flow-plan             2026-09-07       7  +1 at last change
+  ... and 12 more with a counter
+  ~6 installed skills never invoked: doc-flow-review, flow-define, flow-help, flow-review,
+    ...
+  9 counter keys match no installed skill: renamed or uninstalled, so their history is not
+    comparable to anything currently on disk
+  6 snapshots over 0.2 days: too little history to say which plugins are unused rather than
+    simply not reached yet
+
+plugins with counters but no install (uninstalled or renamed — cannot tell whether these fired hooks)
+  anthropic-skills          2026-09-07       0
+  brand-voice               2026-09-07       0
+  change-record             2026-09-07       0
+  cowork-plugin-management  2026-09-07       0
+  data                      2026-09-07       0
+  ... and 7 more
+
+counters are maintained by the harness, not by flow; deltas cover only what flow has observed
+~ marks a value inferred by diffing installed skills against the counters
+skill inventory scanned from ~/src/flow
+measured on this machine only
+freshness: partial — run `flow plugin-usage snapshot`

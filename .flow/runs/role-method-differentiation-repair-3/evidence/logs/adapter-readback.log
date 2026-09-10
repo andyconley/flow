@@ -1,0 +1,29 @@
+command: generated and installed adapter hash/readback inspection
+candidate_T: 4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33
+start_utc: 2026-09-10T11:57:56Z
+95f1c349b92baeea9d1247ff897781529c1851bfbc3d0d78d871b74b2b6a518d  /tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/test-engineer.md
+1731f54c7aeea337c412dc99dd988dcb3cf2783783727b0298e1e2e7a18e3e7a  /tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/product-manager.md
+e025d80e13c8cdec51cbf3d29e9f33c807d9793da1aefcd5d2dfb086d9eef49d  /tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/quality-reviewer.md
+a0b7e8b13b3c0d8e2b237d23d739308eb691eb9958e9d5b7452e0d69b508cbe5  /tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/test-engineer.toml
+a065cabdaaf57ece5bfb2ffa17e31b8d57855f5e46879e6d3de691e7e6869dd4  /tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/product-manager.toml
+f6ce63f6ba16687647cb154ce470dcd2ad2e02e1dbbea577b7f01d748fe6713c  /tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/quality-reviewer.toml
+95f1c349b92baeea9d1247ff897781529c1851bfbc3d0d78d871b74b2b6a518d  /Users/andyconley/.claude/agents/test-engineer.md
+1731f54c7aeea337c412dc99dd988dcb3cf2783783727b0298e1e2e7a18e3e7a  /Users/andyconley/.claude/agents/product-manager.md
+e025d80e13c8cdec51cbf3d29e9f33c807d9793da1aefcd5d2dfb086d9eef49d  /Users/andyconley/.claude/agents/quality-reviewer.md
+a0b7e8b13b3c0d8e2b237d23d739308eb691eb9958e9d5b7452e0d69b508cbe5  /Users/andyconley/.codex/agents/test-engineer.toml
+a065cabdaaf57ece5bfb2ffa17e31b8d57855f5e46879e6d3de691e7e6869dd4  /Users/andyconley/.codex/agents/product-manager.toml
+f6ce63f6ba16687647cb154ce470dcd2ad2e02e1dbbea577b7f01d748fe6713c  /Users/andyconley/.codex/agents/quality-reviewer.toml
+/Users/andyconley/.codex/agents/test-engineer.toml:109:### Define a test oracle with a concrete example
+/Users/andyconley/.codex/agents/test-engineer.toml:123:- Teaches: "Define a test oracle with a concrete example"
+/Users/andyconley/.codex/agents/test-engineer.toml:145:model = "gpt-5.6-terra"
+/Users/andyconley/.codex/agents/test-engineer.toml:146:model_reasoning_effort = "medium"
+/Users/andyconley/.claude/agents/test-engineer.md:11:model: sonnet
+/Users/andyconley/.claude/agents/test-engineer.md:12:effort: medium
+/Users/andyconley/.claude/agents/test-engineer.md:123:### Define a test oracle with a concrete example
+/Users/andyconley/.claude/agents/test-engineer.md:137:- Teaches: "Define a test oracle with a concrete example"
+/Users/andyconley/.claude/agents/product-manager.md expertise_sections=0
+/Users/andyconley/.claude/agents/quality-reviewer.md expertise_sections=0
+/Users/andyconley/.codex/agents/product-manager.toml expertise_sections=0
+/Users/andyconley/.codex/agents/quality-reviewer.toml expertise_sections=0
+end_utc: 2026-09-10T11:57:56Z
+exit_code: 0

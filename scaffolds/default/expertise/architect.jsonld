@@ -1,0 +1,16 @@
+{
+  "@context": {"@vocab": "https://schema.org/", "flow": "https://andyconley.github.io/flow/ns#", "teaches": {"@id": "https://schema.org/teaches", "@type": "@id"}},
+  "@graph": [{
+    "@id": "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision",
+    "@type": "LearningResource",
+    "name": "State alternatives and consequences for a boundary decision",
+    "audience": {"@type": "Audience", "audienceType": "architect"},
+    "flow:layer": "baseline",
+    "abstract": "a durable technical choice needs its context, the alternatives considered, the tradeoffs accepted, and the consequences that follow. The record preserves why the boundary exists when circumstances later change.",
+    "flow:trigger": "a change crosses a module, interface, persistence, compatibility, or other durable system boundary with more than one viable option.",
+    "flow:requiredBehavior": "state the decision, context, viable alternatives, tradeoffs, consequences, and the condition that would justify revisiting it. Keep product priority and file-level task sequencing with their owning roles.",
+    "flow:failureMode": "calling a local refactor an architecture decision, or recording a chosen option without the forces and consequences that make it reviewable.",
+    "flow:source": [{"citation": {"@type": "Article", "author": "Martin Fowler", "name": "Architecture Decision Record", "datePublished": "2026", "sameAs": "https://martinfowler.com/bliki/ArchitectureDecisionRecord.html", "@id": "flow:work/fowler-architecture-decision-record"}, "flow:locator": "decision, context, trade-offs, and consequences"}],
+    "teaches": [{"@type": "DefinedTerm", "@id": "flow:competency/state-alternatives-and-consequences-for-a-boundary-decision", "name": "State alternatives and consequences for a boundary decision"}]
+  }]
+}

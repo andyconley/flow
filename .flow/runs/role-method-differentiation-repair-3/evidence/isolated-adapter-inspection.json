@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-10T11:27:41Z",
+  "candidate_T": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+  "status": "observed",
+  "root": "/tmp/flow-repair3-isolated.UKqD5T",
+  "source_symlink_target": "/Users/andyconley/src/flow",
+  "commands": [
+    {
+      "command": "HOME=<isolated>/home flow sync claude --user",
+      "exit_code": 0
+    },
+    {
+      "command": "HOME=<isolated>/home flow sync codex --user",
+      "exit_code": 0
+    },
+    {
+      "command": "HOME=<isolated>/home flow sync claude --user --check",
+      "exit_code": 0
+    },
+    {
+      "command": "HOME=<isolated>/home flow sync codex --user --check",
+      "exit_code": 0
+    }
+  ],
+  "generated_outputs": {
+    "claude": {
+      "test-engineer": "95f1c349b92baeea9d1247ff897781529c1851bfbc3d0d78d871b74b2b6a518d",
+      "product-manager": "1731f54c7aeea337c412dc99dd988dcb3cf2783783727b0298e1e2e7a18e3e7a",
+      "quality-reviewer": "e025d80e13c8cdec51cbf3d29e9f33c807d9793da1aefcd5d2dfb086d9eef49d"
+    },
+    "codex": {
+      "test-engineer": "a0b7e8b13b3c0d8e2b237d23d739308eb691eb9958e9d5b7452e0d69b508cbe5",
+      "product-manager": "a065cabdaaf57ece5bfb2ffa17e31b8d57855f5e46879e6d3de691e7e6869dd4",
+      "quality-reviewer": "f6ce63f6ba16687647cb154ce470dcd2ad2e02e1dbbea577b7f01d748fe6713c"
+    }
+  },
+  "assertions": {
+    "test-engineer expertise sections per client": 1,
+    "product-manager expertise sections per client": 0,
+    "quality-reviewer expertise sections per client": 0,
+    "test-engineer method present": true,
+    "claude test-engineer model": "sonnet",
+    "claude test-engineer effort": "medium",
+    "codex test-engineer model": "gpt-5.6-terra",
+    "codex test-engineer effort": "medium",
+    "installed outputs exactly equal isolated outputs": true
+  },
+  "readback": "/Users/andyconley/src/flow\nclaude sync check: up to date\nuser-level claude check complete from /tmp/flow-repair3-isolated.UKqD5T/home/.flow/source/scaffolds/default/flow.toml\ncodex sync check: up to date\nuser-level codex check complete from /tmp/flow-repair3-isolated.UKqD5T/home/.flow/source/scaffolds/default/flow.toml\n/tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/test-engineer.md:1\n/tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/test-engineer.toml:1\n/tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/test-engineer.md:11:model: sonnet\n/tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/test-engineer.md:12:effort: medium\n/tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/test-engineer.md:123:### Define a test oracle with a concrete example\n/tmp/flow-repair3-isolated.UKqD5T/home/.claude/agents/test-engineer.md:137:- Teaches: \"Define a test oracle with a concrete example\"\n/tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/test-engineer.toml:109:### Define a test oracle with a concrete example\n/tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/test-engineer.toml:123:- Teaches: \"Define a test oracle with a concrete example\"\n/tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/test-engineer.toml:145:model = \"gpt-5.6-terra\"\n/tmp/flow-repair3-isolated.UKqD5T/home/.codex/agents/test-engineer.toml:146:model_reasoning_effort = \"medium\"\n",
+  "durable_logs": [
+    "evidence/logs/isolated-sync-claude.log",
+    "evidence/logs/isolated-sync-codex.log",
+    "evidence/logs/isolated-sync-claude-check.log",
+    "evidence/logs/isolated-sync-codex-check.log",
+    "evidence/logs/adapter-readback.log"
+  ],
+  "verdict": "pass"
+}

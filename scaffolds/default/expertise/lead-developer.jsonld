@@ -1,0 +1,28 @@
+{
+  "@context": {"@vocab": "https://schema.org/", "flow": "https://andyconley.github.io/flow/ns#", "teaches": {"@id": "https://schema.org/teaches", "@type": "@id"}},
+  "@graph": [{
+    "@id": "flow:entry/lead-developer/plan-a-reversible-delivery-path",
+    "@type": "LearningResource",
+    "name": "Plan a reversible delivery path",
+    "audience": {"@type": "Audience", "audienceType": "lead-developer"},
+    "flow:layer": "baseline",
+    "abstract": "uncertain work becomes safer when choices can be deferred or reversed after evidence arrives. A delivery plan must make its proof and its rollback boundary visible before the irreversible step.",
+    "flow:trigger": "planning implementation of approved work that changes persistence, compatibility, a public interface, or a deployment path.",
+    "flow:requiredBehavior": "sequence small changes so each has a proof point, name the first irreversible step, and state the rollback or recovery action before that boundary. Escalate unresolved product or architecture decisions instead of absorbing them.",
+    "flow:failureMode": "presenting a file list as an execution plan while leaving verification, migration, and recovery to an unspecified later step.",
+    "flow:source": [{"citation": {"@type": "Article", "author": "Martin Fowler", "name": "Is Design Dead?", "sameAs": "https://martinfowler.com/articles/designDead.html", "@id": "flow:work/fowler-is-design-dead"}, "flow:locator": "Reversibility"}, {"citation": {"@type": "Article", "author": "Atlassian", "name": "What Is Continuous Deployment?", "sameAs": "https://www.atlassian.com/continuous-delivery/software-testing/continuous-deployment", "@id": "flow:work/atlassian-continuous-deployment"}, "flow:locator": "rolling deployments and monitoring"}],
+    "teaches": [{"@type": "DefinedTerm", "@id": "flow:competency/plan-a-reversible-delivery-path", "name": "Plan a reversible delivery path"}]
+  }, {
+    "@id": "flow:entry/lead-developer/plan-in-proportion-to-risk",
+    "@type": "LearningResource",
+    "name": "Plan in proportion to risk",
+    "audience": {"@type": "Audience", "audienceType": "lead-developer"},
+    "flow:layer": "baseline",
+    "abstract": "planning effort belongs where reversibility, blast radius, or missing proof makes change risky.",
+    "flow:trigger": "choosing plan depth for an approved implementation change.",
+    "flow:requiredBehavior": "classify reversibility, blast radius, and coverage before selecting a concise short plan or the full planning format.",
+    "flow:failureMode": "inventing slices and generic risks for a local reversible covered change.",
+    "flow:source": [{"citation": {"@type": "Book", "author": "George Fairbanks", "name": "Just Enough Software Architecture", "@id": "flow:work/fairbanks-just-enough-architecture"}, "flow:locator": "risk-driven design"}, {"citation": {"@type": "Book", "author": "Jez Humble and David Farley", "name": "Continuous Delivery", "sameAs": "https://martinfowler.com/books/continuousDelivery.html", "@id": "flow:work/humble-farley-continuous-delivery"}, "flow:locator": "small safe increments and reliable release"}],
+    "teaches": [{"@type": "DefinedTerm", "@id": "flow:competency/plan-in-proportion-to-risk", "name": "Plan in proportion to risk"}]
+  }]
+}

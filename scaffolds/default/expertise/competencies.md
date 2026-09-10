@@ -125,9 +125,40 @@ separate this one from it, before the match drives action.
 - Roles: support-lead
 - Taught by: "Discount the failure mode you saw most recently"
 
+### Define a test oracle with a concrete example
+
+Use a representative input and observable expected result to state what a test
+must distinguish, including relevant failure or recovery behavior.
+
+- Roles: test-engineer
+- Taught by: "Define a test oracle with a concrete example"
+
+### State alternatives and consequences for a boundary decision
+
+Make a durable technical choice reviewable by recording its context, viable
+alternatives, tradeoffs, consequences, and revision condition.
+
+- Roles: architect
+- Taught by: "State alternatives and consequences for a boundary decision"
+
+### Plan a reversible delivery path
+
+Sequence approved work through proof points and name the first irreversible
+step with its rollback or recovery action.
+
+- Roles: lead-developer
+- Taught by: "Plan a reversible delivery path"
+
+### Plan in proportion to risk
+
+Select plan depth from reversibility, blast radius, and available proof.
+
+- Roles: lead-developer
+- Taught by: "Plan in proportion to risk"
+
 ## Coverage
 
-Eleven terms across the seventeen pilot entries. Five terms are held by more than
+Sixteen terms across twenty-one entries. Five terms are held by more than
 one role, which is the mechanism working as intended rather than a sign of
 overlap to remove.
 
@@ -136,17 +167,20 @@ overlap to remove.
 | business-analyst | 5 | 5 |
 | sre | 6 | 6 |
 | support-lead | 6 | 5 |
+| test-engineer | 1 | 1 |
+| architect | 1 | 1 |
+| lead-developer | 2 | 2 |
 
-Every pilot entry maps to exactly one term, and every term is taught by at
-least one entry. Roles outside the pilot hold no terms yet; an empty set is a
+Every shipped entry maps to exactly one term, and every term is taught by at
+least one entry. The remaining seven roles hold no terms yet; an empty set is a
 clean outcome, not a gap to fill by analogy.
 
 ## Consistency
 
 The join is recorded in both directions: every term lists the entries that
-teach it, and every entry names the term it teaches. Seventeen edges each way,
-five terms held by two entries, no term claiming an entry that does not claim
-it back.
+teach it, and every entry names the term it teaches. Twenty-one edges each
+way, five terms held by two entries, no term claiming an entry that does not
+claim it back.
 
 Both halves are authored by hand, so they can disagree, and each half is
 checked where a disagreement would do damage. An entry teaching a term no

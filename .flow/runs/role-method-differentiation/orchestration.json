@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "work_id": "role-method-differentiation",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": ["unverified_claim_for_durable_truth"],
+    "classification": "standard",
+    "rationale": "Local role guidance is reversible, but the five-role release claim depends on independently reviewed behavioral evidence."
+  },
+  "assignments": [
+    {
+      "id": "root",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/role-method-differentiation/implementation-handoff.md",
+      "input_evidence": [".flow/runs/role-method-differentiation/requirements.md", ".flow/runs/role-method-differentiation/acceptance-criteria.md", ".flow/runs/role-method-differentiation/plan.md", ".flow/runs/role-method-differentiation/validation-plan.md"],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/role-method-differentiation", ".flow/memory/STATE.md"],
+      "write_scopes": [
+        "scaffolds/default",
+        "tests/test_expertise_composition.py",
+        "docs/evidence",
+        ".flow/runs/role-method-differentiation/validation-results.md",
+        ".flow/runs/role-method-differentiation/HANDOFF.md",
+        ".flow/runs/role-method-differentiation/findings-reconciliation.md",
+        ".flow/runs/role-method-differentiation/orchestration.json",
+        ".flow/runs/role-method-differentiation/research/behavioral-scoring-repair.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/role-method-differentiation/validation-results.md", "format": "markdown"},
+      "success_criteria": ["Implement the approved replacement methods and produce review-ready proof"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "root-owned-writes"}
+    },
+    {
+      "id": "implementation-lead-repair",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {"kind": "agent", "id": "/root/role_methods_repair_lead"},
+      "brief_path": ".flow/runs/role-method-differentiation/briefs/implementation-lead-repair.md",
+      "input_evidence": [".flow/runs/role-method-differentiation/requirements.md", ".flow/runs/role-method-differentiation/acceptance-criteria.md", ".flow/runs/role-method-differentiation/plan.md", "scaffolds/default/agents/product-manager.md", "scaffolds/default/agents/quality-reviewer.md", "scaffolds/default/agents/lead-developer.md"],
+      "read_scopes": ["scaffolds/default", "tests", "docs/evidence", ".flow/runs/role-method-differentiation"],
+      "write_scopes": [".flow/runs/role-method-differentiation/research/implementation-lead-repair.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/role-method-differentiation/research/implementation-lead-repair.md", "format": "markdown"},
+      "success_criteria": ["Identify the minimum repair and preservation hazards before product mutation"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "implementation-analysis"}
+    },
+    {
+      "id": "implementation-test-repair",
+      "lane": "implement",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "/root/role_methods_repair_test"},
+      "brief_path": ".flow/runs/role-method-differentiation/briefs/implementation-test-repair.md",
+      "input_evidence": [".flow/runs/role-method-differentiation/acceptance-criteria.md", ".flow/runs/role-method-differentiation/validation-plan.md", "tests/test_expertise_composition.py", "docs/evidence/role-method-differentiation/results.md"],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs/evidence", ".flow/runs/role-method-differentiation"],
+      "write_scopes": [".flow/runs/role-method-differentiation/research/implementation-test-repair.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/role-method-differentiation/research/implementation-test-repair.md", "format": "markdown"},
+      "success_criteria": ["Define non-vacuous deterministic, mutation, and treatment-control proof"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "implementation-analysis"}
+    },
+    {
+      "id": "review-quality-repair",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {"kind": "agent", "id": "/root/role_methods_repair_quality"},
+      "brief_path": ".flow/runs/role-method-differentiation/briefs/review-quality-repair.md",
+      "input_evidence": [".flow/runs/role-method-differentiation/requirements.md", ".flow/runs/role-method-differentiation/acceptance-criteria.md", ".flow/runs/role-method-differentiation/plan.md", ".flow/runs/role-method-differentiation/briefs/review-quality-repair.md"],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/role-method-differentiation"],
+      "write_scopes": [".flow/runs/role-method-differentiation/review/quality-repair.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/role-method-differentiation/review/quality-repair.md", "format": "markdown"},
+      "success_criteria": ["Independently determine whether every acceptance criterion is evidenced"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "acceptance-review"}
+    },
+    {
+      "id": "handback-tech-writer",
+      "lane": "implement",
+      "role": "tech-writer",
+      "provider": {"kind": "agent", "id": "/root/role_methods_repair_writer"},
+      "brief_path": ".flow/runs/role-method-differentiation/briefs/handback-tech-writer.md",
+      "input_evidence": [".flow/runs/role-method-differentiation/requirements.md", ".flow/runs/role-method-differentiation/acceptance-criteria.md", ".flow/runs/role-method-differentiation/briefs/handback-tech-writer.md"],
+      "read_scopes": ["docs/evidence", ".flow/runs/role-method-differentiation", ".flow/memory/STATE.md"],
+      "write_scopes": [".flow/runs/role-method-differentiation/research/handback-tech-writer.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/role-method-differentiation/research/handback-tech-writer.md", "format": "markdown"},
+      "success_criteria": ["Recommend concise handback wording with evidence boundaries intact"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "handback-writing"}
+    },
+    {
+      "id": "acceptance-quality",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {"kind": "agent", "id": "/root/role_methods_acceptance_quality"},
+      "brief_path": ".flow/runs/role-method-differentiation/briefs/acceptance-quality.md",
+      "input_evidence": [
+        ".flow/runs/role-method-differentiation/requirements.md",
+        ".flow/runs/role-method-differentiation/acceptance-criteria.md",
+        ".flow/runs/role-method-differentiation/plan.md",
+        ".flow/runs/role-method-differentiation/briefs/acceptance-quality.md"
+      ],
+      "read_scopes": ["scaffolds/default", "tests", "docs", ".flow/runs/role-method-differentiation", ".flow/memory/STATE.md"],
+      "write_scopes": [".flow/runs/role-method-differentiation/review/acceptance-quality.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/role-method-differentiation/review/acceptance-quality.md", "format": "markdown"},
+      "success_criteria": ["Independently judge every acceptance criterion against intent and final evidence"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "formal-acceptance-review"}
+    },
+    {
+      "id": "acceptance-test",
+      "lane": "review",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "/root/role_methods_acceptance_test"},
+      "brief_path": ".flow/runs/role-method-differentiation/briefs/acceptance-test.md",
+      "input_evidence": [
+        ".flow/runs/role-method-differentiation/acceptance-criteria.md",
+        ".flow/runs/role-method-differentiation/validation-plan.md",
+        ".flow/runs/role-method-differentiation/briefs/acceptance-test.md"
+      ],
+      "read_scopes": ["scaffolds/default", "cli", "tests", "docs", ".flow/runs/role-method-differentiation", ".flow/memory/STATE.md"],
+      "write_scopes": [".flow/runs/role-method-differentiation/review/acceptance-test.md"],
+      "read_only": false,
+      "required_capabilities": [{"name": "filesystem-read", "status": "confirmed"}, {"name": "filesystem-write", "status": "confirmed"}],
+      "output": {"path": ".flow/runs/role-method-differentiation/review/acceptance-test.md", "format": "markdown"},
+      "success_criteria": ["Independently audit fault detection, evidence parity, and acceptance-gate computation"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "formal-acceptance-review"}
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/role-method-differentiation/findings-reconciliation.md",
+    "status": "resolved",
+    "unresolved": [],
+    "claims": [
+      {
+        "id": "approved-two-role-replacement",
+        "status": "recommended",
+        "decision_owner": {"kind": "human", "id": "Andy Conley"},
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/role-method-differentiation/requirements.md",
+          ".flow/runs/role-method-differentiation/acceptance-criteria.md"
+        ]
+      },
+      {
+        "id": "deterministic-implementation-valid",
+        "status": "observed",
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/role-method-differentiation/validation-results.md",
+          "docs/evidence/role-method-differentiation/repair-2/mutation-check.md"
+        ]
+      },
+      {
+        "id": "product-manager-behavioral-gate-failed",
+        "status": "observed",
+        "disposition": "accepted",
+        "evidence": [
+          "docs/evidence/role-method-differentiation/repair-2/results.json",
+          ".flow/runs/role-method-differentiation/review/quality-repair.md"
+        ]
+      },
+      {
+        "id": "quality-reviewer-behavioral-gate-failed",
+        "status": "observed",
+        "disposition": "accepted",
+        "evidence": [
+          "docs/evidence/role-method-differentiation/repair-2/results.json",
+          ".flow/runs/role-method-differentiation/review/quality-repair.md"
+        ]
+      },
+      {
+        "id": "combined-five-role-release-blocked",
+        "status": "inferred",
+        "disposition": "accepted",
+        "evidence": [
+          "docs/evidence/agent-expertise-expansion/results.md",
+          ".flow/runs/role-method-differentiation/HANDOFF.md"
+        ],
+        "supports": [
+          "product-manager-behavioral-gate-failed",
+          "quality-reviewer-behavioral-gate-failed"
+        ]
+      },
+      {
+        "id": "formal-acceptance-proof-reproduced",
+        "status": "observed",
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/role-method-differentiation/review/acceptance-quality.md",
+          ".flow/runs/role-method-differentiation/review/acceptance-test.md",
+          ".flow/runs/role-method-differentiation/review.md"
+        ],
+        "supports": [
+          "product-manager-behavioral-gate-failed",
+          "quality-reviewer-behavioral-gate-failed",
+          "combined-five-role-release-blocked"
+        ]
+      },
+      {
+        "id": "accept-review-blocked",
+        "status": "recommended",
+        "decision_owner": {"kind": "agent", "id": "root"},
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/role-method-differentiation/review.md"
+        ],
+        "supports": [
+          "formal-acceptance-proof-reproduced"
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "root",
+      "implementation-lead-repair",
+      "implementation-test-repair",
+      "review-quality-repair",
+      "handback-tech-writer",
+      "acceptance-quality",
+      "acceptance-test"
+    ],
+    "evidence_collector_assignment": "root",
+    "verifier_assignment": "acceptance-quality",
+    "independent": true,
+    "artifact_path": ".flow/runs/role-method-differentiation/review/acceptance-quality.md"
+  }
+}

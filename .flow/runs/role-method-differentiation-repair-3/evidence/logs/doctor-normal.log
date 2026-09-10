@@ -1,0 +1,374 @@
+command: flow doctor --json
+candidate_T: 4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33
+start_utc: 2026-09-10T11:57:13Z
+{
+  "archive_coverage": {
+    "counts": {
+      "backfilled": 1,
+      "historical_gap": 8,
+      "legacy_awaiting_review": 1,
+      "not_archived": 1
+    },
+    "freshness": "last_observed",
+    "inventory_complete": true,
+    "observed_at": "2026-09-07T23:41:23.518788+00:00",
+    "runs": [
+      {
+        "action": "skip",
+        "base_digest": "absent",
+        "conditions": [
+          "legacy_awaiting_review"
+        ],
+        "content_condition": "not_applicable",
+        "diagnostics": [],
+        "eligible": false,
+        "evidence_condition": "valid",
+        "retrieval_eligible": false,
+        "review_disposition": "awaiting_review",
+        "work_id": "20260809-105804-agent-model-routing"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "20260823-clite-workflow-enforcement"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "20260823-runtime-neutrality-cross-runtime"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "20260824-adoption-project-migration"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "20260824-maintainer-supportability"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "20260824-scout-backlog-runtime-docs"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "20260824-telemetry-usage-freshness"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "agent-web-access-policy"
+      },
+      {
+        "action": "skip",
+        "base_digest": "94c1c61c30b3e26fcbc9186e3c3c2aa6de63cd71351aeba80c350615e7d70bc5",
+        "conditions": [],
+        "eligible": true,
+        "work_id": "archive-final-source-artifact"
+      },
+      {
+        "action": "skip",
+        "base_digest": "9dc6e5e8e7d7fbb0d5a23d2ab80b2b754c81d54fc79eeb4872e90f78d3be2a7b",
+        "conditions": [],
+        "eligible": true,
+        "work_id": "archive-legacy-import"
+      },
+      {
+        "action": "skip",
+        "base_digest": "352173b9823d316568e658d62d026a5a3c29d1dd9efe6b4a92982dbecc85abca",
+        "conditions": [],
+        "eligible": true,
+        "work_id": "archive-retrieval"
+      },
+      {
+        "action": "skip",
+        "base_digest": "4fc49aae4ef2381b97059da4685884d4b5c2a79e11ac6be862b91d3d2d9dedf6",
+        "conditions": [],
+        "eligible": true,
+        "work_id": "archive-retrieval-documentation"
+      },
+      {
+        "action": "generate",
+        "base_digest": "absent",
+        "conditions": [
+          "historical_gap"
+        ],
+        "eligible": true,
+        "work_id": "orchestration-safety-contract"
+      },
+      {
+        "action": "skip",
+        "base_digest": "38901582ede709f494b273ab027141e2d91484f27be8204891963e1789bfa895",
+        "conditions": [],
+        "eligible": true,
+        "work_id": "refresh-release-state-v0-26"
+      },
+      {
+        "action": "skip",
+        "conditions": [
+          "not_archived"
+        ],
+        "eligible": false,
+        "work_id": "release-validation-gate"
+      },
+      {
+        "action": "skip",
+        "base_digest": "35142ad21e653a36120195aea412449344833f77a341d504607e43a87a3897bf",
+        "conditions": [
+          "backfilled"
+        ],
+        "eligible": true,
+        "work_id": "session-model-recommendation"
+      }
+    ],
+    "schema_version": 1,
+    "scope": "/Users/andyconley/src/flow",
+    "state": "observed"
+  },
+  "command": "doctor",
+  "diagnostics": [
+    {
+      "category": "ok",
+      "id": "machine.source",
+      "path": "/Users/andyconley/.flow/source",
+      "severity": "info",
+      "status": "ok",
+      "summary": "framework source is present"
+    },
+    {
+      "category": "ok",
+      "id": "machine.scaffold",
+      "path": "/Users/andyconley/.flow/source/scaffolds/default",
+      "severity": "info",
+      "status": "ok",
+      "summary": "framework scaffold is present"
+    },
+    {
+      "category": "ok",
+      "id": "machine.config",
+      "path": "/Users/andyconley/.flow/config.toml",
+      "severity": "info",
+      "status": "ok",
+      "summary": "flow config is present"
+    },
+    {
+      "category": "ok",
+      "id": "machine.launcher",
+      "path": "/Users/andyconley/.local/bin/flow",
+      "severity": "info",
+      "status": "ok",
+      "summary": "flow launcher is present"
+    },
+    {
+      "category": "ok",
+      "id": "install.mode",
+      "severity": "info",
+      "status": "ok",
+      "summary": "install mode is develop"
+    },
+    {
+      "category": "ok",
+      "id": "user.claude.sync",
+      "severity": "info",
+      "status": "ok",
+      "summary": "claude managed manifest is present",
+      "target": "claude"
+    },
+    {
+      "category": "ok",
+      "id": "user.claude.drift",
+      "severity": "info",
+      "status": "ok",
+      "summary": "claude generated surface drift is clean",
+      "target": "claude"
+    },
+    {
+      "category": "ok",
+      "id": "user.claude.agent_policy",
+      "severity": "info",
+      "status": "ok",
+      "summary": "claude agent policy: ok (13/13 configured)",
+      "target": "claude"
+    },
+    {
+      "category": "manual_required",
+      "id": "user.claude.runtime_smoke",
+      "next_action": "flow runtime smoke --target claude",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "static ok; 2 manual check(s) required \u2014 run `flow runtime smoke --target claude`",
+      "target": "claude"
+    },
+    {
+      "category": "ok",
+      "id": "user.codex.sync",
+      "severity": "info",
+      "status": "ok",
+      "summary": "codex managed manifest is present",
+      "target": "codex"
+    },
+    {
+      "category": "ok",
+      "id": "user.codex.drift",
+      "severity": "info",
+      "status": "ok",
+      "summary": "codex generated surface drift is clean",
+      "target": "codex"
+    },
+    {
+      "category": "ok",
+      "id": "user.codex.agent_policy",
+      "severity": "info",
+      "status": "ok",
+      "summary": "codex agent policy: ok (13/13 configured)",
+      "target": "codex"
+    },
+    {
+      "category": "manual_required",
+      "id": "user.codex.runtime_smoke",
+      "next_action": "flow runtime smoke --target codex",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "static ok; 2 manual check(s) required \u2014 run `flow runtime smoke --target codex`",
+      "target": "codex"
+    },
+    {
+      "category": "ok",
+      "id": "project.overlay",
+      "path": "/Users/andyconley/src/flow/.flow",
+      "severity": "info",
+      "status": "ok",
+      "summary": "project overlay is present"
+    },
+    {
+      "category": "ok",
+      "id": "project.manifest",
+      "path": "/Users/andyconley/src/flow/.flow/flow.toml",
+      "severity": "info",
+      "status": "ok",
+      "summary": "project manifest is present"
+    },
+    {
+      "category": "ok",
+      "id": "project.framework_copies",
+      "path": "/Users/andyconley/src/flow/.flow",
+      "severity": "info",
+      "status": "ok",
+      "summary": "project overlay: clean"
+    },
+    {
+      "category": "manual_required",
+      "id": "project.adoption.runtime_surfaces",
+      "next_action": "flow project audit",
+      "path": "/Users/andyconley/src/flow",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "1 project-local runtime surface(s) need an adoption decision"
+    },
+    {
+      "category": "ok",
+      "detail": "last harvested at 2026-09-10 11:19:49",
+      "id": "telemetry.claude.harvest",
+      "severity": "info",
+      "status": "ok",
+      "summary": "claude usage harvest is fresh",
+      "target": "claude"
+    },
+    {
+      "category": "ok",
+      "detail": "last harvested at 2026-09-10 11:19:49",
+      "id": "telemetry.codex.harvest",
+      "severity": "info",
+      "status": "ok",
+      "summary": "codex usage harvest is fresh",
+      "target": "codex"
+    },
+    {
+      "category": "missing",
+      "id": "telemetry.plugin_usage",
+      "next_action": "flow plugin-usage snapshot",
+      "severity": "warning",
+      "status": "warning",
+      "summary": "6 plugin usage snapshot(s), last seen 2026-09-07T22:38:18Z",
+      "target": "claude"
+    },
+    {
+      "category": "capability",
+      "detail": "{'executable': '/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/bin/python3.12', 'python': '3.12.13', 'sqlite': '3.51.2', 'build_files': [{'path': '/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/bin/python3.12', 'size': 52448, 'mtime_ns': 1772934583445679601, 'inode': 1649365}, {'path': '/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/lib-dynload/_sqlite3.cpython-312-darwin.so', 'size': 164816, 'mtime_ns': 1772934584793914040, 'inode': 1649407}]}",
+      "id": "retrieval.fts5",
+      "next_action": "brew install python@3.12; select its interpreter with FLOW_PYTHON when rerunning install-flow.sh, then run flow doctor",
+      "severity": "info",
+      "status": "ok",
+      "summary": "FTS5 retrieval available"
+    }
+  ],
+  "errors": 0,
+  "generated_at": "2026-09-10T11:57:13Z",
+  "install": {
+    "installed_at": "2026-08-09T15:05:20Z",
+    "mode": "develop",
+    "source_target": "/Users/andyconley/src/flow"
+  },
+  "ok": true,
+  "retrieval_capability": {
+    "capability": "FTS5",
+    "observed_at": "2026-09-10T11:57:13.228372+00:00",
+    "remedy": "brew install python@3.12; select its interpreter with FLOW_PYTHON when rerunning install-flow.sh, then run flow doctor",
+    "runtime": {
+      "build_files": [
+        {
+          "inode": 1649365,
+          "mtime_ns": 1772934583445679601,
+          "path": "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/bin/python3.12",
+          "size": 52448
+        },
+        {
+          "inode": 1649407,
+          "mtime_ns": 1772934584793914040,
+          "path": "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/lib-dynload/_sqlite3.cpython-312-darwin.so",
+          "size": 164816
+        }
+      ],
+      "executable": "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/bin/python3.12",
+      "python": "3.12.13",
+      "sqlite": "3.51.2"
+    },
+    "schema_version": 1,
+    "state": "available"
+  },
+  "root": "/Users/andyconley/src/flow",
+  "warnings": 4
+}
+end_utc: 2026-09-10T11:57:13Z
+exit_code: 0

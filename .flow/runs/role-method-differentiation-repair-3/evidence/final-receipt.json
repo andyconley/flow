@@ -1,0 +1,1570 @@
+{
+  "captured_at": "2026-09-10T12:18:32+00:00",
+  "check_count": 250,
+  "checks": [
+    {
+      "actual": "72364da707c1b3b8f5ad381aa73bdbd7158bb9d1fbc8d1f22011739910c757b6",
+      "expected": "72364da707c1b3b8f5ad381aa73bdbd7158bb9d1fbc8d1f22011739910c757b6",
+      "name": "protected_inventory.sha256",
+      "ok": true
+    },
+    {
+      "actual": "020335aa0c5e79221fd172d970b442329b7e24b62c016b303b3c46c277d99f6c",
+      "expected": "020335aa0c5e79221fd172d970b442329b7e24b62c016b303b3c46c277d99f6c",
+      "name": "release_evidence_map.sha256",
+      "ok": true
+    },
+    {
+      "actual": "3bbb040d5f3b038841d6fd9bde8e4f4d9c015c32317a5970a0d6d93eecd323b5",
+      "expected": "3bbb040d5f3b038841d6fd9bde8e4f4d9c015c32317a5970a0d6d93eecd323b5",
+      "name": "retained:scaffolds/default/agents/architect.md",
+      "ok": true
+    },
+    {
+      "actual": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+      "expected": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+      "name": "retained:scaffolds/default/agents/lead-developer.md",
+      "ok": true
+    },
+    {
+      "actual": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+      "expected": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+      "name": "retained:scaffolds/default/agents/test-engineer.md",
+      "ok": true
+    },
+    {
+      "actual": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+      "expected": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+      "name": "retained:scaffolds/default/expertise/architect.jsonld",
+      "ok": true
+    },
+    {
+      "actual": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+      "expected": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+      "name": "retained:scaffolds/default/expertise/lead-developer.jsonld",
+      "ok": true
+    },
+    {
+      "actual": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89",
+      "expected": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89",
+      "name": "retained:scaffolds/default/expertise/test-engineer.jsonld",
+      "ok": true
+    },
+    {
+      "actual": "fbca844849e8de4d07f5300fa3fc5cbbf1007627da4773d9c3a7aab0f6af4aee",
+      "expected": "fbca844849e8de4d07f5300fa3fc5cbbf1007627da4773d9c3a7aab0f6af4aee",
+      "name": "protected:.flow/runs/role-method-differentiation/HANDOFF.md",
+      "ok": true
+    },
+    {
+      "actual": "7187b3c6f431398c9cb1d1bf10fc44f636bde874d5c2b5a5d5805021538bd338",
+      "expected": "7187b3c6f431398c9cb1d1bf10fc44f636bde874d5c2b5a5d5805021538bd338",
+      "name": "protected:.flow/runs/role-method-differentiation/acceptance-criteria.md",
+      "ok": true
+    },
+    {
+      "actual": "cbb1b5cb2dfe66d16500ba432ed27634d34e80ac28fbfdf1a7fae74c8711e331",
+      "expected": "cbb1b5cb2dfe66d16500ba432ed27634d34e80ac28fbfdf1a7fae74c8711e331",
+      "name": "protected:.flow/runs/role-method-differentiation/brief.md",
+      "ok": true
+    },
+    {
+      "actual": "762a99e75e05a9bf9ec798d16dd7c6a2ff748495381ec3e43070b682b4c32b24",
+      "expected": "762a99e75e05a9bf9ec798d16dd7c6a2ff748495381ec3e43070b682b4c32b24",
+      "name": "protected:.flow/runs/role-method-differentiation/briefs/acceptance-quality.md",
+      "ok": true
+    },
+    {
+      "actual": "57e32d5dd38477a29dac3c920938b88c96a535ab06083d0cca92eeedcd8a6fae",
+      "expected": "57e32d5dd38477a29dac3c920938b88c96a535ab06083d0cca92eeedcd8a6fae",
+      "name": "protected:.flow/runs/role-method-differentiation/briefs/acceptance-test.md",
+      "ok": true
+    },
+    {
+      "actual": "692be806489e0fbed816d1f75e8eda1d0b128741cde0b5d78605fdb057db9de7",
+      "expected": "692be806489e0fbed816d1f75e8eda1d0b128741cde0b5d78605fdb057db9de7",
+      "name": "protected:.flow/runs/role-method-differentiation/briefs/handback-tech-writer.md",
+      "ok": true
+    },
+    {
+      "actual": "5a82c6cc8cf94db9f251653f0e5957a95e130a59be7150dcbfb31d21b822d14f",
+      "expected": "5a82c6cc8cf94db9f251653f0e5957a95e130a59be7150dcbfb31d21b822d14f",
+      "name": "protected:.flow/runs/role-method-differentiation/briefs/implementation-lead-repair.md",
+      "ok": true
+    },
+    {
+      "actual": "919bf2854c63007af578aa8adc06700c51e628e529243f306e5d627b771ae022",
+      "expected": "919bf2854c63007af578aa8adc06700c51e628e529243f306e5d627b771ae022",
+      "name": "protected:.flow/runs/role-method-differentiation/briefs/implementation-test-repair.md",
+      "ok": true
+    },
+    {
+      "actual": "6260a5c44c95579ce4c9efe1f342e267a2b8d4b9cd57c1a58820ea7156244f31",
+      "expected": "6260a5c44c95579ce4c9efe1f342e267a2b8d4b9cd57c1a58820ea7156244f31",
+      "name": "protected:.flow/runs/role-method-differentiation/briefs/review-quality-repair.md",
+      "ok": true
+    },
+    {
+      "actual": "2ce36fc23b198224ee0964ac687ba93b5fdf30ec65016857f5fe9f62d21fa0a3",
+      "expected": "2ce36fc23b198224ee0964ac687ba93b5fdf30ec65016857f5fe9f62d21fa0a3",
+      "name": "protected:.flow/runs/role-method-differentiation/events.jsonl",
+      "ok": true
+    },
+    {
+      "actual": "949092d2c145e350e700273dd7a33d56b72dc1e15fcff46304213739dca46b22",
+      "expected": "949092d2c145e350e700273dd7a33d56b72dc1e15fcff46304213739dca46b22",
+      "name": "protected:.flow/runs/role-method-differentiation/findings-reconciliation.md",
+      "ok": true
+    },
+    {
+      "actual": "3bafc2666e89241c2473a742a1c42b0ee76e5786ce5e4ca77565d21111f0e4d2",
+      "expected": "3bafc2666e89241c2473a742a1c42b0ee76e5786ce5e4ca77565d21111f0e4d2",
+      "name": "protected:.flow/runs/role-method-differentiation/implementation-handoff.md",
+      "ok": true
+    },
+    {
+      "actual": "20e627cb80c2b9085d4e63cb134f5a334a947a199f1bd55b7e899b8ab1fddcc3",
+      "expected": "20e627cb80c2b9085d4e63cb134f5a334a947a199f1bd55b7e899b8ab1fddcc3",
+      "name": "protected:.flow/runs/role-method-differentiation/orchestration.json",
+      "ok": true
+    },
+    {
+      "actual": "5acb0f1a1cf833fcccd54f2a7bcda47f2c80173ba2977bf4eb173eb4d7c23c82",
+      "expected": "5acb0f1a1cf833fcccd54f2a7bcda47f2c80173ba2977bf4eb173eb4d7c23c82",
+      "name": "protected:.flow/runs/role-method-differentiation/plan.md",
+      "ok": true
+    },
+    {
+      "actual": "2c6b3daab2c1436afb6b28467cb686dde9572d51edf84c997e8f8504f44f6d4d",
+      "expected": "2c6b3daab2c1436afb6b28467cb686dde9572d51edf84c997e8f8504f44f6d4d",
+      "name": "protected:.flow/runs/role-method-differentiation/requirements.md",
+      "ok": true
+    },
+    {
+      "actual": "e723ba5da8fa265c1e9bd7a8fa788ecedb7cda1b8b32a470de6b19875a0c677f",
+      "expected": "e723ba5da8fa265c1e9bd7a8fa788ecedb7cda1b8b32a470de6b19875a0c677f",
+      "name": "protected:.flow/runs/role-method-differentiation/research/behavioral-scoring-repair.md",
+      "ok": true
+    },
+    {
+      "actual": "e29b1f1759a5c5320cc58b99880d943d2c7a2b5fff7065cb59a827db86499755",
+      "expected": "e29b1f1759a5c5320cc58b99880d943d2c7a2b5fff7065cb59a827db86499755",
+      "name": "protected:.flow/runs/role-method-differentiation/research/behavioral-scoring.md",
+      "ok": true
+    },
+    {
+      "actual": "7ea493b2bac7c852a3a721e94f384d2360afc2eb69f8a846e47cdaf98bb58fff",
+      "expected": "7ea493b2bac7c852a3a721e94f384d2360afc2eb69f8a846e47cdaf98bb58fff",
+      "name": "protected:.flow/runs/role-method-differentiation/research/business-analysis.md",
+      "ok": true
+    },
+    {
+      "actual": "9f64c014d27053d7f933685fc58a1b1041bf0dee6ef03975ae685de7ab6c3bd0",
+      "expected": "9f64c014d27053d7f933685fc58a1b1041bf0dee6ef03975ae685de7ab6c3bd0",
+      "name": "protected:.flow/runs/role-method-differentiation/research/handback-tech-writer.md",
+      "ok": true
+    },
+    {
+      "actual": "d0fd45bc3c3f1d2907c91e79d3a85b5a4f097701848b11cf9cb28954fa6c38e4",
+      "expected": "d0fd45bc3c3f1d2907c91e79d3a85b5a4f097701848b11cf9cb28954fa6c38e4",
+      "name": "protected:.flow/runs/role-method-differentiation/research/implementation-lead-repair.md",
+      "ok": true
+    },
+    {
+      "actual": "5c02786a2d57ac6a16ecfaa1465fe834de64c3a658a53ebc32f8b0ade0760606",
+      "expected": "5c02786a2d57ac6a16ecfaa1465fe834de64c3a658a53ebc32f8b0ade0760606",
+      "name": "protected:.flow/runs/role-method-differentiation/research/implementation-test-repair.md",
+      "ok": true
+    },
+    {
+      "actual": "7fbb79f5d0e9f8d3252ee2712b6e28d17c82ac3db6c98863efc0bb5c4502a479",
+      "expected": "7fbb79f5d0e9f8d3252ee2712b6e28d17c82ac3db6c98863efc0bb5c4502a479",
+      "name": "protected:.flow/runs/role-method-differentiation/research/product.md",
+      "ok": true
+    },
+    {
+      "actual": "52ed3321b5e81952331b2c313cab8dfefd942cebf54e0020ed47a66752688f55",
+      "expected": "52ed3321b5e81952331b2c313cab8dfefd942cebf54e0020ed47a66752688f55",
+      "name": "protected:.flow/runs/role-method-differentiation/research/repair-2/claude-sync-check.log",
+      "ok": true
+    },
+    {
+      "actual": "3e1fe545b52ed283a34267a022a94e0d69a95400c2e2ad69818601cd1500f8f8",
+      "expected": "3e1fe545b52ed283a34267a022a94e0d69a95400c2e2ad69818601cd1500f8f8",
+      "name": "protected:.flow/runs/role-method-differentiation/research/repair-2/codex-sync-check.log",
+      "ok": true
+    },
+    {
+      "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "name": "protected:.flow/runs/role-method-differentiation/research/repair-2/diff-check.log",
+      "ok": true
+    },
+    {
+      "actual": "2865e3eb41cc9f9497e47137ed992a3889ccaa26dec71abe7f9a8a576789b0d5",
+      "expected": "2865e3eb41cc9f9497e47137ed992a3889ccaa26dec71abe7f9a8a576789b0d5",
+      "name": "protected:.flow/runs/role-method-differentiation/research/repair-2/doctor.log",
+      "ok": true
+    },
+    {
+      "actual": "7738339b90d8eeb1fc5c7f72cad60e828b31bba7680ca6312035fe1ad5ecd9e1",
+      "expected": "7738339b90d8eeb1fc5c7f72cad60e828b31bba7680ca6312035fe1ad5ecd9e1",
+      "name": "protected:.flow/runs/role-method-differentiation/research/repair-2/focused-suite-final.log",
+      "ok": true
+    },
+    {
+      "actual": "77fb80f5bf1b6382ed4dd23d89cfc33053ca32b9b061a6140d558d8abddc78d3",
+      "expected": "77fb80f5bf1b6382ed4dd23d89cfc33053ca32b9b061a6140d558d8abddc78d3",
+      "name": "protected:.flow/runs/role-method-differentiation/research/repair-2/full-suite-final.log",
+      "ok": true
+    },
+    {
+      "actual": "2a22df3ec9cd2658d5efe12216d7890e94edf2a1f3abc24cbf60c046d39b11c3",
+      "expected": "2a22df3ec9cd2658d5efe12216d7890e94edf2a1f3abc24cbf60c046d39b11c3",
+      "name": "protected:.flow/runs/role-method-differentiation/research/repair-2/runtime-smoke.json",
+      "ok": true
+    },
+    {
+      "actual": "d4587f8bda20064dc490234325c5045b5dac7dcaef371dd346438b794e4f0263",
+      "expected": "d4587f8bda20064dc490234325c5045b5dac7dcaef371dd346438b794e4f0263",
+      "name": "protected:.flow/runs/role-method-differentiation/research/solution-architecture.md",
+      "ok": true
+    },
+    {
+      "actual": "0d393652b652b363fe8463300b2f9cca2d30f28000a59c5365734e929717d589",
+      "expected": "0d393652b652b363fe8463300b2f9cca2d30f28000a59c5365734e929717d589",
+      "name": "protected:.flow/runs/role-method-differentiation/research/source-verification.md",
+      "ok": true
+    },
+    {
+      "actual": "e7758b029c6a5543b10730aa8964dc02aad65958fbd6a11d804da8e8b635b884",
+      "expected": "e7758b029c6a5543b10730aa8964dc02aad65958fbd6a11d804da8e8b635b884",
+      "name": "protected:.flow/runs/role-method-differentiation/research/validation-review.md",
+      "ok": true
+    },
+    {
+      "actual": "597b98fb4bfe0215d85fd45cd4b300f80c4bcc05e87ff9dda6b1e857705e1d27",
+      "expected": "597b98fb4bfe0215d85fd45cd4b300f80c4bcc05e87ff9dda6b1e857705e1d27",
+      "name": "protected:.flow/runs/role-method-differentiation/review.md",
+      "ok": true
+    },
+    {
+      "actual": "dc7e2a8712f4d9ac9dea4fc5837459c59bdaaefcc8ee3dac6fa2cd9580c0b574",
+      "expected": "dc7e2a8712f4d9ac9dea4fc5837459c59bdaaefcc8ee3dac6fa2cd9580c0b574",
+      "name": "protected:.flow/runs/role-method-differentiation/review/acceptance-quality.md",
+      "ok": true
+    },
+    {
+      "actual": "08d1ecc6109d05f7dde66370dcbc4ce17b6b1698b3ed2e970f2509aa54755616",
+      "expected": "08d1ecc6109d05f7dde66370dcbc4ce17b6b1698b3ed2e970f2509aa54755616",
+      "name": "protected:.flow/runs/role-method-differentiation/review/acceptance-test.md",
+      "ok": true
+    },
+    {
+      "actual": "a4a94bf632628a544279d560c5361e47501989235de17b4e7ca8019ba33f1db2",
+      "expected": "a4a94bf632628a544279d560c5361e47501989235de17b4e7ca8019ba33f1db2",
+      "name": "protected:.flow/runs/role-method-differentiation/review/quality-repair.md",
+      "ok": true
+    },
+    {
+      "actual": "21bc20f07afc1b2003183298f501297e66cc223d1954c4f875be238e0952e074",
+      "expected": "21bc20f07afc1b2003183298f501297e66cc223d1954c4f875be238e0952e074",
+      "name": "protected:.flow/runs/role-method-differentiation/run.json",
+      "ok": true
+    },
+    {
+      "actual": "511eddfca44e6e308a974d4457726a6afd1103f69ab5890854bc66249c6f61a3",
+      "expected": "511eddfca44e6e308a974d4457726a6afd1103f69ab5890854bc66249c6f61a3",
+      "name": "protected:.flow/runs/role-method-differentiation/validation-plan.md",
+      "ok": true
+    },
+    {
+      "actual": "41d259dc884e0b034a09fe8db87414fc50abd52411dac6360d616873dd07f000",
+      "expected": "41d259dc884e0b034a09fe8db87414fc50abd52411dac6360d616873dd07f000",
+      "name": "protected:.flow/runs/role-method-differentiation/validation-results.md",
+      "ok": true
+    },
+    {
+      "actual": "0ab4e811b7d8ab6983204a6d36b6ef22b4b92e6412abf7d35b18303c6cc7af7a",
+      "expected": "0ab4e811b7d8ab6983204a6d36b6ef22b4b92e6412abf7d35b18303c6cc7af7a",
+      "name": "protected:docs/evidence/agent-expertise-expansion/README.md",
+      "ok": true
+    },
+    {
+      "actual": "b224ee2df9b511d9b29a94d05362a1a4aedcf641b1bef7ae5cd5c76324de0060",
+      "expected": "b224ee2df9b511d9b29a94d05362a1a4aedcf641b1bef7ae5cd5c76324de0060",
+      "name": "protected:docs/evidence/agent-expertise-expansion/architect/design.md",
+      "ok": true
+    },
+    {
+      "actual": "2bb42a4d1de01f5c9b39a974a3d30c20a27427c2b8efab4bc57a04325d095446",
+      "expected": "2bb42a4d1de01f5c9b39a974a3d30c20a27427c2b8efab4bc57a04325d095446",
+      "name": "protected:docs/evidence/agent-expertise-expansion/architect/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "ad130c25c60a033a34640c574e7556a1ff363eb19856893accd1a96050a29819",
+      "expected": "ad130c25c60a033a34640c574e7556a1ff363eb19856893accd1a96050a29819",
+      "name": "protected:docs/evidence/agent-expertise-expansion/architect/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "62fa6e8a5665f2166de8babe78051d2e5d399770aba833ac26d26254b5fdf490",
+      "expected": "62fa6e8a5665f2166de8babe78051d2e5d399770aba833ac26d26254b5fdf490",
+      "name": "protected:docs/evidence/agent-expertise-expansion/architect/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "7f37c7cb5089fc17cc6be4c0d9c13a9ef2f18e1e41daf2b0a64fb18417992ee9",
+      "expected": "7f37c7cb5089fc17cc6be4c0d9c13a9ef2f18e1e41daf2b0a64fb18417992ee9",
+      "name": "protected:docs/evidence/agent-expertise-expansion/architect/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "751cd074cfc9b4522baba3c226e896f3ab0d3926c6941d1c754383f58c08fa93",
+      "expected": "751cd074cfc9b4522baba3c226e896f3ab0d3926c6941d1c754383f58c08fa93",
+      "name": "protected:docs/evidence/agent-expertise-expansion/lead-developer/design.md",
+      "ok": true
+    },
+    {
+      "actual": "4de2c69cee8f6e903fc8fc6a176113476750da28f78f3706b7a11e4db72ef49d",
+      "expected": "4de2c69cee8f6e903fc8fc6a176113476750da28f78f3706b7a11e4db72ef49d",
+      "name": "protected:docs/evidence/agent-expertise-expansion/lead-developer/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "b04f3bf4af10efe4a9949ba1c8f3efb275404682b412893e26039f3f00b860d0",
+      "expected": "b04f3bf4af10efe4a9949ba1c8f3efb275404682b412893e26039f3f00b860d0",
+      "name": "protected:docs/evidence/agent-expertise-expansion/lead-developer/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "8c5672d19ea185428d9dd707235de61527276916708f217f626ad4f8c615c4fd",
+      "expected": "8c5672d19ea185428d9dd707235de61527276916708f217f626ad4f8c615c4fd",
+      "name": "protected:docs/evidence/agent-expertise-expansion/lead-developer/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "4681be161d6a17665da23a2947959a7377337b48e425824b2f3d2f6e0f4803f1",
+      "expected": "4681be161d6a17665da23a2947959a7377337b48e425824b2f3d2f6e0f4803f1",
+      "name": "protected:docs/evidence/agent-expertise-expansion/lead-developer/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "28f2bc9837a419213d9b78c31351d1306f0368baae72b93cb9bc58945fb3a997",
+      "expected": "28f2bc9837a419213d9b78c31351d1306f0368baae72b93cb9bc58945fb3a997",
+      "name": "protected:docs/evidence/agent-expertise-expansion/product-manager/design.md",
+      "ok": true
+    },
+    {
+      "actual": "28b7d421c090ea6bb31162c47ecb0caa8092466aa99d8fdbf3a35d011b24d0be",
+      "expected": "28b7d421c090ea6bb31162c47ecb0caa8092466aa99d8fdbf3a35d011b24d0be",
+      "name": "protected:docs/evidence/agent-expertise-expansion/product-manager/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "1d1e8d2f262c665ce9c4531890ceb2db043bf7f720173931b2f4847f1d770dfd",
+      "expected": "1d1e8d2f262c665ce9c4531890ceb2db043bf7f720173931b2f4847f1d770dfd",
+      "name": "protected:docs/evidence/agent-expertise-expansion/product-manager/runs/control-primary-discriminating.json",
+      "ok": true
+    },
+    {
+      "actual": "6e00b4896951ddfe6fd738496524b9e56756635a4029a421b2fd4701372edecd",
+      "expected": "6e00b4896951ddfe6fd738496524b9e56756635a4029a421b2fd4701372edecd",
+      "name": "protected:docs/evidence/agent-expertise-expansion/product-manager/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "7bf5ec9a4dba854213c30e8f6715bcd17cec008f4e1fdf4c38080a08d27caba9",
+      "expected": "7bf5ec9a4dba854213c30e8f6715bcd17cec008f4e1fdf4c38080a08d27caba9",
+      "name": "protected:docs/evidence/agent-expertise-expansion/product-manager/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "b3f0b639acebda419758effbc1deb7d6b3ae46e6868a07f23562db004461b5d3",
+      "expected": "b3f0b639acebda419758effbc1deb7d6b3ae46e6868a07f23562db004461b5d3",
+      "name": "protected:docs/evidence/agent-expertise-expansion/product-manager/runs/treatment-primary-discriminating.json",
+      "ok": true
+    },
+    {
+      "actual": "09cfebd035e06ac88c6a6efed9daceab917fd1ffff4a5e0c462d78e88695055f",
+      "expected": "09cfebd035e06ac88c6a6efed9daceab917fd1ffff4a5e0c462d78e88695055f",
+      "name": "protected:docs/evidence/agent-expertise-expansion/product-manager/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "b9738d03495a89cab3a6c978ad4a2249538647f7c4fc73184340e5016d215d9a",
+      "expected": "b9738d03495a89cab3a6c978ad4a2249538647f7c4fc73184340e5016d215d9a",
+      "name": "protected:docs/evidence/agent-expertise-expansion/quality-reviewer/design.md",
+      "ok": true
+    },
+    {
+      "actual": "cfdb5a4eeaaeb26965d365d5a9b7c8fc45648bec14e0c799cda4c7f98423d50f",
+      "expected": "cfdb5a4eeaaeb26965d365d5a9b7c8fc45648bec14e0c799cda4c7f98423d50f",
+      "name": "protected:docs/evidence/agent-expertise-expansion/quality-reviewer/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "9f2bc78886eb37b7fb74489410c10806587a72cb34d6cf08c752bd38306d17e5",
+      "expected": "9f2bc78886eb37b7fb74489410c10806587a72cb34d6cf08c752bd38306d17e5",
+      "name": "protected:docs/evidence/agent-expertise-expansion/quality-reviewer/runs/control-primary-discriminating.json",
+      "ok": true
+    },
+    {
+      "actual": "a35e17bbdb3735d246fd98bc3e6752276972ba0596bb78ac02bb7943a61c87eb",
+      "expected": "a35e17bbdb3735d246fd98bc3e6752276972ba0596bb78ac02bb7943a61c87eb",
+      "name": "protected:docs/evidence/agent-expertise-expansion/quality-reviewer/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "fa75e30fc9690d493807d43d0ddf0acbb9aea44d37c59869431b01ddeba4e2ff",
+      "expected": "fa75e30fc9690d493807d43d0ddf0acbb9aea44d37c59869431b01ddeba4e2ff",
+      "name": "protected:docs/evidence/agent-expertise-expansion/quality-reviewer/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "6ee4e612e33f8fd030ede25fb3369fc1c5e2259001182886fb68215e10311eea",
+      "expected": "6ee4e612e33f8fd030ede25fb3369fc1c5e2259001182886fb68215e10311eea",
+      "name": "protected:docs/evidence/agent-expertise-expansion/quality-reviewer/runs/treatment-primary-discriminating.json",
+      "ok": true
+    },
+    {
+      "actual": "f7a3b32b5f32d2963da8f24d0f061f14147ab2a96b535f2c49da673d7d1ee88a",
+      "expected": "f7a3b32b5f32d2963da8f24d0f061f14147ab2a96b535f2c49da673d7d1ee88a",
+      "name": "protected:docs/evidence/agent-expertise-expansion/quality-reviewer/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "42b66da759003752bc5d909ccfaa41e7e55122314188f560d7e9e719ce8a9b51",
+      "expected": "42b66da759003752bc5d909ccfaa41e7e55122314188f560d7e9e719ce8a9b51",
+      "name": "protected:docs/evidence/agent-expertise-expansion/results.md",
+      "ok": true
+    },
+    {
+      "actual": "2a492cc82ccc37146267d97b2115e6b7f7aa09c90db4076e11d148938afaeac4",
+      "expected": "2a492cc82ccc37146267d97b2115e6b7f7aa09c90db4076e11d148938afaeac4",
+      "name": "protected:docs/evidence/agent-expertise-expansion/test-engineer/design.md",
+      "ok": true
+    },
+    {
+      "actual": "9ada8bfd6b2bfb74b8e29b0f65685a651324a65ec332d8715eaaf3686409d30b",
+      "expected": "9ada8bfd6b2bfb74b8e29b0f65685a651324a65ec332d8715eaaf3686409d30b",
+      "name": "protected:docs/evidence/agent-expertise-expansion/test-engineer/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "ac76a255927b9e52a67c81040e1d66177716687b36f9021b87f562ed03db37a8",
+      "expected": "ac76a255927b9e52a67c81040e1d66177716687b36f9021b87f562ed03db37a8",
+      "name": "protected:docs/evidence/agent-expertise-expansion/test-engineer/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "437ca3925e34229a50d4560e49d4b0a524e1d2516016b7df0394eb63d89ad8a5",
+      "expected": "437ca3925e34229a50d4560e49d4b0a524e1d2516016b7df0394eb63d89ad8a5",
+      "name": "protected:docs/evidence/agent-expertise-expansion/test-engineer/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "d4afac65816618fb634152e2282df845b1ef9ee19339335c286728ba1f9517a4",
+      "expected": "d4afac65816618fb634152e2282df845b1ef9ee19339335c286728ba1f9517a4",
+      "name": "protected:docs/evidence/agent-expertise-expansion/test-engineer/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "9ca80ccd66926475cdc136453ccffa52a83eb6b7e3cefa55421097b446566633",
+      "expected": "9ca80ccd66926475cdc136453ccffa52a83eb6b7e3cefa55421097b446566633",
+      "name": "protected:docs/evidence/role-method-differentiation/README.md",
+      "ok": true
+    },
+    {
+      "actual": "4e8d8354eebbb1d530fe08953f0194022fb1d04042da2de8f76eb7f674cb6d1d",
+      "expected": "4e8d8354eebbb1d530fe08953f0194022fb1d04042da2de8f76eb7f674cb6d1d",
+      "name": "protected:docs/evidence/role-method-differentiation/lead-developer/design.md",
+      "ok": true
+    },
+    {
+      "actual": "29ccab06ef74c4f11c3bc180fd03e47f26eb287ffaa7285845e74a453ca6b19d",
+      "expected": "29ccab06ef74c4f11c3bc180fd03e47f26eb287ffaa7285845e74a453ca6b19d",
+      "name": "protected:docs/evidence/role-method-differentiation/lead-developer/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "ec3fa034b0ffa17d25809a6c25c97fd94768e4286f14360dba60ed82f7739001",
+      "expected": "ec3fa034b0ffa17d25809a6c25c97fd94768e4286f14360dba60ed82f7739001",
+      "name": "protected:docs/evidence/role-method-differentiation/lead-developer/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "ee362be2cb87dee897569c91482f0ee960d2321a72e99349a02079e3ee188d85",
+      "expected": "ee362be2cb87dee897569c91482f0ee960d2321a72e99349a02079e3ee188d85",
+      "name": "protected:docs/evidence/role-method-differentiation/lead-developer/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "550c253d7213319de6665c248fa045f4f1c829a2bae0b33eada26355308a4efc",
+      "expected": "550c253d7213319de6665c248fa045f4f1c829a2bae0b33eada26355308a4efc",
+      "name": "protected:docs/evidence/role-method-differentiation/lead-developer/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "f90870067c74d5f4ea12b02faf48e7d45cfc56817a36ab6ea35637a458b5776c",
+      "expected": "f90870067c74d5f4ea12b02faf48e7d45cfc56817a36ab6ea35637a458b5776c",
+      "name": "protected:docs/evidence/role-method-differentiation/product-manager/design.md",
+      "ok": true
+    },
+    {
+      "actual": "a46a6acbe39aa77a9def9de8f806b66e49e5499df27634eb6f7d174540089100",
+      "expected": "a46a6acbe39aa77a9def9de8f806b66e49e5499df27634eb6f7d174540089100",
+      "name": "protected:docs/evidence/role-method-differentiation/product-manager/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "ac58c7c7f25922374ed0003a19fd1c164a1e47ee4c64c875f2ebf4e873296257",
+      "expected": "ac58c7c7f25922374ed0003a19fd1c164a1e47ee4c64c875f2ebf4e873296257",
+      "name": "protected:docs/evidence/role-method-differentiation/product-manager/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "acd46c25c671c36c74eebad9633181beab590de29bc2ec166cbb7d57eea8e6ab",
+      "expected": "acd46c25c671c36c74eebad9633181beab590de29bc2ec166cbb7d57eea8e6ab",
+      "name": "protected:docs/evidence/role-method-differentiation/product-manager/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "cd16705c6396db53d4b1d06ce6057351238538222c0b6c4dea241e6a6eebed8b",
+      "expected": "cd16705c6396db53d4b1d06ce6057351238538222c0b6c4dea241e6a6eebed8b",
+      "name": "protected:docs/evidence/role-method-differentiation/product-manager/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "e337e5a9d81fe348669f8e158d345366d6398f0e50d36755ee6eb7dce0cbda8b",
+      "expected": "e337e5a9d81fe348669f8e158d345366d6398f0e50d36755ee6eb7dce0cbda8b",
+      "name": "protected:docs/evidence/role-method-differentiation/quality-reviewer/design.md",
+      "ok": true
+    },
+    {
+      "actual": "613ed650c8ef930bc77334e6f0ebd540fb3a3592b34b7cfef1230ee24f62bf12",
+      "expected": "613ed650c8ef930bc77334e6f0ebd540fb3a3592b34b7cfef1230ee24f62bf12",
+      "name": "protected:docs/evidence/role-method-differentiation/quality-reviewer/runs/control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "fd265368583854ca5bc07e585002e4336c3a525f5688e57e57eed8e2f0a24047",
+      "expected": "fd265368583854ca5bc07e585002e4336c3a525f5688e57e57eed8e2f0a24047",
+      "name": "protected:docs/evidence/role-method-differentiation/quality-reviewer/runs/control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "fe32d7d401665e595ca8b94a230a56654eee53dc120e4e000b5b79de7944f2e0",
+      "expected": "fe32d7d401665e595ca8b94a230a56654eee53dc120e4e000b5b79de7944f2e0",
+      "name": "protected:docs/evidence/role-method-differentiation/quality-reviewer/runs/treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "0a1c4da591f623b8db2a768a9c15d7b9de45c24980b6f6eaa517d7549a98f7f6",
+      "expected": "0a1c4da591f623b8db2a768a9c15d7b9de45c24980b6f6eaa517d7549a98f7f6",
+      "name": "protected:docs/evidence/role-method-differentiation/quality-reviewer/runs/treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "447fe5206904c450b371f94e7e89705611a35f57affd5924ecc7d2d0435e68d9",
+      "expected": "447fe5206904c450b371f94e7e89705611a35f57affd5924ecc7d2d0435e68d9",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/README.md",
+      "ok": true
+    },
+    {
+      "actual": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+      "expected": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/bodies/product-manager-control.md",
+      "ok": true
+    },
+    {
+      "actual": "78082362d9c248d38d6acd2546bdbde3dc5f2360353afa75645d449e71a3b18c",
+      "expected": "78082362d9c248d38d6acd2546bdbde3dc5f2360353afa75645d449e71a3b18c",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/bodies/product-manager-treatment.md",
+      "ok": true
+    },
+    {
+      "actual": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+      "expected": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/bodies/quality-reviewer-control.md",
+      "ok": true
+    },
+    {
+      "actual": "18067dabca8ddb211f836617efaecd4b752c42853bd04c6b2e6a1f96f1281049",
+      "expected": "18067dabca8ddb211f836617efaecd4b752c42853bd04c6b2e6a1f96f1281049",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/bodies/quality-reviewer-treatment.md",
+      "ok": true
+    },
+    {
+      "actual": "869caee8728539b5e16bf90fa153d3063fd94c53472867be95820c7bbbbad76a",
+      "expected": "869caee8728539b5e16bf90fa153d3063fd94c53472867be95820c7bbbbad76a",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/execution-results.json",
+      "ok": true
+    },
+    {
+      "actual": "301d6bec57903f09e8a80e1676719189e6d4c216b730abf3d412aa5b2a5202a1",
+      "expected": "301d6bec57903f09e8a80e1676719189e6d4c216b730abf3d412aa5b2a5202a1",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/freeze-receipt.json",
+      "ok": true
+    },
+    {
+      "actual": "8b8b8138c84cf111aa07942ad88fc68db16566f92aac38c230fdf9e384d2ed01",
+      "expected": "8b8b8138c84cf111aa07942ad88fc68db16566f92aac38c230fdf9e384d2ed01",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/manifest.json",
+      "ok": true
+    },
+    {
+      "actual": "c3b85dd0ee9b499fdc48919259543f9bb4bc9c39ba1f733a4fea95760607ceb4",
+      "expected": "c3b85dd0ee9b499fdc48919259543f9bb4bc9c39ba1f733a4fea95760607ceb4",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/mutation-check.md",
+      "ok": true
+    },
+    {
+      "actual": "feedcb410c8728a8881d0b20adcf505542443a754aa1ed1da24bbf46b1a728ad",
+      "expected": "feedcb410c8728a8881d0b20adcf505542443a754aa1ed1da24bbf46b1a728ad",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/preserved-lead-developer.json",
+      "ok": true
+    },
+    {
+      "actual": "3e8e3b5ef2ca8f192b8f0adf07e43e19530a68d952097042b66aca47c708a638",
+      "expected": "3e8e3b5ef2ca8f192b8f0adf07e43e19530a68d952097042b66aca47c708a638",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/product-manager-design.md",
+      "ok": true
+    },
+    {
+      "actual": "d912fc10d703806594298cef26ef4a644914e63f58440474858aac126dac2bab",
+      "expected": "d912fc10d703806594298cef26ef4a644914e63f58440474858aac126dac2bab",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/prompts/product-manager-counter.md",
+      "ok": true
+    },
+    {
+      "actual": "1daca7735de8c06fe44cbe1a3b58d9d51059f9c3a83ba0e9bdbd73c05af4a439",
+      "expected": "1daca7735de8c06fe44cbe1a3b58d9d51059f9c3a83ba0e9bdbd73c05af4a439",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/prompts/product-manager-primary.md",
+      "ok": true
+    },
+    {
+      "actual": "b5a49fc635117f4d2879d200d1dd5e726a4c07acbf406dbbbecc44cd85e3fff3",
+      "expected": "b5a49fc635117f4d2879d200d1dd5e726a4c07acbf406dbbbecc44cd85e3fff3",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/prompts/quality-reviewer-counter.md",
+      "ok": true
+    },
+    {
+      "actual": "efa7c6a7fd09f7c88c1e1551f8b7a33df34558b6a0efe32542dd29b45bff6dc4",
+      "expected": "efa7c6a7fd09f7c88c1e1551f8b7a33df34558b6a0efe32542dd29b45bff6dc4",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/prompts/quality-reviewer-primary.md",
+      "ok": true
+    },
+    {
+      "actual": "a3d7934d993facc85115ec39bbe2e5d27fc79beb033af363ed3797b877bfc66c",
+      "expected": "a3d7934d993facc85115ec39bbe2e5d27fc79beb033af363ed3797b877bfc66c",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/quality-reviewer-design.md",
+      "ok": true
+    },
+    {
+      "actual": "e79f1fe3ecea7b387aceed228e26dd667c03be4e112f00148cc16a3202c224f7",
+      "expected": "e79f1fe3ecea7b387aceed228e26dd667c03be4e112f00148cc16a3202c224f7",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/results.json",
+      "ok": true
+    },
+    {
+      "actual": "88054005b50e8afc4f09449926f99a6d6fbaa7f3624a3b387d7904a63cade375",
+      "expected": "88054005b50e8afc4f09449926f99a6d6fbaa7f3624a3b387d7904a63cade375",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/product-manager-control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "3f3c9f268399308ef362888fd702ec7d7357923fb980698a7d80ed49f4ea2f70",
+      "expected": "3f3c9f268399308ef362888fd702ec7d7357923fb980698a7d80ed49f4ea2f70",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/product-manager-control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "792134ce7320c45a93e7e03351a8a0a8897f7395f76d09dee937151f73afe081",
+      "expected": "792134ce7320c45a93e7e03351a8a0a8897f7395f76d09dee937151f73afe081",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/product-manager-treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "b3bcd17bb8aa438dcb6b7b3103ddf12f8566961814e0caa36b84c9a5bf50a64b",
+      "expected": "b3bcd17bb8aa438dcb6b7b3103ddf12f8566961814e0caa36b84c9a5bf50a64b",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/product-manager-treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "93efcb3b3c8f4d28167cd93ae8bc2bef34ebbb552b6879d367936b2673be6c70",
+      "expected": "93efcb3b3c8f4d28167cd93ae8bc2bef34ebbb552b6879d367936b2673be6c70",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/quality-reviewer-control-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "5562653417ade806ab1b2bec51808c548c0888ff3ec9afcfc3318aaf0b828e07",
+      "expected": "5562653417ade806ab1b2bec51808c548c0888ff3ec9afcfc3318aaf0b828e07",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/quality-reviewer-control-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "9e3a33098a8762492873009232975dcb76b9e81b92811c60e4393e473c7830fa",
+      "expected": "9e3a33098a8762492873009232975dcb76b9e81b92811c60e4393e473c7830fa",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/quality-reviewer-treatment-counter.json",
+      "ok": true
+    },
+    {
+      "actual": "d5c040d01876b95ec9e90f390e7a12bb78fc5e6f22fe0361e2a4381ef11aa5c5",
+      "expected": "d5c040d01876b95ec9e90f390e7a12bb78fc5e6f22fe0361e2a4381ef11aa5c5",
+      "name": "protected:docs/evidence/role-method-differentiation/repair-2/runs/quality-reviewer-treatment-primary.json",
+      "ok": true
+    },
+    {
+      "actual": "21cd7f45991267bbc38b5ae03f9b5828306380f2b4ab5ba8804fe978241c85d5",
+      "expected": "21cd7f45991267bbc38b5ae03f9b5828306380f2b4ab5ba8804fe978241c85d5",
+      "name": "protected:docs/evidence/role-method-differentiation/results.md",
+      "ok": true
+    },
+    {
+      "actual": 31,
+      "expected": 31,
+      "name": "tree:docs/evidence/agent-expertise-expansion:file_count",
+      "ok": true
+    },
+    {
+      "actual": "4471f811c3637d002b7f9a2405d2fa54fe36b6338d2345cca09ae8b78f2888db",
+      "expected": "4471f811c3637d002b7f9a2405d2fa54fe36b6338d2345cca09ae8b78f2888db",
+      "name": "tree:docs/evidence/agent-expertise-expansion:sha256",
+      "ok": true
+    },
+    {
+      "actual": 42,
+      "expected": 42,
+      "name": "tree:docs/evidence/role-method-differentiation:file_count",
+      "ok": true
+    },
+    {
+      "actual": "82982c4a671852ed2510e46c481acc0c143f6a82c8360bd7dc26a1fc1ac610ad",
+      "expected": "82982c4a671852ed2510e46c481acc0c143f6a82c8360bd7dc26a1fc1ac610ad",
+      "name": "tree:docs/evidence/role-method-differentiation:sha256",
+      "ok": true
+    },
+    {
+      "actual": [
+        "architect",
+        "lead-developer",
+        "test-engineer"
+      ],
+      "expected": [
+        "architect",
+        "lead-developer",
+        "test-engineer"
+      ],
+      "name": "release_map.roles",
+      "ok": true
+    },
+    {
+      "actual": "pass",
+      "expected": "pass",
+      "name": "release_map:architect:gate",
+      "ok": true
+    },
+    {
+      "actual": "3bbb040d5f3b038841d6fd9bde8e4f4d9c015c32317a5970a0d6d93eecd323b5",
+      "expected": "3bbb040d5f3b038841d6fd9bde8e4f4d9c015c32317a5970a0d6d93eecd323b5",
+      "name": "release_map:architect:role_body",
+      "ok": true
+    },
+    {
+      "actual": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+      "expected": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+      "name": "release_map:architect:corpus",
+      "ok": true
+    },
+    {
+      "actual": "42b66da759003752bc5d909ccfaa41e7e55122314188f560d7e9e719ce8a9b51",
+      "expected": "42b66da759003752bc5d909ccfaa41e7e55122314188f560d7e9e719ce8a9b51",
+      "name": "release_map:architect:result",
+      "ok": true
+    },
+    {
+      "actual": [
+        "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision"
+      ],
+      "expected": [
+        "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision"
+      ],
+      "name": "release_map:architect:entry_ids",
+      "ok": true
+    },
+    {
+      "actual": [
+        "Martin Fowler, Architecture Decision Record: decision, context, trade-offs, and consequences"
+      ],
+      "comparison": "case-insensitive words; punctuation ignored",
+      "expected": [
+        "Martin Fowler, Architecture Decision Record: decision, context, trade-offs, and consequences"
+      ],
+      "name": "release_map:architect:source_locators",
+      "ok": true
+    },
+    {
+      "actual": "2bb42a4d1de01f5c9b39a974a3d30c20a27427c2b8efab4bc57a04325d095446",
+      "expected": "2bb42a4d1de01f5c9b39a974a3d30c20a27427c2b8efab4bc57a04325d095446",
+      "name": "release_map:architect:record:control_counter",
+      "ok": true
+    },
+    {
+      "actual": "ad130c25c60a033a34640c574e7556a1ff363eb19856893accd1a96050a29819",
+      "expected": "ad130c25c60a033a34640c574e7556a1ff363eb19856893accd1a96050a29819",
+      "name": "release_map:architect:record:control_primary",
+      "ok": true
+    },
+    {
+      "actual": "62fa6e8a5665f2166de8babe78051d2e5d399770aba833ac26d26254b5fdf490",
+      "expected": "62fa6e8a5665f2166de8babe78051d2e5d399770aba833ac26d26254b5fdf490",
+      "name": "release_map:architect:record:treatment_counter",
+      "ok": true
+    },
+    {
+      "actual": "7f37c7cb5089fc17cc6be4c0d9c13a9ef2f18e1e41daf2b0a64fb18417992ee9",
+      "expected": "7f37c7cb5089fc17cc6be4c0d9c13a9ef2f18e1e41daf2b0a64fb18417992ee9",
+      "name": "release_map:architect:record:treatment_primary",
+      "ok": true
+    },
+    {
+      "actual": "pass",
+      "expected": "pass",
+      "name": "release_map:lead-developer:gate",
+      "ok": true
+    },
+    {
+      "actual": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+      "expected": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+      "name": "release_map:lead-developer:role_body",
+      "ok": true
+    },
+    {
+      "actual": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+      "expected": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+      "name": "release_map:lead-developer:corpus",
+      "ok": true
+    },
+    {
+      "actual": "21cd7f45991267bbc38b5ae03f9b5828306380f2b4ab5ba8804fe978241c85d5",
+      "expected": "21cd7f45991267bbc38b5ae03f9b5828306380f2b4ab5ba8804fe978241c85d5",
+      "name": "release_map:lead-developer:result",
+      "ok": true
+    },
+    {
+      "actual": [
+        "flow:entry/lead-developer/plan-a-reversible-delivery-path",
+        "flow:entry/lead-developer/plan-in-proportion-to-risk"
+      ],
+      "expected": [
+        "flow:entry/lead-developer/plan-a-reversible-delivery-path",
+        "flow:entry/lead-developer/plan-in-proportion-to-risk"
+      ],
+      "name": "release_map:lead-developer:entry_ids",
+      "ok": true
+    },
+    {
+      "actual": [
+        "George Fairbanks, Just Enough Software Architecture: risk-driven design",
+        "Jez Humble and David Farley, Continuous Delivery: small safe increments and reliable release"
+      ],
+      "comparison": "case-insensitive words; punctuation ignored",
+      "expected": [
+        "George Fairbanks, Just Enough Software Architecture: risk-driven design",
+        "Jez Humble and David Farley, Continuous Delivery: small safe increments and reliable release"
+      ],
+      "name": "release_map:lead-developer:source_locators",
+      "ok": true
+    },
+    {
+      "actual": "29ccab06ef74c4f11c3bc180fd03e47f26eb287ffaa7285845e74a453ca6b19d",
+      "expected": "29ccab06ef74c4f11c3bc180fd03e47f26eb287ffaa7285845e74a453ca6b19d",
+      "name": "release_map:lead-developer:record:control_counter",
+      "ok": true
+    },
+    {
+      "actual": "ec3fa034b0ffa17d25809a6c25c97fd94768e4286f14360dba60ed82f7739001",
+      "expected": "ec3fa034b0ffa17d25809a6c25c97fd94768e4286f14360dba60ed82f7739001",
+      "name": "release_map:lead-developer:record:control_primary",
+      "ok": true
+    },
+    {
+      "actual": "ee362be2cb87dee897569c91482f0ee960d2321a72e99349a02079e3ee188d85",
+      "expected": "ee362be2cb87dee897569c91482f0ee960d2321a72e99349a02079e3ee188d85",
+      "name": "release_map:lead-developer:record:treatment_counter",
+      "ok": true
+    },
+    {
+      "actual": "550c253d7213319de6665c248fa045f4f1c829a2bae0b33eada26355308a4efc",
+      "expected": "550c253d7213319de6665c248fa045f4f1c829a2bae0b33eada26355308a4efc",
+      "name": "release_map:lead-developer:record:treatment_primary",
+      "ok": true
+    },
+    {
+      "actual": "pass",
+      "expected": "pass",
+      "name": "release_map:test-engineer:gate",
+      "ok": true
+    },
+    {
+      "actual": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+      "expected": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+      "name": "release_map:test-engineer:role_body",
+      "ok": true
+    },
+    {
+      "actual": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89",
+      "expected": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89",
+      "name": "release_map:test-engineer:corpus",
+      "ok": true
+    },
+    {
+      "actual": "42b66da759003752bc5d909ccfaa41e7e55122314188f560d7e9e719ce8a9b51",
+      "expected": "42b66da759003752bc5d909ccfaa41e7e55122314188f560d7e9e719ce8a9b51",
+      "name": "release_map:test-engineer:result",
+      "ok": true
+    },
+    {
+      "actual": [
+        "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example"
+      ],
+      "expected": [
+        "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example"
+      ],
+      "name": "release_map:test-engineer:entry_ids",
+      "ok": true
+    },
+    {
+      "actual": [
+        "Gojko Adzic, Specification by Example: method overview: collaborative examples specify and validate behavior"
+      ],
+      "comparison": "case-insensitive words; punctuation ignored",
+      "expected": [
+        "Gojko Adzic, Specification by Example: method overview, collaborative examples specify and validate behavior"
+      ],
+      "name": "release_map:test-engineer:source_locators",
+      "ok": true
+    },
+    {
+      "actual": "9ada8bfd6b2bfb74b8e29b0f65685a651324a65ec332d8715eaaf3686409d30b",
+      "expected": "9ada8bfd6b2bfb74b8e29b0f65685a651324a65ec332d8715eaaf3686409d30b",
+      "name": "release_map:test-engineer:record:control_counter",
+      "ok": true
+    },
+    {
+      "actual": "ac76a255927b9e52a67c81040e1d66177716687b36f9021b87f562ed03db37a8",
+      "expected": "ac76a255927b9e52a67c81040e1d66177716687b36f9021b87f562ed03db37a8",
+      "name": "release_map:test-engineer:record:control_primary",
+      "ok": true
+    },
+    {
+      "actual": "437ca3925e34229a50d4560e49d4b0a524e1d2516016b7df0394eb63d89ad8a5",
+      "expected": "437ca3925e34229a50d4560e49d4b0a524e1d2516016b7df0394eb63d89ad8a5",
+      "name": "release_map:test-engineer:record:treatment_counter",
+      "ok": true
+    },
+    {
+      "actual": "d4afac65816618fb634152e2282df845b1ef9ee19339335c286728ba1f9517a4",
+      "expected": "d4afac65816618fb634152e2282df845b1ef9ee19339335c286728ba1f9517a4",
+      "name": "release_map:test-engineer:record:treatment_primary",
+      "ok": true
+    },
+    {
+      "actual": [
+        "architect",
+        "business-analyst",
+        "lead-developer",
+        "sre",
+        "support-lead",
+        "test-engineer"
+      ],
+      "expected": [
+        "architect",
+        "business-analyst",
+        "lead-developer",
+        "sre",
+        "support-lead",
+        "test-engineer"
+      ],
+      "name": "active.composed_roles",
+      "ok": true
+    },
+    {
+      "actual": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+      "expected": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+      "name": "active:product-manager:base_body",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "active:product-manager:corpus_absent",
+      "ok": true
+    },
+    {
+      "actual": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+      "expected": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+      "name": "active:quality-reviewer:base_body",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "active:quality-reviewer:corpus_absent",
+      "ok": true
+    },
+    {
+      "actual": 16,
+      "expected": 16,
+      "name": "active.vocabulary.term_count",
+      "ok": true
+    },
+    {
+      "actual": 21,
+      "expected": 21,
+      "name": "active.vocabulary.edge_count",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "active.vocabulary.product_manager_absent",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "active.vocabulary.quality_reviewer_absent",
+      "ok": true
+    },
+    {
+      "actual": "237cf7b512e212f586e9a8d283346244e51932f8cac06bea72e3ff8572d7a8ea",
+      "expected": "237cf7b512e212f586e9a8d283346244e51932f8cac06bea72e3ff8572d7a8ea",
+      "name": "excluded_worktree_baseline.sha256",
+      "ok": true
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "name": "candidate.required_predecessor_paths",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:cli/expertise.py:state",
+      "ok": true
+    },
+    {
+      "actual": "505437f8009d5f1d57636b54e37bff4726ec3dd232f421597b032129c23b68f1",
+      "expected": "505437f8009d5f1d57636b54e37bff4726ec3dd232f421597b032129c23b68f1",
+      "name": "candidate:cli/expertise.py:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:docs/adr/0008-author-expertise-entries-as-json-ld-per-role.md:state",
+      "ok": true
+    },
+    {
+      "actual": "4673c3c03f653300c2ff23d172c8aa30afa969e6a0a70f7cf4f46f9694ff25ee",
+      "expected": "4673c3c03f653300c2ff23d172c8aa30afa969e6a0a70f7cf4f46f9694ff25ee",
+      "name": "candidate:docs/adr/0008-author-expertise-entries-as-json-ld-per-role.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:docs/architecture.md:state",
+      "ok": true
+    },
+    {
+      "actual": "bf5ad5b51577ca10d5637a075812f0b8c06b31fff412e8ba3acafb686cc321bc",
+      "expected": "bf5ad5b51577ca10d5637a075812f0b8c06b31fff412e8ba3acafb686cc321bc",
+      "name": "candidate:docs/architecture.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:docs/evidence/three-role-expertise-expansion/README.md:state",
+      "ok": true
+    },
+    {
+      "actual": "28aa4968bbef5aeb53fad1a90f124143a089cc6dc139609851464c6b1fc1f406",
+      "expected": "28aa4968bbef5aeb53fad1a90f124143a089cc6dc139609851464c6b1fc1f406",
+      "name": "candidate:docs/evidence/three-role-expertise-expansion/README.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:docs/file-structure.md:state",
+      "ok": true
+    },
+    {
+      "actual": "01fe918b8809d9a1deab6fcf1ba38b1921ce267a3a8907d413e47dd7c54461be",
+      "expected": "01fe918b8809d9a1deab6fcf1ba38b1921ce267a3a8907d413e47dd7c54461be",
+      "name": "candidate:docs/file-structure.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/architect.md:state",
+      "ok": true
+    },
+    {
+      "actual": "3bbb040d5f3b038841d6fd9bde8e4f4d9c015c32317a5970a0d6d93eecd323b5",
+      "expected": "3bbb040d5f3b038841d6fd9bde8e4f4d9c015c32317a5970a0d6d93eecd323b5",
+      "name": "candidate:scaffolds/default/agents/architect.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/business-analyst.md:state",
+      "ok": true
+    },
+    {
+      "actual": "20a245e265259ba4a076cd08d8d01caf0396e0ce06749e6796b8a8e4fa66d303",
+      "expected": "20a245e265259ba4a076cd08d8d01caf0396e0ce06749e6796b8a8e4fa66d303",
+      "name": "candidate:scaffolds/default/agents/business-analyst.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/data-engineer.md:state",
+      "ok": true
+    },
+    {
+      "actual": "fa83bd70c2d4d4bbedfb3cdce365d9bf2e8576d5838be7aae04944e04c9f62d6",
+      "expected": "fa83bd70c2d4d4bbedfb3cdce365d9bf2e8576d5838be7aae04944e04c9f62d6",
+      "name": "candidate:scaffolds/default/agents/data-engineer.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/lead-developer.md:state",
+      "ok": true
+    },
+    {
+      "actual": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+      "expected": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+      "name": "candidate:scaffolds/default/agents/lead-developer.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/product-manager.md:state",
+      "ok": true
+    },
+    {
+      "actual": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+      "expected": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+      "name": "candidate:scaffolds/default/agents/product-manager.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/quality-reviewer.md:state",
+      "ok": true
+    },
+    {
+      "actual": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+      "expected": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+      "name": "candidate:scaffolds/default/agents/quality-reviewer.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/security-reviewer.md:state",
+      "ok": true
+    },
+    {
+      "actual": "c0f69a66d2c1bae681121d6cb84b9d90af257bf63efa62dba14775ab42e0c2a5",
+      "expected": "c0f69a66d2c1bae681121d6cb84b9d90af257bf63efa62dba14775ab42e0c2a5",
+      "name": "candidate:scaffolds/default/agents/security-reviewer.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/solution-architect.md:state",
+      "ok": true
+    },
+    {
+      "actual": "7d247bda42095caa4e1b58dedcef9ac5c652d00a32100df22b5665fb4ca92104",
+      "expected": "7d247bda42095caa4e1b58dedcef9ac5c652d00a32100df22b5665fb4ca92104",
+      "name": "candidate:scaffolds/default/agents/solution-architect.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/sre.md:state",
+      "ok": true
+    },
+    {
+      "actual": "2084dff9cf40d9f970b6079615af56fb7f9a1ab3f5ddd8f9c689b91d4b8e9145",
+      "expected": "2084dff9cf40d9f970b6079615af56fb7f9a1ab3f5ddd8f9c689b91d4b8e9145",
+      "name": "candidate:scaffolds/default/agents/sre.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/support-lead.md:state",
+      "ok": true
+    },
+    {
+      "actual": "fdc76beaeb5f666422bb77eb5f25adf6af3db1a2454a0bd9ea8a0fa1e005a45d",
+      "expected": "fdc76beaeb5f666422bb77eb5f25adf6af3db1a2454a0bd9ea8a0fa1e005a45d",
+      "name": "candidate:scaffolds/default/agents/support-lead.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/tech-writer.md:state",
+      "ok": true
+    },
+    {
+      "actual": "744c720d18da00d82d9040449c58de5a40e82e25e6fb9217ec8bfc7cd0add06c",
+      "expected": "744c720d18da00d82d9040449c58de5a40e82e25e6fb9217ec8bfc7cd0add06c",
+      "name": "candidate:scaffolds/default/agents/tech-writer.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/test-engineer.md:state",
+      "ok": true
+    },
+    {
+      "actual": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+      "expected": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+      "name": "candidate:scaffolds/default/agents/test-engineer.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/agents/ux-specialist.md:state",
+      "ok": true
+    },
+    {
+      "actual": "26981d039c4dbe244efec8f246704c42a8dfcc7b8017c45f5bb6253d860d72c2",
+      "expected": "26981d039c4dbe244efec8f246704c42a8dfcc7b8017c45f5bb6253d860d72c2",
+      "name": "candidate:scaffolds/default/agents/ux-specialist.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/expertise/architect.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+      "expected": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+      "name": "candidate:scaffolds/default/expertise/architect.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/expertise/business-analyst.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": "f44a06b04cec9c5e49dc56d1506552f144cc44295030117da53c6a3aaeb8e3ff",
+      "expected": "f44a06b04cec9c5e49dc56d1506552f144cc44295030117da53c6a3aaeb8e3ff",
+      "name": "candidate:scaffolds/default/expertise/business-analyst.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/expertise/competencies.md:state",
+      "ok": true
+    },
+    {
+      "actual": "d01ae5574e09024cc6b80d4b6ec8a3ee5632221919043315ea683fd16b804791",
+      "expected": "d01ae5574e09024cc6b80d4b6ec8a3ee5632221919043315ea683fd16b804791",
+      "name": "candidate:scaffolds/default/expertise/competencies.md:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/expertise/lead-developer.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+      "expected": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+      "name": "candidate:scaffolds/default/expertise/lead-developer.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "candidate:scaffolds/default/expertise/product-manager.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": null,
+      "expected": null,
+      "name": "candidate:scaffolds/default/expertise/product-manager.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "candidate:scaffolds/default/expertise/quality-reviewer.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": null,
+      "expected": null,
+      "name": "candidate:scaffolds/default/expertise/quality-reviewer.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/expertise/sre.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": "6268cdba7db1b5d2bde9e2a20970e419bcfb9b258afbad579eeabb590beac77c",
+      "expected": "6268cdba7db1b5d2bde9e2a20970e419bcfb9b258afbad579eeabb590beac77c",
+      "name": "candidate:scaffolds/default/expertise/sre.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/expertise/support-lead.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": "bed44ad55cc899a65282223ed5a948319bcf65fdda63f36d7e9184dab755c980",
+      "expected": "bed44ad55cc899a65282223ed5a948319bcf65fdda63f36d7e9184dab755c980",
+      "name": "candidate:scaffolds/default/expertise/support-lead.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/expertise/test-engineer.jsonld:state",
+      "ok": true
+    },
+    {
+      "actual": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89",
+      "expected": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89",
+      "name": "candidate:scaffolds/default/expertise/test-engineer.jsonld:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:scaffolds/default/flow.toml:state",
+      "ok": true
+    },
+    {
+      "actual": "c17e5b7905e02ae26f2173221addb54ef5bcc5c848a53a66d8a47683b237c9d1",
+      "expected": "c17e5b7905e02ae26f2173221addb54ef5bcc5c848a53a66d8a47683b237c9d1",
+      "name": "candidate:scaffolds/default/flow.toml:sha256",
+      "ok": true
+    },
+    {
+      "actual": "present",
+      "expected": "present",
+      "name": "candidate:tests/test_expertise_composition.py:state",
+      "ok": true
+    },
+    {
+      "actual": "b72e7991061726c785ff7d67fd7b38e4e478b026e1608495a177962f3aac4da4",
+      "expected": "b72e7991061726c785ff7d67fd7b38e4e478b026e1608495a177962f3aac4da4",
+      "name": "candidate:tests/test_expertise_composition.py:sha256",
+      "ok": true
+    },
+    {
+      "actual": 29,
+      "expected": 29,
+      "name": "candidate.production_path_count",
+      "ok": true
+    },
+    {
+      "actual": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+      "expected": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+      "name": "candidate.production_sha256",
+      "ok": true
+    },
+    {
+      "actual": "pass",
+      "expected": "pass",
+      "name": "candidate.change_surface_verdict",
+      "ok": true
+    },
+    {
+      "actual": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+      "expected": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+      "name": "command_receipt.candidate_T",
+      "ok": true
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "name": "command_receipt.all_expected_exits_observed",
+      "ok": true
+    },
+    {
+      "actual": "eb03b5e79fd969d639f5f6f7ebf88ca71da7291bcfa38f81bca448969eacc7aa",
+      "expected": "eb03b5e79fd969d639f5f6f7ebf88ca71da7291bcfa38f81bca448969eacc7aa",
+      "name": "command_receipt:full-suite:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "a479a5efc8931332065f3190ec9bffae5ba7a33f22a01ce80c4bc96d465c5d2c",
+      "expected": "a479a5efc8931332065f3190ec9bffae5ba7a33f22a01ce80c4bc96d465c5d2c",
+      "name": "command_receipt:focused:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "07476422548022cf733f339a075ec1b513cefaf292d03d264477ce062a559b2e",
+      "expected": "07476422548022cf733f339a075ec1b513cefaf292d03d264477ce062a559b2e",
+      "name": "command_receipt:help-check:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "6e1aeb6e68d3abf6e6347cecb3baff5e90a9239e976fa4ae3ff569e201440381",
+      "expected": "6e1aeb6e68d3abf6e6347cecb3baff5e90a9239e976fa4ae3ff569e201440381",
+      "name": "command_receipt:diff-check:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "02974dd8b23bd440769a6bc9671f041856794c0d0ac51fa1eff43ac38a4e989b",
+      "expected": "02974dd8b23bd440769a6bc9671f041856794c0d0ac51fa1eff43ac38a4e989b",
+      "name": "command_receipt:sync-claude-user:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "b2fc4e0a37f51c4ae7ac3c4ca8fd7479cc3b3a7968b7cfa4339b379432d94b7a",
+      "expected": "b2fc4e0a37f51c4ae7ac3c4ca8fd7479cc3b3a7968b7cfa4339b379432d94b7a",
+      "name": "command_receipt:sync-codex-user:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "d74b25bfb105377e916208e6f58c49df3c47ad38bdfa1d5b04b3fcd5fb314820",
+      "expected": "d74b25bfb105377e916208e6f58c49df3c47ad38bdfa1d5b04b3fcd5fb314820",
+      "name": "command_receipt:sync-claude-check:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "b5a2b7195996ca098125bd172df23dcf6718b2f59634eb5bb651d609bce84dad",
+      "expected": "b5a2b7195996ca098125bd172df23dcf6718b2f59634eb5bb651d609bce84dad",
+      "name": "command_receipt:sync-codex-check:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "676361b5151a98397dbbbe0c14191bcc07e942c64fe656c731b0fea9a105aaf1",
+      "expected": "676361b5151a98397dbbbe0c14191bcc07e942c64fe656c731b0fea9a105aaf1",
+      "name": "command_receipt:isolated-sync-claude:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "1f9af6894f83d888a530cef5740efef3f3249dc4ddaf824a1330ef4f98c39ab7",
+      "expected": "1f9af6894f83d888a530cef5740efef3f3249dc4ddaf824a1330ef4f98c39ab7",
+      "name": "command_receipt:isolated-sync-codex:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "ab289e8ee4f84944645fc788bdbe61801db34eac759a63f8fef56cba4d578d50",
+      "expected": "ab289e8ee4f84944645fc788bdbe61801db34eac759a63f8fef56cba4d578d50",
+      "name": "command_receipt:isolated-sync-claude-check:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "192c847adedf2643d033079fab55d06498dfd1d90d950eaf2c89b8cde67008f4",
+      "expected": "192c847adedf2643d033079fab55d06498dfd1d90d950eaf2c89b8cde67008f4",
+      "name": "command_receipt:isolated-sync-codex-check:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "4998c584b68331c26fafd80e9a02c8da3704463890e9c2519e38a278852a952d",
+      "expected": "4998c584b68331c26fafd80e9a02c8da3704463890e9c2519e38a278852a952d",
+      "name": "command_receipt:runtime-smoke:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "1d6fe906657052453374f75279baaf343baa5925f9dee94dd91ea5f2d586f005",
+      "expected": "1d6fe906657052453374f75279baaf343baa5925f9dee94dd91ea5f2d586f005",
+      "name": "command_receipt:doctor-normal:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "cef9df2c7f2f137cc0e0f33357b6f1f750909a958cfcc7e1f28557f37d3ca032",
+      "expected": "cef9df2c7f2f137cc0e0f33357b6f1f750909a958cfcc7e1f28557f37d3ca032",
+      "name": "command_receipt:doctor-strict:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "a4ab9671f4688b6f785d1123148fa8b6fef80b7c0e427ea5c6b301042ce6c633",
+      "expected": "a4ab9671f4688b6f785d1123148fa8b6fef80b7c0e427ea5c6b301042ce6c633",
+      "name": "command_receipt:run-verify:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "01fe63e870a65f7f3a845e3cfdb3878f4b068aa3773a713181e5c77ec4e28e68",
+      "expected": "01fe63e870a65f7f3a845e3cfdb3878f4b068aa3773a713181e5c77ec4e28e68",
+      "name": "command_receipt:adapter-readback:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "effcdc59919a33bb467592dfa4bad2208a0d6a677894bc22de01dec34a0b8224",
+      "expected": "effcdc59919a33bb467592dfa4bad2208a0d6a677894bc22de01dec34a0b8224",
+      "name": "command_receipt:current-claim-search:log_sha256",
+      "ok": true
+    },
+    {
+      "actual": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+      "expected": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+      "name": "live.candidate_T",
+      "ok": true
+    },
+    {
+      "actual": "196a38273d6ba503ca946a3aac56b05ccbf1580492f8723460021de8a74588f3",
+      "expected": "196a38273d6ba503ca946a3aac56b05ccbf1580492f8723460021de8a74588f3",
+      "name": "live.claude.raw_capture_sha256",
+      "ok": true
+    },
+    {
+      "actual": "58cd3bdec9a05b85fd3d4f119b40fae1cbeb8fe6923d8fc885662cd10429804e",
+      "expected": "58cd3bdec9a05b85fd3d4f119b40fae1cbeb8fe6923d8fc885662cd10429804e",
+      "name": "live.codex.raw_capture_sha256",
+      "ok": true
+    }
+  ],
+  "excluded_worktree_baseline": {
+    "disposition": "preserve unchanged and unstaged",
+    "path": ".flow/memory/STATE.md",
+    "sha256": "237cf7b512e212f586e9a8d283346244e51932f8cac06bea72e3ff8572d7a8ea"
+  },
+  "failure_count": 0,
+  "failures": [],
+  "mode": "final",
+  "ok": true,
+  "schema_version": 1,
+  "validator": ".flow/runs/role-method-differentiation-repair-3/verify_frozen.py"
+}

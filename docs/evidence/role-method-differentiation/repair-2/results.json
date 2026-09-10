@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "manifest_sha256": "8b8b8138c84cf111aa07942ad88fc68db16566f92aac38c230fdf9e384d2ed01",
+  "scored_at": "2026-09-10T01:31:17Z",
+  "scorer": {
+    "provider": "/root/role_methods_repair_quality",
+    "method": "criterion-level boolean scoring against the frozen design files"
+  },
+  "execution": {
+    "all_pair_parity": true,
+    "all_records_successful": true,
+    "record_count": 8,
+    "record_sha256": {
+      "product-manager-treatment-primary": "b3bcd17bb8aa438dcb6b7b3103ddf12f8566961814e0caa36b84c9a5bf50a64b",
+      "product-manager-control-primary": "3f3c9f268399308ef362888fd702ec7d7357923fb980698a7d80ed49f4ea2f70",
+      "product-manager-treatment-counter": "792134ce7320c45a93e7e03351a8a0a8897f7395f76d09dee937151f73afe081",
+      "product-manager-control-counter": "88054005b50e8afc4f09449926f99a6d6fbaa7f3624a3b387d7904a63cade375",
+      "quality-reviewer-treatment-primary": "d5c040d01876b95ec9e90f390e7a12bb78fc5e6f22fe0361e2a4381ef11aa5c5",
+      "quality-reviewer-control-primary": "5562653417ade806ab1b2bec51808c548c0888ff3ec9afcfc3318aaf0b828e07",
+      "quality-reviewer-treatment-counter": "9e3a33098a8762492873009232975dcb76b9e81b92811c60e4393e473c7830fa",
+      "quality-reviewer-control-counter": "93efcb3b3c8f4d28167cd93ae8bc2bef34ebbb552b6879d367936b2673be6c70"
+    }
+  },
+  "roles": {
+    "product-manager": {
+      "criteria": {
+        "PM-P1": {
+          "treatment": true,
+          "control": true,
+          "evidence": "Both arms classify compliance as a deadline or cliff, onboarding as gradual erosion, and dashboard value as flat."
+        },
+        "PM-P2": {
+          "treatment": false,
+          "control": false,
+          "evidence": "Treatment declines the frozen compliance ratio of 240000 divided by 4; control does not calculate or explicitly compare all three ratios."
+        },
+        "PM-P3": {
+          "treatment": true,
+          "control": true,
+          "evidence": "Both arms order compliance, onboarding, then dashboard and reject stated importance as the sequencing rule."
+        },
+        "PM-C1": {
+          "treatment": true,
+          "control": true,
+          "evidence": "Both arms decline to invent urgency or a factual tie-breaker for flat, undifferentiated options."
+        }
+      },
+      "treatment_primary_all_true": false,
+      "control_primary_all_false": false,
+      "treatment_counter_true": true,
+      "role_pass": false,
+      "failure": "Treatment misses PM-P2 and control satisfies PM-P1 and PM-P3."
+    },
+    "quality-reviewer": {
+      "criteria": {
+        "QR-P1": {
+          "treatment": true,
+          "control": true,
+          "evidence": "Both arms state that a database constraint could reject the unsupported value before commit."
+        },
+        "QR-P2": {
+          "treatment": true,
+          "control": true,
+          "evidence": "Both arms use the absent schema constraint and observed persisted turbo value to rule out the explanation."
+        },
+        "QR-P3": {
+          "treatment": false,
+          "control": false,
+          "evidence": "Both arms declare the Critical before presenting the alternative-explanation chain required by the frozen only-then ordering."
+        },
+        "QR-C1": {
+          "treatment": true,
+          "control": true,
+          "evidence": "Both arms keep the unresolved counter-case below Critical and request discriminating evidence."
+        }
+      },
+      "treatment_primary_all_true": false,
+      "control_primary_all_false": false,
+      "treatment_counter_true": true,
+      "role_pass": false,
+      "failure": "Treatment misses QR-P3 and control satisfies QR-P1 and QR-P2."
+    }
+  },
+  "release": {
+    "combined_five_role_gate": false,
+    "eligible_for_merge": false,
+    "disposition": "Preserve repair-2 as failed. Do not selectively rerun or rescore it. A changed method, prompt, or rubric requires a new versioned envelope."
+  },
+  "fixture_limit": "The product primary does not provide an initial onboarding value, so neither arm's claimed total captured value is supported by the prompt. This does not alter the frozen criterion scores."
+}

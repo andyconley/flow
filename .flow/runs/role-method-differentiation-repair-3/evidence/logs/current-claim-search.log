@@ -1,0 +1,55 @@
+current-claim search
+work_id: role-method-differentiation-repair-3
+candidate_T: 4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33
+result: pass
+
+scope:
+  scaffolds/default/flow.toml
+  scaffolds/default/expertise/competencies.md
+  docs/architecture.md
+  docs/file-structure.md
+  docs/evidence/three-role-expertise-expansion/README.md
+  .flow/runs/role-method-differentiation-repair-3/plan.md
+  .flow/runs/role-method-differentiation-repair-3/validation-plan.md
+  .flow/runs/role-method-differentiation-repair-3/validation-results.md
+  .flow/runs/role-method-differentiation-repair-3/implementation-handoff.md
+  .flow/runs/role-method-differentiation-repair-3/HANDOFF.md
+  .flow/runs/role-method-differentiation-repair-3/findings-reconciliation.md
+  .flow/runs/role-method-differentiation-repair-3/review/*.md
+  .flow/runs/role-method-differentiation-repair-3/research/release-readiness.md
+
+excluded by the approved contract:
+  docs/evidence/agent-expertise-expansion/**
+  docs/evidence/role-method-differentiation/**
+  .flow/runs/role-method-differentiation/**
+
+commands:
+  /opt/homebrew/bin/python3.12 -m unittest tests.test_expertise_composition.ShippedCorpusTests.test_current_documents_describe_the_bounded_release
+  rg -n -i -C 1 '(five[- ]role|all five|eight roles|eight[- ]role|three[- ]role|exactly six roles|six composed roles)' <scope above>
+
+observed positive current claims:
+  docs/file-structure.md:254 says the shipped composed cohort is exactly six roles and names all six.
+  docs/architecture.md names the same six-role composed cohort and describes PM/QR as base-only.
+  docs/evidence/three-role-expertise-expansion/README.md maps the three passing additions and failed PM/QR disposition.
+  .flow/runs/role-method-differentiation-repair-3/plan.md:21-26 states exactly six active composed roles and a three-role current evidence summary.
+  .flow/runs/role-method-differentiation-repair-3/validation-results.md:12-21 states exactly six active roles and only three passing additions.
+  .flow/runs/role-method-differentiation-repair-3/HANDOFF.md:11-27 states exactly six active roles and only three passing additions.
+  focused current-document oracle: pass.
+
+five/eight-role lexical candidates and dispositions:
+  plan.md:15 and plan.md:103 describe an unsupported claim and immutable historical failure language.
+  validation-plan.md:99 is the explicit rejection oracle.
+  validation-results.md:141-143 records that the forbidden current claims were not found.
+  implementation-handoff.md:13 records the preimplementation working-tree input, not the delivered state.
+  findings-reconciliation.md:12 defers the all-five alternative.
+  review/product.md:69-71 forbids implying a completed five-role outcome.
+  review/testability.md:15,72 describe the preimplementation cohort and protected historical language; lines 77-78 require the six-role/three-role outcome.
+  review/requirements.md:47,202,210 describe rejected alternatives, search false positives, and the failed prior assertion.
+  review/architecture.md:26,144-153 describe the prior eight-role inventory and failed all-five relationship; the accepted disposition is the three-role boundary.
+  review/implementation-quality.md:28,200 explicitly classify five/eight references as rejected or historical and accept the current six-role/three-role claim.
+
+forbidden affirmative current claims:
+  none
+
+conclusion:
+  Every affirmative current release statement on the fixed active surface is bounded to three passing additions and six composed roles total. All five/eight-role lexical candidates are rejection rules, preimplementation descriptions, deferred alternatives, or protected-history discussion; none asserts current success.

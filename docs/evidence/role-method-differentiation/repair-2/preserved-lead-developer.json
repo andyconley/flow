@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-10T01:31:17Z",
+  "purpose": "Inventory the lead-developer source and passing evidence retained by the two-role repair.",
+  "scope_limit": "This snapshot proves the retained files and their current bytes. No repair-start lead-developer hash was frozen, so non-mutation across the repair is supported by implementation history rather than an independent before/after digest.",
+  "files": {
+    "scaffolds/default/agents/lead-developer.md": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+    "scaffolds/default/expertise/lead-developer.jsonld": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+    "docs/evidence/role-method-differentiation/lead-developer/design.md": "4e8d8354eebbb1d530fe08953f0194022fb1d04042da2de8f76eb7f674cb6d1d",
+    "docs/evidence/role-method-differentiation/lead-developer/runs/control-counter.json": "29ccab06ef74c4f11c3bc180fd03e47f26eb287ffaa7285845e74a453ca6b19d",
+    "docs/evidence/role-method-differentiation/lead-developer/runs/control-primary.json": "ec3fa034b0ffa17d25809a6c25c97fd94768e4286f14360dba60ed82f7739001",
+    "docs/evidence/role-method-differentiation/lead-developer/runs/treatment-counter.json": "ee362be2cb87dee897569c91482f0ee960d2321a72e99349a02079e3ee188d85",
+    "docs/evidence/role-method-differentiation/lead-developer/runs/treatment-primary.json": "550c253d7213319de6665c248fa045f4f1c829a2bae0b33eada26355308a4efc"
+  },
+  "prior_score": {
+    "primary": "pass",
+    "counter": "pass",
+    "role_gate": "pass",
+    "source": "docs/evidence/role-method-differentiation/results.md"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/role-method-differentiation/acceptance-criteria.md",
+    "handback": ".flow/runs/role-method-differentiation/HANDOFF.md",
+    "handoff": ".flow/runs/role-method-differentiation/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/role-method-differentiation/validation-results.md",
+    "orchestration_manifest": ".flow/runs/role-method-differentiation/orchestration.json",
+    "plan": ".flow/runs/role-method-differentiation/plan.md",
+    "requirements": ".flow/runs/role-method-differentiation/requirements.md",
+    "validation_plan": ".flow/runs/role-method-differentiation/validation-plan.md"
+  },
+  "created_at": "2026-09-09T17:29:01Z",
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-09T17:57:22Z",
+    "approve-plan": "2026-09-09T18:00:20Z",
+    "mark-handback-ready": "2026-09-10T01:35:14Z",
+    "start-definition": "2026-09-09T17:29:01Z",
+    "start-implementation": "2026-09-09T18:00:21Z",
+    "start-plan": "2026-09-09T17:57:22Z",
+    "start-review": "2026-09-10T01:37:42Z"
+  },
+  "lane": "review",
+  "last_event": "start-review",
+  "phase": "reviewing",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "reviewing",
+  "updated_at": "2026-09-10T01:37:42Z",
+  "work_id": "role-method-differentiation"
+}

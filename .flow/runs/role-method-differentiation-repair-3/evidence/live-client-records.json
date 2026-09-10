@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-10T11:27:41Z",
+  "candidate_T": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+  "observer": "Codex primary implementation agent",
+  "candidate_source": {
+    "repository": "/Users/andyconley/src/flow",
+    "head": "2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208",
+    "branch": "codex/role-method-differentiation-repair-3",
+    "install_source_symlink": "/Users/andyconley/.flow/source -> /Users/andyconley/src/flow"
+  },
+  "fixture": "An import must reject row 7 where email is not-an-email and expose an error containing row 7 and email. Define the minimum test oracle.",
+  "role_checks": {
+    "claude": {
+      "status": "observed",
+      "observed_at": "2026-09-10T11:12:31Z",
+      "invocation": "claude -p --agent test-engineer --model sonnet --effort medium --tools '' --no-session-persistence --output-format json",
+      "client_agent": "test-engineer",
+      "session_id": "626bdb33-cbbf-44c0-942f-58d53009da56",
+      "configured_model": "sonnet",
+      "observed_model": "claude-sonnet-5",
+      "effort": "medium",
+      "effort_evidence": "native invocation argument --effort medium",
+      "installed_output": "/Users/andyconley/.claude/agents/test-engineer.md",
+      "installed_output_sha256": "95f1c349b92baeea9d1247ff897781529c1851bfbc3d0d78d871b74b2b6a518d",
+      "isolated_output_sha256": "95f1c349b92baeea9d1247ff897781529c1851bfbc3d0d78d871b74b2b6a518d",
+      "composed_method_visible": "Define a test oracle with a concrete example",
+      "raw_capture_sha256": "196a38273d6ba503ca946a3aac56b05ccbf1580492f8723460021de8a74588f3",
+      "response": "## Test Coverage Analysis\n\n### Current Coverage\n- Not applicable here — this is a scoped oracle definition for a single acceptance criterion (row 7, invalid email), not a full coverage pass.\n\n### Recommended Tests\n\n1. **`import rejects row with invalid email and reports row number and field`** — Verifies the import pipeline validates each row's email and, on failure, produces a structured, actionable error rather than silently skipping, corrupting data, or throwing an unlabelled exception.\n\n   - **Representative input**: An import file/dataset with 7+ valid-shaped rows where row 7's `email` field is the literal string `not-an-email` (all other fields on row 7 valid; surrounding rows valid, to isolate the failure to row 7).\n   - **Observable expected result**: The import call returns/raises an error result whose message or structured payload contains both the row identifier `7` (or `row 7`) and the field name `email` — e.g. `\"row 7: email\"` substring present, or equivalent structured fields like `{row: 7, field: \"email\"}`. The oracle is: does the caller/consumer of the import result see enough to locate and fix the bad record? Absence of either token (row number or field name) fails the test.\n   - **Test level**: Integration — this must exercise the actual import pipeline (parsing + row-level validation + error aggregation/surfacing), not just an isolated email-format validator function. A unit test on the validator alone would prove the regex/format check works but would *not* prove the pipeline correctly attaches row context to that failure — that wiring is the behavior under test.\n   - **Failure/recovery path**: Row 7 must be rejected (not imported/persisted), and the error must be surfaced to the caller rather than swallowed. Assert as part of the same test: (a) row 7 does not appear in the successfully imported records, (b) the error is returned/thrown/collected rather than silently logged, and (c) other valid rows still import successfully (partial-failure behavior isn't silently treated as total success or total failure unless that's the specified contract — confirm which before asserting).\n\n### Priority\n- Critical: The above test — this is the acceptance criterion itself; without it there's no proof the requirement is met.\n- High: A companion \"all rows valid\" happy-path test to confirm the error path doesn't fire on good data (avoids a test that passes only because everything is rejected).\n- Medium: Boundary variants — invalid email on row 1 (first) and last row, to confirm row-number reporting isn't off-by-one or hardcoded.\n- Low: Multiple invalid rows in one import (row 7 and row 12 both bad) — confirms errors aren't reported only for the first failure, if the spec requires multi-error reporting.\n\n### Verification Notes\n- Manual checks: Confirm with the requirement owner whether \"row 7\" means 1-indexed data row, 1-indexed including header, or 0-indexed — this changes the literal value asserted and is a common off-by-one trap.\n- Runtime checks: If the import is file-based (CSV/Excel), confirm the test fixture's row 7 lands exactly where intended after parsing (blank lines, header rows, or BOM characters can shift row numbering) — inspect the parsed row count before trusting the assertion.",
+      "oracle_elements": {
+        "representative_input": true,
+        "observable_error_with_row_7_and_email": true,
+        "integration_level": true,
+        "failure_or_recovery_path": true
+      }
+    },
+    "codex": {
+      "status": "observed",
+      "observed_at": "2026-09-10T11:15:10Z",
+      "invocation": "codex exec parent explicitly invoked collaboration.spawn_agent with agent_type=test-engineer and waited for the child",
+      "parent_thread_id": "01a08b07-309e-77d2-a37e-7fb4ae845f07",
+      "child_thread_id": "01a08b07-46e0-7a23-9f1c-bb30793b4842",
+      "child_agent_path": "/root/native_agent_loading_check",
+      "client_agent": "test-engineer",
+      "configured_model": "gpt-5.6-terra",
+      "observed_model": "gpt-5.6-terra",
+      "effort": "medium",
+      "effort_evidence": "child thread_settings_applied event",
+      "installed_output": "/Users/andyconley/.codex/agents/test-engineer.toml",
+      "installed_output_sha256": "a0b7e8b13b3c0d8e2b237d23d739308eb691eb9958e9d5b7452e0d69b508cbe5",
+      "isolated_output_sha256": "a0b7e8b13b3c0d8e2b237d23d739308eb691eb9958e9d5b7452e0d69b508cbe5",
+      "composed_method_visible": "Define a test oracle with a concrete example",
+      "parent_transcript_sha256": "fd80b1552eca854d86f5c21ef2146114de153afc8c06de89d0ff7866c4fc9c2a",
+      "child_transcript_sha256": "e3a0fd4b82ba64068a080b86c8e382b0c5ef7c0afa7c23d49808ace0ff20f28d",
+      "raw_capture_sha256": "58cd3bdec9a05b85fd3d4f119b40fae1cbeb8fe6923d8fc885662cd10429804e",
+      "response": "Representative input: an import payload whose row 7 has email: not-an-email. Expected observable error: the integration call rejects the import and returns an error message containing both row 7 and email. Integration level: exercise the import entry point through its parsing/validation boundary. Failure path: row validation detects the malformed email, stops or marks the import as rejected, and propagates the row-specific validation error to the caller.",
+      "oracle_elements": {
+        "representative_input": true,
+        "observable_error_with_row_7_and_email": true,
+        "integration_level": true,
+        "failure_or_recovery_path": true
+      }
+    }
+  },
+  "command_discovery_checks": {
+    "claude": {
+      "status": "observed",
+      "observed_at": "2026-09-10T11:21:54Z",
+      "invocation": "/flow-status in a fresh claude -p session",
+      "session_id": "f9dc01ab-c663-492a-9881-94bbdc9a68f0",
+      "model": "claude-sonnet-5",
+      "loaded_skill": "flow-status",
+      "result": "Reported phase/state implementing and mark-handback-ready as the next legal transition.",
+      "exit_code": 0
+    },
+    "codex": {
+      "status": "observed",
+      "observed_at": "2026-09-10T11:23:16Z",
+      "invocation": "$flow-status in a fresh codex exec --ephemeral session",
+      "thread_id": "01a08b0e-27bc-7533-b9a9-9670204c9740",
+      "loaded_skill": "/Users/andyconley/.agents/skills/flow-status/SKILL.md",
+      "result": "Reported phase/state implementing and mark-handback-ready as the next legal transition.",
+      "exit_code": 0,
+      "limitation": "flow cost active attempted a usage-store write in the read-only sandbox and failed; canonical run status and skill discovery were unaffected."
+    }
+  },
+  "transfer_to_T": "The only later production mutations were the three declared negative tests; each was restored to its exact pre-mutation SHA before T was recomputed and verified.",
+  "verdict": "pass"
+}

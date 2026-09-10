@@ -1,7 +1,10 @@
 """Composition of role expertise corpora into generated agent bodies."""
+import hashlib
 import json
+import re
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -13,7 +16,21 @@ import expertise  # noqa: E402
 import sync  # noqa: E402
 
 SCAFFOLD = REPO_ROOT / "scaffolds" / "default"
-COMPOSED_ROLES = ("business-analyst", "sre", "support-lead")
+RUN = REPO_ROOT / ".flow" / "runs" / "role-method-differentiation-repair-3"
+COMPOSED_ROLES = (
+    "architect", "business-analyst", "lead-developer", "sre", "support-lead",
+    "test-engineer",
+)
+ADDED_ROLES = ("architect", "lead-developer", "test-engineer")
+INACTIVE_BASE_ROLES = ("product-manager", "quality-reviewer")
+BASE_ROLE_HASHES = {
+    "product-manager": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+    "quality-reviewer": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+}
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def entry(name, layer="baseline", **overrides):
@@ -40,6 +57,111 @@ def write_corpus(directory: Path, role: str, entries: list) -> Path:
 
 
 class ShippedCorpusTests(unittest.TestCase):
+
+    def test_inactive_roles_match_frozen_base_and_have_no_composed_surface(self):
+        manifest = tomllib.loads((SCAFFOLD / "flow.toml").read_text())
+        agents = {agent["name"]: agent for agent in manifest["agents"]}
+        with mock.patch.object(sync, "USER_OVERLAY_DIR", SCAFFOLD / "no-user-overlay"):
+            for role in INACTIVE_BASE_ROLES:
+                with self.subTest(role=role):
+                    body_path = SCAFFOLD / "agents" / f"{role}.md"
+                    self.assertEqual(sha256(body_path), BASE_ROLE_HASHES[role])
+                    self.assertIn(role, agents)
+                    self.assertNotEqual(agents[role].get("generation_mode"), "composed")
+                    self.assertFalse((SCAFFOLD / "expertise" / f"{role}.jsonld").exists())
+                    self.assertEqual(expertise.corpus_for(role, SCAFFOLD, None), [])
+                    rendered = sync.agent_body(agents[role], SCAFFOLD, SCAFFOLD, {})
+                    self.assertNotIn(expertise.SECTION, rendered)
+
+    def test_retained_role_and_corpus_hashes_match_the_start_receipt(self):
+        receipt = json.loads((RUN / "evidence" / "start-receipt.json").read_text())
+        expected_paths = {
+            f"scaffolds/default/{kind}/{role}.{suffix}"
+            for role in ADDED_ROLES
+            for kind, suffix in (("agents", "md"), ("expertise", "jsonld"))
+        }
+        self.assertEqual(set(receipt["files"]), expected_paths)
+        for relative, expected in receipt["files"].items():
+            with self.subTest(path=relative):
+                self.assertEqual(sha256(REPO_ROOT / relative), expected)
+
+    def test_release_evidence_map_is_exact_and_complete(self):
+        evidence_map = json.loads(
+            (RUN / "evidence" / "release-evidence-map.json").read_text()
+        )
+        roles = {item["role"]: item for item in evidence_map["roles"]}
+        self.assertEqual(set(roles), set(ADDED_ROLES))
+        for role, item in roles.items():
+            with self.subTest(role=role):
+                self.assertEqual(item["gate_result"], "pass")
+                self.assertEqual(sha256(REPO_ROOT / item["role_body"]["path"]),
+                                 item["role_body"]["sha256"])
+                self.assertEqual(sha256(REPO_ROOT / item["corpus"]["path"]),
+                                 item["corpus"]["sha256"])
+                graph = json.loads(
+                    (REPO_ROOT / item["corpus"]["path"]).read_text()
+                )["@graph"]
+                self.assertEqual(
+                    {entry["@id"] for entry in graph}, set(item["entry_ids"])
+                )
+                self.assertEqual(sha256(REPO_ROOT / item["result"]["path"]),
+                                 item["result"]["sha256"])
+                self.assertEqual(
+                    set(item["records"]),
+                    {"control_primary", "treatment_primary", "control_counter",
+                     "treatment_counter"},
+                )
+                for record_path, expected in item["records"].values():
+                    self.assertEqual(sha256(REPO_ROOT / record_path), expected)
+
+    def test_competency_vocabulary_has_exact_release_coverage(self):
+        text = (SCAFFOLD / "expertise" / "competencies.md").read_text()
+        terms = re.findall(r"(?m)^### (.+)$", text)
+        taught_blocks = re.findall(
+            r"(?ms)^- Taught by: (.*?)(?:\n\n|\Z)", text
+        )
+        edges = sum(len(re.findall(r'"[^"]+"', block)) for block in taught_blocks)
+        self.assertEqual(len(terms), 16)
+        self.assertEqual(edges, 21)
+        self.assertNotIn("Roles: product-manager", text)
+        self.assertNotIn("Roles: quality-reviewer", text)
+
+    def test_lead_developer_obligation_is_positive_and_uses_short_form(self):
+        body = (SCAFFOLD / "agents" / "lead-developer.md").read_text()
+        self.assertRegex(
+            body,
+            r"(?m)^First classify reversibility, blast radius, and existing test coverage\.",
+        )
+        self.assertNotRegex(
+            body,
+            r"(?im)^(?:do not|never)\s+first classify reversibility, blast radius",
+        )
+        self.assertIn("### Short form", body)
+        self.assertIn("Full-plan sections omitted: atomic, local, reversible, covered change.", body)
+
+    def test_current_documents_describe_the_bounded_release(self):
+        paths = (
+            REPO_ROOT / "docs" / "architecture.md",
+            REPO_ROOT / "docs" / "file-structure.md",
+            REPO_ROOT / "docs" / "evidence" / "three-role-expertise-expansion" / "README.md",
+        )
+        for path in paths:
+            self.assertTrue(path.is_file(), path)
+        current = "\n".join(path.read_text() for path in paths)
+        self.assertIn("exactly six roles", current)
+        self.assertIn("architect", current)
+        self.assertIn("lead-developer", current)
+        self.assertIn("test-engineer", current)
+        self.assertNotIn("eight roles", current.lower())
+
+    def test_manifest_marks_exactly_the_shipped_roles_composed(self):
+        manifest = tomllib.loads((SCAFFOLD / "flow.toml").read_text())
+        configured = {
+            agent["name"] for agent in manifest["agents"]
+            if agent.get("generation_mode") == "composed"
+        }
+        self.assertEqual(configured, set(COMPOSED_ROLES))
+
     def test_every_composed_role_has_a_corpus(self):
         for role in COMPOSED_ROLES:
             with self.subTest(role=role):
@@ -68,6 +190,47 @@ class ShippedCorpusTests(unittest.TestCase):
                 with self.subTest(role=role, entry=item["name"]):
                     names = [t.get("name") for t in item.get("teaches") or []]
                     self.assertTrue(names and all(names))
+
+    def test_shipped_entries_belong_to_their_role_and_have_unique_ids(self):
+        ids = set()
+        for role in COMPOSED_ROLES:
+            for item in expertise.corpus_for(role, SCAFFOLD, None):
+                with self.subTest(role=role, entry=item["name"]):
+                    self.assertEqual(item.get("@type"), "LearningResource")
+                    self.assertEqual(item.get("audience", {}).get("@type"), "Audience")
+                    self.assertEqual(item.get("audience", {}).get("audienceType"), role)
+                    self.assertTrue(item.get("@id", "").startswith(f"flow:entry/{role}/"))
+                    self.assertNotIn(item.get("@id"), ids)
+                    ids.add(item.get("@id"))
+
+    def test_each_composed_role_renders_one_expertise_section_from_its_corpus(self):
+        """Prove the manifest opt-in reaches the shared agent-body renderer.
+
+        Corpus files alone do not prove either runtime will consume them. This
+        exercises the common body that Claude and Codex render from, while
+        avoiding a user's experience overlay in the candidate proof.
+        """
+        manifest = tomllib.loads((SCAFFOLD / "flow.toml").read_text())
+        agents = {agent["name"]: agent for agent in manifest["agents"]}
+        with mock.patch.object(sync, "USER_OVERLAY_DIR", SCAFFOLD / "no-user-overlay"):
+            for role in COMPOSED_ROLES:
+                with self.subTest(role=role):
+                    rendered = sync.agent_body(agents[role], SCAFFOLD, SCAFFOLD, {})
+                    self.assertEqual(rendered.count(expertise.SECTION), 1)
+                    for item in expertise.corpus_for(role, SCAFFOLD, None):
+                        self.assertIn(f"### {item['name']}", rendered)
+
+    def test_no_role_repeats_the_same_sourced_required_behavior(self):
+        seen = {}
+        for role in COMPOSED_ROLES:
+            for item in expertise.corpus_for(role, SCAFFOLD, None):
+                behavior = re.sub(r"\s+", " ", item["flow:requiredBehavior"].strip().lower())
+                for source in item.get("flow:source", []):
+                    citation = source.get("citation", {})
+                    key = (citation.get("@id"), source.get("flow:locator", ""), behavior)
+                    with self.subTest(role=role, entry=item["name"]):
+                        self.assertNotIn(key, seen, f"also used by {seen.get(key)}")
+                        seen[key] = role
 
 
 class PlacementTests(unittest.TestCase):

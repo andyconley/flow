@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_manifest_marks_exactly_the_shipped_roles_composed (tests.test_expertise_composition.ShippedCorpusTests.test_manifest_marks_exactly_the_shipped_roles_composed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/andyconley/src/flow/tests/test_expertise_composition.py", line 163, in test_manifest_marks_exactly_the_shipped_roles_composed
+    self.assertEqual(configured, set(COMPOSED_ROLES))
+AssertionError: Items in the second set but not the first:
+'test-engineer'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)

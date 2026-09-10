@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "manifest_sha256": "8b8b8138c84cf111aa07942ad88fc68db16566f92aac38c230fdf9e384d2ed01",
+  "collected_at": "2026-09-10T01:09:38Z",
+  "all_cli_exit_codes_zero": true,
+  "all_result_envelopes_successful": true,
+  "records": [
+    {
+      "role": "product-manager",
+      "case": "primary",
+      "arm": "treatment",
+      "path": "runs/product-manager-treatment-primary.json",
+      "sha256": "b3bcd17bb8aa438dcb6b7b3103ddf12f8566961814e0caa36b84c9a5bf50a64b",
+      "completed_at": "2026-09-10T01:07:03Z",
+      "duration_ms": 19773,
+      "num_turns": 1,
+      "session_id": "f60939c3-9f09-4cb2-b859-d86055a6ca89",
+      "main_model": "claude-sonnet-5",
+      "total_cost_usd": 0.0477094
+    },
+    {
+      "role": "product-manager",
+      "case": "primary",
+      "arm": "control",
+      "path": "runs/product-manager-control-primary.json",
+      "sha256": "3f3c9f268399308ef362888fd702ec7d7357923fb980698a7d80ed49f4ea2f70",
+      "completed_at": "2026-09-10T01:07:12Z",
+      "duration_ms": 28673,
+      "num_turns": 1,
+      "session_id": "8cc98a16-c0dd-4fc9-8062-e700519d7bef",
+      "main_model": "claude-sonnet-5",
+      "total_cost_usd": 0.0611074
+    },
+    {
+      "role": "product-manager",
+      "case": "counter",
+      "arm": "treatment",
+      "path": "runs/product-manager-treatment-counter.json",
+      "sha256": "792134ce7320c45a93e7e03351a8a0a8897f7395f76d09dee937151f73afe081",
+      "completed_at": "2026-09-10T01:06:56Z",
+      "duration_ms": 13479,
+      "num_turns": 1,
+      "session_id": "e25e6e3c-fd89-4565-94d3-e7dfbfe1f7ae",
+      "main_model": "claude-sonnet-5",
+      "total_cost_usd": 0.0352024
+    },
+    {
+      "role": "product-manager",
+      "case": "counter",
+      "arm": "control",
+      "path": "runs/product-manager-control-counter.json",
+      "sha256": "88054005b50e8afc4f09449926f99a6d6fbaa7f3624a3b387d7904a63cade375",
+      "completed_at": "2026-09-10T01:06:56Z",
+      "duration_ms": 13336,
+      "num_turns": 1,
+      "session_id": "96790a9d-ba3b-43fb-937f-562f10dbc9ab",
+      "main_model": "claude-sonnet-5",
+      "total_cost_usd": 0.0333154
+    },
+    {
+      "role": "quality-reviewer",
+      "case": "primary",
+      "arm": "treatment",
+      "path": "runs/quality-reviewer-treatment-primary.json",
+      "sha256": "d5c040d01876b95ec9e90f390e7a12bb78fc5e6f22fe0361e2a4381ef11aa5c5",
+      "completed_at": "2026-09-10T01:07:48Z",
+      "duration_ms": 14663,
+      "num_turns": 1,
+      "session_id": "13344909-6bf7-480a-a4fc-febd646f88e6",
+      "main_model": "claude-opus-4-8",
+      "total_cost_usd": 0.064948
+    },
+    {
+      "role": "quality-reviewer",
+      "case": "primary",
+      "arm": "control",
+      "path": "runs/quality-reviewer-control-primary.json",
+      "sha256": "5562653417ade806ab1b2bec51808c548c0888ff3ec9afcfc3318aaf0b828e07",
+      "completed_at": "2026-09-10T01:07:46Z",
+      "duration_ms": 13257,
+      "num_turns": 1,
+      "session_id": "4d297b56-0d70-48f9-aa25-0d3331db7f89",
+      "main_model": "claude-opus-4-8",
+      "total_cost_usd": 0.057273
+    },
+    {
+      "role": "quality-reviewer",
+      "case": "counter",
+      "arm": "treatment",
+      "path": "runs/quality-reviewer-treatment-counter.json",
+      "sha256": "9e3a33098a8762492873009232975dcb76b9e81b92811c60e4393e473c7830fa",
+      "completed_at": "2026-09-10T01:07:50Z",
+      "duration_ms": 16517,
+      "num_turns": 1,
+      "session_id": "75848030-0dba-46cc-9340-1915bcba8cda",
+      "main_model": "claude-opus-4-8",
+      "total_cost_usd": 0.062349
+    },
+    {
+      "role": "quality-reviewer",
+      "case": "counter",
+      "arm": "control",
+      "path": "runs/quality-reviewer-control-counter.json",
+      "sha256": "93efcb3b3c8f4d28167cd93ae8bc2bef34ebbb552b6879d367936b2673be6c70",
+      "completed_at": "2026-09-10T01:07:55Z",
+      "duration_ms": 22136,
+      "num_turns": 1,
+      "session_id": "a85687b6-6896-4e89-ae11-0fee3e0973f9",
+      "main_model": "claude-opus-4-8",
+      "total_cost_usd": 0.070139
+    }
+  ],
+  "parity": {
+    "product-manager-primary": true,
+    "product-manager-counter": true,
+    "quality-reviewer-primary": true,
+    "quality-reviewer-counter": true,
+    "basis": "manifest prompt hashes and settings match within every pair; only the frozen body path/hash differs; every main model, turn count, and result status matches its pair"
+  },
+  "provider_observation": "Claude Code also recorded claude-haiku-4-5-20251001 usage in every arm, consistent with its default prompt-suggestion helper. The auxiliary model appeared symmetrically and supplied none of the scored response text."
+}

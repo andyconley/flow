@@ -1,0 +1,22 @@
+FF
+======================================================================
+FAIL: test_manifest_marks_exactly_the_shipped_roles_composed (tests.test_expertise_composition.ShippedCorpusTests.test_manifest_marks_exactly_the_shipped_roles_composed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/andyconley/src/flow/tests/test_expertise_composition.py", line 163, in test_manifest_marks_exactly_the_shipped_roles_composed
+    self.assertEqual(configured, set(COMPOSED_ROLES))
+AssertionError: Items in the first set but not the second:
+'product-manager'
+
+======================================================================
+FAIL: test_inactive_roles_match_frozen_base_and_have_no_composed_surface (tests.test_expertise_composition.ShippedCorpusTests.test_inactive_roles_match_frozen_base_and_have_no_composed_surface) (role='product-manager')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/andyconley/src/flow/tests/test_expertise_composition.py", line 70, in test_inactive_roles_match_frozen_base_and_have_no_composed_surface
+    self.assertNotEqual(agents[role].get("generation_mode"), "composed")
+AssertionError: 'composed' == 'composed'
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.003s
+
+FAILED (failures=2)

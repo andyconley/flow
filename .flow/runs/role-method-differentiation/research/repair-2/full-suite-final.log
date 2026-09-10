@@ -1,0 +1,38 @@
+..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................fatal: repository '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp60ctsu91/does-not-exist.git' does not exist
+..Cloning into '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpu3bzz09b/user.clone-tmp'...
+done.
+.Cloning into '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp3u_kupgc/user.clone-tmp'...
+done.
+.Initialized empty Git repository in /private/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpi5uut_n5/user/.git/
+....................................................................................To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp9ay44z6r/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmptaw6f0k2/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmptaw6f0k2/remote.git
+ * [new tag]         v0.22.0 -> v0.22.0
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpx9a3_i5y/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpx9a3_i5y/remote.git
+   ddfb130..d535ad6  main -> main
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpm23miyyn/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpm23miyyn/remote.git
+ + c38c85e...ddfb130 v0.21.0 -> v0.21.0 (forced update)
+...................
+----------------------------------------------------------------------
+Ran 992 tests in 91.696s
+
+OK
+(no active sessions in range)
+
+freshness: no usage harvests recorded yet; run `flow harvest claude`, `flow harvest codex`, then `flow normalize`.
+ignoring managed path outside the root: ../../escape.md
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp8dhq5_ik/victim.txt
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpvmcfdc__/victim.txt
+claude sync wrote managed files:
+- removed: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpvmcfdc__/repo/.claude/ok.md
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp91xwzxs2/victim.txt

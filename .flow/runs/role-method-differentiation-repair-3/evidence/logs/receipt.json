@@ -1,0 +1,249 @@
+{
+  "all_expected_exits_observed": true,
+  "branch": "codex/role-method-differentiation-repair-3",
+  "candidate_T": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+  "captured_at": "2026-09-10T12:17:42+00:00",
+  "commands": [
+    {
+      "command": "/opt/homebrew/bin/python3.12 -m unittest discover -s tests",
+      "end_utc": "2026-09-10T11:55:11Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/full-suite.log",
+      "log_sha256": "eb03b5e79fd969d639f5f6f7ebf88ca71da7291bcfa38f81bca448969eacc7aa",
+      "name": "full-suite",
+      "start_utc": "2026-09-10T11:53:45Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.12 -m unittest tests.test_expertise_composition",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/focused.log",
+      "log_sha256": "a479a5efc8931332065f3190ec9bffae5ba7a33f22a01ce80c4bc96d465c5d2c",
+      "name": "focused",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.12 scripts/regenerate-flow-help.py --check",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/help-check.log",
+      "log_sha256": "07476422548022cf733f339a075ec1b513cefaf292d03d264477ce062a559b2e",
+      "name": "help-check",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/diff-check.log",
+      "log_sha256": "6e1aeb6e68d3abf6e6347cecb3baff5e90a9239e976fa4ae3ff569e201440381",
+      "name": "diff-check",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow sync claude --user",
+      "end_utc": "2026-09-10T11:55:44Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/sync-claude-user.log",
+      "log_sha256": "02974dd8b23bd440769a6bc9671f041856794c0d0ac51fa1eff43ac38a4e989b",
+      "name": "sync-claude-user",
+      "start_utc": "2026-09-10T11:55:44Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow sync codex --user",
+      "end_utc": "2026-09-10T11:56:02Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/sync-codex-user.log",
+      "log_sha256": "b2fc4e0a37f51c4ae7ac3c4ca8fd7479cc3b3a7968b7cfa4339b379432d94b7a",
+      "name": "sync-codex-user",
+      "start_utc": "2026-09-10T11:56:02Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow sync claude --user --check",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/sync-claude-check.log",
+      "log_sha256": "d74b25bfb105377e916208e6f58c49df3c47ad38bdfa1d5b04b3fcd5fb314820",
+      "name": "sync-claude-check",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow sync codex --user --check",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/sync-codex-check.log",
+      "log_sha256": "b5a2b7195996ca098125bd172df23dcf6718b2f59634eb5bb651d609bce84dad",
+      "name": "sync-codex-check",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "HOME=<isolated>/home flow sync claude --user",
+      "end_utc": "2026-09-10T11:56:22Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/isolated-sync-claude.log",
+      "log_sha256": "676361b5151a98397dbbbe0c14191bcc07e942c64fe656c731b0fea9a105aaf1",
+      "name": "isolated-sync-claude",
+      "start_utc": "2026-09-10T11:56:22Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "HOME=<isolated>/home flow sync codex --user",
+      "end_utc": "2026-09-10T11:56:39Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/isolated-sync-codex.log",
+      "log_sha256": "1f9af6894f83d888a530cef5740efef3f3249dc4ddaf824a1330ef4f98c39ab7",
+      "name": "isolated-sync-codex",
+      "start_utc": "2026-09-10T11:56:39Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "HOME=<isolated>/home flow sync claude --user --check",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/isolated-sync-claude-check.log",
+      "log_sha256": "ab289e8ee4f84944645fc788bdbe61801db34eac759a63f8fef56cba4d578d50",
+      "name": "isolated-sync-claude-check",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "HOME=<isolated>/home flow sync codex --user --check",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/isolated-sync-codex-check.log",
+      "log_sha256": "192c847adedf2643d033079fab55d06498dfd1d90d950eaf2c89b8cde67008f4",
+      "name": "isolated-sync-codex-check",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow runtime smoke --target all --json",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/runtime-smoke.log",
+      "log_sha256": "4998c584b68331c26fafd80e9a02c8da3704463890e9c2519e38a278852a952d",
+      "name": "runtime-smoke",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow doctor --json",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/doctor-normal.log",
+      "log_sha256": "1d6fe906657052453374f75279baaf343baa5925f9dee94dd91ea5f2d586f005",
+      "name": "doctor-normal",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow doctor --check --json",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/doctor-strict.log",
+      "log_sha256": "cef9df2c7f2f137cc0e0f33357b6f1f750909a958cfcc7e1f28557f37d3ca032",
+      "name": "doctor-strict",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "flow run verify role-method-differentiation-repair-3",
+      "end_utc": "2026-09-10T11:57:13Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/run-verify.log",
+      "log_sha256": "a4ab9671f4688b6f785d1123148fa8b6fef80b7c0e427ea5c6b301042ce6c633",
+      "name": "run-verify",
+      "start_utc": "2026-09-10T11:57:13Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "generated and installed adapter hash/readback inspection",
+      "end_utc": "2026-09-10T11:57:56Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/adapter-readback.log",
+      "log_sha256": "01fe63e870a65f7f3a845e3cfdb3878f4b068aa3773a713181e5c77ec4e28e68",
+      "name": "adapter-readback",
+      "start_utc": "2026-09-10T11:57:56Z",
+      "verdict": "pass"
+    },
+    {
+      "command": "focused current-document oracle plus bounded active-surface rg classification",
+      "end_utc": "2026-09-10T12:17:42Z",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/logs/current-claim-search.log",
+      "log_sha256": "effcdc59919a33bb467592dfa4bad2208a0d6a677894bc22de01dec34a0b8224",
+      "name": "current-claim-search",
+      "start_utc": "2026-09-10T12:17:42Z",
+      "verdict": "pass"
+    }
+  ],
+  "schema_version": 1,
+  "source_head": "2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208",
+  "structured_results": {
+    "doctor": {
+      "errors": 0,
+      "normal_exit": 0,
+      "ok": true,
+      "strict_exit": 1,
+      "telemetry.claude.harvest": "ok",
+      "warnings": [
+        "project.adoption.runtime_surfaces",
+        "telemetry.plugin_usage",
+        "user.claude.runtime_smoke",
+        "user.codex.runtime_smoke"
+      ]
+    },
+    "final_verifier": {
+      "check_count": 250,
+      "failure_count": 0,
+      "log_path": ".flow/runs/role-method-differentiation-repair-3/evidence/final-receipt.json",
+      "result": "pass"
+    },
+    "focused_tests": {
+      "count": 49,
+      "result": "pass"
+    },
+    "full_tests": {
+      "count": 996,
+      "result": "pass"
+    },
+    "runtime_smoke": {
+      "disposition": "command cells directly observed; generic support-lead role cells superseded by approved test-engineer native matrix",
+      "manual_cells": {
+        "command_discovery": 2,
+        "generic_role_invocation": 2
+      },
+      "ok": true,
+      "static_passed": {
+        "claude": 55,
+        "codex": 52
+      }
+    }
+  }
+}

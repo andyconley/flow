@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-09-10T00:24:02Z",
+  "work_id": "role-method-differentiation",
+  "repair": "repair-2",
+  "repository": {
+    "path": "/Users/andyconley/src/flow",
+    "head": "2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208",
+    "tracked_diff_sha256": "b9064132a010c763f97cf9f4302b1ac079fc8d14bc5b13cf3787966c08bca97c",
+    "untracked_inputs": "covered by the individual body, prompt, design, and source-file hashes below"
+  },
+  "provider": {
+    "name": "Claude Code",
+    "executable": "/Users/andyconley/.local/bin/claude",
+    "version": "2.1.207",
+    "working_directory": "/private/tmp/flow-role-method-eval",
+    "authentication": "existing local OAuth session; no credential material retained",
+    "safe_mode": true,
+    "tools": [],
+    "web_search": false,
+    "slash_commands": false,
+    "chrome": false,
+    "session_persistence": false,
+    "temperature": null,
+    "max_turns": null,
+    "output_cap_tokens": null,
+    "unsupported_limits_note": "Claude Code 2.1.207 exposes neither max-turns nor an output-token cap; every pair uses the same one-prompt print invocation and a USD budget cap."
+  },
+  "source_verification": [
+    {
+      "work": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+      "author": "Donald G. Reinertsen",
+      "edition": "Celeritas Publishing, 2009, ISBN 978-1-935401-00-1",
+      "locator": "chapter 2, cost of delay and weighted shortest-job-first principles",
+      "canonical_url": "https://celeritaspublishing.com/",
+      "verified_at": "2026-09-09"
+    },
+    {
+      "work": "Psychology of Intelligence Analysis",
+      "author": "Richards J. Heuer Jr.",
+      "edition": "CIA Center for the Study of Intelligence, 1999",
+      "locator": "chapter 8, Analysis of Competing Hypotheses",
+      "canonical_url": "https://www.cia.gov/resources/csi/books-monographs/psychology-of-intelligence-analysis-2/",
+      "verified_at": "2026-09-09"
+    }
+  ],
+  "body_boundary": {
+    "treatment": "canonical role body composed with the selected baseline corpus through cli.sync.agent_body; no user expertise overlay exists for either role",
+    "control": "exact canonical role body emitted by git show from the frozen HEAD before either role had a baseline corpus",
+    "injection": "--append-system-prompt-file for both arms",
+    "surrogate_delta": "live comparisons omit generated adapter metadata and shared web-policy text equally; deterministic render and adapter sync checks cover those shared wrappers separately"
+  },
+  "roles": {
+    "product-manager": {
+      "model": "sonnet",
+      "expected_runtime_model": "claude-sonnet-5",
+      "effort": "medium",
+      "max_budget_usd": 1.0,
+      "source_files": {
+        "role_body": {
+          "path": "scaffolds/default/agents/product-manager.md",
+          "sha256": "433e3e099eb71e976239ab4be3f1a9c97e17010b8b5bb9296163d42f754df6c0"
+        },
+        "corpus": {
+          "path": "scaffolds/default/expertise/product-manager.jsonld",
+          "sha256": "ddf56b71f1ce4e7507fdc47c8c5129f12f74491973aac07437f2f202ee3fa5bc"
+        }
+      },
+      "treatment_body": {
+        "path": "bodies/product-manager-treatment.md",
+        "sha256": "78082362d9c248d38d6acd2546bdbde3dc5f2360353afa75645d449e71a3b18c"
+      },
+      "control_body": {
+        "path": "bodies/product-manager-control.md",
+        "sha256": "db45fab8ca7a50d78d25f149f560f4076bc86002ce5627960da274c71dd3d54b",
+        "source_command": "git show 2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208:scaffolds/default/agents/product-manager.md"
+      },
+      "design": {
+        "path": "product-manager-design.md",
+        "sha256": "3e8e3b5ef2ca8f192b8f0adf07e43e19530a68d952097042b66aca47c708a638"
+      },
+      "cases": {
+        "primary": {
+          "prompt_path": "prompts/product-manager-primary.md",
+          "prompt_sha256": "1daca7735de8c06fe44cbe1a3b58d9d51059f9c3a83ba0e9bdbd73c05af4a439",
+          "criteria": ["PM-P1", "PM-P2", "PM-P3"]
+        },
+        "counter": {
+          "prompt_path": "prompts/product-manager-counter.md",
+          "prompt_sha256": "d912fc10d703806594298cef26ef4a644914e63f58440474858aac126dac2bab",
+          "criteria": ["PM-C1"]
+        }
+      }
+    },
+    "quality-reviewer": {
+      "model": "opus",
+      "expected_runtime_model": "claude-opus-4-8",
+      "effort": "medium",
+      "max_budget_usd": 1.0,
+      "source_files": {
+        "role_body": {
+          "path": "scaffolds/default/agents/quality-reviewer.md",
+          "sha256": "b4a3bfd1bc020ecc2222af48b91f131843b098b3b2b5e13f69c919c8a253d557"
+        },
+        "corpus": {
+          "path": "scaffolds/default/expertise/quality-reviewer.jsonld",
+          "sha256": "13a45a25d310f5961873b9a1fc1890bb0ce52f7f6a5353e9f054924902bd2ca5"
+        }
+      },
+      "treatment_body": {
+        "path": "bodies/quality-reviewer-treatment.md",
+        "sha256": "18067dabca8ddb211f836617efaecd4b752c42853bd04c6b2e6a1f96f1281049"
+      },
+      "control_body": {
+        "path": "bodies/quality-reviewer-control.md",
+        "sha256": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+        "source_command": "git show 2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208:scaffolds/default/agents/quality-reviewer.md"
+      },
+      "design": {
+        "path": "quality-reviewer-design.md",
+        "sha256": "a3d7934d993facc85115ec39bbe2e5d27fc79beb033af363ed3797b877bfc66c"
+      },
+      "cases": {
+        "primary": {
+          "prompt_path": "prompts/quality-reviewer-primary.md",
+          "prompt_sha256": "efa7c6a7fd09f7c88c1e1551f8b7a33df34558b6a0efe32542dd29b45bff6dc4",
+          "criteria": ["QR-P1", "QR-P2", "QR-P3"]
+        },
+        "counter": {
+          "prompt_path": "prompts/quality-reviewer-counter.md",
+          "prompt_sha256": "b5a49fc635117f4d2879d200d1dd5e726a4c07acbf406dbbbecc44cd85e3fff3",
+          "criteria": ["QR-C1"]
+        }
+      }
+    }
+  },
+  "command_template": "/Users/andyconley/.local/bin/claude --safe-mode --no-chrome --disable-slash-commands --tools '' --model <role-model> --effort medium --max-budget-usd 1.00 --no-session-persistence --output-format json --append-system-prompt-file <absolute-body-path> -p < <absolute-prompt-path> > <absolute-result-path>",
+  "parity_gate": [
+    "within each role/case pair, prompt hash, executable, version, cwd, model, effort, budget, tool policy, safe-mode flags, and injection mechanism are identical",
+    "only the frozen treatment/control body path and hash differ",
+    "all response files must be successful JSON result envelopes with is_error false"
+  ],
+  "stopping_rule": {
+    "formula": "role_pass = parity_all_pairs AND all_four_records_successful AND all_primary_treatment_criteria_true AND all_primary_control_criteria_false AND treatment_counter_true",
+    "content_reruns": "forbidden; a completed response is scored as returned",
+    "infrastructure_retry": "one retry is allowed only after an authentication, transport, or client-process failure and must rerun all four arms for that role with unchanged frozen inputs",
+    "failed_gate": "retain all evidence and keep the five-role release blocked; any new prompt or rubric requires a new versioned envelope"
+  },
+  "scorer": {
+    "provider": "/root/role_methods_repair_quality",
+    "method": "criterion-level boolean scoring with cited response evidence",
+    "results_path": "results.json"
+  }
+}

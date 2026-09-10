@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a08b07-309e-77d2-a37e-7fb4ae845f07"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"01a08b07-309e-77d2-a37e-7fb4ae845f07","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"01a08b07-309e-77d2-a37e-7fb4ae845f07","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Representative input: an import payload whose row 7 has `email: \"not-an-email\"`.\n\nExpected observable error: the integration call rejects the import and returns an error message containing both `row 7` and `email`.\n\nIntegration level: exercise the import entry point through its parsing/validation boundary.\n\nFailure path: row validation detects the malformed email, stops or marks the import as rejected, and propagates the row-specific validation error to the caller."}}
+{"type":"turn.completed","usage":{"input_tokens":65570,"cached_input_tokens":63744,"cache_write_input_tokens":0,"output_tokens":238,"reasoning_output_tokens":19}}

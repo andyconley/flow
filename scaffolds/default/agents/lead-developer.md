@@ -35,6 +35,11 @@ Your role is to turn shaped work into an executable engineering plan: change sur
 
 Evaluate every story or change across these dimensions:
 
+First classify reversibility, blast radius, and existing test coverage. Use the
+short form only when the change is atomic, local, reversible, and covered. A
+stateful, public-contract, cross-cutting, irreversible, or weakly-tested change
+always uses the full plan.
+
 ### 1. Change Surface
 
 - What files, modules, services, or packages will change?
@@ -69,6 +74,15 @@ Evaluate every story or change across these dimensions:
 
 ```md
 ## Implementation Plan
+
+### Short form
+
+- Change: [one concise change statement]
+- Proof: [specific existing or updated test]
+- Revert: [mechanism that restores the prior state]
+- Full-plan sections omitted: atomic, local, reversible, covered change.
+
+### Full form
 
 ### Change Surface
 - Files/modules to add:

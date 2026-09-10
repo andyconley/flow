@@ -1,0 +1,43 @@
+command: /opt/homebrew/bin/python3.12 -m unittest discover -s tests
+candidate_T: 4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33
+start_utc: 2026-09-10T11:53:45Z
+......................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................fatal: repository '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmplunulv5r/does-not-exist.git' does not exist
+..Cloning into '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpymm6cc47/user.clone-tmp'...
+done.
+.Cloning into '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp4_mibesz/user.clone-tmp'...
+done.
+.Initialized empty Git repository in /private/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpd8evtoqy/user/.git/
+....................................................................................To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmphx1txt_5/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp4jqcjl46/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp4jqcjl46/remote.git
+ * [new tag]         v0.22.0 -> v0.22.0
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp1q923fqg/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp1q923fqg/remote.git
+   8b06203..9d8616c  main -> main
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpz_36u4ba/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpz_36u4ba/remote.git
+ + 18aad8b...8b06203 v0.21.0 -> v0.21.0 (forced update)
+...................
+----------------------------------------------------------------------
+Ran 996 tests in 86.050s
+
+OK
+(no active sessions in range)
+
+freshness: no usage harvests recorded yet; run `flow harvest claude`, `flow harvest codex`, then `flow normalize`.
+ignoring managed path outside the root: ../../escape.md
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpy580hh5d/victim.txt
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpm0ho3h7_/victim.txt
+claude sync wrote managed files:
+- removed: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpm0ho3h7_/repo/.claude/ok.md
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpmr_ii68f/victim.txt
+end_utc: 2026-09-10T11:55:11Z
+exit_code: 0

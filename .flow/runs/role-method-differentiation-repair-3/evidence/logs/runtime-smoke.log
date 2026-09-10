@@ -1,0 +1,680 @@
+command: flow runtime smoke --target all --json
+candidate_T: 4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33
+start_utc: 2026-09-10T11:57:13Z
+{
+  "failed": 0,
+  "manual_required": 4,
+  "ok": true,
+  "targets": [
+    {
+      "manual": [
+        {
+          "detail": "invoke /flow-status in claude and confirm the generated command loads",
+          "name": "command discovery",
+          "status": "manual_required"
+        },
+        {
+          "detail": "invoke support-lead in claude and inspect transcript/log evidence for configured model and effort",
+          "name": "role agent invocation",
+          "status": "manual_required"
+        }
+      ],
+      "static": [
+        {
+          "name": "managed manifest",
+          "path": ".claude/flow.managed.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "clean",
+          "name": "generated surface freshness",
+          "status": "passed"
+        },
+        {
+          "name": "managed manifest coverage",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-boot",
+          "path": ".claude/skills/flow-boot/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-boot routing parity",
+          "path": ".claude/skills/flow-boot/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-scout",
+          "path": ".claude/skills/flow-scout/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-scout routing parity",
+          "path": ".claude/skills/flow-scout/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-scout C-lite protocol",
+          "path": ".claude/skills/flow-scout/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-define",
+          "path": ".claude/skills/flow-define/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-define routing parity",
+          "path": ".claude/skills/flow-define/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-define C-lite protocol",
+          "path": ".claude/skills/flow-define/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-solution",
+          "path": ".claude/skills/flow-solution/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-solution routing parity",
+          "path": ".claude/skills/flow-solution/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-solution C-lite protocol",
+          "path": ".claude/skills/flow-solution/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-plan",
+          "path": ".claude/skills/flow-plan/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-plan routing parity",
+          "path": ".claude/skills/flow-plan/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-plan C-lite protocol",
+          "path": ".claude/skills/flow-plan/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-implement",
+          "path": ".claude/skills/flow-implement/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-implement routing parity",
+          "path": ".claude/skills/flow-implement/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-implement C-lite protocol",
+          "path": ".claude/skills/flow-implement/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-review",
+          "path": ".claude/skills/flow-review/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-review routing parity",
+          "path": ".claude/skills/flow-review/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-review C-lite protocol",
+          "path": ".claude/skills/flow-review/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-archive",
+          "path": ".claude/skills/flow-archive/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-archive routing parity",
+          "path": ".claude/skills/flow-archive/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-archive C-lite protocol",
+          "path": ".claude/skills/flow-archive/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-resume",
+          "path": ".claude/skills/flow-resume/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-resume routing parity",
+          "path": ".claude/skills/flow-resume/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-resume C-lite protocol",
+          "path": ".claude/skills/flow-resume/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-status",
+          "path": ".claude/skills/flow-status/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-status routing parity",
+          "path": ".claude/skills/flow-status/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-status C-lite protocol",
+          "path": ".claude/skills/flow-status/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-init-project",
+          "path": ".claude/skills/flow-init-project/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-init-project routing parity",
+          "path": ".claude/skills/flow-init-project/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-help",
+          "path": ".claude/skills/flow-help/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-help routing parity",
+          "path": ".claude/skills/flow-help/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: opus, effort: medium",
+          "name": "agent architect",
+          "path": ".claude/agents/architect.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: opus, effort: medium",
+          "name": "agent solution-architect",
+          "path": ".claude/agents/solution-architect.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: sonnet, effort: medium",
+          "name": "agent business-analyst",
+          "path": ".claude/agents/business-analyst.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: opus, effort: medium",
+          "name": "agent quality-reviewer",
+          "path": ".claude/agents/quality-reviewer.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: sonnet, effort: medium",
+          "name": "agent data-engineer",
+          "path": ".claude/agents/data-engineer.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: sonnet, effort: medium",
+          "name": "agent lead-developer",
+          "path": ".claude/agents/lead-developer.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: sonnet, effort: medium",
+          "name": "agent product-manager",
+          "path": ".claude/agents/product-manager.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: opus, effort: medium",
+          "name": "agent security-reviewer",
+          "path": ".claude/agents/security-reviewer.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: sonnet, effort: medium",
+          "name": "agent sre",
+          "path": ".claude/agents/sre.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: haiku, effort: low",
+          "name": "agent support-lead",
+          "path": ".claude/agents/support-lead.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: haiku, effort: low",
+          "name": "agent tech-writer",
+          "path": ".claude/agents/tech-writer.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: sonnet, effort: medium",
+          "name": "agent test-engineer",
+          "path": ".claude/agents/test-engineer.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model: sonnet, effort: medium",
+          "name": "agent ux-specialist",
+          "path": ".claude/agents/ux-specialist.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-session-start",
+          "path": ".claude/hooks/flow-session-start.sh",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-managed-write-reminder",
+          "path": ".claude/hooks/flow-managed-write-reminder.sh",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-plugin-usage",
+          "path": ".claude/hooks/flow-plugin-usage.sh",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-token-verdict",
+          "path": ".claude/hooks/flow-token-verdict.sh",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-context-warning",
+          "path": ".claude/hooks/flow-context-warning.sh",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-overlay-reminder",
+          "path": ".claude/hooks/flow-overlay-reminder.sh",
+          "status": "passed"
+        }
+      ],
+      "target": "claude"
+    },
+    {
+      "manual": [
+        {
+          "detail": "invoke $flow-status skill in codex and confirm the generated command loads",
+          "name": "command discovery",
+          "status": "manual_required"
+        },
+        {
+          "detail": "invoke support-lead in codex and inspect transcript/log evidence for configured model and effort",
+          "name": "role agent invocation",
+          "status": "manual_required"
+        }
+      ],
+      "static": [
+        {
+          "name": "managed manifest",
+          "path": ".codex/flow.managed.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "clean",
+          "name": "generated surface freshness",
+          "status": "passed"
+        },
+        {
+          "name": "managed manifest coverage",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-boot",
+          "path": ".agents/skills/flow-boot/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-boot routing parity",
+          "path": ".agents/skills/flow-boot/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-define",
+          "path": ".agents/skills/flow-define/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-define routing parity",
+          "path": ".agents/skills/flow-define/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-define C-lite protocol",
+          "path": ".agents/skills/flow-define/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-solution",
+          "path": ".agents/skills/flow-solution/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-solution routing parity",
+          "path": ".agents/skills/flow-solution/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-solution C-lite protocol",
+          "path": ".agents/skills/flow-solution/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-plan",
+          "path": ".agents/skills/flow-plan/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-plan routing parity",
+          "path": ".agents/skills/flow-plan/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-plan C-lite protocol",
+          "path": ".agents/skills/flow-plan/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-scout",
+          "path": ".agents/skills/flow-scout/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-scout routing parity",
+          "path": ".agents/skills/flow-scout/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-scout C-lite protocol",
+          "path": ".agents/skills/flow-scout/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-implement",
+          "path": ".agents/skills/flow-implement/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-implement routing parity",
+          "path": ".agents/skills/flow-implement/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-implement C-lite protocol",
+          "path": ".agents/skills/flow-implement/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-review",
+          "path": ".agents/skills/flow-review/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-review routing parity",
+          "path": ".agents/skills/flow-review/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-review C-lite protocol",
+          "path": ".agents/skills/flow-review/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-resume",
+          "path": ".agents/skills/flow-resume/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-resume routing parity",
+          "path": ".agents/skills/flow-resume/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-resume C-lite protocol",
+          "path": ".agents/skills/flow-resume/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-status",
+          "path": ".agents/skills/flow-status/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-status routing parity",
+          "path": ".agents/skills/flow-status/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-status C-lite protocol",
+          "path": ".agents/skills/flow-status/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-archive",
+          "path": ".agents/skills/flow-archive/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-archive routing parity",
+          "path": ".agents/skills/flow-archive/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "C-lite protocol present",
+          "name": "command flow-archive C-lite protocol",
+          "path": ".agents/skills/flow-archive/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-help",
+          "path": ".agents/skills/flow-help/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-help routing parity",
+          "path": ".agents/skills/flow-help/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "generated skill and routing table present",
+          "name": "command flow-init-project",
+          "path": ".agents/skills/flow-init-project/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "routing rows match effective generated-agent policy",
+          "name": "command flow-init-project routing parity",
+          "path": ".agents/skills/flow-init-project/SKILL.md",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-sol\", model_reasoning_effort = \"medium\"",
+          "name": "agent architect",
+          "path": ".codex/agents/architect.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-sol\", model_reasoning_effort = \"medium\"",
+          "name": "agent solution-architect",
+          "path": ".codex/agents/solution-architect.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-terra\", model_reasoning_effort = \"medium\"",
+          "name": "agent business-analyst",
+          "path": ".codex/agents/business-analyst.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-sol\", model_reasoning_effort = \"medium\"",
+          "name": "agent quality-reviewer",
+          "path": ".codex/agents/quality-reviewer.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-terra\", model_reasoning_effort = \"medium\"",
+          "name": "agent data-engineer",
+          "path": ".codex/agents/data-engineer.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-terra\", model_reasoning_effort = \"medium\"",
+          "name": "agent lead-developer",
+          "path": ".codex/agents/lead-developer.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-terra\", model_reasoning_effort = \"medium\"",
+          "name": "agent product-manager",
+          "path": ".codex/agents/product-manager.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-sol\", model_reasoning_effort = \"medium\"",
+          "name": "agent security-reviewer",
+          "path": ".codex/agents/security-reviewer.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-terra\", model_reasoning_effort = \"medium\"",
+          "name": "agent sre",
+          "path": ".codex/agents/sre.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-luna\", model_reasoning_effort = \"low\"",
+          "name": "agent support-lead",
+          "path": ".codex/agents/support-lead.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-luna\", model_reasoning_effort = \"low\"",
+          "name": "agent tech-writer",
+          "path": ".codex/agents/tech-writer.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-terra\", model_reasoning_effort = \"medium\"",
+          "name": "agent test-engineer",
+          "path": ".codex/agents/test-engineer.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "model/effort policy present: model = \"gpt-5.6-terra\", model_reasoning_effort = \"medium\"",
+          "name": "agent ux-specialist",
+          "path": ".codex/agents/ux-specialist.toml",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-token-verdict",
+          "path": ".codex/hooks/flow-token-verdict.sh",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-context-warning",
+          "path": ".codex/hooks/flow-context-warning.sh",
+          "status": "passed"
+        },
+        {
+          "detail": "generated hook present",
+          "name": "hook flow-overlay-reminder",
+          "path": ".codex/hooks/flow-overlay-reminder.sh",
+          "status": "passed"
+        }
+      ],
+      "target": "codex"
+    }
+  ]
+}
+end_utc: 2026-09-10T11:57:13Z
+exit_code: 0
