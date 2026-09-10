@@ -4,6 +4,26 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Add evidence-backed expertise to architect, lead-developer, and test-engineer; product-manager and quality-reviewer remain base roles.
+
+
+## [0.28.0](https://github.com/andyconley/flow/compare/v0.27.0...v0.28.0) (2026-09-10)
+
+### Features
+
+* **agents:** release three evidence-backed expertise roles ([efb73c8](https://github.com/andyconley/flow/commit/efb73c85d07dc4c091b104f558fa281db0c540ad))
+* **expertise:** validate the teaches join at composition ([498d9b4](https://github.com/andyconley/flow/commit/498d9b4d9741deed36a5ad913a4cb2b9670ed31a))
+
+### Bug Fixes
+
+* **expertise:** enforce teaches contract ([210bdf7](https://github.com/andyconley/flow/commit/210bdf721f146a30f6030abc98a4c40238e8629c))
+
+### Maintenance
+
+* **flow:** record expertise archive state ([2712f5f](https://github.com/andyconley/flow/commit/2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208))
+
+### Highlights
+
 - Archive retrieval is now visible in public docs and generated release highlights.
 
 
