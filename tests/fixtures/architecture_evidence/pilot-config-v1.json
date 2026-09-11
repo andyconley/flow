@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "source_roots": [
+    "cli"
+  ],
+  "identity_roots": [
+    "cli",
+    "tests"
+  ],
+  "identity_excludes": [
+    "**/__pycache__/**",
+    "**/*.pyc"
+  ],
+  "tach_executable": "/absolute/path/to/pilot-venv/bin/tach",
+  "quality": {
+    "enabled": true,
+    "required": true,
+    "python_executable": "/absolute/path/to/pilot-venv/bin/python",
+    "mutation_target": "cli.jsonl_watermark.x_read_new_lines__mutmut_28",
+    "mutation_proof": "selected"
+  }
+}

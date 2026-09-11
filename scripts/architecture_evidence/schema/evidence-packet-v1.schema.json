@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:flow:architecture-evidence:1",
+  "title": "Architecture evidence packet v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "baseline",
+    "candidate",
+    "delta",
+    "policy",
+    "approval",
+    "policy_result",
+    "overall_result",
+    "findings",
+    "gaps",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "packet"
+    },
+    "baseline": {
+      "$ref": "#/$defs/snapshot"
+    },
+    "candidate": {
+      "$ref": "#/$defs/snapshot"
+    },
+    "policy_result": {
+      "enum": [
+        "pass",
+        "fail",
+        "inconclusive"
+      ]
+    },
+    "overall_result": {
+      "enum": [
+        "pass",
+        "fail",
+        "inconclusive"
+      ]
+    },
+    "findings": {
+      "type": "array"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifacts": {
+      "type": "array"
+    }
+  },
+  "$defs": {
+    "snapshot": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "kind",
+        "source",
+        "config",
+        "config_digest",
+        "graph",
+        "quality",
+        "gaps",
+        "artifacts",
+        "sources"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "snapshot"
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "digest",
+            "files"
+          ]
+        },
+        "graph": {
+          "type": "object",
+          "required": [
+            "nodes",
+            "edges",
+            "unresolved",
+            "inventory"
+          ],
+          "properties": {
+            "nodes": {
+              "type": "array"
+            },
+            "edges": {
+              "type": "array"
+            },
+            "unresolved": {
+              "type": "array"
+            },
+            "inventory": {
+              "type": "array"
+            }
+          }
+        },
+        "quality": {
+          "type": "object",
+          "required": [
+            "status",
+            "records"
+          ]
+        }
+      }
+    }
+  }
+}

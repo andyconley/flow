@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "id": "claude_collector-not-harvest",
+      "from": "python:claude_collector",
+      "to": "python:harvest",
+      "kind": "direct-import"
+    },
+    {
+      "id": "codex_collector-not-harvest",
+      "from": "python:codex_collector",
+      "to": "python:harvest",
+      "kind": "direct-import"
+    },
+    {
+      "id": "jsonl_watermark-not-claude_collector",
+      "from": "python:jsonl_watermark",
+      "to": "python:claude_collector",
+      "kind": "direct-import"
+    },
+    {
+      "id": "jsonl_watermark-not-codex_collector",
+      "from": "python:jsonl_watermark",
+      "to": "python:codex_collector",
+      "kind": "direct-import"
+    },
+    {
+      "id": "jsonl_watermark-not-harvest",
+      "from": "python:jsonl_watermark",
+      "to": "python:harvest",
+      "kind": "direct-import"
+    }
+  ],
+  "exceptions": []
+}
