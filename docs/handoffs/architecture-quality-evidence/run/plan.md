@@ -1,0 +1,136 @@
+# Plan Summary
+
+Approved by Andy on 2026-09-11 in this task ("approved flow-plan"). Captures the accepted four-chunk proposal without scope expansion. Implementation has not started.
+
+## Problem Statement
+
+- What: Connect source-derived architecture, dependency rules and attributable quality evidence in one local review report.
+- Who: Engineers reviewing agent-produced changes in Flow.
+- Why now: The approved solution needs reproducible implementation and proof before wider language support or production adoption.
+
+## Desired Outcome
+
+An isolated Python pilot produces an interactive, candidate-bound report and demonstrates whether it helps an engineer assess structural changes. Shared contracts support future language adapters.
+
+## Scope
+
+- In scope: all four chunks—graph/viewer, baseline/boundaries, selected-function quality/mutation, and measured review integration. Include a TypeScript-shaped contract fixture.
+- Out of scope: production CLI/gates/install changes, real non-Python analyzers, custom language analyzers, copying Bob's implementations, universal quality thresholds and publication.
+
+## States and Contracts
+
+- Required states: loading, empty, filtered-empty, invalid/error, partial/inconclusive, valid report, policy pass/fail, and selected source/details. No approval or mutation action in the viewer.
+- Contract expectations: versioned canonical graph/evidence, exact source and policy binding, explicit capability gaps, isolated adapters, deterministic offline HTML, accessible semantic list and separate operation/policy/overall results. Detailed contract follows below.
+
+## Validation
+
+A1–A7 proofs include repeatability, source-edge oracles, boundary fixtures, tamper/staleness rejection, independent CRAP calculations, weak/strong mutation evidence, offline keyboard/browser checks and four matched human reviews. See validation-plan.md. Tests alone do not complete the pilot.
+
+## Recommended Lane
+
+- `flow-implement`
+- Why: four dependent chunks span source analysis, shared contracts, UI states, policy evaluation and human acceptance evidence.
+
+## Session Model Advice
+
+- Coordinator recommendation: judgment, gpt-5.6-sol/high; provisional active-model disposition because current identity is unknown to CLI. Recorded during shaping, no new scope change.
+- Active parent: unknown to Flow CLI; see research/planning-session.md.
+- Effective delegated assignments: business-analyst and product-manager configured gpt-5.6-terra/medium; existing solution-architect configured gpt-5.6-sol/medium reused for structural review after runtime thread limit. Configuration is not an independent runtime attestation.
+- Switch performed: no.
+
+The cost check ran during shaping but returned historical collection errors and mixed/truncated output; no reliable task-specific capacity conclusion was drawn.
+
+# Accepted implementation detail
+
+## Confirmed outcome and implementation setting
+
+Give an engineer a standalone local browser report that explains structural changes and selected-function quality evidence, with an attributable pass/fail/inconclusive pilot result. Plan all four delivery chunks as one bounded effort. Source graph semantics come from language adapters; Flow owns normalized evidence, policy and review behavior. Bob's tools supply reference behaviors; no copying or translation of their implementation.
+
+Use the clean isolated clone `/Users/andyconley/repos/Personal/flow-architecture-pilot`, v0.28.0 commit `6055b6b2dd4ca5fe9a9879d61523bbd08fa0736d`. The clone currently has detached HEAD. Create a feature branch there at implementation start. Keep the existing development checkout and installed Flow unchanged. Evidence baseline is this release; candidate snapshots are controlled copies with full source hashes. Do not substitute a newer baseline without recording identity and rerunning applicable compatibility checks.
+
+Implement a pilot script rather than register a production `flow` command. The viewer opens through `file://` and contains its data and pinned assets; viewing requires no Node runtime, server, network or access to the original source checkout. Vendor the released viewer distribution; no package.json or Node build is required. Do not edit install/sync hooks, lifecycle code, release automation or generated skills for this pilot.
+
+## Four delivery chunks
+
+| Chunk | Deliverable | Dependencies and exit proof |
+| --- | --- | --- |
+| 1. Graph and viewer | Versioned packet contract, Python graph adapter, source excerpts, local interactive report and TypeScript-shaped contract fixture | Prove inventory, deterministic graph and exact source joins before enabling meaningful policy status. Both fixtures render without edits to shared code. |
+| 2. Boundaries and changes | Baseline/candidate delta, cycle analysis, engineer-approved direct-import rules, baseline ledger and result states | Depends on 1. Independent clean/forbidden/new-cycle oracles and stale-evidence rejection pass. |
+| 3. Quality evidence | One selected function's complexity, coverage, CRAP and targeted mutation results in the same report | Depends on 1's symbol/provenance contract; may be developed beside 2 after contract stabilization. Weak assertion survives selected mutant; strengthened test kills it. |
+| 4. Review and measured pilot | Existing review artifact links packet and policy; four matched reviews and expand/revise/defer decision | Depends on 2 and 3. All mandatory proofs plus completed human exercise are required for pilot completion. |
+
+Each chunk is independently reviewable but does not imply production adoption. The shared file/contract owner serializes schema and entrypoint edits; parallel adapter/test work uses disjoint files. No production release, publication or installation is part of implementation completion.
+
+## Proposed boundaries and files
+
+Keep all implementation below the isolated clone. New pilot modules under `scripts/architecture_evidence/`: `model.py` (validation/canonicalization), `snapshot.py` (inventory/identity/source capture), `policy.py` (pure graph rules/deltas), `report.py` (HTML generation), and `adapters/` (Python graph and quality collectors). `scripts/architecture_evidence_pilot.py` is the thin CLI shell. `scripts/architecture_evidence/assets/` holds HTML/CSS/JS and pinned viewer license notices. `tests/test_architecture_evidence.py` plus `tests/fixtures/architecture_evidence/` contain behavioral and contract fixtures. `docs/architecture-evidence-pilot.md` documents reproduction, limitations and review procedure. Exact subdivision may follow architecture review, but no language parser belongs in shared modules.
+
+Put a versioned JSON schema and fixture policy beside pilot assets, with a Python validator used by collector and report generator. Lock analyzer dependencies and viewer asset hashes within the pilot directory. Avoid dependencies in production `cli/` imports. Existing collector tests are read/reused, not replaced with tests that merely assert report formatting.
+
+Add `__init__.py` in the support package and adapters, and use `delta.py` for graph comparison separate from `policy.py`. Adapter files are `tach.py`, `radon.py`, `coverage_json.py`, `mutmut.py`; schema is `schema/evidence-packet-v1.schema.json`, Python lock is `requirements.lock`, viewer metadata is `assets/manifest.json` with `CYTOSCAPE_LICENSE.txt`. Canonical pilot rules are `tests/fixtures/architecture_evidence/policy-v1.json`; configuration is `tests/fixtures/architecture_evidence/pilot-config-v1.json`. Analysis overlay fixtures are in `tests/fixtures/architecture_evidence/tach-overlay/`. Raw packets and reports go outside the code checkout under the run host's `evidence/<case-id>/`; the approval receipt is `evidence/policy-approval.json`. These artifacts are written only during implementation/validation.
+
+Record the durable adapter/policy boundary in `docs/adr/0010-separate-architecture-evidence-from-language-tools.md` on this base (choose the next free number if the implementation base changes). This documents the pilot architecture, not a production-adoption decision.
+
+## Proposed command contract
+
+These are commands to implement, not commands that exist today:
+
+```text
+python scripts/architecture_evidence_pilot.py collect --source ROOT --config FILE --out SNAPSHOT_DIR
+python scripts/architecture_evidence_pilot.py compare --baseline SNAPSHOT_DIR --candidate SNAPSHOT_DIR --policy FILE --out PACKET_DIR
+python scripts/architecture_evidence_pilot.py render --packet PACKET_DIR --out REPORT.html
+python scripts/architecture_evidence_pilot.py verify --packet PACKET_DIR --candidate ROOT --report REPORT.html
+```
+
+`collect` performs only explicitly configured capabilities; mutation requires an explicit enabled target in config and always runs in a disposable copy. `compare` validates evidence before checking policy; `render` validates the packet and performs no analysis or test execution. Reject existing output directories/files rather than silently overwriting evidence. Write atomically via temporary output then rename. Each command emits one machine-readable result envelope on stdout and diagnostics on stderr. Return 0 for a completed valid operation/pass, 1 for proven policy failure from compare, 2 for invalid arguments, and 3 for inconclusive evidence or infrastructure failure. A rendered failing packet is a successful render operation, not a passing policy result. Preserve both statuses in the envelope.
+
+`verify` checks packet/raw/overlay/policy digests, candidate identity and a detached render receipt binding report bytes to packet and viewer-asset digest; no self-referential report hash. It returns 0 for intact evidence regardless of the embedded policy outcome, 2 for bad invocation and 3 for mismatches. Integrity verification is not acceptance. Invoke external tools by explicit executable and argument array without shell expansion, with fixed working directory, timeout and minimal environment. Capture raw bytes/exit status; never install tools during collection.
+
+## Evidence contract and invariants
+
+- Manifest: `schema_version`, snapshot/packet IDs, source revision when available plus content hashes, config and policy hashes, adapter and tool versions, environment/build context, selected scope, raw artifact paths/digests and collection outcome. Use SHA-256; canonical JSON is UTF-8, sorted object keys, sorted record arrays by stable ID, compact separators, no NaN/Infinity, and one trailing newline. Hash exact artifact bytes. A manifest digest is stored in its parent packet/receipt, never in a self-hashed field. Timestamps belong to the manifest, not deterministic graph content. Same source/config/tool inputs must produce byte-identical canonical graph JSON regardless of output path or timestamps.
+- Inventory: one record for every discovered file in declared roots with processed/excluded/failed status and reason. Unresolved dependency records are separate from file processing status. Excluded files are counted; unexplained gaps invalidate completeness. No hidden excludes or ambient home-directory config.
+- Nodes: opaque IDs qualified by adapter/language, explicit parent/component, display label, relative source path/hash and optional symbol span. Source spans use 1-based inclusive start/end lines, checked against the hashed file; no column semantics in v1. Paths use normalized relative separators; reject traversal and symlinks outside declared roots. No dot splitting to infer hierarchy. Removed/moved/renamed symbols and modules are new/removed unless explicit mapping is supplied; they never inherit metrics or policy identity by line number/name similarity alone.
+- Edges: stable identity from endpoints and kind, direct-import kind for pilot enforcement, source spans for each supporting import, and resolution status. Aggregate multiple imports into one graph edge while preserving every source pointer. Out-of-scope targets are explicit external/context nodes. Unresolved imports are visibly different from resolved edges and cannot manufacture a complete pass.
+- Quality: source-bound symbol ID, complexity method/value, coverage unit/denominator/covered counts, CRAP formula/value and references to raw collector output. Statement-based CRAP uses `C*C*(1-covered/total)^3+C`; branch coverage is shown separately. Undefined denominators or missing mappings yield unavailable/inconclusive, never zero. Maintain raw mutation statuses and separate reviewed equivalence/exclusion dispositions with reasons.
+- Integrity: graph source excerpts come from the hashed snapshot. Packet validation checks all references/digests before results are used. Config, baseline or policy changes create a new packet; comparison must not infer approval from file existence. Normal-workflow integrity is the claim, not protection against a malicious agent able to rewrite all artifacts.
+
+Required evidence gaps dominate overall result as `inconclusive`, while any independently proven violations remain visible in the findings. Complete required evidence with a violation is `fail`; complete required evidence without a new violation is `pass`. Quality numbers are advisory, but required quality evidence availability is not optional. Review disposition remains engineer-owned: accept, needs-changes or inconclusive.
+
+Keep `policy_result` separate from `overall_result`. Chunk 2 may prove a passing policy evaluation while the full pilot packet remains inconclusive until Chunk 3 supplies required quality evidence. Unit/contract fixtures can exercise capability-specific outcomes; they must not be presented as full-pilot acceptance. Each configured capability records whether it is required for that packet, with full-pilot requirements fixed by the approved configuration.
+
+Canonicalize nested unordered collections too: edge source references by `(path,start_line,end_line)`, component members by ID, rules/exceptions by ID, and inventory/quality records by ID. Preserve semantically ordered values such as command argument lists and source lines. Exercise deliberately shuffled equivalent input in repeatability fixtures.
+
+## Pilot policy and real source scope
+
+Collect the 45-file CLI context established by prior inventory, verifying the actual count rather than hard-coding it. Focus review on `harvest.py`, `codex_collector.py`, `claude_collector.py`, `jsonl_watermark.py`, `usage_store.py` and direct context. Proposed rules: watermark must not import either collector or harvest; either collector must not import harvest. These are direct imports, not transitive dependencies. Acceptance of this proposal approves these rule semantics; implementation serializes them without changing their meaning, records that approval reference, and binds policy digest to each controlled snapshot pair. Changed rules/scope/exclusions require a new decision, not merely regenerating a hash. Rule matching uses explicit source/target node IDs and direct-import kind; v1 has no wildcard or implicit transitive matching. Initial exceptions are empty. Future exceptions require ID, rule/edge scope, reason, approver and expiry; expired or unapproved exceptions cannot suppress a finding.
+
+Detect graph cycles through strongly connected components, retain members and supporting edges. Compare baseline/candidate cyclic components and report newly cyclic members or changed internal cyclic edges; ignore pure removal-only reductions. A change that adds a cyclic edge within an existing component is not silently baselined. Keep touched baseline violations in a separate ledger requiring reviewer disposition. Display transitive reachability, if any, separately; do not label it an import.
+
+Policy approval reference records the approved plan artifact digest and its run approval event, plus approver and rule-set digest. Before evaluation, validate the referenced artifact/event and semantic agreement with the serialized rules; a nonempty free-text approver alone is insufficient. Package the relevant approval receipt with the evidence for offline inspection. This verifies recorded approval consistency, not authenticated identity. Missing/mismatched reference is inconclusive. Baseline/candidate bindings live in the packet so approved unchanged rules do not require repeated approvals for each controlled fixture.
+
+Tach 0.35.0 provides Python extraction, not shared policy authority. Retain raw map/report output and exact source joins. The previous analyzer-only `cli/pyproject.toml` workaround for `setup.py` must exist only in the disposable analysis copy and be declared separately. If exact edge provenance cannot be obtained, stop downstream acceptance and decide on another adapter rather than writing a custom Python parser.
+
+In the analysis copy, root `tach.toml` declares `source_roots=["cli"]` and `ignore_type_checking_imports=false`, with explicit inventory-derived module entries. Copy the retained overlay `[project] name="flow-architecture-probe", version="0.0.0"` to `cli/pyproject.toml`. Run `[TACH, "map", "-o", MAP_PATH]`, then `[TACH, "report", RELATIVE_MODULE_FILE, "--dependencies"]` for each inventoried module, cwd=analysis root. Do not use `--raw`, which loses source detail. Derive diagnostics using Tach only, retain all source-pointer joins and flag missing joins. The earlier all-denied probe configuration is an instrumentation fixture, never approved Flow policy. Commands/options were checked against installed Tach 0.35.0; complete per-edge joining remains Chunk 1 proof.
+
+Quality targets one controlled changed `jsonl_watermark.read_new_lines` function. Radon 6.0.1 and coverage.py 7.14.0 were inspected; mutmut 3.7.0 remains compatibility-gated. First prove passing baseline tests and that the mutation run imports the disposable mutated module. Pin all transitive dependencies and platform details before measurement. No ambient sessions, user databases or network data in tests.
+
+Use Cytoscape.js 3.33.1 as the viewer candidate (release verified at https://github.com/cytoscape/cytoscape.js/releases/tag/v3.33.1); lock the actual distribution SHA-256 and license on acquisition. Chunk 1's environment task resolves and stores platform-specific Python package hashes and viewer hash before executing evidence collection. Hash values are build outputs to verify, not invented planning facts. Mutation configuration starts with `source_paths=["cli/"]`, `only_mutate=["cli/jsonl_watermark.py"]`, selected test nodes `tests/test_flow.py::CodexCollectorTests` and `tests/test_flow.py::ClaudeCollectorTests`, and target `jsonl_watermark.read_new_lines*`. Add a dedicated synthetic behavioral fixture if these existing tests do not isolate the selected weak/strong assertion. A selected-test configuration alone does not prove a mutant was loaded.
+
+## Browser states and interactions
+
+Show baseline/candidate identities and evidence status above the graph. Provide baseline/candidate/delta modes, component filter, searchable node/edge list, pan/zoom/reset and a details pane with line-numbered source excerpts, violation explanations and quality data. Node selection exposes incoming/outgoing dependencies; edge selection exposes each supporting import. Removed-edge excerpts come from baseline, added-edge excerpts from candidate.
+
+Loading announces initialization; empty distinguishes no modules from a filter with no matches; error identifies invalid/incompatible data and prevents a passing banner; partial/inconclusive displays missing evidence alongside available findings; success means valid report, not proof of correct code. Selection/filtering require no confirmation. There are no mutation or approval actions in the viewer. An optional external source link never substitutes for embedded evidence.
+
+All controls and the equivalent node/edge list must work by keyboard, with visible focus, descriptive labels and a readable status announcement. Do not encode changes or failure by color alone. Render labels and excerpts as text, escape embedded JSON including closing-script sequences, reject unsafe URLs and never evaluate source strings. Bundle assets without CDN calls; browser verification must prove the report works offline and hostile source labels do not execute.
+
+Emit `architecture-report.html` with inert JSON escaping `<`, `>`, `&`, U+2028 and U+2029, textContent-based source display and restrictive meta CSP using exact inline asset hashes. Disable connections/frames/forms/objects/base URL. Bound excerpts to matched span plus five context lines each side, maximum 200 lines/64 KiB per excerpt and 10 MiB total report; if limits hide required evidence, mark it unavailable/inconclusive rather than silently claiming complete drilldown. No raw environment dumps, user HOME paths or analyzer logs in the report. Include a skip link to the synchronized semantic list, reduced-motion behavior and detail-panel focus return.
+
+## Decisions, ownership and remaining feasibility
+
+Andy owns policy approval, review participation and expansion judgment. The implementing engineer owns adapters, isolation, source identity and reproduction; the independent reviewer owns assessment of fixture evidence. Freeze a seeded oracle before reviews and keep its answers out of reviewer material. A missed seeded architectural violation blocks expansion, not the honest reporting of a failed pilot.
+
+Resolve mutmut compatibility and source joins early. No silent weakening of requirements or substitution of source mutation with acceptance-example mutation. If a selected tool cannot satisfy the contract, report the concrete failure and a bounded alternative before continuing dependent work. Approval of this plan does not imply any tool feasibility or benefit has already been demonstrated.
+
+See validation-plan.md and implementation-handoff.md for proof and execution handoff. Andy accepted this shaping proposal on 2026-09-11; the CLI approval event records lifecycle acceptance.

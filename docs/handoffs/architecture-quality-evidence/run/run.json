@@ -1,0 +1,35 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/architecture-quality-evidence/acceptance-criteria.md",
+    "handback": ".flow/runs/architecture-quality-evidence/HANDOFF.md",
+    "handoff": ".flow/runs/architecture-quality-evidence/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/architecture-quality-evidence/validation-results.md",
+    "orchestration_manifest": ".flow/runs/architecture-quality-evidence/orchestration.json",
+    "plan": ".flow/runs/architecture-quality-evidence/plan.md",
+    "requirements": ".flow/runs/architecture-quality-evidence/requirements.md",
+    "solution": ".flow/runs/architecture-quality-evidence/solution.md",
+    "validation_plan": ".flow/runs/architecture-quality-evidence/validation-plan.md"
+  },
+  "created_at": "2026-09-10T18:42:06Z",
+  "dispositions": {
+    "risk": "owned"
+  },
+  "gates": {
+    "approve-definition": "2026-09-10T21:27:04Z",
+    "approve-plan": "2026-09-11T14:20:38Z",
+    "approve-solution": "2026-09-10T21:57:11Z",
+    "mark-handback-ready": "2026-09-11T15:00:16Z",
+    "start-definition": "2026-09-10T18:42:06Z",
+    "start-implementation": "2026-09-11T14:21:31Z",
+    "start-plan": "2026-09-10T21:57:28Z",
+    "start-solution": "2026-09-10T21:28:57Z"
+  },
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "handback_ready",
+  "updated_at": "2026-09-11T15:00:16Z",
+  "work_id": "architecture-quality-evidence"
+}

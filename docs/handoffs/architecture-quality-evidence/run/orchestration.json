@@ -1,0 +1,639 @@
+{
+  "schema_version": 1,
+  "work_id": "architecture-quality-evidence",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": [],
+    "classification": "standard",
+    "rationale": "Isolated local pilot implementation and controlled disposable specimens; no production lifecycle changes, installation or external publication."
+  },
+  "assignments": [
+    {
+      "id": "architecture",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/define_architecture"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/architecture.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/review/architecture.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify definition gaps with dispositions recommended"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "product",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/define_product"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/product.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/review/product.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify definition gaps with dispositions recommended"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "requirements",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/define_requirements"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/requirements.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/review/requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify definition gaps with dispositions recommended"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "solution-architecture",
+      "lane": "solution",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/define_architecture"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/solution-architecture.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/solution-architecture.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Primary-source capability evidence and bounded recommendation"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "solution-research"
+      }
+    },
+    {
+      "id": "solution-testing",
+      "lane": "solution",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/solution_testing"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/solution-testing.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/solution-testing.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Primary-source capability evidence and bounded recommendation"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "solution-research"
+      }
+    },
+    {
+      "id": "plan_requirements",
+      "lane": "plan",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/plan_requirements"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/plan_requirements.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/solution.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence",
+        "flow-architecture-pilot"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/plan_requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Actionable planning findings with evidence and bounded recommendations"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "planning-review"
+      }
+    },
+    {
+      "id": "plan_product",
+      "lane": "plan",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/plan_product"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/plan_product.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/solution.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence",
+        "flow-architecture-pilot"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/plan_product.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Actionable planning findings with evidence and bounded recommendations"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "planning-review"
+      }
+    },
+    {
+      "id": "plan_architecture",
+      "lane": "plan",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/define_architecture"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/plan_architecture.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/solution.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/architecture-quality-evidence",
+        "flow-architecture-pilot"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/plan_architecture.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Actionable planning findings with evidence and bounded recommendations"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "planning-review"
+      }
+    },
+    {
+      "id": "implementation_graph",
+      "lane": "implement",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/define_architecture"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/implementation_graph.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/plan.md",
+        ".flow/runs/architecture-quality-evidence/validation-plan.md",
+        ".flow/runs/architecture-quality-evidence/research/implementation-interface.md"
+      ],
+      "read_scopes": [
+        "flow-architecture-pilot",
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [
+        "flow-architecture-pilot/scripts/architecture_evidence/adapters/tach.py",
+        "flow-architecture-pilot/tests/test_architecture_evidence_tach.py",
+        ".flow/runs/architecture-quality-evidence/research/implementation_graph.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/implementation_graph.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implemented bounded component with meaningful tests and honest integration evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation-components"
+      }
+    },
+    {
+      "id": "implementation_quality",
+      "lane": "implement",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/plan_requirements"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/implementation_quality.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/plan.md",
+        ".flow/runs/architecture-quality-evidence/validation-plan.md",
+        ".flow/runs/architecture-quality-evidence/research/implementation-interface.md"
+      ],
+      "read_scopes": [
+        "flow-architecture-pilot",
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [
+        "flow-architecture-pilot/scripts/architecture_evidence/adapters/radon.py",
+        "flow-architecture-pilot/scripts/architecture_evidence/adapters/coverage_json.py",
+        "flow-architecture-pilot/scripts/architecture_evidence/adapters/mutmut.py",
+        "flow-architecture-pilot/tests/test_architecture_quality.py",
+        ".flow/runs/architecture-quality-evidence/research/implementation_quality.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/implementation_quality.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implemented bounded component with meaningful tests and honest integration evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation-components"
+      }
+    },
+    {
+      "id": "implementation_viewer",
+      "lane": "implement",
+      "role": "ux-specialist",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/plan_product"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/implementation_viewer.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/plan.md",
+        ".flow/runs/architecture-quality-evidence/validation-plan.md",
+        ".flow/runs/architecture-quality-evidence/research/implementation-interface.md"
+      ],
+      "read_scopes": [
+        "flow-architecture-pilot",
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [
+        "flow-architecture-pilot/scripts/architecture_evidence/report.py",
+        "flow-architecture-pilot/scripts/architecture_evidence/assets",
+        "flow-architecture-pilot/tests/test_architecture_report.py",
+        ".flow/runs/architecture-quality-evidence/research/implementation_viewer.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/implementation_viewer.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implemented bounded component with meaningful tests and honest integration evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation-components"
+      }
+    },
+    {
+      "id": "implementation_documentation",
+      "lane": "implement",
+      "role": "tech-writer",
+      "provider": {
+        "kind": "agent",
+        "id": "/root/plan_product"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/briefs/implementation_documentation.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/plan.md",
+        ".flow/runs/architecture-quality-evidence/validation-plan.md"
+      ],
+      "read_scopes": [
+        "flow-architecture-pilot",
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [
+        "flow-architecture-pilot/docs/architecture-evidence-pilot.md",
+        "flow-architecture-pilot/docs/adr/0010-separate-architecture-evidence-from-language-tools.md",
+        ".flow/runs/architecture-quality-evidence/research/implementation_documentation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/research/implementation_documentation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Accurate reproducible implementation documentation with limitations"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation-components"
+      }
+    },
+    {
+      "id": "implementation_reconciliation",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "/root"
+      },
+      "brief_path": ".flow/runs/architecture-quality-evidence/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/architecture-quality-evidence/plan.md",
+        ".flow/runs/architecture-quality-evidence/validation-plan.md"
+      ],
+      "read_scopes": [
+        "flow-architecture-pilot",
+        ".flow/runs/architecture-quality-evidence"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/architecture-quality-evidence/review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Accurate reproducible implementation documentation with limitations"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation-closeout"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/architecture-quality-evidence/findings-reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "planning-base",
+        "status": "observed",
+        "evidence": [
+          ".flow/runs/architecture-quality-evidence/research/planning-baseline.json"
+        ],
+        "disposition": "accepted"
+      },
+      {
+        "id": "planning-design",
+        "status": "recommended",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy"
+        },
+        "disposition": "accepted"
+      },
+      {
+        "id": "unproven-integration",
+        "status": "unverified",
+        "disposition": "deferred"
+      },
+      {
+        "id": "implementation-proof",
+        "status": "observed",
+        "evidence": [
+          ".flow/runs/architecture-quality-evidence/validation-results.md"
+        ],
+        "disposition": "accepted"
+      },
+      {
+        "id": "browser-and-human-acceptance",
+        "status": "unverified",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy"
+        },
+        "disposition": "deferred"
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "implementation_graph",
+      "implementation_quality",
+      "implementation_viewer",
+      "implementation_documentation"
+    ],
+    "evidence_collector_assignment": "implementation_reconciliation",
+    "verifier_assignment": "implementation_reconciliation",
+    "independent": false,
+    "artifact_path": ".flow/runs/architecture-quality-evidence/review.md"
+  }
+}

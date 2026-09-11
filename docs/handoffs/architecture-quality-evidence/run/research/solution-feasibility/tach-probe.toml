@@ -1,0 +1,184 @@
+source_roots = ["cli"]
+exclude = ["tests/**", "docs/**"]
+ignore_type_checking_imports = false
+forbid_circular_dependencies = true
+
+[[modules]]
+path = "agent_capabilities"
+depends_on = []
+
+[[modules]]
+path = "archive_commands"
+depends_on = []
+
+[[modules]]
+path = "archive_extract"
+depends_on = []
+
+[[modules]]
+path = "archive_graph"
+depends_on = []
+
+[[modules]]
+path = "archive_legacy"
+depends_on = []
+
+[[modules]]
+path = "archive_legacy_model"
+depends_on = []
+
+[[modules]]
+path = "archive_model"
+depends_on = []
+
+[[modules]]
+path = "archive_preflight"
+depends_on = []
+
+[[modules]]
+path = "archive_query"
+depends_on = []
+
+[[modules]]
+path = "archive_service"
+depends_on = []
+
+[[modules]]
+path = "archive_sources"
+depends_on = []
+
+[[modules]]
+path = "archive_store"
+depends_on = []
+
+[[modules]]
+path = "baseline"
+depends_on = []
+
+[[modules]]
+path = "claude_collector"
+depends_on = []
+
+[[modules]]
+path = "claude_config"
+depends_on = []
+
+[[modules]]
+path = "codex_collector"
+depends_on = []
+
+[[modules]]
+path = "cost"
+depends_on = []
+
+[[modules]]
+path = "diagnostic_model"
+depends_on = []
+
+[[modules]]
+path = "diagnostics"
+depends_on = []
+
+[[modules]]
+path = "expertise"
+depends_on = []
+
+[[modules]]
+path = "flow"
+depends_on = []
+
+[[modules]]
+path = "flowtoml"
+depends_on = []
+
+[[modules]]
+path = "fsutil"
+depends_on = []
+
+[[modules]]
+path = "gaps"
+depends_on = []
+
+[[modules]]
+path = "harvest"
+depends_on = []
+
+[[modules]]
+path = "hookio"
+depends_on = []
+
+[[modules]]
+path = "jsonl_watermark"
+depends_on = []
+
+[[modules]]
+path = "lifecycle"
+depends_on = []
+
+[[modules]]
+path = "migrate"
+depends_on = []
+
+[[modules]]
+path = "model_advice"
+depends_on = []
+
+[[modules]]
+path = "model_policy"
+depends_on = []
+
+[[modules]]
+path = "normalize"
+depends_on = []
+
+[[modules]]
+path = "orchestration"
+depends_on = []
+
+[[modules]]
+path = "overlay"
+depends_on = []
+
+[[modules]]
+path = "paths"
+depends_on = []
+
+[[modules]]
+path = "plugin_usage"
+depends_on = []
+
+[[modules]]
+path = "project"
+depends_on = []
+
+[[modules]]
+path = "render"
+depends_on = []
+
+[[modules]]
+path = "runstate"
+depends_on = []
+
+[[modules]]
+path = "runtime_smoke"
+depends_on = []
+
+[[modules]]
+path = "session_lookup"
+depends_on = []
+
+[[modules]]
+path = "setup"
+depends_on = []
+
+[[modules]]
+path = "sync"
+depends_on = []
+
+[[modules]]
+path = "telemetry_freshness"
+depends_on = []
+
+[[modules]]
+path = "usage_store"
+depends_on = []

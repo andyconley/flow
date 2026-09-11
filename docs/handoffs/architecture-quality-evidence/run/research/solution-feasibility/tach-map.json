@@ -1,0 +1,221 @@
+{
+  "cli/claude_collector.py": [
+    "cli/jsonl_watermark.py",
+    "cli/session_lookup.py"
+  ],
+  "cli/setup.py": [
+    "cli/sync.py",
+    "cli/fsutil.py",
+    "cli/overlay.py",
+    "cli/usage_store.py",
+    "cli/paths.py",
+    "cli/archive_store.py"
+  ],
+  "cli/harvest.py": [
+    "cli/plugin_usage.py",
+    "cli/usage_store.py",
+    "cli/codex_collector.py",
+    "cli/claude_collector.py",
+    "cli/paths.py"
+  ],
+  "cli/archive_legacy_model.py": [
+    "cli/archive_model.py"
+  ],
+  "cli/archive_extract.py": [
+    "cli/archive_model.py",
+    "cli/archive_store.py"
+  ],
+  "cli/archive_query.py": [
+    "cli/archive_graph.py",
+    "cli/archive_model.py",
+    "cli/archive_store.py",
+    "cli/archive_service.py",
+    "cli/archive_preflight.py",
+    "cli/archive_sources.py"
+  ],
+  "cli/normalize.py": [
+    "cli/usage_store.py",
+    "cli/paths.py"
+  ],
+  "cli/archive_service.py": [
+    "cli/archive_model.py",
+    "cli/archive_legacy.py",
+    "cli/archive_query.py",
+    "cli/archive_extract.py",
+    "cli/fsutil.py",
+    "cli/archive_store.py",
+    "cli/runstate.py"
+  ],
+  "cli/project.py": [
+    "cli/fsutil.py",
+    "cli/flowtoml.py",
+    "cli/paths.py"
+  ],
+  "cli/cost.py": [
+    "cli/hookio.py",
+    "cli/normalize.py",
+    "cli/usage_store.py",
+    "cli/claude_collector.py",
+    "cli/telemetry_freshness.py",
+    "cli/codex_collector.py",
+    "cli/paths.py",
+    "cli/session_lookup.py"
+  ],
+  "cli/overlay.py": [
+    "cli/paths.py",
+    "cli/hookio.py"
+  ],
+  "cli/telemetry_freshness.py": [
+    "cli/diagnostic_model.py"
+  ],
+  "cli/archive_graph.py": [
+    "cli/archive_model.py"
+  ],
+  "cli/model_advice.py": [
+    "cli/usage_store.py",
+    "cli/cost.py",
+    "cli/model_policy.py",
+    "cli/paths.py",
+    "cli/telemetry_freshness.py",
+    "cli/sync.py",
+    "cli/fsutil.py"
+  ],
+  "cli/lifecycle.py": [
+    "cli/setup.py",
+    "cli/sync.py",
+    "cli/diagnostic_model.py",
+    "cli/paths.py",
+    "cli/fsutil.py",
+    "cli/flowtoml.py"
+  ],
+  "cli/runstate.py": [
+    "cli/fsutil.py",
+    "cli/orchestration.py"
+  ],
+  "cli/baseline.py": [
+    "cli/cost.py",
+    "cli/telemetry_freshness.py",
+    "cli/paths.py",
+    "cli/usage_store.py"
+  ],
+  "cli/hookio.py": [
+    "cli/paths.py"
+  ],
+  "cli/sync.py": [
+    "cli/render.py",
+    "cli/fsutil.py",
+    "cli/model_policy.py",
+    "cli/diagnostic_model.py",
+    "cli/agent_capabilities.py",
+    "cli/expertise.py",
+    "cli/paths.py",
+    "cli/flowtoml.py"
+  ],
+  "cli/archive_commands.py": [
+    "cli/archive_sources.py",
+    "cli/archive_graph.py",
+    "cli/archive_query.py",
+    "cli/archive_service.py",
+    "cli/archive_model.py",
+    "cli/archive_legacy.py",
+    "cli/fsutil.py"
+  ],
+  "cli/archive_sources.py": [
+    "cli/archive_model.py",
+    "cli/archive_store.py",
+    "cli/runstate.py",
+    "cli/archive_legacy.py",
+    "cli/archive_extract.py"
+  ],
+  "cli/flow.py": [
+    "cli/plugin_usage.py",
+    "cli/orchestration.py",
+    "cli/harvest.py",
+    "cli/project.py",
+    "cli/sync.py",
+    "cli/archive_service.py",
+    "cli/cost.py",
+    "cli/gaps.py",
+    "cli/normalize.py",
+    "cli/baseline.py",
+    "cli/diagnostics.py",
+    "cli/archive_commands.py",
+    "cli/lifecycle.py",
+    "cli/migrate.py",
+    "cli/model_advice.py",
+    "cli/runstate.py",
+    "cli/runtime_smoke.py",
+    "cli/archive_preflight.py",
+    "cli/setup.py",
+    "cli/overlay.py"
+  ],
+  "cli/archive_preflight.py": [
+    "cli/archive_store.py"
+  ],
+  "cli/runtime_smoke.py": [
+    "cli/model_policy.py",
+    "cli/sync.py",
+    "cli/render.py",
+    "cli/paths.py"
+  ],
+  "cli/migrate.py": [
+    "cli/paths.py",
+    "cli/sync.py",
+    "cli/flowtoml.py",
+    "cli/fsutil.py",
+    "cli/project.py"
+  ],
+  "cli/archive_model.py": [
+    "cli/archive_legacy_model.py"
+  ],
+  "cli/diagnostics.py": [
+    "cli/archive_store.py",
+    "cli/lifecycle.py",
+    "cli/usage_store.py",
+    "cli/flowtoml.py",
+    "cli/overlay.py",
+    "cli/fsutil.py",
+    "cli/runtime_smoke.py",
+    "cli/paths.py",
+    "cli/project.py",
+    "cli/sync.py",
+    "cli/telemetry_freshness.py",
+    "cli/render.py",
+    "cli/diagnostic_model.py",
+    "cli/archive_preflight.py",
+    "cli/plugin_usage.py"
+  ],
+  "cli/render.py": [
+    "cli/model_policy.py",
+    "cli/agent_capabilities.py",
+    "cli/paths.py",
+    "cli/fsutil.py"
+  ],
+  "cli/orchestration.py": [
+    "cli/fsutil.py"
+  ],
+  "cli/archive_store.py": [
+    "cli/archive_model.py"
+  ],
+  "cli/archive_legacy.py": [
+    "cli/archive_service.py",
+    "cli/archive_extract.py",
+    "cli/archive_model.py",
+    "cli/archive_legacy_model.py",
+    "cli/archive_store.py",
+    "cli/archive_query.py"
+  ],
+  "cli/codex_collector.py": [
+    "cli/session_lookup.py",
+    "cli/jsonl_watermark.py"
+  ],
+  "cli/plugin_usage.py": [
+    "cli/telemetry_freshness.py",
+    "cli/claude_config.py",
+    "cli/usage_store.py"
+  ],
+  "cli/gaps.py": [
+    "cli/overlay.py",
+    "cli/paths.py"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "checkout": "/Users/andyconley/repos/Personal/flow-architecture-pilot",
+  "remote": "https://github.com/andyconley/flow.git",
+  "tag": "v0.28.0",
+  "commit": "6055b6b2dd4ca5fe9a9879d61523bbd08fa0736d",
+  "clean": true,
+  "mode": "isolated clone, detached HEAD; no implementation edits",
+  "selection_reason": "Inspected released baseline with prior graph and selected-test evidence; preserves development checkout. Not asserted latest at future implementation time."
+}

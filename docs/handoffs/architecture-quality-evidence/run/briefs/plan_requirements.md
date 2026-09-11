@@ -1,0 +1,3 @@
+# business-analyst planning review
+Read solution.md, requirements.md, research/proposed-design.md in this run. User confirmed all four chunks together, isolated checkout, standalone local browser report. Map A1-A7 to precise observable proof across all four approved chunks. Identify contradictions and missing failure semantics. Include mutation and reviewer experiment feasibility.
+Read only; return concise Markdown with observed/recommended/unverified claims. Write only your report at .flow/runs/architecture-quality-evidence/research/plan_requirements.md. You are not alone; do not change others files. No plan approval or implementation.

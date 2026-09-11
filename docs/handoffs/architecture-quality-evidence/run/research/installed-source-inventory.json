@@ -1,0 +1,182 @@
+{
+  "source": "/Users/andyconley/.flow/source",
+  "note": "Installed source has no Git metadata. Content hashes identify observed files; pilot revision is not selected.",
+  "files": [
+    {
+      "path": "cli/agent_capabilities.py",
+      "sha256": "a358428f90533a36611a9a648dc6ba575c2ae16d2b20a2f88afec8cc6ec0ccdd"
+    },
+    {
+      "path": "cli/archive_commands.py",
+      "sha256": "fd3ba4f85cc80bd6cc77552aee13201ea973ff641261a2810700d0ba77f8bfa4"
+    },
+    {
+      "path": "cli/archive_extract.py",
+      "sha256": "e25c9f0ad5926829f1cfa528d1119d5fe92ac3f72304923faf441a4641f79900"
+    },
+    {
+      "path": "cli/archive_graph.py",
+      "sha256": "bf25bb6a736d10508b4c83c80636e48b37b568b469a8abb3d10dfe2cd6153ca1"
+    },
+    {
+      "path": "cli/archive_legacy.py",
+      "sha256": "9023ca91f7e14df19a27356f153572533482ceff2133e5731ce764e0d108a5f8"
+    },
+    {
+      "path": "cli/archive_legacy_model.py",
+      "sha256": "21a095f3aeff061061ac635d5545b402b4256f9221024f97c7cef84155fe98da"
+    },
+    {
+      "path": "cli/archive_model.py",
+      "sha256": "1d2fb8664a6f82e6d0e12bf12bac7aca1a9a88cf3eadc95a3cc0db6a01d6fe56"
+    },
+    {
+      "path": "cli/archive_preflight.py",
+      "sha256": "6ce31e3c6f34674a6dcdb6975c3a779b20b97d156fcec0ae4be3ac6956cb6000"
+    },
+    {
+      "path": "cli/archive_query.py",
+      "sha256": "11782e4134f85592d5d74c6b45f2162e63748a9e8c833aface4a0ff836f3081b"
+    },
+    {
+      "path": "cli/archive_service.py",
+      "sha256": "f118b796d74161a755edc57950a5f023d30009c1089e4ab4bd12ef729baa3265"
+    },
+    {
+      "path": "cli/archive_sources.py",
+      "sha256": "e974a7847006b47b3764bfc96967c5aeca1009ba80f5c64c8b0a22b76ca49b13"
+    },
+    {
+      "path": "cli/archive_store.py",
+      "sha256": "05e881bd1f3b352b5e4dd38a2fbc77b8d58302e81725afa2f06b714f7bf85dbf"
+    },
+    {
+      "path": "cli/baseline.py",
+      "sha256": "c06323ad0d2865c45ac04511afdb4158cc6c664bbec11402de0fe4d46478b7ce"
+    },
+    {
+      "path": "cli/claude_collector.py",
+      "sha256": "651837eb6c69fef181ce4b360c0351e9913edf742a430208cedee451b3a03b74"
+    },
+    {
+      "path": "cli/claude_config.py",
+      "sha256": "3ad03b788802cd6d9004d4723954d01b5926fe308e92dd12f50e8cba1736a5a8"
+    },
+    {
+      "path": "cli/codex_collector.py",
+      "sha256": "0fb91adcda37127a02b93e31889179722a7d49d4bd25f6bda11d7ab348009912"
+    },
+    {
+      "path": "cli/cost.py",
+      "sha256": "ff2e3dffc76f2cf3ef8e1cb4bdb10c969b0ff137344bd6fad6aef5a2b5d0cabc"
+    },
+    {
+      "path": "cli/diagnostic_model.py",
+      "sha256": "e5d53c078cbb2486b9baa6d48e028037c5e8216f7ae47390e729eced81616480"
+    },
+    {
+      "path": "cli/diagnostics.py",
+      "sha256": "36f03a092985317972d6971295a106b5e9ee52095579ff9f2533d6193e9de1e6"
+    },
+    {
+      "path": "cli/flow.py",
+      "sha256": "09123d1b97aae274c42ae134a323762dde4954a4dfdf859e2d9faff00500f482"
+    },
+    {
+      "path": "cli/flowtoml.py",
+      "sha256": "55de7737575dd2df8d3f7012fb018c4778d2a34aa8a3db7df6e4fb598dbbf4d2"
+    },
+    {
+      "path": "cli/fsutil.py",
+      "sha256": "35f33650fb84affee920ab13aecc877f3d3100595a19b8469ce1529fbfe344b9"
+    },
+    {
+      "path": "cli/gaps.py",
+      "sha256": "689a0bbeb7ef506258d770357c8d1ccbbcd2fa61ae21a3aef6f5cc0db26caab3"
+    },
+    {
+      "path": "cli/harvest.py",
+      "sha256": "2db9898753506c100c270f40714920df7e403e21ee005d77a30231bbd02b443a"
+    },
+    {
+      "path": "cli/hookio.py",
+      "sha256": "7226938a607c8dac3d94163b3cc13a6612a082175e1cc65ae171c68439f1255e"
+    },
+    {
+      "path": "cli/jsonl_watermark.py",
+      "sha256": "0ec49800d477ab5f04caa11cca28f4002f6f08ce16b4e270339296bc8c2bed5b"
+    },
+    {
+      "path": "cli/lifecycle.py",
+      "sha256": "49626ca05ff18d293f71096ee2cbb142844ce3a40df5f77242e41b5ed07fc835"
+    },
+    {
+      "path": "cli/migrate.py",
+      "sha256": "45f14f84d673f8eefd8de502ce9d402d1216926a427a677642930b9e9756a862"
+    },
+    {
+      "path": "cli/model_advice.py",
+      "sha256": "075bf637a99744bb5396d0788f4541ebcb201605ff4ceb0bd4cce5ffbdd17a72"
+    },
+    {
+      "path": "cli/model_policy.py",
+      "sha256": "f04bd04c82f0b7b041790d6e364d7559b35544822f1bfa08fa7aaba8f043c0da"
+    },
+    {
+      "path": "cli/normalize.py",
+      "sha256": "114578af8a1131ce5c6c8a9ddcc43b42595b162b811125e4325c0509c01edb78"
+    },
+    {
+      "path": "cli/orchestration.py",
+      "sha256": "15c775bd2a680af1834845d71fd1d2b09b12148594d1b142e7bf7116f798d289"
+    },
+    {
+      "path": "cli/overlay.py",
+      "sha256": "e515367a230a2027175d4c97840129bdb4f89660c7969f674cab8fbcd8438d24"
+    },
+    {
+      "path": "cli/paths.py",
+      "sha256": "64686e1bdfb0976d9ca8cc9adaa50eb0e8c8f257f6602f4a063b49c180f915bc"
+    },
+    {
+      "path": "cli/plugin_usage.py",
+      "sha256": "028da2f4c5e8a5354297adee57e07532da87f4b7125e5f2a8a846f93103c4c57"
+    },
+    {
+      "path": "cli/project.py",
+      "sha256": "95b8ecca12912ed904b1cfd2ca9fa5b08eac13a754a44dc5b3a2a08fe187059c"
+    },
+    {
+      "path": "cli/render.py",
+      "sha256": "f1e1ed5e4c91dd963f993fbb76b4e0c2136a6bd7379d7eb8b08fc4ab32f76113"
+    },
+    {
+      "path": "cli/runstate.py",
+      "sha256": "d11eff341bccaf41ae9daf5c8ca463e510252d13050371ac077978dfb240f9aa"
+    },
+    {
+      "path": "cli/runtime_smoke.py",
+      "sha256": "4a48c19a261f75899f55114101755754465563ccf08059c57d1d999eb8d6d737"
+    },
+    {
+      "path": "cli/session_lookup.py",
+      "sha256": "4c25a0a2a8b2beec219d5b561d1d0a3704aabec2ea207b3aba72a93166569ece"
+    },
+    {
+      "path": "cli/setup.py",
+      "sha256": "78ca24e44fff021a6df287038f621d60da19ae5c2e65d4b1929b7ba2bc51a810"
+    },
+    {
+      "path": "cli/sync.py",
+      "sha256": "576e70b3724c9eefade9fb5e5669c25052aa016bf2476db17fa571ed88f3e2c2"
+    },
+    {
+      "path": "cli/telemetry_freshness.py",
+      "sha256": "fbb065b958e335bc8db4028452c5286d3e1bd14c8955fb542814e9efeca9d788"
+    },
+    {
+      "path": "cli/usage_store.py",
+      "sha256": "927ee5481661808452553f1de561d4079c908e564dab39c6fc1f2b84c3f9e1b6"
+    }
+  ]
+}

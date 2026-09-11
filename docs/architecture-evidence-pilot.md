@@ -8,7 +8,7 @@ The pilot reads a pinned source tree, writes immutable evidence directories, and
 
 Use the pilot lock only on macOS arm64 with Python 3.14. `scripts/architecture_evidence/requirements.lock` pins Tach 0.35.0, Radon 6.0.1, coverage.py 7.14.0, and mutmut 3.7.0 with their resolved dependencies. Regenerate and verify a separate lock before using another platform or Python version.
 
-The supplied fixture config names absolute executables under `/private/tmp/flow-architecture-tools`. Treat those as examples of a prebuilt isolated environment, not portable paths. Configure the absolute `tach_executable` and quality `python_executable` for the environment that owns the run.
+The supplied fixture config contains placeholder executable paths. Historical run configs name the original temporary environment and must remain unchanged as evidence. Configure the absolute `tach_executable` and quality `python_executable` for the environment that owns the run.
 
 ## Evidence flow
 
@@ -57,3 +57,7 @@ The selected-function coverage record explicitly labels its supplemental behavio
 For optional real-tool integration tests set `FLOW_ARCHITECTURE_PYTHON` to the pinned environment interpreter. Without that variable, unit tests still run and the external-tool integration case is skipped. The example config contains placeholder executable paths; copy it outside the checkout and replace them before collecting.
 
 The local browser automation tool rejected file-URL navigation under its security policy. No alternate browser route was attempted. Offline interaction, keyboard behavior and the four timed reviews therefore require manual evidence before pilot acceptance. Source/unit checks and CLI integrity checks do not substitute for those observations.
+
+## Cross-computer handoff
+
+The [complete handoff](handoffs/architecture-quality-evidence/README.md) includes discussion and decisions, the frozen run archive, hash manifest, restore script and the remaining acceptance steps.

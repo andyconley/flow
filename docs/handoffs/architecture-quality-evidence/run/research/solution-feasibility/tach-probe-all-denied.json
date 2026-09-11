@@ -1,0 +1,7499 @@
+[
+  {
+    "Located": {
+      "file_path": "cli/plugin_usage.py",
+      "line_number": 56,
+      "original_line_number": 56,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_config",
+            "usage_module": "plugin_usage",
+            "definition_module": "claude_config"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/plugin_usage.py",
+      "line_number": 57,
+      "original_line_number": 57,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "plugin_usage",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/plugin_usage.py",
+      "line_number": 58,
+      "original_line_number": 58,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "telemetry_freshness",
+            "usage_module": "plugin_usage",
+            "definition_module": "telemetry_freshness"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/normalize.py",
+      "line_number": 37,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "normalize",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/normalize.py",
+      "line_number": 38,
+      "original_line_number": 38,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "normalize",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/normalize.py",
+      "line_number": 38,
+      "original_line_number": 38,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "normalize",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 13,
+      "original_line_number": 13,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_graph.resolve_graph",
+            "usage_module": "archive_query",
+            "definition_module": "archive_graph"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_preflight.current",
+            "usage_module": "archive_query",
+            "definition_module": "archive_preflight"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.digest",
+            "usage_module": "archive_query",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.effective_view",
+            "usage_module": "archive_query",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.render_lines",
+            "usage_module": "archive_query",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_sources.assess_source",
+            "usage_module": "archive_query",
+            "definition_module": "archive_sources"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_sources.discover_context",
+            "usage_module": "archive_query",
+            "definition_module": "archive_sources"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ArchiveError",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.cache_dir",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.read_projection",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.projection_record",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.projection_rows",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.publish_projection",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.update_projection",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.writer_lock",
+            "usage_module": "archive_query",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 154,
+      "original_line_number": 154,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.refresh_coverage",
+            "usage_module": "archive_query",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 244,
+      "original_line_number": 244,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_preflight.current",
+            "usage_module": "archive_query",
+            "definition_module": "archive_preflight"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_query.py",
+      "line_number": 250,
+      "original_line_number": 250,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.qualified",
+            "usage_module": "archive_query",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 12,
+      "original_line_number": 12,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "model_advice",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 13,
+      "original_line_number": 13,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.capacity_gauge",
+            "usage_module": "model_advice",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "model_advice",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_policy.PROFILE_IDS",
+            "usage_module": "model_advice",
+            "definition_module": "model_policy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_policy.RUNTIMES",
+            "usage_module": "model_advice",
+            "definition_module": "model_policy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_policy.resolve_session_profile",
+            "usage_module": "model_advice",
+            "definition_module": "model_policy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "model_advice",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "telemetry_freshness.usage_freshness",
+            "usage_module": "model_advice",
+            "definition_module": "telemetry_freshness"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 279,
+      "original_line_number": 279,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SCAFFOLD_DIR",
+            "usage_module": "model_advice",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/model_advice.py",
+      "line_number": 280,
+      "original_line_number": 280,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.merge_user_overlay",
+            "usage_module": "model_advice",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_preflight.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.atomic_write",
+            "usage_module": "archive_preflight",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_preflight.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.encode",
+            "usage_module": "archive_preflight",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/orchestration.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "orchestration",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/hookio.py",
+      "line_number": 32,
+      "original_line_number": 32,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "hookio",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/gaps.py",
+      "line_number": 48,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.git_env",
+            "usage_module": "gaps",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/gaps.py",
+      "line_number": 49,
+      "original_line_number": 49,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "gaps",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/gaps.py",
+      "line_number": 49,
+      "original_line_number": 49,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.USER_OVERLAY_DIR",
+            "usage_module": "gaps",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 37,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "baseline",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 38,
+      "original_line_number": 38,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "telemetry_freshness",
+            "usage_module": "baseline",
+            "definition_module": "telemetry_freshness"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 39,
+      "original_line_number": 39,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.DEFAULT_WINDOW_DAYS",
+            "usage_module": "baseline",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 39,
+      "original_line_number": 39,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost._bucket_expr",
+            "usage_module": "baseline",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 39,
+      "original_line_number": 39,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost._cutoff",
+            "usage_module": "baseline",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 39,
+      "original_line_number": 39,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost._data_file",
+            "usage_module": "baseline",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 39,
+      "original_line_number": 39,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.render_json",
+            "usage_module": "baseline",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 40,
+      "original_line_number": 40,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "baseline",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/baseline.py",
+      "line_number": 40,
+      "original_line_number": 40,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "baseline",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_ERROR",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 11,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_INFO",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 12,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_WARNING",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 13,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_FAILED",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 14,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_NOT_APPLICABLE",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 15,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_OK",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 16,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_WARNING",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/telemetry_freshness.py",
+      "line_number": 17,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.diagnostic",
+            "usage_module": "telemetry_freshness",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 22,
+      "original_line_number": 22,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "setup",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 24,
+      "original_line_number": 23,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.copy_if_missing",
+            "usage_module": "setup",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 25,
+      "original_line_number": 23,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.ensure_dir",
+            "usage_module": "setup",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 26,
+      "original_line_number": 23,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.ensure_file",
+            "usage_module": "setup",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 27,
+      "original_line_number": 23,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "setup",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 29,
+      "original_line_number": 29,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.OVERLAY_GITIGNORE",
+            "usage_module": "setup",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 29,
+      "original_line_number": 29,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.format_overlay_vcs",
+            "usage_module": "setup",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 29,
+      "original_line_number": 29,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.git_env",
+            "usage_module": "setup",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 29,
+      "original_line_number": 29,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.overlay_vcs_status",
+            "usage_module": "setup",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 31,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.CAPABILITY_DIRS",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 32,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_CONFIG",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 33,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_HOME",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 34,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 35,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SCAFFOLD_DIR",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 36,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 37,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.USER_BIN_DIR",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 38,
+      "original_line_number": 30,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.USER_OVERLAY_DIR",
+            "usage_module": "setup",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 40,
+      "original_line_number": 40,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.sync_target",
+            "usage_module": "setup",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 167,
+      "original_line_number": 167,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.writer_lock",
+            "usage_module": "setup",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 167,
+      "original_line_number": 167,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ensure_identity",
+            "usage_module": "setup",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/setup.py",
+      "line_number": 167,
+      "original_line_number": 167,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ensure_ignore",
+            "usage_module": "setup",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 36,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_ERROR",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 37,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_INFO",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 38,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_WARNING",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 39,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_FAILED",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 40,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_OK",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 41,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_WARNING",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 42,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.diagnostic",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 43,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.print_json",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 44,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.support_payload",
+            "usage_module": "lifecycle",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 46,
+      "original_line_number": 46,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "flowtoml.read_toml",
+            "usage_module": "lifecycle",
+            "definition_module": "flowtoml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 47,
+      "original_line_number": 47,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil._remove_path",
+            "usage_module": "lifecycle",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 47,
+      "original_line_number": 47,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.ensure_dir",
+            "usage_module": "lifecycle",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 49,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.DEFAULT_REMOTE",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 50,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_CONFIG",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 51,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_HOME",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 52,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.INSTALL_MODE_DEVELOP",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 53,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.INSTALL_MODE_RELEASE",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 54,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.RELEASE_EXCLUDE_DIRS",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 55,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.RELEASE_EXCLUDE_FILE_PATTERNS",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 56,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.RELEASE_EXCLUDE_TOP_LEVEL",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 57,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SEMVER_TAG_RE",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 58,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "lifecycle",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 60,
+      "original_line_number": 60,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "setup._ensure_usage_store",
+            "usage_module": "lifecycle",
+            "definition_module": "setup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/lifecycle.py",
+      "line_number": 61,
+      "original_line_number": 61,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.sync_target",
+            "usage_module": "lifecycle",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 41,
+      "original_line_number": 41,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "flowtoml.loads",
+            "usage_module": "migrate",
+            "definition_module": "flowtoml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 41,
+      "original_line_number": 41,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "flowtoml.read_toml",
+            "usage_module": "migrate",
+            "definition_module": "flowtoml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 43,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.ensure_dir",
+            "usage_module": "migrate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 44,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.read_json",
+            "usage_module": "migrate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 45,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.rel_posix",
+            "usage_module": "migrate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 46,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.remove_empty_parents",
+            "usage_module": "migrate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 47,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "migrate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 48,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.write_atomic",
+            "usage_module": "migrate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 50,
+      "original_line_number": 50,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.CAPABILITY_DIRS",
+            "usage_module": "migrate",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 50,
+      "original_line_number": 50,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_HOME",
+            "usage_module": "migrate",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 50,
+      "original_line_number": 50,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_HOME",
+            "usage_module": "migrate",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 50,
+      "original_line_number": 50,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SCAFFOLD_DIR",
+            "usage_module": "migrate",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 52,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.BUCKET_DIFFERS",
+            "usage_module": "migrate",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 53,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.BUCKET_IDENTICAL",
+            "usage_module": "migrate",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 54,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.audit_project",
+            "usage_module": "migrate",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 55,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.declared_sources",
+            "usage_module": "migrate",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 56,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.has_framework_baseline",
+            "usage_module": "migrate",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 57,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.overlapping_trees",
+            "usage_module": "migrate",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 60,
+      "original_line_number": 59,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.read_managed_merge_paths",
+            "usage_module": "migrate",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 61,
+      "original_line_number": 59,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.read_managed_paths",
+            "usage_module": "migrate",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 62,
+      "original_line_number": 59,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.remove_managed_codex_hooks",
+            "usage_module": "migrate",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 63,
+      "original_line_number": 59,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.remove_managed_flow_hooks",
+            "usage_module": "migrate",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/migrate.py",
+      "line_number": 64,
+      "original_line_number": 59,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.sync_outputs",
+            "usage_module": "migrate",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 25,
+      "original_line_number": 25,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "agent_capabilities.resolve_agent_capabilities",
+            "usage_module": "sync",
+            "definition_module": "agent_capabilities"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 27,
+      "original_line_number": 26,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_ERROR",
+            "usage_module": "sync",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 28,
+      "original_line_number": 26,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_INFO",
+            "usage_module": "sync",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 29,
+      "original_line_number": 26,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_FAILED",
+            "usage_module": "sync",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 30,
+      "original_line_number": 26,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_OK",
+            "usage_module": "sync",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 31,
+      "original_line_number": 26,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.diagnostic",
+            "usage_module": "sync",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 32,
+      "original_line_number": 26,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.print_json",
+            "usage_module": "sync",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 33,
+      "original_line_number": 26,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.support_payload",
+            "usage_module": "sync",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 35,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "expertise.compose",
+            "usage_module": "sync",
+            "definition_module": "expertise"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 35,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "expertise.corpus_for",
+            "usage_module": "sync",
+            "definition_module": "expertise"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 36,
+      "original_line_number": 36,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "flowtoml.read_toml",
+            "usage_module": "sync",
+            "definition_module": "flowtoml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 38,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.ensure_dir",
+            "usage_module": "sync",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 39,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.read_json",
+            "usage_module": "sync",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 40,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.rel_posix",
+            "usage_module": "sync",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 41,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.remove_empty_parents",
+            "usage_module": "sync",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 43,
+      "original_line_number": 43,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_policy.merge_session_model_profiles",
+            "usage_module": "sync",
+            "definition_module": "model_policy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 43,
+      "original_line_number": 43,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_policy.runtime_policy_for_agent",
+            "usage_module": "sync",
+            "definition_module": "model_policy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 45,
+      "original_line_number": 44,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.GENERATED_MARKER",
+            "usage_module": "sync",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 46,
+      "original_line_number": 44,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "sync",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 47,
+      "original_line_number": 44,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SCAFFOLD_DIR",
+            "usage_module": "sync",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 48,
+      "original_line_number": 44,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "sync",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 49,
+      "original_line_number": 44,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.USER_OVERLAY_DIR",
+            "usage_module": "sync",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 52,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.build_managed_manifest",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 53,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.codex_hook_command_for",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 54,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.codex_skill_dir",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 55,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.hook_command_for",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 56,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.manifest_ref_for",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 57,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.render_claude_agent",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 58,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.render_codex_agent",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 59,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.render_codex_skill",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 60,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.render_skill_from_command",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 61,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.routing_hints_for",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/sync.py",
+      "line_number": 62,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.source_ref_for",
+            "usage_module": "sync",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_policy.runtime_policy_for_agent",
+            "usage_module": "runtime_smoke",
+            "definition_module": "model_policy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "runtime_smoke",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SCAFFOLD_DIR",
+            "usage_module": "runtime_smoke",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.codex_skill_dir",
+            "usage_module": "runtime_smoke",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.manifest_ref_for",
+            "usage_module": "runtime_smoke",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 19,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.desired_outputs_for_target",
+            "usage_module": "runtime_smoke",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 20,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.merge_user_overlay",
+            "usage_module": "runtime_smoke",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 21,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.read_managed_paths",
+            "usage_module": "runtime_smoke",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 22,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.runtime_status",
+            "usage_module": "runtime_smoke",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runtime_smoke.py",
+      "line_number": 23,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.shared_agents",
+            "usage_module": "runtime_smoke",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 12,
+      "original_line_number": 12,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "plugin_usage",
+            "usage_module": "harvest",
+            "definition_module": "plugin_usage"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 13,
+      "original_line_number": 13,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "harvest",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_collector.HARNESS",
+            "usage_module": "harvest",
+            "definition_module": "claude_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 15,
+      "original_line_number": 15,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_collector.default_sessions_root",
+            "usage_module": "harvest",
+            "definition_module": "claude_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_collector.harvest_all",
+            "usage_module": "harvest",
+            "definition_module": "claude_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "codex_collector.default_sessions_root",
+            "usage_module": "harvest",
+            "definition_module": "codex_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 18,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "codex_collector.harvest_all",
+            "usage_module": "harvest",
+            "definition_module": "codex_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 19,
+      "original_line_number": 19,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "harvest",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/harvest.py",
+      "line_number": 19,
+      "original_line_number": 19,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "harvest",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 50,
+      "original_line_number": 50,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "flowtoml.read_toml",
+            "usage_module": "project",
+            "definition_module": "flowtoml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 51,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "project",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 53,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.CAPABILITY_DIRS",
+            "usage_module": "project",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 54,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.CAPABILITY_PATHS",
+            "usage_module": "project",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 55,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_HOME",
+            "usage_module": "project",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 56,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.RELEASE_EXCLUDE_DIRS",
+            "usage_module": "project",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 57,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.RELEASE_EXCLUDE_FILE_PATTERNS",
+            "usage_module": "project",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/project.py",
+      "line_number": 58,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SCAFFOLD_DIR",
+            "usage_module": "project",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.declaration_digest",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.digest",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.qualified",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_envelope",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.effective_view",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.contained",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.read_identity",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 8,
+      "original_line_number": 8,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.verify_pointer",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.STATE_ARCHIVED",
+            "usage_module": "archive_sources",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.STATE_BLOCKED",
+            "usage_module": "archive_sources",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.STATE_LANES",
+            "usage_module": "archive_sources",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.STATE_LEGACY",
+            "usage_module": "archive_sources",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.STATE_PAUSED",
+            "usage_module": "archive_sources",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_sources.py",
+      "line_number": 57,
+      "original_line_number": 57,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy.observe",
+            "usage_module": "archive_sources",
+            "definition_module": "archive_legacy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 19,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "agent_capabilities.CapabilityPolicyError",
+            "usage_module": "render",
+            "definition_module": "agent_capabilities"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 20,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "agent_capabilities.WEB_RESEARCH",
+            "usage_module": "render",
+            "definition_module": "agent_capabilities"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 21,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "agent_capabilities.guidance_for",
+            "usage_module": "render",
+            "definition_module": "agent_capabilities"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 23,
+      "original_line_number": 23,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.rel_posix",
+            "usage_module": "render",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 24,
+      "original_line_number": 24,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_policy.runtime_policy_for_agent",
+            "usage_module": "render",
+            "definition_module": "model_policy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 26,
+      "original_line_number": 25,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.CODEX_SKILL_DIR",
+            "usage_module": "render",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 27,
+      "original_line_number": 25,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.GENERATED_MARKER",
+            "usage_module": "render",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/render.py",
+      "line_number": 28,
+      "original_line_number": 25,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.LEGACY_CODEX_SKILL_DIR",
+            "usage_module": "render",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 3,
+      "original_line_number": 3,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_legacy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 5,
+      "original_line_number": 5,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "archive_commands",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.EXITS",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.rebuild",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.search",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.serialized",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.pack",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 6,
+      "original_line_number": 6,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.minimum_budget",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.backfill",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.mutate",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.EXITS",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.rebuild",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.search",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.serialized",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.pack",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.minimum_budget",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 68,
+      "original_line_number": 68,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.backfill",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 68,
+      "original_line_number": 68,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.mutate",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 87,
+      "original_line_number": 87,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.qualified",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 92,
+      "original_line_number": 92,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_sources.discover_context",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_sources"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 92,
+      "original_line_number": 92,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_sources.assess_source",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_sources"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_commands.py",
+      "line_number": 93,
+      "original_line_number": 93,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_graph.resolve_graph",
+            "usage_module": "archive_commands",
+            "definition_module": "archive_graph"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_graph.py",
+      "line_number": 2,
+      "original_line_number": 2,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.qualified",
+            "usage_module": "archive_graph",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 11,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.ACTION_DISPOSITIONS",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 11,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.POSITIVE_ACTIONS",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 11,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.effective_disposition",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 12,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.make_review",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 12,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.semantic_payload",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 12,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.validate_chain",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 12,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.validate_legacy_envelope",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 12,
+      "original_line_number": 11,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.validate_review",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 13,
+      "original_line_number": 13,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.canonical_json",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 13,
+      "original_line_number": 13,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.digest",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 13,
+      "original_line_number": 13,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.qualified",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ArchiveError",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.atomic_write",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.contained",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.encode",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 14,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.envelope_path",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 15,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.file_digest",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 15,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.read_identity",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 15,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.writer_lock",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 15,
+      "original_line_number": 14,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.write_envelope",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 88,
+      "original_line_number": 88,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.verify_pointer",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 162,
+      "original_line_number": 162,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.sections",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 204,
+      "original_line_number": 204,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.verify_pointer",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 277,
+      "original_line_number": 277,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.refresh_coverage",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 278,
+      "original_line_number": 278,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ensure_ignore",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 288,
+      "original_line_number": 288,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.rebuild",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 289,
+      "original_line_number": 289,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.cache_dir",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 362,
+      "original_line_number": 362,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.extract_legacy",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 411,
+      "original_line_number": 411,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.cache_dir",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 415,
+      "original_line_number": 415,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.extract_legacy",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 459,
+      "original_line_number": 459,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.refresh_coverage",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy.py",
+      "line_number": 474,
+      "original_line_number": 474,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.extract_legacy",
+            "usage_module": "archive_legacy",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.EXTRACTOR_VERSION",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.FIELDS",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.SELECTABLE_FIELDS",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.SHA256_RE",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.canonical_json",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.digest",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.pointer",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.qualified",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_declarations",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_field",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_legacy_model.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_refinement",
+            "usage_module": "archive_legacy_model",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 19,
+      "original_line_number": 19,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_commands.register",
+            "usage_module": "flow",
+            "definition_module": "archive_commands"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 19,
+      "original_line_number": 19,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_commands.dispatch",
+            "usage_module": "flow",
+            "definition_module": "archive_commands"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 20,
+      "original_line_number": 20,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "baseline.baseline_command",
+            "usage_module": "flow",
+            "definition_module": "baseline"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 22,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.BUCKET_DAY",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 23,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.BUCKET_WEEK",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 24,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.DEFAULT_ACTIVE_WITHIN_MINUTES",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 25,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.DEFAULT_SESSIONS_LIMIT",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 26,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.DEFAULT_WINDOW_DAYS",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 27,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.cost_active_command",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 28,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.cost_sessions_command",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 29,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.cost_summary_command",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 30,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.cost_trend_command",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 31,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.cost_verdict_command",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 32,
+      "original_line_number": 21,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "cost.cost_warn_command",
+            "usage_module": "flow",
+            "definition_module": "cost"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 34,
+      "original_line_number": 34,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostics.bootstrap",
+            "usage_module": "flow",
+            "definition_module": "diagnostics"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 34,
+      "original_line_number": 34,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostics.doctor",
+            "usage_module": "flow",
+            "definition_module": "diagnostics"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 34,
+      "original_line_number": 34,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostics.help_command",
+            "usage_module": "flow",
+            "definition_module": "diagnostics"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 35,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "gaps.cmd_add",
+            "usage_module": "flow",
+            "definition_module": "gaps"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 35,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "gaps.cmd_list",
+            "usage_module": "flow",
+            "definition_module": "gaps"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 35,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "gaps.cmd_promote",
+            "usage_module": "flow",
+            "definition_module": "gaps"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 36,
+      "original_line_number": 36,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "harvest.harvest_claude_command",
+            "usage_module": "flow",
+            "definition_module": "harvest"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 36,
+      "original_line_number": 36,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "harvest.harvest_codex_command",
+            "usage_module": "flow",
+            "definition_module": "harvest"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 37,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "lifecycle.install_command",
+            "usage_module": "flow",
+            "definition_module": "lifecycle"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 37,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "lifecycle.update_command",
+            "usage_module": "flow",
+            "definition_module": "lifecycle"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 38,
+      "original_line_number": 38,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_advice.context_command",
+            "usage_module": "flow",
+            "definition_module": "model_advice"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 39,
+      "original_line_number": 39,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "model_advice.resolve_command",
+            "usage_module": "flow",
+            "definition_module": "model_advice"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 40,
+      "original_line_number": 40,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "normalize.normalize_command",
+            "usage_module": "flow",
+            "definition_module": "normalize"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 41,
+      "original_line_number": 41,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "orchestration.cmd_validate",
+            "usage_module": "flow",
+            "definition_module": "orchestration"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 42,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.overlay_check_command",
+            "usage_module": "flow",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 42,
+      "original_line_number": 42,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.overlay_status_command",
+            "usage_module": "flow",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 44,
+      "original_line_number": 43,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "plugin_usage.plugin_usage_show_command",
+            "usage_module": "flow",
+            "definition_module": "plugin_usage"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 45,
+      "original_line_number": 43,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "plugin_usage.plugin_usage_snapshot_command",
+            "usage_module": "flow",
+            "definition_module": "plugin_usage"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 48,
+      "original_line_number": 47,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.cmd_history",
+            "usage_module": "flow",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 49,
+      "original_line_number": 47,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.cmd_list",
+            "usage_module": "flow",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 50,
+      "original_line_number": 47,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.cmd_status",
+            "usage_module": "flow",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 51,
+      "original_line_number": 47,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.cmd_transition",
+            "usage_module": "flow",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 52,
+      "original_line_number": 47,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate.cmd_verify",
+            "usage_module": "flow",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 54,
+      "original_line_number": 54,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runtime_smoke.cmd_smoke",
+            "usage_module": "flow",
+            "definition_module": "runtime_smoke"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 55,
+      "original_line_number": 55,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "migrate.cmd_migrate",
+            "usage_module": "flow",
+            "definition_module": "migrate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 56,
+      "original_line_number": 56,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.cmd_audit",
+            "usage_module": "flow",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 58,
+      "original_line_number": 57,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "setup.refresh_project",
+            "usage_module": "flow",
+            "definition_module": "setup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 59,
+      "original_line_number": 57,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "setup.setup_machine",
+            "usage_module": "flow",
+            "definition_module": "setup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 60,
+      "original_line_number": 57,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "setup.setup_project",
+            "usage_module": "flow",
+            "definition_module": "setup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 61,
+      "original_line_number": 57,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "setup.setup_user",
+            "usage_module": "flow",
+            "definition_module": "setup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 63,
+      "original_line_number": 63,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.sync_target",
+            "usage_module": "flow",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 814,
+      "original_line_number": 814,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_service.archive_transition",
+            "usage_module": "flow",
+            "definition_module": "archive_service"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 836,
+      "original_line_number": 836,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_preflight.report",
+            "usage_module": "flow",
+            "definition_module": "archive_preflight"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/flow.py",
+      "line_number": 844,
+      "original_line_number": 844,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_preflight.report",
+            "usage_module": "flow",
+            "definition_module": "archive_preflight"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.extract",
+            "usage_module": "archive_service",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_extract.verify_pointer",
+            "usage_module": "archive_service",
+            "definition_module": "archive_extract"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 8,
+      "original_line_number": 8,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.declaration_digest",
+            "usage_module": "archive_service",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 8,
+      "original_line_number": 8,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.digest",
+            "usage_module": "archive_service",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 8,
+      "original_line_number": 8,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_declarations",
+            "usage_module": "archive_service",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 8,
+      "original_line_number": 8,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_envelope",
+            "usage_module": "archive_service",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ArchiveError",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.atomic_write",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.cache_dir",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.contained",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.encode",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 9,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ensure_identity",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.ensure_ignore",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.envelope_path",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.file_digest",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.read_identity",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.record_coverage",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.cached_coverage",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.writer_lock",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 10,
+      "original_line_number": 9,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.write_envelope",
+            "usage_module": "archive_service",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 48,
+      "original_line_number": 48,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy.observe",
+            "usage_module": "archive_service",
+            "definition_module": "archive_legacy"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 216,
+      "original_line_number": 216,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.rebuild",
+            "usage_module": "archive_service",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 227,
+      "original_line_number": 227,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runstate",
+            "usage_module": "archive_service",
+            "definition_module": "runstate"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 228,
+      "original_line_number": 228,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "archive_service",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_service.py",
+      "line_number": 282,
+      "original_line_number": 282,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_query.rebuild",
+            "usage_module": "archive_service",
+            "definition_module": "archive_query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/codex_collector.py",
+      "line_number": 80,
+      "original_line_number": 80,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.WatermarkAnomaly",
+            "usage_module": "codex_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/codex_collector.py",
+      "line_number": 80,
+      "original_line_number": 80,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.line_byte_length",
+            "usage_module": "codex_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/codex_collector.py",
+      "line_number": 80,
+      "original_line_number": 80,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.line_hash",
+            "usage_module": "codex_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/codex_collector.py",
+      "line_number": 80,
+      "original_line_number": 80,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.read_new_lines",
+            "usage_module": "codex_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/codex_collector.py",
+      "line_number": 81,
+      "original_line_number": 81,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "session_lookup.is_subagent",
+            "usage_module": "codex_collector",
+            "definition_module": "session_lookup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/codex_collector.py",
+      "line_number": 82,
+      "original_line_number": 82,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "session_lookup.lookup_session_for_path",
+            "usage_module": "codex_collector",
+            "definition_module": "session_lookup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/overlay.py",
+      "line_number": 28,
+      "original_line_number": 28,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "hookio",
+            "usage_module": "overlay",
+            "definition_module": "hookio"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/overlay.py",
+      "line_number": 29,
+      "original_line_number": 29,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "overlay",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/overlay.py",
+      "line_number": 29,
+      "original_line_number": 29,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.USER_OVERLAY_DIR",
+            "usage_module": "overlay",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 19,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_ERROR",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 20,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_INFO",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 21,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.SEVERITY_WARNING",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 22,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_FAILED",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 23,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_NOT_APPLICABLE",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 24,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_OK",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 25,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.STATUS_WARNING",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 26,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.diagnostic",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 27,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.exit_code",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 28,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.print_json",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 29,
+      "original_line_number": 18,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "diagnostic_model.support_payload",
+            "usage_module": "diagnostics",
+            "definition_module": "diagnostic_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 31,
+      "original_line_number": 31,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "diagnostics",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 32,
+      "original_line_number": 32,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "telemetry_freshness",
+            "usage_module": "diagnostics",
+            "definition_module": "telemetry_freshness"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 33,
+      "original_line_number": 33,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "flowtoml.read_toml",
+            "usage_module": "diagnostics",
+            "definition_module": "flowtoml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 34,
+      "original_line_number": 34,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "diagnostics",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 35,
+      "original_line_number": 35,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "lifecycle.read_install_config",
+            "usage_module": "diagnostics",
+            "definition_module": "lifecycle"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 36,
+      "original_line_number": 36,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.format_overlay_vcs",
+            "usage_module": "diagnostics",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 36,
+      "original_line_number": 36,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "overlay.overlay_vcs_status",
+            "usage_module": "diagnostics",
+            "definition_module": "overlay"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 38,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.CAPABILITY_DIRS",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 39,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.CODEX_SKILL_DIR",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 40,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.DEFAULT_REMOTE",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 41,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_CONFIG",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 42,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.FLOW_HOME",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 43,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 44,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.INSTALL_MODE_DEVELOP",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 45,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.INSTALL_MODE_RELEASE",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 46,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SCAFFOLD_DIR",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 47,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 48,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.USER_BIN_DIR",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 49,
+      "original_line_number": 37,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.USER_OVERLAY_DIR",
+            "usage_module": "diagnostics",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 51,
+      "original_line_number": 51,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "render.codex_skill_dir",
+            "usage_module": "diagnostics",
+            "definition_module": "render"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 53,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.REPLACE_ABSENT",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 54,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.REPLACE_OK",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 55,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.REPLACE_UNKNOWN",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 56,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.audit_project",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 57,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.declared_replaces",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 58,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.printable",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 59,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.has_legacy_active_standards_heading",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 60,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.resolve_replaces",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 61,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.SURFACE_EXCLUDED",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 62,
+      "original_line_number": 52,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "project.SURFACE_UNMANAGED",
+            "usage_module": "diagnostics",
+            "definition_module": "project"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 64,
+      "original_line_number": 64,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.merge_user_overlay",
+            "usage_module": "diagnostics",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 64,
+      "original_line_number": 64,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.runtime_status",
+            "usage_module": "diagnostics",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 64,
+      "original_line_number": 64,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "sync.shared_agents",
+            "usage_module": "diagnostics",
+            "definition_module": "sync"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 104,
+      "original_line_number": 104,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "runtime_smoke.smoke_payload",
+            "usage_module": "diagnostics",
+            "definition_module": "runtime_smoke"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 488,
+      "original_line_number": 488,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "plugin_usage",
+            "usage_module": "diagnostics",
+            "definition_module": "plugin_usage"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 545,
+      "original_line_number": 545,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_preflight.probe",
+            "usage_module": "diagnostics",
+            "definition_module": "archive_preflight"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 546,
+      "original_line_number": 546,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.cached_coverage",
+            "usage_module": "diagnostics",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/diagnostics.py",
+      "line_number": 731,
+      "original_line_number": 731,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "plugin_usage",
+            "usage_module": "diagnostics",
+            "definition_module": "plugin_usage"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 54,
+      "original_line_number": 54,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "usage_store",
+            "usage_module": "cost",
+            "definition_module": "usage_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 55,
+      "original_line_number": 55,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_collector.HARNESS",
+            "usage_module": "cost",
+            "definition_module": "claude_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 56,
+      "original_line_number": 56,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_collector.default_sessions_root",
+            "usage_module": "cost",
+            "definition_module": "claude_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 57,
+      "original_line_number": 57,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_collector.harvest_all",
+            "usage_module": "cost",
+            "definition_module": "claude_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 58,
+      "original_line_number": 58,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "claude_collector.harvest_file",
+            "usage_module": "cost",
+            "definition_module": "claude_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 59,
+      "original_line_number": 59,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "codex_collector.HARNESS",
+            "usage_module": "cost",
+            "definition_module": "codex_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 60,
+      "original_line_number": 60,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "codex_collector.default_sessions_root",
+            "usage_module": "cost",
+            "definition_module": "codex_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 61,
+      "original_line_number": 61,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "codex_collector.harvest_all",
+            "usage_module": "cost",
+            "definition_module": "codex_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 62,
+      "original_line_number": 62,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "codex_collector.harvest_file",
+            "usage_module": "cost",
+            "definition_module": "codex_collector"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 63,
+      "original_line_number": 63,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "hookio.log_hook_error",
+            "usage_module": "cost",
+            "definition_module": "hookio"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 64,
+      "original_line_number": 64,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "hookio.read_hook_stdin",
+            "usage_module": "cost",
+            "definition_module": "hookio"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 65,
+      "original_line_number": 65,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "hookio.safe_key",
+            "usage_module": "cost",
+            "definition_module": "hookio"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 66,
+      "original_line_number": 66,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "normalize.normalize_all",
+            "usage_module": "cost",
+            "definition_module": "normalize"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.HOME",
+            "usage_module": "cost",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 67,
+      "original_line_number": 67,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "paths.SOURCE_DIR",
+            "usage_module": "cost",
+            "definition_module": "paths"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 68,
+      "original_line_number": 68,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "session_lookup.lookup_session_for_path",
+            "usage_module": "cost",
+            "definition_module": "session_lookup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/cost.py",
+      "line_number": 69,
+      "original_line_number": 69,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "telemetry_freshness",
+            "usage_module": "cost",
+            "definition_module": "telemetry_freshness"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_model.py",
+      "line_number": 128,
+      "original_line_number": 128,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_legacy_model.validate_legacy_envelope",
+            "usage_module": "archive_model",
+            "definition_module": "archive_legacy_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_extract.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.FIELDS",
+            "usage_module": "archive_extract",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_extract.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.EXTRACTOR_VERSION",
+            "usage_module": "archive_extract",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_extract.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.digest",
+            "usage_module": "archive_extract",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_extract.py",
+      "line_number": 7,
+      "original_line_number": 7,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_field",
+            "usage_module": "archive_extract",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_extract.py",
+      "line_number": 8,
+      "original_line_number": 8,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_store.contained",
+            "usage_module": "archive_extract",
+            "definition_module": "archive_store"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_extract.py",
+      "line_number": 200,
+      "original_line_number": 200,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.pointer",
+            "usage_module": "archive_extract",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/archive_store.py",
+      "line_number": 144,
+      "original_line_number": 144,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "archive_model.validate_envelope",
+            "usage_module": "archive_store",
+            "definition_module": "archive_model"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/claude_collector.py",
+      "line_number": 180,
+      "original_line_number": 180,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.WatermarkAnomaly",
+            "usage_module": "claude_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/claude_collector.py",
+      "line_number": 180,
+      "original_line_number": 180,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.line_byte_length",
+            "usage_module": "claude_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/claude_collector.py",
+      "line_number": 180,
+      "original_line_number": 180,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.line_hash",
+            "usage_module": "claude_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/claude_collector.py",
+      "line_number": 180,
+      "original_line_number": 180,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "jsonl_watermark.read_new_lines",
+            "usage_module": "claude_collector",
+            "definition_module": "jsonl_watermark"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/claude_collector.py",
+      "line_number": 181,
+      "original_line_number": 181,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "session_lookup.lookup_session_for_path",
+            "usage_module": "claude_collector",
+            "definition_module": "session_lookup"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runstate.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.ensure_dir",
+            "usage_module": "runstate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runstate.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.repo_root",
+            "usage_module": "runstate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runstate.py",
+      "line_number": 16,
+      "original_line_number": 16,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "fsutil.write_atomic",
+            "usage_module": "runstate",
+            "definition_module": "fsutil"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runstate.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "orchestration.manifest_path",
+            "usage_module": "runstate",
+            "definition_module": "orchestration"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runstate.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "orchestration.valid_work_id",
+            "usage_module": "runstate",
+            "definition_module": "orchestration"
+          }
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "cli/runstate.py",
+      "line_number": 17,
+      "original_line_number": 17,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UndeclaredDependency": {
+            "dependency": "orchestration.validate_orchestration",
+            "usage_module": "runstate",
+            "definition_module": "orchestration"
+          }
+        }
+      }
+    }
+  }
+]

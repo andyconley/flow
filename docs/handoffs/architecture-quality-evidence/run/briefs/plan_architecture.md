@@ -1,0 +1,3 @@
+# architect planning review
+Read solution.md, requirements.md, research/proposed-design.md in this run. User confirmed all four chunks together, isolated checkout, standalone local browser report. Inspect isolated checkout /Users/andyconley/repos/Personal/flow-architecture-pilot. Recommend exact integration files/commands, data contracts, local browser packaging, safe source display, adapter seams and tests. Include UX states/accessibility and security implications of local reports. No code edits.
+Read only; return concise Markdown with observed/recommended/unverified claims. Write only your report at .flow/runs/architecture-quality-evidence/research/plan_architecture.md. You are not alone; do not change others files. No plan approval or implementation.
