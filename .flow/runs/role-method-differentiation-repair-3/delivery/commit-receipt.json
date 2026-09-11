@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-10T15:23:07Z",
+  "reviewed_candidate": {
+    "name": "T",
+    "production_path_count": 29,
+    "sha256": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33",
+    "change_surface_sha256": "bc25f0ca4158a689e3073bdce9fdb810a7bbcd8058cc928e2ad478696cc61fbe",
+    "final_receipt_sha256": "9644720e0924f863f713134f32b49750c396a2810e5ca1463bed1f3d02211345",
+    "review_sha256": "481a0501b04b98d9330eeb3f5b89768e1e6b0922b7c325f9e0033c8ce55ceaf2"
+  },
+  "source_commit": {
+    "name": "C",
+    "sha": "efb73c85d07dc4c091b104f558fa281db0c540ad",
+    "parent": "2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208",
+    "subject": "feat(agents): release three evidence-backed expertise roles",
+    "release_note": "Add evidence-backed expertise to architect, lead-developer, and test-engineer; product-manager and quality-reviewer remain base roles.",
+    "production_matches_T": true,
+    "production_mismatches": [],
+    "committed_state_sha256": "4aecd657bb2d73413e2a454ed08ba211f1dd996b1d64ee26d6c272f6d2c5413d"
+  },
+  "remote_before_push": {
+    "origin_main": "090b4df4924e597930e90573b8393417267a1f92",
+    "origin_main_is_ancestor_of_C": true
+  },
+  "excluded_worktree_delta": {
+    "path": ".flow/memory/STATE.md",
+    "sha256": "237cf7b512e212f586e9a8d283346244e51932f8cac06bea72e3ff8572d7a8ea",
+    "staged": false
+  }
+}

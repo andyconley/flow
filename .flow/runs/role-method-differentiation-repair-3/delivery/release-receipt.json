@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-10T18:41:12Z",
+  "work_id": "role-method-differentiation-repair-3",
+  "version": "0.28.0",
+  "tag": "v0.28.0",
+  "reviewed_candidate": {
+    "name": "T",
+    "production_path_count": 29,
+    "sha256": "4e0a00b81c22d5a7cc2136018188e117893e9ff592813b3ccdb53be400dd8f33"
+  },
+  "source_commit": {
+    "name": "C",
+    "sha": "efb73c85d07dc4c091b104f558fa281db0c540ad",
+    "parent": "2712f5f1fb7f3ecabbc0bbcb77cdf9cd33431208",
+    "production_matches_T": true
+  },
+  "release_commit": {
+    "name": "R",
+    "sha": "6055b6b2dd4ca5fe9a9879d61523bbd08fa0736d",
+    "parent": "efb73c85d07dc4c091b104f558fa281db0c540ad",
+    "only_changed_path_from_C": "CHANGELOG.md"
+  },
+  "remote_reconciliation": {
+    "feature_ref": "origin/codex/role-method-differentiation-repair-3",
+    "feature_sha": "efb73c85d07dc4c091b104f558fa281db0c540ad",
+    "main_ref": "origin/main",
+    "main_sha": "6055b6b2dd4ca5fe9a9879d61523bbd08fa0736d",
+    "merge_mode": "fast-forward"
+  },
+  "release": {
+    "workflow_run_id": 34515517662,
+    "workflow_url": "https://github.com/andyconley/flow/actions/runs/34515517662",
+    "workflow_conclusion": "success",
+    "jobs": {
+      "analyze": "success",
+      "validate-candidate": "success",
+      "publish": "success",
+      "verify-published": "success"
+    },
+    "release_url": "https://github.com/andyconley/flow/releases/tag/v0.28.0",
+    "published_at": "2026-09-10T18:40:46Z",
+    "draft": false,
+    "prerelease": false,
+    "release_body_sha256": "b0940d0639d83b1aa777a937178198550c95d0cb6f1be01ab1e7d8e263b7debc"
+  },
+  "preserved_worktree_delta": {
+    "path": ".flow/memory/STATE.md",
+    "sha256": "237cf7b512e212f586e9a8d283346244e51932f8cac06bea72e3ff8572d7a8ea",
+    "committed_sha256": "4aecd657bb2d73413e2a454ed08ba211f1dd996b1d64ee26d6c272f6d2c5413d",
+    "included_in_release": false
+  }
+}

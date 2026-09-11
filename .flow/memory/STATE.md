@@ -6,6 +6,12 @@
 
 ## Recently completed
 
+- `role-method-differentiation-repair-3` accepted, merged, and released as
+  `v0.28.0` at `6055b6b`. Architect, lead-developer, and test-engineer now use
+  evidence-backed expertise; product-manager and quality-reviewer remain
+  base-only. The 250-check frozen verifier, release workflow, refreshed
+  installation, and fresh Claude/Codex checks passed.
+
 - `agent-expertise-join-validation-refinement` accepted at `210bdf7`. It
   completes the teaches-join validation refinement with strict DefinedTerm
   validation, a sync-boundary regression test, and isolated Claude/Codex
@@ -50,20 +56,16 @@
 
 ## Next step
 
-- Promote `feat/expertise-join-validation` to `main`, refresh the develop
-  install, and run the four documented live-client smoke checks.
-
-- Observe the release workflow for the archive-retrieval documentation delivery
-  and confirm the first production release containing a `Release-Note:`
-  trailer.
 - Re-run the authenticated entry and mapping evidence when model mappings,
   client versions, or account entitlement changes.
 - Optional session-model advice follow-up: make the non-JSON context view show
   declared model details and evidence limitations, and render structured
   disposition identifiers as readable prose.
 - Deferred backlog: runtime memory capability and bounded recall, review rework
-  transition (four observations), and runtime evidence completion manifest.
-  All three gaps are promoted into `docs/backlog.md`; implementation is deferred.
+  transition, runtime evidence completion manifest, and promoted-gap frequency
+  staleness. The first three gaps are promoted into `docs/backlog.md`; the
+  frequency-staleness gap is repeated but still open. Implementation is
+  deferred.
 - Optional follow-up: clearer review-only backfill status.
 
 - No release action remains for `agent-web-access-policy`.

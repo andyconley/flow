@@ -6,3 +6,4 @@
 {"artifacts": {"handback": ".flow/runs/role-method-differentiation-repair-3/HANDOFF.md", "implementation_evidence": ".flow/runs/role-method-differentiation-repair-3/validation-results.md"}, "at": "2026-09-10T12:22:22Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-10T13:11:43Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
 {"artifacts": {"review": ".flow/runs/role-method-differentiation-repair-3/review.md"}, "at": "2026-09-10T13:25:12Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}
+{"artifacts": {"archive": ".flow/runs/role-method-differentiation-repair-3/archive.md"}, "at": "2026-09-10T22:13:19Z", "dispositions": {"archive_enrichment": "1", "capability_gaps": "recorded", "memory": "n/a"}, "event": "archive", "from": "review_accepted", "to": "archived"}
