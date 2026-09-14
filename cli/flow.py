@@ -32,6 +32,7 @@ from cost import (  # noqa: E402
     cost_warn_command,
 )
 from diagnostics import bootstrap, doctor, help_command  # noqa: E402
+from expertise_commands import register as register_expertise, dispatch as dispatch_expertise  # noqa: E402
 from gaps import cmd_add, cmd_list, cmd_promote  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import install_command, update_command  # noqa: E402
@@ -85,6 +86,8 @@ def main() -> int:
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, title="commands")
+
+    register_expertise(sub)
 
     setup = sub.add_parser(
         "setup",
@@ -809,6 +812,8 @@ def main() -> int:
         return run_verify_command(args)
     if args.command in {"archive", "index"}:
         return dispatch_archive(args)
+    if args.command == "expertise":
+        return dispatch_expertise(args)
     if args.command == "run" and args.run_target == "transition":
         if args.event in {"archive", "archive-scout"}:
             from archive_service import archive_transition

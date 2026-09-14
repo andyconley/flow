@@ -1,0 +1,29 @@
+name: Expertise runtime verification
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expertise-runtime:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10.21', '3.11.16', '3.12.14', '3.13.15']
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Verify exact interpreter
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python }}
+        run: python -c 'import os, platform; actual=platform.python_version(); expected=os.environ["EXPECTED_PYTHON"]; print(actual); assert actual == expected, (actual, expected)'
+      - name: Run expertise contract checks
+        run: python -m unittest discover -s tests -p 'test_expertise*.py'

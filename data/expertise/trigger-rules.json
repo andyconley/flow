@@ -1,0 +1,364 @@
+{
+  "corpus_digest": "57cacb337e7f5dc498b93ecb68b9271a949638e5d221835d9beac24e6be9dfb0",
+  "revision": "expertise-trigger-rules-v1",
+  "rules": [
+    {
+      "clauses": [
+        {
+          "fact": "durable_boundary_options",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "512d4783d42d803581888896439676da77f3f5f44456cf55a4d94275459c4a42",
+      "entry_digest": "307c021cdee2e71c28152f7621fa3441ac730676b6a6596be3b8b9d2d48f713e",
+      "entry_id": "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision",
+      "failure_mode_digest": "84f4fc36d18c89e45023bb1cd1b7349e2dde099e4473338b48e77e7dd08e6a37",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "4721c7d4373de3a77d7a3e11f8a0401549578550241c70e0de9e73870d0668fa",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "requirements_conversation",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "98cd19974d4a2188dafcee339c5e962b188e713a6ffd16a6233239c991a75b4e",
+      "entry_digest": "f270a87937f0d86327de6e230a01576d3de3a328333c0a141bd21a61c2d3f5c1",
+      "entry_id": "flow:entry/business-analyst/elicit-past-behavior-not-stated-intent",
+      "failure_mode_digest": "af28782789f6a45073535869dbc693ecc05484fb59cbb84f39b3db4227dbb248",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "8a55651c87a759ec2c206b5629036030cc22c3024a6237ede5e6835adc0e1ed3",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "thin_problem_evidence",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "42d498d6af2688f774d8ca99742b94cc27e01e798f628783c96009ea3a12e9c0",
+      "entry_digest": "51aeb3e24f42cbed5596671824c036f66c772b3f8ca01f284db1f33393aec3c7",
+      "entry_id": "flow:entry/business-analyst/leave-a-requirement-undefined-while-the-evidence-is-thin",
+      "failure_mode_digest": "f14a6b1125ee695d34849c8db8517b0ed4c485906050561ab23e4a2e3a31d856",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "6cb6a285a5dcaf8a2d7c9073ff3b2fff8563124a959d0a708df83e8105545ffe",
+      "unknown_policy": "admit_for_context"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "definition_or_requirement_writing",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "f21208aa31f495e7cdd2089286d3a698e1a7bffa5c5d2560ed0bdd0b57dedcb6",
+      "entry_digest": "8ad4cca0b9e732f28d6e6d86296b3c2877de16c4e08456ee460b8712cb5d7adf",
+      "entry_id": "flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement",
+      "failure_mode_digest": "414afa4bcb2b38c27d933f3828922c6867ed7ed16711f9f01dfc5fea462a43f0",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "92758383a88150da40394f9a6d89d350d4998bdc5bba921d296b4c535f7ffe8d",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "definition_near_approval",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "5677eed4f6e46cd4792fb937a798dcab2ccddddb6ec9117f0ebb1706e3eaf8ce",
+      "entry_digest": "d413a16f0eca1247fb9de3ea112527a11adc4434b6eb719ac67ce495536278cb",
+      "entry_id": "flow:entry/business-analyst/premortem-the-definition-before-it-is-approved",
+      "failure_mode_digest": "cd7c66350a5eed44ac4e6ea78ba79b45b698a4be04f0ef8335bf33700c1a1d5f",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "c3472cce996b5de1dead19be785993a4bedc1fd090f130f08184af8d9ccd5f4e",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "artifact_shaped_request",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "64df6cb71173d833e2e0567d08f6e2cc7a462f81af9838b9b7b3dd2e9766612d",
+      "entry_digest": "4d4125670b89e118e656ee9b9829a051e95eee0a16c256e1535a05704ac67acd",
+      "entry_id": "flow:entry/business-analyst/reframe-a-product-request-as-the-job-behind-it",
+      "failure_mode_digest": "0c48994ea851faee2c35c7adeb4c5041deb410d575a9d2003fceb48ec624aca3",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "c0c2bc7ae1a79947fc54300e5bf7ff3d7edece56c0d2c9183cdc80098ac31a49",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "durable_implementation_change",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "27e9396c6bc42a8661c2fe76cfb71b8211d5d7f841381cad362aa7b9b0b00385",
+      "entry_digest": "877580eae089608479b23a3360ef648a1307755f80ec3081cba1a87a73d325ee",
+      "entry_id": "flow:entry/lead-developer/plan-a-reversible-delivery-path",
+      "failure_mode_digest": "d051e98dcdff4b47f4d2e792fce548dda2a84fde8fd560f235549414fea0677c",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "0ad6982e279db35d666d4a1ddf72ffd78fd279d3fc63861a204ca193cd80090a",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "implementation_plan_depth",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "aa609cfa7e1d503d3cffaa4be902a52653cb0f8ff894a773bc0fae2a97fc3dda",
+      "entry_digest": "951acde47a965c24d4fcd74445d21a64396588fe58d6997dd2d0dd02981d6cd9",
+      "entry_id": "flow:entry/lead-developer/plan-in-proportion-to-risk",
+      "failure_mode_digest": "3ca1e3d8d66f5ac3743ac28772c6351826f6377cd3c0c7978c00c325798332dd",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "d561e3187074e5bafd3f57e6edd7a7419da3a35f50a05341921613053f43094f",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "incident_review",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "8703d6987db65ed9e53b2a46febf8086238e5383b13c645ec43e4fb618655acd",
+      "entry_digest": "014fe9e1c1413ace1d1144d4c4eb8ba92f56b5fda8d7d223dca80f4152f7fab0",
+      "entry_id": "flow:entry/sre/contributing-conditions-instead-of-a-root-cause",
+      "failure_mode_digest": "efa83c410aa1b8c00d890169a829ec3920353dd22d7b4f67b3fdf0c3b908abed",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "5c49686cfb71fd52344fd2ec164adce616a348b05caa6070cc18c2bdd4fbf30c",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "active_incident_hypothesis",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "d79d3d9d087b7df53eea568cb1d78bfad9133e297bda741d4bbd900f4ac59133",
+      "entry_digest": "a867a383023dd4abd0c46b66ed7435d6caedc850203e0025755e0163d18e0dbd",
+      "entry_id": "flow:entry/sre/hold-competing-hypotheses-during-a-live-incident",
+      "failure_mode_digest": "8de191aed595991bc6bd6fdf8ddf4431e60b02c8152555f569d9c79ce8b3ab51",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "5753b8bbb46e072cfc82744361c8552e37b8bcbff4f319ba2c719c527e0db32e",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "postmortem_action",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "017412868df9f8bab7dd28e39327ecd1755362c1c02f371937abd79639213beb",
+      "entry_digest": "4a95079869f05a6fe9bca8d9774c133240cc543bc21adfd5d7af2fbf3f62ad94",
+      "entry_id": "flow:entry/sre/postmortem-output-is-a-change-to-conditions",
+      "failure_mode_digest": "0a5dce1c2ed45994f310d59a9f284926baece4a201eec5ed9ae5dd8b1a9ad04d",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "e0ae40aab8cc50f888684611d59d5b0e569c2bbe8991e550f9da064b157229d5",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "risky_rollout",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "00f6c1d72f104c7cd2599e88c73b3d0c9e0a34aec5ae287f1bdb29a0b585ad6e",
+      "entry_digest": "7fbfe028ec5226f6d6032f5b1f670e99e632fdcf48480459b572f3f1fd99ce38",
+      "entry_id": "flow:entry/sre/premortem-a-change-before-it-rolls",
+      "failure_mode_digest": "1d0787d378126472aa200607fe762478306cf6cd7aca9f0a02117cfcbf93ea79",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "a75f62f0b8969b0a5deb5153ddecf35266eafadc888422800c55ea638302ead9",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "human_timeline_decision",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "1745e82db38f435b10cd094e63a8989c056864a5bca102e1d7a697c7640ca9d3",
+      "entry_digest": "8ac49ca3414de482b71c67290b897ac661be7ac6a1634d5f34e9b6cd81d9b792",
+      "entry_id": "flow:entry/sre/reconstruct-what-was-known-at-the-time",
+      "failure_mode_digest": "666de9fd7a23785608c71976f01a7ffcab837a89aa3403616df8c620fc763e53",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "531531a9d31e2228d79977350d2dfa464fdc8d227b2ad2b32c7f68023e57912a",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "mitigation_recommendation",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "e7b3d017f6cd24359528b080c5bed4a38a8c698bcc459a7561320349d59f11f4",
+      "entry_digest": "92fa827318a017769b4acafd27e04bf33392130a1ae35d1fa113f5df79c26e5b",
+      "entry_id": "flow:entry/sre/state-what-a-mitigation-newly-makes-possible",
+      "failure_mode_digest": "ec134bb88f09d191b0ed84621342fccb190fd2917c7f40670db0a35618c97ec1",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "46e151abb57cdcfa6b9d0019f6bf6aad72f9a334954578c4e7552e6d150c0996",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "distinguishing_observation_present",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "5fe964746aa59bbf4a22dc30e10900903127a134c02770ad0b9841fa96ef00b2",
+      "entry_digest": "272cefc09101b9b332d935c33172e8ea6b39eb504d086efc37b2bdc372f554e3",
+      "entry_id": "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand",
+      "failure_mode_digest": "85e109522c9fd034ee297f6baf8c87d2be54a7270ba875f020ccdc141474e465",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "9e8e229abba0713fd121566ce2160e458501a6012bced7bd3dfc54a899b60546",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "conclusion_shaped_report",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "42d15a38f94d1acfac4b3e62856ae918c953bcd6ddd2bebb50c2aa33d063620f",
+      "entry_digest": "b140dc0d56e675a555022ec20987abfd86b4fd810e1dcac48fb8196bbc1e760b",
+      "entry_id": "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description",
+      "failure_mode_digest": "0aad37e8b39a2d537bb0f72e582871922cd94ad0ecea7c07d848baf878903c82",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "d0f31ba1966248bcadac65572977194b17fe409c0793385e5aa1b41446321abf",
+      "unknown_policy": "admit_for_context"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "unresolved_case_handoff",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "d0940362fbe5173ba67c74bf72221bef799e938018a15efbb85e6014c96349e9",
+      "entry_digest": "7b135d5ae057b07270f8f319d82e22992af8ebc5cefc4e1ed0ad28e7d8c489fe",
+      "entry_id": "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff",
+      "failure_mode_digest": "5bfd26b0aa9c815507797acf9651d7af3173594adc0e98c3fa49665290e5396a",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "a8d6f1f20a6a8940342c771297328dba95d49dec7e6e9dd1f7d15f15a0f55b18",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "recent_pattern_match",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "477879361df1611253f9f7301386f0e0c85423bc8f5e3c940e9c3d196b0f76b2",
+      "entry_digest": "7124e089fe2e8d09a059b384344c31496a665fd7b14aebcd1bfbc4917f5e0249",
+      "entry_id": "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently",
+      "failure_mode_digest": "98ab7475be27ec457be8f3f81c7467841555a95c9f3ecea37ef5372d961679d1",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "b5254132bfa1821d16bf09d07ecb6de140a7e60561b9fdfec55e3ac77d04836b",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "contributing_user_action",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "ccf3c7b0d34740508c37755c3609744950e8f2e833713b8e46c74eec907628d6",
+      "entry_digest": "74f39d97db75d783f0a346e9c80ce9d7cae59238fb023a58ccdb25e0cd51ee65",
+      "entry_id": "flow:entry/support-lead/do-not-read-the-user-s-actions-as-obvious-errors",
+      "failure_mode_digest": "fbb06093cab1c387f1978f5d8204269e75aeecf8bdd6d3214eff6f0111f6b9fe",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "901176892f2ad61c32f20dcb69e98a37303a5a1c8cfd93ac3174a1106b83c4cd",
+      "unknown_policy": "reject"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "incomplete_or_ambiguous_report",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "7915def3058ef51402754375fce107787717f2a22e3b96545ec35d3e2823c4fa",
+      "entry_digest": "0393f85e8c28b752e8f87f361a15ab74e0968f16f6becf15ef02200ddefc5716",
+      "entry_id": "flow:entry/support-lead/evidence-led-triage",
+      "failure_mode_digest": "f2770a078885533ea37571dd1ce7070bcbe8c8c18b13e15c57cc0af432b5cfe0",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "425c6f7b5b3d91584af53f5353538e304f3cd18faae1f8bae208165144c7dc7f",
+      "unknown_policy": "admit_for_context"
+    },
+    {
+      "clauses": [
+        {
+          "fact": "verification_derivation",
+          "operator": "is",
+          "value": "present"
+        }
+      ],
+      "digest": "6a6b50fc54cedd7a70d93f661fb17da5e0ad5dcb940504888fd55491fbee94cb",
+      "entry_digest": "894fc37f382ab4df4ab9beee01a90f329d4cfa6591b74c109e3d1a7bf1c0d1cc",
+      "entry_id": "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example",
+      "failure_mode_digest": "96c3060ace59effe8d8eb28d674319a13073284c42ccab532208c7b244a01ae3",
+      "revision": "expertise-trigger-rule-v1",
+      "schema_version": 1,
+      "trigger_digest": "f669de7fbdcf6cd60b25a492167282cdddcb8a61c740e46f9d6e4fb6bb918264",
+      "unknown_policy": "admit_for_context"
+    }
+  ],
+  "schema_version": 1
+}

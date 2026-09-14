@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -33,11 +34,34 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _without_lifecycle(value):
+    if isinstance(value, dict):
+        return {key: _without_lifecycle(item) for key, item in value.items() if key != "flow:lifecycle"}
+    if isinstance(value, list):
+        return [_without_lifecycle(item) for item in value]
+    return value
+
+
+def _historical_blob_with_digest(relative: str, expected_digest: str) -> bytes:
+    commits = subprocess.run(
+        ["git", "log", "--all", "--format=%H", "--", relative], cwd=REPO_ROOT,
+        check=True, capture_output=True, text=True,
+    ).stdout.splitlines()
+    for commit in commits:
+        candidate = subprocess.run(
+            ["git", "show", f"{commit}:{relative}"], cwd=REPO_ROOT, capture_output=True,
+        )
+        if candidate.returncode == 0 and hashlib.sha256(candidate.stdout).hexdigest() == expected_digest:
+            return candidate.stdout
+    raise AssertionError(f"history contains no blob with recorded before digest for {relative}")
+
+
 def entry(name, layer="baseline", **overrides):
     base = {
         "@id": f"flow:entry/test/{name}",
         "@type": "LearningResource",
         "name": name,
+        "audience": {"@type": "Audience", "audienceType": "sre"},
         "flow:layer": layer,
         "abstract": "a durable idea.",
         "flow:trigger": "the trigger holds.",
@@ -46,6 +70,18 @@ def entry(name, layer="baseline", **overrides):
     }
     base.update(overrides)
     return base
+
+
+def lifecycle_entry(name, *, state="current", layer="baseline", owner="flow:owner/test", supersedes=None, **overrides):
+    value = entry(name, layer=layer, **overrides)
+    value["flow:lifecycle"] = {
+        "state": state,
+        "owner": owner,
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [{"kind": "test", "ref": "fixture"}],
+        "supersedes": supersedes or [],
+    }
+    return value
 
 
 def write_corpus(directory: Path, role: str, entries: list) -> Path:
@@ -73,17 +109,38 @@ class ShippedCorpusTests(unittest.TestCase):
                     rendered = sync.agent_body(agents[role], SCAFFOLD, SCAFFOLD, {})
                     self.assertNotIn(expertise.SECTION, rendered)
 
-    def test_retained_role_and_corpus_hashes_match_the_start_receipt(self):
+    def test_retained_role_hashes_match_the_start_receipt(self):
         receipt = json.loads((RUN / "evidence" / "start-receipt.json").read_text())
-        expected_paths = {
-            f"scaffolds/default/{kind}/{role}.{suffix}"
-            for role in ADDED_ROLES
-            for kind, suffix in (("agents", "md"), ("expertise", "jsonld"))
-        }
-        self.assertEqual(set(receipt["files"]), expected_paths)
+        expected_paths = {f"scaffolds/default/agents/{role}.md" for role in ADDED_ROLES}
         for relative, expected in receipt["files"].items():
+            if relative not in expected_paths:
+                continue
             with self.subTest(path=relative):
                 self.assertEqual(sha256(REPO_ROOT / relative), expected)
+
+    def test_lifecycle_migration_preserves_non_lifecycle_authored_content(self):
+        evidence = json.loads((
+            REPO_ROOT / ".flow/runs/agent-expertise-rag-applicability-admission/"
+            "evidence/lifecycle-migration.json"
+        ).read_text())
+        self.assertEqual(evidence["migration"], "framework-lifecycle-current-v1")
+        self.assertEqual(evidence["entry_count"], 21)
+        observed_ids = set()
+        for item in evidence["files"]:
+            relative = item["path"]
+            current = REPO_ROOT / relative
+            with self.subTest(path=relative):
+                self.assertEqual(sha256(current), item["after_sha256"])
+                before = _historical_blob_with_digest(relative, item["before_sha256"])
+                self.assertEqual(hashlib.sha256(before).hexdigest(), item["before_sha256"])
+                before_value = json.loads(before)
+                after_value = json.loads(current.read_text())
+                self.assertEqual(_without_lifecycle(after_value), _without_lifecycle(before_value))
+                canonical = json.dumps(_without_lifecycle(after_value), ensure_ascii=False,
+                                       sort_keys=True, separators=(",", ":")).encode()
+                self.assertEqual(hashlib.sha256(canonical).hexdigest(), item["content_without_lifecycle_sha256"])
+                observed_ids.update(entry["@id"] for entry in after_value["@graph"])
+        self.assertEqual(observed_ids, set(evidence["entry_ids"]))
 
     def test_release_evidence_map_is_exact_and_complete(self):
         evidence_map = json.loads(
@@ -96,8 +153,6 @@ class ShippedCorpusTests(unittest.TestCase):
                 self.assertEqual(item["gate_result"], "pass")
                 self.assertEqual(sha256(REPO_ROOT / item["role_body"]["path"]),
                                  item["role_body"]["sha256"])
-                self.assertEqual(sha256(REPO_ROOT / item["corpus"]["path"]),
-                                 item["corpus"]["sha256"])
                 graph = json.loads(
                     (REPO_ROOT / item["corpus"]["path"]).read_text()
                 )["@graph"]
@@ -263,7 +318,7 @@ class LayerTests(unittest.TestCase):
             root = Path(raw)
             framework, user = root / "fw", root / "user"
             write_corpus(framework, "sre", [entry("Baseline one"), entry("Shared name")])
-            write_corpus(user, "sre", [entry("Shared name", layer="experience")])
+            write_corpus(user, "sre", [entry("Shared name", layer="experience", **{"@id": "flow:entry/test/user-shared-name"})])
             merged = expertise.corpus_for("sre", framework, user)
             self.assertEqual([e["name"] for e in merged],
                              ["Shared name", "Baseline one", "Shared name"])
@@ -287,6 +342,53 @@ class LayerTests(unittest.TestCase):
     def test_role_with_no_corpus_composes_nothing(self):
         with tempfile.TemporaryDirectory() as raw:
             self.assertEqual(expertise.corpus_for("architect", Path(raw), None), [])
+
+
+class LifecycleEligibilityTests(unittest.TestCase):
+    def _corpus(self, entries, *, layer="fw"):
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name)
+        write_corpus(root / layer, "sre", entries)
+        return root / layer
+
+    def _error(self, entries):
+        framework = self._corpus(entries)
+        with self.assertRaises(expertise.ExpertiseError) as caught:
+            expertise.corpus_for("sre", framework, None)
+        return caught.exception
+
+    def test_wrong_role_is_rejected_before_eligibility(self):
+        wrong = lifecycle_entry("Wrong", audience={"@type": "Audience", "audienceType": "architect"})
+        self.assertEqual(self._error([wrong]).rule, "wrong-expertise-role")
+
+    def test_unknown_and_withdrawn_entries_remain_composable_but_are_not_effective_current(self):
+        unknown = entry("Unknown")
+        withdrawn = lifecycle_entry("Withdrawn", state="withdrawn")
+        framework = self._corpus([unknown, withdrawn])
+        self.assertEqual(len(expertise.corpus_for("sre", framework, None)), 2)
+        self.assertEqual(expertise.eligible_corpus_for("sre", framework, None), [])
+
+    def test_superseded_current_entry_is_excluded_and_successor_remains_effective_current(self):
+        previous = lifecycle_entry("Previous")
+        successor = lifecycle_entry("Successor", supersedes=[previous["@id"]])
+        framework = self._corpus([previous, successor])
+        eligible = expertise.eligible_corpus_for("sre", framework, None)
+        self.assertEqual([item["@id"] for item in eligible], [successor["@id"]])
+
+    def test_unauthorized_layer_and_framework_owner_are_rejected(self):
+        wrong_layer = lifecycle_entry("Wrong layer", layer="experience")
+        self.assertEqual(self._error([wrong_layer]).rule, "unauthorized-expertise-layer")
+        wrong_owner = lifecycle_entry("Wrong owner", owner="user:owner/test")
+        self.assertEqual(self._error([wrong_owner]).rule, "unauthorized-expertise-owner")
+
+    def test_unknown_target_and_cycle_are_rejected(self):
+        missing = lifecycle_entry("Missing", supersedes=["flow:entry/test/absent"])
+        self.assertEqual(self._error([missing]).rule, "unknown-supersession-target")
+        first = lifecycle_entry("First")
+        second = lifecycle_entry("Second", supersedes=[first["@id"]])
+        first["flow:lifecycle"]["supersedes"] = [second["@id"]]
+        self.assertEqual(self._error([first, second]).rule, "cyclic-supersession")
 
 
 class MalformedCorpusTests(unittest.TestCase):
@@ -366,12 +468,12 @@ def write_vocabulary(directory: Path, terms: dict) -> Path:
     return path
 
 
-def teaching(name, term_name, term_id=None):
+def teaching(name, term_name, term_id=None, **overrides):
     return entry(name, teaches=[{
         "@type": "DefinedTerm",
         "@id": term_id or "flow:competency/" + expertise._slug(term_name),
         "name": term_name,
-    }])
+    }], **overrides)
 
 
 class TeachesJoinTests(unittest.TestCase):
@@ -483,7 +585,7 @@ class TeachesJoinTests(unittest.TestCase):
             framework, user = root / "fw", root / "user"
             write_corpus(framework, "sre", [])
             write_vocabulary(framework, {"Ask non-leading questions": []})
-            write_corpus(user, "sre", [teaching("Mine", "My own term")])
+            write_corpus(user, "sre", [teaching("Mine", "My own term", layer="experience")])
             write_vocabulary(user, {"My own term": ["Mine"]})
             loaded = expertise.corpus_for("sre", framework, user)
             self.assertEqual([e["name"] for e in loaded], ["Mine"])
@@ -493,7 +595,7 @@ class TeachesJoinTests(unittest.TestCase):
             root = Path(raw)
             write_corpus(root / "fw", "sre", [])
             write_vocabulary(root / "fw", {"Framework term": []})
-            write_corpus(root / "user", "sre", [teaching("Mine", "Absent everywhere")])
+            write_corpus(root / "user", "sre", [teaching("Mine", "Absent everywhere", layer="experience")])
             write_vocabulary(root / "user", {"Different term": []})
             with self.assertRaises(ValueError) as caught:
                 expertise.corpus_for("sre", root / "fw", root / "user")

@@ -40,7 +40,19 @@
           "@id": "flow:competency/distinguish-contributing-conditions-from-a-named-cause",
           "name": "Distinguish contributing conditions from a named cause"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/sre/reconstruct-what-was-known-at-the-time",
@@ -85,7 +97,19 @@
           "@id": "flow:competency/account-for-hindsight-when-judging-past-decisions",
           "name": "Account for hindsight when judging past decisions"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/sre/postmortem-output-is-a-change-to-conditions",
@@ -120,7 +144,19 @@
           "@id": "flow:competency/direct-corrective-action-at-conditions-rather-than-at-individuals",
           "name": "Direct corrective action at conditions rather than at individuals"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/sre/state-what-a-mitigation-newly-makes-possible",
@@ -154,7 +190,19 @@
           "@id": "flow:competency/make-applicability-conditions-explicit-alongside-a-recommended-pattern",
           "name": "Make applicability conditions explicit alongside a recommended pattern"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/sre/premortem-a-change-before-it-rolls",
@@ -187,7 +235,19 @@
           "@id": "flow:competency/surface-dissent-by-treating-failure-as-already-accomplished",
           "name": "Surface dissent by treating failure as already accomplished"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/sre/hold-competing-hypotheses-during-a-live-incident",
@@ -223,7 +283,19 @@
           "@id": "flow:competency/preserve-competing-hypotheses-until-evidence-rules-them-out",
           "name": "Preserve competing hypotheses until evidence rules them out"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     }
   ]
 }

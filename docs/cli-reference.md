@@ -2,13 +2,14 @@
 
 ## Overview
 
-`flow` manages five things:
+`flow` manages six things:
 
 - machine-local install support
 - project-local `.flow` scaffolding
 - runtime adapter generation and drift detection
 - token usage: reading both harnesses' local transcripts into a store, and reading it back
 - version control for the user overlay at `~/.flow/user/`
+- local agent-expertise retrieval, admission, evaluation evidence, and runtime diagnostics
 
 Three **hook entry points** exist only to be called by generated hooks — `flow cost verdict --hook`, `flow cost warn --hook`, and `flow overlay check --hook`. They read hook JSON on stdin and are documented here for anyone reading a `settings.json` entry and wondering what it invokes, not because there is a reason to type them. (`flow cost verdict` also has an interactive `--transcript` mode, which is worth typing.)
 
@@ -1249,3 +1250,123 @@ Doctor may refresh `~/.flow/retrieval-capabilities.json` after its FTS5 probe.
 That is its only new write: archive coverage is a cached, last-observed read,
 and doctor never scans or repairs project archive records/indexes. Retrieval
 advisories do not change `doctor --check` when other diagnostics stay fixed.
+
+### `flow expertise feasibility`
+
+Validate the canonical expertise corpus, independent campaign staffing, 60
+fixture slots, and the exact supported environment matrix before fixture work.
+Pass `--run <work-id>` to write the private feasibility decision into that run.
+This command does not load a model or score a query.
+
+### `flow expertise fixtures validate`
+
+Validate a candidate calibration or held-out manifest with `--manifest <path>`.
+The validator checks the closed schema, primary-class counts, roles, exact
+trigger spans, behavior oracles, expected states, one-fact pairs, immutable v1
+digests, and the unfrozen/unscored state.
+
+### `flow expertise fixtures independence`
+
+Compare a held-out candidate named by `--candidate <path>` with comma-separated
+reference manifests supplied through `--against <paths>`. The check records
+exact, identifier, and token-set overlap using the declared `--threshold`.
+Every flagged pair still requires blinded semantic disposition before freeze.
+
+### `flow expertise model install`
+
+Install the pinned local embedding model and its environment-specific wheel set.
+Installation requires `--accept-license`; the runtime verifies approved HTTPS
+origins, file sizes, hashes, package records, permissions, and the supported
+environment before publishing the private install.
+
+### `flow expertise model status`
+
+Verify the currently selected local model/runtime without downloading anything.
+The result distinguishes missing, unsupported, corrupt, and ready states and
+provides an actionable remedy.
+
+### `flow expertise index refresh`
+
+Rebuild the disposable SQLite float32 projection from canonical current
+expertise entries. Publication is atomic, and a corpus change during the build
+leaves the prior projection intact.
+
+### `flow expertise index inspect`
+
+Verify projection integrity and identity against the installed provider and
+current canonical corpus. A digest mismatch is reported as stale.
+
+### `flow expertise query`
+
+Run an explicit bounded local query for one `--role`, reading task text from
+`--query-file`. Choose `--strategy similarity` with a declared `--threshold`,
+or `--strategy trigger-rules`. Output preserves stage states and IDs while the
+private receipt stores only an HMAC of normalized query text.
+
+### `flow expertise disposition`
+
+Validate a structured handback supplied by `--handback <path>` against the
+immutable pre-agent receipt named by `--request-id`. A valid result accounts
+for every delivered entry once and writes a linked private post-agent receipt.
+
+### `flow expertise receipts inspect`
+
+Inspect redacted receipt metadata and integrity without exposing query text or
+entry prose.
+
+### `flow expertise receipts purge`
+
+Delete private retrieval receipts older than `--days` according to their
+validated timestamps. The default retention is 30 days.
+
+### `flow expertise campaign freeze`
+
+After explicit engineer approval, freeze an independently reviewed manifest for
+`--run <work-id>`. The supplied `--approved-digest` must exactly match the
+candidate, and `--approved-by` records the approving engineer. The immutable
+receipt binds every query/fixture digest and all corpus, model, projection,
+contract, cap, rule, and prior-evaluation identities.
+
+An `evaluation-v2` freeze additionally requires `--independence-review <path>`.
+That resolved, blinded review must bind the exact candidate and both reference
+splits. The freeze also verifies the selected calibration configuration and
+pins the source hashes of the admission, model, projection, ranker, and service
+modules.
+
+### `flow expertise campaign verify-freeze`
+
+Verify the frozen `--split` for a `--run <work-id>` before any scoring. Changed
+fixtures, queries, approval, identities, or receipt fields invalidate the
+campaign.
+
+### `flow expertise campaign retrieve-calibration`
+
+Execute only the frozen similarity grid and trigger-rule candidate for
+`--run <work-id>`. It writes redacted score inputs plus private disposition work
+items once; rerunning cannot replace prior evidence.
+
+### `flow expertise campaign finalize-calibration`
+
+Apply the preregistered hard rules and lexicographic selector to one run's
+retained calibration results. Reviewed behavior evidence may be supplied with
+`--dispositions <path>`. The command writes one immutable selection and exact
+executable configuration digest.
+
+### `flow expertise campaign retrieve-heldout`
+
+Run only the selected configuration against the approved, frozen
+`evaluation-v2` campaign. The command executes two ordered local repeats,
+records normalized repeatability and performance evidence, and writes private
+disposition work items for delivered entries. A retrieval-oracle miss records
+`stop`; no alternate threshold or strategy is attempted.
+
+### `flow expertise campaign finalize-heldout`
+
+Apply reviewed `--dispositions <path>` to the two retained held-out repeats and
+bind the reviewed exact-runtime matrix supplied by `--environment-evidence
+<path>`. The command writes immutable scorecards, repeatability evidence, and
+exactly one decision. The result is `qualified_disabled` only when every frozen
+oracle passes, normalized repeats are identical, and all five supported cells
+meet the latency and footprint limits. Any miss, incomplete disposition,
+degraded state, leakage, repeatability failure, or missing environment cell
+records `stop`.

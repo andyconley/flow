@@ -1,0 +1,273 @@
+{
+  "facts": [
+    {
+      "absent_any": [
+        "incident resolved"
+      ],
+      "code": "active_incident_hypothesis",
+      "present_any": [
+        "active incident",
+        "incident is ongoing",
+        "proposed cause",
+        "mitigation is about to begin"
+      ]
+    },
+    {
+      "absent_any": [
+        "outcome is already defined",
+        "measured outcome"
+      ],
+      "code": "artifact_shaped_request",
+      "present_any": [
+        "add a field",
+        "build a screen",
+        "feature request",
+        "new button",
+        "new endpoint"
+      ]
+    },
+    {
+      "absent_any": [
+        "concrete last occurrence"
+      ],
+      "code": "conclusion_shaped_report",
+      "present_any": [
+        "is broken",
+        "slow for everyone",
+        "customer conclusion",
+        "reported as a conclusion"
+      ]
+    },
+    {
+      "absent_any": [
+        "no user action"
+      ],
+      "code": "contributing_user_action",
+      "present_any": [
+        "misconfiguration",
+        "skipped step",
+        "user action",
+        "customer changed"
+      ]
+    },
+    {
+      "absent_any": [
+        "early discovery"
+      ],
+      "code": "definition_near_approval",
+      "present_any": [
+        "approve the definition",
+        "ready for approval",
+        "handoff to solution",
+        "definition review"
+      ]
+    },
+    {
+      "absent_any": [
+        "implementation only"
+      ],
+      "code": "definition_or_requirement_writing",
+      "present_any": [
+        "define the requirement",
+        "problem statement",
+        "acceptance criteria",
+        "writing requirements"
+      ]
+    },
+    {
+      "absent_any": [
+        "observation is missing"
+      ],
+      "code": "distinguishing_observation_present",
+      "present_any": [
+        "already attached",
+        "already reproduced",
+        "evidence is already present",
+        "timeline already shows",
+        "tier 1 already captured"
+      ]
+    },
+    {
+      "absent_any": [
+        "one-line local",
+        "single local refactor"
+      ],
+      "code": "durable_boundary_options",
+      "present_any": [
+        "public api",
+        "schema",
+        "persistence",
+        "compatibility",
+        "module boundary",
+        "interface",
+        "architecture option"
+      ]
+    },
+    {
+      "absent_any": [
+        "one-file reversible",
+        "documentation typo"
+      ],
+      "code": "durable_implementation_change",
+      "present_any": [
+        "data migration",
+        "public api",
+        "schema change",
+        "deployment path",
+        "compatibility change"
+      ]
+    },
+    {
+      "absent_any": [
+        "fully automated timeline"
+      ],
+      "code": "human_timeline_decision",
+      "present_any": [
+        "operator decided",
+        "engineer waited",
+        "human decision",
+        "did not escalate"
+      ]
+    },
+    {
+      "absent_any": [
+        "execute the known fix"
+      ],
+      "code": "implementation_plan_depth",
+      "present_any": [
+        "implementation plan",
+        "plan this change",
+        "delivery plan"
+      ]
+    },
+    {
+      "absent_any": [
+        "no incident"
+      ],
+      "code": "incident_review",
+      "present_any": [
+        "incident review",
+        "postmortem",
+        "near miss",
+        "failure review"
+      ]
+    },
+    {
+      "absent_any": [
+        "single confirmed cause"
+      ],
+      "code": "incomplete_or_ambiguous_report",
+      "present_any": [
+        "intermittent",
+        "incomplete report",
+        "several causes",
+        "multiple causes",
+        "unclear failure"
+      ]
+    },
+    {
+      "absent_any": [
+        "root cause analysis only"
+      ],
+      "code": "mitigation_recommendation",
+      "present_any": [
+        "retry",
+        "timeout",
+        "failover",
+        "circuit breaker",
+        "autoscaling",
+        "cache mitigation"
+      ]
+    },
+    {
+      "absent_any": [
+        "active mitigation only"
+      ],
+      "code": "postmortem_action",
+      "present_any": [
+        "postmortem action",
+        "incident finding",
+        "corrective action"
+      ]
+    },
+    {
+      "absent_any": [
+        "distinct new symptom"
+      ],
+      "code": "recent_pattern_match",
+      "present_any": [
+        "recent incident",
+        "known issue",
+        "same symptom",
+        "cluster of tickets"
+      ]
+    },
+    {
+      "absent_any": [
+        "no stakeholder input",
+        "implementation only"
+      ],
+      "code": "requirements_conversation",
+      "present_any": [
+        "stakeholder",
+        "customer interview",
+        "requirements interview",
+        "operator interview"
+      ]
+    },
+    {
+      "absent_any": [
+        "local test only"
+      ],
+      "code": "risky_rollout",
+      "present_any": [
+        "migration rollout",
+        "cutover",
+        "schema rollout",
+        "high blast radius",
+        "release rollout"
+      ]
+    },
+    {
+      "absent_any": [
+        "validated problem",
+        "observed workflow"
+      ],
+      "code": "thin_problem_evidence",
+      "present_any": [
+        "do not understand the workflow",
+        "evidence is thin",
+        "unknown users",
+        "problem is unclear"
+      ]
+    },
+    {
+      "absent_any": [
+        "case resolved"
+      ],
+      "code": "unresolved_case_handoff",
+      "present_any": [
+        "escalate this case",
+        "reassign this case",
+        "unresolved handoff",
+        "handoff to tier"
+      ]
+    },
+    {
+      "absent_any": [
+        "no observable behavior"
+      ],
+      "code": "verification_derivation",
+      "present_any": [
+        "acceptance criterion",
+        "error path",
+        "state transition",
+        "test oracle",
+        "verify behavior"
+      ]
+    }
+  ],
+  "normalizer_revision": "nfkc-casefold-whitespace-v1",
+  "revision": "expertise-task-facts-v1",
+  "schema_version": 1
+}

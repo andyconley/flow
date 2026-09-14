@@ -42,7 +42,19 @@
           "@id": "flow:competency/preserve-competing-hypotheses-until-evidence-rules-them-out",
           "name": "Preserve competing hypotheses until evidence rules them out"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff",
@@ -78,7 +90,19 @@
           "@id": "flow:competency/separate-observation-interpretation-assumption-and-decision",
           "name": "Separate observation, interpretation, assumption, and decision"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description",
@@ -111,7 +135,19 @@
           "@id": "flow:competency/ask-non-leading-questions",
           "name": "Ask non-leading questions"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/support-lead/do-not-read-the-user-s-actions-as-obvious-errors",
@@ -156,7 +192,19 @@
           "@id": "flow:competency/account-for-hindsight-when-judging-past-decisions",
           "name": "Account for hindsight when judging past decisions"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently",
@@ -192,7 +240,19 @@
           "@id": "flow:competency/test-a-familiar-pattern-match-before-acting-on-it",
           "name": "Test a familiar pattern match before acting on it"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand",
@@ -228,7 +288,19 @@
           "@id": "flow:competency/recognize-when-the-discriminating-evidence-is-already-in-hand",
           "name": "Recognize when the discriminating evidence is already in hand"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     }
   ]
 }

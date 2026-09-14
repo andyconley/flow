@@ -39,7 +39,19 @@
           "@id": "flow:competency/restate-a-solution-shaped-request-as-the-outcome-behind-it",
           "name": "Restate a solution-shaped request as the outcome behind it"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/business-analyst/elicit-past-behavior-not-stated-intent",
@@ -72,7 +84,19 @@
           "@id": "flow:competency/ask-non-leading-questions",
           "name": "Ask non-leading questions"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement",
@@ -108,7 +132,19 @@
           "@id": "flow:competency/separate-observation-interpretation-assumption-and-decision",
           "name": "Separate observation, interpretation, assumption, and decision"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/business-analyst/leave-a-requirement-undefined-while-the-evidence-is-thin",
@@ -144,7 +180,19 @@
           "@id": "flow:competency/state-the-evidence-that-would-change-the-conclusion",
           "name": "State the evidence that would change the conclusion"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     },
     {
       "@id": "flow:entry/business-analyst/premortem-the-definition-before-it-is-approved",
@@ -177,7 +225,19 @@
           "@id": "flow:competency/surface-dissent-by-treating-failure-as-already-accomplished",
           "name": "Surface dissent by treating failure as already accomplished"
         }
-      ]
+      ],
+      "flow:lifecycle": {
+        "state": "current",
+        "owner": "flow:owner/framework-maintainers",
+        "attestedAt": "2026-09-11T00:00:00Z",
+        "evidence": [
+          {
+            "kind": "review-record",
+            "ref": "docs/evidence/agent-expertise-expansion/README.md"
+          }
+        ],
+        "supersedes": []
+      }
     }
   ]
 }

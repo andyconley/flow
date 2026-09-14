@@ -14,8 +14,10 @@ validation measured.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 SECTION = "## Expertise"
@@ -29,6 +31,8 @@ BULLETS = (
     ("Avoid", "flow:failureMode"),
 )
 WRAP = 78
+LIFECYCLE_STATES = frozenset({"current", "withdrawn", "superseded", "unknown"})
+FRAMEWORK_OWNER_PREFIX = "flow:owner/"
 
 
 class ExpertiseError(ValueError):
@@ -74,8 +78,10 @@ def _read(path: Path, layer: str) -> list[dict]:
                 remediation="remove the non-object member",
             )
         missing = [
-            key
-            for key in ("name", "abstract", "flow:trigger", "flow:requiredBehavior", "flow:failureMode")
+            key for key in (
+                "@id", "name", "audience", "flow:layer", "abstract", "flow:trigger",
+                "flow:requiredBehavior", "flow:failureMode",
+            )
             if not entry.get(key)
         ]
         if missing:
@@ -85,10 +91,166 @@ def _read(path: Path, layer: str) -> list[dict]:
                 source=str(path),
                 remediation="an entry carries all five authored parts or it is not an entry",
             )
+        audience = entry.get("audience")
+        if not isinstance(audience, dict) or not isinstance(audience.get("audienceType"), str):
+            raise ExpertiseError(
+                "invalid-expertise-audience",
+                f'entry {entry.get("@id") or "<unnamed>"} has no audienceType',
+                source=str(path),
+                remediation="set audience.audienceType to the owning role name",
+            )
+        if entry.get("flow:layer") != layer:
+            raise ExpertiseError(
+                "unauthorized-expertise-layer",
+                f'entry {entry["@id"]} declares {entry.get("flow:layer")!r} in the {layer} corpus',
+                source=str(path),
+                remediation=f'set flow:layer to "{layer}" or move the entry to its authorized corpus',
+            )
         entry = dict(entry)
         entry["_layer"] = layer
+        entry["_source_layer"] = "framework" if layer == "baseline" else "user"
+        entry["_canonical_path"] = str(path)
+        entry["_lifecycle"] = _lifecycle(entry, path)
+        entry["_entry_digest"] = _entry_digest(entry)
         entries.append(entry)
     return entries
+
+
+def _entry_digest(entry: dict) -> str:
+    authored = {key: value for key, value in entry.items() if not key.startswith("_")}
+    encoded = json.dumps(
+        authored, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _utc_instant(value: object) -> bool:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() == timezone.utc.utcoffset(parsed)
+
+
+def _lifecycle(entry: dict, path: Path) -> dict:
+    raw = entry.get("flow:lifecycle")
+    if raw is None:
+        return {"state": "unknown", "owner": None, "attestedAt": None, "evidence": [], "supersedes": []}
+    if not isinstance(raw, dict):
+        raise ExpertiseError(
+            "invalid-expertise-lifecycle", f'entry {entry["@id"]} lifecycle is not an object',
+            source=str(path), remediation="use the documented flow:lifecycle object",
+        )
+    allowed = {"state", "owner", "attestedAt", "evidence", "supersedes"}
+    extras = set(raw) - allowed
+    state = raw.get("state")
+    owner = raw.get("owner")
+    evidence = raw.get("evidence")
+    supersedes = raw.get("supersedes", [])
+    invalid = (
+        bool(extras) or state not in LIFECYCLE_STATES
+        or not isinstance(supersedes, list)
+        or any(not isinstance(value, str) or not value for value in supersedes)
+        or len(supersedes) != len(set(supersedes))
+    )
+    if state != "unknown":
+        invalid = invalid or not isinstance(owner, str) or not owner.strip()
+        invalid = invalid or not _utc_instant(raw.get("attestedAt"))
+        invalid = invalid or not isinstance(evidence, list) or not evidence
+        if isinstance(evidence, list):
+            invalid = invalid or any(
+                not isinstance(item, dict)
+                or set(item) != {"kind", "ref"}
+                or not isinstance(item.get("kind"), str) or not item["kind"].strip()
+                or not isinstance(item.get("ref"), str) or not item["ref"].strip()
+                for item in evidence
+            )
+    elif any(raw.get(field) not in (None, [], "") for field in ("owner", "attestedAt", "evidence", "supersedes")):
+        invalid = True
+    if invalid:
+        raise ExpertiseError(
+            "invalid-expertise-lifecycle", f'entry {entry["@id"]} has malformed lifecycle metadata',
+            source=str(path), remediation="supply a closed state/owner/UTC-attestation/evidence/supersession record",
+        )
+    return {
+        "state": state,
+        "owner": owner if state != "unknown" else None,
+        "attestedAt": raw.get("attestedAt") if state != "unknown" else None,
+        "evidence": evidence if state != "unknown" else [],
+        "supersedes": supersedes,
+    }
+
+
+def _validate_lifecycle_graph(entries: list[dict], role: str) -> None:
+    by_id: dict[str, dict] = {}
+    for entry in entries:
+        entry_id = entry["@id"]
+        if entry_id in by_id:
+            raise ExpertiseError(
+                "duplicate-expertise-id", f"duplicate effective entry id {entry_id}",
+                source=entry["_canonical_path"], remediation="give every merged role entry a distinct @id",
+            )
+        if entry["audience"]["audienceType"] != role:
+            raise ExpertiseError(
+                "wrong-expertise-role", f"entry {entry_id} belongs to {entry['audience']['audienceType']}, not {role}",
+                source=entry["_canonical_path"], remediation=f'move the entry to {role}.jsonld or correct its audience',
+            )
+        if entry["_source_layer"] == "framework" and not str(entry["_lifecycle"].get("owner") or "").startswith(FRAMEWORK_OWNER_PREFIX):
+            if entry["_lifecycle"]["state"] != "unknown":
+                raise ExpertiseError(
+                    "unauthorized-expertise-owner", f"framework entry {entry_id} has a non-framework owner",
+                    source=entry["_canonical_path"], remediation=f"use a {FRAMEWORK_OWNER_PREFIX} owner identifier",
+                )
+        by_id[entry_id] = entry
+
+    graph: dict[str, list[str]] = {entry_id: [] for entry_id in by_id}
+    incoming: set[str] = set()
+    for entry_id, entry in by_id.items():
+        for target_id in entry["_lifecycle"]["supersedes"]:
+            target = by_id.get(target_id)
+            if target is None:
+                raise ExpertiseError(
+                    "unknown-supersession-target", f"entry {entry_id} supersedes missing {target_id}",
+                    source=entry["_canonical_path"], remediation="add the target or remove the supersession edge",
+                )
+            if target_id == entry_id:
+                raise ExpertiseError(
+                    "self-supersession", f"entry {entry_id} supersedes itself", source=entry["_canonical_path"],
+                    remediation="remove the self edge",
+                )
+            if (
+                target["_layer"] != entry["_layer"]
+                or target["_source_layer"] != entry["_source_layer"]
+                or target["_lifecycle"].get("owner") != entry["_lifecycle"].get("owner")
+            ):
+                raise ExpertiseError(
+                    "unauthorized-supersession", f"entry {entry_id} crosses an owner or layer boundary",
+                    source=entry["_canonical_path"], remediation="supersede only an entry with the same owner and layer",
+                )
+            graph[entry_id].append(target_id)
+            incoming.add(target_id)
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    def visit(entry_id: str) -> None:
+        if entry_id in visiting:
+            raise ExpertiseError(
+                "cyclic-supersession", f"supersession cycle includes {entry_id}",
+                source=by_id[entry_id]["_canonical_path"], remediation="remove a supersession edge to make the graph acyclic",
+            )
+        if entry_id in visited:
+            return
+        visiting.add(entry_id)
+        for target_id in graph[entry_id]:
+            visit(target_id)
+        visiting.remove(entry_id)
+        visited.add(entry_id)
+    for entry_id in graph:
+        visit(entry_id)
+    for entry_id, entry in by_id.items():
+        entry["_effective_current"] = entry["_lifecycle"]["state"] == "current" and entry_id not in incoming
 
 
 def _slug(name: str) -> str:
@@ -209,7 +371,43 @@ def corpus_for(role: str, framework_dir: Path, user_dir: Path | None) -> list[di
         if user_path.exists():
             experience = _read(user_path, "experience")
             _validate_teaches(experience, terms, user_path)
-    return experience + baseline
+    entries = experience + baseline
+    _validate_lifecycle_graph(entries, role)
+    return entries
+
+
+def eligible_corpus_for(role: str, framework_dir: Path, user_dir: Path | None) -> list[dict]:
+    """Return only authorized effective-current entries for automatic retrieval."""
+    return [entry for entry in corpus_for(role, framework_dir, user_dir) if entry["_effective_current"]]
+
+
+def canonical_snapshot(
+    roles: list[str] | tuple[str, ...], framework_dir: Path, user_dir: Path | None
+) -> dict:
+    """Return a digest-bound canonical view for projection and inspection."""
+    entries: list[dict] = []
+    tuples: list[dict] = []
+    for role in sorted(set(roles)):
+        for entry in corpus_for(role, framework_dir, user_dir):
+            entries.append(entry)
+            tuples.append({
+                "role": role,
+                "source_layer": entry["_source_layer"],
+                "method_layer": entry["_layer"],
+                "entry_id": entry["@id"],
+                "entry_digest": entry["_entry_digest"],
+                "lifecycle": entry["_lifecycle"],
+                "effective_current": entry["_effective_current"],
+            })
+    encoded = json.dumps(tuples, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return {
+        "schema_version": 1,
+        "roles": sorted(set(roles)),
+        "entries": entries,
+        "corpus_digest": hashlib.sha256(encoded).hexdigest(),
+        "lifecycle_revision": "expertise-lifecycle-v1",
+        "entry_serializer_revision": "expertise-dense-unit-v1",
+    }
 
 
 def _cite(source: dict) -> str:

@@ -30,6 +30,12 @@ from diagnostic_model import (
 )
 import usage_store
 import telemetry_freshness
+from expertise_projection import inspect as expertise_projection_status
+from expertise_projection import projection_identity as expertise_projection_identity
+from expertise_runtime import status as expertise_runtime_status
+from expertise_runtime import provider as expertise_runtime_provider
+from expertise import canonical_snapshot as expertise_snapshot
+from expertise_service import ROLES as EXPERTISE_ROLES
 from flowtoml import read_toml
 from fsutil import repo_root
 from lifecycle import read_install_config
@@ -178,6 +184,50 @@ def _doctor_diagnostics(
             "ok" if mode in (INSTALL_MODE_DEVELOP, INSTALL_MODE_RELEASE) else "missing",
             f"install mode is {mode}",
             next_action=None if mode in (INSTALL_MODE_DEVELOP, INSTALL_MODE_RELEASE) else "re-run install-flow.sh to stamp install metadata",
+        )
+    )
+
+    try:
+        expertise_runtime = expertise_runtime_status(FLOW_HOME)
+    except Exception:  # noqa: BLE001 - doctor reports a broken optional capability.
+        expertise_runtime = {
+            "state": "unavailable", "reason": "corrupt_artifact",
+            "remedy": "restore Flow and rerun `flow expertise model install --accept-license`",
+        }
+    expertise_ready = expertise_runtime.get("state") == "ready"
+    items.append(
+        diagnostic(
+            "expertise.model",
+            STATUS_OK if expertise_ready else STATUS_WARNING,
+            SEVERITY_INFO if expertise_ready else SEVERITY_WARNING,
+            "ok" if expertise_ready else str(expertise_runtime.get("reason", "unavailable")),
+            "local expertise model is verified" if expertise_ready else "local expertise retrieval is unavailable; base Flow lanes remain available",
+            next_action=None if expertise_ready else str(expertise_runtime.get("remedy", "flow expertise model install --accept-license")),
+        )
+    )
+    try:
+        if expertise_ready:
+            expertise_user = USER_OVERLAY_DIR if (USER_OVERLAY_DIR / "expertise").is_dir() else None
+            expertise_expected = expertise_projection_identity(
+                expertise_snapshot(EXPERTISE_ROLES, SCAFFOLD_DIR, expertise_user),
+                expertise_runtime_provider(FLOW_HOME),
+            )["digest"]
+            expertise_index = expertise_projection_status(FLOW_HOME, expertise_expected)
+        else:
+            expertise_index = {"state": "unavailable", "reason": "provider_unavailable"}
+    except Exception:  # noqa: BLE001 - doctor reports a corrupt derived index.
+        expertise_index = {"state": "unavailable", "reason": "projection_corrupt"}
+    expertise_index_ready = expertise_index.get("state") == "ready"
+    index_status = STATUS_OK if expertise_index_ready else (STATUS_WARNING if expertise_ready else STATUS_NOT_APPLICABLE)
+    index_severity = SEVERITY_INFO if expertise_index_ready or not expertise_ready else SEVERITY_WARNING
+    items.append(
+        diagnostic(
+            "expertise.index",
+            index_status,
+            index_severity,
+            "ok" if expertise_index_ready else str(expertise_index.get("reason", "projection_missing")),
+            f"local expertise projection is ready ({expertise_index.get('entry_count', 0)} entries)" if expertise_index_ready else "local expertise projection is unavailable; base Flow lanes remain available",
+            next_action=None if expertise_index_ready else ("flow expertise index refresh" if expertise_ready else "install the expertise model first"),
         )
     )
 

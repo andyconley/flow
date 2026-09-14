@@ -1,0 +1,87 @@
+{
+  "licenses": {
+    "acceptance_required": true,
+    "fastembed": "Apache-2.0",
+    "onnx_port": "Apache-2.0",
+    "upstream_bge": "MIT"
+  },
+  "model": {
+    "artifact_format": "data-only ONNX plus JSON and TXT tokenizer data",
+    "files": [
+      {
+        "bytes": 28,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/README.md?download=true",
+        "path": "README.md",
+        "sha256": "98b45ea81164d1e1a1dd82255207053b15cd6c69d922a1c5cf3387ce604d4b74"
+      },
+      {
+        "bytes": 706,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/config.json?download=true",
+        "path": "config.json",
+        "sha256": "13582bcf2effc85b7bf3d3f5532e686bc1c9ce86bb009d10f0ec33cbe92299dd"
+      },
+      {
+        "bytes": 66465124,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/model_optimized.onnx?download=true",
+        "path": "model_optimized.onnx",
+        "sha256": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431"
+      },
+      {
+        "bytes": 1274,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/ort_config.json?download=true",
+        "path": "ort_config.json",
+        "sha256": "ae8eb2a686022a4fbfb7f6a8d1c1bd4328f0997fab27f9ffe41d67fe5607b172"
+      },
+      {
+        "bytes": 695,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/special_tokens_map.json?download=true",
+        "path": "special_tokens_map.json",
+        "sha256": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a"
+      },
+      {
+        "bytes": 711396,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/tokenizer.json?download=true",
+        "path": "tokenizer.json",
+        "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+      },
+      {
+        "bytes": 1242,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/tokenizer_config.json?download=true",
+        "path": "tokenizer_config.json",
+        "sha256": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53"
+      },
+      {
+        "bytes": 231508,
+        "download_url": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/c32e6154d1bb7a0e47c5e745fd895e7700f44385/vocab.txt?download=true",
+        "path": "vocab.txt",
+        "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+      }
+    ],
+    "license": {
+      "onnx_port": "Apache-2.0",
+      "review_state": "bundled notices recorded for explicit production installation",
+      "upstream_bge": "MIT"
+    },
+    "logical_name": "BAAI/bge-small-en-v1.5",
+    "persistent_bytes": 67411973,
+    "repository": "Qdrant/bge-small-en-v1.5-onnx-Q",
+    "revision": "c32e6154d1bb7a0e47c5e745fd895e7700f44385",
+    "source": "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/tree/c32e6154d1bb7a0e47c5e745fd895e7700f44385",
+    "tree_sha256": "c2e80b612c71b421c9031410404ea113eb6b0cc10296a1fec4a92998de4ba242"
+  },
+  "notices": {
+    "path": "docs/expertise-runtime-notices.md",
+    "sha256": "426c3bea77c05a11416f4aa088942d0c71073a16db715867394c91d84c89df77"
+  },
+  "provider": {
+    "name": "fastembed",
+    "revision": "fastembed-bge-small-en-v1.5-v1",
+    "version": "0.8.0"
+  },
+  "query_posture": {
+    "network": "offline-only",
+    "provider": "CPUExecutionProvider",
+    "remote_code": false
+  },
+  "schema_version": 1
+}
