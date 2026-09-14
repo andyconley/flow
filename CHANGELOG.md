@@ -2,6 +2,27 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.29.0](https://github.com/andyconley/flow/compare/v0.28.0...v0.29.0) (2026-09-14)
+
+### Features
+
+* **expertise:** add disabled local admission evaluator ([3e2921d](https://github.com/andyconley/flow/commit/3e2921dec7609ca2422f684640a78da04f1a8b44))
+* **expertise:** enable advisory retrieval in Flow coordinators ([704b15a](https://github.com/andyconley/flow/commit/704b15a1fd941e1e17baa38e943512418527dcc0))
+
+### Bug Fixes
+
+* bind expertise scorer freeze and separate admission recall ([5dba489](https://github.com/andyconley/flow/commit/5dba489afebb6147fac0346102c475e7d2119b70))
+* harden expertise admission evidence and local runtime ([89a3b05](https://github.com/andyconley/flow/commit/89a3b05e7386846e8ef78773c46476e416d42912))
+* **release:** allow optional expertise model warning in clean runner ([6388ad1](https://github.com/andyconley/flow/commit/6388ad12e6a6f3c34cfb38eba81344f463ad0f5b))
+
+### Tests
+
+* **expertise:** retain evidence for clean release runners ([7e56008](https://github.com/andyconley/flow/commit/7e560087e6031cdadb4c6bc98a1386de7bcd4e23))
+
+### Maintenance
+
+* **flow:** archive role expertise release ([43fc26a](https://github.com/andyconley/flow/commit/43fc26adcad0d983a529c8029dde673df3faf795))
+
 ### Highlights
 
 - Add evidence-backed expertise to architect, lead-developer, and test-engineer; product-manager and quality-reviewer remain base roles.
