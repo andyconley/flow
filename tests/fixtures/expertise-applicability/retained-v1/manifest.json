@@ -1,0 +1,575 @@
+{
+  "schema_version": 1,
+  "work_id": "agent-expertise-rag-retrieval",
+  "evaluation_revision": "evaluation-v1",
+  "review_status": "pending_independent_review",
+  "freeze_timestamp": "2026-09-11T18:10:00Z",
+  "corpus": {
+    "kind": "framework-jsonld",
+    "entry_count": 21,
+    "files": [
+      {
+        "path": "scaffolds/default/expertise/architect.jsonld",
+        "sha256": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa"
+      },
+      {
+        "path": "scaffolds/default/expertise/business-analyst.jsonld",
+        "sha256": "f44a06b04cec9c5e49dc56d1506552f144cc44295030117da53c6a3aaeb8e3ff"
+      },
+      {
+        "path": "scaffolds/default/expertise/lead-developer.jsonld",
+        "sha256": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b"
+      },
+      {
+        "path": "scaffolds/default/expertise/sre.jsonld",
+        "sha256": "6268cdba7db1b5d2bde9e2a20970e419bcfb9b258afbad579eeabb590beac77c"
+      },
+      {
+        "path": "scaffolds/default/expertise/support-lead.jsonld",
+        "sha256": "bed44ad55cc899a65282223ed5a948319bcf65fdda63f36d7e9184dab755c980"
+      },
+      {
+        "path": "scaffolds/default/expertise/test-engineer.jsonld",
+        "sha256": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89"
+      }
+    ]
+  },
+  "eligibility": {
+    "layers": [
+      "baseline",
+      "experience"
+    ],
+    "roles": [
+      "architect",
+      "business-analyst",
+      "lead-developer",
+      "sre",
+      "support-lead",
+      "test-engineer"
+    ],
+    "lifecycle": [
+      "current"
+    ],
+    "project_layer": false
+  },
+  "serialization": {
+    "fields": [
+      "@id",
+      "name",
+      "abstract",
+      "flow:trigger",
+      "flow:requiredBehavior",
+      "flow:failureMode",
+      "flow:source",
+      "teaches"
+    ],
+    "field_labels": true,
+    "complete_entries_only": true
+  },
+  "normalization": {
+    "unicode": "NFKC",
+    "case": "lower",
+    "token_pattern": "[a-z0-9]+(?:[-_][a-z0-9]+)*",
+    "stemming": false,
+    "synonyms": false
+  },
+  "caps": {
+    "top_k": 3,
+    "max_response_bytes": 2800,
+    "counting": "utf-8 bytes"
+  },
+  "candidates": [
+    {
+      "id": "lexical-control",
+      "scorer": "python-bm25",
+      "version": "spike-v1",
+      "eligible_default": false,
+      "minimum_non_stopword_matches": 2
+    },
+    {
+      "id": "local-vector",
+      "provider": "fastembed",
+      "provider_version": "0.8.0",
+      "model": "BAAI/bge-small-en-v1.5",
+      "source": "qdrant/bge-small-en-v1.5-onnx-q",
+      "scorer": "cosine",
+      "revision": "c32e6154d1bb7a0e47c5e745fd895e7700f44385",
+      "artifact_format": "ONNX plus JSON and TXT tokenizer data",
+      "license": "Apache-2.0",
+      "artifact_tree_sha256": "c2e80b612c71b421c9031410404ea113eb6b0cc10296a1fec4a92998de4ba242",
+      "no_match_cosine_min": 0.8
+    },
+    {
+      "id": "local-hybrid",
+      "components": [
+        "local-vector",
+        "lexical-control"
+      ],
+      "fusion": "reciprocal-rank-fusion",
+      "rrf_k": 60,
+      "weights": {
+        "vector": 1.0,
+        "lexical": 1.0
+      },
+      "candidate_admission": "dense>=0.8 or lexical>=2 content-term matches or exact structured match"
+    }
+  ],
+  "stopping_rule_ref": ".flow/runs/agent-expertise-rag-retrieval/research/solution-evaluation.md#stopping-rule",
+  "fixtures": [
+    {
+      "id": "SL-P01",
+      "role": "support-lead",
+      "query": "A customer reports an intermittent failure and several causes still fit. Build the triage record without settling on the first explanation.",
+      "groups": [
+        "support-primary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/evidence-led-triage"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "separate observations, hypotheses, tests, and uncertainty; keep an alternative live"
+    },
+    {
+      "id": "SL-P02",
+      "role": "support-lead",
+      "query": "Prepare an escalation for an unresolved case so the next owner can distinguish what we saw from what we merely suspect and what was ruled out.",
+      "groups": [
+        "support-primary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "hand off facts, beliefs with basis, ruled-out leads, and open questions separately"
+    },
+    {
+      "id": "SL-P03",
+      "role": "support-lead",
+      "query": "The reporter says syncing is broken for everyone. Ask for evidence that is concrete enough to investigate without feeding them our theory.",
+      "groups": [
+        "support-primary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "ask for the most recent occurrence and sequence with open prompts"
+    },
+    {
+      "id": "SL-P04",
+      "role": "support-lead",
+      "query": "A customer followed a misleading default and caused the incident. Explain the support response without treating their choice as careless.",
+      "groups": [
+        "support-primary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/do-not-read-the-user-s-actions-as-obvious-errors"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "reconstruct what the product showed and route the mismatch as a product finding"
+    },
+    {
+      "id": "SL-C01",
+      "role": "support-lead",
+      "query": "Tier 1 already captured the exact observation that confirms the known issue. Resolve it now and name only the signal that would reopen it.",
+      "groups": [
+        "support-counter",
+        "plausible-inapplicable"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand"
+      ],
+      "prohibited": [
+        "flow:entry/support-lead/evidence-led-triage",
+        "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently"
+      ],
+      "expected_state": "hits",
+      "behavior": "act on sufficient evidence without adding investigation"
+    },
+    {
+      "id": "SL-C02",
+      "role": "support-lead",
+      "query": "This ticket resembles last week’s outage, but nobody has checked the one observation that separates that incident from a new defect.",
+      "groups": [
+        "support-counter",
+        "plausible-inapplicable"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently"
+      ],
+      "prohibited": [
+        "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand"
+      ],
+      "expected_state": "hits",
+      "behavior": "test the familiar match before acting"
+    },
+    {
+      "id": "SL-C03",
+      "role": "support-lead",
+      "query": "The user forgot their password, the reset succeeded, and there is no unresolved symptom or product defect. Close the routine case.",
+      "groups": [
+        "support-counter",
+        "plausible-inapplicable",
+        "no-hit"
+      ],
+      "critical": false,
+      "acceptable": [],
+      "prohibited": [
+        "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description",
+        "flow:entry/support-lead/evidence-led-triage"
+      ],
+      "expected_state": "no_match",
+      "behavior": "do not create additional investigation"
+    },
+    {
+      "id": "SL-C04",
+      "role": "support-lead",
+      "query": "Escalate a case whose reproduction, observations, and ruled-out causes are already documented; preserve that record rather than starting triage again.",
+      "groups": [
+        "support-counter",
+        "plausible-inapplicable"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff"
+      ],
+      "prohibited": [
+        "flow:entry/support-lead/evidence-led-triage"
+      ],
+      "expected_state": "hits",
+      "behavior": "preserve the existing evidentiary state in handoff"
+    },
+    {
+      "id": "SL-O01",
+      "role": "support-lead",
+      "query": "flow:entry/support-lead/evidence-led-triage",
+      "groups": [
+        "support-operational",
+        "identifier"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/evidence-led-triage"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "return the exact entry identifier"
+    },
+    {
+      "id": "SL-O02",
+      "role": "support-lead",
+      "query": "The Mom Test chapter 1 open questions most recent concrete occurrence",
+      "groups": [
+        "support-operational",
+        "citation"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "retain source and locator matching"
+    },
+    {
+      "id": "SL-O03",
+      "role": "support-lead",
+      "query": "Help me be a good support lead today.",
+      "groups": [
+        "support-operational",
+        "broad",
+        "no-hit"
+      ],
+      "critical": false,
+      "acceptable": [],
+      "prohibited": [],
+      "expected_state": "no_match",
+      "behavior": "decline automatic injection for an ungrounded broad request"
+    },
+    {
+      "id": "SL-O04",
+      "role": "support-lead",
+      "query": "Investigate several possible causes and hand the unresolved case to engineering with the evidence intact.",
+      "groups": [
+        "support-operational",
+        "lifecycle",
+        "packing"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/support-lead/evidence-led-triage",
+        "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff"
+      ],
+      "prohibited": [
+        "fixture:support-lead:unknown-copy",
+        "fixture:support-lead:withdrawn-copy",
+        "fixture:support-lead:superseded-copy"
+      ],
+      "expected_state": "hits",
+      "behavior": "pack only complete current entries under the byte cap"
+    },
+    {
+      "id": "XR-BA01",
+      "role": "business-analyst",
+      "query": "The draft mixes what users actually did with our interpretation and a decision. Mark which statements are facts and which are assumptions.",
+      "groups": [
+        "cross-role",
+        "shared-vocabulary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement"
+      ],
+      "prohibited": [
+        "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff"
+      ],
+      "expected_state": "hits",
+      "behavior": "separate observed, inferred, assumed, and decided statements"
+    },
+    {
+      "id": "XR-SRE01",
+      "role": "sre",
+      "query": "During the incident, one diagnosis sounds likely, but mitigation has not started. Keep rival explanations alive until a test rules them out.",
+      "groups": [
+        "cross-role",
+        "shared-vocabulary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/sre/hold-competing-hypotheses-during-a-live-incident"
+      ],
+      "prohibited": [
+        "flow:entry/support-lead/evidence-led-triage"
+      ],
+      "expected_state": "hits",
+      "behavior": "preserve competing incident hypotheses"
+    },
+    {
+      "id": "XR-LD01",
+      "role": "lead-developer",
+      "query": "Plan a database compatibility change with a proof point before the irreversible step and a concrete rollback.",
+      "groups": [
+        "cross-role",
+        "shared-vocabulary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/lead-developer/plan-a-reversible-delivery-path"
+      ],
+      "prohibited": [
+        "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision"
+      ],
+      "expected_state": "hits",
+      "behavior": "sequence proof, irreversible boundary, and recovery"
+    },
+    {
+      "id": "XR-TE01",
+      "role": "test-engineer",
+      "query": "Turn this acceptance statement into a representative input and an observable result that distinguishes success from failure.",
+      "groups": [
+        "cross-role",
+        "shared-vocabulary"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example"
+      ],
+      "prohibited": [
+        "flow:entry/business-analyst/leave-a-requirement-undefined-while-the-evidence-is-thin"
+      ],
+      "expected_state": "hits",
+      "behavior": "give a concrete oracle rather than test tooling"
+    },
+    {
+      "id": "SN-01",
+      "role": "business-analyst",
+      "query": "A stakeholder has prescribed a dashboard. Discover the practical progress they seek before agreeing to that deliverable.",
+      "groups": [
+        "semantic-no-overlap",
+        "cross-role"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/business-analyst/reframe-a-product-request-as-the-job-behind-it"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "recover the need beneath a prescribed deliverable"
+    },
+    {
+      "id": "SN-02",
+      "role": "sre",
+      "query": "Stand in a future where customers were harmed by the launch. Reconstruct several independent paths backward before ranking them.",
+      "groups": [
+        "semantic-no-overlap",
+        "cross-role"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/sre/premortem-a-change-before-it-rolls"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "work backward from an accomplished bad future to surface multiple paths"
+    },
+    {
+      "id": "SN-03",
+      "role": "lead-developer",
+      "query": "A one-line edit has strong automated checks and can be undone immediately. Keep preparation brief instead of demanding ceremony.",
+      "groups": [
+        "semantic-no-overlap",
+        "cross-role"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/lead-developer/plan-in-proportion-to-risk"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "size preparation to reversibility, reach, and proof"
+    },
+    {
+      "id": "ID-AR01",
+      "role": "architect",
+      "query": "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision",
+      "groups": [
+        "identifier"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "return the exact entry identifier"
+    },
+    {
+      "id": "ID-SRE01",
+      "role": "sre",
+      "query": "Richard I. Cook How Complex Systems Fail thesis 8",
+      "groups": [
+        "citation"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/sre/reconstruct-what-was-known-at-the-time"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "retain source and locator matching"
+    },
+    {
+      "id": "BH-BA01",
+      "role": "business-analyst",
+      "query": "The request asks us to add a dashboard. Work out what outcome the requester is trying to achieve before treating the screen as the requirement.",
+      "groups": [
+        "broad"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/business-analyst/reframe-a-product-request-as-the-job-behind-it"
+      ],
+      "prohibited": [],
+      "expected_state": "hits",
+      "behavior": "recover the job behind the artifact request"
+    },
+    {
+      "id": "NH-LD01",
+      "role": "lead-developer",
+      "query": "Choose a paint color for the office kitchen.",
+      "groups": [
+        "no-hit"
+      ],
+      "critical": false,
+      "acceptable": [],
+      "prohibited": [],
+      "expected_state": "no_match",
+      "behavior": "return no_match without injecting a planning method"
+    },
+    {
+      "id": "LP-SRE01",
+      "role": "sre",
+      "query": "Before scheduling a risky cutover, imagine that it failed and enumerate the concrete paths that produced the failure.",
+      "groups": [
+        "lifecycle",
+        "packing"
+      ],
+      "critical": true,
+      "acceptable": [
+        "flow:entry/sre/premortem-a-change-before-it-rolls"
+      ],
+      "prohibited": [
+        "fixture:sre:unknown-copy",
+        "fixture:sre:withdrawn-copy",
+        "fixture:sre:superseded-copy"
+      ],
+      "expected_state": "hits",
+      "behavior": "retrieve only the current premortem entry and keep complete-entry packing"
+    }
+  ],
+  "environment": {
+    "local_scoring": "macOS-arm64",
+    "required_release_matrix": [
+      "macOS-arm64-python-3.12",
+      "ubuntu-24.04-x64-python-3.10",
+      "ubuntu-24.04-x64-python-3.11",
+      "ubuntu-24.04-x64-python-3.12",
+      "ubuntu-24.04-x64-python-3.13"
+    ]
+  },
+  "reviewer": {
+    "assignment": "solution-evaluation",
+    "provider": "/root/rag_evaluation",
+    "approval_artifact": ".flow/runs/agent-expertise-rag-retrieval/review/evaluation-freeze.md"
+  },
+  "lifecycle_fixture": {
+    "path": ".flow/runs/agent-expertise-rag-retrieval/evidence/evaluation-v1/lifecycle-fixture.json",
+    "sha256": "45d6c8ee353e037d469f3f69cc9d345b02cd5ff5c1c0640d859b221baced6d60",
+    "status": "isolated_spike_overlay_not_canonical_migration"
+  },
+  "behavior_evidence": [
+    {
+      "path": "docs/agent-expertise-pilot-validation.md",
+      "sha256": "fad5773dbb185e63da4d23ad2ae7b8116317206e109b71cc5935b9e965ef7f56"
+    },
+    {
+      "path": "docs/evidence/agent-expertise-pilot/ticket-sup-4471.md",
+      "sha256": "da8ebad73cdb5704c1e15cdc765c72cf5fef901a435b872cc02c588ba5b2580c"
+    },
+    {
+      "path": "docs/evidence/agent-expertise-pilot/ticket-sup-4602.md",
+      "sha256": "f20581cf0da60bd740ed5be5fd143d1aeb72d2b84fd18089f2232d09e9a36ed9"
+    },
+    {
+      "path": "docs/evidence/agent-expertise-pilot/rubric-sup-4602.md",
+      "sha256": "fb62961436f1d1af70908d43c0cf8947dedae629fb77948a1481b2d982ca2e08"
+    },
+    {
+      "path": "docs/evidence/agent-expertise-pilot/rubric.md",
+      "sha256": "b1f0592c1ddbdd6e3ee53e73a99204efba70fc1c2dfa60e39a46fbc2d4af9a5a"
+    }
+  ],
+  "model_install_manifest": {
+    "path": ".flow/runs/agent-expertise-rag-retrieval/evidence/evaluation-v1/model-install-manifest.json",
+    "sha256": "3ede54f18818e2cfa98f1d729716040469983c9e3e9c5971cb8845e2d924387e"
+  },
+  "query_contract": {
+    "dense_query_prefix": "Represent this sentence for searching relevant passages: ",
+    "dense_no_match_cosine_min": 0.8,
+    "lexical_min_non_stopword_matches": 2,
+    "lexical_exact_identifier_or_locator_bypass": true,
+    "hybrid_admission": "candidate passes dense threshold or lexical cutoff before RRF",
+    "stable_tie_break": "entry_id ascending",
+    "rationale": "threshold frozen before scoring from upstream BGE guidance; absolute scores below 0.8 are not treated as similarity proof"
+  }
+}

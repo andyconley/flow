@@ -18,7 +18,7 @@ from expertise_feasibility_eval import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-V1 = ROOT / ".flow/runs/agent-expertise-rag-retrieval/evidence/evaluation-v1"
+V1 = ROOT / "tests/fixtures/expertise-applicability/retained-v1"
 
 
 def digest(value: str) -> str:

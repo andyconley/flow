@@ -1,0 +1,103 @@
+{
+  "content_change": "Only flow:lifecycle metadata was added; canonical authored method/source/competency content is unchanged.",
+  "entry_count": 21,
+  "entry_ids": [
+    "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision",
+    "flow:entry/business-analyst/elicit-past-behavior-not-stated-intent",
+    "flow:entry/business-analyst/leave-a-requirement-undefined-while-the-evidence-is-thin",
+    "flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement",
+    "flow:entry/business-analyst/premortem-the-definition-before-it-is-approved",
+    "flow:entry/business-analyst/reframe-a-product-request-as-the-job-behind-it",
+    "flow:entry/lead-developer/plan-a-reversible-delivery-path",
+    "flow:entry/lead-developer/plan-in-proportion-to-risk",
+    "flow:entry/sre/contributing-conditions-instead-of-a-root-cause",
+    "flow:entry/sre/hold-competing-hypotheses-during-a-live-incident",
+    "flow:entry/sre/postmortem-output-is-a-change-to-conditions",
+    "flow:entry/sre/premortem-a-change-before-it-rolls",
+    "flow:entry/sre/reconstruct-what-was-known-at-the-time",
+    "flow:entry/sre/state-what-a-mitigation-newly-makes-possible",
+    "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand",
+    "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description",
+    "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff",
+    "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently",
+    "flow:entry/support-lead/do-not-read-the-user-s-actions-as-obvious-errors",
+    "flow:entry/support-lead/evidence-led-triage",
+    "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example"
+  ],
+  "evidence_kind": "review-record",
+  "files": [
+    {
+      "after_sha256": "e86f2f5e3a6147c788278f34b38ac2c22c1ad1b34d6248747cd9e9614afc5c68",
+      "before_sha256": "3993c9c5412944d41c83987c15ee6f9b3ebfe34485629b640bdd0ab52b015cfa",
+      "content_without_lifecycle_sha256": "97538b71076e2ece74427ab80b881128ee4e0eec9bbc603182427bb48e5fd913",
+      "entry_ids": [
+        "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision"
+      ],
+      "path": "scaffolds/default/expertise/architect.jsonld"
+    },
+    {
+      "after_sha256": "7f94e866b2a8f7b1b00ea4cccd5783ef1e163bbc1cfc1878ff2630c68be7958b",
+      "before_sha256": "f44a06b04cec9c5e49dc56d1506552f144cc44295030117da53c6a3aaeb8e3ff",
+      "content_without_lifecycle_sha256": "7d55d42d2f59885a2fc5cd48f8e6894a6856204b4e08fcd6d2e5ee96d04d5cab",
+      "entry_ids": [
+        "flow:entry/business-analyst/reframe-a-product-request-as-the-job-behind-it",
+        "flow:entry/business-analyst/elicit-past-behavior-not-stated-intent",
+        "flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement",
+        "flow:entry/business-analyst/leave-a-requirement-undefined-while-the-evidence-is-thin",
+        "flow:entry/business-analyst/premortem-the-definition-before-it-is-approved"
+      ],
+      "path": "scaffolds/default/expertise/business-analyst.jsonld"
+    },
+    {
+      "after_sha256": "fb9f76da6a54c00ba65e04388eeb8281ec78e7ed39e6d2f9cbf1e90356493093",
+      "before_sha256": "6685816f415ef8c9544ecb49629848fa691232fa66781072b50f4d9d78feab7b",
+      "content_without_lifecycle_sha256": "6f56bbf245753165cd4fc12c9a10fc817b40b854d5c0bde97a80d43691e9981b",
+      "entry_ids": [
+        "flow:entry/lead-developer/plan-a-reversible-delivery-path",
+        "flow:entry/lead-developer/plan-in-proportion-to-risk"
+      ],
+      "path": "scaffolds/default/expertise/lead-developer.jsonld"
+    },
+    {
+      "after_sha256": "8f9e452ee3553e9bb7b53ed333ea37f03f80bf6d757a1dfac3cc6e2f6b967379",
+      "before_sha256": "6268cdba7db1b5d2bde9e2a20970e419bcfb9b258afbad579eeabb590beac77c",
+      "content_without_lifecycle_sha256": "66e3ea9a6e70b104a872ed21cbdfa3bb2bef796b50b638d0b3cd4250bd6f7a18",
+      "entry_ids": [
+        "flow:entry/sre/contributing-conditions-instead-of-a-root-cause",
+        "flow:entry/sre/reconstruct-what-was-known-at-the-time",
+        "flow:entry/sre/postmortem-output-is-a-change-to-conditions",
+        "flow:entry/sre/state-what-a-mitigation-newly-makes-possible",
+        "flow:entry/sre/premortem-a-change-before-it-rolls",
+        "flow:entry/sre/hold-competing-hypotheses-during-a-live-incident"
+      ],
+      "path": "scaffolds/default/expertise/sre.jsonld"
+    },
+    {
+      "after_sha256": "5109f5f3f469164e47c02b2319c298a1b9443754246b79a885f9884b36423dae",
+      "before_sha256": "bed44ad55cc899a65282223ed5a948319bcf65fdda63f36d7e9184dab755c980",
+      "content_without_lifecycle_sha256": "c3958cbeb22f6d61de564fa54e9d0cc2365b905962a2940fec127a3288e66049",
+      "entry_ids": [
+        "flow:entry/support-lead/evidence-led-triage",
+        "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff",
+        "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description",
+        "flow:entry/support-lead/do-not-read-the-user-s-actions-as-obvious-errors",
+        "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently",
+        "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand"
+      ],
+      "path": "scaffolds/default/expertise/support-lead.jsonld"
+    },
+    {
+      "after_sha256": "9194f04054c7487bdfbc0a47c84dcf5a9ee3cfde1fc255bf3ee703f4b22e6ee6",
+      "before_sha256": "640ed7cb566307393c4ff1588b9c3f6b8c65b22842f65af3c1fe84eb452e8a89",
+      "content_without_lifecycle_sha256": "42e0927a7ee5faa41b57ee9710c4d3feedc2635af6c18c0721ab216eb9aa1f69",
+      "entry_ids": [
+        "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example"
+      ],
+      "path": "scaffolds/default/expertise/test-engineer.jsonld"
+    }
+  ],
+  "migration": "framework-lifecycle-current-v1",
+  "owner": "flow:owner/framework-maintainers",
+  "reviewed_at": "2026-09-11T00:00:00Z",
+  "schema_version": 1
+}

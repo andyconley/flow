@@ -296,24 +296,26 @@ class ReceiptAndRuntimeTests(unittest.TestCase):
     def test_symlinked_runtime_cache_and_ancestor_fail_before_install_or_chmod(self):
         outside = self.root / "outside-runtime"
         outside.mkdir()
-        for ancestor in (False, True):
-            with self.subTest(ancestor=ancestor):
-                flow_home = self.root / ("runtime-ancestor" if ancestor else "runtime-root")
-                flow_home.mkdir()
-                if ancestor:
-                    (flow_home / "cache").symlink_to(outside, target_is_directory=True)
-                else:
-                    (flow_home / "cache").mkdir()
-                    (flow_home / "cache" / "expertise").symlink_to(outside, target_is_directory=True)
-                readiness = runtime.status(flow_home)
-                self.assertEqual(readiness["state"], "unavailable")
-                self.assertEqual(readiness["reason"], "unsafe_permissions")
-                with self.assertRaises(runtime.ExpertiseRuntimeError) as raised:
-                    runtime.install(flow_home, accept_license=True)
-                self.assertEqual(raised.exception.reason, "unsafe_permissions")
-                with self.assertRaises(projection.ExpertiseProjectionError):
-                    with projection.writer_lock(flow_home):
-                        pass
+        supported = next(iter(json.loads(runtime.runtime_lock_path().read_text())["environments"]))
+        with patch.object(runtime, "current_environment_id", return_value=supported):
+            for ancestor in (False, True):
+                with self.subTest(ancestor=ancestor):
+                    flow_home = self.root / ("runtime-ancestor" if ancestor else "runtime-root")
+                    flow_home.mkdir()
+                    if ancestor:
+                        (flow_home / "cache").symlink_to(outside, target_is_directory=True)
+                    else:
+                        (flow_home / "cache").mkdir()
+                        (flow_home / "cache" / "expertise").symlink_to(outside, target_is_directory=True)
+                    readiness = runtime.status(flow_home)
+                    self.assertEqual(readiness["state"], "unavailable")
+                    self.assertEqual(readiness["reason"], "unsafe_permissions")
+                    with self.assertRaises(runtime.ExpertiseRuntimeError) as raised:
+                        runtime.install(flow_home, accept_license=True)
+                    self.assertEqual(raised.exception.reason, "unsafe_permissions")
+                    with self.assertRaises(projection.ExpertiseProjectionError):
+                        with projection.writer_lock(flow_home):
+                            pass
         self.assertEqual(list(outside.iterdir()), [])
 
     def test_runtime_status_verifies_local_fake_artifacts_and_normalizes_x64(self):

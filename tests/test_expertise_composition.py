@@ -120,8 +120,7 @@ class ShippedCorpusTests(unittest.TestCase):
 
     def test_lifecycle_migration_preserves_non_lifecycle_authored_content(self):
         evidence = json.loads((
-            REPO_ROOT / ".flow/runs/agent-expertise-rag-applicability-admission/"
-            "evidence/lifecycle-migration.json"
+            REPO_ROOT / "tests/fixtures/expertise-applicability/lifecycle/lifecycle-migration.json"
         ).read_text())
         self.assertEqual(evidence["migration"], "framework-lifecycle-current-v1")
         self.assertEqual(evidence["entry_count"], 21)
