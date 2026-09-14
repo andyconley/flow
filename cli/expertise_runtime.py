@@ -15,10 +15,13 @@ import tempfile
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
 import re
+import stat
+import zipfile
 
 from expertise_model import canonical_json, digest
 from expertise_projection import cache_root
 from expertise_ranker import FastEmbedProvider
+from expertise_paths import PrivatePathError, checked_path
 
 
 class ExpertiseRuntimeError(ValueError):
@@ -170,7 +173,60 @@ def _validate_contracts(model: dict, lock: dict) -> None:
             raise ExpertiseRuntimeError("manifest_invalid", f"{environment_id} wheel byte total is stale")
 
 
-def _verify_site(site: Path, environment: dict) -> None:
+def _trusted_wheel_files(wheel_cache: Path, environment: dict) -> tuple[dict[str, tuple[int, str]], set[str]]:
+    """Derive installed-byte expectations from wheels bound to the shipped lock."""
+    expected: dict[str, tuple[int, str]] = {}
+    generated: set[str] = set()
+    requirements = environment["requirements"]
+    if requirements:
+        if wheel_cache.is_symlink() or not wheel_cache.is_dir():
+            raise ExpertiseRuntimeError("corrupt_artifact", "rerun flow expertise model install")
+        _reject_symlinks(wheel_cache)
+    for item in requirements:
+        wheel = wheel_cache / item["filename"]
+        if wheel.is_symlink() or not wheel.is_file() or wheel.stat().st_size != item["bytes"] or _sha(wheel) != item["sha256"]:
+            raise ExpertiseRuntimeError("hash_mismatch", "rerun flow expertise model install from pinned wheels")
+        try:
+            with zipfile.ZipFile(wheel) as archive:
+                members = archive.infolist()
+                if len(members) > 20000 or sum(member.file_size for member in members) > 1024 * 1024 * 1024:
+                    raise ExpertiseRuntimeError("corrupt_artifact", "pinned wheel exceeds safe expansion limits")
+                for member in members:
+                    if member.is_dir():
+                        continue
+                    if member.file_size > 256 * 1024 * 1024 or stat.S_ISLNK(member.external_attr >> 16):
+                        raise ExpertiseRuntimeError("corrupt_artifact", "pinned wheel has an unsafe member")
+                    parts = Path(member.filename).parts
+                    if not parts or Path(member.filename).is_absolute() or ".." in parts or "\\" in member.filename:
+                        raise ExpertiseRuntimeError("corrupt_artifact", "pinned wheel has an unsafe path")
+                    if parts[0].endswith(".data"):
+                        if len(parts) < 3 or parts[1] not in {"purelib", "platlib"}:
+                            raise ExpertiseRuntimeError("corrupt_artifact", "pinned wheel has unsupported relocation")
+                        relative = "/".join(parts[2:])
+                    else:
+                        relative = member.filename
+                    if relative in expected or relative in generated:
+                        raise ExpertiseRuntimeError("corrupt_artifact", "pinned wheels contain duplicate installed paths")
+                    if relative.endswith(".dist-info/RECORD"):
+                        generated.add(relative)
+                        prefix = relative.removesuffix("RECORD")
+                        generated.update({prefix + name for name in ("INSTALLER", "REQUESTED", "direct_url.json")})
+                        continue
+                    with archive.open(member) as stream:
+                        hasher = hashlib.sha256()
+                        length = 0
+                        for block in iter(lambda: stream.read(1024 * 1024), b""):
+                            length += len(block)
+                            hasher.update(block)
+                    if length != member.file_size:
+                        raise ExpertiseRuntimeError("corrupt_artifact", "pinned wheel member length changed")
+                    expected[relative] = (length, hasher.hexdigest())
+        except (OSError, zipfile.BadZipFile) as error:
+            raise ExpertiseRuntimeError("corrupt_artifact", "rerun flow expertise model install from pinned wheels") from error
+    return expected, generated
+
+
+def _verify_site(site: Path, environment: dict, wheel_cache: Path) -> None:
     _reject_symlinks(site)
     if any(site.glob("*.pth")):
         raise ExpertiseRuntimeError("corrupt_artifact", "remove executable .pth files and reinstall the isolated runtime")
@@ -207,6 +263,14 @@ def _verify_site(site: Path, environment: dict) -> None:
     actual_files = {path.relative_to(site.resolve()) for path in site.resolve().rglob("*") if path.is_file()}
     if actual_files != covered:
         raise ExpertiseRuntimeError("corrupt_artifact", "installed runtime contains files outside the pinned wheels")
+    trusted, generated = _trusted_wheel_files(wheel_cache, environment)
+    actual_names = {path.as_posix() for path in actual_files}
+    if actual_names != set(trusted).union(generated):
+        raise ExpertiseRuntimeError("corrupt_artifact", "installed runtime differs from pinned wheels")
+    for relative, (expected_bytes, expected_sha) in trusted.items():
+        installed = site / relative
+        if installed.stat().st_size != expected_bytes or _sha(installed) != expected_sha:
+            raise ExpertiseRuntimeError("hash_mismatch", "rerun flow expertise model install from pinned wheels")
 
 
 def hmac_compare(left: bytes, right: bytes) -> bool:
@@ -232,21 +296,12 @@ def install_root(flow_home: Path, environment_id: str, model_digest: str, runtim
 
 
 def _private_path(path: Path, root: Path) -> Path:
-    lexical_root = root.absolute()
-    resolved_root = lexical_root.resolve()
-    candidate = path.absolute()
-    if candidate.is_relative_to(lexical_root):
-        candidate = resolved_root / candidate.relative_to(lexical_root)
-    if not candidate.is_relative_to(resolved_root):
-        raise ExpertiseRuntimeError("unsafe_permissions", "replace the expertise cache with a private directory")
-    for part in [candidate, *candidate.parents]:
-        if part == resolved_root:
-            break
-        if part.is_symlink():
-            raise ExpertiseRuntimeError("unsafe_permissions", "remove symlinks from the expertise cache")
-    if not candidate.resolve().is_relative_to(resolved_root):
-        raise ExpertiseRuntimeError("unsafe_permissions", "remove symlinks from the expertise cache")
-    return candidate
+    try:
+        return checked_path(path, root, anchor=Path(root).absolute().parents[1])
+    except PrivatePathError as error:
+        raise ExpertiseRuntimeError(
+            "unsafe_permissions", "replace symlinked expertise cache paths with private directories"
+        ) from error
 
 
 def _require_private(path: Path) -> None:
@@ -348,7 +403,7 @@ def install(flow_home: Path, *, accept_license: bool, wheel_dir: Path | None = N
                 raise ExpertiseRuntimeError("corrupt_artifact", "rerun flow expertise model install")
             shutil.rmtree(generated_scripts)
         _verify_model(model_dir, model)
-        _verify_site(site, environment)
+        _verify_site(site, environment, wheel_cache)
         receipt = {
             "schema_version": 1, "environment_id": environment_id,
             "model_manifest_digest": digest(model), "model_artifact_digest": model_digest,
@@ -401,13 +456,13 @@ def status(flow_home: Path) -> dict:
         if any(receipt.get(key) != value for key, value in expected.items()):
             raise ExpertiseRuntimeError("provider_unapproved", "rerun flow expertise model install --accept-license")
         _verify_model(target / "model", model)
-        _verify_site(target / "site", environment)
+        _verify_site(target / "site", environment, target / "wheels")
         return {
             "state": "ready", "environment_id": current_environment_id(),
             "provider_revision": expected["provider_revision"],
             "model_artifact_digest": expected["model_artifact_digest"],
             "runtime_revision": expected["runtime_revision"],
-            "install": str(target), "persistent_bytes": sum(path.stat().st_size for path in target.rglob("*") if path.is_file()),
+            "install": str(target.resolve()), "persistent_bytes": sum(path.stat().st_size for path in target.rglob("*") if path.is_file()),
         }
     except ExpertiseRuntimeError as error:
         return {"state": "unavailable", "reason": error.reason, "remedy": error.remedy, "environment_id": current_environment_id()}

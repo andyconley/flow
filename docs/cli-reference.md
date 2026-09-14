@@ -1277,19 +1277,26 @@ Every flagged pair still requires blinded semantic disposition before freeze.
 Install the pinned local embedding model and its environment-specific wheel set.
 Installation requires `--accept-license`; the runtime verifies approved HTTPS
 origins, file sizes, hashes, package records, permissions, and the supported
-environment before publishing the private install.
+environment before publishing the private install. Installed executable files
+are checked against the shipped lock's pinned wheel bytes on each status or
+provider load; an installed package's mutable `RECORD` cannot authorize a
+changed module. A corrupt install stays unavailable until reinstalled.
 
 ### `flow expertise model status`
 
 Verify the currently selected local model/runtime without downloading anything.
 The result distinguishes missing, unsupported, corrupt, and ready states and
-provides an actionable remedy.
+provides an actionable remedy. Private cache paths with symlinked application
+components are rejected before an install or status check can follow them.
 
 ### `flow expertise index refresh`
 
 Rebuild the disposable SQLite float32 projection from canonical current
 expertise entries. Publication is atomic, and a corpus change during the build
-leaves the prior projection intact.
+leaves the prior projection intact. Canonical JSON-LD reads are bounded to
+1 MiB per file, 512 graph entries per file, and 1,024 merged entries; the
+projection rejects more than 1 MiB of dense text before embedding and sends
+at most 64 entries per provider batch.
 
 ### `flow expertise index inspect`
 
@@ -1301,7 +1308,9 @@ current canonical corpus. A digest mismatch is reported as stale.
 Run an explicit bounded local query for one `--role`, reading task text from
 `--query-file`. Choose `--strategy similarity` with a declared `--threshold`,
 or `--strategy trigger-rules`. Output preserves stage states and IDs while the
-private receipt stores only an HMAC of normalized query text.
+private receipt stores only an HMAC of normalized query text. Fact definitions
+are limited to 256 KiB, 256 facts, and 32 patterns per present/absent clause;
+oversized or malformed inputs fail closed before provider use.
 
 ### `flow expertise disposition`
 
@@ -1351,6 +1360,15 @@ Apply the preregistered hard rules and lexicographic selector to one run's
 retained calibration results. Reviewed behavior evidence may be supplied with
 `--dispositions <path>`. The command writes one immutable selection and exact
 executable configuration digest.
+
+For a delivered fixture with a frozen behavior oracle, each disposition item
+must contain a versioned `evaluator_record` with the fixture and request IDs,
+reviewer ID, and one ordered entry per delivered ID. Each entry names an
+allowed disposition, matching reason, and bounded fact evidence codes. The
+parallel behavior evaluations bind every ID to the frozen oracle digest and a
+supplied evidence digest. This campaign evaluator assertion is separate from
+the runtime's linked pre/post-agent receipt; final qualification still needs
+the retained behavior and receipt evidence.
 
 ### `flow expertise campaign retrieve-heldout`
 

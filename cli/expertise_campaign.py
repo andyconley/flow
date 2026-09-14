@@ -2,9 +2,18 @@
 from __future__ import annotations
 
 from collections import Counter
+import re
 from typing import Callable
 
-from expertise_model import canonical_json, digest
+from expertise_model import DISPOSITION_REASONS, ENTRY_DISPOSITIONS, canonical_json, digest
+
+
+EVALUATOR_RECORD_REVISION = "expertise-campaign-evaluator-v1"
+REASONS_BY_DISPOSITION = {
+    "applied": {"trigger_satisfied"},
+    "ignored": {"trigger_absent", "trigger_contradicted", "constraint_displaced", "materiality_absent"},
+    "insufficient_context": {"required_fact_missing"},
+}
 
 
 class ExpertiseCampaignError(ValueError):
@@ -29,30 +38,85 @@ def _ids(rows: list[dict], key: str = "entry_id") -> list[str]:
     return [row[key] for row in rows if isinstance(row, dict) and isinstance(row.get(key), str)]
 
 
-def _disposition_evidence(value: dict, delivered: list[str], expected: object) -> bool:
-    """Read either a campaign verdict or a durable disposition plus behavior verdict."""
-    if "disposition_record" not in value:
+def _disposition_evidence(
+    value: dict, delivered: list[str], expected: object, target_ids: set[str],
+    expected_oracle_digest: str | None, request_id: str, fixture_id: str,
+) -> bool | None:
+    """Validate a bounded evaluator assertion for each delivered campaign ID.
+
+    This is campaign scoring evidence, not a linked runtime DispositionRecord.
+    The compact legacy form is valid only in old oracle-free unit contexts.
+    """
+    if not isinstance(value, dict):
+        return None
+    if "evaluator_record" not in value:
+        if expected_oracle_digest is not None:
+            return None
+        if len(delivered) != 1 or value.get("entry_id") != delivered[0]:
+            return None
+        if value.get("disposition") not in ENTRY_DISPOSITIONS or not isinstance(value.get("behavior_pass"), bool):
+            return None
         return (
-            value.get("disposition") == expected
-            and value.get("behavior_pass") is True
-            and value.get("entry_id") in delivered
+            (expected is None or value["disposition"] == expected)
+            and value["behavior_pass"]
         )
-    record = value.get("disposition_record")
-    behavior = value.get("behavior_evaluation")
-    if not isinstance(record, dict) or not isinstance(behavior, dict) or record.get("state") != "observed":
-        return False
+    record = value.get("evaluator_record")
+    if (
+        not isinstance(record, dict)
+        or set(record) != {"revision", "fixture_id", "request_id", "reviewer_id", "entries"}
+        or record["revision"] != EVALUATOR_RECORD_REVISION
+        or record["fixture_id"] != fixture_id
+        or record["request_id"] != request_id
+        or not isinstance(record["reviewer_id"], str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", record["reviewer_id"])
+    ):
+        return None
     rows = record.get("entries")
-    if not isinstance(rows, list) or [row.get("entry_id") for row in rows if isinstance(row, dict)] != delivered:
-        return False
-    target = behavior.get("entry_id")
-    observed = next((row for row in rows if row.get("entry_id") == target), None)
-    return (
-        isinstance(observed, dict)
-        and observed.get("disposition") == expected
-        and target in delivered
-        and behavior.get("behavior_pass") is True
-        and isinstance(behavior.get("oracle_digest"), str)
-        and len(behavior["oracle_digest"]) == 64
+    if (
+        not isinstance(rows, list)
+        or len(rows) != len(delivered)
+        or any(not isinstance(row, dict) for row in rows)
+        or [row.get("entry_id") for row in rows] != delivered
+        or any(
+            set(row) != {"entry_id", "disposition", "reason", "evidence_codes"}
+            or row.get("disposition") not in ENTRY_DISPOSITIONS
+            or row.get("reason") not in DISPOSITION_REASONS
+            or row["reason"] not in REASONS_BY_DISPOSITION[row["disposition"]]
+            or not isinstance(row.get("evidence_codes"), list)
+            or len(row["evidence_codes"]) > 16
+            or any(not isinstance(code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code)
+                   for code in row["evidence_codes"])
+            for row in rows
+        )
+    ):
+        return None
+    verdicts = value.get("behavior_evaluations")
+    if verdicts is None:
+        single = value.get("behavior_evaluation")
+        verdicts = [single] if len(delivered) == 1 else None
+    if (
+        not isinstance(verdicts, list)
+        or len(verdicts) != len(delivered)
+        or any(not isinstance(verdict, dict) for verdict in verdicts)
+        or [verdict.get("entry_id") for verdict in verdicts] != delivered
+        or any(
+            set(verdict) != {"entry_id", "behavior_pass", "oracle_digest", "evidence_digest"}
+            or not isinstance(verdict.get("evidence_digest"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", verdict["evidence_digest"])
+            or
+            not isinstance(verdict.get("behavior_pass"), bool)
+            or not isinstance(verdict.get("oracle_digest"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", verdict["oracle_digest"])
+            or (expected_oracle_digest is not None and verdict["oracle_digest"] != expected_oracle_digest)
+            for verdict in verdicts
+        )
+    ):
+        return None
+    return all(verdict["behavior_pass"] is True for verdict in verdicts) and (
+        expected is None or all(
+        row["disposition"] == expected for row in rows
+        if row["entry_id"] in target_ids
+        )
     )
 
 
@@ -82,7 +146,7 @@ def score_fixture(fixture: dict, outcome: dict, disposition: dict | None = None)
     leakage_scope = eligible.union(ranked).union(delivered) if primary == "integrity" else set(delivered)
     leakage = sorted(prohibited.intersection(leakage_scope))
     retrieval_pass = False
-    disposition_required = False
+    disposition_required = bool(delivered)
     disposition_pass: bool | None = None
 
     if primary == "applicable":
@@ -126,10 +190,13 @@ def score_fixture(fixture: dict, outcome: dict, disposition: dict | None = None)
         )
     elif primary == "plausible-inapplicable" and plausible_path == "controlled-delivery":
         retrieval_pass = outcome["state"] == "admitted" and admitted_acceptable
-        disposition_required = bool(delivered)
-        if disposition is not None:
-            expected = fixture.get("expected", {}).get("disposition")
-            disposition_pass = _disposition_evidence(disposition, delivered, expected)
+    if disposition_required and disposition is not None:
+        expected = fixture.get("expected", {}).get("disposition")
+        disposition_pass = _disposition_evidence(
+            disposition, delivered, expected, acceptable.intersection(delivered),
+            digest(fixture["behavior_oracle"]) if "behavior_oracle" in fixture else None,
+            outcome["request_id"], fixture["id"],
+        )
     passed = retrieval_pass and not leakage and not untraceable and (disposition_pass is not False)
     complete = not disposition_required or disposition_pass is not None
     if disposition_required:

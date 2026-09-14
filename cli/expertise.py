@@ -19,6 +19,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from expertise_json import BoundedJSONError, read_json
 
 SECTION = "## Expertise"
 VOCABULARY = "competencies.md"
@@ -52,19 +53,22 @@ class ExpertiseError(ValueError):
 
 def _read(path: Path, layer: str) -> list[dict]:
     try:
-        document = json.loads(path.read_text())
-    except json.JSONDecodeError as error:
+        document = read_json(path, maximum_bytes=1024 * 1024, maximum_nodes=10000)
+    except BoundedJSONError as error:
         raise ExpertiseError(
             "invalid-expertise-json",
-            f"expertise corpus is not valid JSON: {error}",
+            f"expertise corpus cannot be parsed within limits: {error}",
             source=str(path),
-            remediation="fix the JSON syntax; sync will not skip a corpus it cannot read",
+            remediation="fix the JSON or reduce the corpus; sync will not skip unusable expertise",
         ) from error
+    if not isinstance(document, dict):
+        raise ExpertiseError("invalid-expertise-json", "expertise corpus must be an object",
+                             source=str(path), remediation="wrap entries in a JSON-LD object")
     graph = document.get("@graph")
-    if not isinstance(graph, list):
+    if not isinstance(graph, list) or len(graph) > 512:
         raise ExpertiseError(
             "missing-expertise-graph",
-            "expertise corpus has no @graph array",
+            "expertise corpus needs an @graph array of at most 512 entries",
             source=str(path),
             remediation='wrap the entries in {"@context": {...}, "@graph": [...]}',
         )
@@ -390,6 +394,11 @@ def canonical_snapshot(
     for role in sorted(set(roles)):
         for entry in corpus_for(role, framework_dir, user_dir):
             entries.append(entry)
+            if len(entries) > 1024:
+                raise ExpertiseError(
+                    "expertise-corpus-too-large", "merged expertise exceeds 1024 entries",
+                    source=str(framework_dir), remediation="reduce the authored expertise corpus",
+                )
             tuples.append({
                 "role": role,
                 "source_layer": entry["_source_layer"],

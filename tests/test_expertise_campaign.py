@@ -14,6 +14,7 @@ import expertise_campaign as campaign
 
 
 TARGET = "flow:entry/support-lead/method"
+SECOND = "flow:entry/support-lead/second-method"
 
 
 def fixture(primary: str, *, path: str | None = None) -> dict:
@@ -71,6 +72,36 @@ def outcome(*, admitted: bool, state: str | None = None, cause: str | None = Non
     }
 
 
+def second_delivery() -> dict:
+    result = outcome(admitted=True)
+    result["eligibility"]["eligible_ids"].append(SECOND)
+    result["ranking"]["candidates"].append({"entry_id": SECOND, "ordinal": 2, "provider_score": 0.8})
+    result["admission"]["admitted_ids"].append(SECOND)
+    result["admission"]["candidate_decisions"].append({"entry_id": SECOND, "admitted": True, "reason": "traceable"})
+    result["delivery"]["delivered_ids"].append(SECOND)
+    result["delivery"]["entries"].append({"private": "second entry prose"})
+    return result
+
+
+def two_entry_evidence() -> dict:
+    return {
+        "evaluator_record": {
+            "revision": campaign.EVALUATOR_RECORD_REVISION,
+            "fixture_id": fixture("applicable")["id"],
+            "request_id": "request-a",
+            "reviewer_id": "reviewer-test",
+            "entries": [
+                {"entry_id": TARGET, "disposition": "applied", "reason": "trigger_satisfied", "evidence_codes": ["fact_a"]},
+                {"entry_id": SECOND, "disposition": "ignored", "reason": "trigger_absent", "evidence_codes": ["fact_b"]},
+            ],
+        },
+        "behavior_evaluations": [
+            {"entry_id": TARGET, "behavior_pass": True, "oracle_digest": "a" * 64, "evidence_digest": "c" * 64},
+            {"entry_id": SECOND, "behavior_pass": True, "oracle_digest": "b" * 64, "evidence_digest": "d" * 64},
+        ],
+    }
+
+
 class CampaignScoringTests(unittest.TestCase):
     def test_true_no_match_may_rank_role_entries_but_must_not_deliver_them(self):
         row = campaign.score_fixture(fixture("true-no-match"), outcome(admitted=False))
@@ -106,16 +137,120 @@ class CampaignScoringTests(unittest.TestCase):
     def test_controlled_delivery_accepts_durable_disposition_with_separate_behavior_verdict(self):
         item = fixture("plausible-inapplicable", path="controlled-delivery")
         evidence = {
-            "disposition_record": {
-                "state": "observed",
-                "entries": [{"entry_id": TARGET, "disposition": "ignored"}],
+            "evaluator_record": {
+                "revision": campaign.EVALUATOR_RECORD_REVISION,
+                "fixture_id": item["id"], "request_id": "request-a", "reviewer_id": "reviewer-test",
+                "entries": [{"entry_id": TARGET, "disposition": "ignored", "reason": "trigger_absent", "evidence_codes": []}],
             },
             "behavior_evaluation": {
-                "entry_id": TARGET, "behavior_pass": True, "oracle_digest": "a" * 64,
+                "entry_id": TARGET, "behavior_pass": True, "oracle_digest": "a" * 64, "evidence_digest": "c" * 64,
             },
         }
         row = campaign.score_fixture(item, outcome(admitted=True), evidence)
         self.assertTrue(row["passed"])
+
+    def test_applicable_delivery_is_incomplete_without_a_disposition_for_each_delivered_id(self):
+        row = campaign.score_fixture(fixture("applicable"), second_delivery())
+        self.assertTrue(row["retrieval_pass"])
+        self.assertTrue(row["disposition_required"])
+        self.assertFalse(row["complete"])
+        self.assertFalse(row["passed"])
+
+    def test_integrity_delivery_is_incomplete_without_disposition(self):
+        item = fixture("integrity")
+        item["expected"] = {"outer_state": "admitted", "cause": "candidates_delivered",
+                            "admission_state": "admitted", "disposition": "applied"}
+        item["acceptable_entry_ids"] = [TARGET]
+        item["prohibited_entry_ids"] = []
+        row = campaign.score_fixture(item, outcome(admitted=True))
+        self.assertTrue(row["retrieval_pass"])
+        self.assertFalse(row["complete"])
+        self.assertFalse(row["passed"])
+
+    def test_multi_entry_delivery_rejects_single_compact_disposition(self):
+        row = campaign.score_fixture(
+            fixture("applicable"), second_delivery(),
+            {"entry_id": TARGET, "disposition": "applied", "behavior_pass": True},
+        )
+        self.assertFalse(row["complete"])
+        self.assertFalse(row["passed"])
+
+    def test_multi_entry_delivery_requires_exact_behavior_evidence(self):
+        item = fixture("applicable")
+        delivered = second_delivery()
+        valid = two_entry_evidence()
+        passing = campaign.score_fixture(item, delivered, valid)
+        self.assertTrue(passing["complete"])
+        self.assertTrue(passing["passed"])
+
+        for bad in (
+            {**valid, "evaluator_record": {**valid["evaluator_record"], "entries": valid["evaluator_record"]["entries"][:1]}},
+            {**valid, "evaluator_record": {**valid["evaluator_record"], "entries": [valid["evaluator_record"]["entries"][0]] * 2}},
+            {**valid, "behavior_evaluations": valid["behavior_evaluations"][:1]},
+            {**valid, "behavior_evaluations": [valid["behavior_evaluations"][0]] * 2},
+        ):
+            with self.subTest(bad=bad):
+                row = campaign.score_fixture(item, delivered, bad)
+                self.assertFalse(row["complete"])
+                self.assertFalse(row["passed"])
+
+        contradicted = two_entry_evidence()
+        contradicted["behavior_evaluations"][1]["behavior_pass"] = False
+        row = campaign.score_fixture(item, delivered, contradicted)
+        self.assertTrue(row["complete"])
+        self.assertFalse(row["passed"])
+
+    def test_behavior_verdict_must_bind_frozen_oracle(self):
+        item = fixture("applicable")
+        item["behavior_oracle"] = {"must_include": ["compare options"], "must_avoid": ["defer blindly"]}
+        evidence = two_entry_evidence()
+        mismatch = campaign.score_fixture(item, second_delivery(), evidence)
+        self.assertFalse(mismatch["complete"])
+        self.assertFalse(mismatch["passed"])
+        bound = campaign.digest(item["behavior_oracle"])
+        for verdict in evidence["behavior_evaluations"]:
+            verdict["oracle_digest"] = bound
+        passing = campaign.score_fixture(item, second_delivery(), evidence)
+        self.assertTrue(passing["complete"])
+        self.assertTrue(passing["passed"])
+
+    def test_campaign_evaluator_record_rejects_missing_or_inconsistent_fields(self):
+        import copy
+        item = fixture("applicable")
+        item["behavior_oracle"] = {"must_include": ["decide"], "must_avoid": ["defer"]}
+        valid = two_entry_evidence()
+        for verdict in valid["behavior_evaluations"]:
+            verdict["oracle_digest"] = campaign.digest(item["behavior_oracle"])
+        mutations = []
+        for key in ("revision", "fixture_id", "request_id", "reviewer_id"):
+            changed = copy.deepcopy(valid)
+            del changed["evaluator_record"][key]
+            mutations.append(changed)
+        for field, value in (("reason", "trigger_absent"), ("evidence_codes", ["bad-code"]),
+                             ("disposition", "ignored")):
+            changed = copy.deepcopy(valid)
+            changed["evaluator_record"]["entries"][0][field] = value
+            mutations.append(changed)
+        changed = copy.deepcopy(valid)
+        del changed["behavior_evaluations"][0]["evidence_digest"]
+        mutations.append(changed)
+        for changed in mutations:
+            with self.subTest(changed=changed):
+                row = campaign.score_fixture(item, second_delivery(), changed)
+                self.assertFalse(row["complete"])
+                self.assertFalse(row["passed"])
+        passing = campaign.score_fixture(item, second_delivery(), valid)
+        self.assertTrue(passing["complete"])
+        self.assertTrue(passing["passed"])
+
+    def test_scorecard_cannot_survive_pending_applicable_disposition(self):
+        item = fixture("applicable")
+        score = campaign.score_candidate(
+            {"split": "evaluation-v2", "fixtures": [item]},
+            "similarity:0.7", lambda _fixture: outcome(admitted=True),
+        )
+        self.assertFalse(score["complete"])
+        self.assertFalse(score["survives_hard_rules"])
 
     def test_integrity_invalid_graph_passes_only_as_invalid_corpus_before_ranking(self):
         row = campaign.score_fixture(fixture("integrity"), outcome(admitted=False, invalid_corpus=True))

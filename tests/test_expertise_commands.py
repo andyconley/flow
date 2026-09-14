@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "cli"))
 
 import expertise_commands as commands
+import expertise_campaign as campaign
 import expertise_service as service
 import expertise
 from expertise_model import (
@@ -27,6 +28,54 @@ from expertise_model import (
     validate_admission_input, validate_delivery_result, validate_disposition_record,
     validate_identity, validate_outcome, validate_trigger_rule,
 )
+
+
+class HeldoutDispositionFinalizationTests(unittest.TestCase):
+    def test_pending_applicable_delivery_cannot_qualify_or_disappear_from_decision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run = Path(temporary)
+            target = "entry-a"
+            fixture = {
+                "id": "applicable-one", "primary_class": "applicable",
+                "acceptable_entry_ids": [target], "prohibited_entry_ids": [],
+                "expected": {"disposition": "applied"},
+            }
+            manifest = {"split": "evaluation-v2", "fixtures": [fixture],
+                        "selected_configuration_digest": "selected-v1"}
+            manifest_path = run / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest))
+            outcome = {
+                "request_id": "request-1", "role": "support-lead", "state": "admitted",
+                "cause": "candidates_delivered",
+                "eligibility": {"state": "eligible", "eligible_ids": [target], "excluded": [], "identity": "eligibility"},
+                "ranking": {"state": "ranked", "reason": "ranked", "provider_calls": 1,
+                            "candidates": [{"entry_id": target, "ordinal": 1, "provider_score": 0.9}], "identity": "ranking"},
+                "admission": {"state": "admitted", "strategy": "similarity", "admitted_ids": [target],
+                              "candidate_decisions": [{"entry_id": target, "admitted": True, "reason": "similarity_threshold_met"}],
+                              "identity": "admission"},
+                "delivery": {"state": "delivered", "reason": "delivered", "delivered_ids": [target],
+                             "withheld_ids": [], "actual_bytes": 100, "limits": {}, "identity": "delivery",
+                             "entries": [{"@id": target}]},
+            }
+            retained = campaign.score_candidate(manifest, "similarity:0.70", lambda _fixture: outcome)
+            scoring = run / "evidence" / "evaluation-v2" / "scoring"
+            scoring.mkdir(parents=True)
+            (scoring / "retrieval-results.json").write_text(json.dumps({
+                "manifest_digest": digest(manifest), "freeze_receipt_digest": "freeze-v1",
+                "candidate_id": "similarity:0.70",
+                "repeats": [{"repeat": index, "scorecard": retained} for index in (1, 2)],
+            }))
+            with (
+                patch.object(commands, "verify_campaign_freeze", return_value={"state": "valid", "freeze_receipt_digest": "freeze-v1"}),
+                patch.object(commands, "_frozen_paths", return_value=(manifest_path, run / "receipt.json")),
+                patch.object(commands, "_heldout_strategy", return_value=("similarity:0.70", None, {})),
+                patch.object(commands, "_environment_evidence", return_value={"state": "passed"}),
+            ):
+                result = commands.finalize_heldout(run)
+            decision = result["decision"]
+            self.assertEqual(decision["state"], "stop")
+            self.assertFalse(decision["all_fixture_oracles_passed"])
+            self.assertEqual(decision["missing_disposition_fixture_ids"], [fixture["id"]])
 
 
 ROLES = ("support-lead", "product-manager", "quality-reviewer", "lead-developer", "sre", "architect")

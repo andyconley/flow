@@ -15,6 +15,7 @@ import time
 from typing import Callable, Iterable
 
 from expertise_model import ExpertiseContractError, identity
+from expertise_paths import PrivatePathError, checked_path
 
 
 SCHEMA_REVISION = "expertise-index-v1"
@@ -34,21 +35,12 @@ def projection_path(flow_home: Path) -> Path:
 
 
 def _contained(path: Path, root: Path) -> Path:
-    lexical_root = root.absolute()
-    root = lexical_root.resolve()
-    path = path.absolute()
-    if path.is_relative_to(lexical_root):
-        path = root / path.relative_to(lexical_root)
-    if not path.is_relative_to(root):
-        raise ExpertiseProjectionError(f"path escapes expertise cache: {path}")
-    for part in [path, *path.parents]:
-        if part == root:
-            break
-        if part.is_symlink():
-            raise ExpertiseProjectionError(f"symlinked expertise cache path: {part}")
-    if not path.resolve().is_relative_to(root):
-        raise ExpertiseProjectionError(f"resolved path escapes expertise cache: {path}")
-    return path
+    try:
+        root = Path(root).absolute()
+        anchor = root.parents[1] if root.name == "expertise" and root.parent.name == "cache" else root
+        return checked_path(path, root, anchor=anchor)
+    except PrivatePathError as error:
+        raise ExpertiseProjectionError("expertise cache path escapes or redirects private root") from error
 
 
 @contextmanager
@@ -137,7 +129,11 @@ def publish(
 ) -> dict:
     current = [entry for entry in snapshot["entries"] if entry.get("_effective_current")]
     texts = [dense_text(entry) for entry in current]
-    raw_vectors = list(provider.embed(texts)) if texts else []
+    if len(texts) > 1024 or sum(len(text.encode("utf-8")) for text in texts) > 1024 * 1024:
+        raise ExpertiseProjectionError("expertise projection exceeds corpus limits")
+    raw_vectors = []
+    for start in range(0, len(texts), 64):
+        raw_vectors.extend(provider.embed(texts[start:start + 64]))
     if len(raw_vectors) != len(current):
         raise ExpertiseProjectionError("provider returned the wrong vector count")
     encoded = [encode_vector(vector) for vector in raw_vectors]

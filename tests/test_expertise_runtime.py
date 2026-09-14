@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 
@@ -271,6 +272,50 @@ class ReceiptAndRuntimeTests(unittest.TestCase):
         purged = receipts.purge(root, now=datetime.now(timezone.utc), days=30)
         self.assertEqual(purged["deleted"], 1)
 
+    def test_symlinked_receipt_root_and_ancestor_fail_before_private_writes(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        flow_home = self.root / "flow-home"
+        root_link = self.root / "receipts-link"
+        root_link.symlink_to(outside, target_is_directory=True)
+        parent_link = self.root / "linked-parent"
+        parent_link.symlink_to(outside, target_is_directory=True)
+        for root in (root_link, parent_link / "receipts"):
+            with self.subTest(root=root):
+                with self.assertRaises(receipts.ExpertiseReceiptError):
+                    receipts.write_pre(root, flow_home, self.receipt_outcome(), "private sentinel")
+                with self.assertRaises(receipts.ExpertiseReceiptError):
+                    receipts.write_post(root, {"request_id": "request-1"}, [])
+                with self.assertRaises(receipts.ExpertiseReceiptError):
+                    receipts.inspect_receipts(root)
+                with self.assertRaises(receipts.ExpertiseReceiptError):
+                    receipts.purge(root)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse((flow_home / "cache" / "expertise" / "receipt.key").exists())
+
+    def test_symlinked_runtime_cache_and_ancestor_fail_before_install_or_chmod(self):
+        outside = self.root / "outside-runtime"
+        outside.mkdir()
+        for ancestor in (False, True):
+            with self.subTest(ancestor=ancestor):
+                flow_home = self.root / ("runtime-ancestor" if ancestor else "runtime-root")
+                flow_home.mkdir()
+                if ancestor:
+                    (flow_home / "cache").symlink_to(outside, target_is_directory=True)
+                else:
+                    (flow_home / "cache").mkdir()
+                    (flow_home / "cache" / "expertise").symlink_to(outside, target_is_directory=True)
+                readiness = runtime.status(flow_home)
+                self.assertEqual(readiness["state"], "unavailable")
+                self.assertEqual(readiness["reason"], "unsafe_permissions")
+                with self.assertRaises(runtime.ExpertiseRuntimeError) as raised:
+                    runtime.install(flow_home, accept_license=True)
+                self.assertEqual(raised.exception.reason, "unsafe_permissions")
+                with self.assertRaises(projection.ExpertiseProjectionError):
+                    with projection.writer_lock(flow_home):
+                        pass
+        self.assertEqual(list(outside.iterdir()), [])
+
     def test_runtime_status_verifies_local_fake_artifacts_and_normalizes_x64(self):
         artifact = b"fake model"
         artifact_hash = hashlib.sha256(artifact).hexdigest()
@@ -369,8 +414,82 @@ class RuntimeArtifactQualificationTests(unittest.TestCase):
                     distribution = FakeDistribution(site, "demo", "1.0", [record])
                     expected = "hash_mismatch" if kind == "bad-hash" else "corrupt_artifact"
                     with patch.object(runtime.metadata, "distributions", return_value=[distribution]), self.assertRaises(runtime.ExpertiseRuntimeError) as raised:
-                        runtime._verify_site(site, environment)
+                        runtime._verify_site(site, environment, self.root / "wheels")
                     self.assertEqual(raised.exception.reason, expected)
+
+    def test_site_rejects_package_and_record_changed_together_against_pinned_wheel(self):
+        site = self.root / "site"
+        site.mkdir()
+        installed = site / "demo.py"
+        installed.write_bytes(b"original")
+        wheels = self.root / "wheels"
+        wheels.mkdir()
+        wheel = wheels / "demo-1.0-py3-none-any.whl"
+        with zipfile.ZipFile(wheel, "w") as archive:
+            archive.writestr("demo.py", b"original")
+        environment = {"requirements": [{
+            "name": "demo", "version": "1.0", "filename": wheel.name,
+            "bytes": wheel.stat().st_size, "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+        }]}
+        original = FakeDistribution(site, "demo", "1.0", [FakeRecordPath("demo.py", b"original")])
+        with patch.object(runtime.metadata, "distributions", return_value=[original]):
+            runtime._verify_site(site, environment, wheels)
+
+        installed.write_bytes(b"tampered")
+        changed_record = FakeDistribution(site, "demo", "1.0", [FakeRecordPath("demo.py", b"tampered")])
+        with patch.object(runtime.metadata, "distributions", return_value=[changed_record]), self.assertRaises(runtime.ExpertiseRuntimeError) as raised:
+            runtime._verify_site(site, environment, wheels)
+        self.assertEqual(raised.exception.reason, "hash_mismatch")
+
+        with zipfile.ZipFile(wheel, "w") as archive:
+            archive.writestr("demo.py", b"tampered")
+        with patch.object(runtime.metadata, "distributions", return_value=[changed_record]), self.assertRaises(runtime.ExpertiseRuntimeError) as raised:
+            runtime._verify_site(site, environment, wheels)
+        self.assertEqual(raised.exception.reason, "hash_mismatch")
+
+    def test_real_metadata_record_cannot_authorize_changed_package_bytes(self):
+        """Exercise importlib's actual RECORD parser against a pinned wheel."""
+        site = self.root / "site"
+        wheels = self.root / "wheels"
+        site.mkdir()
+        wheels.mkdir()
+        dist_info = "demo-1.0.dist-info"
+        original = {
+            "demo.py": b"VALUE = 'original'\n",
+            f"{dist_info}/METADATA": b"Metadata-Version: 2.1\nName: demo\nVersion: 1.0\n",
+            f"{dist_info}/WHEEL": b"Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        }
+        wheel = wheels / "demo-1.0-py3-none-any.whl"
+        with zipfile.ZipFile(wheel, "w") as archive:
+            for name, payload in original.items():
+                archive.writestr(name, payload)
+            archive.writestr(f"{dist_info}/RECORD", b"")
+        installed = dict(original)
+        installed.update({f"{dist_info}/{name}": b"" for name in ("INSTALLER", "REQUESTED", "direct_url.json")})
+
+        def write_site() -> None:
+            for name, payload in installed.items():
+                destination = site / name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(payload)
+            rows = []
+            for name, payload in installed.items():
+                encoded = base64.urlsafe_b64encode(hashlib.sha256(payload).digest()).decode().rstrip("=")
+                rows.append(f"{name},sha256={encoded},{len(payload)}")
+            rows.append(f"{dist_info}/RECORD,,")
+            (site / dist_info / "RECORD").write_text("\n".join(rows) + "\n")
+
+        environment = {"requirements": [{
+            "name": "demo", "version": "1.0", "filename": wheel.name,
+            "bytes": wheel.stat().st_size, "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+        }]}
+        write_site()
+        runtime._verify_site(site, environment, wheels)
+        installed["demo.py"] = b"VALUE = 'tampered'\n"
+        write_site()
+        with self.assertRaises(runtime.ExpertiseRuntimeError) as raised:
+            runtime._verify_site(site, environment, wheels)
+        self.assertEqual(raised.exception.reason, "hash_mismatch")
 
     def test_provider_import_from_read_only_site_creates_no_bytecode(self):
         site = self.root / "site"

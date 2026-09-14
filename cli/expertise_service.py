@@ -27,6 +27,7 @@ from expertise_model import (
 )
 from expertise_projection import ExpertiseProjectionError, projection_identity
 from expertise_ranker import ExpertiseProviderError, rank
+from expertise_json import BoundedJSONError, read_json
 
 
 ROLES = ("architect", "business-analyst", "lead-developer", "sre", "support-lead", "test-engineer")
@@ -42,8 +43,16 @@ class ExpertiseServiceError(ValueError):
 
 
 def load_fact_definitions(path: Path) -> dict:
-    data = json.loads(Path(path).read_text())
-    if set(data) != {"schema_version", "revision", "normalizer_revision", "facts"} or data.get("schema_version") != 1:
+    try:
+        data = read_json(Path(path), maximum_bytes=256 * 1024, maximum_nodes=12000,
+                         maximum_depth=16, maximum_string=2048)
+    except BoundedJSONError as error:
+        raise ExpertiseServiceError("invalid fact definitions") from error
+    if (
+        not isinstance(data, dict)
+        or set(data) != {"schema_version", "revision", "normalizer_revision", "facts"}
+        or data.get("schema_version") != 1
+    ):
         raise ExpertiseServiceError("invalid fact definitions")
     facts = data.get("facts")
     if not isinstance(facts, list) or len(facts) > 256:
@@ -58,7 +67,10 @@ def load_fact_definitions(path: Path) -> dict:
         seen.add(code)
         for field in ("present_any", "absent_any"):
             patterns = item.get(field)
-            if not isinstance(patterns, list) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in patterns):
+            if (
+                not isinstance(patterns, list) or len(patterns) > 32
+                or any(not isinstance(pattern, str) or not pattern.strip() or len(pattern) > 256 for pattern in patterns)
+            ):
                 raise ExpertiseServiceError("fact patterns must be non-empty strings")
     return data
 

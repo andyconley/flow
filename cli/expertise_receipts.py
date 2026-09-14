@@ -11,6 +11,7 @@ import secrets
 from typing import Any
 
 from expertise_model import canonical_json, validate_disposition_record
+from expertise_paths import PrivatePathError, checked_path
 
 
 SCHEMA_VERSION = 1
@@ -35,21 +36,10 @@ def receipt_root(project_root: Path | None, flow_home: Path) -> Path:
 
 
 def _contained(path: Path, root: Path) -> Path:
-    lexical_root = root.absolute()
-    root = lexical_root.resolve()
-    path = path.absolute()
-    if path.is_relative_to(lexical_root):
-        path = root / path.relative_to(lexical_root)
-    if not path.is_relative_to(root):
-        raise ExpertiseReceiptError("receipt path escapes its private root")
-    for part in [path, *path.parents]:
-        if part == root:
-            break
-        if part.is_symlink():
-            raise ExpertiseReceiptError("symlinked receipt path is not allowed")
-    if not path.resolve().is_relative_to(root):
-        raise ExpertiseReceiptError("resolved receipt path escapes its private root")
-    return path
+    try:
+        return checked_path(path, root, anchor=Path(root).absolute().parents[2])
+    except PrivatePathError as error:
+        raise ExpertiseReceiptError("receipt path escapes or redirects its private root") from error
 
 
 def _assert_allowlisted(value: Any, path: str = "receipt") -> None:
@@ -99,6 +89,7 @@ def _write_once(path: Path, value: dict, root: Path) -> str:
 
 def _secret(flow_home: Path) -> bytes:
     root = Path(flow_home) / "cache" / "expertise"
+    root = _contained(root, root)
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(root, 0o700)
     path = _contained(root / "receipt.key", root)
@@ -158,6 +149,7 @@ def safe_pre_receipt(outcome: dict, *, query_digest: str, created_at: str) -> di
 
 
 def write_pre(root: Path, flow_home: Path, outcome: dict, normalized_query: str) -> dict:
+    root = _contained(root, root)
     created_at = datetime.now(timezone.utc).isoformat()
     value = safe_pre_receipt(outcome, query_digest=query_hmac(flow_home, normalized_query), created_at=created_at)
     path = root / f"{outcome['request_id']}.pre.json"
@@ -166,6 +158,7 @@ def write_pre(root: Path, flow_home: Path, outcome: dict, normalized_query: str)
 
 
 def write_post(root: Path, value: dict, delivered_ids: list[str]) -> dict:
+    root = _contained(root, root)
     record = dict(value)
     record["created_at"] = datetime.now(timezone.utc).isoformat()
     validate_disposition_record(record, delivered_ids)
