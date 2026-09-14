@@ -6,6 +6,9 @@ version = 1
 flow_dir = ".flow"
 source_of_truth = ".flow"
 
+[expertise_advisory]
+enabled = true
+
 # Semantic agent capability intent is resolved once, after the framework and
 # user agent inventory is merged, then translated by each runtime adapter.
 [agent_capabilities.web_research]

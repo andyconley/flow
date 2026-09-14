@@ -190,6 +190,14 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
             "fix the TOML before syncing so capability exceptions cannot be ignored"
         )
 
+    advisory_override = user_manifest.get("expertise_advisory", {})
+    if not isinstance(advisory_override, dict) or set(advisory_override) - {"enabled"}:
+        raise ValueError("user expertise_advisory must contain only enabled = true|false")
+    if "enabled" in advisory_override:
+        if not isinstance(advisory_override["enabled"], bool):
+            raise ValueError("user expertise_advisory.enabled must be true or false")
+        manifest["expertise_advisory"] = {"enabled": advisory_override["enabled"]}
+
     def merge_named(framework_list: list, user_list: list) -> list:
         if not user_list:
             return framework_list
@@ -460,6 +468,7 @@ def desired_claude_outputs(
         target = root / runtime["skill_dir"] / command["name"] / "SKILL.md"
         command_with_body = dict(command)
         command_with_body["_body"] = source_path.read_text()
+        command_with_body["_expertise_advisory_enabled"] = manifest.get("expertise_advisory", {}).get("enabled", True)
         content = render_skill_from_command(command_with_body, skill_defaults, routing_hints)
         outputs[target] = content
         managed_entries.append(
@@ -561,6 +570,7 @@ def desired_codex_outputs(
             source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
             routing_hints,
+            advisory_enabled=manifest.get("expertise_advisory", {}).get("enabled", True),
         )
         managed_entries.append(
             {

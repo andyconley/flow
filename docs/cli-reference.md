@@ -1312,11 +1312,49 @@ private receipt stores only an HMAC of normalized query text. Fact definitions
 are limited to 256 KiB, 256 facts, and 32 patterns per present/absent clause;
 oversized or malformed inputs fail closed before provider use.
 
+### `flow expertise brief`
+
+Prepare a role-isolated advisory envelope for Flow coordinator dispatch. Supply
+the bounded task summary on stdin with `--task-stdin` and select one of the six
+query-supported `--role` values. The command uses the fixed 0.70 similarity
+threshold, writes the private pre-agent receipt, and returns complete capped
+entries only when admission succeeds. Non-admitted states return no advisory
+entries; the composed role continues. No query file is created.
+The envelope limits delivery to three entries and 16 KiB. If its stage, role,
+ordered IDs, cap, or complete-entry checks fail, the coordinator receives no
+advisory entries and continues the composed role.
+
+This default advisory path is validated for personal use on the active Mac.
+The frozen v2 evaluation remains STOP; five-environment qualification is
+deferred. Generated coordinators cover `flow-define`, `flow-solution`,
+`flow-plan`, `flow-implement`, `flow-review`, `flow-archive`,
+`flow-init-project`, `flow-scout`, and `flow-resume` when they dispatch one of
+the six supported roles. Direct agent calls do not automatically retrieve.
+
 ### `flow expertise disposition`
 
-Validate a structured handback supplied by `--handback <path>` against the
+Validate a structured handback supplied by `--handback <path>` or bounded
+`--handback-stdin` against the
 immutable pre-agent receipt named by `--request-id`. A valid result accounts
 for every delivered entry once and writes a linked private post-agent receipt.
+
+### `flow expertise feedback`
+
+Record a local, redacted observation linked to one query with `--request-id`,
+`--lane`, and `--category useful|inapplicable|miss|failure`. Useful or
+inapplicable feedback also requires `--entry-id` from that query's delivered
+entries. The private record stores IDs and the category, never task text or
+entry prose; it does not change the released admission threshold. If preparation
+failed before a pre receipt exists, use `--role <role> --category failure`
+without a request ID.
+
+To disable generated advisory injection while retaining composed expertise,
+set `[expertise_advisory] enabled = false` in `~/.flow/user/flow.toml`, then run
+`flow sync claude --user` and `flow sync codex --user`. Set it back to `true`
+and resync to restore the personal advisory path.
+After either change, run both `flow sync ... --user --check` commands, then
+`flow runtime smoke --target all` and `flow doctor`. A release also requires
+live Claude and Codex checks of the installed behavior and linked receipts.
 
 ### `flow expertise receipts inspect`
 

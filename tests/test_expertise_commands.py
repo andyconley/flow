@@ -552,7 +552,7 @@ class RuntimeCommandTests(unittest.TestCase):
             parser.parse_args(["expertise", "--help"])
         self.assertEqual(exited.exception.code, 0)
         help_text = output.getvalue()
-        for action in ("model", "index", "query", "disposition", "receipts", "campaign"):
+        for action in ("model", "index", "query", "brief", "disposition", "feedback", "receipts", "campaign"):
             self.assertIn(action, help_text)
 
     def test_dispatch_routes_model_action_to_the_runtime_command(self):
@@ -596,6 +596,62 @@ class RuntimeCommandTests(unittest.TestCase):
         self.assertNotIn(raw_query, rendered)
         self.assertEqual(json.loads(rendered)["pre_receipt"], {"digest": "receipt-v1"})
 
+    def test_brief_reads_bounded_stdin_and_rejects_cross_role_result(self):
+        outcome = {
+            "schema_version": 1, "request_id": "request-1", "role": "support-lead",
+            "state": "no_match", "cause": "no_eligible_entries",
+            "eligibility": {"schema_version": 1, "state": "empty", "role": "support-lead", "identity": "eligible", "eligible_ids": [], "excluded": []},
+            "ranking": {"schema_version": 1, "state": "not_run", "reason": "not_run_empty_eligibility", "provider_calls": 0, "identity": "ranked", "candidates": []},
+            "admission": {"schema_version": 1, "state": "not_run", "strategy": "not-run", "admitted_ids": [], "candidate_decisions": [], "identity": "admitted"},
+            "delivery": {"schema_version": 1, "state": "not_run", "reason": "not_run", "delivered_ids": [], "withheld_ids": [], "actual_bytes": 0,
+                         "limits": {"delivery_entry_cap": 3, "delivery_byte_cap": 16384}, "identity": "delivered", "entries": []},
+            "pre_receipt": {"digest": "receipt-v1"},
+        }
+        args = SimpleNamespace(role="support-lead", json=True)
+        stdin = io.TextIOWrapper(io.BytesIO(b"private task"), encoding="utf-8")
+        with patch.object(commands.sys, "stdin", stdin), patch.object(commands, "_query_result", return_value=outcome) as query, contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(commands.brief_command(args), 0, output.getvalue())
+        self.assertEqual(query.call_args.kwargs["task_override"], "private task")
+        brief = json.loads(output.getvalue())
+        self.assertEqual(brief["state"], "no_match")
+        self.assertEqual(brief["advisory_entries"], [])
+        self.assertNotIn("private task", output.getvalue())
+        wrong = dict(outcome, role="architect")
+        stdin = io.TextIOWrapper(io.BytesIO(b"private task"), encoding="utf-8")
+        with patch.object(commands.sys, "stdin", stdin), patch.object(commands, "_query_result", return_value=wrong), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(commands.brief_command(args), 2)
+        self.assertEqual(json.loads(output.getvalue())["advisory_entries"], [])
+        oversized = io.TextIOWrapper(io.BytesIO(b"x" * 32769), encoding="utf-8")
+        with patch.object(commands.sys, "stdin", oversized), patch.object(commands, "_query_result") as query, contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(commands.brief_command(args), 2)
+        query.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())["advisory_entries"], [])
+        empty = io.TextIOWrapper(io.BytesIO(b""), encoding="utf-8")
+        with patch.object(commands.sys, "stdin", empty), patch.object(commands, "_query_result") as query, contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(commands.brief_command(args), 2)
+        query.assert_not_called()
+        self.assertIn("non-empty", json.loads(output.getvalue())["reason"])
+
+    def test_brief_rejects_cross_role_or_incomplete_delivered_entry(self):
+        entry = {"@id": "entry-a", "name": "Example", "abstract": "A useful principle",
+                 "flow:trigger": "When triaging", "flow:requiredBehavior": "Check scope",
+                 "flow:failureMode": "Wrong scope", "role": "architect",
+                 "source_layer": "framework", "method_layer": "method", "lifecycle_state": "current",
+                 "owner": "flow", "entry_digest": "digest-a"}
+        outcome = {"schema_version": 1, "eligibility": {}, "ranking": {}, "admission": {},
+                   "role": "support-lead", "state": "admitted", "request_id": "request-1",
+                   "cause": "delivered", "pre_receipt": {"digest": "receipt-v1"},
+                   "delivery": {"state": "delivered", "identity": "delivery-v1",
+                                "delivered_ids": ["entry-a"], "entries": [entry],
+                                "limits": {"delivery_entry_cap": 3, "delivery_byte_cap": 16384}}}
+        args = SimpleNamespace(role="support-lead", json=True)
+        for candidate in (entry, dict(entry, role="support-lead", abstract="")):
+            outcome["delivery"]["entries"] = [candidate]
+            stdin = io.TextIOWrapper(io.BytesIO(b"private task"), encoding="utf-8")
+            with patch.object(commands.sys, "stdin", stdin), patch.object(commands, "_query_result", return_value=outcome), patch.object(commands, "validate_outcome"), contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(commands.brief_command(args), 2)
+            self.assertEqual(json.loads(output.getvalue())["advisory_entries"], [])
+
     def test_disposition_requires_linked_pre_receipt_and_writes_only_validated_handback(self):
         root = self.root / "receipts"
         root.mkdir()
@@ -616,6 +672,60 @@ class RuntimeCommandTests(unittest.TestCase):
         post = json.loads((root / f"{request_id}.post.json").read_text())
         self.assertIn("created_at", post)
         self.assertNotIn("query", json.dumps(post))
+
+    def test_disposition_accepts_bounded_stdin_without_a_handback_file(self):
+        root = self.root / "receipts"
+        root.mkdir()
+        request_id = "request-stdin"
+        pre = {"delivery": {"delivered_ids": [], "identity": "delivery-v1"}}
+        pre_bytes = json.dumps(pre).encode()
+        (root / f"{request_id}.pre.json").write_bytes(pre_bytes)
+        handback = {"schema_version": 1, "state": "observed", "request_id": request_id,
+                    "pre_receipt_digest": hashlib.sha256(pre_bytes).hexdigest(),
+                    "identity": "delivery-v1", "entries": []}
+        stdin = io.TextIOWrapper(io.BytesIO(json.dumps(handback).encode()), encoding="utf-8")
+        args = SimpleNamespace(request_id=request_id, handback=None, handback_stdin=True, json=True)
+        with patch.object(commands.sys, "stdin", stdin), patch.object(commands, "FLOW_HOME", self.root / "flow-home"), patch.object(commands, "receipt_root", return_value=root), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(commands.disposition_command(args), 0, output.getvalue())
+        self.assertEqual(json.loads(output.getvalue())["state"], "complete")
+
+    def test_feedback_links_delivered_entry_without_retaining_task_text(self):
+        root = self.root / "receipts"
+        root.mkdir()
+        request_id = "request-feedback-1"
+        (root / f"{request_id}.pre.json").write_text(json.dumps({
+            "kind": "pre-agent", "request_id": request_id, "role": "support-lead",
+            "delivery": {"delivered_ids": ["entry-a"]},
+        }))
+        args = SimpleNamespace(request_id=request_id, lane="review", category="inapplicable",
+                               entry_id="entry-a", role=None, json=True)
+        with (patch.object(commands, "repo_root", return_value=self.root),
+              patch.object(commands, "FLOW_HOME", self.root / "flow-home"),
+              patch.object(commands, "receipt_root", return_value=root),
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(commands.feedback_command(args), 0)
+            args.entry_id = "not-delivered"
+            self.assertEqual(commands.feedback_command(args), 2)
+        records = list(root.glob("feedback-*.json"))
+        self.assertEqual(len(records), 1)
+        record = json.loads(records[0].read_text())
+        self.assertEqual(record["category"], "inapplicable")
+        self.assertEqual(record["role"], "support-lead")
+        self.assertNotIn("query", record)
+        self.assertNotIn("task", record)
+
+    def test_feedback_can_record_pre_receipt_failure_without_query_text(self):
+        root = self.root / "receipts"
+        args = SimpleNamespace(request_id=None, role="support-lead", lane="plan",
+                               category="failure", entry_id=None, json=True)
+        with (patch.object(commands, "repo_root", return_value=self.root),
+              patch.object(commands, "FLOW_HOME", self.root / "flow-home"),
+              patch.object(commands, "receipt_root", return_value=root),
+              contextlib.redirect_stdout(io.StringIO())):
+            self.assertEqual(commands.feedback_command(args), 0)
+        record = json.loads(next(root.glob("feedback-*.json")).read_text())
+        self.assertIsNone(record["request_id"])
+        self.assertEqual(record["category"], "failure")
 
 
 class AdmissionInputDomainTests(unittest.TestCase):

@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from collections import Counter, defaultdict
@@ -25,12 +26,14 @@ from expertise_model import (
     digest,
     normalized_task,
     task_identifiers,
+    validate_outcome,
 )
 from expertise import canonical_snapshot
 from expertise_admission import SimilarityStrategy, TriggerRuleStrategy
 from expertise_projection import inspect as inspect_projection, projection_identity, publish as publish_projection
 from expertise_receipts import (
-    inspect_receipts, purge as purge_receipts, receipt_root, write_post, write_pre,
+    inspect_receipts, purge as purge_receipts, receipt_root, write_feedback,
+    write_post, write_pre,
 )
 from expertise_runtime import (
     ExpertiseRuntimeError, data_root as expertise_data_root, install as install_runtime,
@@ -149,10 +152,29 @@ def register(sub) -> None:
     query.add_argument("--user-dir", help=argparse.SUPPRESS)
     query.add_argument("--json", action="store_true")
 
+    brief = actions.add_parser("brief", help="prepare one bounded advisory brief for a Flow role dispatch")
+    brief.add_argument("--role", required=True, choices=ROLES)
+    brief.add_argument("--task-stdin", action="store_true", required=True,
+                       help="read at most 32768 UTF-8 task bytes from stdin without a query file")
+    brief.add_argument("--json", action="store_true")
+
     disposition = actions.add_parser("disposition", help="validate a coordinator handback and write its linked receipt")
     disposition.add_argument("--request-id", required=True)
-    disposition.add_argument("--handback", required=True)
+    handback_input = disposition.add_mutually_exclusive_group(required=True)
+    handback_input.add_argument("--handback")
+    handback_input.add_argument("--handback-stdin", action="store_true",
+                                help="read at most 32768 UTF-8 JSON bytes from stdin without a handback file")
     disposition.add_argument("--json", action="store_true")
+
+    feedback = actions.add_parser("feedback", help="record a redacted observation about one local query")
+    feedback.add_argument("--request-id", help="linked pre-agent request; omit only when preparation failed before a receipt")
+    feedback.add_argument("--role", choices=ROLES, help="required for a failure without a request ID")
+    feedback.add_argument("--lane", required=True, choices=(
+        "define", "solution", "plan", "implement", "review", "archive", "init-project", "scout", "resume",
+    ))
+    feedback.add_argument("--category", required=True, choices=("useful", "inapplicable", "miss", "failure"))
+    feedback.add_argument("--entry-id")
+    feedback.add_argument("--json", action="store_true")
 
     receipt_parser = actions.add_parser("receipts", help="inspect or purge private retrieval receipts")
     receipt_actions = receipt_parser.add_subparsers(dest="receipts_action", required=True)
@@ -1068,55 +1090,118 @@ def _load_rules() -> tuple[dict[str, dict], dict]:
     return rules, {"revision": document.get("revision"), "corpus_digest": document.get("corpus_digest")}
 
 
-def query_command(args) -> int:
-    try:
+def _query_result(args, task_override: str | None = None) -> dict:
+    if task_override is None:
         query_path = Path(args.query_file).expanduser().resolve()
         if query_path.stat().st_size > 32768:
             raise ExpertiseCommandError("query file exceeds 32768 UTF-8 bytes")
         task = query_path.read_text()
-        framework, user = _runtime_paths(args)
-        readiness = runtime_status(FLOW_HOME)
-        if readiness["state"] == "ready":
-            local_provider = load_provider(FLOW_HOME)
-        else:
-            model = _read_object(expertise_data_root() / "model-manifest.json", "model manifest")
+    else:
+        task = task_override
+    framework, user = _runtime_paths(args)
+    readiness = runtime_status(FLOW_HOME)
+    if readiness["state"] == "ready":
+        local_provider = load_provider(FLOW_HOME)
+    else:
+        model = _read_object(expertise_data_root() / "model-manifest.json", "model manifest")
 
-            class UnavailableProvider:
-                provider_revision = model.get("provider", {}).get("revision", "unavailable-provider")
-                model_artifact_digest = digest(model.get("model", {}))
-                runtime_revision = f"unavailable:{readiness.get('environment_id', 'unknown')}"
+        class UnavailableProvider:
+            provider_revision = model.get("provider", {}).get("revision", "unavailable-provider")
+            model_artifact_digest = digest(model.get("model", {}))
+            runtime_revision = f"unavailable:{readiness.get('environment_id', 'unknown')}"
 
-                def embed(self, texts):
-                    from expertise_ranker import ExpertiseProviderError
-                    raise ExpertiseProviderError(readiness.get("reason", "provider_missing"))
+            def embed(self, texts):
+                from expertise_ranker import ExpertiseProviderError
+                raise ExpertiseProviderError(readiness.get("reason", "provider_missing"))
 
-            local_provider = UnavailableProvider()
-        if args.strategy == "similarity":
-            strategy = SimilarityStrategy(args.threshold)
-            strategy_config = {"strategy": "similarity", "threshold": args.threshold}
-        else:
-            rules, rule_metadata = _load_rules()
-            strategy = TriggerRuleStrategy(rules)
-            strategy_config = {"strategy": "trigger-rules", **rule_metadata}
-        facts = load_fact_definitions(expertise_data_root() / "fact-definitions.json")
-        outcome = execute(
-            args.role, task, framework_dir=framework, user_dir=user, flow_home=FLOW_HOME,
-            provider=local_provider, strategy=strategy, strategy_config=strategy_config,
-            fact_definitions=facts,
-        )
-        root = receipt_root(repo_root(), FLOW_HOME)
-        receipt = write_pre(root, FLOW_HOME, outcome, normalized_task(task))
-        result = dict(outcome)
-        result["pre_receipt"] = {"digest": receipt["digest"]}
-        result["runtime"] = {key: readiness[key] for key in ("state", "reason", "remedy", "environment_id") if key in readiness}
-        return _emit(result, args.json, 0)
+        local_provider = UnavailableProvider()
+    if args.strategy == "similarity":
+        strategy = SimilarityStrategy(args.threshold)
+        strategy_config = {"strategy": "similarity", "threshold": args.threshold}
+    else:
+        rules, rule_metadata = _load_rules()
+        strategy = TriggerRuleStrategy(rules)
+        strategy_config = {"strategy": "trigger-rules", **rule_metadata}
+    facts = load_fact_definitions(expertise_data_root() / "fact-definitions.json")
+    outcome = execute(
+        args.role, task, framework_dir=framework, user_dir=user, flow_home=FLOW_HOME,
+        provider=local_provider, strategy=strategy, strategy_config=strategy_config,
+        fact_definitions=facts,
+    )
+    root = receipt_root(repo_root(), FLOW_HOME)
+    receipt = write_pre(root, FLOW_HOME, outcome, normalized_task(task))
+    result = dict(outcome)
+    result["pre_receipt"] = {"digest": receipt["digest"]}
+    result["runtime"] = {key: readiness[key] for key in ("state", "reason", "remedy", "environment_id") if key in readiness}
+    return result
+
+
+def query_command(args) -> int:
+    try:
+        return _emit(_query_result(args), args.json, 0)
     except (OSError, UnicodeError, ExpertiseCommandError, ValueError, TypeError) as error:
         return _emit({"state": "invalid_request", "reason": str(error)}, args.json, 2)
 
 
+def brief_command(args) -> int:
+    """Return a validated, role-isolated envelope for coordinator dispatch."""
+    try:
+        task_bytes = sys.stdin.buffer.read(32769)
+        if len(task_bytes) > 32768:
+            raise ExpertiseCommandError("advisory task exceeds 32768 UTF-8 bytes")
+        task = task_bytes.decode("utf-8")
+        if not task.strip():
+            raise ExpertiseCommandError("advisory task on stdin must be non-empty")
+        query_args = SimpleNamespace(
+            role=args.role, strategy="similarity", threshold=0.70,
+            framework_dir=None, user_dir=None,
+        )
+        outcome = _query_result(query_args, task_override=task)
+        validate_outcome({key: outcome[key] for key in (
+            "schema_version", "request_id", "role", "state", "cause",
+            "eligibility", "ranking", "admission", "delivery",
+        )})
+        if outcome["role"] != args.role:
+            raise ExpertiseCommandError("advisory outcome role does not match selected role")
+        delivery = outcome["delivery"]
+        admitted = outcome["state"] == "admitted" and delivery["state"] == "delivered"
+        if admitted:
+            required = (
+                "@id", "name", "abstract", "flow:trigger", "flow:requiredBehavior",
+                "flow:failureMode", "role", "source_layer", "method_layer",
+                "lifecycle_state", "owner", "entry_digest",
+            )
+            for entry in delivery["entries"]:
+                if not isinstance(entry, dict) or entry.get("role") != args.role:
+                    raise ExpertiseCommandError("advisory entry role does not match selected role")
+                if any(not entry.get(field) for field in required):
+                    raise ExpertiseCommandError("advisory entry is incomplete")
+        result = {
+            "schema_version": 1, "state": "admitted" if admitted else outcome["state"],
+            "role": args.role, "request_id": outcome["request_id"],
+            "pre_receipt_digest": outcome["pre_receipt"]["digest"],
+            "delivery_identity": delivery["identity"],
+            "entry_ids": delivery["delivered_ids"] if admitted else [],
+            "advisory_entries": delivery["entries"] if admitted else [],
+            "limits": delivery["limits"],
+            "reason": outcome["cause"] if admitted else delivery["reason"] if delivery["state"] in {"capped_failure", "invalid_envelope"} else outcome["cause"],
+        }
+        return _emit(result, args.json, 0)
+    except (OSError, UnicodeError, ExpertiseCommandError, ValueError, TypeError, KeyError) as error:
+        return _emit({"state": "invalid_request", "reason": str(error), "advisory_entries": []}, args.json, 2)
+
+
 def disposition_command(args) -> int:
     try:
-        handback = _read_object(Path(args.handback).expanduser().resolve(), "disposition handback")
+        if getattr(args, "handback_stdin", False):
+            raw = sys.stdin.buffer.read(32769)
+            if len(raw) > 32768:
+                raise ExpertiseCommandError("disposition handback exceeds 32768 UTF-8 bytes")
+            handback = json.loads(raw.decode("utf-8"))
+            if not isinstance(handback, dict):
+                raise ExpertiseCommandError("disposition handback must be a JSON object")
+        else:
+            handback = _read_object(Path(args.handback).expanduser().resolve(), "disposition handback")
         if handback.get("request_id") != args.request_id:
             raise ExpertiseCommandError("handback request_id does not match --request-id")
         root = receipt_root(repo_root(), FLOW_HOME)
@@ -1135,6 +1220,47 @@ def disposition_command(args) -> int:
             raise ExpertiseCommandError("handback delivery identity does not match the pre-agent receipt")
         result = write_post(root, handback, delivered_ids)
         return _emit({"state": "complete", "request_id": args.request_id, "post_receipt": {"digest": result["digest"]}}, args.json, 0)
+    except (OSError, json.JSONDecodeError, ExpertiseCommandError, ValueError, TypeError) as error:
+        return _emit({"state": "invalid_request", "reason": str(error)}, args.json, 2)
+
+
+def feedback_command(args) -> int:
+    try:
+        root = receipt_root(repo_root(), FLOW_HOME)
+        if args.request_id is None:
+            if args.category != "failure" or args.role not in ROLES or args.entry_id is not None:
+                raise ExpertiseCommandError("unlinked feedback requires a role and failure category without an entry ID")
+            role, pre_digest = args.role, None
+        else:
+            if not WORK_ID_RE.fullmatch(args.request_id):
+                raise ExpertiseCommandError("invalid feedback request ID")
+            pre_path = root / f"{args.request_id}.pre.json"
+            if not pre_path.is_file() or pre_path.is_symlink():
+                raise ExpertiseCommandError("linked pre-agent receipt is missing")
+            pre_bytes = pre_path.read_bytes()
+            pre = json.loads(pre_bytes)
+            role = pre.get("role")
+            if pre.get("kind") != "pre-agent" or pre.get("request_id") != args.request_id or role not in ROLES:
+                raise ExpertiseCommandError("linked pre-agent receipt is invalid")
+            if args.role is not None and args.role != role:
+                raise ExpertiseCommandError("feedback role does not match linked request")
+            delivered = pre.get("delivery", {}).get("delivered_ids")
+            if not isinstance(delivered, list):
+                raise ExpertiseCommandError("linked pre-agent receipt is invalid")
+            if args.category in {"useful", "inapplicable"} and args.entry_id not in delivered:
+                raise ExpertiseCommandError("feedback entry ID was not delivered in this request")
+            if args.entry_id is not None and args.entry_id not in delivered:
+                raise ExpertiseCommandError("feedback entry ID was not delivered in this request")
+            if args.category in {"miss", "failure"} and args.entry_id is not None:
+                raise ExpertiseCommandError("miss or failure feedback must not name a delivered entry")
+            pre_digest = _sha256_bytes(pre_bytes)
+        record = {
+            "schema_version": 1, "kind": "user-feedback", "request_id": args.request_id,
+            "pre_receipt_digest": pre_digest, "role": role,
+            "lane": args.lane, "category": args.category, "entry_id": args.entry_id,
+        }
+        result = write_feedback(root, record)
+        return _emit({"state": "recorded", "request_id": args.request_id, "feedback_digest": result["digest"]}, args.json, 0)
     except (OSError, json.JSONDecodeError, ExpertiseCommandError, ValueError, TypeError) as error:
         return _emit({"state": "invalid_request", "reason": str(error)}, args.json, 2)
 
@@ -2169,8 +2295,12 @@ def dispatch(args) -> int:
         return index_command(args)
     if args.expertise_action == "query":
         return query_command(args)
+    if args.expertise_action == "brief":
+        return brief_command(args)
     if args.expertise_action == "disposition":
         return disposition_command(args)
+    if args.expertise_action == "feedback":
+        return feedback_command(args)
     if args.expertise_action == "campaign":
         return campaign_command(args)
     return receipts_command(args)

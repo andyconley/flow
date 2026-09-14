@@ -167,6 +167,15 @@ def write_post(root: Path, value: dict, delivered_ids: list[str]) -> dict:
     return {"path": str(path), "digest": receipt_digest, "receipt": record}
 
 
+def write_feedback(root: Path, value: dict) -> dict:
+    """Persist one redacted user observation beside its linked query receipt."""
+    root = _contained(root, root)
+    record = dict(value, created_at=datetime.now(timezone.utc).isoformat())
+    path = root / f"feedback-{secrets.token_hex(16)}.json"
+    receipt_digest = _write_once(path, record, root)
+    return {"path": str(path), "digest": receipt_digest, "receipt": record}
+
+
 def inspect_receipts(root: Path) -> dict:
     root = _contained(root, root)
     if not root.exists():
