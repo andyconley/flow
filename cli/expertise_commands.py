@@ -75,6 +75,8 @@ REQUIRED_ENVIRONMENTS = {
 }
 CAMPAIGN_SOURCE_FILES = (
     "cli/expertise_admission.py",
+    "cli/expertise_campaign.py",
+    "cli/expertise_commands.py",
     "cli/expertise_model.py",
     "cli/expertise_projection.py",
     "cli/expertise_ranker.py",

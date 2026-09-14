@@ -226,9 +226,12 @@ def score_candidate(
     dispositions = dispositions or {}
     rows = [score_fixture(fixture, execute_fixture(fixture), dispositions.get(fixture["id"])) for fixture in manifest["fixtures"]]
     classes = Counter()
+    applicable_admitted = 0
     for row in rows:
         if row["passed"]:
             classes[row["primary_class"]] += 1
+        if row["primary_class"] == "applicable" and row["retrieval_pass"]:
+            applicable_admitted += 1
     hard_failures = []
     for row in rows:
         result = row["safe_result"]
@@ -258,8 +261,8 @@ def score_candidate(
         "survives_hard_rules": not hard_failures and complete,
         "hard_failures": hard_failures,
         "score": {
-            "applicable_admission_recall": classes["applicable"] / applicable_total if applicable_total else 0.0,
-            "applicable_passed": classes["applicable"],
+            "applicable_admission_recall": applicable_admitted / applicable_total if applicable_total else 0.0,
+            "applicable_passed": applicable_admitted,
             "applicable_total": applicable_total,
             "plausible_path_passed": classes["plausible-inapplicable"],
             "plausible_total": plausible_total,

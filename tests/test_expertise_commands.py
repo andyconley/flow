@@ -420,6 +420,21 @@ class ExpertiseCommandTests(unittest.TestCase):
         self.assertEqual(receipt["source_sha256"], source_hashes)
         self.assertEqual(receipt["selected_configuration"]["candidate_id"], "similarity:0.70")
 
+    def test_campaign_source_identity_tracks_scorer_and_finalizer_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative in commands.CAMPAIGN_SOURCE_FILES:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"original")
+            baseline = commands._campaign_source_sha256(root)
+            for relative in ("cli/expertise_campaign.py", "cli/expertise_commands.py"):
+                with self.subTest(relative=relative):
+                    path = root / relative
+                    path.write_bytes(b"changed")
+                    self.assertNotEqual(commands._campaign_source_sha256(root), baseline)
+                    path.write_bytes(b"original")
+
     def test_evaluation_v2_freeze_requires_resolved_independence_review(self):
         manifest = fixture_manifest("evaluation-v2", self.corpus["entry_ids"])
         selected_payload = {"state": "selected", "candidate_id": "similarity:0.70"}

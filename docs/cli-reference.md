@@ -1339,8 +1339,8 @@ contract, cap, rule, and prior-evaluation identities.
 An `evaluation-v2` freeze additionally requires `--independence-review <path>`.
 That resolved, blinded review must bind the exact candidate and both reference
 splits. The freeze also verifies the selected calibration configuration and
-pins the source hashes of the admission, model, projection, ranker, and service
-modules.
+pins the source hashes of the admission, campaign scorer, campaign commands,
+model, projection, ranker, and service modules.
 
 ### `flow expertise campaign verify-freeze`
 

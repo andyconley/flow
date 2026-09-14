@@ -251,6 +251,34 @@ class CampaignScoringTests(unittest.TestCase):
         )
         self.assertFalse(score["complete"])
         self.assertFalse(score["survives_hard_rules"])
+        self.assertEqual(score["score"]["applicable_admission_recall"], 1.0)
+
+    def test_selector_prioritizes_admission_recall_over_behavior_disposition(self):
+        import copy
+        first = fixture("applicable")
+        second = copy.deepcopy(first)
+        second["id"] = "fixture-applicable-second"
+        manifest = {"split": "calibration-v1", "fixtures": [first, second]}
+        evidence = {}
+        for item in (first, second):
+            record = two_entry_evidence()
+            record["evaluator_record"]["fixture_id"] = item["id"]
+            evidence[item["id"]] = record
+        trigger_evidence = copy.deepcopy(evidence)
+        trigger_evidence[second["id"]]["behavior_evaluations"][0]["behavior_pass"] = False
+        trigger = campaign.score_candidate(
+            manifest, "trigger-rules", lambda _fixture: second_delivery(), trigger_evidence,
+        )
+        similarity = campaign.score_candidate(
+            manifest, "similarity:0.7",
+            lambda item: second_delivery() if item["id"] == first["id"] else outcome(admitted=False),
+            evidence,
+        )
+        self.assertTrue(trigger["survives_hard_rules"])
+        self.assertTrue(similarity["survives_hard_rules"])
+        self.assertEqual(trigger["score"]["applicable_admission_recall"], 1.0)
+        self.assertEqual(similarity["score"]["applicable_admission_recall"], 0.5)
+        self.assertEqual(campaign.select_candidate([similarity, trigger])["winner"], "trigger-rules")
 
     def test_integrity_invalid_graph_passes_only_as_invalid_corpus_before_ranking(self):
         row = campaign.score_fixture(fixture("integrity"), outcome(admitted=False, invalid_corpus=True))
