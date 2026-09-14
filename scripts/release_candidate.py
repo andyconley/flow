@@ -163,6 +163,16 @@ def _doctor_check(home: Path) -> Result:
         for item in payload.get("diagnostics", [])
         if item.get("severity") == "warning"
     }
+    model_warnings = [
+        item for item in payload.get("diagnostics", [])
+        if item.get("id") == "expertise.model" and item.get("severity") == "warning"
+    ]
+    if len(model_warnings) == 1 and model_warnings[0].get("category") in {
+        "model_missing", "unsupported_runtime",
+    }:
+        # Fresh release homes have no separately installed local model. The
+        # runner's Python build may also be outside the optional model matrix.
+        observed_warnings.discard("expertise.model")
     if (
         payload.get("ok") is True
         and payload.get("errors") == 0

@@ -1076,8 +1076,10 @@ fresh install and prior-version upgrade, machine and user setup, both runtime
 sync checks, `flow doctor --check`, static runtime smoke, and a representative
 CLI invocation. Evidence and per-check logs are retained as workflow artifacts.
 `doctor --check --json` must report `ok: true` and zero errors. The isolated
-runner permits only the named live-client manual-check warnings and empty local
-telemetry warnings; every other doctor warning blocks publication. Static
+runner permits the named live-client manual-check warnings, empty local
+telemetry warnings, and an optional expertise model that is missing or
+unsupported on that runner; a corrupt model or any other doctor warning still
+blocks publication. Static
 runtime smoke remains a separate required check.
 
 After publication, a read-only job verifies the tag and changelog-only release

@@ -252,6 +252,19 @@ class CandidateRunnerIntegrationTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("accepted by the release contract", output)
 
+        allowed["diagnostics"].append({
+            "id": "expertise.model", "severity": "warning", "category": "unsupported_runtime",
+        })
+        with unittest.mock.patch.object(release_candidate, "_flow", return_value=(1, json.dumps(allowed))):
+            code, _output = release_candidate._doctor_check(Path("/isolated"))
+        self.assertEqual(code, 0)
+
+        allowed["diagnostics"][-1]["category"] = "corrupt_artifact"
+        with unittest.mock.patch.object(release_candidate, "_flow", return_value=(1, json.dumps(allowed))):
+            code, _output = release_candidate._doctor_check(Path("/isolated"))
+        self.assertEqual(code, 1)
+        allowed["diagnostics"].pop()
+
         allowed["diagnostics"].append({"id": "machine.config", "severity": "warning"})
         with unittest.mock.patch.object(release_candidate, "_flow", return_value=(1, json.dumps(allowed))):
             code, _output = release_candidate._doctor_check(Path("/isolated"))
