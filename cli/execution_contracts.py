@@ -129,3 +129,38 @@ def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
         raise ContractError("receipt charter source link mismatch")
     if receipt["status"] not in {"completed", "failed", "denied", "unknown"} or not isinstance(receipt["actions"], list):
         raise ContractError("receipt status or actions invalid")
+
+
+RECOVERY_DISPOSITIONS = frozenset({"resolved_completed", "resolved_not_dispatched", "still_unknown"})
+
+
+def validate_recovery_evidence(evidence: list[dict[str, Any]]) -> None:
+    """Validate immutable evidence references used by an operator resolution.
+
+    The ledger deliberately retains references and digests rather than mutable
+    evidence bytes. Callers that accept filesystem paths must independently
+    verify the path and its digest before recording this contract.
+    """
+    if not isinstance(evidence, list) or not evidence:
+        raise ContractError("recovery resolution requires immutable evidence")
+    seen: set[tuple[str, str]] = set()
+    for item in evidence:
+        if not isinstance(item, dict) or set(item) != {"kind", "path", "sha256"}:
+            raise ContractError("recovery evidence is invalid")
+        if not isinstance(item["kind"], str) or not item["kind"].strip() or not isinstance(item["path"], str) or not item["path"].strip():
+            raise ContractError("recovery evidence is invalid")
+        value = item["sha256"]
+        if not isinstance(value, str) or len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+            raise ContractError("recovery evidence digest is invalid")
+        key = (item["path"], value)
+        if key in seen:
+            raise ContractError("recovery evidence is duplicated")
+        seen.add(key)
+
+
+def validate_recovery_resolution(disposition: str, explanation: str, evidence: list[dict[str, Any]]) -> None:
+    if disposition not in RECOVERY_DISPOSITIONS:
+        raise ContractError("recovery disposition is invalid")
+    if not isinstance(explanation, str) or not explanation.strip() or len(explanation.encode("utf-8")) > 4096:
+        raise ContractError("recovery explanation is invalid")
+    validate_recovery_evidence(evidence)

@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import sys
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +43,7 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
-async def _run(envelope: dict[str, Any]) -> None:
+async def _run(envelope: dict[str, Any], resume: dict[str, Any] | None = None) -> None:
     # Imports are intentionally child-only so Flow's normal CLI has no MAF dep.
     from agent_framework import Executor, FileCheckpointStorage, Message, WorkflowContext, handler
     from agent_framework_orchestrations import (
@@ -150,23 +151,35 @@ async def _run(envelope: dict[str, Any]) -> None:
         participants=[GuardedSpecialist()], manager=OneCallManager(), enable_plan_review=False,
         checkpoint_storage=checkpoint_storage, name="flow-supervised-local-worker"
     ).build()
-    result = await workflow.run("Execute the one Flow-authorized bounded task.")
+    if resume is None:
+        result = await workflow.run("Execute the one Flow-authorized bounded task.")
+    else:
+        if (resume.get("schema_version") != 2 or resume.get("attempt_id") != attempt_id
+                or not isinstance(resume.get("checkpoint_id"), str)
+                or resume.get("runtime_version") != version("agent-framework-core")):
+            raise RuntimeError("invalid Flow resume identity")
+        result = await workflow.run(checkpoint_id=resume["checkpoint_id"], checkpoint_storage=checkpoint_storage)
     outputs = result.get_outputs()
     summary = next((str(getattr(output, "text", output)) for output in reversed(outputs)), "MAF workflow completed")
     checkpoint_id = None
     if checkpoint_storage is not None:
         checkpoints = await checkpoint_storage.list_checkpoints(workflow_name=workflow.name)
-        if checkpoints:
-            checkpoint_id = checkpoints[0].checkpoint_id
-    _write({"protocol_version": PROTOCOL_VERSION, "type": "workflow_finished", "attempt_id": attempt_id, "checkpoint_id": checkpoint_id, "summary": summary})
+        # The lineage root is the stable barrier before the guarded specialist
+        # request. Restoring a later terminal checkpoint would never re-propose
+        # the action, so Flow could not replay its committed result to MAF.
+        roots = [item for item in checkpoints if item.previous_checkpoint_id is None]
+        if len(roots) != 1:
+            raise RuntimeError("MAF pre-action checkpoint barrier is absent or ambiguous")
+        checkpoint_id = roots[0].checkpoint_id
+    _write({"protocol_version": PROTOCOL_VERSION, "type": "workflow_finished", "attempt_id": attempt_id, "checkpoint_id": checkpoint_id, "runtime_version": version("agent-framework-core"), "summary": summary})
 
 
 def main() -> int:
     try:
         start = _read()
-        if start.get("type") != "start" or not isinstance(start.get("envelope"), dict):
-            raise RuntimeError("first parent message must be start with an envelope")
-        asyncio.run(_run(start["envelope"]))
+        if start.get("type") not in {"start", "resume"} or not isinstance(start.get("envelope"), dict):
+            raise RuntimeError("first parent message must be start or resume with an envelope")
+        asyncio.run(_run(start["envelope"], start.get("resume") if start["type"] == "resume" else None))
         return 0
     except Exception as exc:
         _write({"protocol_version": PROTOCOL_VERSION, "type": "error", "message": str(exc)})

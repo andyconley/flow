@@ -52,7 +52,7 @@ from runstate import (  # noqa: E402
     cmd_transition as run_transition_command,
     cmd_verify as run_verify_command,
 )
-from execution_gateway import execute_local  # noqa: E402
+from execution_gateway import execute_local, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -526,6 +526,26 @@ def main() -> int:
     run_execute_parser.add_argument("--task-file", required=True, help="task artifact within this run")
     run_execute_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
 
+    run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
+    run_inspect_parser.add_argument("work_id")
+    run_inspect_parser.add_argument("attempt_id")
+    run_inspect_parser.add_argument("--json", action="store_true")
+
+    run_resume_parser = run_sub.add_parser("resume-execution", help="fence and safely reopen one execution attempt")
+    run_resume_parser.add_argument("work_id")
+    run_resume_parser.add_argument("attempt_id")
+    run_resume_parser.add_argument("--json", action="store_true")
+
+    run_resolve_parser = run_sub.add_parser("resolve-execution", help="append an evidence-backed operator resolution")
+    run_resolve_parser.add_argument("work_id")
+    run_resolve_parser.add_argument("attempt_id")
+    run_resolve_parser.add_argument("action_id")
+    run_resolve_parser.add_argument("--actor", required=True)
+    run_resolve_parser.add_argument("--disposition", required=True, choices=("resolved_completed", "resolved_not_dispatched", "still_unknown"))
+    run_resolve_parser.add_argument("--explanation", required=True)
+    run_resolve_parser.add_argument("--evidence-file", required=True)
+    run_resolve_parser.add_argument("--json", action="store_true")
+
     runtime_parser = sub.add_parser(
         "runtime",
         help="inspect generated runtime adapter behavior",
@@ -842,6 +862,28 @@ def main() -> int:
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "inspect-execution":
+        import json
+        try:
+            result = inspect_attempt(args.work_id, args.attempt_id)
+        except (ContractError, FileNotFoundError, ValueError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"inspection refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True, indent=2))
+        return 0
+    if args.command == "run" and args.run_target in {"resume-execution", "resolve-execution"}:
+        import json
+        try:
+            if args.run_target == "resume-execution":
+                result = resume_local(args.work_id, args.attempt_id)
+            else:
+                result = resolve_attempt(args.work_id, args.attempt_id, args.action_id, args.actor,
+                                         args.disposition, args.explanation, args.evidence_file)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"execution recovery refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True, indent=2))
+        return 0 if result.get("status") in {"replayed", "repaired", "read_only"} or args.run_target == "resolve-execution" else 1
     if args.command == "runtime" and args.runtime_target == "smoke":
         return runtime_smoke_command(args)
     if args.command == "model" and args.model_target == "context":

@@ -100,6 +100,7 @@ def run_maf(
     *,
     timeout_s: float = 120,
     python_path: str | None = None,
+    resume: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one guarded MAF turn and return its terminal protocol record.
 
@@ -134,7 +135,10 @@ def run_maf(
     deadline = time.monotonic() + timeout_s
     pending = bytearray()
     try:
-        process.stdin.write(_json_line({"protocol_version": PROTOCOL_VERSION, "type": "start", "envelope": envelope}))
+        if resume is not None:
+            if resume.get("schema_version") != 2 or not isinstance(resume.get("checkpoint_id"), str):
+                raise MafProtocolError("invalid Flow resume message")
+        process.stdin.write(_json_line({"protocol_version": PROTOCOL_VERSION, "type": "resume" if resume else "start", "envelope": envelope, "resume": resume}))
         process.stdin.flush()
         proposals = 0
         while True:

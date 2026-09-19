@@ -129,21 +129,25 @@ def execute_local(work_id: str, assignment_id: str, task_file: str, *, root: Pat
 
     def on_propose(action: dict[str, Any]) -> dict[str, Any]:
         validate_action(envelope, action)
-        decision = ledger.decide(envelope, action)
+        decision = ledger.decide(envelope, action, generation=1)
         if not decision["allowed"]:
             return {"status": "denied", "reason": decision["reason"], "action_id": action["action_id"]}
-        if not ledger.consume_grant(action["action_id"], decision["grant_id"]):
+        if not ledger.consume_grant(action["action_id"], decision["grant_id"], generation=1):
             current = next((item for item in ledger.snapshot(aid)["actions"] if item["action_id"] == action["action_id"]), None)
             reason = current["reason"] if current and current["reason"] == "grant_expired" else "grant_reused"
             return {"status": "denied", "reason": reason, "action_id": action["action_id"]}
-        try:
-            result = adapter(envelope)
-            validate_result(envelope, result)
-            ledger.complete(action["action_id"], result)
-            return {"status": "completed", "action_id": action["action_id"], "output": result["output"]}
-        except Exception as exc:
-            ledger.mark_unknown(action["action_id"], "adapter_outcome_uncertain")
-            raise RuntimeError(f"local adapter outcome uncertain: {exc}") from exc
+        with ledger.send_lock():
+            ledger.assert_owner(aid, 1)
+            try:
+                ledger.observe_send(action["action_id"], 1)
+                result = adapter(envelope)
+                validate_result(envelope, result)
+                ledger.observe_response(action["action_id"], result, 1)
+                ledger.complete(action["action_id"], result, generation=1)
+                return {"status": "completed", "action_id": action["action_id"], "output": result["output"]}
+            except Exception as exc:
+                ledger.mark_unknown(action["action_id"], "adapter_outcome_uncertain", generation=1)
+                raise RuntimeError(f"local adapter outcome uncertain: {exc}") from exc
 
     try:
         outcome = supervisor(envelope, on_propose, python_path=python_path)
@@ -159,6 +163,13 @@ def execute_local(work_id: str, assignment_id: str, task_file: str, *, root: Pat
             if not checkpoint_path.is_file() or checkpoint_path.is_symlink():
                 raise ContractError("supervisor checkpoint is absent")
             validated_checkpoint_id = checkpoint_name
+            runtime_version = outcome.get("runtime_version")
+            if not isinstance(runtime_version, str) or not runtime_version:
+                raise ContractError("supervisor runtime version is absent")
+            ledger.assert_owner(aid, 1)
+            high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+            ledger.bind_checkpoint(aid, checkpoint_name, envelope_digest(envelope), high_water,
+                                   1, runtime_version, str(checkpoint_path), generation=1)
     except Exception as exc:
         failure = str(exc)
     snapshot = ledger.snapshot(aid)
@@ -182,6 +193,203 @@ def execute_local(work_id: str, assignment_id: str, task_file: str, *, root: Pat
                "status": terminal, "reason": reason,
                "checkpoint_id": validated_checkpoint_id, "actions": actions, "created_at": utc_now()}
     validate_receipt(envelope, receipt)
-    write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
-    ledger.finish_attempt(aid, terminal, receipt["reason"], str(receipt_path))
+    with ledger.send_lock():
+        ledger.assert_owner(aid, 1)
+        write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+        ledger.finish_attempt(aid, terminal, receipt["reason"], str(receipt_path), generation=1)
     return {"attempt_id": aid, "status": terminal, "receipt_path": str(receipt_path), "reason": receipt["reason"]}
+
+
+def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Read the original Flow evidence without starting a coordinator or adapter."""
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    execution_dir = run_dir / "execution"
+    ledger_path = execution_dir / "ledger.sqlite"
+    if not ledger_path.is_file() or not attempt_id or any(c not in "0123456789abcdef" for c in attempt_id):
+        raise ContractError("execution attempt is absent or invalid")
+    ledger = ExecutionLedger(ledger_path, read_only=True)
+    snapshot = ledger.snapshot(attempt_id)
+    if snapshot["work_id"] != work_id:
+        raise ContractError("attempt belongs to a different work item")
+    envelope = snapshot["envelope"]
+    attempt_dir = execution_dir / attempt_id
+    if not attempt_dir.is_dir() or attempt_dir.is_symlink():
+        raise ContractError("attempt evidence directory is absent")
+    sources = {}
+    for name, expected in (("manifest.snapshot.json", envelope["manifest_digest"]),
+                           ("requirements.snapshot.md", envelope["charter_sources"]["requirements"]["sha256"]),
+                           ("acceptance.snapshot.md", envelope["charter_sources"]["acceptance"]["sha256"])):
+        path = attempt_dir / name
+        sources[name] = {"present": path.is_file() and not path.is_symlink(),
+                         "matches": path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == expected}
+    receipt_path = attempt_dir / "receipt.json"
+    receipt = None
+    if receipt_path.is_file() and not receipt_path.is_symlink():
+        try:
+            receipt = json.loads(receipt_path.read_text())
+            validate_receipt(envelope, receipt)
+        except (ValueError, OSError) as exc:
+            raise ContractError(f"receipt is invalid: {exc}") from exc
+    missing_evidence = [name for name, state in sources.items() if not state["matches"]]
+    for resolution in snapshot.get("resolutions", []):
+        for item in resolution["evidence"]:
+            raw_path = project_root / item["path"]
+            path = raw_path.resolve()
+            if raw_path.is_symlink() or not _inside(path, attempt_dir) or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
+                missing_evidence.append(item["path"])
+    return {"snapshot": snapshot, "sources": sources, "receipt": receipt,
+            "missing_evidence": missing_evidence}
+
+
+def resume_local(work_id: str, attempt_id: str, *, root: Path | None = None,
+                 supervisor: Callable[..., dict[str, Any]] | None = None,
+                 python_path: str | None = None) -> dict[str, Any]:
+    """Fence the former coordinator and resume only a proved safe action."""
+    inspected = inspect_attempt(work_id, attempt_id, root=root)
+    snapshot = inspected["snapshot"]
+    if snapshot.get("recovery_version") != 2 or inspected["missing_evidence"]:
+        raise ContractError("historical or source-mismatched attempt cannot resume")
+    envelope = snapshot["envelope"]
+    attempt_dir = (root or repo_root()).resolve() / ".flow" / "runs" / work_id / "execution" / attempt_id
+    if (attempt_dir / "envelope.json").read_text().strip() != canonical(envelope):
+        raise ContractError("stored execution envelope differs from original snapshot")
+    if inspected["receipt"] is not None and snapshot["receipt_path"] is None:
+        receipt = inspected["receipt"]
+        # The file was sealed before the terminal ledger update. Finish it
+        # after fencing, without another child or provider invocation.
+        ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+        generation = ledger.claim_recovery(attempt_id)
+        current = ledger.snapshot(attempt_id)
+        if receipt["actions"] != current["actions"] or current["status"] != "started":
+            raise ContractError("receipt actions or terminal state conflict with fenced ledger")
+        expected = "completed" if current["actions"] and all(a["status"] == "completed" for a in current["actions"]) else "unknown" if any(a["status"] == "unknown" for a in current["actions"]) else "denied" if current["actions"] and all(a["status"] == "denied" for a in current["actions"]) else "failed"
+        if receipt["status"] != expected:
+            raise ContractError("receipt terminal status conflicts with fenced ledger")
+        ledger.finish_attempt(attempt_id, receipt["status"], receipt.get("reason", ""),
+                              str(attempt_dir / "receipt.json"), generation=generation)
+        return {"attempt_id": attempt_id, "status": "repaired", "receipt_path": str(attempt_dir / "receipt.json")}
+    if snapshot["status"] != "started":
+        return {"attempt_id": attempt_id, "status": "read_only", "reason": "attempt already terminal"}
+    ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+    generation = ledger.claim_recovery(attempt_id)
+    snapshot = ledger.snapshot(attempt_id)
+    actions = snapshot["actions"]
+    if any(action["status"] in {"unknown", "started"} for action in actions):
+        return {"attempt_id": attempt_id, "status": "reconciliation_required", "reason": "dispatch outcome uncertain", "owner_generation": generation}
+    if not actions or actions[0]["status"] != "completed" or actions[0]["result"] is None:
+        return {"attempt_id": attempt_id, "status": "reconciliation_required", "reason": "no replayable committed result", "owner_generation": generation}
+    validate_result(envelope, actions[0]["result"])
+    observations = [item for item in snapshot.get("response_observations", []) if item["action_id"] == actions[0]["action_id"]]
+    if len(observations) != 1 or observations[0]["result"] != actions[0]["result"] or digest(observations[0]["result"]) != observations[0]["result_digest"]:
+        raise ContractError("committed result differs from durable response observation")
+    checkpoint = snapshot.get("checkpoint")
+    if not isinstance(checkpoint, dict) or checkpoint.get("format_version") != 1 or checkpoint.get("envelope_digest") != envelope_digest(envelope):
+        raise ContractError("compatible Flow checkpoint link is absent")
+    if checkpoint.get("ledger_seq") not in {event["seq"] for event in snapshot["events"]}:
+        raise ContractError("bound checkpoint ledger barrier is absent")
+    try:
+        checkpoint_name = str(uuid.UUID(checkpoint["checkpoint_id"]))
+    except (TypeError, ValueError, KeyError) as exc:
+        raise ContractError("bound MAF checkpoint ID is invalid") from exc
+    if checkpoint_name != checkpoint["checkpoint_id"]:
+        raise ContractError("bound MAF checkpoint ID is not canonical")
+    checkpoint_path = attempt_dir / "checkpoints" / f"{checkpoint_name}.json"
+    if checkpoint_path.is_symlink() or not checkpoint_path.is_file() or str(checkpoint_path) != checkpoint.get("path"):
+        raise ContractError("bound MAF checkpoint is absent or foreign")
+    try:
+        checkpoint_bytes = checkpoint_path.read_bytes()
+        if hashlib.sha256(checkpoint_bytes).hexdigest() != checkpoint.get("file_sha256"):
+            raise ContractError("bound MAF checkpoint digest mismatch")
+        json.loads(checkpoint_bytes)
+    except (OSError, ValueError) as exc:
+        raise ContractError("bound MAF checkpoint is corrupt") from exc
+
+    def replay(action: dict[str, Any]) -> dict[str, Any]:
+        ledger.assert_owner(attempt_id, generation)
+        validate_action(envelope, action)
+        if action != actions[0]["request"]:
+            raise ContractError("recovery proposal differs from committed action")
+        return {"status": "completed", "action_id": action["action_id"], "output": actions[0]["result"]["output"]}
+
+    outcome = (supervisor or run_maf)(envelope, replay, python_path=python_path,
+                                       resume={"schema_version": 2, "attempt_id": attempt_id,
+                                               "checkpoint_id": checkpoint["checkpoint_id"],
+                                               "ledger_seq": checkpoint["ledger_seq"],
+                                               "runtime_version": checkpoint["runtime_version"]})
+    ledger.assert_owner(attempt_id, generation)
+    if outcome.get("attempt_id") != attempt_id:
+        raise ContractError("recovered supervisor attempt mismatch")
+    receipt = {"schema_version": 1, "work_id": work_id, "attempt_id": attempt_id,
+               "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],
+               "manifest_digest": envelope["manifest_digest"], "charter_sources": envelope["charter_sources"],
+               "run_protocol_revision": envelope["run_protocol_revision"], "definition_digest": envelope["definition_digest"],
+               "provider": envelope["provider"], "status": "completed", "reason": "",
+               "checkpoint_id": checkpoint_name, "actions": ledger.snapshot(attempt_id)["actions"], "created_at": utc_now()}
+    validate_receipt(envelope, receipt)
+    receipt_path = attempt_dir / "receipt.json"
+    with ledger.send_lock():
+        ledger.assert_owner(attempt_id, generation)
+        write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+        ledger.finish_attempt(attempt_id, "completed", "", str(receipt_path), generation=generation)
+    return {"attempt_id": attempt_id, "status": "replayed", "owner_generation": generation,
+            "checkpoint_id": checkpoint["checkpoint_id"], "result": actions[0]["result"], "receipt_path": str(receipt_path)}
+
+
+def resolve_attempt(work_id: str, attempt_id: str, action_id: str, actor: str,
+                    disposition: str, explanation: str, evidence_file: str,
+                    *, root: Path | None = None) -> dict[str, Any]:
+    """Record an operator decision only against immutable, local evidence."""
+    inspected = inspect_attempt(work_id, attempt_id, root=root)
+    snapshot = inspected["snapshot"]
+    if snapshot.get("recovery_version") != 2 or inspected["missing_evidence"]:
+        raise ContractError("historical or source-mismatched attempt cannot be resolved")
+    if not isinstance(actor, str) or not actor.strip():
+        raise ContractError("operator identity is required")
+    project_root = (root or repo_root()).resolve()
+    attempt_dir = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id
+    evidence_input = Path(evidence_file)
+    if evidence_input.is_symlink():
+        raise ContractError("resolution evidence must not be a symlink")
+    evidence_path = evidence_input.resolve()
+    if not _inside(evidence_path, attempt_dir) or not evidence_path.is_file():
+        raise ContractError("resolution evidence must be an existing attempt-local file")
+    evidence = json.loads(evidence_path.read_text())
+    if not isinstance(evidence, list) or not evidence:
+        raise ContractError("resolution evidence file must contain a nonempty list")
+    evidence_dir = attempt_dir / "resolution-evidence"
+    if evidence_dir.is_symlink():
+        raise ContractError("resolution evidence directory must not be a symlink")
+    evidence_dir.mkdir(mode=0o700, exist_ok=True)
+    if evidence_dir.is_symlink() or not _inside(evidence_dir.resolve(), attempt_dir):
+        raise ContractError("resolution evidence directory is outside attempt")
+    os.chmod(evidence_dir, 0o700)
+    preserved = []
+    for item in evidence:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            raise ContractError("resolution evidence item is invalid")
+        raw_path = project_root / item["path"]
+        if raw_path.is_symlink():
+            raise ContractError("resolution evidence source must not be a symlink")
+        path = raw_path.resolve()
+        if not _inside(path, attempt_dir) or not path.is_file() or path == evidence_path:
+            raise ContractError("resolution evidence source is missing or outside attempt")
+        content = path.read_bytes()
+        if len(content) > 65536 or hashlib.sha256(content).hexdigest() != item.get("sha256"):
+            raise ContractError("resolution evidence digest mismatch")
+        proof_path = evidence_dir / f"{item['sha256']}.proof"
+        if proof_path.exists():
+            if proof_path.is_symlink() or proof_path.read_bytes() != content:
+                raise ContractError("preserved resolution evidence conflicts with source")
+        else:
+            try:
+                _write_snapshot(proof_path, content)
+            except FileExistsError:
+                if proof_path.is_symlink() or proof_path.read_bytes() != content:
+                    raise ContractError("preserved resolution evidence conflicts with source")
+            os.chmod(proof_path, 0o400)
+        preserved.append({"kind": item.get("kind"), "path": str(proof_path.relative_to(project_root)), "sha256": item["sha256"]})
+    ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+    generation = ledger.claim_recovery(attempt_id, actor)
+    return ledger.resolve_unknown(attempt_id, action_id, actor, disposition, explanation, preserved,
+                                  generation=generation)

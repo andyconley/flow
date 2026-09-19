@@ -158,6 +158,18 @@ The run must be revision 2 and `implementing`, with a valid `orchestration.json`
 
 MAF is optional: ordinary Flow commands do not import it. For this first slice, install the pinned runner requirements in a separate Python environment and set `FLOW_MAF_PYTHON` to that environment's Python executable before calling `execute-local`. See `runtime/maf_runner/requirements.txt`. A configured local Ollama server and model are required for a physical worker call. The receipt and ledger live under `.flow/runs/WORK_ID/execution/`; a receipt reports observed facts and does not itself approve lifecycle handback.
 
+### `flow run inspect-execution <work-id> <attempt-id>`
+
+Read the original envelope, action, ordered ledger events, source snapshot checks, checkpoint link, receipt, and missing evidence without creating a new attempt or calling a provider. Use `--json` for structured output. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that Ollama did not receive the request.
+
+### `flow run resume-execution <work-id> <attempt-id>`
+
+Fence the previous parent and reopen the same attempt. An uncertain dispatch returns `reconciliation_required` without a provider send. A committed result requires a bound, compatible MAF checkpoint before supervised replay. A matching receipt written before the ledger's terminal update is repaired without dispatch. This command never allocates a replacement attempt.
+
+### `flow run resolve-execution <work-id> <attempt-id> <action-id>`
+
+Append an operator resolution using `--actor`, `--disposition`, `--explanation`, and `--evidence-file`. The evidence file contains a JSON list of `{ "kind": "...", "path": ".flow/runs/.../execution/.../file", "sha256": "..." }` records; each referenced file must exist inside the original attempt directory and match its digest. Flow copies bounded proof bytes into an owner-only, read-only attempt directory and checks their hashes on inspection. Completion requires a durable validated response observation. No-dispatch is permitted only before Flow's dispatch boundary. `still_unknown` records the investigation and leaves dispatch blocked.
+
 ### `flow run transition <work-id> <event>`
 
 Apply a hard-gated lifecycle transition. Invalid transitions and orchestration refusals leave `run.json` and `events.jsonl` unchanged.

@@ -88,6 +88,14 @@ class ExecutionFixture(unittest.TestCase):
     def _make_run(self, work_id: str) -> Path:
         source_run = REPO / ".flow" / "runs" / "maf-supervised-local-worker"
         run = json.loads((source_run / "run.json").read_text())
+        # The source run is archived; this disposable fixture represents the
+        # earlier implementation state required by the dispatch gateway.
+        run["state"] = "implementing"
+        run["phase"] = "implementing"
+        run["lane"] = "implement"
+        run["last_event"] = "start-implementation"
+        for key in ("archive", "handback", "implementation_evidence", "review"):
+            run["artifacts"].pop(key, None)
         manifest = json.loads((source_run / "orchestration.json").read_text())
         self._replace_work_id(run, work_id)
         self._replace_work_id(manifest, work_id)
@@ -316,7 +324,7 @@ class ExecutionGatewayTests(ExecutionFixture):
             checkpoint_id = str(uuid.uuid4())
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{checkpoint_id}.json"
             checkpoint.write_text("{}\n")
-            return {"attempt_id": envelope["attempt_id"], "checkpoint_id": checkpoint_id}
+            return {"attempt_id": envelope["attempt_id"], "checkpoint_id": checkpoint_id, "runtime_version": "fixture-maf-1"}
 
         result = self.run_gateway(supervisor)
         self.assertEqual(result["status"], "completed")
