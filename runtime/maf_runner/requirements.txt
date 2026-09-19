@@ -1,0 +1,3 @@
+# Opt-in supervised runtime. Flow's base CLI deliberately does not install this.
+agent-framework-core==1.19.0
+agent-framework-orchestrations==1.2.0

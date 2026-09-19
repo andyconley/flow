@@ -145,6 +145,19 @@ Dispatch checks briefs, evidence inventories, declared capabilities, output owne
 
 The command validates declarations. It cannot query hidden runtime grants, prove semantic truth, or establish transactional behavior for arbitrary external systems.
 
+### `flow run execute-local <work-id>`
+
+Start one local `test-engineer` execution attempt through an optional supervised Microsoft Agent Framework (MAF) process. Flow owns the policy gate, physical Ollama call, execution ledger, and sealed receipt; MAF proposes the specialist action and coordinates the result. This command does not advance the C-lite lifecycle.
+
+```sh
+flow run execute-local WORK_ID --assignment ASSIGNMENT_ID \
+  --task-file .flow/runs/WORK_ID/local-task.txt --json
+```
+
+The run must be revision 2 and `implementing`, with a valid `orchestration.json`. The selected `test-engineer` assignment must declare `execution.provider = "ollama"` and a local `execution.model`. The task file must live inside that run and is limited to 4096 bytes. The command returns an attempt ID, status, receipt path, and reason. An interrupted physical call is `unknown` and is never retried automatically. A failed start or denial receives a no-dispatch receipt. Paid providers are disabled.
+
+MAF is optional: ordinary Flow commands do not import it. For this first slice, install the pinned runner requirements in a separate Python environment and set `FLOW_MAF_PYTHON` to that environment's Python executable before calling `execute-local`. See `runtime/maf_runner/requirements.txt`. A configured local Ollama server and model are required for a physical worker call. The receipt and ledger live under `.flow/runs/WORK_ID/execution/`; a receipt reports observed facts and does not itself approve lifecycle handback.
+
 ### `flow run transition <work-id> <event>`
 
 Apply a hard-gated lifecycle transition. Invalid transitions and orchestration refusals leave `run.json` and `events.jsonl` unchanged.

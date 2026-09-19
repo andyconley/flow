@@ -561,6 +561,10 @@ invocation = "flow run list/status/history/verify/transition"
 summary = "Inspect and hard-gate C-lite workflow run state"
 
 [[help.cli_commands]]
+invocation = "flow run execute-local WORK_ID --assignment ID --task-file PATH"
+summary = "Run one Flow-authorized local specialist through the optional supervised MAF runtime"
+
+[[help.cli_commands]]
 invocation = "flow archive search/backfill/inspect/refine/import"
 summary = "Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports"
 

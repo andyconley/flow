@@ -102,6 +102,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow project audit` | Classify a repo's `.flow/` overlay against the framework (read-only) |
 | `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
 | `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
+| `flow run execute-local WORK_ID --assignment ID --task-file PATH` | Run one Flow-authorized local specialist through the optional supervised MAF runtime |
 | `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
 | `flow runtime smoke [--target all|claude|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |

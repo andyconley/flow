@@ -52,6 +52,8 @@ from runstate import (  # noqa: E402
     cmd_transition as run_transition_command,
     cmd_verify as run_verify_command,
 )
+from execution_gateway import execute_local  # noqa: E402
+from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
 from project import cmd_audit  # noqa: E402
@@ -514,6 +516,16 @@ def main() -> int:
     )
     run_orchestration_parser.add_argument("--json", action="store_true", help="emit JSON")
 
+    run_execute_parser = run_sub.add_parser(
+        "execute-local",
+        help="run one Flow-authorized local specialist through supervised MAF",
+        description="Attach one execution attempt to an implementing run. Requires an optional MAF runner and an approved local Ollama assignment; never enables paid providers.",
+    )
+    run_execute_parser.add_argument("work_id")
+    run_execute_parser.add_argument("--assignment", required=True, help="approved test-engineer assignment ID")
+    run_execute_parser.add_argument("--task-file", required=True, help="task artifact within this run")
+    run_execute_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
+
     runtime_parser = sub.add_parser(
         "runtime",
         help="inspect generated runtime adapter behavior",
@@ -821,6 +833,15 @@ def main() -> int:
         return run_transition_command(args)
     if args.command == "run" and args.run_target == "validate-orchestration":
         return orchestration_validate_command(args)
+    if args.command == "run" and args.run_target == "execute-local":
+        import json
+        try:
+            result = execute_local(args.work_id, args.assignment, args.task_file)
+        except (ContractError, FileNotFoundError, ValueError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"execution refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
+        return 0 if result["status"] == "completed" else 1
     if args.command == "runtime" and args.runtime_target == "smoke":
         return runtime_smoke_command(args)
     if args.command == "model" and args.model_target == "context":
