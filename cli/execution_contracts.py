@@ -543,6 +543,14 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
     for key in ("tree_sha256", "diff_sha256"):
         if key in evidence and not _hex_digest(evidence[key]):
             raise ContractError("Magentic receipt evidence digest is invalid")
+    trace = evidence.get("diagnostic_trace")
+    if trace is not None and (not isinstance(trace, dict)
+                              or set(trace) != {"path", "sha256", "bytes"}
+                              or trace["path"] != "claude-implementer.debug.log"
+                              or not _hex_digest(trace["sha256"])
+                              or type(trace["bytes"]) is not int
+                              or not 0 <= trace["bytes"] <= 1024 * 1024):
+        raise ContractError("Magentic diagnostic trace evidence is invalid")
     for key in ("manager_calls", "actions", "replans", "checkpoints"):
         if not isinstance(receipt[key], list):
             raise ContractError("Magentic receipt decision list is invalid")

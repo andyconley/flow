@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import uuid
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
@@ -20,7 +21,7 @@ from execution_gateway import _effective_specialist_for, _run_file, _write_snaps
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from claude_worker import call_claude
-from claude_edit_worker import call_claude_edit
+from claude_edit_worker import MAX_TRACE_BYTES, call_claude_edit
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
@@ -328,7 +329,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
              "- The Claude implementer may edit only the charter's allowed paths. Flow verifies the diff and runs"
              " the targeted test after that edit; the full suite is an acceptance check.\n")
     manager_adapter = manager_adapter or _default_manager_adapter
-    worker_adapter = worker_adapter or _default_worker_adapter
+    worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir)
     test_runner = test_runner or _run_targeted_test
     edit_evidence: dict[str, Any] | None = None
     test_evidence: dict[str, Any] | None = None
@@ -489,6 +490,14 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                             "allowed_paths": list(APPROVED_PATHS), "baseline": baseline,
                             "edit": edit_evidence, "tests": test_evidence,
                             "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
+    trace_path = attempt_dir / "claude-implementer.debug.log"
+    if trace_path.is_file() and not trace_path.is_symlink():
+        trace_size = trace_path.stat().st_size
+        if trace_size > MAX_TRACE_BYTES:
+            raise ContractError("Claude diagnostic trace exceeds limit")
+        receipt["evidence"]["diagnostic_trace"] = {
+            "path": trace_path.name, "sha256": hashlib.sha256(trace_path.read_bytes()).hexdigest(),
+            "bytes": trace_size}
     validate_receipt(envelope, receipt)
     receipt_path = attempt_dir / "receipt.json"
     with ledger.send_lock():
@@ -531,12 +540,14 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
     return result
 
 
-def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path) -> dict[str, Any]:
+def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
+                            trace_dir: Path | None = None) -> dict[str, Any]:
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
     if action["provider"] == "ollama":
         return call_local({**assignment, "task": action.get("provider_task", action["task"]), "attempt_id": envelope["attempt_id"]},
                           correlation_id=action["action_id"])
     if action["provider"] == "claude":
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
-                                workspace=workspace, model=assignment["model"], timeout_seconds=120)
+                                workspace=workspace, model=assignment["model"], timeout_seconds=120,
+                                trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None)
     raise ContractError("selected specialist provider has no approved adapter")

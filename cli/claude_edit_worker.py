@@ -21,6 +21,7 @@ from claude_worker import CLAUDE_ENV_KEYS, _normalized_usage
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
 MAX_RESULT_BYTES = 8192
+MAX_TRACE_BYTES = 1024 * 1024
 
 
 class ClaudeEditError(RuntimeError):
@@ -56,7 +57,8 @@ def _result(raw: bytes, model: str) -> dict[str, Any]:
 
 
 def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: str,
-                     timeout_seconds: int, claude_bin: str = "claude") -> dict[str, Any]:
+                     timeout_seconds: int, claude_bin: str = "claude",
+                     trace_path: Path | None = None) -> dict[str, Any]:
     """Allow only Claude file tools; caller must verify every resulting edit."""
     raw_workspace = Path(workspace)
     if raw_workspace.is_symlink():
@@ -79,6 +81,16 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
             "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands",
             "--permission-mode", "acceptEdits", "--tools", "Read,Glob,Grep,Edit",
             "--model", model]
+    if trace_path is not None:
+        trace_path = Path(trace_path)
+        if not trace_path.is_absolute() or trace_path.parent.is_symlink() or not trace_path.parent.is_dir():
+            raise ValueError("Claude diagnostic path must be in an existing real directory")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(trace_path, flags, 0o600)
+        os.close(fd)
+        argv.extend(["--debug-file", str(trace_path)])
     env = {key: os.environ[key] for key in CLAUDE_ENV_KEYS if key in os.environ}
     deadline = time.monotonic() + timeout_seconds
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -95,12 +107,14 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
         selector.register(process.stdout, selectors.EVENT_READ)
         try:
             while selector.get_map():
+                if trace_path is not None and trace_path.stat().st_size > MAX_TRACE_BYTES:
+                    raise ClaudeEditError("Claude diagnostic trace exceeded limit")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise ClaudeEditError("Claude edit timed out")
-                ready = selector.select(remaining)
+                ready = selector.select(min(remaining, 1.0) if trace_path is not None else remaining)
                 if not ready:
-                    raise ClaudeEditError("Claude edit timed out")
+                    continue
                 for key, _ in ready:
                     if key.fileobj is process.stdin:
                         count = os.write(process.stdin.fileno(), prompt[written:])
@@ -138,3 +152,8 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
         if not process.stdin.closed:
             process.stdin.close()
         process.stdout.close()
+        if trace_path is not None:
+            if trace_path.stat().st_size > MAX_TRACE_BYTES:
+                with trace_path.open("r+b") as trace:
+                    trace.truncate(MAX_TRACE_BYTES)
+            trace_path.chmod(0o600)

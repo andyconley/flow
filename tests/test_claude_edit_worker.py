@@ -66,6 +66,47 @@ class ClaudeEditWorkerTests(unittest.TestCase):
                 call_claude_edit(instructions="Fix", task="Edit", workspace=root / "link",
                                  model="claude-test", timeout_seconds=5)
 
+    def test_debug_trace_survives_timeout_without_session_persistence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            trace = root / "claude-implementer.debug.log"
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import sys, time\n"
+                            "from pathlib import Path\n"
+                            "Path(sys.argv[sys.argv.index('--debug-file') + 1]).write_text('tool: Read started\\n')\n"
+                            "sys.stdin.read()\n"
+                            "time.sleep(4)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaisesRegex(ClaudeEditError, "timed out"):
+                call_claude_edit(instructions="Fix", task="Edit", workspace=workspace,
+                                 model="claude-test", timeout_seconds=1, claude_bin=str(fake),
+                                 trace_path=trace)
+            self.assertEqual(trace.read_text(), "tool: Read started\n")
+            self.assertEqual(stat.S_IMODE(trace.stat().st_mode), 0o600)
+
+    def test_debug_trace_is_bounded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            trace = root / "claude-implementer.debug.log"
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import sys, time\n"
+                            "from pathlib import Path\n"
+                            "Path(sys.argv[sys.argv.index('--debug-file') + 1]).write_bytes(b'x' * (2 * 1024 * 1024))\n"
+                            "sys.stdin.read()\n"
+                            "time.sleep(4)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaisesRegex(ClaudeEditError, "trace exceeded limit"):
+                call_claude_edit(instructions="Fix", task="Edit", workspace=workspace,
+                                 model="claude-test", timeout_seconds=3, claude_bin=str(fake),
+                                 trace_path=trace)
+            self.assertEqual(trace.stat().st_size, 1024 * 1024)
+
 
 if __name__ == "__main__":
     unittest.main()
