@@ -39,7 +39,7 @@ def envelope() -> dict:
 
 def action(env: dict, sequence: int, assignment: dict, *, task: str = "Inspect the scoped change.") -> dict:
     value = {"schema_version": 1, "attempt_id": env["attempt_id"], "envelope_digest": envelope_digest(env),
-             "sequence": sequence, "kind": "delegate", "manager_turn": sequence,
+             "sequence": sequence, "kind": "delegate", "manager_turn": min(sequence, 6),
              "task": task, "task_digest": hashlib.sha256(task.encode()).hexdigest(),
              "rationale": "Manager selected this specialist.", "checkpoint_id": f"pending-{sequence}",
              "parent_action_id": None,
@@ -60,6 +60,65 @@ def manager_call(env: dict, sequence: int, phase: str = "facts", replan_sequence
 
 
 class MagenticContractTests(unittest.TestCase):
+    def test_paid_manager_call_budget_is_per_attempt(self) -> None:
+        first = {**envelope(), "manager": {"provider": "claude", "model": "sonnet"}}
+        second = {**first, "attempt_id": "delivery-attempt-2"}
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = ExecutionLedger(Path(temporary) / "ledger.sqlite")
+            ledger.create_attempt(first)
+            for sequence in range(1, 13):
+                phase = "facts" if sequence == 1 else "plan" if sequence == 2 else "progress"
+                self.assertTrue(ledger.decide_manager_call(first, manager_call(first, sequence, phase), generation=1)["allowed"])
+            self.assertEqual(ledger.decide_manager_call(first, manager_call(first, 13, "progress"), generation=1)["reason"],
+                             "manager_call_cap")
+            ledger.create_attempt(second)
+            self.assertTrue(ledger.decide_manager_call(second, manager_call(second, 1), generation=1)["allowed"])
+
+    def test_local_calls_have_no_delegation_cap_but_keep_concurrency_limit(self) -> None:
+        env = envelope()
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = ExecutionLedger(Path(temporary) / "ledger.sqlite")
+            ledger.create_attempt(env)
+            local = env["roster"][0]
+            for sequence in range(1, 8):
+                proposal = action(env, sequence, local, task=f"Analyze bounded fact {sequence}.")
+                decision = ledger.decide(env, proposal, generation=1)
+                self.assertTrue(decision["allowed"], decision)
+                ledger.close_pre_send_failure(proposal["action_id"], decision["grant_id"], generation=1)
+            for sequence in range(8, 11):
+                proposal = action(env, sequence, local, task=f"Analyze bounded fact {sequence}.")
+                self.assertTrue(ledger.decide(env, proposal, generation=1)["allowed"])
+            denied = action(env, 11, local, task="One more concurrent local call.")
+            self.assertEqual(ledger.decide(env, denied, generation=1)["reason"], "concurrency_cap")
+
+    def test_local_manager_has_no_paid_call_cap(self) -> None:
+        env = envelope()
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = ExecutionLedger(Path(temporary) / "ledger.sqlite")
+            ledger.create_attempt(env)
+            for sequence in range(1, 15):
+                phase = "facts" if sequence == 1 else "plan" if sequence == 2 else "progress"
+                self.assertTrue(ledger.decide_manager_call(env, manager_call(env, sequence, phase), generation=1)["allowed"])
+
+    def test_paid_worker_and_replan_allowances_reset_for_new_attempt(self) -> None:
+        first = envelope()
+        second = {**first, "attempt_id": "delivery-attempt-2"}
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = ExecutionLedger(Path(temporary) / "ledger.sqlite")
+            ledger.create_attempt(first)
+            self.assertTrue(ledger.decide(first, action(first, 1, first["roster"][1]), generation=1)["allowed"])
+            for sequence in (1, 2):
+                replan = {"schema_version": 1, "replan_id": expected_replan_id(first, sequence),
+                          "attempt_id": first["attempt_id"], "envelope_digest": envelope_digest(first),
+                          "sequence": sequence, "kind": "replan", "proposal": {"reason": "new evidence"}}
+                self.assertTrue(ledger.decide_replan(first, replan, generation=1)["allowed"])
+            ledger.create_attempt(second)
+            self.assertTrue(ledger.decide(second, action(second, 1, second["roster"][1]), generation=1)["allowed"])
+            replan = {"schema_version": 1, "replan_id": expected_replan_id(second, 1),
+                      "attempt_id": second["attempt_id"], "envelope_digest": envelope_digest(second),
+                      "sequence": 1, "kind": "replan", "proposal": {"reason": "new evidence"}}
+            self.assertTrue(ledger.decide_replan(second, replan, generation=1)["allowed"])
+
     def test_dynamic_choice_is_bound_to_roster_scope_and_task(self) -> None:
         env = envelope()
         validate_envelope(env)

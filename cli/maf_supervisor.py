@@ -470,7 +470,8 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
             kind = message["type"]
             if kind == "manager_request":
                 manager_calls += 1
-                if manager_calls > envelope["limits"]["max_manager_calls"] + 1:
+                if (envelope["manager"]["provider"] in {"codex", "claude"}
+                        and manager_calls > envelope["limits"]["max_manager_calls"] + 1):
                     raise MafProtocolError("MAF manager exceeded the bounded call protocol")
                 if message.get("attempt_id") != envelope["attempt_id"]:
                     raise MafProtocolError("MAF manager request attempt differs")
@@ -481,9 +482,10 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                                                            "call_id": message.get("call_id"), "text": text}, deadline)
                 continue
             if kind == "propose_action":
-                actions += 1
-                if actions > envelope["limits"]["max_delegations"] + 1:
-                    raise MafProtocolError("MAF proposed too many specialist calls")
+                if message.get("provider") in {"codex", "claude"}:
+                    actions += 1
+                    if actions > envelope["limits"]["max_delegations"] + 1:
+                        raise MafProtocolError("MAF proposed too many paid specialist calls")
                 if message.get("attempt_id") != envelope["attempt_id"]:
                     raise MafProtocolError("MAF action attempt differs")
                 result = on_action(message)

@@ -319,14 +319,25 @@ class ExecutionLedger:
             ).fetchone()[0]
             if protocol_version == 5:
                 paid_count = db.execute(
-                    "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
-                    "AND json_extract(actions.request_json,'$.provider') IN ('codex','claude') "
+                    "SELECT count(*) FROM actions WHERE attempt_id=? "
+                    "AND json_extract(request_json,'$.provider') IN ('codex','claude') "
                     "AND actions.status IN ('allowed','started','completed','unknown','failed','not_dispatched')",
-                    (work_id,),
+                    (attempt,),
+                ).fetchone()[0]
+                paid_delegations = db.execute(
+                    "SELECT count(*) FROM actions WHERE attempt_id=? "
+                    "AND json_extract(request_json,'$.provider') IN ('codex','claude') "
+                    "AND status IN ('allowed','started','completed','unknown')",
+                    (attempt,),
+                ).fetchone()[0]
+                concurrent_count = db.execute(
+                    "SELECT count(*) FROM actions WHERE attempt_id=? "
+                    "AND status IN ('allowed','started','unknown')",
+                    (attempt,),
                 ).fetchone()[0]
                 if action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
                     reason = "paid_call_cap"
-                elif allowed_count >= envelope["limits"]["max_delegations"]:
+                elif action["provider"] in {"codex", "claude"} and paid_delegations >= envelope["limits"]["max_delegations"]:
                     reason = "delegation_cap"
                 elif concurrent_count >= envelope["limits"]["max_concurrent"]:
                     reason = "concurrency_cap"
@@ -395,12 +406,11 @@ class ExecutionLedger:
             if replan["sequence"] != previous + 1:
                 raise ContractError("replan sequence is skipped or out of order")
             if stored[2] == 5:
-                prior_work_replans = db.execute(
-                    "SELECT COUNT(*) FROM replan_decisions JOIN attempts USING(attempt_id) "
-                    "WHERE attempts.work_id=? AND replan_decisions.status='allowed'",
-                    (envelope["work_id"],),
+                prior_attempt_replans = db.execute(
+                    "SELECT COUNT(*) FROM replan_decisions WHERE attempt_id=? AND status='allowed'",
+                    (attempt,),
                 ).fetchone()[0]
-                allowed = prior_work_replans < envelope["limits"]["max_replans"]
+                allowed = prior_attempt_replans < envelope["limits"]["max_replans"]
             else:
                 allowed = replan["sequence"] <= envelope["limits"]["max_replans"]
             reason = "allowed" if allowed else "replan_cap"
@@ -451,12 +461,12 @@ class ExecutionLedger:
                             reason = "replan_out_of_order"
                     elif facts != [("completed",)] or plans:
                         reason = "replan_out_of_order"
-            work_calls = db.execute(
-                "SELECT COUNT(*) FROM manager_calls JOIN attempts USING(attempt_id) "
-                "WHERE attempts.work_id=? AND manager_calls.status IN ('allowed','started','completed','unknown')",
-                (envelope["work_id"],),
+            attempt_calls = db.execute(
+                "SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? "
+                "AND status IN ('allowed','started','completed','unknown')",
+                (attempt,),
             ).fetchone()[0]
-            if work_calls >= envelope["limits"]["max_manager_calls"]:
+            if envelope["manager"]["provider"] in {"codex", "claude"} and attempt_calls >= envelope["limits"]["max_manager_calls"]:
                 reason = "manager_call_cap"
             elif request["manager_round"] > envelope["limits"]["max_manager_rounds"]:
                 reason = "manager_round_cap"

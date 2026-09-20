@@ -271,7 +271,7 @@ def expected_magentic_action_id(action: dict[str, Any]) -> str:
 def _validate_magentic_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
     require_fields(action, ("assignment_id", "definition_digest", "manager_turn", "task", "rationale",
                             "checkpoint_id"), kind="Magentic action")
-    if action["kind"] != "delegate" or type(action["sequence"]) is not int or not 1 <= action["sequence"] <= 6:
+    if action["kind"] != "delegate" or type(action["sequence"]) is not int or not 1 <= action["sequence"] <= 2**31 - 1:
         raise ContractError("Magentic action sequence is invalid")
     if type(action["manager_turn"]) is not int or not 1 <= action["manager_turn"] <= 6:
         raise ContractError("Magentic manager turn is invalid")
@@ -311,7 +311,7 @@ def validate_manager_call(envelope: dict[str, Any], request: dict[str, Any]) -> 
         raise ContractError("manager calls require protocol v5")
     require_fields(request, ("call_id", "attempt_id", "envelope_digest", "sequence", "phase",
                              "manager_round", "prompt_digest"), kind="manager call")
-    if type(request["sequence"]) is not int or not 1 <= request["sequence"] <= 13 or type(request["manager_round"]) is not int or not 1 <= request["manager_round"] <= 7:
+    if type(request["sequence"]) is not int or not 1 <= request["sequence"] <= 2**31 - 1 or type(request["manager_round"]) is not int or not 1 <= request["manager_round"] <= 7:
         raise ContractError("manager call position is invalid")
     if request["phase"] not in MAGENTIC_PHASES or not _hex_digest(request["prompt_digest"]):
         raise ContractError("manager call phase or prompt digest is invalid")
