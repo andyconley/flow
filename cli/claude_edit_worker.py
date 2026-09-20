@@ -42,8 +42,8 @@ def _result(raw: bytes, model: str) -> dict[str, Any]:
     session = payload.get("session_id")
     if not isinstance(output, str) or not output.strip() or len(output.encode()) > MAX_RESULT_BYTES:
         raise ClaudeEditError("Claude edit result is missing or oversized")
-    if isinstance(turns, bool) or not isinstance(turns, int) or not 1 <= turns <= 8:
-        raise ClaudeEditError("Claude edit exceeded its turn bound")
+    if isinstance(turns, bool) or not isinstance(turns, int) or turns < 1:
+        raise ClaudeEditError("Claude edit turn count is invalid")
     if not isinstance(session, str) or not session:
         raise ClaudeEditError("Claude edit session identity is missing")
     try:

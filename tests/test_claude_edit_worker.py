@@ -17,10 +17,11 @@ from claude_edit_worker import ClaudeEditError, _result, _stream_result, call_cl
 class ClaudeEditWorkerTests(unittest.TestCase):
     def test_stream_result_requires_one_success(self):
         good = {"type": "result", "subtype": "success", "is_error": False,
-                "result": "Edited.", "session_id": "one", "num_turns": 1,
+                "result": "Edited.", "session_id": "one", "num_turns": 9,
                 "usage": {"input_tokens": 3}}
         stream = b'{"type":"system","subtype":"init"}\n' + json.dumps(good).encode() + b'\n'
         self.assertEqual(_stream_result(stream, "claude-test")["output"], "Edited.")
+        self.assertEqual(_stream_result(stream, "claude-test")["num_turns"], 9)
         with self.assertRaises(ClaudeEditError):
             _stream_result(stream + json.dumps(good).encode() + b'\n', "claude-test")
 
@@ -49,12 +50,13 @@ class ClaudeEditWorkerTests(unittest.TestCase):
             self.assertIn('"subtype": "init"', events.read_text())
             self.assertEqual(stat.S_IMODE(events.stat().st_mode), 0o600)
 
-    def test_result_rejects_failed_and_overbound_turns(self):
+    def test_result_rejects_failed_and_invalid_turns(self):
         good = {"type": "result", "subtype": "success", "is_error": False,
                 "result": "Edited two files.", "session_id": "one", "num_turns": 2,
                 "usage": {"input_tokens": 3}}
         self.assertEqual(_result(json.dumps(good).encode(), "claude-test")["num_turns"], 2)
-        for change in ({"is_error": True}, {"num_turns": 9}, {"session_id": ""},
+        self.assertEqual(_result(json.dumps({**good, "num_turns": 9}).encode(), "claude-test")["num_turns"], 9)
+        for change in ({"is_error": True}, {"num_turns": 0}, {"session_id": ""},
                        {"result": "x" * 9000}):
             with self.subTest(change=change), self.assertRaises(ClaudeEditError):
                 _result(json.dumps({**good, **change}).encode(), "claude-test")
