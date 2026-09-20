@@ -44,6 +44,20 @@ class DeliveryGatewayTests(unittest.TestCase):
         self.assertIn("user:\nReturn progress as pure JSON.", sent["prompt_override"])
         self.assertNotIn("review and report", sent["prompt_override"])
 
+    def test_manager_adapter_unwraps_only_exact_progress_json_fence(self):
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "Progress JSON"}]}]
+        body = '{"is_request_satisfied":{"answer":false,"reason":"pending"},"next_speaker":"local-analyst"}'
+        raw = "```json\n" + body + "\n```"
+        with tempfile.TemporaryDirectory() as folder:
+            with patch("delivery_gateway.call_claude", return_value={"output": raw,
+                                                                  "output_sha256": hashlib.sha256(raw.encode()).hexdigest()}):
+                result = _default_manager_adapter({"messages": messages},
+                                                  envelope={"manager": {"model": "fake"}},
+                                                  workspace=Path(folder))
+        self.assertEqual(result["output"], body)
+        self.assertEqual(result["normalization"], "exact_json_fence")
+        self.assertEqual(result["raw_output_sha256"], hashlib.sha256(raw.encode()).hexdigest())
+
     def test_supervisor_write_times_out_when_child_stops_reading(self):
         read_fd, write_fd = os.pipe()
         try:

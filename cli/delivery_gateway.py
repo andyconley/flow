@@ -319,6 +319,14 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     source_commit = envelope["source_commit"]
     worktree = Path(envelope["worktree"])
     baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    task += ("\n\nFlow-verified execution facts:\n"
+             "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
+             "- The approved regression test is already present and failed before this job's first provider send."
+             " Do not ask a specialist to create or rerun that prerequisite.\n"
+             "- Local analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
+             " run commands, or edit the worktree.\n"
+             "- The Claude implementer may edit only the charter's allowed paths. Flow verifies the diff and runs"
+             " the targeted test after that edit; the full suite is an acceptance check.\n")
     manager_adapter = manager_adapter or _default_manager_adapter
     worker_adapter = worker_adapter or _default_worker_adapter
     test_runner = test_runner or _run_targeted_test
@@ -364,6 +372,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 observation = {"status": "completed", "output": text,
                                "output_sha256": digest(text),
                                "usage": result.get("usage")}
+                if result.get("normalization") == "exact_json_fence":
+                    observation["normalization"] = "exact_json_fence"
+                    observation["raw_output_sha256"] = result["raw_output_sha256"]
                 ledger.observe_manager_response(request["call_id"], observation, generation=generation)
                 return text
             except Exception:
@@ -502,10 +513,22 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
     prompt = "\n\n".join(turns)
     if not prompt.strip():
         raise ContractError("stock manager prompt text is absent")
-    return call_claude(instructions="stock Magentic manager", task="model response",
-                       prompt_override=prompt, workspace=workspace,
-                       model=envelope["manager"]["model"], timeout_seconds=120,
-                       max_output_bytes=32768)
+    result = call_claude(instructions="stock Magentic manager", task="model response",
+                         prompt_override=prompt, workspace=workspace,
+                         model=envelope["manager"]["model"], timeout_seconds=120,
+                         max_output_bytes=32768)
+    output = result["output"]
+    if output.startswith("```json\n") and output.rstrip().endswith("```"):
+        inner = output.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        try:
+            parsed = json.loads(inner)
+        except json.JSONDecodeError:
+            pass
+        else:
+            if isinstance(parsed, dict) and {"is_request_satisfied", "next_speaker"} <= set(parsed):
+                result = {**result, "output": inner, "normalization": "exact_json_fence",
+                          "raw_output_sha256": result["output_sha256"]}
+    return result
 
 
 def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path) -> dict[str, Any]:
