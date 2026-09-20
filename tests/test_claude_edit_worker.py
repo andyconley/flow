@@ -11,10 +11,44 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from claude_edit_worker import ClaudeEditError, _result, call_claude_edit
+from claude_edit_worker import ClaudeEditError, _result, _stream_result, call_claude_edit
 
 
 class ClaudeEditWorkerTests(unittest.TestCase):
+    def test_stream_result_requires_one_success(self):
+        good = {"type": "result", "subtype": "success", "is_error": False,
+                "result": "Edited.", "session_id": "one", "num_turns": 1,
+                "usage": {"input_tokens": 3}}
+        stream = b'{"type":"system","subtype":"init"}\n' + json.dumps(good).encode() + b'\n'
+        self.assertEqual(_stream_result(stream, "claude-test")["output"], "Edited.")
+        with self.assertRaises(ClaudeEditError):
+            _stream_result(stream + json.dumps(good).encode() + b'\n', "claude-test")
+
+    def test_live_events_are_preserved_on_success(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            trace = root / "claude-implementer.debug.log"
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "from pathlib import Path\n"
+                            "Path(sys.argv[sys.argv.index('--debug-file') + 1]).write_text('started\\n')\n"
+                            "sys.stdin.read()\n"
+                            "print(json.dumps({'type':'system','subtype':'init'}), flush=True)\n"
+                            "print(json.dumps({'type':'result','subtype':'success',"
+                            "'is_error':False,'result':'Edited.','session_id':'test',"
+                            "'num_turns':1,'usage':{'input_tokens':3}}), flush=True)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            result = call_claude_edit(instructions="Fix", task="Edit", workspace=workspace,
+                                      model="claude-test", timeout_seconds=5,
+                                      claude_bin=str(fake), trace_path=trace)
+            events = root / "claude-implementer.events.ndjson"
+            self.assertEqual(result["output"], "Edited.")
+            self.assertIn('"subtype": "init"', events.read_text())
+            self.assertEqual(stat.S_IMODE(events.stat().st_mode), 0o600)
+
     def test_result_rejects_failed_and_overbound_turns(self):
         good = {"type": "result", "subtype": "success", "is_error": False,
                 "result": "Edited two files.", "session_id": "one", "num_turns": 2,
@@ -86,6 +120,7 @@ class ClaudeEditWorkerTests(unittest.TestCase):
                                  trace_path=trace)
             self.assertEqual(trace.read_text(), "tool: Read started\n")
             self.assertEqual(stat.S_IMODE(trace.stat().st_mode), 0o600)
+            self.assertTrue((root / "claude-implementer.events.ndjson").exists())
 
     def test_debug_trace_is_bounded(self):
         with tempfile.TemporaryDirectory() as temporary:

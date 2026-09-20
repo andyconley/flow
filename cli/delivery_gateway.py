@@ -21,7 +21,7 @@ from execution_gateway import _effective_specialist_for, _run_file, _write_snaps
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from claude_worker import call_claude
-from claude_edit_worker import MAX_TRACE_BYTES, call_claude_edit
+from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, call_claude_edit
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
@@ -498,6 +498,14 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         receipt["evidence"]["diagnostic_trace"] = {
             "path": trace_path.name, "sha256": hashlib.sha256(trace_path.read_bytes()).hexdigest(),
             "bytes": trace_size}
+    event_path = attempt_dir / "claude-implementer.events.ndjson"
+    if event_path.is_file() and not event_path.is_symlink():
+        event_size = event_path.stat().st_size
+        if event_size > MAX_EVENT_BYTES:
+            raise ContractError("Claude event trace exceeds limit")
+        receipt["evidence"]["event_trace"] = {
+            "path": event_path.name, "sha256": hashlib.sha256(event_path.read_bytes()).hexdigest(),
+            "bytes": event_size}
     validate_receipt(envelope, receipt)
     receipt_path = attempt_dir / "receipt.json"
     with ledger.send_lock():
@@ -548,6 +556,6 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
                           correlation_id=action["action_id"])
     if action["provider"] == "claude":
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
-                                workspace=workspace, model=assignment["model"], timeout_seconds=120,
+                                workspace=workspace, model=assignment["model"], timeout_seconds=300,
                                 trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None)
     raise ContractError("selected specialist provider has no approved adapter")

@@ -139,6 +139,7 @@ class DeliveryGatewayTests(unittest.TestCase):
                     (workspace / "cli/codex_worker.py").write_text("OLD = False\n# " + "x" * 2500 + " END_OF_DIFF\n")
                     trace = Path(envelope["checkpoint_dir"]).parent / "claude-implementer.debug.log"
                     trace.write_text("Claude edit tool started\n")
+                    (trace.parent / "claude-implementer.events.ndjson").write_text('{"type":"result"}\n')
                     return _result("claude", "fake", "Repair complete")
                 verifier_task = action.get("provider_task", "")
                 return _result("ollama", "fake", "Verified diff and test result")
@@ -161,6 +162,7 @@ class DeliveryGatewayTests(unittest.TestCase):
             self.assertEqual(result["status"], "completed")
             self.assertEqual(result["evidence"]["diagnostic_trace"]["bytes"], len(b"Claude edit tool started\n"))
             self.assertEqual(result["evidence"]["diagnostic_trace"]["path"], "claude-implementer.debug.log")
+            self.assertEqual(result["evidence"]["event_trace"]["path"], "claude-implementer.events.ndjson")
             self.assertEqual(worker_roles, ["claude-implementer", "local-verifier"])
             self.assertIn("Flow-verified complete bounded diff", verifier_task)
             self.assertIn("Targeted test: passed", verifier_task)

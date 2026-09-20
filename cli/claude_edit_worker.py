@@ -22,6 +22,7 @@ MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
 MAX_RESULT_BYTES = 8192
 MAX_TRACE_BYTES = 1024 * 1024
+MAX_EVENT_BYTES = 1024 * 1024
 
 
 class ClaudeEditError(RuntimeError):
@@ -56,6 +57,22 @@ def _result(raw: bytes, model: str) -> dict[str, Any]:
             "usage": usage, "session_id": session, "num_turns": turns}
 
 
+def _stream_result(raw: bytes, model: str) -> dict[str, Any]:
+    results = []
+    try:
+        for line in raw.splitlines():
+            event = json.loads(line)
+            if not isinstance(event, dict):
+                raise ValueError("event is not an object")
+            if event.get("type") == "result":
+                results.append(event)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ClaudeEditError("Claude edit emitted invalid event stream") from exc
+    if len(results) != 1:
+        raise ClaudeEditError("Claude edit did not emit one terminal result")
+    return _result(json.dumps(results[0]).encode(), model)
+
+
 def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: str,
                      timeout_seconds: int, claude_bin: str = "claude",
                      trace_path: Path | None = None) -> dict[str, Any]:
@@ -77,7 +94,9 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
                 "Edit only the explicitly authorized files. Return a short summary.\n").encode()
     if len(prompt) > MAX_PROMPT_BYTES:
         raise ValueError("Claude prompt exceeds limit")
-    argv = [claude_bin, "-p", "--output-format", "json", "--safe-mode", "--restricted",
+    event_path = trace_path.parent / "claude-implementer.events.ndjson" if trace_path is not None else None
+    argv = [claude_bin, "-p", "--output-format", "stream-json" if event_path else "json",
+            "--safe-mode", "--restricted",
             "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands",
             "--permission-mode", "acceptEdits", "--tools", "Read,Glob,Grep,Edit",
             "--model", model]
@@ -91,6 +110,9 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
         fd = os.open(trace_path, flags, 0o600)
         os.close(fd)
         argv.extend(["--debug-file", str(trace_path)])
+        fd = os.open(event_path, flags, 0o600)
+        os.close(fd)
+        argv.extend(["--verbose", "--include-partial-messages"])
     env = {key: os.environ[key] for key in CLAUDE_ENV_KEYS if key in os.environ}
     deadline = time.monotonic() + timeout_seconds
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -101,6 +123,7 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
     try:
         chunks: list[bytes] = []
         size = written = 0
+        event_file = event_path.open("ab") if event_path is not None else None
         selector = selectors.DefaultSelector()
         os.set_blocking(process.stdin.fileno(), False)
         selector.register(process.stdin, selectors.EVENT_WRITE)
@@ -123,22 +146,29 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
                             selector.unregister(process.stdin)
                             process.stdin.close()
                     else:
-                        chunk = os.read(process.stdout.fileno(), min(8192, MAX_STDOUT_BYTES + 1 - size))
+                        limit = MAX_EVENT_BYTES if event_path is not None else MAX_STDOUT_BYTES
+                        chunk = os.read(process.stdout.fileno(), min(8192, limit + 1 - size))
                         if not chunk:
                             selector.unregister(process.stdout)
                             continue
                         chunks.append(chunk)
                         size += len(chunk)
-                        if size > MAX_STDOUT_BYTES:
+                        if event_file is not None:
+                            event_file.write(chunk[:max(0, MAX_EVENT_BYTES - event_file.tell())])
+                            event_file.flush()
+                        if size > limit:
                             raise ClaudeEditError("Claude edit output exceeds limit")
         finally:
             selector.close()
+            if event_file is not None:
+                event_file.close()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise ClaudeEditError("Claude edit timed out")
         if process.wait(timeout=remaining) != 0:
             raise ClaudeEditError("Claude exited without a successful edit turn")
-        return {**_result(b"".join(chunks), model),
+        result = (_stream_result if event_path is not None else _result)(b"".join(chunks), model)
+        return {**result,
                 "input_sha256": hashlib.sha256(prompt).hexdigest()}
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
         raise ClaudeEditError("Claude edit outcome uncertain") from exc
@@ -157,3 +187,4 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
                 with trace_path.open("r+b") as trace:
                     trace.truncate(MAX_TRACE_BYTES)
             trace_path.chmod(0o600)
+            event_path.chmod(0o600)
