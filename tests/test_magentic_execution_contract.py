@@ -14,7 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from execution_contracts import (ContractError, digest, envelope_digest,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_envelope,
-                                 validate_manager_call, validate_receipt)
+                                 validate_manager_call, validate_receipt, validate_result)
+from claude_edit_worker import _result as claude_edit_result
 from execution_ledger import ExecutionLedger
 
 
@@ -60,6 +61,16 @@ def manager_call(env: dict, sequence: int, phase: str = "facts", replan_sequence
 
 
 class MagenticContractTests(unittest.TestCase):
+    def test_claude_edit_result_matches_v5_worker_contract(self) -> None:
+        env = envelope()
+        selected = env["roster"][1]
+        delegated = action(env, 1, selected)
+        raw = {"type": "result", "subtype": "success", "is_error": False,
+               "result": "Edited the scoped file.", "session_id": "session-1",
+               "num_turns": 9, "usage": {"input_tokens": 5}}
+        validate_result(env, claude_edit_result(json.dumps(raw).encode(), selected["model"]),
+                        action=delegated)
+
     def test_paid_manager_call_budget_is_per_attempt(self) -> None:
         first = {**envelope(), "manager": {"provider": "claude", "model": "sonnet"}}
         second = {**first, "attempt_id": "delivery-attempt-2"}

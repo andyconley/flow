@@ -52,7 +52,7 @@ def _result(raw: bytes, model: str) -> dict[str, Any]:
         raise ClaudeEditError("Claude edit usage is invalid") from exc
     return {"schema_version": 1, "status": "completed", "provider": "claude",
             "model": model, "physical_call": True,
-            "evidence_level": "flow_observed_claude_cli_edit_completed",
+            "evidence_level": "flow_observed_claude_cli_completed_turn",
             "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
             "usage": usage, "session_id": session, "num_turns": turns}
 

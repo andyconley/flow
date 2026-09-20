@@ -55,6 +55,8 @@ class ClaudeEditWorkerTests(unittest.TestCase):
                 "result": "Edited two files.", "session_id": "one", "num_turns": 2,
                 "usage": {"input_tokens": 3}}
         self.assertEqual(_result(json.dumps(good).encode(), "claude-test")["num_turns"], 2)
+        self.assertEqual(_result(json.dumps(good).encode(), "claude-test")["evidence_level"],
+                         "flow_observed_claude_cli_completed_turn")
         self.assertEqual(_result(json.dumps({**good, "num_turns": 9}).encode(), "claude-test")["num_turns"], 9)
         for change in ({"is_error": True}, {"num_turns": 0}, {"session_id": ""},
                        {"result": "x" * 9000}):
