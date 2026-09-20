@@ -52,7 +52,7 @@ from runstate import (  # noqa: E402
     cmd_transition as run_transition_command,
     cmd_verify as run_verify_command,
 )
-from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
+from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -528,6 +528,16 @@ def main() -> int:
     run_execute_parser.add_argument("--interrupt-after-third-send", action="store_true", help="record a controlled post-send unknown for the third v2 call")
     run_execute_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
 
+    run_mixed_parser = run_sub.add_parser(
+        "execute-mixed",
+        help="run one local and one Codex specialist through supervised MAF and Flow policy",
+        description="Execute the approved two-specialist fixture job. Flow grants each action and records separate receipts; Codex writes only in the run-local fixture. No dollar or token cap is claimed.",
+    )
+    run_mixed_parser.add_argument("work_id")
+    run_mixed_parser.add_argument("--local-task-file", required=True, help="approved local task artifact within this run")
+    run_mixed_parser.add_argument("--codex-task-file", required=True, help="approved Codex task artifact within this run")
+    run_mixed_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
+
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
@@ -872,6 +882,15 @@ def main() -> int:
                       if args.multi_turn else execute_local(args.work_id, args.assignment, args.task_file))
         except (ContractError, FileNotFoundError, ValueError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"execution refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
+        return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "execute-mixed":
+        import json
+        try:
+            result = execute_mixed(args.work_id, args.local_task_file, args.codex_task_file)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"mixed execution refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1

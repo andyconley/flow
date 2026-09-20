@@ -103,9 +103,11 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
 | `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
 | `flow run execute-local WORK_ID --assignment ID --task-file PATH [--multi-turn]` | Run one guarded local specialist call, or the bounded v2 three-call MAF exercise |
+| `flow run execute-mixed WORK_ID --local-task-file PATH --codex-task-file PATH` | Run one guarded Ollama test-engineer and Codex lead-developer job through MAF |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
 | `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |
 | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
+| `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
 | `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
 | `flow runtime smoke [--target all|claude|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |

@@ -3440,6 +3440,7 @@ class FlowCliTests(FlowCliHarness):
                 "claude_collector",
                 "claude_config",
                 "codex_collector",
+                "codex_worker",
                 "cost",
                 "diagnostic_model",
                 "diagnostics",

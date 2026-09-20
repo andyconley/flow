@@ -321,6 +321,84 @@ def run_maf_multiturn(
                 stream.close()
 
 
+def run_maf_mixed(
+    envelope: dict[str, Any],
+    on_action: Callable[[dict[str, Any]], dict[str, Any]],
+    *,
+    timeout_s: float = 240,
+    python_path: str | None = None,
+) -> dict[str, Any]:
+    """Supervise exactly two ordered MAF proposals through Flow callbacks."""
+    if envelope.get("execution_protocol_version") != 3 or timeout_s <= 0:
+        raise MafProtocolError("mixed execution requires a v3 envelope and positive timeout")
+    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    root = Path(__file__).resolve().parents[1]
+    process = subprocess.Popen(
+        [executable, "-m", "runtime.maf_runner.mixed"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        cwd=root, env={"PYTHONPATH": str(root)}, bufsize=0,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    deadline = time.monotonic() + timeout_s
+    pending = bytearray()
+    position = 0
+    try:
+        process.stdin.write(_json_line({"protocol_version": 3, "type": "start", "envelope": envelope}))
+        process.stdin.flush()
+        while True:
+            message = _read_message(process.stdout.fileno(), deadline, pending, 3)
+            if message["type"] == "propose_action":
+                position += 1
+                if position > 2 or message.get("sequence") != position:
+                    raise MafProtocolError("MAF child proposed an extra or out-of-order mixed action")
+                required = ("schema_version", "kind", "attempt_id", "action_id", "envelope_digest",
+                            "assignment_id", "definition_digest", "role", "instance_id", "provider", "model",
+                            "task_digest", "sequence", "checkpoint_id", "runtime_version", "request_id")
+                if any(message.get(key) is None for key in required):
+                    raise MafProtocolError("MAF child omitted a mixed action identity")
+                if message["request_id"] != f"flow-mixed-action-{position}" or message["runtime_version"] != PINNED_MAF_CORE_VERSION:
+                    raise MafProtocolError("MAF child mixed checkpoint or runtime identity differs")
+                proposal = {key: message[key] for key in required if key not in {"checkpoint_id", "runtime_version", "request_id"}}
+                try:
+                    validate_action(envelope, proposal)
+                except (TypeError, ValueError) as exc:
+                    raise MafProtocolError(f"MAF child mixed proposal differs from Flow envelope: {exc}") from exc
+                decision = on_action({**proposal, "checkpoint_id": message["checkpoint_id"],
+                                      "runtime_version": message["runtime_version"],
+                                      "request_id": message["request_id"]})
+                if not isinstance(decision, dict):
+                    raise MafProtocolError("Flow mixed callback did not return a result")
+                process.stdin.write(_json_line({"protocol_version": 3, "type": "action_result",
+                                                "action_id": proposal["action_id"],
+                                                "request_id": message["request_id"], "result": decision}))
+                process.stdin.flush()
+                continue
+            if message["type"] == "workflow_finished":
+                if position != 2 or message.get("attempt_id") != envelope["attempt_id"] or message.get("reason") != "mixed-job-complete":
+                    raise MafProtocolError("MAF child finished without the two approved actions")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise MafProtocolError("MAF child timed out before clean exit")
+                try:
+                    code = process.wait(timeout=remaining)
+                except subprocess.TimeoutExpired as exc:
+                    raise MafProtocolError("MAF child did not exit after mixed completion") from exc
+                if code != 0:
+                    raise MafProtocolError(f"MAF child exited {code} after mixed completion")
+                return message
+            if message["type"] == "error":
+                raise RuntimeError(f"MAF mixed child failed: {message.get('message')}")
+            raise MafProtocolError(f"MAF child sent unexpected mixed message: {message['type']}")
+    except BaseException:
+        process.kill()
+        process.wait(timeout=5)
+        raise
+    finally:
+        for stream in (process.stdin, process.stdout):
+            if stream is not None and not stream.closed:
+                stream.close()
+
+
 def run_maf_action3_continuation(
     envelope: dict[str, Any],
     resume: dict[str, Any],
