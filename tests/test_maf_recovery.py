@@ -12,6 +12,7 @@ import multiprocessing
 import json
 import os
 import hashlib
+import uuid
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -21,7 +22,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "cli"))
 sys.path.insert(0, str(REPO / "tests"))
 
-from maf_supervisor import MafProtocolError, run_maf  # noqa: E402
+from maf_supervisor import MafProtocolError, PINNED_MAF_CORE_VERSION, run_maf  # noqa: E402
 from test_maf_supervisor import SupervisorProtocolTests  # noqa: E402
 import execution_gateway as gateway  # noqa: E402
 from test_execution import ASSIGNMENT_ID, ExecutionFixture, WORK_ID, action_for, stub_result  # noqa: E402
@@ -194,6 +195,37 @@ class ReceiptSplitRecoveryTests(ExecutionFixture):
 
 
 class MultiTurnRuntimeTests(ExecutionFixture):
+    def test_runtime_version_gate_matches_pinned_requirement(self) -> None:
+        requirements = (REPO / "runtime" / "maf_runner" / "requirements.txt").read_text()
+        self.assertIn(f"agent-framework-core=={PINNED_MAF_CORE_VERSION}", requirements)
+
+    def test_v2_resume_rejects_incompatible_pinned_runtime_before_child_launch(self) -> None:
+        envelope, attempt_dir, ledger = gateway.prepare(
+            WORK_ID, ASSIGNMENT_ID, f".flow/runs/{WORK_ID}/task.md",
+            root=self.root, test_provider="local-stub", execution_protocol_version=2,
+        )
+        action = action_for(envelope)
+        decision = ledger.decide(envelope, action, generation=1)
+        checkpoint_id = str(uuid.uuid4())
+        checkpoint = attempt_dir / "checkpoints" / f"{checkpoint_id}.json"
+        checkpoint.write_text(json.dumps({"checkpoint_id": checkpoint_id,
+                                          "workflow_name": "flow-maf-v2-initial",
+                                          "pending_request_info_events": {"flow-action-1": {}}}))
+        ledger.bind_checkpoint_position(
+            envelope["attempt_id"], "pending_delegate", 1, checkpoint_id,
+            gateway.envelope_digest(envelope), ledger.snapshot(envelope["attempt_id"])["events"][-1]["seq"],
+            1, "incompatible-maf-version", str(checkpoint), generation=1,
+        )
+        ledger.consume_grant(action["action_id"], decision["grant_id"], generation=1)
+        ledger.observe_send(action["action_id"], 1)
+        result = stub_result(envelope)
+        ledger.observe_response(action["action_id"], result, 1)
+        ledger.complete(action["action_id"], result, generation=1)
+        outcome = gateway.resume_local(WORK_ID, envelope["attempt_id"], root=self.root,
+                                       supervisor=lambda *_args, **_kwargs: self.fail("incompatible runtime must not launch"))
+        self.assertEqual(outcome["status"], "runtime_protocol_gap")
+        self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "completed")
+
     def test_v2_receipt_seals_per_action_observer_counts(self) -> None:
         executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
         if not executable.is_file():

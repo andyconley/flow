@@ -13,7 +13,7 @@ from execution_contracts import ContractError, canonical, digest, envelope_diges
 from execution_ledger import ExecutionLedger, utc_now
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
-from maf_supervisor import run_maf, run_maf_multiturn
+from maf_supervisor import PINNED_MAF_CORE_VERSION, run_maf, run_maf_multiturn
 from orchestration import validate_orchestration
 from paths import SCAFFOLD_DIR
 from runstate import status as run_status
@@ -492,6 +492,9 @@ def resume_local(work_id: str, attempt_id: str, *, root: Path | None = None,
         except (ContractError, OSError, ValueError) as exc:
             return {"attempt_id": attempt_id, "status": "runtime_protocol_gap",
                     "reason": f"pending MAF checkpoint cannot be verified: {exc}"}
+        if pending["metadata"]["format_version"] != 1 or pending["metadata"]["runtime_version"] != PINNED_MAF_CORE_VERSION:
+            return {"attempt_id": attempt_id, "status": "runtime_protocol_gap",
+                    "reason": "pending MAF checkpoint runtime or format version is incompatible"}
         generation = ledger.claim_recovery(attempt_id)
         fenced = ledger.snapshot(attempt_id)
         if any(action["status"] == "unknown" for action in fenced["actions"]):

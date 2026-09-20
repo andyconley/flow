@@ -25,6 +25,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by package consumers
 
 PROTOCOL_VERSION = 1
 MULTITURN_PROTOCOL_VERSION = 2
+PINNED_MAF_CORE_VERSION = "1.19.0"
 MAX_LINE_BYTES = 256 * 1024
 
 
@@ -275,6 +276,8 @@ def run_maf_multiturn(
                     raise MafProtocolError("MAF child omitted a multi-turn identity field")
                 if not isinstance(proposal["checkpoint_id"], str) or not isinstance(proposal["runtime_version"], str):
                     raise MafProtocolError("MAF child checkpoint identity is invalid")
+                if proposal["runtime_version"] != PINNED_MAF_CORE_VERSION:
+                    raise MafProtocolError("MAF child runtime version differs from the pinned version")
                 try:
                     (validate_action if kind == "delegate" else validate_replan)(envelope, proposal)
                 except (TypeError, ValueError) as exc:

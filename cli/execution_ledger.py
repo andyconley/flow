@@ -7,6 +7,7 @@ import json
 import fcntl
 import os
 import sqlite3
+import stat
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -483,7 +484,7 @@ class ExecutionLedger:
             return {"allowed": True, "reason": "regranted_after_no_dispatch", "action_id": action_id, "grant_id": grant}
 
     @staticmethod
-    def _checkpoint_file(envelope: dict[str, Any], path: str, *, max_bytes: int) -> tuple[Path, str, int]:
+    def _checkpoint_file(envelope: dict[str, Any], path: str, *, max_bytes: int) -> tuple[Path, str, int, bytes]:
         if not isinstance(path, str) or not path or not isinstance(max_bytes, int) or max_bytes < 1:
             raise ContractError("checkpoint path or size limit is invalid")
         root = Path(envelope["checkpoint_dir"])
@@ -493,12 +494,25 @@ class ExecutionLedger:
             resolved = raw.resolve(strict=True)
         except OSError as exc:
             raise ContractError("checkpoint file is absent") from exc
-        if raw.is_symlink() or root.is_symlink() or not resolved.is_file() or not (resolved == root_resolved or root_resolved in resolved.parents):
+        if raw.is_symlink() or root.is_symlink() or resolved.parent != root_resolved:
             raise ContractError("checkpoint file is absent, linked, or outside attempt")
-        size = resolved.stat().st_size
-        if size < 1 or size > max_bytes:
-            raise ContractError("checkpoint file exceeds size limit")
-        return resolved, hashlib.sha256(resolved.read_bytes()).hexdigest(), size
+        root_fd = os.open(root_resolved, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            file_fd = os.open(resolved.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd)
+            try:
+                before = os.fstat(file_fd)
+                if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= max_bytes:
+                    raise ContractError("checkpoint file exceeds size limit or is not regular")
+                raw_bytes = os.read(file_fd, max_bytes + 1)
+                after = os.fstat(file_fd)
+                if (len(raw_bytes) != before.st_size or before.st_size != after.st_size
+                        or before.st_mtime_ns != after.st_mtime_ns):
+                    raise ContractError("checkpoint file changed while reading")
+            finally:
+                os.close(file_fd)
+        finally:
+            os.close(root_fd)
+        return resolved, hashlib.sha256(raw_bytes).hexdigest(), len(raw_bytes), raw_bytes
 
     @staticmethod
     def _validate_maf_checkpoint(raw: bytes, checkpoint_id: str, kind: str, sequence: int) -> None:
@@ -560,8 +574,7 @@ class ExecutionLedger:
             prior = db.execute("SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? AND kind=? AND sequence=?", (attempt_id, kind, sequence)).fetchone()
             if ledger_seq != high_water and prior is None:
                 raise ContractError("checkpoint ledger barrier mismatch")
-            checkpoint_path, file_sha256, file_size = self._checkpoint_file(envelope, path, max_bytes=max_bytes)
-            raw = checkpoint_path.read_bytes()
+            checkpoint_path, file_sha256, file_size, raw = self._checkpoint_file(envelope, path, max_bytes=max_bytes)
             if kind == "pending_delegate" or (kind == "delegate" and sequence in {1, 2}):
                 self._validate_maf_checkpoint(raw, checkpoint_id, kind, sequence)
             record = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": checkpoint_id,
@@ -589,7 +602,7 @@ class ExecutionLedger:
         with self._db() as db:
             row = db.execute("SELECT envelope_json,execution_protocol_version,owner_generation FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             link = db.execute("SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? AND kind=? AND sequence=?", (attempt_id, kind, sequence)).fetchone()
-            if row is None or link is None or row[1] != 2 or link[5] != 2:
+            if row is None or link is None or row[1] != 2 or link[5] != 2 or link[3] != 1:
                 raise ContractError("checkpoint position is absent or incompatible")
             envelope = json.loads(row[0])
             if link[1] != envelope_digest(envelope) or link[10] > row[2]:
@@ -597,10 +610,9 @@ class ExecutionLedger:
             high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
             if high_water < link[2]:
                 raise ContractError("checkpoint ledger barrier is unavailable")
-        checkpoint_path, file_sha256, file_size = self._checkpoint_file(envelope, link[6], max_bytes=max_bytes)
+        checkpoint_path, file_sha256, file_size, raw = self._checkpoint_file(envelope, link[6], max_bytes=max_bytes)
         if file_sha256 != link[7] or file_size != link[8]:
             raise ContractError("checkpoint file digest or size changed")
-        raw = checkpoint_path.read_bytes()
         if kind == "pending_delegate" or (kind == "delegate" and sequence in {1, 2}):
             self._validate_maf_checkpoint(raw, link[0], kind, sequence)
         metadata = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": link[0],
