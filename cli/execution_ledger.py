@@ -1114,6 +1114,40 @@ class ExecutionLedger:
                 self._event(db, attempt_id, action_id, "continuation_opened", canonical({"epoch_id": epoch_id, "resolution_id": resolution_id, "command": command, "actor": actor}))
                 return {"epoch_id": epoch_id, "status": "pending", "generation": 1, "replayed": False}
 
+    def retry_failed_magentic_continuation(self, prior_epoch_id: str, action_id: str,
+                                           checkpoint_sha256: str, *, actor: str) -> dict[str, Any]:
+        """Append a new epoch after a failed v5 continuation with no uncertain sends."""
+        with self.send_lock():
+            with self._db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                prior = db.execute("SELECT attempt_id,status,receipt_path,receipt_sha256,resolution_id "
+                                   "FROM continuation_epochs WHERE epoch_id=?", (prior_epoch_id,)).fetchone()
+                if not prior or prior[1] != "failed" or not prior[2]:
+                    raise ContractError("prior Magentic continuation is not sealed failed")
+                attempt_id = prior[0]
+                attempt = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+                action = db.execute("SELECT attempt_id,status FROM actions WHERE action_id=?", (action_id,)).fetchone()
+                checkpoint = db.execute("SELECT file_sha256 FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind='worker' AND pending_id=?", (attempt_id, action_id)).fetchone()
+                uncertain = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
+                uncertain += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
+                if attempt != ("unknown", 5) or action != (attempt_id, "completed") or checkpoint != (checkpoint_sha256,) or uncertain:
+                    raise ContractError("Magentic retry lacks a completed action and safe checkpoint")
+                if hashlib.sha256(Path(prior[2]).read_bytes()).hexdigest() != db.execute(
+                        "SELECT sealed_receipt_sha256 FROM continuation_epochs WHERE epoch_id=?", (prior_epoch_id,)).fetchone()[0]:
+                    raise ContractError("prior Magentic continuation receipt changed")
+                existing = db.execute("SELECT epoch_id,status FROM continuation_epochs WHERE attempt_id=? AND action_id=?", (attempt_id, action_id)).fetchone()
+                if existing:
+                    return {"epoch_id": existing[0], "status": existing[1], "replayed": True}
+                epoch_id = uuid.uuid4().hex
+                work_id = db.execute("SELECT work_id FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+                before = canonical(self._policy_counts(db, work_id))
+                db.execute("INSERT INTO continuation_epochs(epoch_id,attempt_id,action_id,resolution_id,receipt_sha256,checkpoint_sha256,status,owner_actor,created_at,policy_before_json,reason) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                           (epoch_id, attempt_id, action_id, prior[4], prior[3], checkpoint_sha256,
+                            "pending", actor, utc_now(), before, "follows failed epoch " + prior_epoch_id))
+                self._event(db, attempt_id, action_id, "magentic_continuation_retry_opened",
+                            canonical({"epoch_id": epoch_id, "prior_epoch_id": prior_epoch_id, "actor": actor}))
+                return {"epoch_id": epoch_id, "status": "pending", "replayed": False}
+
     def claim_continuation(self, epoch_id: str, *, actor: str) -> int:
         """Fence a prior process; a claimed send becomes unknown on restart."""
         if not isinstance(actor, str) or not actor.strip() or len(actor.encode()) > 256:

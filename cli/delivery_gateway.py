@@ -133,7 +133,7 @@ def prepare_delivery(work_id: str, worktree: Path, source_commit: str, *,
 
 def _normalized_manager_request(envelope: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
     messages = message.get("messages")
-    if not isinstance(messages, list) or not messages or len(canonical(messages).encode()) > 24000:
+    if not isinstance(messages, list) or not messages or len(canonical(messages).encode()) > 32000:
         raise ContractError("Magentic manager messages are invalid")
     request = {key: message.get(key) for key in ("schema_version", "call_id", "attempt_id", "envelope_digest",
                                                 "sequence", "phase", "manager_round", "prompt_digest")}
@@ -428,6 +428,14 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
            for item in initial_snapshot["actions"]):
         edit_evidence = _verify_edit(worktree, baseline, attempt_dir)
         test_evidence = test_runner(worktree)
+    prior_verifier = [item for item in initial_snapshot["actions"]
+                      if item["request"]["assignment_id"] == "local-verifier" and item["status"] == "completed"]
+    if prior_verifier and edit_evidence:
+        verifier_task = (prior_verifier[-1]["request"]["task"]
+                         + "\n\nFlow-verified complete bounded diff for this review:\n"
+                         + (attempt_dir / "repair.diff").read_text()
+                         + "\nTargeted test: passed. Diff SHA-256: " + edit_evidence["diff_sha256"])
+        verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
     def on_manager(message: dict[str, Any]) -> str:
         request = _normalized_manager_request(envelope, message)

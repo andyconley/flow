@@ -17,6 +17,7 @@ from execution_contracts import (ContractError, digest, envelope_digest,
                                  validate_manager_call, validate_receipt, validate_result)
 from claude_edit_worker import _result as claude_edit_result
 from execution_ledger import ExecutionLedger
+from delivery_gateway import _normalized_manager_request
 
 
 def envelope() -> dict:
@@ -61,6 +62,14 @@ def manager_call(env: dict, sequence: int, phase: str = "facts", replan_sequence
 
 
 class MagenticContractTests(unittest.TestCase):
+    def test_manager_accepts_verified_progress_prompt_within_claude_limit(self) -> None:
+        env = envelope()
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "x" * 24000}]}]
+        request = manager_call(env, 1, "progress")
+        request["prompt_digest"] = digest(messages)
+        request["call_id"] = expected_manager_call_id(request)
+        self.assertEqual(_normalized_manager_request(env, {**request, "messages": messages}), request)
+
     def test_claude_edit_result_matches_v5_worker_contract(self) -> None:
         env = envelope()
         selected = env["roster"][1]
@@ -269,6 +278,22 @@ class MagenticContractTests(unittest.TestCase):
             ledger.start_magentic_continuation(epoch["epoch_id"], generation=epoch_generation)
             generation = ledger.claim_recovery(env["attempt_id"], actor="operator")
             self.assertTrue(ledger.decide_manager_call(env, manager, generation=generation)["allowed"])
+            verifier = action(env, 2, env["roster"][0])
+            verifier_grant = ledger.decide(env, verifier, generation=generation)
+            verifier_checkpoint = root / "verifier-checkpoint.json"
+            verifier_checkpoint.write_text(json.dumps({"checkpoint_id": "pending-2", "workflow_name": "flow-magentic-delivery-v5",
+                                                       "pending_request_info_events": {"flow-magentic-action-2": {"request": "opaque"}}}))
+            high_water = ledger.snapshot(env["attempt_id"])["events"][-1]["seq"]
+            verifier_bound = ledger.bind_magentic_checkpoint(env["attempt_id"], "pending-2", "worker",
+                                                               verifier["action_id"], high_water,
+                                                               str(verifier_checkpoint), generation=generation)
+            self.assertTrue(ledger.consume_grant(verifier["action_id"], verifier_grant["grant_id"], generation=generation))
+            ledger.observe_send(verifier["action_id"], generation)
+            verdict = {"schema_version": 1, "status": "completed", "provider": "ollama", "model": "local-model", "physical_call": True,
+                       "evidence_level": "flow_observed_local_http_response", "output": "Verified.",
+                       "output_sha256": hashlib.sha256(b"Verified.").hexdigest()}
+            ledger.observe_response(verifier["action_id"], verdict, generation)
+            ledger.complete(verifier["action_id"], verdict, generation=generation)
             linked = root / "linked-receipt.json"
             linked.write_text("linked continuation receipt\n")
             ledger.finish_magentic_continuation(epoch["epoch_id"], "failed", "probe complete", str(linked),
@@ -276,6 +301,14 @@ class MagenticContractTests(unittest.TestCase):
             self.assertEqual(original.read_text(), "original unknown receipt\n")
             self.assertEqual(ledger.snapshot(env["attempt_id"])["status"], "unknown")
             self.assertEqual(ledger.continuation_snapshot(epoch["epoch_id"])["status"], "failed")
+            retry = ledger.retry_failed_magentic_continuation(epoch["epoch_id"], verifier["action_id"],
+                                                               verifier_bound["file_sha256"], actor="operator")
+            self.assertEqual(retry["status"], "pending")
+            self.assertEqual(ledger.retry_failed_magentic_continuation(epoch["epoch_id"], verifier["action_id"],
+                                                                        verifier_bound["file_sha256"], actor="operator")["epoch_id"],
+                             retry["epoch_id"])
+            retry_generation = ledger.claim_continuation(retry["epoch_id"], actor="operator")
+            ledger.start_magentic_continuation(retry["epoch_id"], generation=retry_generation)
 
     def test_replan_model_calls_need_matching_approval_and_ordered_pair(self) -> None:
         env = envelope()
