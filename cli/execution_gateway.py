@@ -9,11 +9,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from execution_contracts import ContractError, canonical, digest, envelope_digest, validate_action, validate_receipt, validate_result
+from execution_contracts import ContractError, canonical, digest, envelope_digest, validate_action, validate_receipt, validate_result, validate_replan
 from execution_ledger import ExecutionLedger, utc_now
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
-from maf_supervisor import run_maf
+from maf_supervisor import run_maf, run_maf_multiturn
 from orchestration import validate_orchestration
 from paths import SCAFFOLD_DIR
 from runstate import status as run_status
@@ -49,7 +49,7 @@ def _write_snapshot(path: Path, data: bytes) -> None:
 
 
 def prepare(work_id: str, assignment_id: str, task_file: str, *, root: Path | None = None,
-            test_provider: str | None = None) -> tuple[dict[str, Any], Path, ExecutionLedger]:
+            test_provider: str | None = None, execution_protocol_version: int = 1) -> tuple[dict[str, Any], Path, ExecutionLedger]:
     project_root = (root or repo_root()).resolve()
     run_dir = project_root / ".flow" / "runs" / work_id
     state = run_status(work_id, root=project_root)
@@ -106,6 +106,10 @@ def prepare(work_id: str, assignment_id: str, task_file: str, *, root: Path | No
                 "task_digest": hashlib.sha256(task.encode()).hexdigest(), "task": task, "instructions": instructions,
                 "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2, "paid_budget_usd": 0},
                 "checkpoint_dir": str(attempt_dir / "checkpoints")}
+    if execution_protocol_version == 2:
+        envelope["execution_protocol_version"] = 2
+    elif execution_protocol_version != 1:
+        raise ContractError("unsupported execution protocol version")
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     ledger = ExecutionLedger(run_dir / "execution" / "ledger.sqlite")
@@ -200,6 +204,164 @@ def execute_local(work_id: str, assignment_id: str, task_file: str, *, root: Pat
     return {"attempt_id": aid, "status": terminal, "receipt_path": str(receipt_path), "reason": receipt["reason"]}
 
 
+def execute_multiturn_local(work_id: str, assignment_id: str, task_file: str, *, root: Path | None = None,
+                            adapter: Callable[..., dict[str, Any]] | None = None,
+                            python_path: str | None = None,
+                            interrupt_after_third_send: bool = False,
+                            _existing: tuple[dict[str, Any], Path, ExecutionLedger, int, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Run the bounded three-call exercise with Flow owning every decision."""
+    if _existing is None:
+        envelope, attempt_dir, ledger = prepare(
+            work_id, assignment_id, task_file, root=root,
+            test_provider="local-stub" if adapter is not None else None,
+            execution_protocol_version=2,
+        )
+        generation, resume = 1, None
+    else:
+        envelope, attempt_dir, ledger, generation, resume = _existing
+    physical_adapter = adapter is None
+    adapter = adapter or call_local
+    aid = envelope["attempt_id"]
+    failure = ""
+
+    def bind_prior(proposal: dict[str, Any]) -> None:
+        # A pending next-position checkpoint is the MAF barrier *after* the
+        # previous action's committed result. Flow binds that committed action,
+        # not the new proposal, to the checkpoint.
+        if proposal["kind"] != "replan" or proposal["sequence"] not in {1, 2}:
+            return
+        completed_action = proposal["sequence"]
+        if any(p["kind"] == "delegate" and p["sequence"] == completed_action
+               for p in ledger.snapshot(aid)["checkpoint_positions"]):
+            return
+        checkpoint_id = str(uuid.UUID(proposal["checkpoint_id"]))
+        checkpoint_path = attempt_dir / "checkpoints" / f"{checkpoint_id}.json"
+        snapshot = ledger.snapshot(aid)
+        if not snapshot["events"]:
+            raise ContractError("checkpoint has no Flow ledger barrier")
+        ledger.bind_checkpoint_position(
+            aid, "delegate", completed_action, checkpoint_id,
+            envelope_digest(envelope), snapshot["events"][-1]["seq"],
+            1, proposal["runtime_version"], str(checkpoint_path), generation=generation,
+        )
+
+    def on_action(proposal: dict[str, Any]) -> dict[str, Any]:
+        validate_action(envelope, proposal)
+        logical = {key: value for key, value in proposal.items()
+                   if key not in {"checkpoint_id", "runtime_version"}}
+        decision = ledger.decide(envelope, logical, generation=generation)
+        if not decision["allowed"]:
+            return {"status": "denied", "reason": decision["reason"], "action_id": proposal["action_id"]}
+        if decision.get("replayed") and decision.get("result") is not None:
+            return {"status": "completed", "action_id": proposal["action_id"],
+                    "output": decision["result"]["output"], "replayed": True}
+        if not decision.get("replayed"):
+            checkpoint_id = str(uuid.UUID(proposal["checkpoint_id"]))
+            checkpoint_path = attempt_dir / "checkpoints" / f"{checkpoint_id}.json"
+            high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+            ledger.bind_checkpoint_position(
+                aid, "pending_delegate", proposal["sequence"], checkpoint_id,
+                envelope_digest(envelope), high_water, 1, proposal["runtime_version"],
+                str(checkpoint_path), generation=generation,
+            )
+        if not ledger.consume_grant(proposal["action_id"], decision["grant_id"], generation=generation):
+            raise ContractError("action grant was already consumed without a committed result")
+        with ledger.send_lock():
+            ledger.assert_owner(aid, generation)
+            ledger.observe_send(proposal["action_id"], generation)
+            if interrupt_after_third_send and proposal["sequence"] == 3:
+                ledger.mark_unknown(proposal["action_id"], "controlled_post_send_interruption", generation=generation)
+                raise RuntimeError("controlled post-send interruption")
+            try:
+                result = (call_local(envelope, correlation_id=proposal["action_id"])
+                          if physical_adapter else adapter(envelope))
+                validate_result(envelope, result)
+                ledger.observe_response(proposal["action_id"], result, generation)
+                ledger.complete(proposal["action_id"], result, generation=generation)
+            except Exception as exc:
+                ledger.mark_unknown(proposal["action_id"], "adapter_outcome_uncertain", generation=generation)
+                raise RuntimeError(f"local adapter outcome uncertain: {exc}") from exc
+        return {"status": "completed", "action_id": proposal["action_id"], "output": result["output"]}
+
+    def on_replan(proposal: dict[str, Any]) -> dict[str, Any]:
+        validate_replan(envelope, proposal)
+        bind_prior(proposal)
+        logical = {key: value for key, value in proposal.items()
+                   if key not in {"checkpoint_id", "runtime_version"}}
+        decision = ledger.decide_replan(envelope, logical, generation=generation)
+        return {"status": "allowed" if decision["allowed"] else "denied",
+                "reason": decision["reason"], "replan_id": proposal["replan_id"]}
+
+    try:
+        first = run_maf_multiturn(envelope, on_action, on_replan, phase="initial", python_path=python_path,
+                                  resume=resume)
+        snapshot = ledger.snapshot(aid)
+        if (first.get("reason") != "denied_replan_cap" or
+                [a["status"] for a in snapshot["actions"]] != ["completed", "completed"] or
+                [r["status"] for r in snapshot["replans"]] != ["allowed", "allowed", "denied"]):
+            raise ContractError("runtime_protocol_gap: initial phase did not reach the approved denial barrier")
+        # This launch is an independent proposal, after Flow has checked that
+        # the denial caused no replacement action or grant.
+        run_maf_multiturn(envelope, on_action, on_replan, phase="action3", python_path=python_path)
+    except Exception as exc:
+        failure = str(exc)
+    snapshot = ledger.snapshot(aid)
+    actions = snapshot["actions"]
+    terminal = "unknown" if any(a["status"] == "unknown" for a in actions) else (
+        "completed" if not failure and len(actions) == 3 and all(a["status"] == "completed" for a in actions)
+        else "failed"
+    )
+    reason = "reconciliation_required" if terminal == "unknown" else failure
+    receipt_path = attempt_dir / "receipt.json"
+    action_ids = {action["action_id"] for action in actions}
+    sends = {event["action_id"] for event in snapshot["events"] if event["event"] == "adapter_send_started"}
+    observer_path_raw = os.environ.get("FLOW_OLLAMA_OBSERVER_LOG")
+    observer_rows: list[dict[str, Any]] | None = None
+    if observer_path_raw:
+        observer_path = Path(observer_path_raw).resolve()
+        run_dir = attempt_dir.parent.parent
+        if (not _inside(observer_path, run_dir.resolve()) or observer_path.is_symlink()
+                or not observer_path.is_file() or observer_path.stat().st_size > 65536):
+            raise ContractError("local observer evidence path is invalid")
+        raw_rows = [json.loads(line) for line in observer_path.read_text().splitlines()]
+        expected_fields = {"correlation_id", "arrival_time", "method", "path", "byte_count"}
+        if any(not isinstance(row, dict) or set(row) != expected_fields for row in raw_rows):
+            raise ContractError("local observer evidence has unexpected fields")
+        observer_rows = [row for row in raw_rows if row["correlation_id"] in action_ids]
+        if any(row["method"] != "POST" or row["path"] != "/api/chat" for row in observer_rows):
+            raise ContractError("local observer evidence has an unexpected route")
+        sealed = canonical(observer_rows) + "\n"
+        write_atomic(attempt_dir / "endpoint-observations.json", sealed, mode=0o600)
+    endpoint_evidence = {
+        "status": "observed" if observer_rows is not None else "unavailable",
+        "path": "endpoint-observations.json" if observer_rows is not None else None,
+        "sha256": hashlib.sha256((canonical(observer_rows) + "\n").encode()).hexdigest() if observer_rows is not None else None,
+        "actions": [
+            {"action_id": action["action_id"], "flow_send_observed": action["action_id"] in sends,
+             "endpoint_arrivals": sum(row["correlation_id"] == action["action_id"] for row in observer_rows)
+             if observer_rows is not None else None}
+            for action in actions
+        ],
+    }
+    receipt = {
+        "schema_version": 1, "execution_protocol_version": 2,
+        "work_id": work_id, "attempt_id": aid, "envelope_digest": envelope_digest(envelope),
+        "charter_digest": envelope["charter_digest"], "manifest_digest": envelope["manifest_digest"],
+        "charter_sources": envelope["charter_sources"], "run_protocol_revision": envelope["run_protocol_revision"],
+        "definition_digest": envelope["definition_digest"], "provider": envelope["provider"],
+        "status": terminal, "reason": reason, "checkpoint_id": None,
+        "actions": actions, "replans": snapshot["replans"],
+        "checkpoints": snapshot["checkpoint_positions"], "created_at": utc_now(),
+        "endpoint_evidence": endpoint_evidence,
+    }
+    validate_receipt(envelope, receipt)
+    with ledger.send_lock():
+        ledger.assert_owner(aid, generation)
+        write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+    return {"attempt_id": aid, "status": terminal, "receipt_path": str(receipt_path), "reason": reason}
+
+
 def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) -> dict[str, Any]:
     """Read the original Flow evidence without starting a coordinator or adapter."""
     project_root = (root or repo_root()).resolve()
@@ -232,6 +394,34 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
         except (ValueError, OSError) as exc:
             raise ContractError(f"receipt is invalid: {exc}") from exc
     missing_evidence = [name for name, state in sources.items() if not state["matches"]]
+    if snapshot.get("execution_protocol_version") == 2:
+        for position in snapshot.get("checkpoint_positions", []):
+            try:
+                ledger.read_checkpoint_position(attempt_id, position["kind"], position["sequence"])
+            except (ContractError, OSError, ValueError):
+                missing_evidence.append(f"checkpoint:{position['kind']}:{position['sequence']}")
+        endpoint = receipt.get("endpoint_evidence") if isinstance(receipt, dict) else None
+        if isinstance(endpoint, dict) and endpoint.get("status") == "observed":
+            endpoint_path = attempt_dir / "endpoint-observations.json"
+            if (endpoint.get("path") != "endpoint-observations.json" or endpoint_path.is_symlink()
+                    or not endpoint_path.is_file() or
+                    hashlib.sha256(endpoint_path.read_bytes()).hexdigest() != endpoint.get("sha256")):
+                missing_evidence.append("endpoint-observations.json")
+            else:
+                try:
+                    rows = json.loads(endpoint_path.read_text())
+                    sends = {event["action_id"] for event in snapshot["events"]
+                             if event["event"] == "adapter_send_started"}
+                    expected = [
+                        {"action_id": action["action_id"],
+                         "flow_send_observed": action["action_id"] in sends,
+                         "endpoint_arrivals": sum(row["correlation_id"] == action["action_id"] for row in rows)}
+                        for action in snapshot["actions"]
+                    ]
+                    if endpoint.get("actions") != expected:
+                        missing_evidence.append("endpoint-observations.json:count-mismatch")
+                except (TypeError, ValueError, KeyError):
+                    missing_evidence.append("endpoint-observations.json:invalid")
     for resolution in snapshot.get("resolutions", []):
         for item in resolution["evidence"]:
             raw_path = project_root / item["path"]
@@ -244,7 +434,9 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
 
 def resume_local(work_id: str, attempt_id: str, *, root: Path | None = None,
                  supervisor: Callable[..., dict[str, Any]] | None = None,
-                 python_path: str | None = None) -> dict[str, Any]:
+                 python_path: str | None = None,
+                 adapter: Callable[..., dict[str, Any]] | None = None,
+                 interrupt_after_third_send: bool = False) -> dict[str, Any]:
     """Fence the former coordinator and resume only a proved safe action."""
     inspected = inspect_attempt(work_id, attempt_id, root=root)
     snapshot = inspected["snapshot"]
@@ -261,7 +453,10 @@ def resume_local(work_id: str, attempt_id: str, *, root: Path | None = None,
         ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
         generation = ledger.claim_recovery(attempt_id)
         current = ledger.snapshot(attempt_id)
-        if receipt["actions"] != current["actions"] or current["status"] != "started":
+        if (receipt["actions"] != current["actions"] or current["status"] != "started"
+                or (current.get("execution_protocol_version") == 2 and
+                    (receipt.get("replans") != current["replans"] or
+                     receipt.get("checkpoints") != current["checkpoint_positions"]))):
             raise ContractError("receipt actions or terminal state conflict with fenced ledger")
         expected = "completed" if current["actions"] and all(a["status"] == "completed" for a in current["actions"]) else "unknown" if any(a["status"] == "unknown" for a in current["actions"]) else "denied" if current["actions"] and all(a["status"] == "denied" for a in current["actions"]) else "failed"
         if receipt["status"] != expected:
@@ -270,7 +465,48 @@ def resume_local(work_id: str, attempt_id: str, *, root: Path | None = None,
                               str(attempt_dir / "receipt.json"), generation=generation)
         return {"attempt_id": attempt_id, "status": "repaired", "receipt_path": str(attempt_dir / "receipt.json")}
     if snapshot["status"] != "started":
+        if snapshot["status"] == "unknown":
+            return {"attempt_id": attempt_id, "status": "reconciliation_required",
+                    "reason": "dispatch outcome uncertain"}
         return {"attempt_id": attempt_id, "status": "read_only", "reason": "attempt already terminal"}
+    if snapshot.get("execution_protocol_version") == 2:
+        actions = snapshot["actions"]
+        if any(action["status"] in {"unknown", "started"} for action in actions):
+            # Fence a former parent and turn any started send into unknown.
+            ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+            generation = ledger.claim_recovery(attempt_id)
+            return {"attempt_id": attempt_id, "status": "reconciliation_required",
+                    "reason": "dispatch outcome uncertain", "owner_generation": generation}
+        completed = [action for action in actions if action["status"] == "completed"]
+        if not completed or len(completed) > 2 or [a["request"]["sequence"] for a in completed] != list(range(1, len(completed) + 1)):
+            return {"attempt_id": attempt_id, "status": "runtime_protocol_gap",
+                    "reason": "no replayable v2 committed action prefix"}
+        last = completed[-1]
+        if last["result"] is None:
+            return {"attempt_id": attempt_id, "status": "runtime_protocol_gap",
+                    "reason": "committed action has no durable result"}
+        validate_result(envelope, last["result"])
+        ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+        try:
+            pending = ledger.read_checkpoint_position(attempt_id, "pending_delegate", last["request"]["sequence"])
+        except (ContractError, OSError, ValueError) as exc:
+            return {"attempt_id": attempt_id, "status": "runtime_protocol_gap",
+                    "reason": f"pending MAF checkpoint cannot be verified: {exc}"}
+        generation = ledger.claim_recovery(attempt_id)
+        fenced = ledger.snapshot(attempt_id)
+        if any(action["status"] == "unknown" for action in fenced["actions"]):
+            return {"attempt_id": attempt_id, "status": "reconciliation_required",
+                    "reason": "dispatch outcome uncertain", "owner_generation": generation}
+        seq = last["request"]["sequence"]
+        resume = {"checkpoint_id": pending["metadata"]["checkpoint_id"],
+                  "request_id": f"flow-action-{seq}", "type": "action_result",
+                  "action_id": last["action_id"], "kind": "delegate", "sequence": seq,
+                  "result": {"status": "completed", "action_id": last["action_id"],
+                             "output": last["result"]["output"], "replayed": True}}
+        return execute_multiturn_local(work_id, envelope["assignment_id"], "", root=root,
+                                       python_path=python_path, adapter=adapter,
+                                       interrupt_after_third_send=interrupt_after_third_send,
+                                       _existing=(envelope, attempt_dir, ledger, generation, resume))
     ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
     generation = ledger.claim_recovery(attempt_id)
     snapshot = ledger.snapshot(attempt_id)

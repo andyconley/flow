@@ -18,7 +18,9 @@ from execution_contracts import (
     canonical,
     validate_action,
     validate_envelope,
+    execution_protocol_version,
     envelope_digest,
+    validate_replan,
     validate_recovery_resolution,
     validate_result,
 )
@@ -52,12 +54,21 @@ class ExecutionLedger:
                 status TEXT NOT NULL, reason TEXT NOT NULL, receipt_path TEXT,
                 recovery_version INTEGER NOT NULL DEFAULT 1,
                 owner_generation INTEGER NOT NULL DEFAULT 0,
-                owner_actor TEXT
+                owner_actor TEXT,
+                execution_protocol_version INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS actions (
                 action_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
                 request_json TEXT NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL,
-                grant_id TEXT UNIQUE, result_json TEXT
+                grant_id TEXT UNIQUE, result_json TEXT,
+                kind TEXT NOT NULL DEFAULT 'delegate', sequence INTEGER NOT NULL DEFAULT 1,
+                proposal_digest TEXT
+            );
+            CREATE TABLE IF NOT EXISTS replan_decisions (
+                replan_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                sequence INTEGER NOT NULL, request_json TEXT NOT NULL, proposal_digest TEXT NOT NULL,
+                status TEXT NOT NULL, reason TEXT NOT NULL,
+                UNIQUE(attempt_id, sequence)
             );
             CREATE TABLE IF NOT EXISTS events (
                 seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, attempt_id TEXT NOT NULL,
@@ -80,6 +91,16 @@ class ExecutionLedger:
                 runtime_version TEXT NOT NULL, path TEXT NOT NULL, bound_at TEXT NOT NULL,
                 owner_generation INTEGER NOT NULL, file_sha256 TEXT
             );
+            CREATE TABLE IF NOT EXISTS checkpoint_position_links (
+                attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                kind TEXT NOT NULL, sequence INTEGER NOT NULL, checkpoint_id TEXT NOT NULL,
+                envelope_digest TEXT NOT NULL, ledger_seq INTEGER NOT NULL,
+                format_version INTEGER NOT NULL, runtime_version TEXT NOT NULL,
+                protocol_version INTEGER NOT NULL, path TEXT NOT NULL,
+                file_sha256 TEXT NOT NULL, file_size INTEGER NOT NULL,
+                bound_at TEXT NOT NULL, owner_generation INTEGER NOT NULL,
+                PRIMARY KEY(attempt_id, kind, sequence)
+            );
             """)
             # SQLite's CREATE TABLE IF NOT EXISTS cannot evolve first-slice
             # databases. These columns make existing records explicitly v1 and
@@ -89,12 +110,22 @@ class ExecutionLedger:
                 ("recovery_version", "INTEGER NOT NULL DEFAULT 1"),
                 ("owner_generation", "INTEGER NOT NULL DEFAULT 0"),
                 ("owner_actor", "TEXT"),
+                ("execution_protocol_version", "INTEGER NOT NULL DEFAULT 1"),
             ):
                 if name not in columns:
                     db.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
             checkpoint_columns = {row[1] for row in db.execute("PRAGMA table_info(checkpoint_links)")}
             if "file_sha256" not in checkpoint_columns:
                 db.execute("ALTER TABLE checkpoint_links ADD COLUMN file_sha256 TEXT")
+            action_columns = {row[1] for row in db.execute("PRAGMA table_info(actions)")}
+            for name, definition in (
+                ("kind", "TEXT NOT NULL DEFAULT 'delegate'"),
+                ("sequence", "INTEGER NOT NULL DEFAULT 1"),
+                ("proposal_digest", "TEXT"),
+            ):
+                if name not in action_columns:
+                    db.execute(f"ALTER TABLE actions ADD COLUMN {name} {definition}")
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS actions_attempt_kind_sequence ON actions(attempt_id, kind, sequence)")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=10) if self.read_only else sqlite3.connect(self.path, timeout=10)
@@ -135,9 +166,10 @@ class ExecutionLedger:
 
     def create_attempt(self, envelope: dict[str, Any]) -> None:
         validate_envelope(envelope)
+        protocol_version = execution_protocol_version(envelope)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor) VALUES(?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, 1, "initial"))
+            db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor,execution_protocol_version) VALUES(?,?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, 1, "initial", protocol_version))
             self._event(db, envelope["attempt_id"], None, "attempt_started", "")
 
     def claim_recovery(self, attempt_id: str, actor: str = "flow-recovery") -> int:
@@ -172,21 +204,63 @@ class ExecutionLedger:
         with self._db() as db:
             self._assert_owner(db, attempt_id, generation)
 
+    @staticmethod
+    def _unresolved_action(db: sqlite3.Connection, attempt_id: str) -> str | None:
+        row = db.execute(
+            "SELECT action_id FROM actions WHERE attempt_id=? AND status IN ('started','unknown') ORDER BY rowid LIMIT 1",
+            (attempt_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    @staticmethod
+    def _decision_from_action(row: tuple[Any, ...]) -> dict[str, Any]:
+        action_id, status, reason, grant_id, result_json = row
+        return {
+            "allowed": status == "allowed",
+            "reason": reason,
+            "action_id": action_id,
+            "grant_id": grant_id if status == "allowed" else None,
+            "result": json.loads(result_json) if result_json else None,
+            "replayed": True,
+        }
+
+    @staticmethod
+    def _decision_from_replan(row: tuple[Any, ...]) -> dict[str, Any]:
+        replan_id, status, reason = row
+        return {"allowed": status == "allowed", "reason": reason, "replan_id": replan_id, "replayed": True}
+
     def decide(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int | None = None) -> dict[str, Any]:
         validate_action(envelope, action)
         aid, attempt = action["action_id"], envelope["attempt_id"]
+        protocol_version = execution_protocol_version(envelope)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt, generation)
-            stored = db.execute("SELECT envelope_json,status FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
-            if stored is None or stored[0] != canonical(envelope) or stored[1] != "started":
+            stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
+            if stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] != protocol_version:
                 raise ContractError("attempt is absent, changed, or closed")
-            existing = db.execute("SELECT request_json,status,reason,grant_id FROM actions WHERE action_id=?", (aid,)).fetchone()
+            request_json = canonical(action)
+            existing = db.execute("SELECT request_json,status,reason,grant_id,result_json FROM actions WHERE action_id=?", (aid,)).fetchone()
             if existing:
-                if existing[0] != canonical(action):
+                if existing[0] != request_json:
                     raise ContractError("action ID reused with changed payload")
                 self._event(db, attempt, aid, "duplicate_request", existing[1])
+                if protocol_version == 2:
+                    return self._decision_from_action((aid, *existing[1:]))
                 return {"allowed": False, "reason": "duplicate_request", "action_id": aid}
+            slot = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? AND kind='delegate' AND sequence=?", (attempt, action["sequence"])).fetchone()
+            if slot:
+                if slot[1] == request_json:
+                    self._event(db, attempt, slot[0], "duplicate_request", slot[2])
+                    return self._decision_from_action((slot[0], *slot[2:]))
+                raise ContractError("logical action slot already occupied")
+            unresolved = self._unresolved_action(db, attempt)
+            if unresolved:
+                return {"allowed": False, "reason": "reconciliation_required", "action_id": aid}
+            if protocol_version == 2:
+                previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM actions WHERE attempt_id=? AND kind='delegate'", (attempt,)).fetchone()[0]
+                if action["sequence"] != previous + 1:
+                    raise ContractError("action sequence is skipped or out of order")
             work_id = envelope["work_id"]
             allowed_count = db.execute(
                 "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND actions.status IN ('allowed','started','completed','unknown')",
@@ -207,9 +281,48 @@ class ExecutionLedger:
             else:
                 reason = "allowed"
             grant = uuid.uuid4().hex if reason == "allowed" else None
-            db.execute("INSERT INTO actions VALUES(?,?,?,?,?,?,?)", (aid, attempt, canonical(action), "allowed" if grant else "denied", reason, grant, None))
+            db.execute("INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)", (aid, attempt, request_json, "allowed" if grant else "denied", reason, grant, None, "delegate", action["sequence"], hashlib.sha256(request_json.encode()).hexdigest()))
             self._event(db, attempt, aid, "policy_allowed" if grant else "policy_denied", reason)
             return {"allowed": bool(grant), "reason": reason, "action_id": aid, "grant_id": grant}
+
+    def decide_replan(self, envelope: dict[str, Any], replan: dict[str, Any], *, generation: int | None = None) -> dict[str, Any]:
+        """Persist a Flow policy decision for an ordered replan request.
+
+        Replans have no grant and cannot cause an action or adapter send. The
+        v2 table records the cap denial as evidence that the child was stopped.
+        """
+        validate_replan(envelope, replan)
+        attempt, replan_id = envelope["attempt_id"], replan["replan_id"]
+        request_json = canonical(replan)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt, generation)
+            stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
+            if stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] != 2:
+                raise ContractError("attempt is absent, changed, or closed")
+            existing = db.execute("SELECT request_json,status,reason FROM replan_decisions WHERE replan_id=?", (replan_id,)).fetchone()
+            if existing:
+                if existing[0] != request_json:
+                    raise ContractError("replan ID reused with changed payload")
+                self._event(db, attempt, replan_id, "duplicate_replan", existing[1])
+                return self._decision_from_replan((replan_id, existing[1], existing[2]))
+            slot = db.execute("SELECT replan_id,request_json,status,reason FROM replan_decisions WHERE attempt_id=? AND sequence=?", (attempt, replan["sequence"])).fetchone()
+            if slot:
+                if slot[1] == request_json:
+                    self._event(db, attempt, slot[0], "duplicate_replan", slot[2])
+                    return self._decision_from_replan((slot[0], slot[2], slot[3]))
+                raise ContractError("logical replan slot already occupied")
+            unresolved = self._unresolved_action(db, attempt)
+            if unresolved:
+                return {"allowed": False, "reason": "reconciliation_required", "replan_id": replan_id}
+            previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM replan_decisions WHERE attempt_id=?", (attempt,)).fetchone()[0]
+            if replan["sequence"] != previous + 1:
+                raise ContractError("replan sequence is skipped or out of order")
+            allowed = replan["sequence"] <= envelope["limits"]["max_replans"]
+            reason = "allowed" if allowed else "replan_cap"
+            db.execute("INSERT INTO replan_decisions(replan_id,attempt_id,sequence,request_json,proposal_digest,status,reason) VALUES(?,?,?,?,?,?,?)", (replan_id, attempt, replan["sequence"], request_json, hashlib.sha256(request_json.encode()).hexdigest(), "allowed" if allowed else "denied", reason))
+            self._event(db, attempt, replan_id, "replan_allowed" if allowed else "replan_denied", reason)
+            return {"allowed": allowed, "reason": reason, "replan_id": replan_id}
 
     def consume_grant(self, action_id: str, grant_id: str, *, generation: int | None = None) -> bool:
         with self._db() as db:
@@ -369,6 +482,133 @@ class ExecutionLedger:
             self._event(db, attempt_id, action_id, "policy_reallowed", "resolved_not_dispatched")
             return {"allowed": True, "reason": "regranted_after_no_dispatch", "action_id": action_id, "grant_id": grant}
 
+    @staticmethod
+    def _checkpoint_file(envelope: dict[str, Any], path: str, *, max_bytes: int) -> tuple[Path, str, int]:
+        if not isinstance(path, str) or not path or not isinstance(max_bytes, int) or max_bytes < 1:
+            raise ContractError("checkpoint path or size limit is invalid")
+        root = Path(envelope["checkpoint_dir"])
+        raw = Path(path)
+        try:
+            root_resolved = root.resolve(strict=True)
+            resolved = raw.resolve(strict=True)
+        except OSError as exc:
+            raise ContractError("checkpoint file is absent") from exc
+        if raw.is_symlink() or root.is_symlink() or not resolved.is_file() or not (resolved == root_resolved or root_resolved in resolved.parents):
+            raise ContractError("checkpoint file is absent, linked, or outside attempt")
+        size = resolved.stat().st_size
+        if size < 1 or size > max_bytes:
+            raise ContractError("checkpoint file exceeds size limit")
+        return resolved, hashlib.sha256(resolved.read_bytes()).hexdigest(), size
+
+    @staticmethod
+    def _validate_maf_checkpoint(raw: bytes, checkpoint_id: str, kind: str, sequence: int) -> None:
+        """Validate the safe JSON envelope around MAF's opaque saved state.
+
+        Flow deliberately does not unpickle MAF internals. The storage JSON
+        still supplies enough stable metadata to prove the linked position is
+        the expected pending MAF request, rather than an arbitrary checkpoint
+        with a borrowed filename.
+        """
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError) as exc:
+            raise ContractError("pending checkpoint is not MAF JSON") from exc
+        if not isinstance(value, dict) or value.get("checkpoint_id") != checkpoint_id:
+            raise ContractError("pending checkpoint ID does not match link")
+        expected_workflow = "flow-maf-v2-action3" if kind == "pending_delegate" and sequence == 3 else "flow-maf-v2-initial"
+        if value.get("workflow_name") != expected_workflow:
+            raise ContractError("checkpoint workflow does not match position")
+        pending = value.get("pending_request_info_events")
+        request_id = f"flow-action-{sequence}" if kind == "pending_delegate" else f"flow-replan-{sequence}"
+        if not isinstance(pending, dict) or set(pending) != {request_id} or not isinstance(pending[request_id], dict):
+            raise ContractError("checkpoint request does not match position")
+
+    def bind_checkpoint_position(self, attempt_id: str, kind: str, sequence: int, checkpoint_id: str,
+                                 checkpoint_envelope_digest: str, ledger_seq: int, format_version: int,
+                                 runtime_version: str, path: str, *, generation: int,
+                                 max_bytes: int = 65536) -> dict[str, Any]:
+        """Bind a v2 checkpoint to one completed Flow decision position.
+
+        The persisted barrier is descriptive recovery evidence only. It never
+        authorizes a grant, a replan, or a provider send.
+        """
+        if kind not in {"delegate", "pending_delegate", "replan"} or not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+            raise ContractError("checkpoint position is invalid")
+        if not isinstance(checkpoint_id, str) or not checkpoint_id or not isinstance(ledger_seq, int) or ledger_seq < 0:
+            raise ContractError("checkpoint link is invalid")
+        if format_version != 1 or not isinstance(runtime_version, str) or not runtime_version:
+            raise ContractError("checkpoint version is invalid")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            row = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[1] != 2:
+                raise ContractError("checkpoint positions require execution protocol v2")
+            envelope = json.loads(row[0])
+            if checkpoint_envelope_digest != envelope_digest(envelope):
+                raise ContractError("checkpoint envelope digest mismatch")
+            if kind in {"delegate", "pending_delegate"}:
+                position = db.execute("SELECT status FROM actions WHERE attempt_id=? AND kind='delegate' AND sequence=?", (attempt_id, sequence)).fetchone()
+                expected_status = "allowed" if kind == "pending_delegate" else "completed"
+                if position is None or position[0] != expected_status:
+                    raise ContractError("checkpoint action position is not completed")
+            else:
+                position = db.execute("SELECT status FROM replan_decisions WHERE attempt_id=? AND sequence=?", (attempt_id, sequence)).fetchone()
+                if position is None:
+                    raise ContractError("checkpoint replan position is absent")
+            high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+            prior = db.execute("SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? AND kind=? AND sequence=?", (attempt_id, kind, sequence)).fetchone()
+            if ledger_seq != high_water and prior is None:
+                raise ContractError("checkpoint ledger barrier mismatch")
+            checkpoint_path, file_sha256, file_size = self._checkpoint_file(envelope, path, max_bytes=max_bytes)
+            raw = checkpoint_path.read_bytes()
+            if kind == "pending_delegate" or (kind == "delegate" and sequence in {1, 2}):
+                self._validate_maf_checkpoint(raw, checkpoint_id, kind, sequence)
+            record = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": checkpoint_id,
+                      "envelope_digest": checkpoint_envelope_digest, "ledger_seq": ledger_seq,
+                      "format_version": format_version, "runtime_version": runtime_version,
+                      "protocol_version": 2, "path": str(checkpoint_path), "file_sha256": file_sha256,
+                      "file_size": file_size, "owner_generation": generation}
+            if prior:
+                old = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": prior[0],
+                       "envelope_digest": prior[1], "ledger_seq": prior[2], "format_version": prior[3],
+                       "runtime_version": prior[4], "protocol_version": prior[5], "path": prior[6],
+                       "file_sha256": prior[7], "file_size": prior[8], "owner_generation": prior[10]}
+                if old != record:
+                    raise ContractError("checkpoint position conflicts with durable checkpoint")
+                return {**record, "bound_at": prior[9], "replayed": True}
+            bound_at = utc_now()
+            db.execute("INSERT INTO checkpoint_position_links(attempt_id,kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (attempt_id, kind, sequence, checkpoint_id, checkpoint_envelope_digest, ledger_seq, format_version, runtime_version, 2, str(checkpoint_path), file_sha256, file_size, bound_at, generation))
+            self._event(db, attempt_id, None, "checkpoint_position_bound", canonical({"kind": kind, "sequence": sequence, "checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq}))
+            return {**record, "bound_at": bound_at, "replayed": False}
+
+    def read_checkpoint_position(self, attempt_id: str, kind: str, sequence: int, *, max_bytes: int = 65536) -> dict[str, Any]:
+        """Return a bounded checkpoint only after all Flow-owned link checks pass."""
+        if kind not in {"delegate", "pending_delegate", "replan"} or not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+            raise ContractError("checkpoint position is invalid")
+        with self._db() as db:
+            row = db.execute("SELECT envelope_json,execution_protocol_version,owner_generation FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            link = db.execute("SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? AND kind=? AND sequence=?", (attempt_id, kind, sequence)).fetchone()
+            if row is None or link is None or row[1] != 2 or link[5] != 2:
+                raise ContractError("checkpoint position is absent or incompatible")
+            envelope = json.loads(row[0])
+            if link[1] != envelope_digest(envelope) or link[10] > row[2]:
+                raise ContractError("checkpoint position is stale or foreign")
+            high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+            if high_water < link[2]:
+                raise ContractError("checkpoint ledger barrier is unavailable")
+        checkpoint_path, file_sha256, file_size = self._checkpoint_file(envelope, link[6], max_bytes=max_bytes)
+        if file_sha256 != link[7] or file_size != link[8]:
+            raise ContractError("checkpoint file digest or size changed")
+        raw = checkpoint_path.read_bytes()
+        if kind == "pending_delegate" or (kind == "delegate" and sequence in {1, 2}):
+            self._validate_maf_checkpoint(raw, link[0], kind, sequence)
+        metadata = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": link[0],
+                    "envelope_digest": link[1], "ledger_seq": link[2], "format_version": link[3],
+                    "runtime_version": link[4], "protocol_version": link[5], "path": str(checkpoint_path),
+                    "file_sha256": link[7], "file_size": link[8], "bound_at": link[9], "owner_generation": link[10]}
+        return {"metadata": metadata, "bytes": raw}
+
     def bind_checkpoint(self, attempt_id: str, checkpoint_id: str, checkpoint_envelope_digest: str,
                         ledger_seq: int, format_version: int, runtime_version: str, path: str,
                         *, generation: int) -> dict[str, Any]:
@@ -420,7 +660,8 @@ class ExecutionLedger:
         with self._db() as db:
             attempt_columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
             recovery_columns = {"recovery_version", "owner_generation", "owner_actor"}.issubset(attempt_columns)
-            attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "")
+            protocol_column = "execution_protocol_version" in attempt_columns
+            attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "") + (",execution_protocol_version" if protocol_column else "")
             a = db.execute(f"SELECT {attempt_select} FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             if not a:
                 raise ContractError("attempt missing")
@@ -429,12 +670,17 @@ class ExecutionLedger:
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             observations = db.execute("SELECT action_id,observed_at,result_json,result_digest,owner_generation FROM response_observations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY observed_at", (attempt_id,)).fetchall() if "response_observations" in tables else []
             resolutions = db.execute("SELECT resolution_id,action_id,actor,disposition,explanation,evidence_json,result_json,resolution_digest,created_at,owner_generation FROM recovery_resolutions WHERE attempt_id=? ORDER BY created_at", (attempt_id,)).fetchall() if "recovery_resolutions" in tables else []
+            replans = db.execute("SELECT replan_id,sequence,request_json,proposal_digest,status,reason FROM replan_decisions WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "replan_decisions" in tables else []
+            checkpoint_positions = db.execute("SELECT kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? ORDER BY kind,sequence", (attempt_id,)).fetchall() if "checkpoint_position_links" in tables else []
             checkpoint_columns = {row[1] for row in db.execute("PRAGMA table_info(checkpoint_links)")} if "checkpoint_links" in tables else set()
             checkpoint_query = "SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,path,bound_at,owner_generation" + (",file_sha256" if "file_sha256" in checkpoint_columns else "") + " FROM checkpoint_links WHERE attempt_id=?"
             checkpoint = db.execute(checkpoint_query, (attempt_id,)).fetchone() if "checkpoint_links" in tables else None
         return {"attempt_id": a[0], "work_id": a[1], "envelope": json.loads(a[2]), "status": a[3], "reason": a[4], "receipt_path": a[5],
                 "recovery_version": a[6] if recovery_columns else 1, "owner_generation": a[7] if recovery_columns else 0, "owner_actor": a[8] if recovery_columns else None,
+                "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
                 "actions": [{"action_id": r[0], "request": json.loads(r[1]), "status": r[2], "reason": r[3], "grant_id": r[4], "result": json.loads(r[5]) if r[5] else None} for r in actions],
+                "replans": [{"replan_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "proposal_digest": r[3], "status": r[4], "reason": r[5]} for r in replans],
+                "checkpoint_positions": [{"kind": r[0], "sequence": r[1], "checkpoint_id": r[2], "envelope_digest": r[3], "ledger_seq": r[4], "format_version": r[5], "runtime_version": r[6], "protocol_version": r[7], "path": r[8], "file_sha256": r[9], "file_size": r[10], "bound_at": r[11], "owner_generation": r[12]} for r in checkpoint_positions],
                 "events": [{"seq": r[0], "at": r[1], "action_id": r[2], "event": r[3], "detail": r[4]} for r in events],
                 "response_observations": [{"action_id": r[0], "observed_at": r[1], "result": json.loads(r[2]), "result_digest": r[3], "owner_generation": r[4]} for r in observations],
                 "resolutions": [{"resolution_id": r[0], "action_id": r[1], "actor": r[2], "disposition": r[3], "explanation": r[4], "evidence": json.loads(r[5]), "result": json.loads(r[6]) if r[6] else None, "resolution_digest": r[7], "created_at": r[8], "owner_generation": r[9]} for r in resolutions],

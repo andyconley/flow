@@ -7,6 +7,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from typing import Any, Callable
 
 from execution_contracts import ContractError
@@ -24,7 +25,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         raise RuntimeError("Ollama redirect refused")
 
 
-def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None = None) -> dict[str, Any]:
+def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None = None,
+               correlation_id: str | None = None) -> dict[str, Any]:
     provider = envelope["provider"]
     if provider == "local-stub":
         if transport is None:
@@ -42,12 +44,20 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
     else:
         url = os.environ.get("FLOW_OLLAMA_URL", OLLAMA_URL)
         if url != OLLAMA_URL:
-            raise ContractError("Ollama endpoint override is not allowed in this slice")
+            parsed = urlsplit(url)
+            if (os.environ.get("FLOW_OLLAMA_OBSERVER") != "1" or parsed.scheme != "http"
+                    or parsed.hostname != "127.0.0.1" or parsed.path != "/api/chat"
+                    or parsed.username or parsed.password or parsed.query or parsed.fragment
+                    or parsed.port is None):
+                raise ContractError("Ollama endpoint override requires an explicit loopback observer")
         body = json.dumps({"model": envelope["model"], "stream": False, "messages": [
             {"role": "system", "content": envelope["instructions"]},
             {"role": "user", "content": envelope["task"]},
         ], "options": {"num_predict": 256}}, sort_keys=True).encode()
-        request = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        request = urllib.request.Request(url, data=body, headers={
+            "Content-Type": "application/json",
+            "X-Flow-Correlation-Id": correlation_id or envelope["attempt_id"],
+        })
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
         try:
             with opener.open(request, timeout=60) as response:

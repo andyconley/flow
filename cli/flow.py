@@ -52,7 +52,7 @@ from runstate import (  # noqa: E402
     cmd_transition as run_transition_command,
     cmd_verify as run_verify_command,
 )
-from execution_gateway import execute_local, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
+from execution_gateway import execute_local, execute_multiturn_local, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -524,6 +524,8 @@ def main() -> int:
     run_execute_parser.add_argument("work_id")
     run_execute_parser.add_argument("--assignment", required=True, help="approved test-engineer assignment ID")
     run_execute_parser.add_argument("--task-file", required=True, help="task artifact within this run")
+    run_execute_parser.add_argument("--multi-turn", action="store_true", help="run the bounded v2 three-call exercise")
+    run_execute_parser.add_argument("--interrupt-after-third-send", action="store_true", help="record a controlled post-send unknown for the third v2 call")
     run_execute_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
 
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
@@ -856,7 +858,11 @@ def main() -> int:
     if args.command == "run" and args.run_target == "execute-local":
         import json
         try:
-            result = execute_local(args.work_id, args.assignment, args.task_file)
+            if args.interrupt_after_third_send and not args.multi_turn:
+                raise ContractError("third-send interruption requires --multi-turn")
+            result = (execute_multiturn_local(args.work_id, args.assignment, args.task_file,
+                                              interrupt_after_third_send=args.interrupt_after_third_send)
+                      if args.multi_turn else execute_local(args.work_id, args.assignment, args.task_file))
         except (ContractError, FileNotFoundError, ValueError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"execution refused: {exc}")
             return 2

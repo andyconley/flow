@@ -18,12 +18,13 @@ from pathlib import Path
 from typing import Any
 
 try:  # flow.py runs siblings directly; package imports use the second path.
-    from execution_contracts import validate_action
+    from execution_contracts import validate_action, validate_replan
 except ModuleNotFoundError:  # pragma: no cover - exercised by package consumers
-    from cli.execution_contracts import validate_action
+    from cli.execution_contracts import validate_action, validate_replan
 
 
 PROTOCOL_VERSION = 1
+MULTITURN_PROTOCOL_VERSION = 2
 MAX_LINE_BYTES = 256 * 1024
 
 
@@ -35,7 +36,7 @@ def _json_line(value: dict[str, Any]) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
-def _read_message(fd: int, deadline: float, pending: bytearray) -> dict[str, Any]:
+def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version: int = PROTOCOL_VERSION) -> dict[str, Any]:
     """Read one bounded protocol line without allowing partial output to hang.
 
     ``readline`` after ``select`` can block when a child wrote only part of a
@@ -69,7 +70,7 @@ def _read_message(fd: int, deadline: float, pending: bytearray) -> dict[str, Any
         raise MafProtocolError("MAF child sent invalid JSON") from exc
     if not isinstance(message, dict):
         raise MafProtocolError("MAF child protocol message must be an object")
-    if message.get("protocol_version") != PROTOCOL_VERSION or not isinstance(message.get("type"), str):
+    if message.get("protocol_version") != protocol_version or not isinstance(message.get("type"), str):
         raise MafProtocolError("MAF child sent an unsupported protocol message")
     return message
 
@@ -208,3 +209,110 @@ def run_maf(
                         stream.close()
                 except OSError:
                     pass
+
+
+def run_maf_multiturn(
+    envelope: dict[str, Any],
+    on_action: Callable[[dict[str, Any]], dict[str, Any]],
+    on_replan: Callable[[dict[str, Any]], dict[str, Any]],
+    *,
+    phase: str,
+    timeout_s: float = 120,
+    python_path: str | None = None,
+    resume: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Supervise one bounded v2 MAF phase through Flow-owned callbacks.
+
+    The denied third replan ends the initial child. The third action requires a
+    distinct ``action3`` invocation after Flow has inspected the denial state.
+    """
+    if envelope.get("execution_protocol_version") != 2 or phase not in {"initial", "action3"}:
+        raise MafProtocolError("unsupported multi-turn envelope or phase")
+    if timeout_s <= 0:
+        raise ValueError("timeout_s must be positive")
+    expected = ([ ("delegate", 1), ("replan", 1), ("delegate", 2),
+                  ("replan", 2), ("replan", 3) ] if phase == "initial" else [("delegate", 3)])
+    if resume is not None:
+        if (phase != "initial" or resume.get("kind") != "delegate"
+                or resume.get("sequence") not in {1, 2}
+                or not isinstance(resume.get("checkpoint_id"), str)
+                or not isinstance(resume.get("request_id"), str)
+                or resume.get("type") != "action_result"
+                or not isinstance(resume.get("action_id"), str)
+                or not isinstance(resume.get("result"), dict)):
+            raise MafProtocolError("unsupported multi-turn resume position")
+        expected = expected[1 if resume["sequence"] == 1 else 3:]
+    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    root = Path(__file__).resolve().parents[1]
+    process = subprocess.Popen(
+        [executable, "-m", "runtime.maf_runner.multiturn"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        cwd=root, env={"PYTHONPATH": str(root)}, bufsize=0,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    deadline = time.monotonic() + timeout_s
+    pending = bytearray()
+    position = 0
+    try:
+        process.stdin.write(_json_line({"protocol_version": 2, "type": "start", "phase": phase,
+                                        "envelope": envelope, "checkpoint_dir": envelope["checkpoint_dir"],
+                                        "resume": resume}))
+        process.stdin.flush()
+        while True:
+            message = _read_message(process.stdout.fileno(), deadline, pending, 2)
+            kind = "delegate" if message["type"] == "propose_action" else "replan" if message["type"] == "propose_replan" else None
+            if kind is not None:
+                if position >= len(expected) or expected[position] != (kind, message.get("sequence")):
+                    raise MafProtocolError("MAF child proposed an unexpected multi-turn position")
+                required = ("schema_version", "kind", "attempt_id", "role", "instance_id", "provider", "model",
+                            "task_digest", "envelope_digest", "sequence", "checkpoint_id", "runtime_version")
+                if kind == "delegate":
+                    required += ("action_id",)
+                else:
+                    required += ("replan_id", "proposal")
+                proposal = {key: message.get(key) for key in required}
+                if any(value is None for value in proposal.values()):
+                    raise MafProtocolError("MAF child omitted a multi-turn identity field")
+                if not isinstance(proposal["checkpoint_id"], str) or not isinstance(proposal["runtime_version"], str):
+                    raise MafProtocolError("MAF child checkpoint identity is invalid")
+                try:
+                    (validate_action if kind == "delegate" else validate_replan)(envelope, proposal)
+                except (TypeError, ValueError) as exc:
+                    raise MafProtocolError(f"MAF child proposal is not bound to the envelope: {exc}") from exc
+                decision = (on_action if kind == "delegate" else on_replan)(proposal)
+                if not isinstance(decision, dict):
+                    raise MafProtocolError("Flow callback must return a normalized decision")
+                response_type = "action_result" if kind == "delegate" else "replan_result"
+                identity_key = "action_id" if kind == "delegate" else "replan_id"
+                process.stdin.write(_json_line({"protocol_version": 2, "type": response_type,
+                                                identity_key: proposal[identity_key],
+                                                "request_id": message.get("request_id"), "result": decision}))
+                process.stdin.flush()
+                position += 1
+                continue
+            if message["type"] == "workflow_finished":
+                if position != len(expected) or message.get("attempt_id") != envelope["attempt_id"] or message.get("phase") != phase:
+                    raise MafProtocolError("MAF child finished before the approved phase ended")
+                if phase == "initial" and message.get("reason") != "denied_replan_cap":
+                    raise MafProtocolError("initial phase did not halt at the third replan denial")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise MafProtocolError("MAF child timed out before clean exit")
+                try:
+                    code = process.wait(timeout=remaining)
+                except subprocess.TimeoutExpired as exc:
+                    raise MafProtocolError("MAF child did not exit after workflow_finished") from exc
+                if code != 0:
+                    raise MafProtocolError(f"MAF child exited {code} after workflow_finished")
+                return message
+            if message["type"] == "error":
+                raise RuntimeError(f"MAF child failed: {message.get('message')}")
+            raise MafProtocolError(f"MAF child sent unexpected message type: {message['type']}")
+    except BaseException:
+        process.kill()
+        process.wait(timeout=5)
+        raise
+    finally:
+        for stream in (process.stdin, process.stdout):
+            if stream is not None and not stream.closed:
+                stream.close()

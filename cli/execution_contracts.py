@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
+EXECUTION_PROTOCOL_VERSION = 2
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
@@ -65,6 +66,15 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
     limits = envelope["limits"]
     if not isinstance(limits, dict) or limits != {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2, "paid_budget_usd": 0}:
         raise ContractError("execution limits differ from the approved first slice")
+    protocol_version = envelope.get("execution_protocol_version", 1)
+    if protocol_version not in {1, EXECUTION_PROTOCOL_VERSION}:
+        raise ContractError("execution protocol version is unsupported")
+
+
+def execution_protocol_version(envelope: dict[str, Any]) -> int:
+    """Return the explicit protocol for a new attempt, defaulting old records to v1."""
+    validate_envelope(envelope)
+    return envelope.get("execution_protocol_version", 1)
 
 
 def envelope_digest(envelope: dict[str, Any]) -> str:
@@ -73,28 +83,75 @@ def envelope_digest(envelope: dict[str, Any]) -> str:
 
 
 def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
-    if sequence != 1:
+    protocol_version = execution_protocol_version(envelope)
+    if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+        raise ContractError("action sequence is invalid")
+    if protocol_version == 1 and sequence != 1:
         raise ContractError("first slice permits one specialist request")
-    return digest({
+    if protocol_version == EXECUTION_PROTOCOL_VERSION and sequence > 3:
+        raise ContractError("action sequence exceeds the approved slice")
+    identity = {
         "attempt_id": envelope["attempt_id"],
         "charter_digest": envelope["charter_digest"],
         "definition_digest": envelope["definition_digest"],
         "instance_id": envelope["instance_id"],
         "kind": "delegate", "sequence": sequence,
-    })
+    }
+    if protocol_version == EXECUTION_PROTOCOL_VERSION:
+        identity["execution_protocol_version"] = protocol_version
+    return digest(identity)
 
 
 def validate_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
     require_fields(action, ("action_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind"), kind="action")
-    if action["kind"] != "delegate" or action["sequence"] != 1:
+    protocol_version = execution_protocol_version(envelope)
+    if action["kind"] != "delegate" or not isinstance(action["sequence"], int) or isinstance(action["sequence"], bool):
         raise ContractError("first slice permits one delegation")
+    if protocol_version == 1 and action["sequence"] != 1:
+        raise ContractError("first slice permits one delegation")
+    if protocol_version == EXECUTION_PROTOCOL_VERSION and not 1 <= action["sequence"] <= 3:
+        raise ContractError("action sequence exceeds the approved slice")
     for field in ("attempt_id", "role", "instance_id", "provider", "model", "task_digest"):
         if action[field] != envelope[field]:
             raise ContractError(f"action {field} differs from envelope")
     if action["envelope_digest"] != envelope_digest(envelope):
         raise ContractError("action envelope digest mismatch")
-    if action["action_id"] != expected_action_id(envelope, 1):
+    if action["action_id"] != expected_action_id(envelope, action["sequence"]):
         raise ContractError("action ID mismatch")
+
+
+def expected_replan_id(envelope: dict[str, Any], sequence: int) -> str:
+    if execution_protocol_version(envelope) != EXECUTION_PROTOCOL_VERSION:
+        raise ContractError("replans require execution protocol v2")
+    if not isinstance(sequence, int) or isinstance(sequence, bool) or not 1 <= sequence <= 3:
+        raise ContractError("replan sequence exceeds the approved slice")
+    return digest({
+        "attempt_id": envelope["attempt_id"],
+        "charter_digest": envelope["charter_digest"],
+        "definition_digest": envelope["definition_digest"],
+        "instance_id": envelope["instance_id"],
+        "execution_protocol_version": EXECUTION_PROTOCOL_VERSION,
+        "kind": "replan",
+        "sequence": sequence,
+    })
+
+
+def validate_replan(envelope: dict[str, Any], replan: dict[str, Any]) -> None:
+    """Validate a Flow-owned replan request without giving it action authority."""
+    require_fields(replan, ("replan_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind", "proposal"), kind="replan")
+    if execution_protocol_version(envelope) != EXECUTION_PROTOCOL_VERSION:
+        raise ContractError("replans require execution protocol v2")
+    if replan["kind"] != "replan" or not isinstance(replan["sequence"], int) or isinstance(replan["sequence"], bool) or not 1 <= replan["sequence"] <= 3:
+        raise ContractError("replan sequence exceeds the approved slice")
+    if not isinstance(replan["proposal"], dict) or not replan["proposal"]:
+        raise ContractError("replan proposal is invalid")
+    for field in ("attempt_id", "role", "instance_id", "provider", "model", "task_digest"):
+        if replan[field] != envelope[field]:
+            raise ContractError(f"replan {field} differs from envelope")
+    if replan["envelope_digest"] != envelope_digest(envelope):
+        raise ContractError("replan envelope digest mismatch")
+    if replan["replan_id"] != expected_replan_id(envelope, replan["sequence"]):
+        raise ContractError("replan ID mismatch")
 
 
 def validate_result(envelope: dict[str, Any], result: dict[str, Any]) -> None:
@@ -129,6 +186,52 @@ def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
         raise ContractError("receipt charter source link mismatch")
     if receipt["status"] not in {"completed", "failed", "denied", "unknown"} or not isinstance(receipt["actions"], list):
         raise ContractError("receipt status or actions invalid")
+    if execution_protocol_version(envelope) == 1:
+        return
+    require_fields(receipt, ("execution_protocol_version", "replans", "checkpoints"), kind="v2 receipt")
+    if receipt["execution_protocol_version"] != EXECUTION_PROTOCOL_VERSION:
+        raise ContractError("receipt execution protocol link mismatch")
+    if not isinstance(receipt["replans"], list) or not isinstance(receipt["checkpoints"], list):
+        raise ContractError("receipt v2 decision or checkpoint list is invalid")
+    seen_replans: set[tuple[str, int]] = set()
+    for replan in receipt["replans"]:
+        if not isinstance(replan, dict) or not isinstance(replan.get("replan_id"), str) or not isinstance(replan.get("sequence"), int) or replan.get("status") not in {"allowed", "denied"} or not isinstance(replan.get("reason"), str):
+            raise ContractError("receipt replan is invalid")
+        key = (replan["replan_id"], replan["sequence"])
+        if key in seen_replans:
+            raise ContractError("receipt replan is duplicated")
+        seen_replans.add(key)
+    seen_positions: set[tuple[str, int]] = set()
+    for checkpoint in receipt["checkpoints"]:
+        if not isinstance(checkpoint, dict) or checkpoint.get("kind") not in {"delegate", "pending_delegate", "replan"} or not isinstance(checkpoint.get("sequence"), int) or not isinstance(checkpoint.get("file_sha256"), str) or len(checkpoint["file_sha256"]) != 64:
+            raise ContractError("receipt checkpoint is invalid")
+        position = (checkpoint["kind"], checkpoint["sequence"])
+        if position in seen_positions:
+            raise ContractError("receipt checkpoint position is duplicated")
+        seen_positions.add(position)
+    endpoint_evidence = receipt.get("endpoint_evidence")
+    if endpoint_evidence is None:
+        return
+    if not isinstance(endpoint_evidence, dict) or endpoint_evidence.get("status") not in {"observed", "unavailable"} or not isinstance(endpoint_evidence.get("actions"), list):
+        raise ContractError("receipt endpoint evidence is invalid")
+    status = endpoint_evidence["status"]
+    path, sha256 = endpoint_evidence.get("path"), endpoint_evidence.get("sha256")
+    if (path is None) != (sha256 is None) or (path is not None and (not isinstance(path, str) or not path or not isinstance(sha256, str) or len(sha256) != 64 or any(char not in "0123456789abcdef" for char in sha256))):
+        raise ContractError("receipt endpoint evidence link is invalid")
+    if status == "observed" and path is None:
+        raise ContractError("observed endpoint evidence requires a sealed link")
+    seen_actions: set[str] = set()
+    for action in endpoint_evidence["actions"]:
+        if not isinstance(action, dict) or not isinstance(action.get("action_id"), str) or not action["action_id"] or type(action.get("flow_send_observed")) is not bool:
+            raise ContractError("receipt endpoint action evidence is invalid")
+        arrivals = action.get("endpoint_arrivals")
+        if arrivals is not None and (not isinstance(arrivals, int) or isinstance(arrivals, bool) or arrivals < 0):
+            raise ContractError("receipt endpoint arrival count is invalid")
+        if status == "unavailable" and arrivals is not None:
+            raise ContractError("unavailable endpoint evidence cannot claim arrivals")
+        if action["action_id"] in seen_actions:
+            raise ContractError("receipt endpoint action evidence is duplicated")
+        seen_actions.add(action["action_id"])
 
 
 RECOVERY_DISPOSITIONS = frozenset({"resolved_completed", "resolved_not_dispatched", "still_unknown"})

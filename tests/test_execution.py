@@ -308,12 +308,23 @@ class ExecutionContractTests(ExecutionFixture):
             result = call_local(envelope)
         self.assertTrue(result["physical_call"])
         self.assertEqual(opener.request.full_url, local_worker.OLLAMA_URL)
+        self.assertEqual(opener.request.get_header("X-flow-correlation-id"), envelope["attempt_id"])
         handlers = build.call_args.args
         proxy = next(handler for handler in handlers if isinstance(handler, local_worker.urllib.request.ProxyHandler))
         redirect = next(handler for handler in handlers if isinstance(handler, local_worker._NoRedirect))
         self.assertEqual(proxy.proxies, {})
         with self.assertRaisesRegex(RuntimeError, "redirect refused"):
             redirect.redirect_request(opener.request, None, 302, "Found", {}, "http://elsewhere.invalid")
+
+    def test_observer_override_is_explicit_and_loopback_only(self) -> None:
+        envelope, _, _ = self.prepare()
+        envelope = {**envelope, "provider": "ollama", "model": "fixture-model"}
+        with patch.dict(os.environ, {"FLOW_OLLAMA_URL": "http://127.0.0.1:11435/api/chat"}, clear=False):
+            with self.assertRaisesRegex(ContractError, "explicit loopback observer"):
+                call_local(envelope)
+        with patch.dict(os.environ, {"FLOW_OLLAMA_OBSERVER": "1", "FLOW_OLLAMA_URL": "http://example.com/api/chat"}, clear=False):
+            with self.assertRaisesRegex(ContractError, "explicit loopback observer"):
+                call_local(envelope)
 
 
 class ExecutionGatewayTests(ExecutionFixture):

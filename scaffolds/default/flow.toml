@@ -561,8 +561,8 @@ invocation = "flow run list/status/history/verify/transition"
 summary = "Inspect and hard-gate C-lite workflow run state"
 
 [[help.cli_commands]]
-invocation = "flow run execute-local WORK_ID --assignment ID --task-file PATH"
-summary = "Run one Flow-authorized local specialist through the optional supervised MAF runtime"
+invocation = "flow run execute-local WORK_ID --assignment ID --task-file PATH [--multi-turn]"
+summary = "Run one guarded local specialist call, or the bounded v2 three-call MAF exercise"
 
 [[help.cli_commands]]
 invocation = "flow run inspect-execution WORK_ID ATTEMPT_ID"

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import sys
 import multiprocessing
+import json
+import os
+import hashlib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -76,6 +79,23 @@ print(json.dumps({"protocol_version":1,"type":"propose_action","schema_version":
 
 
 class ReceiptSplitRecoveryTests(ExecutionFixture):
+    def test_terminal_unknown_remains_reconciliation_required_on_restart(self) -> None:
+        envelope, attempt_dir, ledger = self.prepare()
+        action = action_for(envelope)
+        grant = ledger.decide(envelope, action, generation=1)
+        self.assertTrue(ledger.consume_grant(action["action_id"], grant["grant_id"], generation=1))
+        ledger.observe_send(action["action_id"], 1)
+        ledger.mark_unknown(action["action_id"], "interrupted_after_send", generation=1)
+        receipt_path = attempt_dir / "receipt.json"
+        ledger.finish_attempt(envelope["attempt_id"], "unknown", "reconciliation_required",
+                              str(receipt_path), generation=1)
+
+        result = gateway.resume_local(WORK_ID, envelope["attempt_id"], root=self.root,
+                                      supervisor=lambda *_args, **_kwargs: self.fail("unknown must not supervise"))
+        self.assertEqual(result["status"], "reconciliation_required")
+        self.assertEqual(sum(event["event"] == "adapter_send_started"
+                             for event in ledger.snapshot(envelope["attempt_id"])["events"]), 1)
+
     def test_two_full_gateway_resumes_race_without_a_second_send(self) -> None:
         envelope, attempt_dir, ledger = self.prepare()
         action = action_for(envelope)
@@ -171,6 +191,116 @@ class ReceiptSplitRecoveryTests(ExecutionFixture):
         after = gateway.ExecutionLedger(ledger.path).snapshot(attempt_id)
         self.assertEqual(after["status"], "started")
         self.assertEqual(len(calls), 1)
+
+
+class MultiTurnRuntimeTests(ExecutionFixture):
+    def test_v2_receipt_seals_per_action_observer_counts(self) -> None:
+        executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
+        if not executable.is_file():
+            self.skipTest("optional pinned MAF environment is absent")
+        log = self.run_dir / "observer.jsonl"
+
+        def fake_local(envelope, *, correlation_id):
+            with log.open("a") as stream:
+                stream.write(json.dumps({"correlation_id": correlation_id, "arrival_time": "2026-09-19T00:00:00Z",
+                                         "method": "POST", "path": "/api/chat", "byte_count": 64}) + "\n")
+            output = "fake Ollama response for receipt shape test"
+            return {"schema_version": 1, "status": "completed", "provider": "ollama",
+                    "model": envelope["model"], "physical_call": True,
+                    "evidence_level": "flow_observed_local_http_response", "output": output,
+                    "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "usage": None}
+
+        with patch.object(gateway, "call_local", side_effect=fake_local), \
+             patch.dict(os.environ, {"FLOW_OLLAMA_OBSERVER_LOG": str(log)}, clear=False):
+            result = gateway.execute_multiturn_local(
+                WORK_ID, ASSIGNMENT_ID, f".flow/runs/{WORK_ID}/task.md",
+                root=self.root, python_path=str(executable), interrupt_after_third_send=True,
+            )
+        self.assertEqual(result["status"], "unknown", result)
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        arrivals = receipt["endpoint_evidence"]["actions"]
+        self.assertEqual([row["endpoint_arrivals"] for row in arrivals], [1, 1, 0])
+        self.assertTrue(all(row["flow_send_observed"] for row in arrivals))
+        inspected = gateway.inspect_attempt(WORK_ID, result["attempt_id"], root=self.root)
+        self.assertEqual(inspected["missing_evidence"], [])
+
+    def test_fresh_maf_continuation_after_first_and_second_committed_result(self) -> None:
+        executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
+        if not executable.is_file():
+            self.skipTest("optional pinned MAF environment is absent")
+        for crash_at in (1, 2):
+            with self.subTest(crash_after_action=crash_at):
+                calls: list[str] = []
+
+                def adapter(envelope):
+                    calls.append(envelope["attempt_id"])
+                    return stub_result(envelope)
+
+                actual = gateway.run_maf_multiturn
+
+                def interrupted(envelope, on_action, on_replan, **kwargs):
+                    def fail_at_barrier(proposal):
+                        if proposal["sequence"] == crash_at:
+                            raise SystemExit("simulated coordinator crash after committed result")
+                        return on_replan(proposal)
+
+                    return actual(envelope, on_action, fail_at_barrier, **kwargs)
+
+                with patch.object(gateway, "run_maf_multiturn", side_effect=interrupted), \
+                     self.assertRaises(SystemExit):
+                    gateway.execute_multiturn_local(
+                        WORK_ID, ASSIGNMENT_ID, f".flow/runs/{WORK_ID}/task.md",
+                        root=self.root, adapter=adapter, python_path=str(executable),
+                    )
+                attempts = [path for path in (self.run_dir / "execution").iterdir() if path.is_dir()]
+                attempt_id = sorted(attempts, key=lambda path: path.stat().st_mtime_ns)[-1].name
+                self.assertEqual(len(calls), crash_at)
+                result = gateway.resume_local(
+                    WORK_ID, attempt_id, root=self.root, adapter=adapter,
+                    python_path=str(executable), interrupt_after_third_send=True,
+                )
+                self.assertEqual(result["status"], "unknown", result)
+                self.assertEqual(len(calls), 2)
+                snapshot = gateway.ExecutionLedger(self.run_dir / "execution" / "ledger.sqlite").snapshot(attempt_id)
+                self.assertEqual([row["status"] for row in snapshot["actions"]], ["completed", "completed", "unknown"])
+                self.assertEqual([row["reason"] for row in snapshot["replans"]], ["allowed", "allowed", "replan_cap"])
+
+    def test_pinned_maf_two_results_denial_and_unknown_restart(self) -> None:
+        executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
+        if not executable.is_file():
+            self.skipTest("optional pinned MAF environment is absent")
+        calls: list[str] = []
+
+        def adapter(envelope):
+            calls.append(envelope["attempt_id"])
+            return stub_result(envelope)
+
+        result = gateway.execute_multiturn_local(
+            WORK_ID, ASSIGNMENT_ID, f".flow/runs/{WORK_ID}/task.md",
+            root=self.root, adapter=adapter, python_path=str(executable),
+            interrupt_after_third_send=True,
+        )
+        self.assertEqual(result["status"], "unknown", result)
+        self.assertEqual(len(calls), 2)
+        snapshot = gateway.ExecutionLedger(self.run_dir / "execution" / "ledger.sqlite").snapshot(result["attempt_id"])
+        self.assertEqual([row["status"] for row in snapshot["actions"]], ["completed", "completed", "unknown"])
+        self.assertEqual([row["reason"] for row in snapshot["replans"]], ["allowed", "allowed", "replan_cap"])
+        self.assertEqual([(row["kind"], row["sequence"]) for row in snapshot["checkpoint_positions"]],
+                         [("delegate", 1), ("delegate", 2),
+                          ("pending_delegate", 1), ("pending_delegate", 2), ("pending_delegate", 3)])
+        before = len(snapshot["events"])
+        reopened = gateway.resume_local(WORK_ID, result["attempt_id"], root=self.root)
+        self.assertEqual(reopened["status"], "reconciliation_required")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(gateway.ExecutionLedger(self.run_dir / "execution" / "ledger.sqlite").snapshot(result["attempt_id"])["events"]), before)
+        pending_third = next(row for row in snapshot["checkpoint_positions"]
+                             if row["kind"] == "pending_delegate" and row["sequence"] == 3)
+        Path(pending_third["path"]).write_text("{}")
+        inspected = gateway.inspect_attempt(WORK_ID, result["attempt_id"], root=self.root)
+        self.assertIn("checkpoint:pending_delegate:3", inspected["missing_evidence"])
+        with self.assertRaisesRegex(Exception, "source-mismatched"):
+            gateway.resume_local(WORK_ID, result["attempt_id"], root=self.root)
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":

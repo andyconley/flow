@@ -158,13 +158,15 @@ The run must be revision 2 and `implementing`, with a valid `orchestration.json`
 
 MAF is optional: ordinary Flow commands do not import it. For this first slice, install the pinned runner requirements in a separate Python environment and set `FLOW_MAF_PYTHON` to that environment's Python executable before calling `execute-local`. See `runtime/maf_runner/requirements.txt`. A configured local Ollama server and model are required for a physical worker call. The receipt and ledger live under `.flow/runs/WORK_ID/execution/`; a receipt reports observed facts and does not itself approve lifecycle handback.
 
+For the bounded multi-turn exercise, add `--multi-turn`. Flow then records three ordered action positions and three separate replan decisions. The first two replans may be allowed; the third is denied by the two-replan cap and ends that MAF phase. Flow checks the denial state before starting an independent action-3 phase in the same attempt. `--interrupt-after-third-send` is an exercise-only fault point: it marks the third action `unknown` immediately after Flow records `adapter_send_started`, before calling Ollama. The first two actions still make physical Ollama calls. This flag does not prove that Ollama received the third request. Inspect the v2 receipt and checkpoint positions for the evidence actually recorded. For a disposable loopback arrival observer, set `FLOW_OLLAMA_OBSERVER=1`, `FLOW_OLLAMA_URL=http://127.0.0.1:PORT/api/chat`, and `FLOW_OLLAMA_OBSERVER_LOG` to its owner-only JSONL file inside the run. The receipt seals a per-action arrival table; without an observer it labels endpoint arrival evidence unavailable.
+
 ### `flow run inspect-execution <work-id> <attempt-id>`
 
 Read the original envelope, action, ordered ledger events, source snapshot checks, checkpoint link, receipt, and missing evidence without creating a new attempt or calling a provider. Use `--json` for structured output. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that Ollama did not receive the request.
 
 ### `flow run resume-execution <work-id> <attempt-id>`
 
-Fence the previous parent and reopen the same attempt. An uncertain dispatch returns `reconciliation_required` without a provider send. A committed result requires a bound, compatible MAF checkpoint before supervised replay. A matching receipt written before the ledger's terminal update is repaired without dispatch. This command never allocates a replacement attempt.
+Fence the previous parent and reopen the same attempt. An uncertain dispatch returns `reconciliation_required` without a provider send. The v1 path can replay one committed result through a bound MAF checkpoint. For v2, a completed first or second action can be replayed through its verified pending checkpoint in a fresh MAF process; Flow reuses committed results and decisions and authorizes only the next logical action. A missing, changed, or incompatible checkpoint halts as a runtime protocol gap. A matching receipt written before the ledger's terminal update is repaired without dispatch. An unresolved third action always halts pending reconciliation. This command never allocates a replacement attempt.
 
 ### `flow run resolve-execution <work-id> <attempt-id> <action-id>`
 
