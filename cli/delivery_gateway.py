@@ -21,7 +21,7 @@ from execution_gateway import _effective_specialist_for, _run_file, _write_snaps
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from claude_worker import call_claude
-from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, call_claude_edit
+from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
@@ -230,7 +230,8 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                     worker_adapter: Callable[..., dict[str, Any]] | None = None,
                     supervisor: Callable[..., dict[str, Any]] | None = None,
                     test_runner: Callable[[Path], dict[str, Any]] | None = None,
-                    python_path: str | None = None) -> dict[str, Any]:
+                    python_path: str | None = None,
+                    continuation_epoch_id: str | None = None) -> dict[str, Any]:
     """Restore only a completed worker response from its exact pinned MAF pause."""
     project_root = (root or repo_root()).resolve()
     run_dir = project_root / ".flow" / "runs" / work_id
@@ -240,8 +241,13 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
     ledger = ExecutionLedger(run_dir / "execution" / "ledger.sqlite")
     snapshot = ledger.snapshot(attempt_id)
     envelope = snapshot["envelope"]
-    if snapshot["status"] != "started" or snapshot["execution_protocol_version"] != 5 or envelope["work_id"] != work_id:
+    expected_status = "unknown" if continuation_epoch_id else "started"
+    if snapshot["status"] != expected_status or snapshot["execution_protocol_version"] != 5 or envelope["work_id"] != work_id:
         raise ContractError("Magentic attempt is closed or differs from the approved run")
+    if continuation_epoch_id:
+        epoch = ledger.continuation_snapshot(continuation_epoch_id)
+        if epoch["attempt_id"] != attempt_id or epoch["status"] != "pending":
+            raise ContractError("Magentic continuation differs from resolved attempt")
     if json.loads((attempt_dir / "envelope.json").read_text()) != envelope:
         raise ContractError("stored Magentic envelope changed")
     manager_calls = snapshot.get("manager_calls", [])
@@ -299,11 +305,91 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
               "replans_committed": replans_committed,
               "result": reply}
     task = (attempt_dir / "job-charter.snapshot.md").read_text()
+    if continuation_epoch_id:
+        epoch_generation = ledger.claim_continuation(continuation_epoch_id, actor="flow-magentic-recovery")
+        ledger.start_magentic_continuation(continuation_epoch_id, generation=epoch_generation)
     generation = ledger.claim_recovery(attempt_id, actor="flow-magentic-resume")
     return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
                                       manager_adapter=manager_adapter, worker_adapter=worker_adapter,
                                       supervisor=supervisor, test_runner=test_runner, python_path=python_path,
-                                      resume=resume, generation=generation)
+                                      resume=resume, generation=generation,
+                                      continuation_epoch_id=continuation_epoch_id)
+
+
+def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
+                     actor: str = "codex-assisted-recovery", python_path: str | None = None,
+                     manager_adapter: Callable[..., dict[str, Any]] | None = None,
+                     worker_adapter: Callable[..., dict[str, Any]] | None = None,
+                     supervisor: Callable[..., dict[str, Any]] | None = None,
+                     test_runner: Callable[[Path], dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Resolve one observed v5 Claude result, then resume its exact pending MAF action."""
+    project_root = (root or repo_root()).resolve()
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    attempt_dir = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id
+    ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+    snapshot = ledger.snapshot(attempt_id)
+    envelope = snapshot["envelope"]
+    receipt_path = attempt_dir / "receipt.json"
+    event_path = attempt_dir / "claude-implementer.events.ndjson"
+    if (snapshot["status"] != "unknown" or snapshot["execution_protocol_version"] != 5
+            or envelope["work_id"] != work_id or snapshot["receipt_path"] != str(receipt_path)):
+        raise ContractError("Magentic recovery requires the exact unknown terminal attempt")
+    for path in (attempt_dir, receipt_path, event_path, attempt_dir.parent / "ledger.sqlite"):
+        mode = path.lstat()
+        if path.is_symlink() or mode.st_uid != os.getuid() or mode.st_mode & 0o077:
+            raise ContractError("Magentic recovery requires owner-only local evidence")
+    original = json.loads(receipt_path.read_text())
+    validate_receipt(envelope, original)
+    if original["status"] != "unknown" or original["attempt_id"] != attempt_id:
+        raise ContractError("original Magentic receipt differs from terminal attempt")
+    candidates = [item for item in snapshot["actions"] if item["request"]["assignment_id"] == "claude-implementer"
+                  and item["status"] in {"unknown", "completed"}]
+    if len(candidates) != 1 or any(item["status"] == "unknown" for item in snapshot["actions"] if item != candidates[0]) or any(
+            item["status"] in {"started", "unknown"} for item in snapshot["manager_calls"]):
+        raise ContractError("Magentic recovery requires one unknown Claude implementer")
+    selected = candidates[0]
+    action = selected["request"]
+    events = event_path.read_bytes()
+    trace = original["evidence"].get("event_trace")
+    if (not trace or trace["path"] != event_path.name or trace["bytes"] != len(events)
+            or hashlib.sha256(events).hexdigest() != trace["sha256"]):
+        raise ContractError("Claude event trace differs from terminal receipt")
+    result = _stream_result(events, action["model"])
+    validate_result(envelope, result, action=action)
+    checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
+    checkpoint_sha = checkpoint["metadata"]["file_sha256"]
+    baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    worktree = Path(envelope["worktree"])
+    if _git(worktree, "rev-parse", "HEAD") != envelope["source_commit"]:
+        raise ContractError("recovery worktree source commit changed")
+    edit = _verify_edit(worktree, baseline, attempt_dir)
+    (test_runner or _run_targeted_test)(worktree)
+    receipt_sha = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    evidence = [{"kind": kind, "path": str(path.relative_to(project_root)),
+                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for kind, path in
+                (("provider_event_trace", event_path), ("original_receipt", receipt_path),
+                 ("magentic_checkpoint", Path(checkpoint["metadata"]["path"])),
+                 ("verified_repair_diff", Path(edit["diff_path"]))) ]
+    if selected["status"] == "unknown":
+        generation = ledger.claim_recovery(attempt_id, actor=actor)
+        ledger.observe_response(action["action_id"], result, generation)
+        resolution = ledger.resolve_unknown(attempt_id, action["action_id"], actor,
+                                            "resolved_completed", "Validated terminal Claude CLI result and scoped repair test",
+                                            evidence, generation=generation)
+    else:
+        matches = [item for item in snapshot["resolutions"] if item["action_id"] == action["action_id"]
+                   and item["disposition"] == "resolved_completed" and item["result"] == result
+                   and item["evidence"] == evidence]
+        if len(matches) != 1:
+            raise ContractError("completed Claude action lacks matching prior recovery resolution")
+        resolution = matches[0]
+    epoch = ledger.begin_continuation(attempt_id, action["action_id"], resolution["resolution_id"],
+                                      receipt_sha, checkpoint_sha, actor=actor)
+    return resume_delivery(work_id, attempt_id, root=project_root, manager_adapter=manager_adapter,
+                           worker_adapter=worker_adapter, supervisor=supervisor, test_runner=test_runner,
+                           python_path=python_path, continuation_epoch_id=epoch["epoch_id"])
 
 
 def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
@@ -314,7 +400,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                                test_runner: Callable[[Path], dict[str, Any]] | None,
                                python_path: str | None,
                                resume: dict[str, Any] | None = None,
-                               generation: int = 1) -> dict[str, Any]:
+                               generation: int = 1,
+                               continuation_epoch_id: str | None = None) -> dict[str, Any]:
     aid = envelope["attempt_id"]
     work_id = envelope["work_id"]
     source_commit = envelope["source_commit"]
@@ -506,12 +593,25 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         receipt["evidence"]["event_trace"] = {
             "path": event_path.name, "sha256": hashlib.sha256(event_path.read_bytes()).hexdigest(),
             "bytes": event_size}
+    if continuation_epoch_id:
+        epoch = ledger.continuation_snapshot(continuation_epoch_id)
+        receipt["evidence"]["continuation"] = {
+            "epoch_id": continuation_epoch_id,
+            "original_receipt_sha256": epoch["receipt_sha256"],
+            "checkpoint_sha256": epoch["checkpoint_sha256"],
+            "resolution_id": epoch["resolution_id"]}
     validate_receipt(envelope, receipt)
-    receipt_path = attempt_dir / "receipt.json"
+    receipt_path = attempt_dir / (f"continuation-{continuation_epoch_id}.receipt.json"
+                                  if continuation_epoch_id else "receipt.json")
     with ledger.send_lock():
         ledger.assert_owner(aid, generation)
-        write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
-        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+        if continuation_epoch_id:
+            _write_snapshot(receipt_path, (canonical(receipt) + "\n").encode())
+            ledger.finish_magentic_continuation(continuation_epoch_id, terminal, reason,
+                                                str(receipt_path), generation=generation)
+        else:
+            write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+            ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
     return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
             "evidence": receipt["evidence"]}
 

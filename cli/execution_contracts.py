@@ -559,6 +559,15 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                                     or type(event_trace["bytes"]) is not int
                                     or not 0 <= event_trace["bytes"] <= 1024 * 1024):
         raise ContractError("Magentic event trace evidence is invalid")
+    continuation = evidence.get("continuation")
+    if continuation is not None and (not isinstance(continuation, dict)
+                                     or set(continuation) != {"epoch_id", "original_receipt_sha256",
+                                                              "checkpoint_sha256", "resolution_id"}
+                                     or not all(isinstance(continuation[key], str) and continuation[key]
+                                                for key in ("epoch_id", "resolution_id"))
+                                     or not _hex_digest(continuation["original_receipt_sha256"])
+                                     or not _hex_digest(continuation["checkpoint_sha256"])):
+        raise ContractError("Magentic continuation evidence is invalid")
     for key in ("manager_calls", "actions", "replans", "checkpoints"):
         if not isinstance(receipt[key], list):
             raise ContractError("Magentic receipt decision list is invalid")

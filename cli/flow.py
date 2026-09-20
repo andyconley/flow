@@ -54,7 +54,7 @@ from runstate import (  # noqa: E402
 )
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
-from delivery_gateway import execute_delivery, resume_delivery  # noqa: E402
+from delivery_gateway import execute_delivery, recover_delivery, resume_delivery  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -567,6 +567,13 @@ def main() -> int:
     run_delivery_resume.add_argument("--project-root", type=Path, help="Flow project checkout containing the approved run overlay")
     run_delivery_resume.add_argument("--json", action="store_true")
 
+    run_delivery_recover = run_sub.add_parser(
+        "recover-delivery-lead", help="reconcile one completed Claude result and resume a linked Magentic epoch")
+    run_delivery_recover.add_argument("work_id")
+    run_delivery_recover.add_argument("attempt_id")
+    run_delivery_recover.add_argument("--project-root", type=Path)
+    run_delivery_recover.add_argument("--json", action="store_true")
+
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
@@ -947,6 +954,15 @@ def main() -> int:
             result = resume_delivery(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery resume refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
+        return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "recover-delivery-lead":
+        import json
+        try:
+            result = recover_delivery(args.work_id, args.attempt_id, root=args.project_root)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery recovery refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1

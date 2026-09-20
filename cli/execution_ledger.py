@@ -204,6 +204,15 @@ class ExecutionLedger:
         if row[0] != 2 or row[1] != generation:
             raise ContractError("attempt ownership is stale or not recovery-capable")
 
+    @staticmethod
+    def _magentic_continuation_open(db: sqlite3.Connection, attempt_id: str) -> bool:
+        return db.execute(
+            "SELECT 1 FROM continuation_epochs JOIN recovery_resolutions USING(resolution_id) "
+            "WHERE continuation_epochs.attempt_id=? AND continuation_epochs.status='running' "
+            "AND recovery_resolutions.disposition='resolved_completed'",
+            (attempt_id,),
+        ).fetchone() is not None
+
     def create_attempt(self, envelope: dict[str, Any]) -> None:
         validate_envelope(envelope)
         protocol_version = execution_protocol_version(envelope)
@@ -284,7 +293,9 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt, generation)
             stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
-            if stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] != protocol_version:
+            if (stored is None or stored[0] != canonical(envelope) or stored[2] != protocol_version
+                    or not (stored[1] == "started" or protocol_version == 5 and stored[1] == "unknown"
+                            and self._magentic_continuation_open(db, attempt))):
                 raise ContractError("attempt is absent, changed, or closed")
             request_json = canonical(action)
             existing = db.execute("SELECT request_json,status,reason,grant_id,result_json FROM actions WHERE action_id=?", (aid,)).fetchone()
@@ -385,7 +396,9 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt, generation)
             stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
-            if stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] not in {2, 5}:
+            if (stored is None or stored[0] != canonical(envelope) or stored[2] not in {2, 5}
+                    or not (stored[1] == "started" or stored[2] == 5 and stored[1] == "unknown"
+                            and self._magentic_continuation_open(db, attempt))):
                 raise ContractError("attempt is absent, changed, or closed")
             existing = db.execute("SELECT request_json,status,reason FROM replan_decisions WHERE replan_id=?", (replan_id,)).fetchone()
             if existing:
@@ -427,7 +440,9 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt, generation)
             stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
-            if stored is None or stored != (canonical(envelope), "started", 5):
+            if (stored is None or stored[0] != canonical(envelope) or stored[2] != 5
+                    or not (stored[1] == "started" or stored[1] == "unknown"
+                            and self._magentic_continuation_open(db, attempt))):
                 raise ContractError("attempt is absent, changed, or closed")
             existing = db.execute("SELECT request_json,status,reason,grant_id,result_json FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
             if existing:
@@ -843,7 +858,8 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
             attempt = db.execute("SELECT envelope_json,execution_protocol_version,status FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
-            if attempt is None or attempt[1:] != (5, "started"):
+            if (attempt is None or attempt[1] != 5 or not (attempt[2] == "started"
+                    or attempt[2] == "unknown" and self._magentic_continuation_open(db, attempt_id))):
                 raise ContractError("Magentic attempt is absent or closed")
             table, key = ("manager_calls", "call_id") if pending_kind == "manager" else ("actions", "action_id")
             proposal = db.execute(f"SELECT status,request_json FROM {table} WHERE attempt_id=? AND {key}=?", (attempt_id, pending_id)).fetchone()
@@ -991,6 +1007,32 @@ class ExecutionLedger:
             db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
 
+    def finish_magentic_continuation(self, epoch_id: str, status: str, reason: str,
+                                     receipt_path: str, *, generation: int) -> None:
+        """Seal a linked v5 receipt while preserving the original terminal attempt."""
+        if status not in {"completed", "failed", "unknown"}:
+            raise ContractError("Magentic continuation status is invalid")
+        path = Path(receipt_path)
+        if path.is_symlink() or not path.is_file():
+            raise ContractError("Magentic continuation receipt is absent or unsafe")
+        receipt_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT attempt_id,action_id,status,receipt_path FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
+            if not row or row[2] != "running" or row[3] is not None:
+                raise ContractError("Magentic continuation is not running")
+            self._assert_owner(db, row[0], generation)
+            attempt = db.execute("SELECT status,receipt_path,execution_protocol_version FROM attempts WHERE attempt_id=?", (row[0],)).fetchone()
+            if not attempt or attempt[0] != "unknown" or attempt[2] != 5 or attempt[1] == receipt_path:
+                raise ContractError("original Magentic receipt must remain terminal and separate")
+            unresolved = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (row[0],)).fetchone()[0]
+            unresolved += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (row[0],)).fetchone()[0]
+            if (unresolved > 0) != (status == "unknown"):
+                raise ContractError("Magentic continuation status contradicts uncertain sends")
+            db.execute("UPDATE continuation_epochs SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE epoch_id=?",
+                       (status, reason, receipt_path, receipt_sha, epoch_id))
+            self._event(db, row[0], row[1], "magentic_continuation_" + status, epoch_id)
+
     @staticmethod
     def _continuation_owner(db: sqlite3.Connection, epoch_id: str, generation: int) -> tuple[str, str, str]:
         row = db.execute("SELECT attempt_id,action_id,status,owner_generation FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
@@ -1038,7 +1080,11 @@ class ExecutionLedger:
                 attempt = db.execute("SELECT status,receipt_path,recovery_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
                 action = db.execute("SELECT attempt_id,status,request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()
                 resolution = db.execute("SELECT attempt_id,action_id,disposition FROM recovery_resolutions WHERE resolution_id=?", (resolution_id,)).fetchone()
-                checkpoint = db.execute("SELECT file_sha256 FROM checkpoint_position_links WHERE attempt_id=? AND kind='pending_delegate' AND sequence=3", (attempt_id,)).fetchone()
+                protocol = db.execute("SELECT execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+                if protocol == (5,):
+                    checkpoint = db.execute("SELECT file_sha256 FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind='worker' AND pending_id=?", (attempt_id, action_id)).fetchone()
+                else:
+                    checkpoint = db.execute("SELECT file_sha256 FROM checkpoint_position_links WHERE attempt_id=? AND kind='pending_delegate' AND sequence=3", (attempt_id,)).fetchone()
                 if not attempt or attempt[0] not in {"unknown", "failed"} or attempt[2] != 2 or not attempt[1]:
                     raise ContractError("attempt is not terminal and continuation-capable")
                 if not action or action[0] != attempt_id or not resolution or resolution[:2] != (attempt_id, action_id):
@@ -1064,7 +1110,8 @@ class ExecutionLedger:
                 before = canonical(self._policy_counts(db, work_id))
                 db.execute("INSERT INTO continuation_epochs(epoch_id,attempt_id,action_id,resolution_id,receipt_sha256,checkpoint_sha256,status,owner_actor,created_at,policy_before_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
                            (epoch_id, attempt_id, action_id, resolution_id, receipt_sha256, checkpoint_sha256, "pending", actor, utc_now(), before))
-                self._event(db, attempt_id, action_id, "continuation_opened", canonical({"epoch_id": epoch_id, "resolution_id": resolution_id, "command": "flow run continue-resolved-execution", "actor": actor}))
+                command = "flow run recover-delivery-lead" if protocol == (5,) else "flow run continue-resolved-execution"
+                self._event(db, attempt_id, action_id, "continuation_opened", canonical({"epoch_id": epoch_id, "resolution_id": resolution_id, "command": command, "actor": actor}))
                 return {"epoch_id": epoch_id, "status": "pending", "generation": 1, "replayed": False}
 
     def claim_continuation(self, epoch_id: str, *, actor: str) -> int:
@@ -1084,6 +1131,26 @@ class ExecutionLedger:
                 db.execute("UPDATE continuation_epochs SET owner_generation=?,owner_actor=?,status=?,reason=? WHERE epoch_id=?", (generation, actor, status, reason, epoch_id))
                 self._event(db, row[0], row[1], "continuation_claimed", canonical({"epoch_id": epoch_id, "generation": generation, "status": status}))
                 return generation
+
+    def start_magentic_continuation(self, epoch_id: str, *, generation: int) -> None:
+        """Open v5 policy decisions only after the linked epoch is fenced."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT continuation_epochs.attempt_id,continuation_epochs.action_id,"
+                             "continuation_epochs.status,continuation_epochs.owner_generation,"
+                             "attempts.status,attempts.execution_protocol_version "
+                             "FROM continuation_epochs JOIN attempts USING(attempt_id) WHERE epoch_id=?",
+                             (epoch_id,)).fetchone()
+            if (not row or row[2] != "pending" or row[3] != generation
+                    or row[4:] != ("unknown", 5)):
+                raise ContractError("Magentic continuation is not ready to run")
+            resolution = db.execute("SELECT disposition FROM recovery_resolutions WHERE resolution_id="
+                                    "(SELECT resolution_id FROM continuation_epochs WHERE epoch_id=?)",
+                                    (epoch_id,)).fetchone()
+            if resolution != ("resolved_completed",):
+                raise ContractError("Magentic continuation lacks completed resolution")
+            db.execute("UPDATE continuation_epochs SET status='running' WHERE epoch_id=?", (epoch_id,))
+            self._event(db, row[0], row[1], "magentic_continuation_running", epoch_id)
 
     def regrant_continuation(self, epoch_id: str, envelope: dict[str, Any], action: dict[str, Any], *, generation: int) -> dict[str, Any]:
         """Reserve one fresh delegation unit for a proven unsent action."""

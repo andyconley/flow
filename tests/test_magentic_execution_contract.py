@@ -230,6 +230,53 @@ class MagenticContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ContractError, "changed"):
                 ledger.read_magentic_checkpoint(env["attempt_id"], "worker", worker["action_id"])
 
+    def test_terminal_v5_attempt_continues_only_after_observed_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env = {**envelope(), "checkpoint_dir": str(root)}
+            ledger = ExecutionLedger(root / "ledger.sqlite")
+            ledger.create_attempt(env)
+            worker = action(env, 1, env["roster"][1])
+            grant = ledger.decide(env, worker, generation=1)
+            checkpoint = root / "checkpoint.json"
+            checkpoint.write_text(json.dumps({"checkpoint_id": "cp-1", "workflow_name": "flow-magentic-delivery-v5",
+                                              "pending_request_info_events": {"flow-magentic-action-1": {"request": "opaque"}}}))
+            high_water = ledger.snapshot(env["attempt_id"])["events"][-1]["seq"]
+            bound = ledger.bind_magentic_checkpoint(env["attempt_id"], "cp-1", "worker", worker["action_id"],
+                                                      high_water, str(checkpoint), generation=1)
+            self.assertTrue(ledger.consume_grant(worker["action_id"], grant["grant_id"], generation=1))
+            ledger.observe_send(worker["action_id"], 1)
+            ledger.mark_unknown(worker["action_id"], "adapter_result_invalid", generation=1)
+            original = root / "receipt.json"
+            original.write_text("original unknown receipt\n")
+            ledger.finish_attempt(env["attempt_id"], "unknown", "reconciliation_required", str(original), generation=1)
+            manager = manager_call(env, 1)
+            with self.assertRaisesRegex(ContractError, "closed"):
+                ledger.decide_manager_call(env, manager, generation=1)
+            raw = {"type": "result", "subtype": "success", "is_error": False, "result": "Edited.",
+                   "session_id": "session-1", "num_turns": 9, "usage": {"input_tokens": 5}}
+            result = claude_edit_result(json.dumps(raw).encode(), worker["model"])
+            generation = ledger.claim_recovery(env["attempt_id"], actor="operator")
+            ledger.observe_response(worker["action_id"], result, generation)
+            proof = [{"kind": "provider_result", "path": "receipt.json",
+                      "sha256": hashlib.sha256(original.read_bytes()).hexdigest()}]
+            resolution = ledger.resolve_unknown(env["attempt_id"], worker["action_id"], "operator",
+                                                "resolved_completed", "Provider result verified", proof,
+                                                generation=generation)
+            epoch = ledger.begin_continuation(env["attempt_id"], worker["action_id"], resolution["resolution_id"],
+                                              proof[0]["sha256"], bound["file_sha256"], actor="operator")
+            epoch_generation = ledger.claim_continuation(epoch["epoch_id"], actor="operator")
+            ledger.start_magentic_continuation(epoch["epoch_id"], generation=epoch_generation)
+            generation = ledger.claim_recovery(env["attempt_id"], actor="operator")
+            self.assertTrue(ledger.decide_manager_call(env, manager, generation=generation)["allowed"])
+            linked = root / "linked-receipt.json"
+            linked.write_text("linked continuation receipt\n")
+            ledger.finish_magentic_continuation(epoch["epoch_id"], "failed", "probe complete", str(linked),
+                                                generation=generation)
+            self.assertEqual(original.read_text(), "original unknown receipt\n")
+            self.assertEqual(ledger.snapshot(env["attempt_id"])["status"], "unknown")
+            self.assertEqual(ledger.continuation_snapshot(epoch["epoch_id"])["status"], "failed")
+
     def test_replan_model_calls_need_matching_approval_and_ordered_pair(self) -> None:
         env = envelope()
         with tempfile.TemporaryDirectory() as temporary:
