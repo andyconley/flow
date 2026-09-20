@@ -178,8 +178,11 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
             raise ContractError("specialist definition digest mismatch")
     limits = envelope["limits"]
     expected = {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
-                "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 1}
-    if limits != expected:
+                "max_manager_calls": 12, "max_manager_rounds": 6}
+    paid_calls = limits.get("max_paid_worker_calls") if isinstance(limits, dict) else None
+    if (not isinstance(limits, dict) or set(limits) != set(expected) | {"max_paid_worker_calls"}
+            or any(limits[key] != value for key, value in expected.items())
+            or type(paid_calls) is not int or not 1 <= paid_calls <= expected["max_delegations"]):
         raise ContractError("Magentic limits differ from approved envelope")
 
 

@@ -100,6 +100,21 @@ class MagenticContractTests(unittest.TestCase):
                 phase = "facts" if sequence == 1 else "plan" if sequence == 2 else "progress"
                 self.assertTrue(ledger.decide_manager_call(env, manager_call(env, sequence, phase), generation=1)["allowed"])
 
+    def test_paid_worker_call_allowance_is_charter_configurable(self) -> None:
+        env = envelope()
+        env = {**env, "limits": {**env["limits"], "max_paid_worker_calls": 3}}
+        validate_envelope(env)
+        with self.assertRaises(ContractError):
+            validate_envelope({**env, "limits": {**env["limits"], "max_paid_worker_calls": 7}})
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = ExecutionLedger(Path(temporary) / "ledger.sqlite")
+            ledger.create_attempt(env)
+            for sequence in (1, 2, 3):
+                proposal = action(env, sequence, env["roster"][1], task=f"Authorized paid task {sequence}.")
+                self.assertTrue(ledger.decide(env, proposal, generation=1)["allowed"])
+            fourth = action(env, 4, env["roster"][1], task="Unapproved fourth paid task.")
+            self.assertEqual(ledger.decide(env, fourth, generation=1)["reason"], "paid_call_cap")
+
     def test_paid_worker_and_replan_allowances_reset_for_new_attempt(self) -> None:
         first = envelope()
         second = {**first, "attempt_id": "delivery-attempt-2"}
