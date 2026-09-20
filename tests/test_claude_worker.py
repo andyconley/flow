@@ -155,6 +155,23 @@ class ClaudeWorkerTests(unittest.TestCase):
             self.assertNotIn("CLAUDE_API_KEY", child_env)
             self.assertIn("HOME", child_env)
 
+    def test_manager_prompt_override_preserves_exact_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "from pathlib import Path\n"
+                            "Path('received.txt').write_text(sys.stdin.read())\n"
+                            "print(json.dumps({'type':'result','subtype':'success','is_error':False,"
+                            "'result':'complete','session_id':'manager-test','num_turns':1}))\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            prompt = "Return only stock Magentic progress JSON."
+            call_claude(instructions="unused", task="unused", workspace=root,
+                        model="claude-test", timeout_seconds=5, claude_bin=str(fake),
+                        prompt_override=prompt)
+            self.assertEqual((root / "received.txt").read_text(), prompt)
+
     def test_nonzero_exit_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

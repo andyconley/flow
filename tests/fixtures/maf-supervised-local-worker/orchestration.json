@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "work_id": "maf-supervised-local-worker",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [
+      "security_or_privacy_boundary"
+    ],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "classification": "high",
+    "rationale": "Production execution authorization, local worker invocation, and subprocess protocol."
+  },
+  "assignments": [
+    {
+      "id": "runtime-producer",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-lead-developer-maf-runtime"
+      },
+      "brief_path": ".flow/runs/maf-supervised-local-worker/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-supervised-local-worker/requirements.md",
+        "docs/maf-adoption-design.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "runtime",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli/maf_supervisor.py",
+        "runtime/maf_runner",
+        ".flow/runs/maf-supervised-local-worker/research/runtime-implementation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-supervised-local-worker/research/runtime-implementation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implement supervised MAF child protocol"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation"
+      }
+    },
+    {
+      "id": "test-producer",
+      "lane": "implement",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-maf-runtime"
+      },
+      "brief_path": ".flow/runs/maf-supervised-local-worker/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-supervised-local-worker/requirements.md",
+        "docs/maf-adoption-design.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "runtime",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        "tests/test_execution.py",
+        ".flow/runs/maf-supervised-local-worker/research/test-implementation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-supervised-local-worker/research/test-implementation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implement focused execution contract and CLI tests"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation"
+      },
+      "execution": {
+        "provider": "ollama",
+        "model": "llama3.1:8b",
+        "timeout_seconds": 60,
+        "max_output_chars": 4096
+      }
+    },
+    {
+      "id": "gateway-producer",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "codex-coordinator-maf-gateway"
+      },
+      "brief_path": ".flow/runs/maf-supervised-local-worker/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-supervised-local-worker/requirements.md",
+        "docs/maf-adoption-design.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "runtime",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli/execution_contracts.py",
+        "cli/execution_ledger.py",
+        "cli/execution_gateway.py",
+        "cli/local_worker.py",
+        "cli/flow.py",
+        "README.md",
+        "docs/cli-reference.md",
+        ".flow/runs/maf-supervised-local-worker/validation-results.md",
+        ".flow/runs/maf-supervised-local-worker/HANDOFF.md",
+        ".flow/runs/maf-supervised-local-worker/reconciliation.md",
+        ".flow/runs/maf-supervised-local-worker/verification.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-supervised-local-worker/validation-results.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implement Flow-owned gate and CLI path, validate runtime"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "gateway"
+      }
+    },
+    {
+      "id": "verifier",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-maf-runtime"
+      },
+      "brief_path": ".flow/runs/maf-supervised-local-worker/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-supervised-local-worker/requirements.md",
+        ".flow/runs/maf-supervised-local-worker/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "runtime",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-supervised-local-worker/review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Independent acceptance-readiness review"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "review"
+      }
+    },
+    {
+      "id": "security-review",
+      "lane": "implement",
+      "role": "security-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-security-reviewer-maf-runtime"
+      },
+      "brief_path": ".flow/runs/maf-supervised-local-worker/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-supervised-local-worker/requirements.md",
+        ".flow/runs/maf-supervised-local-worker/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "runtime",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-supervised-local-worker/research/security-review.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-supervised-local-worker/research/security-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Review local IPC, provider, ledger and receipt trust boundaries"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "security-review"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/maf-supervised-local-worker/reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {"id": "local-runtime-completed", "status": "observed", "disposition": "accepted", "evidence": [".flow/runs/maf-supervised-local-worker/validation-results.md"]},
+      {"id": "security-boundary-reviewed", "status": "observed", "disposition": "accepted", "evidence": [".flow/runs/maf-supervised-local-worker/research/security-review.md"]},
+      {"id": "paid-and-multiworker-expansion", "status": "unverified", "disposition": "deferred", "evidence": [".flow/runs/maf-supervised-local-worker/HANDOFF.md"]}
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "runtime-producer",
+      "test-producer",
+      "gateway-producer",
+      "security-review"
+    ],
+    "evidence_collector_assignment": "gateway-producer",
+    "verifier_assignment": "verifier",
+    "independent": true,
+    "artifact_path": ".flow/runs/maf-supervised-local-worker/verification.md"
+  }
+}

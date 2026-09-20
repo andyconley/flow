@@ -93,7 +93,8 @@ def build_prompt(instructions: str, task: str) -> bytes:
 
 
 def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
-                timeout_seconds: int, claude_bin: str = "claude") -> dict[str, Any]:
+                timeout_seconds: int, claude_bin: str = "claude",
+                prompt_override: str | None = None) -> dict[str, Any]:
     """Run one Claude Code turn; fail closed on timeout, malformed or incomplete output.
 
     The caller must create and approve the isolated workspace before dispatch.
@@ -110,7 +111,14 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
         raise ValueError("Claude model must be explicit")
     if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 600:
         raise ValueError("Claude timeout must be 1 to 600 seconds")
-    prompt_bytes = build_prompt(instructions, task)
+    if prompt_override is None:
+        prompt_bytes = build_prompt(instructions, task)
+    else:
+        if not isinstance(prompt_override, str) or not prompt_override.strip():
+            raise ValueError("Claude manager prompt is empty")
+        prompt_bytes = prompt_override.encode("utf-8")
+        if len(prompt_bytes) > MAX_PROMPT_BYTES:
+            raise ValueError("Claude manager prompt exceeds limit")
     argv = [claude_bin, "-p", "--output-format", "json",
             "--safe-mode", "--no-session-persistence",
             "--permission-mode", "dontAsk", "--tools", "",
@@ -162,8 +170,9 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise ClaudeWorkerError("Claude turn timed out")
-        if process.wait(timeout=remaining) != 0:
-            raise ClaudeWorkerError("Claude exited without a successful turn")
+        exit_code = process.wait(timeout=remaining)
+        if exit_code != 0:
+            raise ClaudeWorkerError(f"Claude exited without a successful turn (status {exit_code})")
         return {**_parse_result(b"".join(chunks), model),
                 "input_sha256": hashlib.sha256(prompt_bytes).hexdigest()}
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:

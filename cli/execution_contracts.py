@@ -11,6 +11,7 @@ SCHEMA_VERSION = 1
 EXECUTION_PROTOCOL_VERSION = 2
 MIXED_PROTOCOL_VERSION = 3
 CLAUDE_PROTOCOL_VERSION = 4
+MAGENTIC_PROTOCOL_VERSION = 5
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
@@ -37,20 +38,24 @@ def file_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def require_fields(record: dict[str, Any], fields: tuple[str, ...], *, kind: str) -> None:
+def require_fields(record: dict[str, Any], fields: tuple[str, ...], *, kind: str,
+                   max_bytes: int = MAX_MESSAGE_BYTES) -> None:
     if not isinstance(record, dict) or record.get("schema_version") != SCHEMA_VERSION:
         raise ContractError(f"unsupported {kind} schema version")
     for field in fields:
         if field not in record or record[field] is None:
             raise ContractError(f"{kind} missing {field}")
-    if len(canonical(record).encode("utf-8")) > MAX_MESSAGE_BYTES:
+    if len(canonical(record).encode("utf-8")) > max_bytes:
         raise ContractError(f"{kind} exceeds size limit")
 
 
 def validate_envelope(envelope: dict[str, Any]) -> None:
     protocol_version = envelope.get("execution_protocol_version", 1)
-    if protocol_version not in {1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION}:
+    if protocol_version not in {1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION, MAGENTIC_PROTOCOL_VERSION}:
         raise ContractError("execution protocol version is unsupported")
+    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+        _validate_magentic_envelope(envelope)
+        return
     shared = ("work_id", "attempt_id", "charter_digest", "charter_sources", "run_protocol_revision", "manifest_digest", "limits", "checkpoint_dir")
     legacy = ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "task_digest", "task")
     paired = protocol_version in {MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION}
@@ -123,12 +128,69 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
         raise ContractError("execution limits differ from the approved first slice")
 
 
+def _hex_digest(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
+    require_fields(envelope, ("work_id", "attempt_id", "charter_digest", "charter_sources",
+                              "run_protocol_revision", "manifest_digest", "limits", "checkpoint_dir",
+                              "source_commit", "worktree", "allowed_paths", "manager", "roster"), kind="envelope")
+    sources = envelope["charter_sources"]
+    if envelope["run_protocol_revision"] != 2 or not isinstance(sources, dict) or set(sources) != {"requirements", "acceptance"}:
+        raise ContractError("charter source snapshot is invalid")
+    for source in sources.values():
+        if not isinstance(source, dict) or set(source) != {"path", "sha256"} or not isinstance(source["path"], str) or not source["path"].startswith(".flow/runs/") or any(part in {"", ".", ".."} for part in source["path"].split("/")) or not _hex_digest(source["sha256"]):
+            raise ContractError("charter source snapshot is invalid")
+    if digest({"requirements": sources["requirements"]["sha256"], "acceptance": sources["acceptance"]["sha256"]}) != envelope["charter_digest"]:
+        raise ContractError("charter source digest mismatch")
+    if not isinstance(envelope["manifest_digest"], str) or not _hex_digest(envelope["manifest_digest"]):
+        raise ContractError("manifest digest is invalid")
+    if not isinstance(envelope["source_commit"], str) or len(envelope["source_commit"]) != 40 or any(c not in "0123456789abcdef" for c in envelope["source_commit"]):
+        raise ContractError("source commit is invalid")
+    worktree = envelope["worktree"]
+    if not isinstance(worktree, str) or not Path(worktree).is_absolute() or ".." in Path(worktree).parts:
+        raise ContractError("worktree path is invalid")
+    paths = envelope["allowed_paths"]
+    if not isinstance(paths, list) or not paths or len(paths) != len(set(paths)):
+        raise ContractError("allowed path scope is invalid")
+    for path in paths:
+        if not isinstance(path, str) or not path or Path(path).is_absolute() or any(part in {"", ".", ".."} for part in path.split("/")):
+            raise ContractError("allowed path scope is invalid")
+    manager = envelope["manager"]
+    if not isinstance(manager, dict) or set(manager) != {"provider", "model"} or manager["provider"] not in {"ollama", "claude", "codex"} or not isinstance(manager["model"], str) or not manager["model"].strip():
+        raise ContractError("manager binding is invalid")
+    roster = envelope["roster"]
+    if not isinstance(roster, list) or not roster or len(roster) > 6:
+        raise ContractError("specialist roster is invalid")
+    seen_ids: set[str] = set()
+    for assignment in roster:
+        if not isinstance(assignment, dict) or set(assignment) != {"assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "instructions"}:
+            raise ContractError("specialist binding is invalid")
+        if assignment["provider"] not in {"ollama", "claude", "codex", "local-stub"}:
+            raise ContractError("specialist provider is invalid")
+        if any(not isinstance(assignment[k], str) or not assignment[k].strip() for k in ("assignment_id", "instance_id", "role", "model", "instructions")):
+            raise ContractError("specialist identity is invalid")
+        if assignment["assignment_id"] in seen_ids or assignment["instance_id"] in seen_ids:
+            raise ContractError("specialist identity is duplicated")
+        seen_ids.update((assignment["assignment_id"], assignment["instance_id"]))
+        if assignment["definition_digest"] != digest({"role": assignment["role"], "instructions": assignment["instructions"]}):
+            raise ContractError("specialist definition digest mismatch")
+    limits = envelope["limits"]
+    expected = {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
+                "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 1}
+    if limits != expected:
+        raise ContractError("Magentic limits differ from approved envelope")
+
+
 def action_assignment(envelope: dict[str, Any], sequence: int) -> dict[str, Any]:
     """Select the immutable assignment bound to this logical action."""
     if execution_protocol_version(envelope) in {MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION}:
         if type(sequence) is not int or not 1 <= sequence <= 2:
             raise ContractError("mixed action sequence is invalid")
         return envelope["assignments"][sequence - 1]
+    if execution_protocol_version(envelope) == MAGENTIC_PROTOCOL_VERSION:
+        raise ContractError("dynamic action requires an assignment identity")
     return envelope
 
 
@@ -145,6 +207,8 @@ def envelope_digest(envelope: dict[str, Any]) -> str:
 
 def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
     protocol_version = execution_protocol_version(envelope)
+    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+        raise ContractError("dynamic action identity requires its manager proposal")
     if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
         raise ContractError("action sequence is invalid")
     if protocol_version == 1 and sequence != 1:
@@ -172,6 +236,9 @@ def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
 def validate_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
     require_fields(action, ("action_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind"), kind="action")
     protocol_version = execution_protocol_version(envelope)
+    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+        _validate_magentic_action(envelope, action)
+        return
     if action["kind"] != "delegate" or not isinstance(action["sequence"], int) or isinstance(action["sequence"], bool):
         raise ContractError("first slice permits one delegation")
     if protocol_version == 1 and action["sequence"] != 1:
@@ -195,8 +262,78 @@ def validate_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
         raise ContractError("action ID mismatch")
 
 
+def expected_magentic_action_id(action: dict[str, Any]) -> str:
+    fields = ("attempt_id", "envelope_digest", "assignment_id", "definition_digest", "instance_id",
+              "sequence", "manager_turn", "task_digest", "parent_action_id", "checkpoint_id")
+    return digest({"kind": "delegate", **{field: action[field] for field in fields}})
+
+
+def _validate_magentic_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
+    require_fields(action, ("assignment_id", "definition_digest", "manager_turn", "task", "rationale",
+                            "checkpoint_id"), kind="Magentic action")
+    if action["kind"] != "delegate" or type(action["sequence"]) is not int or not 1 <= action["sequence"] <= 6:
+        raise ContractError("Magentic action sequence is invalid")
+    if type(action["manager_turn"]) is not int or not 1 <= action["manager_turn"] <= 6:
+        raise ContractError("Magentic manager turn is invalid")
+    assignment = next((item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"]), None)
+    if assignment is None:
+        raise ContractError("Magentic selected an unlisted specialist")
+    for field in ("definition_digest", "instance_id", "role", "provider", "model"):
+        if action[field] != assignment[field]:
+            raise ContractError(f"Magentic action {field} differs from roster")
+    if action["attempt_id"] != envelope["attempt_id"] or action["envelope_digest"] != envelope_digest(envelope):
+        raise ContractError("Magentic action envelope link mismatch")
+    if not isinstance(action["task"], str) or not action["task"].strip() or len(action["task"].encode()) > MAX_TASK_BYTES or hashlib.sha256(action["task"].encode()).hexdigest() != action["task_digest"]:
+        raise ContractError("Magentic action task is invalid")
+    if not isinstance(action["rationale"], str) or not action["rationale"].strip() or len(action["rationale"].encode()) > MAX_TASK_BYTES:
+        raise ContractError("Magentic action rationale is invalid")
+    if action.get("parent_action_id") is not None and not _hex_digest(action["parent_action_id"]):
+        raise ContractError("Magentic parent action identity is invalid")
+    if not isinstance(action["checkpoint_id"], str) or not action["checkpoint_id"].strip():
+        raise ContractError("Magentic pending checkpoint is invalid")
+    if action["action_id"] != expected_magentic_action_id(action):
+        raise ContractError("Magentic action identity mismatch")
+
+
+MAGENTIC_PHASES = frozenset({"facts", "plan", "progress", "replan", "replan_facts", "replan_plan", "final"})
+
+
+def expected_manager_call_id(request: dict[str, Any]) -> str:
+    fields = ("attempt_id", "envelope_digest", "sequence", "phase", "manager_round", "prompt_digest")
+    identity = {"kind": "manager_model", **{field: request[field] for field in fields}}
+    if request["phase"] in {"replan_facts", "replan_plan"}:
+        identity.update({field: request[field] for field in ("replan_sequence", "replan_id")})
+    return digest(identity)
+
+
+def validate_manager_call(envelope: dict[str, Any], request: dict[str, Any]) -> None:
+    if execution_protocol_version(envelope) != MAGENTIC_PROTOCOL_VERSION:
+        raise ContractError("manager calls require protocol v5")
+    require_fields(request, ("call_id", "attempt_id", "envelope_digest", "sequence", "phase",
+                             "manager_round", "prompt_digest"), kind="manager call")
+    if type(request["sequence"]) is not int or not 1 <= request["sequence"] <= 13 or type(request["manager_round"]) is not int or not 1 <= request["manager_round"] <= 7:
+        raise ContractError("manager call position is invalid")
+    if request["phase"] not in MAGENTIC_PHASES or not _hex_digest(request["prompt_digest"]):
+        raise ContractError("manager call phase or prompt digest is invalid")
+    if request["phase"] in {"replan_facts", "replan_plan"}:
+        if type(request.get("replan_sequence")) is not int or not 1 <= request["replan_sequence"] <= 3 or request.get("replan_id") != expected_replan_id(envelope, request["replan_sequence"]):
+            raise ContractError("manager replan identity is invalid")
+    elif "replan_sequence" in request or "replan_id" in request:
+        raise ContractError("non-replan manager call carries replan authority")
+    if request["attempt_id"] != envelope["attempt_id"] or request["envelope_digest"] != envelope_digest(envelope):
+        raise ContractError("manager call envelope link mismatch")
+    if request["call_id"] != expected_manager_call_id(request):
+        raise ContractError("manager call identity mismatch")
+
+
 def expected_replan_id(envelope: dict[str, Any], sequence: int) -> str:
-    if execution_protocol_version(envelope) != EXECUTION_PROTOCOL_VERSION:
+    protocol = execution_protocol_version(envelope)
+    if protocol == MAGENTIC_PROTOCOL_VERSION:
+        if type(sequence) is not int or not 1 <= sequence <= 3:
+            raise ContractError("replan sequence exceeds the approved slice")
+        return digest({"attempt_id": envelope["attempt_id"], "envelope_digest": envelope_digest(envelope),
+                       "execution_protocol_version": 5, "kind": "replan", "sequence": sequence})
+    if protocol != EXECUTION_PROTOCOL_VERSION:
         raise ContractError("replans require execution protocol v2")
     if not isinstance(sequence, int) or isinstance(sequence, bool) or not 1 <= sequence <= 3:
         raise ContractError("replan sequence exceeds the approved slice")
@@ -213,6 +350,13 @@ def expected_replan_id(envelope: dict[str, Any], sequence: int) -> str:
 
 def validate_replan(envelope: dict[str, Any], replan: dict[str, Any]) -> None:
     """Validate a Flow-owned replan request without giving it action authority."""
+    if execution_protocol_version(envelope) == MAGENTIC_PROTOCOL_VERSION:
+        require_fields(replan, ("replan_id", "attempt_id", "envelope_digest", "sequence", "kind", "proposal"), kind="replan")
+        if replan["kind"] != "replan" or type(replan["sequence"]) is not int or not 1 <= replan["sequence"] <= 3 or not isinstance(replan["proposal"], dict) or not replan["proposal"]:
+            raise ContractError("Magentic replan proposal is invalid")
+        if replan["attempt_id"] != envelope["attempt_id"] or replan["envelope_digest"] != envelope_digest(envelope) or replan["replan_id"] != expected_replan_id(envelope, replan["sequence"]):
+            raise ContractError("Magentic replan identity mismatch")
+        return
     require_fields(replan, ("replan_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind", "proposal"), kind="replan")
     if execution_protocol_version(envelope) != EXECUTION_PROTOCOL_VERSION:
         raise ContractError("replans require execution protocol v2")
@@ -231,7 +375,12 @@ def validate_replan(envelope: dict[str, Any], replan: dict[str, Any]) -> None:
 
 def validate_result(envelope: dict[str, Any], result: dict[str, Any], *, action: dict[str, Any] | None = None) -> None:
     require_fields(result, ("status", "provider", "model", "physical_call", "evidence_level", "output", "output_sha256"), kind="result")
-    if execution_protocol_version(envelope) in {MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION}:
+    if execution_protocol_version(envelope) == MAGENTIC_PROTOCOL_VERSION:
+        if action is None:
+            raise ContractError("Magentic result requires selected action identity")
+        validate_action(envelope, action)
+        assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
+    elif execution_protocol_version(envelope) in {MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION}:
         if action is None:
             raise ContractError("mixed result requires an action identity")
         validate_action(envelope, action)
@@ -261,6 +410,9 @@ def validate_result(envelope: dict[str, Any], result: dict[str, Any], *, action:
 
 def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
     protocol_version = execution_protocol_version(envelope)
+    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+        _validate_magentic_receipt(envelope, receipt)
+        return
     common = ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest", "status", "actions")
     paired = protocol_version in {MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION}
     require_fields(receipt, common + (() if paired else ("definition_digest", "provider")), kind="receipt")
@@ -369,6 +521,62 @@ def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
         if action["action_id"] in seen_actions:
             raise ContractError("receipt endpoint action evidence is duplicated")
         seen_actions.add(action["action_id"])
+
+
+def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
+    require_fields(receipt, ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest",
+                             "status", "execution_protocol_version", "roster", "manager_calls", "actions",
+                             "replans", "checkpoints", "evidence"), kind="Magentic receipt", max_bytes=512 * 1024)
+    if receipt["execution_protocol_version"] != 5 or receipt["status"] not in {"completed", "failed", "denied", "unknown"}:
+        raise ContractError("Magentic receipt status or protocol is invalid")
+    for field in ("work_id", "attempt_id", "charter_digest", "manifest_digest"):
+        if receipt[field] != envelope[field]:
+            raise ContractError(f"Magentic receipt {field} link mismatch")
+    if receipt["envelope_digest"] != envelope_digest(envelope) or receipt.get("charter_sources") != envelope["charter_sources"] or receipt.get("run_protocol_revision") != envelope["run_protocol_revision"] or receipt["roster"] != envelope["roster"]:
+        raise ContractError("Magentic receipt envelope or roster link mismatch")
+    evidence = receipt["evidence"]
+    if not isinstance(evidence, dict) or any(evidence.get(field) != envelope[field] for field in ("source_commit", "worktree", "allowed_paths")):
+        raise ContractError("Magentic receipt source or scope link mismatch")
+    for key in ("tree_sha256", "diff_sha256"):
+        if key in evidence and not _hex_digest(evidence[key]):
+            raise ContractError("Magentic receipt evidence digest is invalid")
+    for key in ("manager_calls", "actions", "replans", "checkpoints"):
+        if not isinstance(receipt[key], list):
+            raise ContractError("Magentic receipt decision list is invalid")
+    seen_calls: set[str] = set()
+    for item in receipt["manager_calls"]:
+        if not isinstance(item, dict) or not isinstance(item.get("request"), dict):
+            raise ContractError("Magentic manager receipt is invalid")
+        request = item["request"]
+        validate_manager_call(envelope, request)
+        if item.get("call_id") != request["call_id"] or request["call_id"] in seen_calls or item.get("status") not in {"allowed", "started", "completed", "denied", "unknown"}:
+            raise ContractError("Magentic manager receipt identity or status is invalid")
+        seen_calls.add(request["call_id"])
+        if item["status"] == "completed" and not isinstance(item.get("result"), dict):
+            raise ContractError("Magentic completed manager call lacks observed result")
+    seen_actions: set[str] = set()
+    for item in receipt["actions"]:
+        if not isinstance(item, dict) or not isinstance(item.get("request"), dict):
+            raise ContractError("Magentic action receipt is invalid")
+        action = item["request"]
+        validate_action(envelope, action)
+        if item.get("action_id") != action["action_id"] or action["action_id"] in seen_actions or item.get("status") not in {"allowed", "started", "completed", "failed", "denied", "unknown", "not_dispatched"}:
+            raise ContractError("Magentic action receipt identity or status is invalid")
+        seen_actions.add(action["action_id"])
+        if item["status"] == "completed":
+            validate_result(envelope, item.get("result"), action=action)
+    if receipt["status"] == "completed":
+        completed = [item["request"] for item in receipt["actions"] if item["status"] == "completed"]
+        producers = [item for item in completed if item["role"] == "lead-developer" and item["provider"] == "claude"]
+        if len(producers) != 1 or not any(item["role"] == "test-engineer" and item["instance_id"] != producers[0]["instance_id"] and item["sequence"] > producers[0]["sequence"] for item in completed):
+            raise ContractError("completed Magentic receipt requires Claude producer and later distinct verifier")
+        baseline, edit, tests = (evidence.get(key) for key in ("baseline", "edit", "tests"))
+        if not isinstance(baseline, dict) or baseline.get("source_commit") != envelope["source_commit"] or not _hex_digest(baseline.get("regression_diff_sha256")) or not isinstance(baseline.get("files"), dict) or not all(_hex_digest(v) for v in baseline["files"].values()):
+            raise ContractError("Magentic baseline evidence is invalid")
+        if not isinstance(edit, dict) or not isinstance(edit.get("changed_files"), list) or not edit["changed_files"] or not set(edit["changed_files"]).issubset(set(envelope["allowed_paths"])) or "cli/codex_worker.py" not in edit["changed_files"] or not _hex_digest(edit.get("diff_sha256")) or not isinstance(edit.get("diff_path"), str) or not edit["diff_path"] or not isinstance(edit.get("files"), dict) or not all(_hex_digest(v) for v in edit["files"].values()):
+            raise ContractError("Magentic edit evidence is invalid")
+        if not isinstance(tests, dict) or tests.get("status") != "passed" or not isinstance(tests.get("command"), list) or not tests["command"] or not all(isinstance(v, str) and v for v in tests["command"]) or not _hex_digest(tests.get("output_sha256")):
+            raise ContractError("Magentic focused test evidence is invalid")
 
 
 RECOVERY_DISPOSITIONS = frozenset({"resolved_completed", "resolved_not_dispatched", "still_unknown"})

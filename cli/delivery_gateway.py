@@ -1,0 +1,518 @@
+"""Flow-owned dispatch boundary for a stock Magentic Delivery Lead (v5)."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+from typing import Any, Callable
+
+from execution_contracts import (ContractError, canonical, digest, envelope_digest,
+                                 expected_magentic_action_id, expected_manager_call_id,
+                                 expected_replan_id, validate_action, validate_manager_call,
+                                 validate_result, validate_receipt)
+from execution_ledger import ExecutionLedger, utc_now
+from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot
+from fsutil import repo_root, write_atomic
+from local_worker import call_local
+from claude_worker import call_claude
+from claude_edit_worker import call_claude_edit
+from maf_supervisor import MafTransportError, run_maf_delivery
+from orchestration import validate_orchestration
+from runstate import status as run_status
+
+APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
+ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
+MAX_TASK_BYTES = 4096
+
+
+def _git(worktree: Path, *args: str) -> str:
+    result = subprocess.run(["git", "-C", str(worktree), *args], capture_output=True,
+                            text=True, timeout=15, check=False)
+    if result.returncode:
+        raise ContractError("isolated worktree Git check failed")
+    return result.stdout.rstrip("\n")
+
+
+def _worktree_baseline(worktree: Path, source_commit: str) -> dict[str, Any]:
+    if worktree.is_symlink() or not worktree.is_dir() or _git(worktree, "rev-parse", "HEAD") != source_commit:
+        raise ContractError("isolated worktree does not match pinned source commit")
+    changes = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
+    if len(changes) != 1 or changes[0][:2] not in {" M", "M "} or changes[0][3:] != "tests/test_codex_worker.py":
+        raise ContractError("isolated worktree requires only the approved failing regression")
+    if not _git(worktree, "diff", "HEAD", "--", "tests/test_codex_worker.py"):
+        raise ContractError("approved regression diff is absent")
+    if _git(worktree, "diff", "--name-only", "HEAD", "--") != "tests/test_codex_worker.py":
+        raise ContractError("worktree baseline includes changes outside the approved regression")
+    return {"source_commit": source_commit,
+            "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in APPROVED_PATHS},
+            "regression_diff_sha256": hashlib.sha256(_git(worktree, "diff", "HEAD", "--", "tests/test_codex_worker.py").encode()).hexdigest()}
+
+
+def prepare_delivery(work_id: str, worktree: Path, source_commit: str, *,
+                     root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
+    """Pin approved charter, effective roster, source, and baseline before any send."""
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    state = run_status(work_id, root=project_root)
+    if state.get("state") != "implementing" or state.get("protocol_revision") != 2:
+        raise ContractError("delivery requires an implementing revision-2 run")
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    manifest_path = run_dir / "orchestration.json"
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    assignments = {a["id"]: a for a in manifest["assignments"] if a.get("lane") == "implement"}
+    if set(assignments) != {"magentic-manager", *ROSTER_IDS}:
+        raise ContractError("approved Delivery Lead roster is absent or expanded")
+    manager = assignments["magentic-manager"]
+    if manager.get("role") != "delivery-lead" or manager.get("execution", {}).get("provider") != "claude":
+        raise ContractError("approved manager binding is invalid")
+    roster = []
+    for assignment_id in ROSTER_IDS:
+        entry = assignments[assignment_id]
+        role = "lead-developer" if assignment_id == "claude-implementer" else "test-engineer"
+        provider = "claude" if assignment_id == "claude-implementer" else "ollama"
+        execution = entry.get("execution", {})
+        if entry.get("role") != role or execution.get("provider") != provider or not execution.get("model"):
+            raise ContractError("approved specialist binding is invalid")
+        instructions = _effective_specialist_for(role)
+        roster.append({"assignment_id": assignment_id, "definition_digest": digest({"role": role, "instructions": instructions}),
+                       "instance_id": assignment_id, "role": role, "provider": provider,
+                       "model": execution["model"], "instructions": instructions})
+    if assignments["claude-implementer"].get("write_scopes") != list(APPROVED_PATHS):
+        raise ContractError("Claude edit scope differs from approved paths")
+    charter_path = _run_file(project_root, run_dir, str((run_dir / "job-charter.md").relative_to(project_root)))
+    task = charter_path.read_text()
+    if not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
+        raise ContractError("delivery job charter is absent or oversized")
+    artifacts = state.get("artifacts", {})
+    requirements = _run_file(project_root, run_dir, artifacts.get("requirements", ""))
+    acceptance = _run_file(project_root, run_dir, artifacts.get("acceptance_criteria", ""))
+    requirements_bytes, acceptance_bytes = requirements.read_bytes(), acceptance.read_bytes()
+    worktree = Path(worktree).resolve(strict=True)
+    baseline = _worktree_baseline(worktree, source_commit)
+    baseline["regression_test"] = _verify_failing_regression(worktree)
+    attempt_id = uuid.uuid4().hex
+    execution_dir = run_dir / "execution"
+    execution_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(execution_dir, 0o700)
+    attempt_dir = execution_dir / attempt_id
+    attempt_dir.mkdir(mode=0o700)
+    (attempt_dir / "checkpoints").mkdir(mode=0o700)
+    for data, name in ((manifest_bytes, "manifest.snapshot.json"), (requirements_bytes, "requirements.snapshot.md"),
+                       (acceptance_bytes, "acceptance.snapshot.md"), (task.encode(), "job-charter.snapshot.md")):
+        _write_snapshot(attempt_dir / name, data)
+    if any(path.read_bytes() != data for path, data in ((manifest_path, manifest_bytes),
+              (requirements, requirements_bytes), (acceptance, acceptance_bytes), (charter_path, task.encode()))):
+        raise ContractError("approved delivery sources changed during preparation")
+    envelope = {"schema_version": 1, "execution_protocol_version": 5, "work_id": work_id, "attempt_id": attempt_id,
+                "charter_digest": digest({"requirements": hashlib.sha256(requirements_bytes).hexdigest(),
+                                          "acceptance": hashlib.sha256(acceptance_bytes).hexdigest()}),
+                "charter_sources": {"requirements": {"path": str(requirements.relative_to(project_root)), "sha256": hashlib.sha256(requirements_bytes).hexdigest()},
+                                    "acceptance": {"path": str(acceptance.relative_to(project_root)), "sha256": hashlib.sha256(acceptance_bytes).hexdigest()}},
+                "run_protocol_revision": 2, "manifest_digest": hashlib.sha256(manifest_bytes).hexdigest(),
+                "checkpoint_dir": str(attempt_dir / "checkpoints"), "source_commit": source_commit,
+                "worktree": str(worktree), "allowed_paths": list(APPROVED_PATHS),
+                "manager": {"provider": "claude", "model": manager["execution"]["model"]}, "roster": roster,
+                "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
+                           "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 1}}
+    envelope_digest(envelope)
+    write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
+    write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    ledger.create_attempt(envelope)
+    return envelope, task, attempt_dir, ledger
+
+
+def _normalized_manager_request(envelope: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
+    messages = message.get("messages")
+    if not isinstance(messages, list) or not messages or len(canonical(messages).encode()) > 24000:
+        raise ContractError("Magentic manager messages are invalid")
+    request = {key: message.get(key) for key in ("schema_version", "call_id", "attempt_id", "envelope_digest",
+                                                "sequence", "phase", "manager_round", "prompt_digest")}
+    for key in ("replan_sequence", "replan_id"):
+        if key in message:
+            request[key] = message[key]
+    if request["prompt_digest"] != digest(messages):
+        raise ContractError("Magentic manager prompt digest differs from messages")
+    validate_manager_call(envelope, request)
+    return request
+
+
+def _normalized_action(envelope: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
+    task = message.get("task")
+    if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
+        raise ContractError("Magentic specialist task is invalid")
+    keys = ("schema_version", "kind", "attempt_id", "envelope_digest", "sequence", "assignment_id",
+            "definition_digest", "instance_id", "role", "provider", "model", "manager_turn", "task",
+            "rationale", "parent_action_id", "checkpoint_id")
+    action = {key: message.get(key) for key in keys}
+    action["task_digest"] = hashlib.sha256(task.encode()).hexdigest()
+    expected_id = expected_magentic_action_id(action)
+    if message.get("action_id") != expected_id:
+        raise ContractError("Magentic specialist action ID differs from selected task")
+    action["action_id"] = expected_id
+    validate_action(envelope, action)
+    return action
+
+
+def _verify_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path) -> dict[str, Any]:
+    changed = _git(worktree, "diff", "--name-only", "HEAD", "--").splitlines()
+    if not changed or any(path not in APPROVED_PATHS for path in changed):
+        raise ContractError("Claude changed files outside the approved repair scope")
+    if _git(worktree, "status", "--porcelain", "--untracked-files=all") and any(
+            line[:2] not in {" M", "M "} or line[3:] not in APPROVED_PATHS
+            for line in _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()):
+        raise ContractError("Claude created or changed an unapproved worktree entry")
+    if hashlib.sha256((worktree / "cli/codex_worker.py").read_bytes()).hexdigest() == baseline["files"]["cli/codex_worker.py"]:
+        raise ContractError("Claude did not change the approved implementation target")
+    diff = _git(worktree, "diff", "HEAD", "--", *APPROVED_PATHS).encode()
+    if not diff or len(diff) > 16384:
+        raise ContractError("Claude repair diff is empty or oversized")
+    diff_path = attempt_dir / "repair.diff"
+    if diff_path.exists():
+        if diff_path.is_symlink() or diff_path.read_bytes() != diff:
+            raise ContractError("recorded Claude repair diff changed")
+    else:
+        _write_snapshot(diff_path, diff)
+    return {"changed_files": changed, "diff_sha256": hashlib.sha256(diff).hexdigest(),
+            "diff_path": str(attempt_dir / "repair.diff"),
+            "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in APPROVED_PATHS}}
+
+
+def _run_targeted_test(worktree: Path) -> dict[str, Any]:
+    command = [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_codex_worker.py"]
+    try:
+        completed = subprocess.run(command, cwd=worktree, capture_output=True, text=True, timeout=90, check=False)
+    except subprocess.TimeoutExpired as exc:
+        raise ContractError("targeted repair test timed out") from exc
+    output = (completed.stdout + completed.stderr)[-8192:]
+    if completed.returncode:
+        raise ContractError("targeted repair test failed: " + output[-512:])
+    return {"command": command, "status": "passed", "output_sha256": hashlib.sha256(output.encode()).hexdigest()}
+
+
+def _verify_failing_regression(worktree: Path) -> dict[str, Any]:
+    command = [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_codex_worker.py"]
+    try:
+        completed = subprocess.run(command, cwd=worktree, capture_output=True, text=True, timeout=90, check=False)
+    except subprocess.TimeoutExpired as exc:
+        raise ContractError("baseline regression test timed out") from exc
+    output = (completed.stdout + completed.stderr)[-8192:]
+    if completed.returncode == 0 or "FAIL" not in output and "ERROR" not in output:
+        raise ContractError("baseline regression is not a reproducible failing test")
+    return {"command": command, "status": "failed_as_expected", "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+            "output_tail": output[-1024:]}
+
+
+def execute_delivery(work_id: str, worktree: Path, source_commit: str, *, root: Path | None = None,
+                     manager_adapter: Callable[..., dict[str, Any]] | None = None,
+                     worker_adapter: Callable[..., dict[str, Any]] | None = None,
+                     supervisor: Callable[..., dict[str, Any]] | None = None,
+                     test_runner: Callable[[Path], dict[str, Any]] | None = None,
+                     python_path: str | None = None) -> dict[str, Any]:
+    """Authorize each manager and specialist call, then seal a linked receipt."""
+    envelope, task, attempt_dir, ledger = prepare_delivery(work_id, worktree, source_commit, root=root)
+    return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
+                                      manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                      supervisor=supervisor, test_runner=test_runner, python_path=python_path)
+
+
+def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
+                    manager_adapter: Callable[..., dict[str, Any]] | None = None,
+                    worker_adapter: Callable[..., dict[str, Any]] | None = None,
+                    supervisor: Callable[..., dict[str, Any]] | None = None,
+                    test_runner: Callable[[Path], dict[str, Any]] | None = None,
+                    python_path: str | None = None) -> dict[str, Any]:
+    """Restore only a completed worker response from its exact pinned MAF pause."""
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    attempt_dir = run_dir / "execution" / attempt_id
+    if not attempt_dir.is_dir() or attempt_dir.is_symlink():
+        raise ContractError("Magentic attempt directory is absent")
+    ledger = ExecutionLedger(run_dir / "execution" / "ledger.sqlite")
+    snapshot = ledger.snapshot(attempt_id)
+    envelope = snapshot["envelope"]
+    if snapshot["status"] != "started" or snapshot["execution_protocol_version"] != 5 or envelope["work_id"] != work_id:
+        raise ContractError("Magentic attempt is closed or differs from the approved run")
+    if json.loads((attempt_dir / "envelope.json").read_text()) != envelope:
+        raise ContractError("stored Magentic envelope changed")
+    manager_calls = snapshot.get("manager_calls", [])
+    if any(item["status"] in {"started", "unknown"} for item in manager_calls + snapshot["actions"]):
+        raise ContractError("Magentic send outcome requires reconciliation")
+    completed = [item for item in snapshot["actions"] if item["status"] == "completed"]
+    if not completed:
+        raise ContractError("Magentic has no completed worker action to restore")
+    last = completed[-1]
+    action = last["request"]
+    checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
+    recorded = checkpoint["metadata"]
+    if recorded["checkpoint_id"] != action["checkpoint_id"]:
+        raise ContractError("Magentic restore checkpoint differs from worker action")
+    reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
+    if reply_path.is_symlink():
+        raise ContractError("durable Magentic worker response path is unsafe")
+    if reply_path.is_file():
+        reply = json.loads(reply_path.read_text())
+    else:
+        output = last["result"]["output"]
+        summary = output
+        if action["provider"] == "claude":
+            baseline = json.loads((attempt_dir / "baseline.json").read_text())
+            edit = _verify_edit(Path(envelope["worktree"]), baseline, attempt_dir)
+            (test_runner or _run_targeted_test)(Path(envelope["worktree"]))
+            summary += ("\n\nFlow verified the scoped repair. Diff SHA-256: " + edit["diff_sha256"]
+                        + ". Targeted test: passed. Verified diff excerpt:\n" + (attempt_dir / "repair.diff").read_text()[:2048])
+        reply = {"status": "completed", "action_id": action["action_id"], "summary": summary, "output": output}
+        _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
+    if reply.get("action_id") != action["action_id"] or reply.get("output") != last["result"]["output"]:
+        raise ContractError("durable Magentic worker response differs from ledger")
+    committed = {item["call_id"] for item in manager_calls if item["status"] == "completed"}
+    before_pause = {item["action_id"] for item in snapshot["events"]
+                    if item["event"] == "manager_response_observed" and item["seq"] <= recorded["ledger_seq"]}
+    manager_calls_committed = len(committed & before_pause)
+    if manager_calls_committed < 1:
+        raise ContractError("Magentic checkpoint lacks observed manager decisions")
+    replan_events = {item["action_id"] for item in snapshot["events"]
+                     if item["event"] == "replan_allowed" and item["seq"] <= recorded["ledger_seq"]}
+    approved_replans = [item for item in snapshot["replans"]
+                        if item["status"] == "allowed" and item["replan_id"] in replan_events]
+    replans_committed = len(approved_replans)
+    if replans_committed > envelope["limits"]["max_replans"] or sorted(item["sequence"] for item in approved_replans) != list(range(1, replans_committed + 1)):
+        raise ContractError("Magentic checkpoint replan lineage is inconsistent")
+    for replan in approved_replans:
+        phases = {item["request"]["phase"] for item in manager_calls
+                  if item["status"] == "completed" and item["call_id"] in before_pause
+                  and item["request"].get("replan_id") == replan["replan_id"]}
+        if phases != {"replan_facts", "replan_plan"}:
+            raise ContractError("Magentic checkpoint lacks a completed replan pair")
+    resume = {"checkpoint_id": recorded["checkpoint_id"],
+              "request_id": f"flow-magentic-action-{action['sequence']}",
+              "action_id": action["action_id"], "manager_calls_committed": manager_calls_committed,
+              "replans_committed": replans_committed,
+              "result": reply}
+    task = (attempt_dir / "job-charter.snapshot.md").read_text()
+    generation = ledger.claim_recovery(attempt_id, actor="flow-magentic-resume")
+    return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
+                                      manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                      supervisor=supervisor, test_runner=test_runner, python_path=python_path,
+                                      resume=resume, generation=generation)
+
+
+def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
+                               ledger: ExecutionLedger, *,
+                               manager_adapter: Callable[..., dict[str, Any]] | None,
+                               worker_adapter: Callable[..., dict[str, Any]] | None,
+                               supervisor: Callable[..., dict[str, Any]] | None,
+                               test_runner: Callable[[Path], dict[str, Any]] | None,
+                               python_path: str | None,
+                               resume: dict[str, Any] | None = None,
+                               generation: int = 1) -> dict[str, Any]:
+    aid = envelope["attempt_id"]
+    work_id = envelope["work_id"]
+    source_commit = envelope["source_commit"]
+    worktree = Path(envelope["worktree"])
+    baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    manager_adapter = manager_adapter or _default_manager_adapter
+    worker_adapter = worker_adapter or _default_worker_adapter
+    test_runner = test_runner or _run_targeted_test
+    edit_evidence: dict[str, Any] | None = None
+    test_evidence: dict[str, Any] | None = None
+    failure = ""
+    recoverable_transport_failure = False
+    verifier_input_sha256: str | None = None
+    initial_snapshot = ledger.snapshot(aid)
+    if any(item["request"]["assignment_id"] == "claude-implementer" and item["status"] == "completed"
+           for item in initial_snapshot["actions"]):
+        edit_evidence = _verify_edit(worktree, baseline, attempt_dir)
+        test_evidence = test_runner(worktree)
+
+    def on_manager(message: dict[str, Any]) -> str:
+        request = _normalized_manager_request(envelope, message)
+        if request["phase"] == "replan_facts":
+            replan = {"schema_version": 1, "kind": "replan", "attempt_id": aid,
+                      "envelope_digest": envelope_digest(envelope), "sequence": request["replan_sequence"],
+                      "proposal": {"prompt_digest": request["prompt_digest"]}}
+            replan["replan_id"] = request["replan_id"]
+            decision = ledger.decide_replan(envelope, replan, generation=generation)
+            if not decision["allowed"]:
+                raise ContractError("Magentic replan denied: " + decision["reason"])
+        decision = ledger.decide_manager_call(envelope, request, generation=generation)
+        if decision.get("replayed") and isinstance(decision.get("result"), dict):
+            observed = decision["result"].get("output")
+            if isinstance(observed, str) and observed.strip():
+                return observed
+        if decision.get("replayed") and not decision["allowed"]:
+            raise ContractError("Magentic manager call needs reconciliation: " + decision["reason"])
+        if not decision["allowed"]:
+            raise ContractError("Magentic manager call denied: " + decision["reason"])
+        with ledger.send_lock():
+            ledger.assert_owner(aid, generation)
+            if not ledger.consume_manager_grant(request["call_id"], decision["grant_id"], generation=generation):
+                raise ContractError("Magentic manager grant was already consumed")
+            try:
+                result = manager_adapter(message, envelope=envelope, workspace=worktree)
+                text = result.get("output") if isinstance(result, dict) else None
+                if not isinstance(text, str) or not text.strip() or len(text.encode()) > 32768:
+                    raise ContractError("manager adapter returned invalid model text")
+                observation = {"status": "completed", "output": text,
+                               "output_sha256": digest(text),
+                               "usage": result.get("usage")}
+                ledger.observe_manager_response(request["call_id"], observation, generation=generation)
+                return text
+            except Exception:
+                ledger.mark_manager_unknown(request["call_id"], "manager_send_outcome_uncertain", generation=generation)
+                raise
+
+    def on_action(message: dict[str, Any]) -> dict[str, Any]:
+        nonlocal edit_evidence, test_evidence, verifier_input_sha256
+        action = _normalized_action(envelope, message)
+        if action["assignment_id"] == "local-verifier" and (edit_evidence is None or test_evidence is None):
+            raise ContractError("Magentic verifier selected before Flow verified Claude repair")
+        decision = ledger.decide(envelope, action, generation=generation)
+        if decision.get("replayed") and isinstance(decision.get("result"), dict):
+            result = decision["result"]
+            reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
+            if reply_path.is_file() and not reply_path.is_symlink():
+                reply = json.loads(reply_path.read_text())
+                if reply.get("action_id") == action["action_id"] and reply.get("output") == result["output"]:
+                    return reply
+            if action["provider"] == "claude" and edit_evidence and test_evidence:
+                summary = (result["output"] + "\n\nFlow verified the scoped repair. Diff SHA-256: "
+                           + edit_evidence["diff_sha256"] + ". Targeted test: passed. Verified diff excerpt:\n"
+                           + (attempt_dir / "repair.diff").read_text()[:2048])
+            else:
+                summary = result["output"]
+            return {"status": "completed", "action_id": action["action_id"],
+                    "summary": summary, "output": result["output"]}
+        if decision.get("replayed") and not decision["allowed"]:
+            raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
+        if not decision["allowed"]:
+            return {"status": "denied", "action_id": action["action_id"], "reason": decision["reason"], "summary": "Flow denied this specialist call"}
+        try:
+            checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
+            if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
+                raise ContractError("Magentic pending-action checkpoint is absent")
+            high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+            ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
+                                            high_water, str(checkpoint_path), generation=generation)
+            if not ledger.consume_grant(action["action_id"], decision["grant_id"], generation=generation):
+                raise ContractError("Magentic specialist grant was already consumed")
+        except Exception:
+            ledger.close_pre_send_failure(action["action_id"], decision["grant_id"], generation=generation)
+            raise
+        with ledger.send_lock():
+            ledger.assert_owner(aid, generation)
+            ledger.observe_send(action["action_id"], generation)
+            try:
+                provider_action = action
+                if action["assignment_id"] == "local-verifier":
+                    diff = (attempt_dir / "repair.diff").read_text()
+                    evidence = ("\n\nFlow-verified complete bounded diff for this review:\n"
+                                + diff + "\nTargeted test: passed. Diff SHA-256: " + edit_evidence["diff_sha256"])
+                    provider_task = action["task"] + evidence
+                    verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
+                    provider_action = {**action, "provider_task": provider_task}
+                result = worker_adapter(provider_action, envelope=envelope, workspace=worktree)
+                validate_result(envelope, result, action=action)
+                ledger.observe_response(action["action_id"], result, generation)
+                if action["provider"] == "claude":
+                    edit_evidence = _verify_edit(worktree, baseline, attempt_dir)
+                    test_evidence = test_runner(worktree)
+                ledger.complete(action["action_id"], result, generation=generation)
+            except Exception:
+                ledger.mark_unknown(action["action_id"], "specialist_send_outcome_uncertain", generation=generation)
+                raise
+        summary = result["output"]
+        if action["provider"] == "claude" and edit_evidence and test_evidence:
+            summary += ("\n\nFlow verified the scoped repair. Diff SHA-256: " + edit_evidence["diff_sha256"]
+                        + ". Targeted test: passed. Verified diff excerpt:\n" + (attempt_dir / "repair.diff").read_text()[:2048])
+        reply = {"status": "completed", "action_id": action["action_id"], "summary": summary, "output": result["output"]}
+        reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
+        if reply_path.exists():
+            if json.loads(reply_path.read_text()) != reply:
+                raise ContractError("Magentic action response conflicts with durable replay")
+        else:
+            _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
+        return reply
+
+    try:
+        runner_kwargs = {"python_path": python_path, "timeout_s": 900}
+        if resume is not None:
+            runner_kwargs["resume"] = resume
+        outcome = (supervisor or run_maf_delivery)(envelope, task, on_manager, on_action, **runner_kwargs)
+        if outcome.get("attempt_id") != aid:
+            raise ContractError("Magentic finished a different attempt")
+    except Exception as exc:
+        failure = str(exc)
+        recoverable_transport_failure = isinstance(exc, MafTransportError)
+    snapshot = ledger.snapshot(aid)
+    actions = snapshot["actions"]
+    manager_calls = snapshot.get("manager_calls", [])
+    uncertain = any(item["status"] in {"started", "unknown"} for item in actions + manager_calls)
+    if failure and recoverable_transport_failure and not uncertain and any(item["status"] == "completed" for item in actions):
+        interruption = {"attempt_id": aid, "status": "interrupted", "reason": failure[:512],
+                        "last_completed_action": next(item["action_id"] for item in reversed(actions) if item["status"] == "completed"),
+                        "created_at": utc_now()}
+        write_atomic(attempt_dir / "interruption.json", canonical(interruption) + "\n", mode=0o600)
+        return {"attempt_id": aid, "status": "interrupted", "reason": failure,
+                "receipt_path": None, "resume_available": True}
+    producer = [item for item in actions if item["request"]["assignment_id"] == "claude-implementer" and item["status"] == "completed"]
+    verifier = [item for item in actions if item["request"]["assignment_id"] == "local-verifier" and item["status"] == "completed"]
+    terminal = "unknown" if uncertain else ("completed" if not failure and producer and verifier and edit_evidence and test_evidence else "failed")
+    reason = "reconciliation_required" if terminal == "unknown" else failure
+    receipt = {"schema_version": 1, "execution_protocol_version": 5, "work_id": work_id, "attempt_id": aid,
+               "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],
+               "manifest_digest": envelope["manifest_digest"], "charter_sources": envelope["charter_sources"],
+               "run_protocol_revision": 2, "roster": envelope["roster"], "status": terminal, "reason": reason,
+               "manager_calls": manager_calls, "actions": actions, "replans": snapshot["replans"],
+               "checkpoints": snapshot.get("magentic_checkpoints", []),
+               "failure_detail": failure[:512],
+               "evidence": {"source_commit": source_commit, "worktree": str(worktree),
+                            "allowed_paths": list(APPROVED_PATHS), "baseline": baseline,
+                            "edit": edit_evidence, "tests": test_evidence,
+                            "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
+    validate_receipt(envelope, receipt)
+    receipt_path = attempt_dir / "receipt.json"
+    with ledger.send_lock():
+        ledger.assert_owner(aid, generation)
+        write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+    return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
+            "evidence": receipt["evidence"]}
+
+
+def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any], workspace: Path) -> dict[str, Any]:
+    turns = []
+    for item in message["messages"]:
+        contents = item.get("contents") if isinstance(item, dict) else None
+        role = item.get("role") if isinstance(item, dict) else None
+        if not isinstance(role, str) or not isinstance(contents, list) or not contents:
+            raise ContractError("stock manager prompt structure is invalid")
+        parts = [part.get("text") for part in contents if isinstance(part, dict) and part.get("type") == "text"]
+        if len(parts) != len(contents) or any(not isinstance(part, str) for part in parts):
+            raise ContractError("stock manager message contains unsupported content")
+        turns.append(f"{role}:\n" + "\n".join(parts))
+    prompt = "\n\n".join(turns)
+    if not prompt.strip():
+        raise ContractError("stock manager prompt text is absent")
+    return call_claude(instructions="stock Magentic manager", task="model response",
+                       prompt_override=prompt, workspace=workspace,
+                       model=envelope["manager"]["model"], timeout_seconds=120)
+
+
+def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path) -> dict[str, Any]:
+    assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
+    if action["provider"] == "ollama":
+        return call_local({**assignment, "task": action.get("provider_task", action["task"]), "attempt_id": envelope["attempt_id"]},
+                          correlation_id=action["action_id"])
+    if action["provider"] == "claude":
+        return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
+                                workspace=workspace, model=assignment["model"], timeout_seconds=120)
+    raise ContractError("selected specialist provider has no approved adapter")

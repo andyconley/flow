@@ -24,6 +24,7 @@ from execution_contracts import (
     validate_replan,
     validate_recovery_resolution,
     validate_result,
+    validate_manager_call,
 )
 
 
@@ -70,6 +71,20 @@ class ExecutionLedger:
                 sequence INTEGER NOT NULL, request_json TEXT NOT NULL, proposal_digest TEXT NOT NULL,
                 status TEXT NOT NULL, reason TEXT NOT NULL,
                 UNIQUE(attempt_id, sequence)
+            );
+            CREATE TABLE IF NOT EXISTS manager_calls (
+                call_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                sequence INTEGER NOT NULL, request_json TEXT NOT NULL, status TEXT NOT NULL,
+                reason TEXT NOT NULL, grant_id TEXT UNIQUE, result_json TEXT,
+                observed_at TEXT, UNIQUE(attempt_id,sequence)
+            );
+            CREATE TABLE IF NOT EXISTS magentic_checkpoint_links (
+                attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                pending_kind TEXT NOT NULL, pending_id TEXT NOT NULL,
+                checkpoint_id TEXT NOT NULL, ledger_seq INTEGER NOT NULL,
+                path TEXT NOT NULL, file_sha256 TEXT NOT NULL, file_size INTEGER NOT NULL,
+                bound_at TEXT NOT NULL, owner_generation INTEGER NOT NULL,
+                PRIMARY KEY(attempt_id,pending_kind,pending_id)
             );
             CREATE TABLE IF NOT EXISTS events (
                 seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, attempt_id TEXT NOT NULL,
@@ -222,6 +237,10 @@ class ExecutionLedger:
             for (action_id,) in unknown:
                 db.execute("UPDATE actions SET status='unknown',reason='recovery_after_dispatch' WHERE action_id=?", (action_id,))
                 self._event(db, attempt_id, action_id, "worker_unknown", "recovery_after_dispatch")
+            manager_unknown = db.execute("SELECT call_id FROM manager_calls WHERE attempt_id=? AND status='started'", (attempt_id,)).fetchall()
+            for (call_id,) in manager_unknown:
+                db.execute("UPDATE manager_calls SET status='unknown',reason='recovery_after_dispatch' WHERE call_id=?", (call_id,))
+                self._event(db, attempt_id, call_id, "manager_unknown", "recovery_after_dispatch")
             self._event(db, attempt_id, None, "recovery_claimed", canonical({"actor": actor, "generation": generation}))
             return generation
 
@@ -235,7 +254,10 @@ class ExecutionLedger:
             "SELECT action_id FROM actions WHERE attempt_id=? AND status IN ('started','unknown') ORDER BY rowid LIMIT 1",
             (attempt_id,),
         ).fetchone()
-        return row[0] if row else None
+        if row:
+            return row[0]
+        manager = db.execute("SELECT call_id FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown') ORDER BY rowid LIMIT 1", (attempt_id,)).fetchone()
+        return manager[0] if manager else None
 
     @staticmethod
     def _decision_from_action(row: tuple[Any, ...]) -> dict[str, Any]:
@@ -270,7 +292,7 @@ class ExecutionLedger:
                 if existing[0] != request_json:
                     raise ContractError("action ID reused with changed payload")
                 self._event(db, attempt, aid, "duplicate_request", existing[1])
-                if protocol_version in {2, 3, 4}:
+                if protocol_version in {2, 3, 4, 5}:
                     return self._decision_from_action((aid, *existing[1:]))
                 return {"allowed": False, "reason": "duplicate_request", "action_id": aid}
             slot = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? AND kind='delegate' AND sequence=?", (attempt, action["sequence"])).fetchone()
@@ -282,7 +304,7 @@ class ExecutionLedger:
             unresolved = self._unresolved_action(db, attempt)
             if unresolved:
                 return {"allowed": False, "reason": "reconciliation_required", "action_id": aid}
-            if protocol_version in {2, 3, 4}:
+            if protocol_version in {2, 3, 4, 5}:
                 previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM actions WHERE attempt_id=? AND kind='delegate'", (attempt,)).fetchone()[0]
                 if action["sequence"] != previous + 1:
                     raise ContractError("action sequence is skipped or out of order")
@@ -295,7 +317,22 @@ class ExecutionLedger:
                 "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND actions.status IN ('allowed','started','unknown')",
                 (work_id,),
             ).fetchone()[0]
-            if protocol_version in {3, 4}:
+            if protocol_version == 5:
+                paid_count = db.execute(
+                    "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
+                    "AND json_extract(actions.request_json,'$.provider') IN ('codex','claude') "
+                    "AND actions.status IN ('allowed','started','completed','unknown','failed','not_dispatched')",
+                    (work_id,),
+                ).fetchone()[0]
+                if action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
+                    reason = "paid_call_cap"
+                elif allowed_count >= envelope["limits"]["max_delegations"]:
+                    reason = "delegation_cap"
+                elif concurrent_count >= envelope["limits"]["max_concurrent"]:
+                    reason = "concurrency_cap"
+                else:
+                    reason = "allowed"
+            elif protocol_version in {3, 4}:
                 paid_provider = "codex" if protocol_version == 3 else "claude"
                 paid_count = db.execute(
                     "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND json_extract(actions.request_json,'$.provider')=? AND actions.status IN ('allowed','started','completed','unknown','failed','not_dispatched')",
@@ -337,7 +374,7 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt, generation)
             stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
-            if stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] != 2:
+            if stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] not in {2, 5}:
                 raise ContractError("attempt is absent, changed, or closed")
             existing = db.execute("SELECT request_json,status,reason FROM replan_decisions WHERE replan_id=?", (replan_id,)).fetchone()
             if existing:
@@ -357,11 +394,130 @@ class ExecutionLedger:
             previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM replan_decisions WHERE attempt_id=?", (attempt,)).fetchone()[0]
             if replan["sequence"] != previous + 1:
                 raise ContractError("replan sequence is skipped or out of order")
-            allowed = replan["sequence"] <= envelope["limits"]["max_replans"]
+            if stored[2] == 5:
+                prior_work_replans = db.execute(
+                    "SELECT COUNT(*) FROM replan_decisions JOIN attempts USING(attempt_id) "
+                    "WHERE attempts.work_id=? AND replan_decisions.status='allowed'",
+                    (envelope["work_id"],),
+                ).fetchone()[0]
+                allowed = prior_work_replans < envelope["limits"]["max_replans"]
+            else:
+                allowed = replan["sequence"] <= envelope["limits"]["max_replans"]
             reason = "allowed" if allowed else "replan_cap"
             db.execute("INSERT INTO replan_decisions(replan_id,attempt_id,sequence,request_json,proposal_digest,status,reason) VALUES(?,?,?,?,?,?,?)", (replan_id, attempt, replan["sequence"], request_json, hashlib.sha256(request_json.encode()).hexdigest(), "allowed" if allowed else "denied", reason))
             self._event(db, attempt, replan_id, "replan_allowed" if allowed else "replan_denied", reason)
             return {"allowed": allowed, "reason": reason, "replan_id": replan_id}
+
+    def decide_manager_call(self, envelope: dict[str, Any], request: dict[str, Any], *, generation: int | None = None) -> dict[str, Any]:
+        """Authorize one stock-manager model call, without choosing its response."""
+        validate_manager_call(envelope, request)
+        attempt, call_id = envelope["attempt_id"], request["call_id"]
+        encoded = canonical(request)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt, generation)
+            stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
+            if stored is None or stored != (canonical(envelope), "started", 5):
+                raise ContractError("attempt is absent, changed, or closed")
+            existing = db.execute("SELECT request_json,status,reason,grant_id,result_json FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            if existing:
+                if existing[0] != encoded:
+                    raise ContractError("manager call ID reused with changed payload")
+                self._event(db, attempt, call_id, "duplicate_manager_request", existing[1])
+                return {"allowed": existing[1] == "allowed", "reason": existing[2], "call_id": call_id,
+                        "grant_id": existing[3] if existing[1] == "allowed" else None,
+                        "result": json.loads(existing[4]) if existing[4] else None, "replayed": True}
+            occupied = db.execute("SELECT call_id FROM manager_calls WHERE attempt_id=? AND sequence=?", (attempt, request["sequence"])).fetchone()
+            if occupied:
+                raise ContractError("manager call sequence already occupied")
+            if self._unresolved_action(db, attempt):
+                return {"allowed": False, "reason": "reconciliation_required", "call_id": call_id}
+            previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM manager_calls WHERE attempt_id=?", (attempt,)).fetchone()[0]
+            if request["sequence"] != previous + 1:
+                raise ContractError("manager call sequence is skipped or out of order")
+            reason = "allowed"
+            if request["phase"] in {"replan_facts", "replan_plan"}:
+                replan_sequence = request["replan_sequence"]
+                linked = db.execute("SELECT status FROM replan_decisions WHERE attempt_id=? AND sequence=? AND replan_id=?",
+                                    (attempt, replan_sequence, request["replan_id"])).fetchone()
+                if linked != ("allowed",):
+                    reason = "replan_not_authorized"
+                else:
+                    facts = db.execute("SELECT status FROM manager_calls WHERE attempt_id=? AND json_extract(request_json,'$.phase')='replan_facts' AND json_extract(request_json,'$.replan_sequence')=?", (attempt, replan_sequence)).fetchall()
+                    plans = db.execute("SELECT status FROM manager_calls WHERE attempt_id=? AND json_extract(request_json,'$.phase')='replan_plan' AND json_extract(request_json,'$.replan_sequence')=?", (attempt, replan_sequence)).fetchall()
+                    if request["phase"] == "replan_facts":
+                        previous = db.execute("SELECT status FROM manager_calls WHERE attempt_id=? AND json_extract(request_json,'$.phase')='replan_plan' AND json_extract(request_json,'$.replan_sequence')=?", (attempt, replan_sequence - 1)).fetchall()
+                        if facts or (replan_sequence > 1 and previous != [("completed",)]):
+                            reason = "replan_out_of_order"
+                    elif facts != [("completed",)] or plans:
+                        reason = "replan_out_of_order"
+            work_calls = db.execute(
+                "SELECT COUNT(*) FROM manager_calls JOIN attempts USING(attempt_id) "
+                "WHERE attempts.work_id=? AND manager_calls.status IN ('allowed','started','completed','unknown')",
+                (envelope["work_id"],),
+            ).fetchone()[0]
+            if work_calls >= envelope["limits"]["max_manager_calls"]:
+                reason = "manager_call_cap"
+            elif request["manager_round"] > envelope["limits"]["max_manager_rounds"]:
+                reason = "manager_round_cap"
+            grant = uuid.uuid4().hex if reason == "allowed" else None
+            db.execute("INSERT INTO manager_calls(call_id,attempt_id,sequence,request_json,status,reason,grant_id) VALUES(?,?,?,?,?,?,?)",
+                       (call_id, attempt, request["sequence"], encoded, "allowed" if grant else "denied", reason, grant))
+            self._event(db, attempt, call_id, "manager_policy_allowed" if grant else "manager_policy_denied", reason)
+            return {"allowed": bool(grant), "reason": reason, "call_id": call_id, "grant_id": grant}
+
+    def consume_manager_grant(self, call_id: str, grant_id: str, *, generation: int) -> bool:
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT attempt_id,status,grant_id FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            if row is None:
+                raise ContractError("manager call missing")
+            self._assert_owner(db, row[0], generation)
+            if row[1] != "allowed" or row[2] != grant_id:
+                return False
+            issued = db.execute("SELECT at FROM events WHERE action_id=? AND event='manager_policy_allowed' ORDER BY seq DESC LIMIT 1", (call_id,)).fetchone()
+            if not issued or datetime.now(timezone.utc) > datetime.fromisoformat(issued[0]) + timedelta(seconds=60):
+                db.execute("UPDATE manager_calls SET status='denied',reason='grant_expired' WHERE call_id=?", (call_id,))
+                self._event(db, row[0], call_id, "manager_policy_denied", "grant_expired")
+                return False
+            db.execute("UPDATE manager_calls SET status='started' WHERE call_id=?", (call_id,))
+            self._event(db, row[0], call_id, "manager_send_started", "grant_consumed")
+            return True
+
+    def observe_manager_response(self, call_id: str, response: dict[str, Any], *, generation: int) -> None:
+        encoded = canonical(response)
+        output = response.get("output") if isinstance(response, dict) else None
+        usage = response.get("usage") if isinstance(response, dict) else None
+        if (not isinstance(response, dict) or response.get("status") != "completed" or output is None
+                or response.get("output_sha256") != hashlib.sha256(canonical(output).encode()).hexdigest()
+                or len(encoded.encode()) > 65536 or
+                (usage is not None and (not isinstance(usage, dict) or any(type(v) is not int or v < 0 for v in usage.values())))):
+            raise ContractError("manager response is invalid")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT attempt_id,status,result_json FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            if row is None:
+                raise ContractError("manager call missing")
+            self._assert_owner(db, row[0], generation)
+            if row[2] is not None:
+                if row[2] != encoded:
+                    raise ContractError("manager response conflicts with durable observation")
+                return
+            if row[1] not in {"started", "unknown"}:
+                raise ContractError("manager call was not sent")
+            db.execute("UPDATE manager_calls SET status='completed',result_json=?,observed_at=? WHERE call_id=?", (encoded, utc_now(), call_id))
+            self._event(db, row[0], call_id, "manager_response_observed", response["output_sha256"])
+
+    def mark_manager_unknown(self, call_id: str, reason: str, *, generation: int) -> None:
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT attempt_id,status FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            if row is None:
+                raise ContractError("manager call missing")
+            self._assert_owner(db, row[0], generation)
+            if row[1] == "started":
+                db.execute("UPDATE manager_calls SET status='unknown',reason=? WHERE call_id=?", (reason, call_id))
+                self._event(db, row[0], call_id, "manager_unknown", reason)
 
     def consume_grant(self, action_id: str, grant_id: str, *, generation: int | None = None) -> bool:
         with self._db() as db:
@@ -395,7 +551,7 @@ class ExecutionLedger:
             if row is None:
                 raise ContractError("action missing")
             self._assert_owner(db, row[0], generation)
-            if row[3] not in {3, 4} or row[1] != "allowed" or row[2] != grant_id:
+            if row[3] not in {3, 4, 5} or row[1] != "allowed" or row[2] != grant_id:
                 raise ContractError("action is not an unconsumed mixed grant")
             crossed = db.execute(
                 "SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,),
@@ -667,6 +823,84 @@ class ExecutionLedger:
             self._event(db, attempt_id, None, "checkpoint_position_bound", canonical({"kind": kind, "sequence": sequence, "checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq}))
             return {**record, "bound_at": bound_at, "replayed": False}
 
+    def bind_magentic_checkpoint(self, attempt_id: str, checkpoint_id: str, pending_kind: str,
+                                 pending_id: str, ledger_seq: int, path: str, *, generation: int,
+                                 max_bytes: int = 65536) -> dict[str, Any]:
+        """Link a v5 MAF snapshot to a Flow proposal, without granting restore authority."""
+        if pending_kind not in {"manager", "worker"} or not isinstance(pending_id, str) or not pending_id or not isinstance(checkpoint_id, str) or not checkpoint_id or type(ledger_seq) is not int or ledger_seq < 0:
+            raise ContractError("Magentic checkpoint identity is invalid")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            attempt = db.execute("SELECT envelope_json,execution_protocol_version,status FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if attempt is None or attempt[1:] != (5, "started"):
+                raise ContractError("Magentic attempt is absent or closed")
+            table, key = ("manager_calls", "call_id") if pending_kind == "manager" else ("actions", "action_id")
+            proposal = db.execute(f"SELECT status,request_json FROM {table} WHERE attempt_id=? AND {key}=?", (attempt_id, pending_id)).fetchone()
+            if proposal is None or proposal[0] not in {"allowed", "started", "completed"}:
+                raise ContractError("Magentic checkpoint has no authorized proposal")
+            high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+            if ledger_seq != high_water:
+                raise ContractError("Magentic checkpoint ledger barrier mismatch")
+            envelope = json.loads(attempt[0])
+            checkpoint_path, file_sha256, file_size, raw = self._checkpoint_file(envelope, path, max_bytes=max_bytes)
+            try:
+                value = json.loads(raw)
+            except ValueError as exc:
+                raise ContractError("Magentic checkpoint is not JSON") from exc
+            if not isinstance(value, dict) or value.get("checkpoint_id") != checkpoint_id or value.get("workflow_name") != "flow-magentic-delivery-v5":
+                raise ContractError("Magentic checkpoint identity or workflow mismatch")
+            if pending_kind == "worker":
+                sequence = json.loads(proposal[1])["sequence"]
+                pending = value.get("pending_request_info_events")
+                request_key = f"flow-magentic-action-{sequence}"
+                if not isinstance(pending, dict) or set(pending) != {request_key} or not isinstance(pending[request_key], dict):
+                    raise ContractError("Magentic worker checkpoint request mismatch")
+            record = {"attempt_id": attempt_id, "pending_kind": pending_kind, "pending_id": pending_id,
+                      "checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq, "path": str(checkpoint_path),
+                      "file_sha256": file_sha256, "file_size": file_size, "owner_generation": generation}
+            old = db.execute("SELECT checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind=? AND pending_id=?", (attempt_id, pending_kind, pending_id)).fetchone()
+            if old:
+                if old[:5] != (checkpoint_id, ledger_seq, str(checkpoint_path), file_sha256, file_size):
+                    raise ContractError("Magentic checkpoint conflicts with durable link")
+                return {**record, "bound_at": old[5], "replayed": True}
+            bound_at = utc_now()
+            db.execute("INSERT INTO magentic_checkpoint_links VALUES(?,?,?,?,?,?,?,?,?,?)",
+                       (attempt_id, pending_kind, pending_id, checkpoint_id, ledger_seq, str(checkpoint_path), file_sha256, file_size, bound_at, generation))
+            self._event(db, attempt_id, pending_id, "magentic_checkpoint_bound", canonical({"checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq, "file_sha256": file_sha256}))
+            return {**record, "bound_at": bound_at, "replayed": False}
+
+    def read_magentic_checkpoint(self, attempt_id: str, pending_kind: str, pending_id: str,
+                                 *, max_bytes: int = 65536) -> dict[str, Any]:
+        with self._db() as db:
+            attempt = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            row = db.execute("SELECT checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind=? AND pending_id=?", (attempt_id, pending_kind, pending_id)).fetchone()
+            if attempt is None or attempt[1] != 5 or row is None:
+                raise ContractError("Magentic checkpoint link is absent")
+            high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+            if high_water < row[1]:
+                raise ContractError("Magentic checkpoint ledger barrier is unavailable")
+        envelope = json.loads(attempt[0])
+        _, file_sha256, file_size, raw = self._checkpoint_file(envelope, row[2], max_bytes=max_bytes)
+        if file_sha256 != row[3] or file_size != row[4]:
+            raise ContractError("Magentic checkpoint file changed")
+        value = json.loads(raw)
+        if value.get("checkpoint_id") != row[0] or value.get("workflow_name") != "flow-magentic-delivery-v5":
+            raise ContractError("Magentic checkpoint identity changed")
+        if pending_kind == "worker":
+            with self._db() as db:
+                proposal = db.execute("SELECT request_json FROM actions WHERE attempt_id=? AND action_id=?", (attempt_id, pending_id)).fetchone()
+            if proposal is None:
+                raise ContractError("Magentic checkpoint action missing")
+            request_key = f"flow-magentic-action-{json.loads(proposal[0])['sequence']}"
+            pending = value.get("pending_request_info_events")
+            if not isinstance(pending, dict) or set(pending) != {request_key}:
+                raise ContractError("Magentic checkpoint pending request changed")
+        return {"metadata": {"attempt_id": attempt_id, "pending_kind": pending_kind, "pending_id": pending_id,
+                             "checkpoint_id": row[0], "ledger_seq": row[1], "path": row[2],
+                             "file_sha256": row[3], "file_size": row[4], "bound_at": row[5],
+                             "owner_generation": row[6]}, "bytes": raw}
+
     def read_checkpoint_position(self, attempt_id: str, kind: str, sequence: int, *, max_bytes: int = 65536) -> dict[str, Any]:
         """Return a bounded checkpoint only after all Flow-owned link checks pass."""
         if kind not in {"delegate", "pending_delegate", "replan"} or not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
@@ -736,9 +970,14 @@ class ExecutionLedger:
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
-            row = db.execute("SELECT status FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
-            if row != ("started",):
+            row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[0] != "started":
                 raise ContractError("attempt not active")
+            if row[1] == 5:
+                uncertain = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
+                uncertain += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
+                if (uncertain > 0) != (status == "unknown"):
+                    raise ContractError("Magentic terminal status contradicts uncertain sends")
             db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
 
@@ -970,6 +1209,8 @@ class ExecutionLedger:
             observations = db.execute("SELECT action_id,observed_at,result_json,result_digest,owner_generation FROM response_observations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY observed_at", (attempt_id,)).fetchall() if "response_observations" in tables else []
             resolutions = db.execute("SELECT resolution_id,action_id,actor,disposition,explanation,evidence_json,result_json,resolution_digest,created_at,owner_generation FROM recovery_resolutions WHERE attempt_id=? ORDER BY created_at", (attempt_id,)).fetchall() if "recovery_resolutions" in tables else []
             replans = db.execute("SELECT replan_id,sequence,request_json,proposal_digest,status,reason FROM replan_decisions WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "replan_decisions" in tables else []
+            manager_calls = db.execute("SELECT call_id,sequence,request_json,status,reason,grant_id,result_json,observed_at FROM manager_calls WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "manager_calls" in tables else []
+            magentic_checkpoints = db.execute("SELECT pending_kind,pending_id,checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall() if "magentic_checkpoint_links" in tables else []
             checkpoint_positions = db.execute("SELECT kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? ORDER BY kind,sequence", (attempt_id,)).fetchall() if "checkpoint_position_links" in tables else []
             checkpoint_columns = {row[1] for row in db.execute("PRAGMA table_info(checkpoint_links)")} if "checkpoint_links" in tables else set()
             checkpoint_query = "SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,path,bound_at,owner_generation" + (",file_sha256" if "file_sha256" in checkpoint_columns else "") + " FROM checkpoint_links WHERE attempt_id=?"
@@ -981,6 +1222,8 @@ class ExecutionLedger:
                 "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
                 "actions": [{"action_id": r[0], "request": json.loads(r[1]), "status": r[2], "reason": r[3], "grant_id": r[4], "result": json.loads(r[5]) if r[5] else None} for r in actions],
                 "replans": [{"replan_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "proposal_digest": r[3], "status": r[4], "reason": r[5]} for r in replans],
+                "manager_calls": [{"call_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "status": r[3], "reason": r[4], "grant_id": r[5], "result": json.loads(r[6]) if r[6] else None, "observed_at": r[7]} for r in manager_calls],
+                "magentic_checkpoints": [{"pending_kind": r[0], "pending_id": r[1], "checkpoint_id": r[2], "ledger_seq": r[3], "path": r[4], "file_sha256": r[5], "file_size": r[6], "bound_at": r[7], "owner_generation": r[8]} for r in magentic_checkpoints],
                 "checkpoint_positions": [{"kind": r[0], "sequence": r[1], "checkpoint_id": r[2], "envelope_digest": r[3], "ledger_seq": r[4], "format_version": r[5], "runtime_version": r[6], "protocol_version": r[7], "path": r[8], "file_sha256": r[9], "file_size": r[10], "bound_at": r[11], "owner_generation": r[12]} for r in checkpoint_positions],
                 "events": [{"seq": r[0], "at": r[1], "action_id": r[2], "event": r[3], "detail": r[4]} for r in events],
                 "response_observations": [{"action_id": r[0], "observed_at": r[1], "result": json.loads(r[2]), "result_digest": r[3], "owner_generation": r[4]} for r in observations],

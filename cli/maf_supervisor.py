@@ -33,8 +33,38 @@ class MafProtocolError(RuntimeError):
     """The supervised runtime sent an invalid or unsafe protocol message."""
 
 
+class MafTransportError(MafProtocolError):
+    """The supervised child disappeared or stopped moving within the deadline."""
+
+
+class MafChildError(MafProtocolError):
+    """The child reported a deterministic workflow or policy failure."""
+
+
 def _json_line(value: dict[str, Any]) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _write_bounded(fd: int, value: dict[str, Any], deadline: float) -> None:
+    """Write a bounded protocol line without letting a nonreading child hang Flow."""
+    payload = _json_line(value)
+    if len(payload) > MAX_LINE_BYTES:
+        raise MafProtocolError("Flow protocol line exceeds the bounded size")
+    os.set_blocking(fd, False)
+    sent = 0
+    while sent < len(payload):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise MafTransportError("MAF child timed out while reading a protocol message")
+        _, ready, _ = select.select([], [fd], [], remaining)
+        if not ready:
+            raise MafTransportError("MAF child timed out while reading a protocol message")
+        try:
+            sent += os.write(fd, payload[sent:])
+        except BlockingIOError:
+            continue
+        except BrokenPipeError as exc:
+            raise MafTransportError("MAF child closed stdin during a protocol message") from exc
 
 
 def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version: int = PROTOCOL_VERSION) -> dict[str, Any]:
@@ -57,13 +87,13 @@ def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version
             raise MafProtocolError("MAF child sent an oversized unterminated protocol line")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise MafProtocolError("MAF child timed out before sending a protocol message")
+            raise MafTransportError("MAF child timed out before sending a protocol message")
         ready, _, _ = select.select([fd], [], [], remaining)
         if not ready:
-            raise MafProtocolError("MAF child timed out before sending a protocol message")
+            raise MafTransportError("MAF child timed out before sending a protocol message")
         chunk = os.read(fd, min(65536, MAX_LINE_BYTES + 1 - len(pending)))
         if not chunk:
-            raise MafProtocolError("MAF child closed stdout before workflow_finished")
+            raise MafTransportError("MAF child closed stdout before workflow_finished")
         pending.extend(chunk)
     try:
         message = json.loads(line)
@@ -408,6 +438,78 @@ def run_maf_mixed(envelope: dict[str, Any], on_action: Callable[[dict[str, Any]]
 def run_maf_claude(envelope: dict[str, Any], on_action: Callable[[dict[str, Any]], dict[str, Any]],
                    *, timeout_s: float = 240, python_path: str | None = None) -> dict[str, Any]:
     return _run_maf_pair(envelope, on_action, timeout_s=timeout_s, python_path=python_path, protocol_version=4)
+
+
+def run_maf_delivery(envelope: dict[str, Any], task: str,
+                     on_manager: Callable[[dict[str, Any]], str],
+                     on_action: Callable[[dict[str, Any]], dict[str, Any]], *,
+                     timeout_s: float = 900, python_path: str | None = None,
+                     resume: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Run credentialless stock Magentic behind Flow's two guarded callbacks."""
+    if envelope.get("execution_protocol_version") != 5 or not isinstance(task, str) or not task.strip():
+        raise MafProtocolError("delivery requires a v5 envelope and task")
+    if not callable(on_manager) or not callable(on_action) or not 0 < timeout_s <= 900:
+        raise MafProtocolError("delivery callbacks or timeout are invalid")
+    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    root = Path(__file__).resolve().parents[1]
+    process = subprocess.Popen(
+        [executable, "-m", "runtime.maf_runner.delivery_lead"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        cwd=root, env={"PYTHONPATH": str(root)}, bufsize=0,
+        start_new_session=True,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    deadline = time.monotonic() + timeout_s
+    pending = bytearray()
+    manager_calls = actions = 0
+    try:
+        _write_bounded(process.stdin.fileno(), {"protocol_version": 5, "type": "resume" if resume else "start",
+                                                   "envelope": envelope, "task": task, "resume": resume}, deadline)
+        while True:
+            message = _read_message(process.stdout.fileno(), deadline, pending, 5)
+            kind = message["type"]
+            if kind == "manager_request":
+                manager_calls += 1
+                if manager_calls > envelope["limits"]["max_manager_calls"] + 1:
+                    raise MafProtocolError("MAF manager exceeded the bounded call protocol")
+                if message.get("attempt_id") != envelope["attempt_id"]:
+                    raise MafProtocolError("MAF manager request attempt differs")
+                text = on_manager(message)
+                if not isinstance(text, str) or not text.strip() or len(text.encode()) > MAX_LINE_BYTES // 2:
+                    raise MafProtocolError("Flow manager callback returned invalid text")
+                _write_bounded(process.stdin.fileno(), {"protocol_version": 5, "type": "manager_response",
+                                                           "call_id": message.get("call_id"), "text": text}, deadline)
+                continue
+            if kind == "propose_action":
+                actions += 1
+                if actions > envelope["limits"]["max_delegations"] + 1:
+                    raise MafProtocolError("MAF proposed too many specialist calls")
+                if message.get("attempt_id") != envelope["attempt_id"]:
+                    raise MafProtocolError("MAF action attempt differs")
+                result = on_action(message)
+                if not isinstance(result, dict):
+                    raise MafProtocolError("Flow action callback returned invalid result")
+                _write_bounded(process.stdin.fileno(), {"protocol_version": 5, "type": "action_result",
+                                                           "action_id": result.get("action_id", message.get("action_id")), "result": result}, deadline)
+                continue
+            if kind == "workflow_finished":
+                if message.get("attempt_id") != envelope["attempt_id"]:
+                    raise MafProtocolError("MAF finished a different attempt")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise MafProtocolError("MAF timed out before exit")
+                if process.wait(timeout=remaining) != 0:
+                    raise MafProtocolError("MAF failed after workflow_finished")
+                return message
+            if kind == "error":
+                raise MafChildError("MAF delivery child failed: " + str(message.get("message", "unknown"))[:512])
+            raise MafProtocolError("MAF delivery child sent an unexpected message")
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        process.stdin.close()
+        process.stdout.close()
 
 
 def run_maf_action3_continuation(
