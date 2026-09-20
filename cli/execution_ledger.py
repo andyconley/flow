@@ -270,7 +270,7 @@ class ExecutionLedger:
                 if existing[0] != request_json:
                     raise ContractError("action ID reused with changed payload")
                 self._event(db, attempt, aid, "duplicate_request", existing[1])
-                if protocol_version == 2:
+                if protocol_version in {2, 3}:
                     return self._decision_from_action((aid, *existing[1:]))
                 return {"allowed": False, "reason": "duplicate_request", "action_id": aid}
             slot = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? AND kind='delegate' AND sequence=?", (attempt, action["sequence"])).fetchone()
@@ -282,7 +282,7 @@ class ExecutionLedger:
             unresolved = self._unresolved_action(db, attempt)
             if unresolved:
                 return {"allowed": False, "reason": "reconciliation_required", "action_id": aid}
-            if protocol_version == 2:
+            if protocol_version in {2, 3}:
                 previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM actions WHERE attempt_id=? AND kind='delegate'", (attempt,)).fetchone()[0]
                 if action["sequence"] != previous + 1:
                     raise ContractError("action sequence is skipped or out of order")
@@ -295,7 +295,20 @@ class ExecutionLedger:
                 "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND actions.status IN ('allowed','started','unknown')",
                 (work_id,),
             ).fetchone()[0]
-            if action["role"] != "test-engineer":
+            if protocol_version == 3:
+                codex_count = db.execute(
+                    "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND json_extract(actions.request_json,'$.provider')='codex' AND actions.status IN ('allowed','started','completed','unknown','failed','not_dispatched')",
+                    (work_id,),
+                ).fetchone()[0]
+                if action["provider"] == "codex" and codex_count >= envelope["limits"]["max_codex_calls"]:
+                    reason = "codex_call_cap"
+                elif allowed_count >= envelope["limits"]["max_delegations"]:
+                    reason = "delegation_cap"
+                elif concurrent_count >= envelope["limits"]["max_concurrent"]:
+                    reason = "concurrency_cap"
+                else:
+                    reason = "allowed"
+            elif action["role"] != "test-engineer":
                 reason = "specialist_denied"
             elif action["provider"] not in {"ollama", "local-stub"}:
                 reason = "provider_denied"
@@ -366,6 +379,31 @@ class ExecutionLedger:
             self._event(db, row[0], action_id, "worker_dispatched", "grant_consumed")
             return True
 
+    def close_pre_send_failure(self, action_id: str, grant_id: str, *, generation: int) -> None:
+        """Close a v3 grant when the gateway failed before crossing dispatch.
+
+        This is only valid for the exact still-allowed grant. A consumed grant
+        or recorded adapter send can never be relabeled as safely unsent.
+        """
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT actions.attempt_id,actions.status,actions.grant_id,attempts.execution_protocol_version "
+                "FROM actions JOIN attempts USING(attempt_id) WHERE actions.action_id=?", (action_id,),
+            ).fetchone()
+            if row is None:
+                raise ContractError("action missing")
+            self._assert_owner(db, row[0], generation)
+            if row[3] != 3 or row[1] != "allowed" or row[2] != grant_id:
+                raise ContractError("action is not an unconsumed mixed grant")
+            crossed = db.execute(
+                "SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,),
+            ).fetchone()
+            if crossed:
+                raise ContractError("pre-send failure conflicts with dispatch evidence")
+            db.execute("UPDATE actions SET status='not_dispatched',reason='pre_send_failure',grant_id=NULL WHERE action_id=?", (action_id,))
+            self._event(db, row[0], action_id, "pre_send_failure", "checkpoint_or_grant_failed_before_dispatch")
+
     def observe_send(self, action_id: str, generation: int) -> None:
         """Record the gateway-side adapter boundary after a fenced grant use."""
         with self._db() as db:
@@ -385,13 +423,13 @@ class ExecutionLedger:
         """Durably retain a validated normalized response before replaying it."""
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT attempt_id,status FROM actions WHERE action_id=?", (action_id,)).fetchone()
+            row = db.execute("SELECT attempt_id,status,request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()
             if not row:
                 raise ContractError("action missing")
             self._assert_owner(db, row[0], generation)
             envelope_row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (row[0],)).fetchone()
             envelope = json.loads(envelope_row[0])
-            validate_result(envelope, result)
+            validate_result(envelope, result, action=json.loads(row[2]))
             encoded = canonical(result)
             stored = db.execute("SELECT result_json,result_digest FROM response_observations WHERE action_id=?", (action_id,)).fetchone()
             if stored:
@@ -466,7 +504,8 @@ class ExecutionLedger:
                 if hashlib.sha256(observed[0].encode()).hexdigest() != observed[1]:
                     raise ContractError("durable response observation digest mismatch")
                 envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0])
-                validate_result(envelope, json.loads(observed[0]))
+                request = json.loads(db.execute("SELECT request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()[0])
+                validate_result(envelope, json.loads(observed[0]), action=request)
             if disposition == "resolved_not_dispatched":
                 if row[0] != "allowed":
                     raise ContractError("no-dispatch resolution requires an unconsumed grant")
@@ -539,7 +578,8 @@ class ExecutionLedger:
         return resolved, hashlib.sha256(raw_bytes).hexdigest(), len(raw_bytes), raw_bytes
 
     @staticmethod
-    def _validate_maf_checkpoint(raw: bytes, checkpoint_id: str, kind: str, sequence: int) -> None:
+    def _validate_maf_checkpoint(raw: bytes, checkpoint_id: str, kind: str, sequence: int,
+                                 protocol_version: int = 2) -> None:
         """Validate the safe JSON envelope around MAF's opaque saved state.
 
         Flow deliberately does not unpickle MAF internals. The storage JSON
@@ -553,11 +593,14 @@ class ExecutionLedger:
             raise ContractError("pending checkpoint is not MAF JSON") from exc
         if not isinstance(value, dict) or value.get("checkpoint_id") != checkpoint_id:
             raise ContractError("pending checkpoint ID does not match link")
-        expected_workflow = "flow-maf-v2-action3" if kind == "pending_delegate" and sequence == 3 else "flow-maf-v2-initial"
+        expected_workflow = ("flow-maf-mixed-provider-v3" if protocol_version == 3 else
+                             "flow-maf-v2-action3" if kind == "pending_delegate" and sequence == 3 else
+                             "flow-maf-v2-initial")
         if value.get("workflow_name") != expected_workflow:
             raise ContractError("checkpoint workflow does not match position")
         pending = value.get("pending_request_info_events")
-        request_id = f"flow-action-{sequence}" if kind == "pending_delegate" else f"flow-replan-{sequence}"
+        request_id = (f"flow-mixed-action-{sequence}" if protocol_version == 3 else
+                      f"flow-action-{sequence}" if kind == "pending_delegate" else f"flow-replan-{sequence}")
         if not isinstance(pending, dict) or set(pending) != {request_id} or not isinstance(pending[request_id], dict):
             raise ContractError("checkpoint request does not match position")
 
@@ -565,7 +608,7 @@ class ExecutionLedger:
                                  checkpoint_envelope_digest: str, ledger_seq: int, format_version: int,
                                  runtime_version: str, path: str, *, generation: int,
                                  max_bytes: int = 65536) -> dict[str, Any]:
-        """Bind a v2 checkpoint to one completed Flow decision position.
+        """Bind a versioned checkpoint to one completed Flow decision position.
 
         The persisted barrier is descriptive recovery evidence only. It never
         authorizes a grant, a replan, or a provider send.
@@ -580,8 +623,11 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
             row = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
-            if row is None or row[1] != 2:
-                raise ContractError("checkpoint positions require execution protocol v2")
+            if row is None or row[1] not in {2, 3}:
+                raise ContractError("checkpoint positions require execution protocol v2 or v3")
+            protocol_version = row[1]
+            if protocol_version == 3 and (kind != "pending_delegate" or sequence not in {1, 2}):
+                raise ContractError("mixed checkpoint position is invalid")
             envelope = json.loads(row[0])
             if checkpoint_envelope_digest != envelope_digest(envelope):
                 raise ContractError("checkpoint envelope digest mismatch")
@@ -600,11 +646,11 @@ class ExecutionLedger:
                 raise ContractError("checkpoint ledger barrier mismatch")
             checkpoint_path, file_sha256, file_size, raw = self._checkpoint_file(envelope, path, max_bytes=max_bytes)
             if kind == "pending_delegate" or (kind == "delegate" and sequence in {1, 2}):
-                self._validate_maf_checkpoint(raw, checkpoint_id, kind, sequence)
+                self._validate_maf_checkpoint(raw, checkpoint_id, kind, sequence, protocol_version)
             record = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": checkpoint_id,
                       "envelope_digest": checkpoint_envelope_digest, "ledger_seq": ledger_seq,
                       "format_version": format_version, "runtime_version": runtime_version,
-                      "protocol_version": 2, "path": str(checkpoint_path), "file_sha256": file_sha256,
+                      "protocol_version": protocol_version, "path": str(checkpoint_path), "file_sha256": file_sha256,
                       "file_size": file_size, "owner_generation": generation}
             if prior:
                 old = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": prior[0],
@@ -615,7 +661,7 @@ class ExecutionLedger:
                     raise ContractError("checkpoint position conflicts with durable checkpoint")
                 return {**record, "bound_at": prior[9], "replayed": True}
             bound_at = utc_now()
-            db.execute("INSERT INTO checkpoint_position_links(attempt_id,kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (attempt_id, kind, sequence, checkpoint_id, checkpoint_envelope_digest, ledger_seq, format_version, runtime_version, 2, str(checkpoint_path), file_sha256, file_size, bound_at, generation))
+            db.execute("INSERT INTO checkpoint_position_links(attempt_id,kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (attempt_id, kind, sequence, checkpoint_id, checkpoint_envelope_digest, ledger_seq, format_version, runtime_version, protocol_version, str(checkpoint_path), file_sha256, file_size, bound_at, generation))
             self._event(db, attempt_id, None, "checkpoint_position_bound", canonical({"kind": kind, "sequence": sequence, "checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq}))
             return {**record, "bound_at": bound_at, "replayed": False}
 
@@ -626,8 +672,10 @@ class ExecutionLedger:
         with self._db() as db:
             row = db.execute("SELECT envelope_json,execution_protocol_version,owner_generation FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             link = db.execute("SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? AND kind=? AND sequence=?", (attempt_id, kind, sequence)).fetchone()
-            if row is None or link is None or row[1] != 2 or link[5] != 2 or link[3] != 1:
+            if row is None or link is None or row[1] not in {2, 3} or link[5] != row[1] or link[3] != 1:
                 raise ContractError("checkpoint position is absent or incompatible")
+            if row[1] == 3 and (kind != "pending_delegate" or sequence not in {1, 2}):
+                raise ContractError("mixed checkpoint position is invalid")
             envelope = json.loads(row[0])
             if link[1] != envelope_digest(envelope) or link[10] > row[2]:
                 raise ContractError("checkpoint position is stale or foreign")
@@ -638,7 +686,7 @@ class ExecutionLedger:
         if file_sha256 != link[7] or file_size != link[8]:
             raise ContractError("checkpoint file digest or size changed")
         if kind == "pending_delegate" or (kind == "delegate" and sequence in {1, 2}):
-            self._validate_maf_checkpoint(raw, link[0], kind, sequence)
+            self._validate_maf_checkpoint(raw, link[0], kind, sequence, link[5])
         metadata = {"attempt_id": attempt_id, "kind": kind, "sequence": sequence, "checkpoint_id": link[0],
                     "envelope_digest": link[1], "ledger_seq": link[2], "format_version": link[3],
                     "runtime_version": link[4], "protocol_version": link[5], "path": str(checkpoint_path),

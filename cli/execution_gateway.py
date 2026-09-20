@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import difflib
 import hashlib
 import json
 import os
@@ -12,9 +14,10 @@ from typing import Any, Callable
 
 from execution_contracts import ContractError, canonical, digest, envelope_digest, validate_action, validate_receipt, validate_result, validate_replan
 from execution_ledger import ExecutionLedger, utc_now
+from codex_worker import call_codex
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
-from maf_supervisor import PINNED_MAF_CORE_VERSION, run_maf, run_maf_multiturn, run_maf_action3_continuation
+from maf_supervisor import PINNED_MAF_CORE_VERSION, run_maf, run_maf_multiturn, run_maf_action3_continuation, run_maf_mixed
 from orchestration import validate_orchestration
 from paths import SCAFFOLD_DIR
 from runstate import status as run_status
@@ -33,10 +36,14 @@ def _run_file(root: Path, run_dir: Path, raw: str) -> Path:
 
 
 def _effective_specialist() -> str:
+    return _effective_specialist_for("test-engineer")
+
+
+def _effective_specialist_for(role: str) -> str:
     _, manifest = merge_user_overlay(SCAFFOLD_DIR)
-    matches = [entry for entry in manifest.get("agents", []) if entry.get("name") == "test-engineer"]
+    matches = [entry for entry in manifest.get("agents", []) if entry.get("name") == role]
     if len(matches) != 1:
-        raise ContractError("effective test-engineer definition is absent or ambiguous")
+        raise ContractError(f"effective {role} definition is absent or ambiguous")
     entry = matches[0]
     return agent_body(entry, entry["_root"], SCAFFOLD_DIR, manifest.get("codex", {}).get("agent_defaults", {}))
 
@@ -47,6 +54,25 @@ def _write_snapshot(path: Path, data: bytes) -> None:
         stream.write(data)
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def _verified_greet_source(source: bytes) -> bool:
+    if len(source) > 8192:
+        return False
+    try:
+        tree = ast.parse(source.decode("utf-8"))
+    except (SyntaxError, UnicodeDecodeError):
+        return False
+    if len(tree.body) != 1 or not isinstance(tree.body[0], ast.FunctionDef):
+        return False
+    function = tree.body[0]
+    return (function.name == "greet" and not function.decorator_list and
+            not function.args.posonlyargs and not function.args.args and
+            not function.args.kwonlyargs and not function.args.vararg and
+            not function.args.kwarg and len(function.body) == 1 and
+            isinstance(function.body[0], ast.Return) and
+            isinstance(function.body[0].value, ast.Constant) and
+            function.body[0].value.value == "Hello, Flow!")
 
 
 def prepare(work_id: str, assignment_id: str, task_file: str, *, root: Path | None = None,
@@ -203,6 +229,215 @@ def execute_local(work_id: str, assignment_id: str, task_file: str, *, root: Pat
         write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
         ledger.finish_attempt(aid, terminal, receipt["reason"], str(receipt_path), generation=1)
     return {"attempt_id": aid, "status": terminal, "receipt_path": str(receipt_path), "reason": receipt["reason"]}
+
+
+def prepare_mixed(work_id: str, local_task_file: str, codex_task_file: str, *,
+                  root: Path | None = None) -> tuple[dict[str, Any], Path, ExecutionLedger]:
+    """Snapshot one approved two-specialist job without opening a provider."""
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    state = run_status(work_id, root=project_root)
+    if state.get("state") != "implementing" or state.get("protocol_revision") != 2:
+        raise ContractError("mixed execution requires an implementing revision-2 run")
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    manifest_path = run_dir / "orchestration.json"
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    names = ("local-worker", "codex-worker")
+    roles = ("test-engineer", "lead-developer")
+    providers = ("ollama", "codex")
+    task_paths = (_run_file(project_root, run_dir, local_task_file),
+                  _run_file(project_root, run_dir, codex_task_file))
+    assignments: list[dict[str, Any]] = []
+    for sequence, (assignment_id, role, provider, task_path) in enumerate(zip(names, roles, providers, task_paths), 1):
+        matches = [entry for entry in manifest["assignments"] if entry.get("id") == assignment_id]
+        if len(matches) != 1 or matches[0].get("role") != role:
+            raise ContractError(f"approved {role} assignment not found")
+        execution = matches[0].get("execution")
+        if not isinstance(execution, dict) or execution.get("provider") != provider or not isinstance(execution.get("model"), str) or not execution["model"].strip():
+            raise ContractError(f"approved {provider} execution settings are absent")
+        task = task_path.read_text()
+        if not task.strip() or len(task.encode()) > 4096:
+            raise ContractError("mixed task is empty or too large")
+        instructions = _effective_specialist_for(role)
+        assignments.append({"sequence": sequence, "assignment_id": assignment_id,
+                            "role": role, "provider": provider, "model": execution["model"],
+                            "instance_id": f"{role}-1", "definition_digest": digest({"role": role, "instructions": instructions}),
+                            "instructions": instructions, "task": task,
+                            "task_digest": hashlib.sha256(task.encode()).hexdigest()})
+    artifacts = state.get("artifacts", {})
+    requirements = _run_file(project_root, run_dir, artifacts.get("requirements", ""))
+    acceptance = _run_file(project_root, run_dir, artifacts.get("acceptance_criteria", ""))
+    requirements_bytes, acceptance_bytes = requirements.read_bytes(), acceptance.read_bytes()
+    fixture = run_dir / "fixture"
+    if fixture.is_symlink() or not fixture.is_dir() or not _inside(fixture.resolve(), run_dir.resolve()):
+        raise ContractError("isolated fixture workspace is absent or unsafe")
+    if sorted(path.name for path in fixture.iterdir()) != ["greet.py"] or (fixture / "greet.py").is_symlink():
+        raise ContractError("fixture must initially contain only greet.py")
+    if (fixture / "greet.py").read_bytes() != b'def greet() -> str:\n    return "hello"\n':
+        raise ContractError("fixture baseline differs from the approved exercise")
+    attempt_id = uuid.uuid4().hex
+    execution_dir = run_dir / "execution"
+    execution_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(execution_dir, 0o700)
+    attempt_dir = execution_dir / attempt_id
+    attempt_dir.mkdir(mode=0o700)
+    (attempt_dir / "checkpoints").mkdir(mode=0o700)
+    for source_bytes, snapshot_name in ((manifest_bytes, "manifest.snapshot.json"),
+                                        (requirements_bytes, "requirements.snapshot.md"),
+                                        (acceptance_bytes, "acceptance.snapshot.md")):
+        _write_snapshot(attempt_dir / snapshot_name, source_bytes)
+    if (manifest_path.read_bytes() != manifest_bytes or requirements.read_bytes() != requirements_bytes
+            or acceptance.read_bytes() != acceptance_bytes):
+        raise ContractError("approved mixed execution sources changed during preparation")
+    envelope = {"schema_version": 1, "execution_protocol_version": 3,
+                "work_id": work_id, "attempt_id": attempt_id,
+                "charter_digest": digest({"requirements": hashlib.sha256(requirements_bytes).hexdigest(),
+                                          "acceptance": hashlib.sha256(acceptance_bytes).hexdigest()}),
+                "charter_sources": {"requirements": {"path": str(requirements.relative_to(project_root)), "sha256": hashlib.sha256(requirements_bytes).hexdigest()},
+                                    "acceptance": {"path": str(acceptance.relative_to(project_root)), "sha256": hashlib.sha256(acceptance_bytes).hexdigest()}},
+                "run_protocol_revision": 2, "manifest_digest": hashlib.sha256(manifest_bytes).hexdigest(),
+                "assignments": assignments,
+                "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2, "max_codex_calls": 1},
+                "checkpoint_dir": str(attempt_dir / "checkpoints"), "fixture_dir": str(fixture.resolve())}
+    envelope_digest(envelope)
+    write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    ledger.create_attempt(envelope)
+    return envelope, attempt_dir, ledger
+
+
+def execute_mixed(work_id: str, local_task_file: str, codex_task_file: str, *, root: Path | None = None,
+                  local_adapter: Callable[..., dict[str, Any]] | None = None,
+                  codex_adapter: Callable[..., dict[str, Any]] | None = None,
+                  supervisor: Callable[..., dict[str, Any]] | None = None,
+                  python_path: str | None = None) -> dict[str, Any]:
+    """Run one local plan and one Codex fixture edit under Flow's v3 ledger."""
+    envelope, attempt_dir, ledger = prepare_mixed(work_id, local_task_file, codex_task_file, root=root)
+    aid = envelope["attempt_id"]
+    fixture = Path(envelope["fixture_dir"])
+    local_adapter = local_adapter or call_local
+    codex_adapter = codex_adapter or call_codex
+    failure = ""
+    codex_diff: dict[str, Any] | None = None
+    proposal_count = 0
+
+    def on_action(proposal: dict[str, Any]) -> dict[str, Any]:
+        nonlocal codex_diff, proposal_count
+        proposal_count += 1
+        if proposal_count > 2 or proposal.get("sequence") != proposal_count:
+            raise ContractError("mixed coordinator proposed an extra or out-of-order action")
+        logical = {key: value for key, value in proposal.items()
+                   if key not in {"checkpoint_id", "runtime_version", "request_id"}}
+        validate_action(envelope, logical)
+        sequence = logical["sequence"]
+        assignment = envelope["assignments"][sequence - 1]
+        decision = ledger.decide(envelope, logical, generation=1)
+        if not decision["allowed"]:
+            return {"status": "denied", "reason": decision["reason"], "action_id": logical["action_id"]}
+        try:
+            checkpoint_id = str(uuid.UUID(proposal["checkpoint_id"]))
+            checkpoint_path = attempt_dir / "checkpoints" / f"{checkpoint_id}.json"
+            if checkpoint_path.is_symlink() or not checkpoint_path.is_file() or proposal["runtime_version"] != PINNED_MAF_CORE_VERSION:
+                raise ContractError("mixed MAF checkpoint is absent or incompatible")
+            high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+            ledger.bind_checkpoint_position(aid, "pending_delegate", sequence, checkpoint_id,
+                                            envelope_digest(envelope), high_water, 1, proposal["runtime_version"],
+                                            str(checkpoint_path), generation=1)
+            if not ledger.consume_grant(logical["action_id"], decision["grant_id"], generation=1):
+                raise ContractError("mixed grant was already consumed or expired")
+        except Exception:
+            current = next((item for item in ledger.snapshot(aid)["actions"]
+                            if item["action_id"] == logical["action_id"]), None)
+            if current and current["status"] == "allowed":
+                ledger.close_pre_send_failure(logical["action_id"], decision["grant_id"], generation=1)
+            raise
+        with ledger.send_lock():
+            ledger.assert_owner(aid, 1)
+            ledger.observe_send(logical["action_id"], 1)
+            try:
+                if sequence == 1:
+                    local_envelope = {**assignment, "attempt_id": aid}
+                    result = local_adapter(local_envelope, correlation_id=logical["action_id"])
+                else:
+                    before = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in fixture.iterdir() if path.is_file() and not path.is_symlink()}
+                    before_source = (fixture / "greet.py").read_bytes()
+                    result = codex_adapter(instructions=assignment["instructions"], task=assignment["task"],
+                                           workspace=fixture, model=assignment["model"], timeout_seconds=120)
+                    # Preserve a completed provider observation before reviewing
+                    # the workspace. A failed artifact check still halts the job,
+                    # but its send outcome is then independently inspectable.
+                    validate_result(envelope, result, action=logical)
+                    ledger.observe_response(logical["action_id"], result, 1)
+                    after_paths = list(fixture.iterdir())
+                    if any(path.is_symlink() or not path.is_file() for path in after_paths):
+                        raise ContractError("Codex created an unsafe fixture entry")
+                    after = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in after_paths}
+                    changed = {name for name in set(before) | set(after) if before.get(name) != after.get(name)}
+                    if changed != {"greet.py"} or after.get("test-plan.md") != before.get("test-plan.md"):
+                        raise ContractError("Codex changed files outside the approved fixture target")
+                    source = (fixture / "greet.py").read_bytes()
+                    if not _verified_greet_source(source):
+                        raise ContractError("Codex fixture does not implement the required greet behavior")
+                    diff = "".join(difflib.unified_diff(
+                        before_source.decode("utf-8").splitlines(keepends=True),
+                        source.decode("utf-8").splitlines(keepends=True),
+                        fromfile="greet.py:before", tofile="greet.py:after",
+                    )).encode("utf-8")
+                    if not diff or len(diff) > 16384:
+                        raise ContractError("Codex fixture diff is empty or too large")
+                    _write_snapshot(attempt_dir / "fixture-before.py", before_source)
+                    _write_snapshot(attempt_dir / "fixture.diff", diff)
+                    _write_snapshot(attempt_dir / "fixture-greet.py", source)
+                    codex_diff = {"changed_files": ["greet.py"], "before_sha256": before.get("greet.py"),
+                                  "after_sha256": after["greet.py"],
+                                  "diff_sha256": hashlib.sha256(diff).hexdigest(),
+                                  "behavior_check": "passed"}
+                if sequence == 1:
+                    validate_result(envelope, result, action=logical)
+                    ledger.observe_response(logical["action_id"], result, 1)
+                ledger.complete(logical["action_id"], result, generation=1)
+                if sequence == 1:
+                    write_atomic(fixture / "test-plan.md", result["output"] + "\n", mode=0o600)
+            except Exception as exc:
+                ledger.mark_unknown(logical["action_id"], "adapter_outcome_uncertain", generation=1)
+                raise RuntimeError(f"mixed adapter outcome uncertain: {exc}") from exc
+        return {"status": "completed", "action_id": logical["action_id"], "summary": result["output"],
+                "output": result["output"]}
+
+    try:
+        outcome = (supervisor or run_maf_mixed)(envelope, on_action, python_path=python_path)
+        if outcome.get("attempt_id") != aid or outcome.get("reason") != "mixed-job-complete":
+            raise ContractError("mixed supervisor did not finish the approved attempt")
+    except Exception as exc:
+        failure = str(exc)
+    snapshot = ledger.snapshot(aid)
+    for action in snapshot["actions"]:
+        if action["status"] == "started":
+            ledger.mark_unknown(action["action_id"], "dispatch_outcome_uncertain", generation=1)
+    snapshot = ledger.snapshot(aid)
+    actions = snapshot["actions"]
+    terminal = "unknown" if any(action["status"] == "unknown" for action in actions) else (
+        "completed" if not failure and len(actions) == 2 and all(action["status"] == "completed" for action in actions)
+        else "failed")
+    reason = "reconciliation_required" if terminal == "unknown" else failure
+    receipt = {"schema_version": 1, "execution_protocol_version": 3, "work_id": work_id, "attempt_id": aid,
+               "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],
+               "manifest_digest": envelope["manifest_digest"], "charter_sources": envelope["charter_sources"],
+               "run_protocol_revision": 2, "assignments": envelope["assignments"],
+               "status": terminal, "reason": reason, "actions": actions,
+               "replans": [], "checkpoints": snapshot.get("checkpoint_positions", []),
+               "fixture_diff": codex_diff, "failure_detail": failure[:512], "created_at": utc_now()}
+    validate_receipt(envelope, receipt)
+    receipt_path = attempt_dir / "receipt.json"
+    with ledger.send_lock():
+        ledger.assert_owner(aid, 1)
+        write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=1)
+    return {"attempt_id": aid, "status": terminal, "receipt_path": str(receipt_path),
+            "reason": reason, "fixture_diff": codex_diff}
 
 
 def execute_multiturn_local(work_id: str, assignment_id: str, task_file: str, *, root: Path | None = None,
@@ -395,7 +630,7 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
         except (ValueError, OSError) as exc:
             raise ContractError(f"receipt is invalid: {exc}") from exc
     missing_evidence = [name for name, state in sources.items() if not state["matches"]]
-    if snapshot.get("execution_protocol_version") == 2:
+    if snapshot.get("execution_protocol_version") in {2, 3}:
         for position in snapshot.get("checkpoint_positions", []):
             try:
                 ledger.read_checkpoint_position(attempt_id, position["kind"], position["sequence"])
@@ -423,6 +658,39 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
                         missing_evidence.append("endpoint-observations.json:count-mismatch")
                 except (TypeError, ValueError, KeyError):
                     missing_evidence.append("endpoint-observations.json:invalid")
+    if snapshot.get("execution_protocol_version") == 3 and isinstance(receipt, dict):
+        if (receipt.get("actions") != snapshot["actions"] or
+                receipt.get("checkpoints") != snapshot.get("checkpoint_positions", []) or
+                receipt.get("replans") != snapshot.get("replans", []) or
+                receipt.get("status") != snapshot["status"] or
+                receipt.get("reason") != snapshot["reason"]):
+            missing_evidence.append("receipt:ledger-mismatch")
+        if receipt.get("status") == "completed":
+            evidence = receipt.get("fixture_diff")
+            if not isinstance(evidence, dict):
+                missing_evidence.append("fixture:diff-absent")
+            else:
+                before_path = attempt_dir / "fixture-before.py"
+                after_path = attempt_dir / "fixture-greet.py"
+                diff_path = attempt_dir / "fixture.diff"
+                files = (before_path, after_path, diff_path)
+                if any(path.is_symlink() or not path.is_file() for path in files):
+                    missing_evidence.append("fixture:artifact-absent")
+                else:
+                    before_bytes, after_bytes, diff_bytes = (path.read_bytes() for path in files)
+                    try:
+                        expected_diff = "".join(difflib.unified_diff(
+                            before_bytes.decode("utf-8").splitlines(keepends=True),
+                            after_bytes.decode("utf-8").splitlines(keepends=True),
+                            fromfile="greet.py:before", tofile="greet.py:after",
+                        )).encode("utf-8")
+                    except UnicodeDecodeError:
+                        expected_diff = b""
+                    if (not expected_diff or hashlib.sha256(before_bytes).hexdigest() != evidence.get("before_sha256") or
+                            hashlib.sha256(after_bytes).hexdigest() != evidence.get("after_sha256") or
+                            hashlib.sha256(diff_bytes).hexdigest() != evidence.get("diff_sha256") or
+                            diff_bytes != expected_diff or not _verified_greet_source(after_bytes)):
+                        missing_evidence.append("fixture:artifact-mismatch")
     for resolution in snapshot.get("resolutions", []):
         for item in resolution["evidence"]:
             raw_path = project_root / item["path"]

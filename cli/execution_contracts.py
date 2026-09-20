@@ -9,9 +9,11 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 EXECUTION_PROTOCOL_VERSION = 2
+MIXED_PROTOCOL_VERSION = 3
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
+MIXED_ASSIGNMENTS = (("test-engineer", "ollama"), ("lead-developer", "codex"))
 
 
 class ContractError(ValueError):
@@ -44,12 +46,43 @@ def require_fields(record: dict[str, Any], fields: tuple[str, ...], *, kind: str
 
 
 def validate_envelope(envelope: dict[str, Any]) -> None:
-    require_fields(envelope, (
-        "work_id", "attempt_id", "charter_digest", "charter_sources", "run_protocol_revision", "manifest_digest", "assignment_id",
-        "definition_digest", "instance_id", "role", "provider", "model", "task_digest",
-        "task", "limits", "checkpoint_dir",
-    ), kind="envelope")
-    if envelope["role"] != "test-engineer" or envelope["provider"] not in ALLOWED_PROVIDERS:
+    protocol_version = envelope.get("execution_protocol_version", 1)
+    if protocol_version not in {1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION}:
+        raise ContractError("execution protocol version is unsupported")
+    shared = ("work_id", "attempt_id", "charter_digest", "charter_sources", "run_protocol_revision", "manifest_digest", "limits", "checkpoint_dir")
+    legacy = ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "task_digest", "task")
+    require_fields(envelope, shared + (("assignments",) if protocol_version == MIXED_PROTOCOL_VERSION else legacy), kind="envelope")
+    if protocol_version == MIXED_PROTOCOL_VERSION:
+        assignments = envelope["assignments"]
+        if not isinstance(assignments, list) or len(assignments) != 2:
+            raise ContractError("mixed job requires exactly two assignments")
+        seen_instances: set[str] = set()
+        seen_definitions: set[str] = set()
+        seen_tasks: set[str] = set()
+        for sequence, assignment in enumerate(assignments, 1):
+            if not isinstance(assignment, dict) or set(assignment) != {"sequence", "assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "task_digest", "task", "instructions"}:
+                raise ContractError("mixed assignment fields are invalid")
+            if assignment["sequence"] != sequence or (assignment["role"], assignment["provider"]) != MIXED_ASSIGNMENTS[sequence - 1]:
+                raise ContractError("mixed assignment order, role, or provider is invalid")
+            for field in ("assignment_id", "instance_id", "model", "instructions"):
+                if not isinstance(assignment[field], str) or not assignment[field].strip():
+                    raise ContractError(f"mixed assignment {field} is invalid")
+            if assignment["instance_id"] in seen_instances:
+                raise ContractError("mixed assignment instance is duplicated")
+            seen_instances.add(assignment["instance_id"])
+            if assignment["definition_digest"] in seen_definitions:
+                raise ContractError("mixed assignment definition is duplicated")
+            seen_definitions.add(assignment["definition_digest"])
+            if not isinstance(assignment["task"], str) or not assignment["task"].strip() or len(assignment["task"].encode()) > MAX_TASK_BYTES:
+                raise ContractError("task is empty or exceeds size limit")
+            if hashlib.sha256(assignment["task"].encode()).hexdigest() != assignment["task_digest"]:
+                raise ContractError("task digest mismatch")
+            if assignment["task_digest"] in seen_tasks:
+                raise ContractError("mixed assignment task is duplicated")
+            seen_tasks.add(assignment["task_digest"])
+            if assignment["definition_digest"] != digest({"role": assignment["role"], "instructions": assignment["instructions"]}):
+                raise ContractError("definition digest mismatch")
+    elif envelope["role"] != "test-engineer" or envelope["provider"] not in ALLOWED_PROVIDERS:
         raise ContractError("role or provider is not allowed")
     sources = envelope["charter_sources"]
     if envelope["run_protocol_revision"] != 2 or not isinstance(sources, dict) or set(sources) != {"requirements", "acceptance"}:
@@ -59,16 +92,26 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
             raise ContractError("charter source snapshot is invalid")
     if digest({"requirements": sources["requirements"]["sha256"], "acceptance": sources["acceptance"]["sha256"]}) != envelope["charter_digest"]:
         raise ContractError("charter source digest mismatch")
-    if not isinstance(envelope["task"], str) or not envelope["task"].strip() or len(envelope["task"].encode()) > MAX_TASK_BYTES:
-        raise ContractError("task is empty or exceeds size limit")
-    if hashlib.sha256(envelope["task"].encode()).hexdigest() != envelope["task_digest"]:
-        raise ContractError("task digest mismatch")
+    if protocol_version != MIXED_PROTOCOL_VERSION:
+        if not isinstance(envelope["task"], str) or not envelope["task"].strip() or len(envelope["task"].encode()) > MAX_TASK_BYTES:
+            raise ContractError("task is empty or exceeds size limit")
+        if hashlib.sha256(envelope["task"].encode()).hexdigest() != envelope["task_digest"]:
+            raise ContractError("task digest mismatch")
     limits = envelope["limits"]
-    if not isinstance(limits, dict) or limits != {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2, "paid_budget_usd": 0}:
+    expected_limits = ({"max_delegations": 6, "max_concurrent": 3, "max_replans": 2, "max_codex_calls": 1}
+                       if protocol_version == MIXED_PROTOCOL_VERSION else
+                       {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2, "paid_budget_usd": 0})
+    if not isinstance(limits, dict) or limits != expected_limits:
         raise ContractError("execution limits differ from the approved first slice")
-    protocol_version = envelope.get("execution_protocol_version", 1)
-    if protocol_version not in {1, EXECUTION_PROTOCOL_VERSION}:
-        raise ContractError("execution protocol version is unsupported")
+
+
+def action_assignment(envelope: dict[str, Any], sequence: int) -> dict[str, Any]:
+    """Select the immutable assignment bound to this logical action."""
+    if execution_protocol_version(envelope) == MIXED_PROTOCOL_VERSION:
+        if type(sequence) is not int or not 1 <= sequence <= 2:
+            raise ContractError("mixed action sequence is invalid")
+        return envelope["assignments"][sequence - 1]
+    return envelope
 
 
 def execution_protocol_version(envelope: dict[str, Any]) -> int:
@@ -90,15 +133,21 @@ def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
         raise ContractError("first slice permits one specialist request")
     if protocol_version == EXECUTION_PROTOCOL_VERSION and sequence > 3:
         raise ContractError("action sequence exceeds the approved slice")
+    if protocol_version == MIXED_PROTOCOL_VERSION and sequence > 2:
+        raise ContractError("mixed action sequence exceeds the approved slice")
+    assignment = action_assignment(envelope, sequence)
     identity = {
         "attempt_id": envelope["attempt_id"],
         "charter_digest": envelope["charter_digest"],
-        "definition_digest": envelope["definition_digest"],
-        "instance_id": envelope["instance_id"],
+        "definition_digest": assignment["definition_digest"],
+        "instance_id": assignment["instance_id"],
         "kind": "delegate", "sequence": sequence,
     }
     if protocol_version == EXECUTION_PROTOCOL_VERSION:
         identity["execution_protocol_version"] = protocol_version
+    if protocol_version == MIXED_PROTOCOL_VERSION:
+        identity["execution_protocol_version"] = protocol_version
+        identity["assignment_id"] = assignment["assignment_id"]
     return digest(identity)
 
 
@@ -111,8 +160,16 @@ def validate_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
         raise ContractError("first slice permits one delegation")
     if protocol_version == EXECUTION_PROTOCOL_VERSION and not 1 <= action["sequence"] <= 3:
         raise ContractError("action sequence exceeds the approved slice")
+    if protocol_version == MIXED_PROTOCOL_VERSION and not 1 <= action["sequence"] <= 2:
+        raise ContractError("mixed action sequence exceeds the approved slice")
+    assignment = action_assignment(envelope, action["sequence"])
+    if protocol_version == MIXED_PROTOCOL_VERSION:
+        for field in ("assignment_id", "definition_digest"):
+            if action.get(field) != assignment[field]:
+                raise ContractError(f"action {field} differs from approved assignment")
     for field in ("attempt_id", "role", "instance_id", "provider", "model", "task_digest"):
-        if action[field] != envelope[field]:
+        expected = envelope[field] if field == "attempt_id" else assignment[field]
+        if action[field] != expected:
             raise ContractError(f"action {field} differs from envelope")
     if action["envelope_digest"] != envelope_digest(envelope):
         raise ContractError("action envelope digest mismatch")
@@ -154,14 +211,21 @@ def validate_replan(envelope: dict[str, Any], replan: dict[str, Any]) -> None:
         raise ContractError("replan ID mismatch")
 
 
-def validate_result(envelope: dict[str, Any], result: dict[str, Any]) -> None:
+def validate_result(envelope: dict[str, Any], result: dict[str, Any], *, action: dict[str, Any] | None = None) -> None:
     require_fields(result, ("status", "provider", "model", "physical_call", "evidence_level", "output", "output_sha256"), kind="result")
-    if result["status"] != "completed" or result["provider"] != envelope["provider"] or result["model"] != envelope["model"]:
+    if execution_protocol_version(envelope) == MIXED_PROTOCOL_VERSION:
+        if action is None:
+            raise ContractError("mixed result requires an action identity")
+        validate_action(envelope, action)
+        assignment = action_assignment(envelope, action["sequence"])
+    else:
+        assignment = envelope
+    if result["status"] != "completed" or result["provider"] != assignment["provider"] or result["model"] != assignment["model"]:
         raise ContractError("result status, provider, or model differs from approved envelope")
-    physical = envelope["provider"] == "ollama"
+    physical = assignment["provider"] in {"ollama", "codex"}
     if type(result["physical_call"]) is not bool or result["physical_call"] != physical:
         raise ContractError("result physical-call claim contradicts provider")
-    expected_evidence = "flow_observed_local_http_response" if physical else "local_stub"
+    expected_evidence = ({"ollama": "flow_observed_local_http_response", "codex": "flow_observed_codex_cli_completed_turn", "local-stub": "local_stub"})[assignment["provider"]]
     if result["evidence_level"] != expected_evidence:
         raise ContractError("result evidence level contradicts provider")
     output = result["output"]
@@ -176,8 +240,10 @@ def validate_result(envelope: dict[str, Any], result: dict[str, Any]) -> None:
 
 
 def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
-    require_fields(receipt, ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest", "definition_digest", "provider", "status", "actions"), kind="receipt")
-    for field in ("work_id", "attempt_id", "charter_digest", "manifest_digest", "definition_digest", "provider"):
+    protocol_version = execution_protocol_version(envelope)
+    common = ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest", "status", "actions")
+    require_fields(receipt, common + (() if protocol_version == MIXED_PROTOCOL_VERSION else ("definition_digest", "provider")), kind="receipt")
+    for field in ("work_id", "attempt_id", "charter_digest", "manifest_digest") + (() if protocol_version == MIXED_PROTOCOL_VERSION else ("definition_digest", "provider")):
         if receipt[field] != envelope[field]:
             raise ContractError(f"receipt {field} link mismatch")
     if receipt["envelope_digest"] != envelope_digest(envelope):
@@ -186,11 +252,48 @@ def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
         raise ContractError("receipt charter source link mismatch")
     if receipt["status"] not in {"completed", "failed", "denied", "unknown"} or not isinstance(receipt["actions"], list):
         raise ContractError("receipt status or actions invalid")
-    if execution_protocol_version(envelope) == 1:
+    if protocol_version == 1:
         return
-    require_fields(receipt, ("execution_protocol_version", "replans", "checkpoints"), kind="v2 receipt")
-    if receipt["execution_protocol_version"] != EXECUTION_PROTOCOL_VERSION:
+    require_fields(receipt, ("execution_protocol_version", "replans", "checkpoints"), kind="versioned receipt")
+    if receipt["execution_protocol_version"] != protocol_version:
         raise ContractError("receipt execution protocol link mismatch")
+    if protocol_version == MIXED_PROTOCOL_VERSION:
+        if receipt.get("assignments") != envelope["assignments"]:
+            raise ContractError("receipt mixed assignments link mismatch")
+        if receipt["replans"] != []:
+            raise ContractError("mixed receipt cannot claim replans")
+        seen_sequences: set[int] = set()
+        for item in receipt["actions"]:
+            if not isinstance(item, dict) or not isinstance(item.get("request"), dict):
+                raise ContractError("mixed receipt action is invalid")
+            request = item["request"]
+            validate_action(envelope, request)
+            sequence = request["sequence"]
+            if sequence in seen_sequences or item.get("action_id") != request["action_id"]:
+                raise ContractError("mixed receipt action identity is duplicated or changed")
+            seen_sequences.add(sequence)
+            if item.get("status") not in {"allowed", "started", "completed", "failed", "denied", "unknown", "not_dispatched"}:
+                raise ContractError("mixed receipt action status is invalid")
+            if item["status"] == "completed":
+                if not isinstance(item.get("result"), dict):
+                    raise ContractError("completed mixed action lacks a result")
+                validate_result(envelope, item["result"], action=request)
+            elif item.get("result") is not None and item["status"] != "failed":
+                raise ContractError("mixed action result contradicts status")
+        if receipt["status"] == "completed":
+            if [item["request"]["sequence"] for item in receipt["actions"]] != [1, 2] or any(item["status"] != "completed" for item in receipt["actions"]):
+                raise ContractError("completed mixed receipt requires both completed actions")
+            fixture_diff = receipt.get("fixture_diff")
+            if not isinstance(fixture_diff, dict) or set(fixture_diff) != {"changed_files", "before_sha256", "after_sha256", "diff_sha256", "behavior_check"}:
+                raise ContractError("completed mixed receipt requires a fixture diff")
+            if fixture_diff["changed_files"] != ["greet.py"] or fixture_diff["behavior_check"] != "passed":
+                raise ContractError("mixed fixture scope or behavior check is invalid")
+            for key in ("before_sha256", "after_sha256", "diff_sha256"):
+                value = fixture_diff[key]
+                if not isinstance(value, str) or len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+                    raise ContractError("mixed fixture digest is invalid")
+            if fixture_diff["before_sha256"] == fixture_diff["after_sha256"]:
+                raise ContractError("mixed fixture has no changed content")
     if not isinstance(receipt["replans"], list) or not isinstance(receipt["checkpoints"], list):
         raise ContractError("receipt v2 decision or checkpoint list is invalid")
     seen_replans: set[tuple[str, int]] = set()
