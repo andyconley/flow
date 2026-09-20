@@ -182,6 +182,20 @@ class ClaudeWorkerTests(unittest.TestCase):
                 call_claude(instructions="Charter", task="Review", workspace=root,
                             model="claude-test", timeout_seconds=5, claude_bin=str(fake))
 
+    def test_nonzero_exit_reports_fixed_category_without_provider_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import sys\n"
+                            "sys.stderr.write('Please log in; secret=do-not-record\\n')\n"
+                            "sys.exit(1)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaisesRegex(ClaudeWorkerError, "category authentication_unavailable") as error:
+                call_claude(instructions="Charter", task="Review", workspace=root,
+                            model="claude-test", timeout_seconds=5, claude_bin=str(fake))
+            self.assertNotIn("do-not-record", str(error.exception))
+
     def test_timeout_is_uncertain(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
