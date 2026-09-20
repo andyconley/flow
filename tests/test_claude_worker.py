@@ -64,6 +64,14 @@ class ClaudeWorkerTests(unittest.TestCase):
         with self.assertRaises(ClaudeWorkerError):
             _parse_result(result_json(result="x" * 5000), "claude-test")
 
+    def test_manager_output_uses_explicit_larger_limit(self):
+        result = _parse_result(result_json(result="x" * 5000), "claude-test",
+                               max_output_bytes=32768)
+        self.assertEqual(len(result["output"]), 5000)
+        with self.assertRaises(ClaudeWorkerError):
+            _parse_result(result_json(result="x" * 33000), "claude-test",
+                          max_output_bytes=32768)
+
     def test_usage_may_be_absent(self):
         result = _parse_result(result_json(usage=None), "claude-test")
         self.assertIsNone(result["usage"])
@@ -155,6 +163,23 @@ class ClaudeWorkerTests(unittest.TestCase):
             self.assertNotIn("CLAUDE_API_KEY", child_env)
             self.assertIn("HOME", child_env)
 
+    def test_manager_prompt_override_preserves_exact_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "from pathlib import Path\n"
+                            "Path('received.txt').write_text(sys.stdin.read())\n"
+                            "print(json.dumps({'type':'result','subtype':'success','is_error':False,"
+                            "'result':'complete','session_id':'manager-test','num_turns':1}))\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            prompt = "Return only stock Magentic progress JSON."
+            call_claude(instructions="unused", task="unused", workspace=root,
+                        model="claude-test", timeout_seconds=5, claude_bin=str(fake),
+                        prompt_override=prompt)
+            self.assertEqual((root / "received.txt").read_text(), prompt)
+
     def test_nonzero_exit_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -164,6 +189,20 @@ class ClaudeWorkerTests(unittest.TestCase):
             with self.assertRaises(ClaudeWorkerError):
                 call_claude(instructions="Charter", task="Review", workspace=root,
                             model="claude-test", timeout_seconds=5, claude_bin=str(fake))
+
+    def test_nonzero_exit_reports_fixed_category_without_provider_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import sys\n"
+                            "sys.stderr.write('Please log in; secret=do-not-record\\n')\n"
+                            "sys.exit(1)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaisesRegex(ClaudeWorkerError, "category authentication_unavailable") as error:
+                call_claude(instructions="Charter", task="Review", workspace=root,
+                            model="claude-test", timeout_seconds=5, claude_bin=str(fake))
+            self.assertNotIn("do-not-record", str(error.exception))
 
     def test_timeout_is_uncertain(self):
         with tempfile.TemporaryDirectory() as temporary:

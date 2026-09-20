@@ -3,8 +3,10 @@
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -88,6 +90,49 @@ class CodexWorkerTests(unittest.TestCase):
             with self.assertRaisesRegex(CodexWorkerError, "timed out"):
                 call_codex(instructions="Charter", task="Task", workspace=root,
                            model="gpt-test", timeout_seconds=1, codex_bin=str(fake))
+
+    def test_timeout_includes_prompt_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "codex-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys, time\n"
+                            "time.sleep(2)\n"
+                            "sys.stdin.read()\n"
+                            "print(json.dumps({'type':'thread.started','thread_id':'test'}))\n"
+                            "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'done'}}))\n"
+                            "print(json.dumps({'type':'turn.completed'}))\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            start = time.monotonic()
+            with patch("codex_worker.MAX_PROMPT_BYTES", 1024 * 1024):
+                with self.assertRaises(CodexWorkerError):
+                    call_codex(instructions="x" * 512000, task="Task", workspace=root,
+                               model="gpt-test", timeout_seconds=1, codex_bin=str(fake))
+            self.assertLess(time.monotonic() - start, 1.8)
+
+    def test_broken_prompt_write_closes_stdin(self):
+        process = None
+        real_popen = subprocess.Popen
+
+        def remember(*args, **kwargs):
+            nonlocal process
+            process = real_popen(*args, **kwargs)
+            return process
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "codex-fake"
+            fake.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(4)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with patch("codex_worker.subprocess.Popen", side_effect=remember):
+                with patch("codex_worker.os.write", side_effect=BrokenPipeError):
+                    with self.assertRaises(CodexWorkerError):
+                        call_codex(instructions="Charter", task="Task", workspace=root,
+                                   model="gpt-test", timeout_seconds=1, codex_bin=str(fake))
+        self.assertIsNotNone(process)
+        self.assertIsNotNone(process.poll())
+        self.assertTrue(process.stdin.closed)
+        self.assertTrue(process.stdout.closed)
 
 
 if __name__ == "__main__":

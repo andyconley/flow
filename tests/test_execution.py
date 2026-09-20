@@ -86,7 +86,7 @@ class ExecutionFixture(unittest.TestCase):
         self.run_dir = self._make_run(WORK_ID)
 
     def _make_run(self, work_id: str) -> Path:
-        source_run = REPO / ".flow" / "runs" / "maf-supervised-local-worker"
+        source_run = REPO / "tests" / "fixtures" / "maf-supervised-local-worker"
         run = json.loads((source_run / "run.json").read_text())
         # The source run is archived; this disposable fixture represents the
         # earlier implementation state required by the dispatch gateway.

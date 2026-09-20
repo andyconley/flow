@@ -100,29 +100,38 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                                stderr=subprocess.DEVNULL, cwd=workspace, env=env,
                                start_new_session=True)
     assert process.stdin is not None and process.stdout is not None
+    deadline = time.monotonic() + timeout_seconds
     try:
-        process.stdin.write(prompt_bytes)
-        process.stdin.close()
-        deadline = time.monotonic() + timeout_seconds
         chunks: list[bytes] = []
-        size = 0
+        size = written = 0
         selector = selectors.DefaultSelector()
-        selector.register(process.stdout, selectors.EVENT_READ)
         try:
+            os.set_blocking(process.stdin.fileno(), False)
+            selector.register(process.stdin, selectors.EVENT_WRITE)
+            selector.register(process.stdout, selectors.EVENT_READ)
             while selector.get_map():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise CodexWorkerError("Codex turn timed out")
-                if not selector.select(remaining):
+                ready = selector.select(remaining)
+                if not ready:
                     raise CodexWorkerError("Codex turn timed out")
-                chunk = os.read(process.stdout.fileno(), min(8192, MAX_EVENT_BYTES + 1 - size))
-                if not chunk:
-                    selector.unregister(process.stdout)
-                    break
-                chunks.append(chunk)
-                size += len(chunk)
-                if size > MAX_EVENT_BYTES:
-                    raise CodexWorkerError("Codex event stream exceeds limit")
+                for key, _ in ready:
+                    if key.fileobj is process.stdin:
+                        count = os.write(process.stdin.fileno(), prompt_bytes[written:])
+                        written += count
+                        if written == len(prompt_bytes):
+                            selector.unregister(process.stdin)
+                            process.stdin.close()
+                    else:
+                        chunk = os.read(process.stdout.fileno(), min(8192, MAX_EVENT_BYTES + 1 - size))
+                        if not chunk:
+                            selector.unregister(process.stdout)
+                            continue
+                        chunks.append(chunk)
+                        size += len(chunk)
+                        if size > MAX_EVENT_BYTES:
+                            raise CodexWorkerError("Codex event stream exceeds limit")
         finally:
             selector.close()
         remaining = deadline - time.monotonic()
@@ -141,4 +150,6 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
             except ProcessLookupError:
                 pass
             process.wait()
+        if not process.stdin.closed:
+            process.stdin.close()
         process.stdout.close()
