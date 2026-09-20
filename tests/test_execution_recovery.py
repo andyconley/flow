@@ -404,7 +404,9 @@ class LedgerRecoveryTests(unittest.TestCase):
             self.assertFalse(ledger.claim_continuation_send(epoch, grant["grant_id"], generation=generation))
         result = self._result(envelope, "continued")
         ledger.observe_continuation_response(epoch, result, generation=generation)
-        ledger.finish_continuation(epoch, "completed", "maf_acknowledged", str(self.root / "continuation.json"), generation=generation)
+        linked_receipt = self.root / "continuation.json"
+        linked_receipt.write_text('{"status":"completed"}')
+        ledger.finish_continuation(epoch, "completed", "maf_acknowledged", str(linked_receipt), generation=generation)
         snapshot = ledger.snapshot(envelope["attempt_id"])
         self.assertEqual(snapshot["status"], "failed")
         self.assertEqual(snapshot["receipt_path"], str(receipt))
@@ -413,6 +415,27 @@ class LedgerRecoveryTests(unittest.TestCase):
         self.assertTrue(snapshot["continuations"][0]["send_claimed"])
         with self.assertRaisesRegex(ContractError, "terminal"):
             ledger.claim_continuation(epoch, actor="other")
+
+    def test_older_continuation_schema_remains_readable_without_migration(self) -> None:
+        path = self.root / "older-continuation.sqlite"
+        with sqlite3.connect(path) as db:
+            db.executescript("""
+                CREATE TABLE continuation_epochs (
+                    epoch_id TEXT PRIMARY KEY, attempt_id TEXT, action_id TEXT,
+                    resolution_id TEXT, receipt_sha256 TEXT, checkpoint_sha256 TEXT,
+                    status TEXT, reason TEXT, receipt_path TEXT, owner_generation INTEGER,
+                    owner_actor TEXT, created_at TEXT);
+                CREATE TABLE continuation_grants (grant_id TEXT, epoch_id TEXT, issued_at TEXT,
+                    status TEXT, claimed_at TEXT);
+                CREATE TABLE continuation_responses (epoch_id TEXT, result_json TEXT,
+                    result_digest TEXT, observed_at TEXT);
+            """)
+            db.execute("INSERT INTO continuation_epochs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                       ("epoch", "attempt", "action", "resolution", "a" * 64, "b" * 64,
+                        "failed", "historical", None, 2, "operator", "2026-09-20"))
+        old = ExecutionLedger(path, read_only=True).continuation_snapshot("epoch")
+        self.assertEqual(old["status"], "failed")
+        self.assertIsNone(old["sealed_receipt_sha256"])
 
 
 if __name__ == "__main__":

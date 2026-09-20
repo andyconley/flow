@@ -439,10 +439,12 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
                 missing_evidence.append(f"continuation:{epoch['epoch_id']}:receipt")
             else:
                 try:
-                    record = json.loads(linked.read_text())
+                    linked_bytes = linked.read_bytes()
+                    record = json.loads(linked_bytes)
                     if (record.get("epoch_id") != epoch["epoch_id"] or
                             record.get("original_receipt_sha256") != epoch["receipt_sha256"] or
-                            record.get("status") != epoch["status"]):
+                            record.get("status") != epoch["status"] or
+                            hashlib.sha256(linked_bytes).hexdigest() != epoch.get("sealed_receipt_sha256")):
                         missing_evidence.append(f"continuation:{epoch['epoch_id']}:receipt")
                 except (TypeError, ValueError, OSError):
                     missing_evidence.append(f"continuation:{epoch['epoch_id']}:receipt")
@@ -734,7 +736,9 @@ def continue_resolved_local(work_id: str, attempt_id: str, action_id: str, actor
                            "checkpoint_sha256": checkpoint["file_sha256"],
                            "status": "unknown", "reason": unknown_reason,
                            "maf_acknowledgment": None,
-                           "ledger": ledger.continuation_snapshot(epoch_id), "created_at": utc_now()}
+                           "policy_counters": ledger.continuation_policy_counters(epoch_id, terminal_status="unknown"),
+                           "grant": ledger.continuation_snapshot(epoch_id)["grant"],
+                           "response_digest": None, "created_at": utc_now()}
         with ledger.send_lock():
             if ledger.continuation_snapshot(epoch_id)["owner_generation"] != generation:
                 raise ContractError("continuation owner is stale before unknown receipt seal")
@@ -810,7 +814,10 @@ def continue_resolved_local(work_id: str, attempt_id: str, action_id: str, actor
               "resolution_id": resolution["resolution_id"], "resolution_digest": resolution["resolution_digest"],
               "checkpoint_id": checkpoint["checkpoint_id"], "checkpoint_sha256": checkpoint["file_sha256"],
               "status": status, "reason": reason, "maf_acknowledgment": acknowledgment,
-              "ledger": ledger.continuation_snapshot(epoch_id), "created_at": utc_now()}
+              "policy_counters": ledger.continuation_policy_counters(epoch_id, terminal_status=status),
+              "grant": ledger.continuation_snapshot(epoch_id)["grant"],
+              "response_digest": (ledger.continuation_snapshot(epoch_id)["response"] or {}).get("result_digest"),
+              "created_at": utc_now()}
     linked_path = attempt_dir / f"continuation-{epoch_id}.json"
     with ledger.send_lock():
         if ledger.continuation_snapshot(epoch_id)["owner_generation"] != generation:

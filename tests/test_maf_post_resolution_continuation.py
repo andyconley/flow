@@ -101,8 +101,26 @@ class PostResolutionContinuationTests(ExecutionFixture):
         self.assertEqual(result["status"], "completed", result)
         self.assertEqual(len(calls), before)
         self.assertEqual(original.read_bytes(), original_bytes)
-        self.assertEqual(json.loads(Path(result["receipt_path"]).read_text())["maf_acknowledgment"]["reason"], "action-3-complete")
+        linked = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(linked["maf_acknowledgment"]["reason"], "action-3-complete")
+        self.assertEqual(linked["policy_counters"]["before"]["delegations"], 3)
+        self.assertEqual(linked["policy_counters"]["after"]["delegations"], 3)
+        self.assertEqual(linked["policy_counters"]["after"]["replans"], 2)
+        self.assertNotIn("ledger", linked)
         self.assertEqual(gateway.inspect_attempt(WORK_ID, attempt_id, root=self.root)["missing_evidence"], [])
+
+    def test_linked_receipt_tamper_is_detected(self):
+        attempt_id, action_id, _calls, adapter = self._make_attempt("resolved_completed")
+        outcome = gateway.continue_resolved_local(
+            WORK_ID, attempt_id, action_id, "test-operator", root=self.root,
+            python_path=self._pinned_python(), adapter=adapter,
+        )
+        linked = Path(outcome["receipt_path"])
+        receipt = json.loads(linked.read_text())
+        receipt["maf_acknowledgment"]["reason"] = "forged"
+        linked.write_text(json.dumps(receipt))
+        inspected = gateway.inspect_attempt(WORK_ID, attempt_id, root=self.root)
+        self.assertIn(f"continuation:{outcome['epoch_id']}:receipt", inspected["missing_evidence"])
 
     def test_no_dispatch_requires_ready_then_sends_once(self):
         attempt_id, action_id, calls, adapter = self._make_attempt("resolved_not_dispatched")
@@ -113,6 +131,10 @@ class PostResolutionContinuationTests(ExecutionFixture):
         )
         self.assertEqual(result["status"], "completed", result)
         self.assertEqual(len(calls), before + 1)
+        linked = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(linked["policy_counters"]["before"]["delegations"], 3)
+        self.assertEqual(linked["policy_counters"]["after"]["delegations"], 4)
+        self.assertEqual(linked["policy_counters"]["after"]["concurrent"], 0)
         self.assertEqual(gateway.inspect_attempt(WORK_ID, attempt_id, root=self.root)["missing_evidence"], [])
         with self.assertRaises(ContractError):
             gateway.continue_resolved_local(WORK_ID, attempt_id, action_id, "test-operator",
