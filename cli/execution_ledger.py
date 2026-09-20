@@ -270,7 +270,7 @@ class ExecutionLedger:
                 if existing[0] != request_json:
                     raise ContractError("action ID reused with changed payload")
                 self._event(db, attempt, aid, "duplicate_request", existing[1])
-                if protocol_version in {2, 3}:
+                if protocol_version in {2, 3, 4}:
                     return self._decision_from_action((aid, *existing[1:]))
                 return {"allowed": False, "reason": "duplicate_request", "action_id": aid}
             slot = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? AND kind='delegate' AND sequence=?", (attempt, action["sequence"])).fetchone()
@@ -282,7 +282,7 @@ class ExecutionLedger:
             unresolved = self._unresolved_action(db, attempt)
             if unresolved:
                 return {"allowed": False, "reason": "reconciliation_required", "action_id": aid}
-            if protocol_version in {2, 3}:
+            if protocol_version in {2, 3, 4}:
                 previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM actions WHERE attempt_id=? AND kind='delegate'", (attempt,)).fetchone()[0]
                 if action["sequence"] != previous + 1:
                     raise ContractError("action sequence is skipped or out of order")
@@ -295,13 +295,14 @@ class ExecutionLedger:
                 "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND actions.status IN ('allowed','started','unknown')",
                 (work_id,),
             ).fetchone()[0]
-            if protocol_version == 3:
-                codex_count = db.execute(
-                    "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND json_extract(actions.request_json,'$.provider')='codex' AND actions.status IN ('allowed','started','completed','unknown','failed','not_dispatched')",
-                    (work_id,),
+            if protocol_version in {3, 4}:
+                paid_provider = "codex" if protocol_version == 3 else "claude"
+                paid_count = db.execute(
+                    "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND json_extract(actions.request_json,'$.provider')=? AND actions.status IN ('allowed','started','completed','unknown','failed','not_dispatched')",
+                    (work_id, paid_provider),
                 ).fetchone()[0]
-                if action["provider"] == "codex" and codex_count >= envelope["limits"]["max_codex_calls"]:
-                    reason = "codex_call_cap"
+                if action["provider"] == paid_provider and paid_count >= envelope["limits"][f"max_{paid_provider}_calls"]:
+                    reason = f"{paid_provider}_call_cap"
                 elif allowed_count >= envelope["limits"]["max_delegations"]:
                     reason = "delegation_cap"
                 elif concurrent_count >= envelope["limits"]["max_concurrent"]:
@@ -394,7 +395,7 @@ class ExecutionLedger:
             if row is None:
                 raise ContractError("action missing")
             self._assert_owner(db, row[0], generation)
-            if row[3] != 3 or row[1] != "allowed" or row[2] != grant_id:
+            if row[3] not in {3, 4} or row[1] != "allowed" or row[2] != grant_id:
                 raise ContractError("action is not an unconsumed mixed grant")
             crossed = db.execute(
                 "SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,),
@@ -593,13 +594,14 @@ class ExecutionLedger:
             raise ContractError("pending checkpoint is not MAF JSON") from exc
         if not isinstance(value, dict) or value.get("checkpoint_id") != checkpoint_id:
             raise ContractError("pending checkpoint ID does not match link")
-        expected_workflow = ("flow-maf-mixed-provider-v3" if protocol_version == 3 else
+        expected_workflow = ("flow-maf-claude-review-v4" if protocol_version == 4 else
+                             "flow-maf-mixed-provider-v3" if protocol_version == 3 else
                              "flow-maf-v2-action3" if kind == "pending_delegate" and sequence == 3 else
                              "flow-maf-v2-initial")
         if value.get("workflow_name") != expected_workflow:
             raise ContractError("checkpoint workflow does not match position")
         pending = value.get("pending_request_info_events")
-        request_id = (f"flow-mixed-action-{sequence}" if protocol_version == 3 else
+        request_id = (f"flow-mixed-action-{sequence}" if protocol_version in {3, 4} else
                       f"flow-action-{sequence}" if kind == "pending_delegate" else f"flow-replan-{sequence}")
         if not isinstance(pending, dict) or set(pending) != {request_id} or not isinstance(pending[request_id], dict):
             raise ContractError("checkpoint request does not match position")
@@ -623,10 +625,10 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
             row = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
-            if row is None or row[1] not in {2, 3}:
+            if row is None or row[1] not in {2, 3, 4}:
                 raise ContractError("checkpoint positions require execution protocol v2 or v3")
             protocol_version = row[1]
-            if protocol_version == 3 and (kind != "pending_delegate" or sequence not in {1, 2}):
+            if protocol_version in {3, 4} and (kind != "pending_delegate" or sequence not in {1, 2}):
                 raise ContractError("mixed checkpoint position is invalid")
             envelope = json.loads(row[0])
             if checkpoint_envelope_digest != envelope_digest(envelope):
@@ -672,9 +674,9 @@ class ExecutionLedger:
         with self._db() as db:
             row = db.execute("SELECT envelope_json,execution_protocol_version,owner_generation FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             link = db.execute("SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? AND kind=? AND sequence=?", (attempt_id, kind, sequence)).fetchone()
-            if row is None or link is None or row[1] not in {2, 3} or link[5] != row[1] or link[3] != 1:
+            if row is None or link is None or row[1] not in {2, 3, 4} or link[5] != row[1] or link[3] != 1:
                 raise ContractError("checkpoint position is absent or incompatible")
-            if row[1] == 3 and (kind != "pending_delegate" or sequence not in {1, 2}):
+            if row[1] in {3, 4} and (kind != "pending_delegate" or sequence not in {1, 2}):
                 raise ContractError("mixed checkpoint position is invalid")
             envelope = json.loads(row[0])
             if link[1] != envelope_digest(envelope) or link[10] > row[2]:

@@ -630,7 +630,7 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
         except (ValueError, OSError) as exc:
             raise ContractError(f"receipt is invalid: {exc}") from exc
     missing_evidence = [name for name, state in sources.items() if not state["matches"]]
-    if snapshot.get("execution_protocol_version") in {2, 3}:
+    if snapshot.get("execution_protocol_version") in {2, 3, 4}:
         for position in snapshot.get("checkpoint_positions", []):
             try:
                 ledger.read_checkpoint_position(attempt_id, position["kind"], position["sequence"])
@@ -658,14 +658,14 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
                         missing_evidence.append("endpoint-observations.json:count-mismatch")
                 except (TypeError, ValueError, KeyError):
                     missing_evidence.append("endpoint-observations.json:invalid")
-    if snapshot.get("execution_protocol_version") == 3 and isinstance(receipt, dict):
+    if snapshot.get("execution_protocol_version") in {3, 4} and isinstance(receipt, dict):
         if (receipt.get("actions") != snapshot["actions"] or
                 receipt.get("checkpoints") != snapshot.get("checkpoint_positions", []) or
                 receipt.get("replans") != snapshot.get("replans", []) or
                 receipt.get("status") != snapshot["status"] or
                 receipt.get("reason") != snapshot["reason"]):
             missing_evidence.append("receipt:ledger-mismatch")
-        if receipt.get("status") == "completed":
+        if snapshot.get("execution_protocol_version") == 3 and receipt.get("status") == "completed":
             evidence = receipt.get("fixture_diff")
             if not isinstance(evidence, dict):
                 missing_evidence.append("fixture:diff-absent")
@@ -691,6 +691,39 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
                             hashlib.sha256(diff_bytes).hexdigest() != evidence.get("diff_sha256") or
                             diff_bytes != expected_diff or not _verified_greet_source(after_bytes)):
                         missing_evidence.append("fixture:artifact-mismatch")
+        if snapshot.get("execution_protocol_version") == 4 and receipt.get("status") == "completed":
+            from claude_gateway import _claude_task
+            from claude_worker import build_prompt
+            source_dir = attempt_dir / "source"
+            if source_dir.is_symlink() or not source_dir.is_dir():
+                missing_evidence.append("claude:source-absent")
+            else:
+                for item in envelope["source_files"]:
+                    path = source_dir / item["path"]
+                    if (path.is_symlink() or not path.is_file() or not _inside(path.resolve(), source_dir.resolve())
+                            or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]):
+                        missing_evidence.append(f"claude:source:{item['path']}")
+            plan_path = attempt_dir / "test-plan.md"
+            review_path = attempt_dir / "review-output.md"
+            evidence = receipt.get("review_artifact")
+            if (plan_path.is_symlink() or not plan_path.is_file() or review_path.is_symlink()
+                    or not review_path.is_file() or not isinstance(evidence, dict)):
+                missing_evidence.append("claude:artifact-absent")
+            else:
+                plan = plan_path.read_text()
+                review_bytes = review_path.read_bytes()
+                if (hashlib.sha256(plan.encode()).hexdigest() != evidence.get("plan_sha256") or
+                        hashlib.sha256(review_bytes).hexdigest() != evidence.get("sha256") or
+                        review_bytes != (snapshot["actions"][1]["result"]["output"] + "\n").encode()):
+                    missing_evidence.append("claude:artifact-mismatch")
+                elif not any(name.startswith("claude:source") for name in missing_evidence):
+                    try:
+                        task = _claude_task(envelope, attempt_dir, plan)
+                        expected_input = hashlib.sha256(build_prompt(envelope["assignments"][1]["instructions"], task)).hexdigest()
+                        if snapshot["actions"][1]["result"].get("input_sha256") != expected_input:
+                            missing_evidence.append("claude:input-mismatch")
+                    except (ContractError, ValueError, OSError, UnicodeDecodeError):
+                        missing_evidence.append("claude:input-unavailable")
     for resolution in snapshot.get("resolutions", []):
         for item in resolution["evidence"]:
             raw_path = project_root / item["path"]

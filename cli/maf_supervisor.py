@@ -321,20 +321,21 @@ def run_maf_multiturn(
                 stream.close()
 
 
-def run_maf_mixed(
+def _run_maf_pair(
     envelope: dict[str, Any],
     on_action: Callable[[dict[str, Any]], dict[str, Any]],
     *,
     timeout_s: float = 240,
     python_path: str | None = None,
+    protocol_version: int = 3,
 ) -> dict[str, Any]:
     """Supervise exactly two ordered MAF proposals through Flow callbacks."""
-    if envelope.get("execution_protocol_version") != 3 or timeout_s <= 0:
-        raise MafProtocolError("mixed execution requires a v3 envelope and positive timeout")
+    if protocol_version not in {3, 4} or envelope.get("execution_protocol_version") != protocol_version or timeout_s <= 0:
+        raise MafProtocolError("paired execution requires a matching envelope and positive timeout")
     executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
     root = Path(__file__).resolve().parents[1]
     process = subprocess.Popen(
-        [executable, "-m", "runtime.maf_runner.mixed"],
+        [executable, "-m", "runtime.maf_runner.mixed" if protocol_version == 3 else "runtime.maf_runner.claude_review"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         cwd=root, env={"PYTHONPATH": str(root)}, bufsize=0,
     )
@@ -343,10 +344,10 @@ def run_maf_mixed(
     pending = bytearray()
     position = 0
     try:
-        process.stdin.write(_json_line({"protocol_version": 3, "type": "start", "envelope": envelope}))
+        process.stdin.write(_json_line({"protocol_version": protocol_version, "type": "start", "envelope": envelope}))
         process.stdin.flush()
         while True:
-            message = _read_message(process.stdout.fileno(), deadline, pending, 3)
+            message = _read_message(process.stdout.fileno(), deadline, pending, protocol_version)
             if message["type"] == "propose_action":
                 position += 1
                 if position > 2 or message.get("sequence") != position:
@@ -368,7 +369,7 @@ def run_maf_mixed(
                                       "request_id": message["request_id"]})
                 if not isinstance(decision, dict):
                     raise MafProtocolError("Flow mixed callback did not return a result")
-                process.stdin.write(_json_line({"protocol_version": 3, "type": "action_result",
+                process.stdin.write(_json_line({"protocol_version": protocol_version, "type": "action_result",
                                                 "action_id": proposal["action_id"],
                                                 "request_id": message["request_id"], "result": decision}))
                 process.stdin.flush()
@@ -397,6 +398,16 @@ def run_maf_mixed(
         for stream in (process.stdin, process.stdout):
             if stream is not None and not stream.closed:
                 stream.close()
+
+
+def run_maf_mixed(envelope: dict[str, Any], on_action: Callable[[dict[str, Any]], dict[str, Any]],
+                  *, timeout_s: float = 240, python_path: str | None = None) -> dict[str, Any]:
+    return _run_maf_pair(envelope, on_action, timeout_s=timeout_s, python_path=python_path, protocol_version=3)
+
+
+def run_maf_claude(envelope: dict[str, Any], on_action: Callable[[dict[str, Any]], dict[str, Any]],
+                   *, timeout_s: float = 240, python_path: str | None = None) -> dict[str, Any]:
+    return _run_maf_pair(envelope, on_action, timeout_s=timeout_s, python_path=python_path, protocol_version=4)
 
 
 def run_maf_action3_continuation(

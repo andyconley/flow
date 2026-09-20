@@ -53,6 +53,7 @@ from runstate import (  # noqa: E402
     cmd_verify as run_verify_command,
 )
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
+from claude_gateway import execute_claude  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -538,6 +539,16 @@ def main() -> int:
     run_mixed_parser.add_argument("--codex-task-file", required=True, help="approved Codex task artifact within this run")
     run_mixed_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
 
+    run_claude_parser = run_sub.add_parser(
+        "execute-local-claude",
+        help="run one local plan and one Claude review through supervised MAF and Flow policy",
+        description="Review a pinned real Flow change with one local test-engineer and one tool-free Claude quality-reviewer. Flow grants both calls and seals the receipt; no dollar or token cap is claimed.",
+    )
+    run_claude_parser.add_argument("work_id")
+    run_claude_parser.add_argument("--local-task-file", required=True, help="approved local task artifact within this run")
+    run_claude_parser.add_argument("--claude-task-file", required=True, help="approved Claude task artifact within this run")
+    run_claude_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
+
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
@@ -891,6 +902,15 @@ def main() -> int:
             result = execute_mixed(args.work_id, args.local_task_file, args.codex_task_file)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"mixed execution refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
+        return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "execute-local-claude":
+        import json
+        try:
+            result = execute_claude(args.work_id, args.local_task_file, args.claude_task_file)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"Claude execution refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1
