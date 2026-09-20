@@ -504,7 +504,8 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
         raise ContractError("stock manager prompt text is absent")
     return call_claude(instructions="stock Magentic manager", task="model response",
                        prompt_override=prompt, workspace=workspace,
-                       model=envelope["manager"]["model"], timeout_seconds=120)
+                       model=envelope["manager"]["model"], timeout_seconds=120,
+                       max_output_bytes=32768)
 
 
 def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path) -> dict[str, Any]:

@@ -63,7 +63,7 @@ def _normalized_usage(usage: Any) -> dict[str, int] | None:
     return normalized or None
 
 
-def _parse_result(raw: bytes, expected_model: str) -> dict[str, Any]:
+def _parse_result(raw: bytes, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -81,7 +81,7 @@ def _parse_result(raw: bytes, expected_model: str) -> dict[str, Any]:
     result = payload.get("result")
     if not isinstance(result, str) or not result.strip():
         raise ClaudeWorkerError("Claude final result missing")
-    if len(result.encode("utf-8")) > MAX_OUTPUT_BYTES:
+    if len(result.encode("utf-8")) > max_output_bytes:
         raise ClaudeWorkerError("Claude final result exceeds output limit")
     session_id = payload.get("session_id")
     if not isinstance(session_id, str) or not session_id.strip():
@@ -110,7 +110,8 @@ def build_prompt(instructions: str, task: str) -> bytes:
 
 def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
                 timeout_seconds: int, claude_bin: str = "claude",
-                prompt_override: str | None = None) -> dict[str, Any]:
+                prompt_override: str | None = None,
+                max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
     """Run one Claude Code turn; fail closed on timeout, malformed or incomplete output.
 
     The caller must create and approve the isolated workspace before dispatch.
@@ -127,6 +128,8 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
         raise ValueError("Claude model must be explicit")
     if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 600:
         raise ValueError("Claude timeout must be 1 to 600 seconds")
+    if isinstance(max_output_bytes, bool) or not isinstance(max_output_bytes, int) or not 1 <= max_output_bytes <= 32768:
+        raise ValueError("Claude output limit must be 1 to 32768 bytes")
     if prompt_override is None:
         prompt_bytes = build_prompt(instructions, task)
     else:
@@ -202,7 +205,7 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
         if exit_code != 0:
             category = _failure_category(b"".join(chunks), b"".join(stderr_chunks))
             raise ClaudeWorkerError(f"Claude exited without a successful turn (status {exit_code}; category {category})")
-        return {**_parse_result(b"".join(chunks), model),
+        return {**_parse_result(b"".join(chunks), model, max_output_bytes=max_output_bytes),
                 "input_sha256": hashlib.sha256(prompt_bytes).hexdigest()}
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
         raise ClaudeWorkerError("Claude turn outcome uncertain") from exc

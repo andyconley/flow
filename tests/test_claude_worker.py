@@ -64,6 +64,14 @@ class ClaudeWorkerTests(unittest.TestCase):
         with self.assertRaises(ClaudeWorkerError):
             _parse_result(result_json(result="x" * 5000), "claude-test")
 
+    def test_manager_output_uses_explicit_larger_limit(self):
+        result = _parse_result(result_json(result="x" * 5000), "claude-test",
+                               max_output_bytes=32768)
+        self.assertEqual(len(result["output"]), 5000)
+        with self.assertRaises(ClaudeWorkerError):
+            _parse_result(result_json(result="x" * 33000), "claude-test",
+                          max_output_bytes=32768)
+
     def test_usage_may_be_absent(self):
         result = _parse_result(result_json(usage=None), "claude-test")
         self.assertIsNone(result["usage"])
