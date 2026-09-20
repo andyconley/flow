@@ -212,6 +212,7 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
 | `flow run execute-local WORK_ID --assignment ID --task-file PATH [--multi-turn]` | Run one guarded local specialist call, or the bounded v2 three-call MAF exercise |
 | `flow run execute-mixed WORK_ID --local-task-file PATH --codex-task-file PATH` | Run one guarded Ollama test-engineer and Codex lead-developer job through MAF |
+| `flow run execute-local-claude WORK_ID --local-task-file PATH --claude-task-file PATH` | Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
 | `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |
 | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
