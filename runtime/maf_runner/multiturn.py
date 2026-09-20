@@ -104,6 +104,15 @@ def _validate_resume(envelope: dict[str, Any], resume: dict[str, Any]) -> tuple[
     return checkpoint_id, request_id, result
 
 
+def _validate_continuation_resume(envelope: dict[str, Any], resume: dict[str, Any]) -> tuple[str, str]:
+    """Validate identity before restoring the pending action without a result."""
+    checkpoint_id, request_id = resume.get("checkpoint_id"), resume.get("request_id")
+    if (resume.get("schema_version") != 2 or not isinstance(checkpoint_id, str) or not checkpoint_id
+            or request_id != "flow-action-3" or resume.get("action_id") != _proposal(envelope, "delegate", 3)["action_id"]):
+        raise RuntimeError("invalid action-3 continuation identity")
+    return checkpoint_id, request_id
+
+
 def _build_initial():
     """Build action1 -> replan1 -> action2 -> replan2 -> replan3(stop)."""
     from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler, response_handler
@@ -261,8 +270,19 @@ async def _run(start: dict[str, Any]) -> None:
     work = _build_initial() if phase == "initial" else _build_action_three()
     resume = start.get("resume")
     resumed_from: str | None = None
+    continuation = start.get("continuation") is True
+    if continuation and (phase != "action3" or not isinstance(resume, dict)):
+        raise RuntimeError("continuation requires an action-3 resume")
     if resume is None:
         result = await work.run("start", checkpoint_storage=storage)
+    elif continuation:
+        checkpoint_id, request_id = _validate_continuation_resume(envelope, resume)
+        checkpoints = await storage.list_checkpoints(workflow_name=work.name)
+        matching = [item for item in checkpoints if item.checkpoint_id == checkpoint_id]
+        if len(matching) != 1 or set(matching[0].pending_request_info_events) != {request_id}:
+            raise RuntimeError("continuation checkpoint is not the sole pending action-3 request")
+        resumed_from = checkpoint_id
+        result = await work.run(checkpoint_id=checkpoint_id, checkpoint_storage=storage)
     else:
         if not isinstance(resume, dict):
             raise RuntimeError("invalid resume identity")
@@ -284,20 +304,28 @@ async def _run(start: dict[str, Any]) -> None:
         kind, sequence = request.data.get("kind"), request.data.get("sequence")
         if kind not in {"delegate", "replan"} or not isinstance(sequence, int):
             raise RuntimeError("workflow produced an invalid pending request")
-        checkpoint_id = await _checkpoint_id(storage, work.name, request.request_id, resumed_from=resumed_from)
+        if continuation:
+            if request.request_id != "flow-action-3" or request.data != {"kind": "delegate", "sequence": 3} or result.get_outputs():
+                raise RuntimeError("restored workflow is not pending solely on action 3")
+            checkpoint_id = resumed_from
+            assert checkpoint_id is not None
+        else:
+            checkpoint_id = await _checkpoint_id(storage, work.name, request.request_id, resumed_from=resumed_from)
         proposal = _proposal(envelope, kind, sequence)
         result_type = "action_result" if kind == "delegate" else "replan_result"
         id_field = "action_id" if kind == "delegate" else "replan_id"
-        proposal.update({"protocol_version": PROTOCOL_VERSION, "type": "propose_action" if kind == "delegate" else "propose_replan",
+        proposal.update({"protocol_version": PROTOCOL_VERSION, "type": "continuation_ready" if continuation else "propose_action" if kind == "delegate" else "propose_replan",
                          "request_id": request.request_id, "checkpoint_id": checkpoint_id,
                          "runtime_version": version(RUNTIME_VERSION), "phase": phase})
         _write(proposal)
         reply = _read()
-        if reply.get("type") != result_type or reply.get(id_field) != proposal[id_field] or not isinstance(reply.get("result"), dict):
+        if (reply.get("type") != result_type or reply.get(id_field) != proposal[id_field]
+                or reply.get("request_id") != request.request_id or not isinstance(reply.get("result"), dict)):
             raise RuntimeError("parent returned an invalid result for the pending Flow proposal")
         result = await work.run(checkpoint_id=checkpoint_id, checkpoint_storage=storage,
                                 responses={request.request_id: reply["result"]})
         resumed_from = checkpoint_id
+        continuation = False
 
 
 def main() -> int:

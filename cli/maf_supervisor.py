@@ -319,3 +319,88 @@ def run_maf_multiturn(
         for stream in (process.stdin, process.stdout):
             if stream is not None and not stream.closed:
                 stream.close()
+
+
+def run_maf_action3_continuation(
+    envelope: dict[str, Any],
+    resume: dict[str, Any],
+    on_ready: Callable[[dict[str, Any]], dict[str, Any]],
+    *,
+    timeout_s: float = 120,
+    python_path: str | None = None,
+) -> dict[str, Any]:
+    """Restore action 3 first; invoke Flow's send boundary only after MAF readiness."""
+    if envelope.get("execution_protocol_version") != 2 or not callable(on_ready):
+        raise MafProtocolError("invalid action-3 continuation envelope or callback")
+    if (not isinstance(resume, dict) or resume.get("schema_version") != 2
+            or not isinstance(resume.get("checkpoint_id"), str) or not resume["checkpoint_id"]
+            or resume.get("request_id") != "flow-action-3"
+            or not isinstance(resume.get("action_id"), str)):
+        raise MafProtocolError("invalid action-3 continuation resume identity")
+    if timeout_s <= 0:
+        raise ValueError("timeout_s must be positive")
+    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    root = Path(__file__).resolve().parents[1]
+    process = subprocess.Popen(
+        [executable, "-m", "runtime.maf_runner.multiturn"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        cwd=root, env={"PYTHONPATH": str(root)}, bufsize=0,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    deadline = time.monotonic() + timeout_s
+    pending = bytearray()
+    ready_seen = False
+    try:
+        process.stdin.write(_json_line({"protocol_version": 2, "type": "start", "phase": "action3",
+                                        "continuation": True, "envelope": envelope,
+                                        "checkpoint_dir": envelope["checkpoint_dir"], "resume": resume}))
+        process.stdin.flush()
+        while True:
+            message = _read_message(process.stdout.fileno(), deadline, pending, 2)
+            if message["type"] == "continuation_ready":
+                if ready_seen or message.get("phase") != "action3" or message.get("kind") != "delegate" or message.get("sequence") != 3:
+                    raise MafProtocolError("MAF child sent unexpected continuation readiness")
+                if (message.get("request_id") != resume["request_id"]
+                        or message.get("checkpoint_id") != resume["checkpoint_id"]
+                        or message.get("action_id") != resume["action_id"]
+                        or message.get("runtime_version") != PINNED_MAF_CORE_VERSION):
+                    raise MafProtocolError("MAF child readiness does not match the pinned action-3 barrier")
+                try:
+                    validate_action(envelope, message)
+                except (TypeError, ValueError) as exc:
+                    raise MafProtocolError(f"MAF child readiness is not bound to the envelope: {exc}") from exc
+                ready_seen = True
+                result = on_ready(dict(message))
+                if not isinstance(result, dict):
+                    raise MafProtocolError("Flow readiness callback must return a normalized result")
+                process.stdin.write(_json_line({"protocol_version": 2, "type": "action_result",
+                                                "action_id": resume["action_id"], "request_id": resume["request_id"],
+                                                "result": result}))
+                process.stdin.flush()
+                continue
+            if message["type"] == "workflow_finished":
+                if (not ready_seen or message.get("attempt_id") != envelope.get("attempt_id")
+                        or message.get("phase") != "action3" or message.get("reason") != "action-3-complete"
+                        or message.get("runtime_version") != PINNED_MAF_CORE_VERSION):
+                    raise MafProtocolError("MAF child did not acknowledge the continued action 3")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise MafProtocolError("MAF child timed out before clean exit")
+                try:
+                    code = process.wait(timeout=remaining)
+                except subprocess.TimeoutExpired as exc:
+                    raise MafProtocolError("MAF child did not exit after continuation") from exc
+                if code != 0:
+                    raise MafProtocolError(f"MAF child exited {code} after continuation")
+                return message
+            if message["type"] == "error":
+                raise RuntimeError(f"MAF child failed: {message.get('message')}")
+            raise MafProtocolError(f"MAF child sent unexpected message type: {message['type']}")
+    except BaseException:
+        process.kill()
+        process.wait(timeout=5)
+        raise
+    finally:
+        for stream in (process.stdin, process.stdout):
+            if stream is not None and not stream.closed:
+                stream.close()

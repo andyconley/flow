@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -13,7 +14,7 @@ from execution_contracts import ContractError, canonical, digest, envelope_diges
 from execution_ledger import ExecutionLedger, utc_now
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
-from maf_supervisor import PINNED_MAF_CORE_VERSION, run_maf, run_maf_multiturn
+from maf_supervisor import PINNED_MAF_CORE_VERSION, run_maf, run_maf_multiturn, run_maf_action3_continuation
 from orchestration import validate_orchestration
 from paths import SCAFFOLD_DIR
 from runstate import status as run_status
@@ -428,6 +429,23 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
             path = raw_path.resolve()
             if raw_path.is_symlink() or not _inside(path, attempt_dir) or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
                 missing_evidence.append(item["path"])
+    for epoch in snapshot.get("continuations", []):
+        linked_path = epoch.get("receipt_path")
+        if epoch.get("receipt_sha256") != (hashlib.sha256(receipt_path.read_bytes()).hexdigest() if receipt else None):
+            missing_evidence.append(f"continuation:{epoch['epoch_id']}:original-receipt")
+        if linked_path:
+            linked = Path(linked_path)
+            if (linked.is_symlink() or linked.parent != attempt_dir or not linked.is_file()):
+                missing_evidence.append(f"continuation:{epoch['epoch_id']}:receipt")
+            else:
+                try:
+                    record = json.loads(linked.read_text())
+                    if (record.get("epoch_id") != epoch["epoch_id"] or
+                            record.get("original_receipt_sha256") != epoch["receipt_sha256"] or
+                            record.get("status") != epoch["status"]):
+                        missing_evidence.append(f"continuation:{epoch['epoch_id']}:receipt")
+                except (TypeError, ValueError, OSError):
+                    missing_evidence.append(f"continuation:{epoch['epoch_id']}:receipt")
     return {"snapshot": snapshot, "sources": sources, "receipt": receipt,
             "missing_evidence": missing_evidence}
 
@@ -632,3 +650,172 @@ def resolve_attempt(work_id: str, attempt_id: str, action_id: str, actor: str,
     generation = ledger.claim_recovery(attempt_id, actor)
     return ledger.resolve_unknown(attempt_id, action_id, actor, disposition, explanation, preserved,
                                   generation=generation)
+
+
+def continue_resolved_local(work_id: str, attempt_id: str, action_id: str, actor: str,
+                            *, root: Path | None = None, python_path: str | None = None,
+                            adapter: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Finish the resolved third action through a separately fenced epoch.
+
+    Flow retains the original terminal attempt and receipt. The MAF child only
+    confirms that the exact checkpointed action is pending and accepts a
+    Flow-supplied response; it never decides whether another send is allowed.
+    """
+    if not isinstance(actor, str) or not actor.strip() or len(actor.encode()) > 256:
+        raise ContractError("continuation actor is invalid")
+    inspected = inspect_attempt(work_id, attempt_id, root=root)
+    snapshot, receipt = inspected["snapshot"], inspected["receipt"]
+    if inspected["missing_evidence"] or snapshot.get("execution_protocol_version") != 2:
+        raise ContractError("continuation evidence is missing or incompatible")
+    if not isinstance(receipt, dict) or snapshot["status"] not in {"unknown", "failed"}:
+        raise ContractError("continuation requires an original terminal receipt")
+    envelope = snapshot["envelope"]
+    project_root = (root or repo_root()).resolve()
+    attempt_dir = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id
+    receipt_path = attempt_dir / "receipt.json"
+    ledger_path = attempt_dir.parent / "ledger.sqlite"
+    for protected in (attempt_dir, receipt_path, ledger_path):
+        mode = protected.lstat()
+        if (stat.S_ISLNK(mode.st_mode) or mode.st_uid != os.getuid()
+                or mode.st_mode & (stat.S_IRWXG | stat.S_IRWXO)):
+            raise ContractError("continuation requires owner-only local evidence")
+    if snapshot["receipt_path"] != str(receipt_path) or receipt_path.is_symlink():
+        raise ContractError("original terminal receipt path differs from ledger")
+    original_receipt_sha = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    if (receipt.get("attempt_id") != attempt_id or receipt.get("status") != snapshot["status"]
+            or receipt.get("envelope_digest") != envelope_digest(envelope)):
+        raise ContractError("original receipt identity differs from ledger")
+    actions = [a for a in snapshot["actions"] if a["action_id"] == action_id]
+    resolutions = [r for r in snapshot["resolutions"] if r["action_id"] == action_id]
+    if len(actions) != 1 or len(resolutions) != 1 or actions[0]["request"]["sequence"] != 3:
+        raise ContractError("continuation requires exactly one resolved third action")
+    action, resolution = actions[0], resolutions[0]
+    resolution_record = {key: resolution[key] for key in
+                         ("action_id", "actor", "disposition", "evidence", "explanation")}
+    resolution_record["attempt_id"] = attempt_id
+    if digest(resolution_record) != resolution["resolution_digest"]:
+        raise ContractError("continuation resolution digest mismatch")
+    disposition = resolution["disposition"]
+    if disposition not in {"resolved_completed", "resolved_not_dispatched"}:
+        raise ContractError("resolution does not permit continuation")
+    if disposition == "resolved_completed":
+        if snapshot["status"] != "unknown" or action["status"] != "completed" or action["result"] != resolution["result"]:
+            raise ContractError("completed resolution has no matching durable result")
+        observed = [o for o in snapshot["response_observations"] if o["action_id"] == action_id]
+        if len(observed) != 1 or observed[0]["result"] != action["result"] or digest(observed[0]["result"]) != observed[0]["result_digest"]:
+            raise ContractError("completed result lacks matching response observation")
+    elif snapshot["status"] != "failed" or action["status"] != "not_dispatched":
+        raise ContractError("no-dispatch resolution differs from terminal action")
+    validate_action(envelope, action["request"])
+    ledger = ExecutionLedger(ledger_path)
+    pending = ledger.read_checkpoint_position(attempt_id, "pending_delegate", 3)
+    checkpoint = pending["metadata"]
+    if checkpoint["runtime_version"] != PINNED_MAF_CORE_VERSION or checkpoint["format_version"] != 1:
+        raise ContractError("pending checkpoint uses an incompatible MAF runtime")
+    barrier = [e for e in snapshot["events"] if e["seq"] == checkpoint["ledger_seq"]]
+    if len(barrier) != 1 or barrier[0]["action_id"] != action_id or barrier[0]["event"] != "policy_allowed":
+        raise ContractError("pending checkpoint does not follow original policy allowance")
+    if (attempt_dir / "envelope.json").read_text().strip() != canonical(envelope):
+        raise ContractError("original envelope differs from snapshot")
+    epoch = ledger.begin_continuation(attempt_id, action_id, resolution["resolution_id"],
+                                      original_receipt_sha, checkpoint["file_sha256"], actor=actor)
+    epoch_id = epoch["epoch_id"]
+    generation = ledger.claim_continuation(epoch_id, actor=actor)
+    if ledger.continuation_snapshot(epoch_id)["status"] == "unknown":
+        unknown_reason = "previous continuation send outcome uncertain"
+        linked_path = attempt_dir / f"continuation-{epoch_id}.json"
+        unknown_receipt = {"schema_version": 1, "kind": "continuation_receipt",
+                           "work_id": work_id, "attempt_id": attempt_id, "action_id": action_id,
+                           "epoch_id": epoch_id, "owner_generation": generation,
+                           "original_receipt_sha256": original_receipt_sha,
+                           "resolution_id": resolution["resolution_id"],
+                           "resolution_digest": resolution["resolution_digest"],
+                           "checkpoint_id": checkpoint["checkpoint_id"],
+                           "checkpoint_sha256": checkpoint["file_sha256"],
+                           "status": "unknown", "reason": unknown_reason,
+                           "maf_acknowledgment": None,
+                           "ledger": ledger.continuation_snapshot(epoch_id), "created_at": utc_now()}
+        with ledger.send_lock():
+            if ledger.continuation_snapshot(epoch_id)["owner_generation"] != generation:
+                raise ContractError("continuation owner is stale before unknown receipt seal")
+            write_atomic(linked_path, canonical(unknown_receipt) + "\n", mode=0o600)
+            ledger.seal_unknown_continuation(epoch_id, str(linked_path), generation=generation)
+        return {"attempt_id": attempt_id, "action_id": action_id, "epoch_id": epoch_id,
+                "status": "unknown", "reason": unknown_reason,
+                "receipt_path": str(linked_path)}
+
+    def verify_current() -> None:
+        current = inspect_attempt(work_id, attempt_id, root=root)
+        if current["missing_evidence"] or hashlib.sha256(receipt_path.read_bytes()).hexdigest() != original_receipt_sha:
+            raise ContractError("continuation evidence changed")
+        current_resolution = [r for r in current["snapshot"]["resolutions"] if r["resolution_id"] == resolution["resolution_id"]]
+        if len(current_resolution) != 1 or current_resolution[0] != resolution:
+            raise ContractError("continuation resolution changed")
+        current_checkpoint = ledger.read_checkpoint_position(attempt_id, "pending_delegate", 3)["metadata"]
+        if current_checkpoint != checkpoint:
+            raise ContractError("continuation checkpoint changed")
+        if current["snapshot"]["envelope"] != envelope:
+            raise ContractError("continuation envelope changed")
+        current_action = [a for a in current["snapshot"]["actions"] if a["action_id"] == action_id]
+        if len(current_action) != 1 or current_action[0] != action:
+            raise ContractError("continuation action changed")
+
+    def on_ready(proposal: dict[str, Any]) -> dict[str, Any]:
+        verify_current()
+        validate_action(envelope, proposal)
+        if proposal["action_id"] != action_id or proposal["sequence"] != 3 or proposal["request_id"] != "flow-action-3":
+            raise ContractError("restored MAF request differs from resolved action")
+        if disposition == "resolved_completed":
+            ledger.observe_continuation_response(epoch_id, action["result"], generation=generation)
+            return {"status": "completed", "action_id": action_id,
+                    "output": action["result"]["output"], "replayed": True}
+        with ledger.send_lock():
+            verify_current()
+            decision = ledger.regrant_continuation(epoch_id, envelope, action["request"], generation=generation)
+            if not decision["allowed"]:
+                raise ContractError("continuation policy denied: " + decision["reason"])
+            if not ledger.claim_continuation_send(epoch_id, decision["grant_id"], generation=generation):
+                raise ContractError("continuation send claim was already consumed")
+            physical = adapter or call_local
+            try:
+                result = (physical(envelope, correlation_id=action_id) if adapter is None else physical(envelope))
+                validate_result(envelope, result)
+                ledger.observe_continuation_response(epoch_id, result, generation=generation)
+            except Exception:
+                # The claim crossed Flow's send boundary. Its outcome is now
+                # uncertain even when the adapter raised before returning.
+                raise
+            return {"status": "completed", "action_id": action_id, "output": result["output"]}
+
+    status, reason = "failed", ""
+    acknowledgment: dict[str, Any] | None = None
+    try:
+        verify_current()
+        acknowledgment = run_maf_action3_continuation(
+            envelope, {"schema_version": 2, "checkpoint_id": checkpoint["checkpoint_id"],
+                       "request_id": "flow-action-3", "action_id": action_id},
+            on_ready, python_path=python_path,
+        )
+        if acknowledgment.get("reason") != "action-3-complete":
+            raise ContractError("MAF did not acknowledge the resolved third action")
+        status = "completed"
+    except Exception as exc:
+        reason = str(exc)
+        latest = ledger.continuation_snapshot(epoch_id)
+        if latest.get("send_claimed"):
+            status = "unknown"
+    linked = {"schema_version": 1, "kind": "continuation_receipt", "attempt_id": attempt_id,
+              "work_id": work_id, "action_id": action_id, "epoch_id": epoch_id,
+              "owner_generation": generation, "original_receipt_sha256": original_receipt_sha,
+              "resolution_id": resolution["resolution_id"], "resolution_digest": resolution["resolution_digest"],
+              "checkpoint_id": checkpoint["checkpoint_id"], "checkpoint_sha256": checkpoint["file_sha256"],
+              "status": status, "reason": reason, "maf_acknowledgment": acknowledgment,
+              "ledger": ledger.continuation_snapshot(epoch_id), "created_at": utc_now()}
+    linked_path = attempt_dir / f"continuation-{epoch_id}.json"
+    with ledger.send_lock():
+        if ledger.continuation_snapshot(epoch_id)["owner_generation"] != generation:
+            raise ContractError("continuation owner is stale before receipt seal")
+        write_atomic(linked_path, canonical(linked) + "\n", mode=0o600)
+        ledger.finish_continuation(epoch_id, status, reason, str(linked_path), generation=generation)
+    return {"attempt_id": attempt_id, "action_id": action_id, "epoch_id": epoch_id,
+            "status": status, "reason": reason, "receipt_path": str(linked_path)}

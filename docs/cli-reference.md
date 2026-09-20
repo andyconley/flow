@@ -172,6 +172,10 @@ Fence the previous parent and reopen the same attempt. An uncertain dispatch ret
 
 Append an operator resolution using `--actor`, `--disposition`, `--explanation`, and `--evidence-file`. The evidence file contains a JSON list of `{ "kind": "...", "path": ".flow/runs/.../execution/.../file", "sha256": "..." }` records; each referenced file must exist inside the original attempt directory and match its digest. Flow copies bounded proof bytes into an owner-only, read-only attempt directory and checks their hashes on inspection. Completion requires a durable validated response observation. No-dispatch is permitted only before Flow's dispatch boundary. `still_unknown` records the investigation and leaves dispatch blocked.
 
+### `flow run continue-resolved-execution <work-id> <attempt-id> <action-id>`
+
+Continue an evidence-resolved third action with `--actor` for local operator attribution. The command requires the original terminal receipt, exact resolution, and a verified `pending_delegate:3` checkpoint. Pinned MAF must restore that checkpoint and report the same pending action before Flow considers a new send. `resolved_completed` replays the durable result without a provider call; `resolved_not_dispatched` requires a fresh policy grant and makes at most one send. Flow writes a separate linked continuation receipt; the original receipt remains unchanged. A failed readiness check halts without a send, and an uncertain post-send response remains `unknown`. The local OS file permission boundary controls access; actor text is attribution, not authentication.
+
 ### `flow run transition <work-id> <event>`
 
 Apply a hard-gated lifecycle transition. Invalid transitions and orchestration refusals leave `run.json` and `events.jsonl` unchanged.

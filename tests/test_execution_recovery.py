@@ -364,6 +364,56 @@ class LedgerRecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "historical attempt is read-only"):
             legacy.claim_recovery("legacy")
 
+    def test_terminal_continuation_regrant_is_single_use_and_preserves_original(self) -> None:
+        envelope = {**self._envelope(), "execution_protocol_version": 2}
+        ledger = ExecutionLedger(self.root / "continuation.sqlite")
+        ledger.create_attempt(envelope)
+        actions = []
+        for sequence in (1, 2, 3):
+            action = {**self._action(envelope), "action_id": expected_action_id(envelope, sequence), "sequence": sequence}
+            actions.append(action)
+            decision = ledger.decide(envelope, action, generation=1)
+            self.assertTrue(decision["allowed"])
+            if sequence < 3:
+                self.assertTrue(ledger.consume_grant(action["action_id"], decision["grant_id"], generation=1))
+                ledger.observe_send(action["action_id"], 1)
+                result = self._result(envelope, f"result-{sequence}")
+                ledger.observe_response(action["action_id"], result, 1)
+                ledger.complete(action["action_id"], result, generation=1)
+        checkpoint_sha = "f" * 64
+        with ledger._db() as db:
+            db.execute("INSERT INTO checkpoint_position_links VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                       (envelope["attempt_id"], "pending_delegate", 3, "cp", envelope_digest(envelope),
+                        ledger.snapshot(envelope["attempt_id"])["events"][-1]["seq"], 2, "maf-test", 2,
+                        str(self.root / "checkpoint.json"), checkpoint_sha, 20, "2026-01-01", 1))
+        receipt = self.root / "original-receipt.json"
+        receipt.write_text('{"status":"failed"}')
+        ledger.finish_attempt(envelope["attempt_id"], "failed", "unsent", str(receipt), generation=1)
+        resolution = ledger.resolve_unknown(envelope["attempt_id"], actions[2]["action_id"], "operator",
+                                            "resolved_not_dispatched", "positive no-send proof", evidence(), generation=1)
+        opened = ledger.begin_continuation(envelope["attempt_id"], actions[2]["action_id"], resolution["resolution_id"],
+                                           hashlib.sha256(receipt.read_bytes()).hexdigest(), checkpoint_sha, actor="local")
+        self.assertEqual(opened["status"], "pending")
+        epoch = opened["epoch_id"]
+        generation = ledger.claim_continuation(epoch, actor="local")
+        grant = ledger.regrant_continuation(epoch, envelope, actions[2], generation=generation)
+        self.assertTrue(grant["allowed"])
+        self.assertTrue(ledger.regrant_continuation(epoch, envelope, actions[2], generation=generation)["replayed"])
+        with ledger.send_lock():
+            self.assertTrue(ledger.claim_continuation_send(epoch, grant["grant_id"], generation=generation))
+            self.assertFalse(ledger.claim_continuation_send(epoch, grant["grant_id"], generation=generation))
+        result = self._result(envelope, "continued")
+        ledger.observe_continuation_response(epoch, result, generation=generation)
+        ledger.finish_continuation(epoch, "completed", "maf_acknowledged", str(self.root / "continuation.json"), generation=generation)
+        snapshot = ledger.snapshot(envelope["attempt_id"])
+        self.assertEqual(snapshot["status"], "failed")
+        self.assertEqual(snapshot["receipt_path"], str(receipt))
+        self.assertEqual(snapshot["actions"][2]["status"], "not_dispatched")
+        self.assertEqual(snapshot["continuations"][0]["status"], "completed")
+        self.assertTrue(snapshot["continuations"][0]["send_claimed"])
+        with self.assertRaisesRegex(ContractError, "terminal"):
+            ledger.claim_continuation(epoch, actor="other")
+
 
 if __name__ == "__main__":
     unittest.main()

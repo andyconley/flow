@@ -102,6 +102,24 @@ class ExecutionLedger:
                 bound_at TEXT NOT NULL, owner_generation INTEGER NOT NULL,
                 PRIMARY KEY(attempt_id, kind, sequence)
             );
+            CREATE TABLE IF NOT EXISTS continuation_epochs (
+                epoch_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                action_id TEXT NOT NULL REFERENCES actions(action_id),
+                resolution_id TEXT NOT NULL REFERENCES recovery_resolutions(resolution_id),
+                receipt_sha256 TEXT NOT NULL, checkpoint_sha256 TEXT NOT NULL,
+                status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', receipt_path TEXT,
+                owner_generation INTEGER NOT NULL DEFAULT 1, owner_actor TEXT NOT NULL,
+                created_at TEXT NOT NULL, UNIQUE(attempt_id,action_id)
+            );
+            CREATE TABLE IF NOT EXISTS continuation_grants (
+                grant_id TEXT PRIMARY KEY, epoch_id TEXT NOT NULL REFERENCES continuation_epochs(epoch_id),
+                issued_at TEXT NOT NULL, status TEXT NOT NULL,
+                claimed_at TEXT, UNIQUE(epoch_id)
+            );
+            CREATE TABLE IF NOT EXISTS continuation_responses (
+                epoch_id TEXT PRIMARY KEY REFERENCES continuation_epochs(epoch_id),
+                result_json TEXT NOT NULL, result_digest TEXT NOT NULL, observed_at TEXT NOT NULL
+            );
             """)
             # SQLite's CREATE TABLE IF NOT EXISTS cannot evolve first-slice
             # databases. These columns make existing records explicitly v1 and
@@ -668,6 +686,191 @@ class ExecutionLedger:
             db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
 
+    @staticmethod
+    def _continuation_owner(db: sqlite3.Connection, epoch_id: str, generation: int) -> tuple[str, str, str]:
+        row = db.execute("SELECT attempt_id,action_id,status,owner_generation FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
+        if row is None or row[3] != generation:
+            raise ContractError("continuation ownership is stale or absent")
+        return row[0], row[1], row[2]
+
+    def begin_continuation(self, attempt_id: str, action_id: str, resolution_id: str,
+                           receipt_sha256: str, checkpoint_sha256: str, *, actor: str) -> dict[str, Any]:
+        """Bind one terminal attempt to one separately fenced continuation epoch.
+
+        The caller verifies receipt/checkpoint bytes and the MAF barrier. This
+        transaction checks their durable ledger links and never edits the old
+        attempt, action, or receipt.
+        """
+        if not isinstance(actor, str) or not actor.strip() or len(actor.encode()) > 256:
+            raise ContractError("continuation actor is invalid")
+        for digest in (receipt_sha256, checkpoint_sha256):
+            if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+                raise ContractError("continuation digest is invalid")
+        with self.send_lock():
+            with self._db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                attempt = db.execute("SELECT status,receipt_path,recovery_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+                action = db.execute("SELECT attempt_id,status,request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()
+                resolution = db.execute("SELECT attempt_id,action_id,disposition FROM recovery_resolutions WHERE resolution_id=?", (resolution_id,)).fetchone()
+                checkpoint = db.execute("SELECT file_sha256 FROM checkpoint_position_links WHERE attempt_id=? AND kind='pending_delegate' AND sequence=3", (attempt_id,)).fetchone()
+                if not attempt or attempt[0] not in {"unknown", "failed"} or attempt[2] != 2 or not attempt[1]:
+                    raise ContractError("attempt is not terminal and continuation-capable")
+                if not action or action[0] != attempt_id or not resolution or resolution[:2] != (attempt_id, action_id):
+                    raise ContractError("continuation lineage is invalid")
+                expected_status = "completed" if resolution[2] == "resolved_completed" else "not_dispatched"
+                if resolution[2] not in {"resolved_completed", "resolved_not_dispatched"} or action[1] != expected_status:
+                    raise ContractError("continuation action is not resolved")
+                if not checkpoint or checkpoint[0] != checkpoint_sha256:
+                    raise ContractError("continuation checkpoint link mismatch")
+                try:
+                    actual_receipt_sha256 = hashlib.sha256(Path(attempt[1]).read_bytes()).hexdigest()
+                except OSError as exc:
+                    raise ContractError("original receipt is absent") from exc
+                if actual_receipt_sha256 != receipt_sha256:
+                    raise ContractError("original receipt digest mismatch")
+                prior = db.execute("SELECT epoch_id,resolution_id,receipt_sha256,checkpoint_sha256,status,owner_generation FROM continuation_epochs WHERE attempt_id=? AND action_id=?", (attempt_id, action_id)).fetchone()
+                if prior:
+                    if prior[1:4] != (resolution_id, receipt_sha256, checkpoint_sha256):
+                        raise ContractError("continuation epoch conflicts with durable lineage")
+                    return {"epoch_id": prior[0], "status": prior[4], "generation": prior[5], "replayed": True}
+                epoch_id = uuid.uuid4().hex
+                db.execute("INSERT INTO continuation_epochs(epoch_id,attempt_id,action_id,resolution_id,receipt_sha256,checkpoint_sha256,status,owner_actor,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                           (epoch_id, attempt_id, action_id, resolution_id, receipt_sha256, checkpoint_sha256, "pending", actor, utc_now()))
+                self._event(db, attempt_id, action_id, "continuation_opened", canonical({"epoch_id": epoch_id, "resolution_id": resolution_id}))
+                return {"epoch_id": epoch_id, "status": "pending", "generation": 1, "replayed": False}
+
+    def claim_continuation(self, epoch_id: str, *, actor: str) -> int:
+        """Fence a prior process; a claimed send becomes unknown on restart."""
+        if not isinstance(actor, str) or not actor.strip() or len(actor.encode()) > 256:
+            raise ContractError("continuation actor is invalid")
+        with self.send_lock():
+            with self._db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                row = db.execute("SELECT attempt_id,action_id,status,owner_generation FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
+                if not row or row[2] in {"completed", "failed", "unknown"}:
+                    raise ContractError("continuation is absent or terminal")
+                claimed = db.execute("SELECT 1 FROM continuation_grants WHERE epoch_id=? AND status='claimed'", (epoch_id,)).fetchone()
+                status = "unknown" if claimed else row[2]
+                generation = row[3] + 1
+                reason = "previous continuation send outcome uncertain" if claimed else ""
+                db.execute("UPDATE continuation_epochs SET owner_generation=?,owner_actor=?,status=?,reason=? WHERE epoch_id=?", (generation, actor, status, reason, epoch_id))
+                self._event(db, row[0], row[1], "continuation_claimed", canonical({"epoch_id": epoch_id, "generation": generation, "status": status}))
+                return generation
+
+    def regrant_continuation(self, epoch_id: str, envelope: dict[str, Any], action: dict[str, Any], *, generation: int) -> dict[str, Any]:
+        """Reserve one fresh delegation unit for a proven unsent action."""
+        validate_action(envelope, action)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt_id, action_id, status = self._continuation_owner(db, epoch_id, generation)
+            row = db.execute("SELECT envelope_json,work_id FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            original = db.execute("SELECT request_json,status FROM actions WHERE action_id=?", (action_id,)).fetchone()
+            resolution = db.execute("SELECT disposition FROM recovery_resolutions WHERE resolution_id=(SELECT resolution_id FROM continuation_epochs WHERE epoch_id=?)", (epoch_id,)).fetchone()
+            if status not in {"pending", "running"} or not row or row[0] != canonical(envelope) or action_id != action["action_id"] or original != (canonical(action), "not_dispatched") or resolution != ("resolved_not_dispatched",):
+                raise ContractError("continuation is not eligible for regrant")
+            prior = db.execute("SELECT grant_id,status FROM continuation_grants WHERE epoch_id=?", (epoch_id,)).fetchone()
+            if prior:
+                return {"allowed": prior[1] == "issued", "reason": "existing_continuation_grant", "action_id": action_id, "grant_id": prior[0], "replayed": True}
+            historical = db.execute("SELECT count(*) FROM events JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND event IN ('policy_allowed','policy_reallowed')", (row[1],)).fetchone()[0]
+            extra = db.execute("SELECT count(*) FROM continuation_grants JOIN continuation_epochs USING(epoch_id) JOIN attempts USING(attempt_id) WHERE attempts.work_id=?", (row[1],)).fetchone()[0]
+            active = db.execute("SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND actions.status IN ('allowed','started','unknown')", (row[1],)).fetchone()[0]
+            active_extra = db.execute("SELECT count(*) FROM continuation_grants JOIN continuation_epochs USING(epoch_id) JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND continuation_grants.status IN ('issued','claimed') AND continuation_epochs.status NOT IN ('completed','failed')", (row[1],)).fetchone()[0]
+            limits = envelope["limits"]
+            if action["role"] != envelope["role"] or action["role"] != "test-engineer":
+                reason = "specialist_denied"
+            elif action["provider"] != envelope["provider"] or action["provider"] not in {"ollama", "local-stub"}:
+                reason = "provider_denied"
+            elif historical + extra >= limits["max_delegations"]:
+                reason = "delegation_cap"
+            elif active + active_extra >= limits["max_concurrent"]:
+                reason = "concurrency_cap"
+            else:
+                reason = "allowed"
+            if reason != "allowed":
+                self._event(db, attempt_id, action_id, "continuation_policy_denied", canonical({"epoch_id": epoch_id, "reason": reason}))
+                return {"allowed": False, "reason": reason, "action_id": action_id, "grant_id": None}
+            grant_id = uuid.uuid4().hex
+            db.execute("INSERT INTO continuation_grants(grant_id,epoch_id,issued_at,status) VALUES(?,?,?,'issued')", (grant_id, epoch_id, utc_now()))
+            db.execute("UPDATE continuation_epochs SET status='running' WHERE epoch_id=?", (epoch_id,))
+            self._event(db, attempt_id, action_id, "continuation_granted", canonical({"epoch_id": epoch_id, "grant_id": grant_id}))
+            return {"allowed": True, "reason": "allowed", "action_id": action_id, "grant_id": grant_id, "replayed": False}
+
+    def claim_continuation_send(self, epoch_id: str, grant_id: str, *, generation: int) -> bool:
+        """Single-use durable claim; caller holds send_lock across physical I/O."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt_id, action_id, status = self._continuation_owner(db, epoch_id, generation)
+            grant = db.execute("SELECT status,issued_at FROM continuation_grants WHERE epoch_id=? AND grant_id=?", (epoch_id, grant_id)).fetchone()
+            if status != "running" or not grant or grant[0] != "issued":
+                return False
+            if datetime.now(timezone.utc) > datetime.fromisoformat(grant[1]) + timedelta(seconds=60):
+                db.execute("UPDATE continuation_grants SET status='expired' WHERE grant_id=?", (grant_id,))
+                self._event(db, attempt_id, action_id, "continuation_grant_expired", epoch_id)
+                return False
+            db.execute("UPDATE continuation_grants SET status='claimed',claimed_at=? WHERE grant_id=?", (utc_now(), grant_id))
+            self._event(db, attempt_id, action_id, "continuation_send_claimed", canonical({"epoch_id": epoch_id, "grant_id": grant_id}))
+            return True
+
+    def observe_continuation_response(self, epoch_id: str, result: dict[str, Any], *, generation: int) -> None:
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt_id, action_id, status = self._continuation_owner(db, epoch_id, generation)
+            disposition = db.execute("SELECT disposition,result_json FROM recovery_resolutions WHERE resolution_id=(SELECT resolution_id FROM continuation_epochs WHERE epoch_id=?)", (epoch_id,)).fetchone()
+            envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0])
+            validate_result(envelope, result)
+            encoded = canonical(result)
+            if status not in {"pending", "running"}:
+                raise ContractError("continuation cannot observe response")
+            if disposition[0] == "resolved_completed" and encoded != disposition[1]:
+                raise ContractError("continuation replay differs from resolved response")
+            if disposition[0] == "resolved_not_dispatched" and not db.execute("SELECT 1 FROM continuation_grants WHERE epoch_id=? AND status='claimed'", (epoch_id,)).fetchone():
+                raise ContractError("continuation response lacks send claim")
+            prior = db.execute("SELECT result_json FROM continuation_responses WHERE epoch_id=?", (epoch_id,)).fetchone()
+            if prior:
+                if prior[0] != encoded:
+                    raise ContractError("continuation response conflicts with durable observation")
+                return
+            db.execute("INSERT INTO continuation_responses VALUES(?,?,?,?)", (epoch_id, encoded, hashlib.sha256(encoded.encode()).hexdigest(), utc_now()))
+            self._event(db, attempt_id, action_id, "continuation_response_observed", canonical({"epoch_id": epoch_id, "result_digest": hashlib.sha256(encoded.encode()).hexdigest()}))
+
+    def finish_continuation(self, epoch_id: str, status: str, reason: str, receipt_path: str, *, generation: int) -> None:
+        if status not in {"completed", "failed", "unknown"} or not isinstance(receipt_path, str) or not receipt_path:
+            raise ContractError("invalid continuation terminal state")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt_id, action_id, old_status = self._continuation_owner(db, epoch_id, generation)
+            if old_status in {"completed", "failed", "unknown"}:
+                raise ContractError("continuation is already terminal")
+            if status == "completed" and not db.execute("SELECT 1 FROM continuation_responses WHERE epoch_id=?", (epoch_id,)).fetchone():
+                raise ContractError("continuation success lacks durable response")
+            db.execute("UPDATE continuation_epochs SET status=?,reason=?,receipt_path=? WHERE epoch_id=?", (status, reason, receipt_path, epoch_id))
+            self._event(db, attempt_id, action_id, "continuation_" + status, canonical({"epoch_id": epoch_id, "reason": reason}))
+
+    def seal_unknown_continuation(self, epoch_id: str, receipt_path: str, *, generation: int) -> None:
+        """Attach a linked receipt after a restart detects an earlier send claim."""
+        if not isinstance(receipt_path, str) or not Path(receipt_path).is_file():
+            raise ContractError("unknown continuation receipt is absent")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt_id, action_id, status = self._continuation_owner(db, epoch_id, generation)
+            row = db.execute("SELECT receipt_path,reason FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
+            if status != "unknown" or row[0] is not None or row[1] != "previous continuation send outcome uncertain":
+                raise ContractError("continuation is not an unsealed send-claim unknown")
+            db.execute("UPDATE continuation_epochs SET receipt_path=? WHERE epoch_id=?", (receipt_path, epoch_id))
+            self._event(db, attempt_id, action_id, "continuation_unknown_sealed", epoch_id)
+
+    def continuation_snapshot(self, epoch_id: str) -> dict[str, Any]:
+        with self._db() as db:
+            row = db.execute("SELECT epoch_id,attempt_id,action_id,resolution_id,receipt_sha256,checkpoint_sha256,status,reason,receipt_path,owner_generation,owner_actor,created_at FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
+            if not row:
+                raise ContractError("continuation epoch missing")
+            grant = db.execute("SELECT grant_id,issued_at,status,claimed_at FROM continuation_grants WHERE epoch_id=?", (epoch_id,)).fetchone()
+            response = db.execute("SELECT result_json,result_digest,observed_at FROM continuation_responses WHERE epoch_id=?", (epoch_id,)).fetchone()
+            return {**dict(zip(("epoch_id", "attempt_id", "action_id", "resolution_id", "receipt_sha256", "checkpoint_sha256", "status", "reason", "receipt_path", "owner_generation", "owner_actor", "created_at"), row)),
+                    "grant": dict(zip(("grant_id", "issued_at", "status", "claimed_at"), grant)) if grant else None,
+                    "response": {"result": json.loads(response[0]), "result_digest": response[1], "observed_at": response[2]} if response else None,
+                    "send_claimed": bool(grant and grant[2] == "claimed")}
+
     def snapshot(self, attempt_id: str) -> dict[str, Any]:
         with self._db() as db:
             attempt_columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
@@ -687,6 +890,8 @@ class ExecutionLedger:
             checkpoint_columns = {row[1] for row in db.execute("PRAGMA table_info(checkpoint_links)")} if "checkpoint_links" in tables else set()
             checkpoint_query = "SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,path,bound_at,owner_generation" + (",file_sha256" if "file_sha256" in checkpoint_columns else "") + " FROM checkpoint_links WHERE attempt_id=?"
             checkpoint = db.execute(checkpoint_query, (attempt_id,)).fetchone() if "checkpoint_links" in tables else None
+            continuation_rows = db.execute("SELECT epoch_id FROM continuation_epochs WHERE attempt_id=? ORDER BY created_at, rowid", (attempt_id,)).fetchall() if "continuation_epochs" in tables else []
+        continuations = [self.continuation_snapshot(epoch_id) for (epoch_id,) in continuation_rows]
         return {"attempt_id": a[0], "work_id": a[1], "envelope": json.loads(a[2]), "status": a[3], "reason": a[4], "receipt_path": a[5],
                 "recovery_version": a[6] if recovery_columns else 1, "owner_generation": a[7] if recovery_columns else 0, "owner_actor": a[8] if recovery_columns else None,
                 "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
@@ -696,4 +901,5 @@ class ExecutionLedger:
                 "events": [{"seq": r[0], "at": r[1], "action_id": r[2], "event": r[3], "detail": r[4]} for r in events],
                 "response_observations": [{"action_id": r[0], "observed_at": r[1], "result": json.loads(r[2]), "result_digest": r[3], "owner_generation": r[4]} for r in observations],
                 "resolutions": [{"resolution_id": r[0], "action_id": r[1], "actor": r[2], "disposition": r[3], "explanation": r[4], "evidence": json.loads(r[5]), "result": json.loads(r[6]) if r[6] else None, "resolution_digest": r[7], "created_at": r[8], "owner_generation": r[9]} for r in resolutions],
-                "checkpoint": ({"checkpoint_id": checkpoint[0], "envelope_digest": checkpoint[1], "ledger_seq": checkpoint[2], "format_version": checkpoint[3], "runtime_version": checkpoint[4], "path": checkpoint[5], "bound_at": checkpoint[6], "owner_generation": checkpoint[7], "file_sha256": checkpoint[8] if len(checkpoint) > 8 else None} if checkpoint else None)}
+                "checkpoint": ({"checkpoint_id": checkpoint[0], "envelope_digest": checkpoint[1], "ledger_seq": checkpoint[2], "format_version": checkpoint[3], "runtime_version": checkpoint[4], "path": checkpoint[5], "bound_at": checkpoint[6], "owner_generation": checkpoint[7], "file_sha256": checkpoint[8] if len(checkpoint) > 8 else None} if checkpoint else None),
+                "continuations": continuations}
