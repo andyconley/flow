@@ -12,7 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_gateway import (ContractError, _default_worker_adapter,
-                              _run_chartered_test, prepare_chartered_delivery)
+                              execute_chartered_delivery, prepare_chartered_delivery)
 
 
 class CharteredPreparationTests(unittest.TestCase):
@@ -85,6 +85,14 @@ class CharteredPreparationTests(unittest.TestCase):
         (self.worktree / "target.py").write_text("changed\n")
         with self.assertRaisesRegex(ContractError, "not clean"):
             self.prepare()
+
+    def test_no_actions_yields_linked_failed_receipt(self):
+        with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=lambda envelope, task, on_manager, on_action, **kwargs: {"attempt_id": envelope["attempt_id"]})
+        self.assertEqual(result["status"], "failed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["execution_protocol_version"], 6)
 
 
 class ProviderRouteTests(unittest.TestCase):
