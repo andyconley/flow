@@ -329,6 +329,16 @@ class ExecutionLedger:
                 (work_id,),
             ).fetchone()[0]
             if protocol_version in {5, 6}:
+                completed_producer = False
+                if protocol_version == 6 and action["instance_id"] in envelope["job_contract"]["producer_instance_ids"]:
+                    prior_completed = db.execute(
+                        "SELECT request_json FROM actions WHERE attempt_id=? AND status='completed'",
+                        (attempt,),
+                    ).fetchall()
+                    completed_producer = any(
+                        json.loads(row[0]).get("instance_id") in envelope["job_contract"]["producer_instance_ids"]
+                        for row in prior_completed
+                    )
                 paid_count = db.execute(
                     "SELECT count(*) FROM actions WHERE attempt_id=? "
                     "AND json_extract(request_json,'$.provider') IN ('codex','claude') "
@@ -346,7 +356,9 @@ class ExecutionLedger:
                     "AND status IN ('allowed','started','unknown')",
                     (attempt,),
                 ).fetchone()[0]
-                if action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
+                if completed_producer:
+                    reason = "producer_already_completed"
+                elif action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
                     reason = "paid_call_cap"
                 elif action["provider"] in {"codex", "claude"} and paid_delegations >= envelope["limits"]["max_delegations"]:
                     reason = "delegation_cap"

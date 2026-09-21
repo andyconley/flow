@@ -26,7 +26,7 @@ def chartered() -> dict:
         "baseline": {"kind": "clean", "diff_sha256": hashlib.sha256(b"").hexdigest()},
         "read_paths": ["cli/example.py", "tests/test_example.py"],
         "write_paths": ["cli/example.py"],
-        "test": {"argv": ["python3", "-m", "unittest", "tests.test_example"], "timeout_seconds": 120},
+        "test": {"argv": ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_example.py"], "timeout_seconds": 120},
         "producer_instance_ids": [env["roster"][1]["instance_id"]],
         "verifier_instance_ids": [env["roster"][0]["instance_id"]],
     }
@@ -56,6 +56,12 @@ class CharteredContractTests(unittest.TestCase):
     def test_v5_envelope_keeps_legacy_roster_shape(self) -> None:
         env = envelope()
         env["roster"][0]["capabilities"] = ["read"]
+        with self.assertRaises(ContractError):
+            validate_envelope(env)
+
+    def test_v5_paid_worker_cap_remains_one(self) -> None:
+        env = envelope()
+        env["limits"]["max_paid_worker_calls"] = 2
         with self.assertRaises(ContractError):
             validate_envelope(env)
 

@@ -200,7 +200,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     if len(ids) != len(set(ids)) or ids.count("magentic-manager") != 1:
         raise ContractError("manager or specialist instance is duplicated or absent")
     manager = next(a for a in assignments if a["id"] == "magentic-manager")
-    if manager.get("role") != "delivery-lead" or manager.get("execution", {}).get("provider") != "claude" or not manager["execution"].get("model"):
+    if manager.get("role") != "delivery-lead" or manager.get("execution", {}).get("provider") not in {"claude", "codex"} or not manager["execution"].get("model"):
         raise ContractError("approved manager binding is unsupported")
     specialists = [a for a in assignments if a["id"] != "magentic-manager"]
     if not specialists or len(specialists) > 6:
@@ -284,7 +284,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "manifest_digest": hashlib.sha256(source_bytes[manifest_path]).hexdigest(),
                 "checkpoint_dir": str(attempt_dir / "checkpoints"), "source_commit": source_commit,
                 "worktree": str(worktree), "allowed_paths": charter["write_paths"],
-                "manager": {"provider": "claude", "model": manager["execution"]["model"]},
+                "manager": {"provider": manager["execution"]["provider"], "model": manager["execution"]["model"]},
                 "roster": roster, "job_contract": job_contract,
                 "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
                            "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 6}}
@@ -402,6 +402,8 @@ def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
 
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
                            job: dict[str, Any]) -> dict[str, Any]:
+    if _git(worktree, "rev-parse", "HEAD") != baseline["source_commit"]:
+        raise ContractError("editor changed the pinned source commit")
     allowed = set(job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
     changed = [line[3:] for line in status]
@@ -430,7 +432,8 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any]) -> dict[str, Any]:
     test = _job_test(job["test"])
     try:
         completed = subprocess.run(test["argv"], cwd=worktree, capture_output=True, text=True,
-                                   timeout=test["timeout_seconds"], check=False)
+                                   timeout=test["timeout_seconds"], check=False,
+                                   env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
     except subprocess.TimeoutExpired as exc:
         raise ContractError("targeted chartered test timed out") from exc
     output = (completed.stdout + completed.stderr)[-8192:]
@@ -753,6 +756,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 if is_producer:
                     edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
+                    if chartered and verify_edit(worktree, baseline, attempt_dir) != edit_evidence:
+                        raise ContractError("targeted test changed the verified worktree diff")
                 ledger.complete(action["action_id"], result, generation=generation)
             except Exception:
                 ledger.mark_unknown(action["action_id"], "specialist_send_outcome_uncertain", generation=generation)
@@ -784,7 +789,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     actions = snapshot["actions"]
     manager_calls = snapshot.get("manager_calls", [])
     uncertain = any(item["status"] in {"started", "unknown"} for item in actions + manager_calls)
-    if failure and recoverable_transport_failure and not uncertain and any(item["status"] == "completed" for item in actions):
+    if failure and recoverable_transport_failure and not chartered and not uncertain and any(item["status"] == "completed" for item in actions):
         interruption = {"attempt_id": aid, "status": "interrupted", "reason": failure[:512],
                         "last_completed_action": next(item["action_id"] for item in reversed(actions) if item["status"] == "completed"),
                         "created_at": utc_now()}
@@ -860,10 +865,17 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
     prompt = "\n\n".join(turns)
     if not prompt.strip():
         raise ContractError("stock manager prompt text is absent")
-    result = call_claude(instructions="stock Magentic manager", task="model response",
-                         prompt_override=prompt, workspace=workspace,
-                         model=envelope["manager"]["model"], timeout_seconds=120,
-                         max_output_bytes=32768)
+    if envelope["manager"].get("provider", "claude") == "claude":
+        result = call_claude(instructions="stock Magentic manager", task="model response",
+                             prompt_override=prompt, workspace=workspace,
+                             model=envelope["manager"]["model"], timeout_seconds=120,
+                             max_output_bytes=32768)
+    elif envelope["manager"]["provider"] == "codex":
+        result = call_codex(instructions="Respond to the stock Magentic manager request only. Return the requested response text without editing files.",
+                            task=prompt, workspace=workspace, model=envelope["manager"]["model"],
+                            timeout_seconds=120, sandbox="read-only")
+    else:
+        raise ContractError("approved manager provider has no adapter")
     output = result["output"]
     if output.startswith("```json\n") and output.rstrip().endswith("```"):
         inner = output.split("\n", 1)[1].rsplit("```", 1)[0].strip()

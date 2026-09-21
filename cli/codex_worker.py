@@ -68,7 +68,8 @@ def _parse_events(raw: bytes, expected_model: str) -> dict[str, Any]:
 
 
 def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
-               timeout_seconds: int, codex_bin: str = "codex") -> dict[str, Any]:
+               timeout_seconds: int, codex_bin: str = "codex",
+               sandbox: str = "workspace-write") -> dict[str, Any]:
     """Run one Codex turn; fail closed on timeout, malformed or incomplete output.
 
     The caller must create and approve the isolated workspace before dispatch.
@@ -81,6 +82,8 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
         raise ValueError("Codex model must be explicit")
     if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 600:
         raise ValueError("Codex timeout must be 1 to 600 seconds")
+    if sandbox not in {"workspace-write", "read-only"}:
+        raise ValueError("Codex sandbox must be explicit and supported")
     prompt = ("Specialist instructions:\n" + instructions + "\n\nAuthorized task:\n" + task
               + "\n\nWork only in this workspace. Do not spawn subagents or delegate. "
                 "Complete this single task and report the change and checks.\n")
@@ -88,7 +91,7 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
     if not instructions.strip() or not task.strip() or len(prompt_bytes) > MAX_PROMPT_BYTES:
         raise ValueError("Codex prompt is empty or too large")
     argv = [codex_bin, "exec", "--json", "--ephemeral", "--ignore-user-config",
-            "--skip-git-repo-check", "--sandbox", "workspace-write",
+            "--skip-git-repo-check", "--sandbox", sandbox,
             "--model", model, "--cd", str(workspace),
             "--config", 'approval_policy="never"',
             "--config", "features.multi_agent=false", "-"]

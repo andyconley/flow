@@ -192,7 +192,9 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
     paid_calls = limits.get("max_paid_worker_calls") if isinstance(limits, dict) else None
     if (not isinstance(limits, dict) or set(limits) != set(expected) | {"max_paid_worker_calls"}
             or any(limits[key] != value for key, value in expected.items())
-            or type(paid_calls) is not int or not 1 <= paid_calls <= expected["max_delegations"]):
+            or type(paid_calls) is not int
+            or (paid_calls != 1 if envelope["execution_protocol_version"] == MAGENTIC_PROTOCOL_VERSION
+                else not 1 <= paid_calls <= expected["max_delegations"])):
         raise ContractError("Magentic limits differ from approved envelope")
 
 
@@ -224,7 +226,12 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
             or not isinstance(test["argv"], list) or not test["argv"]
             or any(not isinstance(arg, str) or not arg or "\x00" in arg or "\n" in arg for arg in test["argv"])
             or test["argv"][0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or test["argv"][1:3] != ["-m", "unittest"]
+            or len(test["argv"]) != 8
+            or test["argv"][1:6] != ["-m", "unittest", "discover", "-s", "tests"]
+            or test["argv"][6] != "-p"
+            or not test["argv"][7].startswith("test_")
+            or not test["argv"][7].endswith(".py")
+            or not test["argv"][7][5:-3].replace("_", "").isalnum()
             or type(test["timeout_seconds"]) is not int or not 1 <= test["timeout_seconds"] <= 3600):
         raise ContractError("chartered job test command is invalid")
     for kind, providers in (("producer_instance_ids", {"claude", "codex"}),

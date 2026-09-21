@@ -58,6 +58,16 @@ class DeliveryGatewayTests(unittest.TestCase):
         self.assertEqual(result["normalization"], "exact_json_fence")
         self.assertEqual(result["raw_output_sha256"], hashlib.sha256(raw.encode()).hexdigest())
 
+    def test_codex_manager_uses_read_only_sandbox(self):
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "Return a short plan."}]}]
+        with tempfile.TemporaryDirectory() as folder:
+            with patch("delivery_gateway.call_codex", return_value={"output": "Plan"}) as adapter:
+                result = _default_manager_adapter({"messages": messages},
+                    envelope={"manager": {"provider": "codex", "model": "gpt-test"}}, workspace=Path(folder))
+        self.assertEqual(result["output"], "Plan")
+        self.assertEqual(adapter.call_args.kwargs["sandbox"], "read-only")
+        self.assertIn("Return a short plan.", adapter.call_args.kwargs["task"])
+
     def test_supervisor_write_times_out_when_child_stops_reading(self):
         read_fd, write_fd = os.pipe()
         try:
