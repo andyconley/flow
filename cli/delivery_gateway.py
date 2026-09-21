@@ -169,16 +169,20 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
     artifacts = state.get("artifacts", {})
     charter_rel = artifacts.get("job_charter")
-    if charter_rel != f".flow/runs/{work_id}/job-charter.json":
-        raise ContractError("approved job charter artifact is absent")
-    charter_path = _run_file(project_root, run_dir, charter_rel)
     manifest_path = _run_file(project_root, run_dir, artifacts.get("orchestration_manifest", ""))
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    manager_matches = [a for a in manifest.get("assignments", []) if a.get("lane") == "implement" and a.get("id") == "magentic-manager"]
+    expected_charter = f".flow/runs/{work_id}/job-charter.json"
+    manifest_linked = len(manager_matches) == 1 and expected_charter in manager_matches[0].get("input_evidence", [])
+    if (charter_rel is not None and charter_rel != expected_charter) or (charter_rel is None and not manifest_linked):
+        raise ContractError("approved job charter artifact is absent")
+    charter_path = _run_file(project_root, run_dir, expected_charter)
     requirements = _run_file(project_root, run_dir, artifacts.get("requirements", ""))
     acceptance = _run_file(project_root, run_dir, artifacts.get("acceptance_criteria", ""))
     source_paths = (charter_path, manifest_path, requirements, acceptance)
-    source_bytes = {path: path.read_bytes() for path in source_paths}
+    source_bytes = {path: (manifest_bytes if path == manifest_path else path.read_bytes()) for path in source_paths}
     charter = json.loads(source_bytes[charter_path])
-    manifest = json.loads(source_bytes[manifest_path])
     if not isinstance(charter, dict) or set(charter) != {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}:
         raise ContractError("job charter fields are invalid")
     task = charter["task"]

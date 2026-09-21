@@ -66,6 +66,9 @@ class CharteredPreparationTests(unittest.TestCase):
         self.state["artifacts"].pop("job_charter")
         with self.assertRaisesRegex(ContractError, "approved job charter"):
             self.prepare()
+        self.manifest["assignments"][0]["input_evidence"] = [".flow/runs/sample/job-charter.json"]
+        self._write_inputs()
+        self.assertEqual(self.prepare()[0]["execution_protocol_version"], 6)
         self.state["artifacts"]["job_charter"] = ".flow/runs/sample/job-charter.json"
         self.manifest["assignments"][1]["read_only"] = True
         self._write_inputs()
