@@ -119,6 +119,7 @@ class CharteredPreparationTests(unittest.TestCase):
         return {"schema_version": 1, "status": "completed", "provider": provider, "model": model,
                 "physical_call": True,
                 "evidence_level": {"codex": "flow_observed_codex_cli_completed_turn",
+                                   "claude": "flow_observed_claude_cli_completed_turn",
                                    "ollama": "flow_observed_local_http_response"}[provider],
                 "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "usage": None}
 
@@ -155,6 +156,44 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual([item["status"] for item in receipt["actions"]], ["completed", "completed"])
         self.assertEqual(receipt["evidence"]["tests"]["command"], self.charter["test"]["argv"])
         self.assertTrue(receipt["checkpoints"])
+
+    def test_v6_claude_producer_runs_under_flow_grant_before_verifier(self):
+        self.manifest["assignments"][1]["execution"] = {"provider": "claude", "model": "claude-model"}
+        self._write_inputs()
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v6",
+                                                  "pending_request_info_events": {
+                                                      f"flow-magentic-action-{sequence}": {}}}))
+                self.assertEqual(on_action(proposal)["status"], "completed")
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return {**self._result("claude", "claude-model", "Edited target"),
+                        "session_id": "claude-session-1"}
+            self.assertIn("Flow-verified complete bounded diff", action["provider_task"])
+            return self._result("ollama", "local-model", "Verified target")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(calls, ["editor", "verifier"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["actions"][0]["request"]["provider"], "claude")
+        self.assertEqual(receipt["actions"][0]["result"]["session_id"], "claude-session-1")
+        self.assertEqual([action["status"] for action in receipt["actions"]], ["completed", "completed"])
+        self.assertEqual(receipt["evidence"]["tests"]["status"], "passed")
 
     def test_v6_verifier_before_observed_edit_refuses_without_provider_send(self):
         calls = []
