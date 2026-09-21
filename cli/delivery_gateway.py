@@ -22,6 +22,7 @@ from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from claude_worker import call_claude
 from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, _stream_result, call_claude_edit
+from codex_worker import call_codex
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
@@ -29,6 +30,30 @@ from runstate import status as run_status
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
+
+
+def _safe_job_path(path: Any) -> str:
+    if (not isinstance(path, str) or not path or Path(path).is_absolute()
+            or any(part in {"", ".", ".."} for part in path.split("/"))
+            or "\\" in path):
+        raise ContractError("job path is not a safe relative path")
+    return path
+
+
+def _job_test(test: Any) -> dict[str, Any]:
+    if not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}:
+        raise ContractError("targeted test specification is invalid")
+    argv, timeout = test["argv"], test["timeout_seconds"]
+    if (not isinstance(argv, list) or len(argv) != 8
+            or any(not isinstance(arg, str) or not arg or len(arg) > 256 or "\x00" in arg for arg in argv)
+            or argv[0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
+            or argv[1:6] != ["-m", "unittest", "discover", "-s", "tests"]
+            or argv[6] != "-p"
+            or type(timeout) is not int or not 1 <= timeout <= 3600):
+        raise ContractError("targeted test argv or deadline is unsupported")
+    if not argv[7].startswith("test_") or not argv[7].endswith(".py") or not argv[7][5:-3].replace("_", "").isalnum():
+        raise ContractError("targeted test pattern is unsafe")
+    return test
 
 
 def _git(worktree: Path, *args: str) -> str:
@@ -131,6 +156,134 @@ def prepare_delivery(work_id: str, worktree: Path, source_commit: str, *,
     return envelope, task, attempt_dir, ledger
 
 
+def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *,
+                               root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
+    """Resolve an approved generic charter into a pinned v6 attempt before any send."""
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    state = run_status(work_id, root=project_root)
+    if state.get("state") != "implementing" or state.get("protocol_revision") != 2:
+        raise ContractError("chartered delivery requires an implementing revision-2 run")
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    artifacts = state.get("artifacts", {})
+    charter_rel = artifacts.get("job_charter")
+    if charter_rel != f".flow/runs/{work_id}/job-charter.json":
+        raise ContractError("approved job charter artifact is absent")
+    charter_path = _run_file(project_root, run_dir, charter_rel)
+    manifest_path = _run_file(project_root, run_dir, artifacts.get("orchestration_manifest", ""))
+    requirements = _run_file(project_root, run_dir, artifacts.get("requirements", ""))
+    acceptance = _run_file(project_root, run_dir, artifacts.get("acceptance_criteria", ""))
+    source_paths = (charter_path, manifest_path, requirements, acceptance)
+    source_bytes = {path: path.read_bytes() for path in source_paths}
+    charter = json.loads(source_bytes[charter_path])
+    manifest = json.loads(source_bytes[manifest_path])
+    if not isinstance(charter, dict) or set(charter) != {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}:
+        raise ContractError("job charter fields are invalid")
+    task = charter["task"]
+    if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
+        raise ContractError("job task is empty or oversized")
+    for field in ("read_paths", "write_paths", "producer_instance_ids", "verifier_instance_ids"):
+        if not isinstance(charter[field], list) or not charter[field] or len(charter[field]) != len(set(charter[field])):
+            raise ContractError(f"job {field} is invalid")
+    for field in ("read_paths", "write_paths"):
+        for path in charter[field]:
+            _safe_job_path(path)
+    _job_test(charter["test"])
+    assignments = [a for a in manifest.get("assignments", []) if a.get("lane") == "implement"]
+    ids = [a.get("id") for a in assignments]
+    if len(ids) != len(set(ids)) or ids.count("magentic-manager") != 1:
+        raise ContractError("manager or specialist instance is duplicated or absent")
+    manager = next(a for a in assignments if a["id"] == "magentic-manager")
+    if manager.get("role") != "delivery-lead" or manager.get("execution", {}).get("provider") != "claude" or not manager["execution"].get("model"):
+        raise ContractError("approved manager binding is unsupported")
+    specialists = [a for a in assignments if a["id"] != "magentic-manager"]
+    if not specialists or len(specialists) > 6:
+        raise ContractError("approved roster is absent or expanded")
+    roster = []
+    for entry in specialists:
+        execution = entry.get("execution", {})
+        provider = execution.get("provider")
+        model = execution.get("model")
+        read_only = entry.get("read_only") is True
+        if provider not in {"claude", "codex", "ollama"} or not isinstance(model, str) or not model.strip():
+            raise ContractError("specialist provider or model is unsupported")
+        if read_only != (provider == "ollama"):
+            raise ContractError("specialist provider and permissions disagree")
+        if not read_only and entry.get("write_scopes") != charter["write_paths"]:
+            raise ContractError("editing assignment scope differs from charter")
+        if read_only and entry.get("write_scopes"):
+            raise ContractError("read-only assignment has write scope")
+        role = entry.get("role")
+        instructions = _effective_specialist_for(role)
+        roster.append({"assignment_id": entry["id"], "definition_digest": digest({"role": role, "instructions": instructions}),
+                       "instance_id": entry["id"], "role": role, "provider": provider,
+                       "model": model, "instructions": instructions,
+                       "capabilities": ["read"] if read_only else ["read", "edit"]})
+    by_id = {item["instance_id"]: item for item in roster}
+    producers, verifiers = charter["producer_instance_ids"], charter["verifier_instance_ids"]
+    if any(item not in by_id or "edit" not in by_id[item]["capabilities"] for item in producers):
+        raise ContractError("producer is not an approved editor")
+    if any(item not in by_id or by_id[item]["capabilities"] != ["read"] for item in verifiers) or set(producers) & set(verifiers):
+        raise ContractError("verifier is not an independent read-only specialist")
+    raw_worktree = Path(worktree)
+    if raw_worktree.is_symlink():
+        raise ContractError("isolated worktree path is a symlink")
+    worktree = raw_worktree.resolve(strict=True)
+    if _git(worktree, "rev-parse", "HEAD") != source_commit or _git(worktree, "rev-parse", "--show-toplevel") != str(worktree):
+        raise ContractError("isolated worktree does not match pinned source commit")
+    lines = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
+    baseline = charter["baseline"]
+    if not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}:
+        raise ContractError("job baseline is invalid")
+    diff = _git(worktree, "diff", "HEAD", "--").encode()
+    if baseline["kind"] == "clean":
+        if lines or diff or baseline["diff_sha256"] != hashlib.sha256(b"").hexdigest():
+            raise ContractError("isolated worktree baseline is not clean")
+    elif baseline["kind"] == "declared_regression":
+        if not diff or baseline["diff_sha256"] != hashlib.sha256(diff).hexdigest() or any(line[3:] not in charter["write_paths"] for line in lines):
+            raise ContractError("declared regression differs from pinned baseline")
+    else:
+        raise ContractError("job baseline kind is unsupported")
+    job_baseline = {key: baseline[key] for key in ("kind", "diff_sha256")}
+    baseline = {"regression_diff_sha256": baseline["diff_sha256"], "source_commit": source_commit,
+                "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in charter["write_paths"] if (worktree / path).is_file()}}
+    attempt_id = uuid.uuid4().hex
+    execution_dir = run_dir / "execution"
+    execution_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(execution_dir, 0o700)
+    attempt_dir = execution_dir / attempt_id
+    attempt_dir.mkdir(mode=0o700)
+    (attempt_dir / "checkpoints").mkdir(mode=0o700)
+    for path, name in ((charter_path, "job-charter.snapshot.json"), (manifest_path, "manifest.snapshot.json"),
+                       (requirements, "requirements.snapshot.md"), (acceptance, "acceptance.snapshot.md")):
+        _write_snapshot(attempt_dir / name, source_bytes[path])
+    if any(path.read_bytes() != data for path, data in source_bytes.items()) or _git(worktree, "rev-parse", "HEAD") != source_commit:
+        raise ContractError("approved delivery source changed during preparation")
+    sources = {name: {"path": str(path.relative_to(project_root)), "sha256": hashlib.sha256(source_bytes[path]).hexdigest()}
+               for name, path in (("requirements", requirements), ("acceptance", acceptance))}
+    job_contract = {"task": task, "baseline": job_baseline,
+                    "read_paths": charter["read_paths"], "write_paths": charter["write_paths"],
+                    "test": charter["test"], "producer_instance_ids": producers, "verifier_instance_ids": verifiers}
+    envelope = {"schema_version": 1, "execution_protocol_version": 6, "work_id": work_id, "attempt_id": attempt_id,
+                "charter_digest": digest({"requirements": sources["requirements"]["sha256"], "acceptance": sources["acceptance"]["sha256"]}),
+                "charter_sources": sources, "run_protocol_revision": 2,
+                "manifest_digest": hashlib.sha256(source_bytes[manifest_path]).hexdigest(),
+                "checkpoint_dir": str(attempt_dir / "checkpoints"), "source_commit": source_commit,
+                "worktree": str(worktree), "allowed_paths": charter["write_paths"],
+                "manager": {"provider": "claude", "model": manager["execution"]["model"]},
+                "roster": roster, "job_contract": job_contract,
+                "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
+                           "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 1}}
+    envelope_digest(envelope)
+    write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
+    write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    ledger.create_attempt(envelope)
+    return envelope, task, attempt_dir, ledger
+
+
 def _normalized_manager_request(envelope: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
     messages = message.get("messages")
     if not isinstance(messages, list) or not messages or len(canonical(messages).encode()) > 32000:
@@ -223,6 +376,55 @@ def execute_delivery(work_id: str, worktree: Path, source_commit: str, *, root: 
     return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
                                       manager_adapter=manager_adapter, worker_adapter=worker_adapter,
                                       supervisor=supervisor, test_runner=test_runner, python_path=python_path)
+
+
+def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *, root: Path | None = None,
+                               manager_adapter: Callable[..., dict[str, Any]] | None = None,
+                               worker_adapter: Callable[..., dict[str, Any]] | None = None,
+                               supervisor: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
+    envelope, task, attempt_dir, ledger = prepare_chartered_delivery(work_id, worktree, source_commit, root=root)
+    return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
+                                      manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                      supervisor=supervisor, test_runner=None, python_path=None)
+
+
+def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
+                           job: dict[str, Any]) -> dict[str, Any]:
+    allowed = set(job["write_paths"])
+    status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
+    changed = [line[3:] for line in status]
+    if not changed or any(line[:2] not in {" M", "M ", "??"} or path not in allowed for line, path in zip(status, changed)):
+        raise ContractError("editor changed files outside the approved job scope")
+    if not any((worktree / path).is_file() and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path) for path in changed):
+        raise ContractError("editor produced no observed change")
+    diff = _git(worktree, "diff", "HEAD", "--", *job["write_paths"]).encode()
+    for path in changed:
+        if path not in baseline["files"]:
+            diff += ("\nNEW FILE " + path + "\n").encode() + (worktree / path).read_bytes()
+    if not diff or len(diff) > 32768:
+        raise ContractError("chartered edit diff is empty or oversized")
+    diff_path = attempt_dir / "repair.diff"
+    if diff_path.exists():
+        if diff_path.is_symlink() or diff_path.read_bytes() != diff:
+            raise ContractError("recorded chartered diff changed")
+    else:
+        _write_snapshot(diff_path, diff)
+    return {"changed_files": changed, "diff_sha256": hashlib.sha256(diff).hexdigest(),
+            "diff_path": str(diff_path),
+            "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in changed}}
+
+
+def _run_chartered_test(worktree: Path, job: dict[str, Any]) -> dict[str, Any]:
+    test = _job_test(job["test"])
+    try:
+        completed = subprocess.run(test["argv"], cwd=worktree, capture_output=True, text=True,
+                                   timeout=test["timeout_seconds"], check=False)
+    except subprocess.TimeoutExpired as exc:
+        raise ContractError("targeted chartered test timed out") from exc
+    output = (completed.stdout + completed.stderr)[-8192:]
+    if completed.returncode:
+        raise ContractError("targeted chartered test failed: " + output[-512:])
+    return {"command": test["argv"], "status": "passed", "output_sha256": hashlib.sha256(output.encode()).hexdigest()}
 
 
 def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
@@ -407,29 +609,32 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     source_commit = envelope["source_commit"]
     worktree = Path(envelope["worktree"])
     baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    chartered = envelope["execution_protocol_version"] == 6
+    job = envelope.get("job_contract") if chartered else None
     task += ("\n\nFlow-verified execution facts:\n"
              "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
-             "- The approved regression test is already present and failed before this job's first provider send."
-             " Do not ask a specialist to create or rerun that prerequisite.\n"
-             "- Local analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
+             + (("- The approved baseline is " + job["baseline"]["kind"] + ".\n") if chartered else "- The approved regression test is already present and failed before this job's first provider send. Do not ask a specialist to create or rerun that prerequisite.\n")
+             +
+             "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
              " run commands, or edit the worktree.\n"
-             "- The Claude implementer may edit only the charter's allowed paths. Flow verifies the diff and runs"
+             "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
              " the targeted test after that edit; the full suite is an acceptance check.\n")
     manager_adapter = manager_adapter or _default_manager_adapter
     worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir)
-    test_runner = test_runner or _run_targeted_test
+    test_runner = test_runner or (partial(_run_chartered_test, job=job) if chartered else _run_targeted_test)
+    verify_edit = (partial(_verify_chartered_edit, job=job) if chartered else _verify_edit)
     edit_evidence: dict[str, Any] | None = None
     test_evidence: dict[str, Any] | None = None
     failure = ""
     recoverable_transport_failure = False
     verifier_input_sha256: str | None = None
     initial_snapshot = ledger.snapshot(aid)
-    if any(item["request"]["assignment_id"] == "claude-implementer" and item["status"] == "completed"
+    if any((item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"
            for item in initial_snapshot["actions"]):
-        edit_evidence = _verify_edit(worktree, baseline, attempt_dir)
+        edit_evidence = verify_edit(worktree, baseline, attempt_dir)
         test_evidence = test_runner(worktree)
     prior_verifier = [item for item in initial_snapshot["actions"]
-                      if item["request"]["assignment_id"] == "local-verifier" and item["status"] == "completed"]
+                      if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
     if prior_verifier and edit_evidence:
         verifier_task = (prior_verifier[-1]["request"]["task"]
                          + "\n\nFlow-verified complete bounded diff for this review:\n"
@@ -480,7 +685,11 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     def on_action(message: dict[str, Any]) -> dict[str, Any]:
         nonlocal edit_evidence, test_evidence, verifier_input_sha256
         action = _normalized_action(envelope, message)
-        if action["assignment_id"] == "local-verifier" and (edit_evidence is None or test_evidence is None):
+        is_verifier = action["instance_id"] in job["verifier_instance_ids"] if chartered else action["assignment_id"] == "local-verifier"
+        is_producer = action["instance_id"] in job["producer_instance_ids"] if chartered else action["assignment_id"] == "claude-implementer"
+        if chartered and action["provider"] in {"claude", "codex"} and not is_producer:
+            raise ContractError("selected editor is not eligible to produce this job")
+        if is_verifier and (edit_evidence is None or test_evidence is None):
             raise ContractError("Magentic verifier selected before Flow verified Claude repair")
         decision = ledger.decide(envelope, action, generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
@@ -490,7 +699,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 reply = json.loads(reply_path.read_text())
                 if reply.get("action_id") == action["action_id"] and reply.get("output") == result["output"]:
                     return reply
-            if action["provider"] == "claude" and edit_evidence and test_evidence:
+            if is_producer and edit_evidence and test_evidence:
                 summary = (result["output"] + "\n\nFlow verified the scoped repair. Diff SHA-256: "
                            + edit_evidence["diff_sha256"] + ". Targeted test: passed. Verified diff excerpt:\n"
                            + (attempt_dir / "repair.diff").read_text()[:2048])
@@ -519,7 +728,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             ledger.observe_send(action["action_id"], generation)
             try:
                 provider_action = action
-                if action["assignment_id"] == "local-verifier":
+                if is_verifier:
                     diff = (attempt_dir / "repair.diff").read_text()
                     evidence = ("\n\nFlow-verified complete bounded diff for this review:\n"
                                 + diff + "\nTargeted test: passed. Diff SHA-256: " + edit_evidence["diff_sha256"])
@@ -529,15 +738,15 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 result = worker_adapter(provider_action, envelope=envelope, workspace=worktree)
                 validate_result(envelope, result, action=action)
                 ledger.observe_response(action["action_id"], result, generation)
-                if action["provider"] == "claude":
-                    edit_evidence = _verify_edit(worktree, baseline, attempt_dir)
+                if is_producer:
+                    edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
                 ledger.complete(action["action_id"], result, generation=generation)
             except Exception:
                 ledger.mark_unknown(action["action_id"], "specialist_send_outcome_uncertain", generation=generation)
                 raise
         summary = result["output"]
-        if action["provider"] == "claude" and edit_evidence and test_evidence:
+        if is_producer and edit_evidence and test_evidence:
             summary += ("\n\nFlow verified the scoped repair. Diff SHA-256: " + edit_evidence["diff_sha256"]
                         + ". Targeted test: passed. Verified diff excerpt:\n" + (attempt_dir / "repair.diff").read_text()[:2048])
         reply = {"status": "completed", "action_id": action["action_id"], "summary": summary, "output": result["output"]}
@@ -570,11 +779,12 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         write_atomic(attempt_dir / "interruption.json", canonical(interruption) + "\n", mode=0o600)
         return {"attempt_id": aid, "status": "interrupted", "reason": failure,
                 "receipt_path": None, "resume_available": True}
-    producer = [item for item in actions if item["request"]["assignment_id"] == "claude-implementer" and item["status"] == "completed"]
-    verifier = [item for item in actions if item["request"]["assignment_id"] == "local-verifier" and item["status"] == "completed"]
-    terminal = "unknown" if uncertain else ("completed" if not failure and producer and verifier and edit_evidence and test_evidence else "failed")
+    producer = [item for item in actions if (item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"]
+    verifier = [item for item in actions if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
+    verified_order = bool(producer and any(item["request"]["sequence"] > producer[0]["request"]["sequence"] for item in verifier))
+    terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and edit_evidence and test_evidence else "failed")
     reason = "reconciliation_required" if terminal == "unknown" else failure
-    receipt = {"schema_version": 1, "execution_protocol_version": 5, "work_id": work_id, "attempt_id": aid,
+    receipt = {"schema_version": 1, "execution_protocol_version": envelope["execution_protocol_version"], "work_id": work_id, "attempt_id": aid,
                "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],
                "manifest_digest": envelope["manifest_digest"], "charter_sources": envelope["charter_sources"],
                "run_protocol_revision": 2, "roster": envelope["roster"], "status": terminal, "reason": reason,
@@ -582,7 +792,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                "checkpoints": snapshot.get("magentic_checkpoints", []),
                "failure_detail": failure[:512],
                "evidence": {"source_commit": source_commit, "worktree": str(worktree),
-                            "allowed_paths": list(APPROVED_PATHS), "baseline": baseline,
+                            "allowed_paths": envelope["allowed_paths"], "baseline": baseline,
                             "edit": edit_evidence, "tests": test_evidence,
                             "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
     trace_path = attempt_dir / "claude-implementer.debug.log"
@@ -666,4 +876,7 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
                                 workspace=workspace, model=assignment["model"], timeout_seconds=300,
                                 trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None)
+    if action["provider"] == "codex" and envelope["execution_protocol_version"] == 6:
+        return call_codex(instructions=assignment["instructions"], task=action["task"],
+                          workspace=workspace, model=assignment["model"], timeout_seconds=300)
     raise ContractError("selected specialist provider has no approved adapter")
