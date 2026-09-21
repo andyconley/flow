@@ -351,6 +351,11 @@ class ExecutionLedger:
                     "AND status IN ('allowed','started','completed','unknown')",
                     (attempt,),
                 ).fetchone()[0]
+                chartered_delegations = db.execute(
+                    "SELECT count(*) FROM actions WHERE attempt_id=? "
+                    "AND status IN ('allowed','started','completed','unknown','failed')",
+                    (attempt,),
+                ).fetchone()[0] if protocol_version == 6 else 0
                 concurrent_count = db.execute(
                     "SELECT count(*) FROM actions WHERE attempt_id=? "
                     "AND status IN ('allowed','started','unknown')",
@@ -360,7 +365,7 @@ class ExecutionLedger:
                     reason = "producer_already_completed"
                 elif action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
                     reason = "paid_call_cap"
-                elif action["provider"] in {"codex", "claude"} and paid_delegations >= envelope["limits"]["max_delegations"]:
+                elif (chartered_delegations if protocol_version == 6 else paid_delegations) >= envelope["limits"]["max_delegations"]:
                     reason = "delegation_cap"
                 elif concurrent_count >= envelope["limits"]["max_concurrent"]:
                     reason = "concurrency_cap"
