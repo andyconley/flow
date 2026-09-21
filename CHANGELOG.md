@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.31.0](https://github.com/andyconley/flow/compare/v0.30.0...v0.31.0) (2026-09-21)
+
+### Features
+
+* add private Flow Shaper MCP bridge ([da1daf5](https://github.com/andyconley/flow/commit/da1daf5757c0ca72379d9115165d058412c08851))
+
 ## [0.30.0](https://github.com/andyconley/flow/compare/v0.29.0...v0.30.0) (2026-09-21)
 
 ### Features
