@@ -741,6 +741,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         with ledger.send_lock():
             ledger.assert_owner(aid, generation)
             ledger.observe_send(action["action_id"], generation)
+            response_completed = False
             try:
                 provider_action = action
                 if is_verifier:
@@ -753,14 +754,22 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 result = worker_adapter(provider_action, envelope=envelope, workspace=worktree)
                 validate_result(envelope, result, action=action)
                 ledger.observe_response(action["action_id"], result, generation)
+                if chartered:
+                    # The provider turn is observed even when later Flow validation
+                    # rejects its edit. Preserve that fact instead of claiming an
+                    # uncertain provider outcome.
+                    ledger.complete(action["action_id"], result, generation=generation)
+                    response_completed = True
                 if is_producer:
                     edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
                     if chartered and verify_edit(worktree, baseline, attempt_dir) != edit_evidence:
                         raise ContractError("targeted test changed the verified worktree diff")
-                ledger.complete(action["action_id"], result, generation=generation)
+                if not chartered:
+                    ledger.complete(action["action_id"], result, generation=generation)
             except Exception:
-                ledger.mark_unknown(action["action_id"], "specialist_send_outcome_uncertain", generation=generation)
+                if not response_completed:
+                    ledger.mark_unknown(action["action_id"], "specialist_send_outcome_uncertain", generation=generation)
                 raise
         summary = result["output"]
         if is_producer and edit_evidence and test_evidence:
