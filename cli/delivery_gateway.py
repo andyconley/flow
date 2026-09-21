@@ -35,7 +35,7 @@ MAX_TASK_BYTES = 4096
 def _safe_job_path(path: Any) -> str:
     if (not isinstance(path, str) or not path or Path(path).is_absolute()
             or any(part in {"", ".", ".."} for part in path.split("/"))
-            or "\\" in path):
+            or "\\" in path or ".git" in path.split("/")):
         raise ContractError("job path is not a safe relative path")
     return path
 
@@ -237,6 +237,14 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     worktree = raw_worktree.resolve(strict=True)
     if _git(worktree, "rev-parse", "HEAD") != source_commit or _git(worktree, "rev-parse", "--show-toplevel") != str(worktree):
         raise ContractError("isolated worktree does not match pinned source commit")
+    for relative in set(charter["read_paths"] + charter["write_paths"]):
+        current = worktree
+        for part in relative.split("/"):
+            current /= part
+            if current.is_symlink():
+                raise ContractError("job scope contains a symlink")
+        if worktree not in current.resolve().parents:
+            raise ContractError("job scope escapes isolated worktree")
     lines = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
     baseline = charter["baseline"]
     if not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}:
