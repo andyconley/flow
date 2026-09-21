@@ -873,7 +873,8 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
     elif envelope["manager"]["provider"] == "codex":
         result = call_codex(instructions="Respond to the stock Magentic manager request only. Return the requested response text without editing files.",
                             task=prompt, workspace=workspace, model=envelope["manager"]["model"],
-                            timeout_seconds=120, sandbox="read-only")
+                            timeout_seconds=120, sandbox="read-only",
+                            max_prompt_bytes=32768, max_output_bytes=32768)
     else:
         raise ContractError("approved manager provider has no adapter")
     output = result["output"]

@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-MAX_PROMPT_BYTES = 16384
+MAX_PROMPT_BYTES = 32768
 MAX_EVENT_BYTES = 262144
 MAX_OUTPUT_BYTES = 4096
 CODEX_ENV_KEYS = ("HOME", "CODEX_HOME", "PATH", "TMPDIR", "LANG", "LC_ALL",
@@ -27,7 +27,7 @@ class CodexWorkerError(RuntimeError):
     """Codex may have acted, but Flow did not observe a valid completed turn."""
 
 
-def _parse_events(raw: bytes, expected_model: str) -> dict[str, Any]:
+def _parse_events(raw: bytes, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
     try:
         events = [json.loads(line) for line in raw.splitlines() if line.strip()]
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -50,7 +50,7 @@ def _parse_events(raw: bytes, expected_model: str) -> dict[str, Any]:
     if not messages or not isinstance(messages[-1], str) or not messages[-1].strip():
         raise CodexWorkerError("Codex final message missing")
     output = messages[-1]
-    if len(output.encode("utf-8")) > MAX_OUTPUT_BYTES:
+    if len(output.encode("utf-8")) > max_output_bytes:
         raise CodexWorkerError("Codex final message exceeds output limit")
     usage = completed[0].get("usage")
     if usage is not None:
@@ -69,7 +69,8 @@ def _parse_events(raw: bytes, expected_model: str) -> dict[str, Any]:
 
 def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                timeout_seconds: int, codex_bin: str = "codex",
-               sandbox: str = "workspace-write") -> dict[str, Any]:
+               sandbox: str = "workspace-write", max_prompt_bytes: int | None = None,
+               max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
     """Run one Codex turn; fail closed on timeout, malformed or incomplete output.
 
     The caller must create and approve the isolated workspace before dispatch.
@@ -84,11 +85,16 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
         raise ValueError("Codex timeout must be 1 to 600 seconds")
     if sandbox not in {"workspace-write", "read-only"}:
         raise ValueError("Codex sandbox must be explicit and supported")
+    if max_prompt_bytes is None:
+        max_prompt_bytes = MAX_PROMPT_BYTES
+    if (type(max_prompt_bytes) is not int or not 1 <= max_prompt_bytes <= MAX_PROMPT_BYTES
+            or type(max_output_bytes) is not int or not 1 <= max_output_bytes <= 32768):
+        raise ValueError("Codex prompt or output limit is invalid")
     prompt = ("Specialist instructions:\n" + instructions + "\n\nAuthorized task:\n" + task
               + "\n\nWork only in this workspace. Do not spawn subagents or delegate. "
                 "Complete this single task and report the change and checks.\n")
     prompt_bytes = prompt.encode("utf-8")
-    if not instructions.strip() or not task.strip() or len(prompt_bytes) > MAX_PROMPT_BYTES:
+    if not instructions.strip() or not task.strip() or len(prompt_bytes) > max_prompt_bytes:
         raise ValueError("Codex prompt is empty or too large")
     argv = [codex_bin, "exec", "--json", "--ephemeral", "--ignore-user-config",
             "--skip-git-repo-check", "--sandbox", sandbox,
@@ -142,7 +148,7 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
             raise CodexWorkerError("Codex turn timed out")
         if process.wait(timeout=remaining) != 0:
             raise CodexWorkerError("Codex exited without a successful turn")
-        return _parse_events(b"".join(chunks), model)
+        return _parse_events(b"".join(chunks), model, max_output_bytes=max_output_bytes)
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
         raise CodexWorkerError("Codex turn outcome uncertain") from exc
     finally:
