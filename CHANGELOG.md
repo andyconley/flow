@@ -2,6 +2,61 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.30.0](https://github.com/andyconley/flow/compare/v0.29.0...v0.30.0) (2026-09-21)
+
+### Features
+
+* add chartered delivery gateway ([1122544](https://github.com/andyconley/flow/commit/11225443a97eef8622ca6af18c583c88e6bf2977))
+* add chartered execution contract v6 ([7c882b5](https://github.com/andyconley/flow/commit/7c882b5a41e2c665c598c952349721388fd2b8fc))
+* add guarded Claude review provider ([c1416f6](https://github.com/andyconley/flow/commit/c1416f6349b07dfb6663cb401e0b1bf5ca637945))
+* add guarded MAF mixed-provider execution ([971bba4](https://github.com/andyconley/flow/commit/971bba4452d7e988e77107f6b08b2e96991bd660))
+* add guarded MAF multi-turn recovery ([131e268](https://github.com/andyconley/flow/commit/131e2683bd5f65a9788cf3b4c59fcee9af5a7212))
+* add guarded stock Magentic delivery lead ([0392409](https://github.com/andyconley/flow/commit/0392409d180721e34b05205d685e02b17df3ab91))
+* add supervised local MAF execution through Flow ([3503354](https://github.com/andyconley/flow/commit/35033546061a77be8dcf7e196140c01ce45eb4cb))
+* allow chartered paid worker call limits ([c111780](https://github.com/andyconley/flow/commit/c1117804f12a7888df2b93ae60e8f73815e381d7))
+* capture Claude edit events during bounded turns ([a35a76a](https://github.com/andyconley/flow/commit/a35a76ac53e7da2bd8636d73673a6c4c6ef4bb74))
+* continue resolved MAF action through fenced epoch ([4ff6d08](https://github.com/andyconley/flow/commit/4ff6d08a8e57bee493db6098cd0fde2594910538))
+* continue resolved Magentic actions through linked receipts ([be717b5](https://github.com/andyconley/flow/commit/be717b518f1b5df3578f695c246ed165451f1adb))
+* recover supervised MAF attempts with Flow fencing ([acd8d1d](https://github.com/andyconley/flow/commit/acd8d1d6aab83201c5a1e1db07890feffbaa18bb))
+* retain bounded Claude edit debug trace ([e7ca797](https://github.com/andyconley/flow/commit/e7ca797e2e5e562eae53568ae801bc778aed00d6))
+* route chartered jobs through supervised MAF ([fc18d5d](https://github.com/andyconley/flow/commit/fc18d5d8c7b0db86646ea8cbb49e8245a189ce0a))
+
+### Bug Fixes
+
+* accept completed Claude turns regardless of count ([ea48326](https://github.com/andyconley/flow/commit/ea4832663b40ab0f773076981caf6e9b0a507336))
+* accept manifest-linked job charter ([c7042b2](https://github.com/andyconley/flow/commit/c7042b29771303384008e581ee165c2517895abd))
+* align Claude edit evidence with v5 result contract ([07a6123](https://github.com/andyconley/flow/commit/07a61233575ddc912d9defdfe600d47785896546))
+* allow bounded Codex manager responses ([ab2c903](https://github.com/andyconley/flow/commit/ab2c90350d75ca49946271bba82547bb90f1469a))
+* allow bounded Magentic manager output ([099f596](https://github.com/andyconley/flow/commit/099f596573bbea654d5380efeae07f54b040e400))
+* bound Codex prompt writes within turn deadline ([f22237c](https://github.com/andyconley/flow/commit/f22237cd5ed33e9af6dada551da0df8538edec0f))
+* classify bounded Claude CLI failures ([ac68f18](https://github.com/andyconley/flow/commit/ac68f18a444166ef86bdf067fc830cd09d197267))
+* count local charter delegations toward safety cap ([c4799f8](https://github.com/andyconley/flow/commit/c4799f8638e8dd683df48d9db16b8647797a6b63))
+* ground Magentic manager in verified execution facts ([eaa3fee](https://github.com/andyconley/flow/commit/eaa3fee4804a54bff4d93017d80a89127758036b))
+* guard chartered manager and producer authority ([50e70ae](https://github.com/andyconley/flow/commit/50e70ae3742c0874f8d000cc2b9a2ba55e213dd8))
+* preserve completed worker result on validation failure ([05f3f26](https://github.com/andyconley/flow/commit/05f3f267021bd8e6d130085e9c8eaebdd0a55754))
+* reject symlinked charter scopes ([9c9d9d6](https://github.com/andyconley/flow/commit/9c9d9d6bf6659d7c21f794d5747fd5f725294d2c))
+* resume Magentic after verified manager prompt failure ([a4ff566](https://github.com/andyconley/flow/commit/a4ff56696a0d39fe96a99c8f9adc000d073a8b76))
+* retain configurable v5 paid worker allowance ([3fdbd45](https://github.com/andyconley/flow/commit/3fdbd45391ad198e589a68ea648ff731386a3db6))
+* scope Magentic paid limits to attempts ([ec30b45](https://github.com/andyconley/flow/commit/ec30b45dc936f030b60ab2379c9de82ce76dd5c8))
+* seal MAF continuation receipt evidence ([97e14d5](https://github.com/andyconley/flow/commit/97e14d5696c28198489de6d468f010113bbf2b87))
+* verify MAF checkpoint bytes and runtime ([0bb718b](https://github.com/andyconley/flow/commit/0bb718b06f7bd7fe4c410b7a43e6ba8162b17a06))
+
+### Documentation
+
+* document chartered job launcher ([0295849](https://github.com/andyconley/flow/commit/029584931b7adca14847885acbf07ee93ea50325))
+
+### Tests
+
+* count chartered dispatch refusals ([3af945d](https://github.com/andyconley/flow/commit/3af945d01c90069ad25bff29e390e4dac3d84875))
+* cover chartered Claude grant path ([49c7470](https://github.com/andyconley/flow/commit/49c74702aaf1fd8a6b982469012e0fb6d6a533ec))
+* cover chartered gateway execution ([5f9c188](https://github.com/andyconley/flow/commit/5f9c18801b4242dd9945ee9a4dedff38bc7e01bf))
+* cover chartered terminal receipt ([36feb0a](https://github.com/andyconley/flow/commit/36feb0a84ceb55694deea90ad740072f609457aa))
+* cover chartered transport interruption honesty ([1600d57](https://github.com/andyconley/flow/commit/1600d57138a83eded7879bf81129fd5213c4f565))
+* cover pinned MAF continuation readiness ([53da86d](https://github.com/andyconley/flow/commit/53da86de5925592f00cad95ffa90ccff43d93f62))
+* reject chartered producer and source drift ([f3bedf8](https://github.com/andyconley/flow/commit/f3bedf8f053d4129a8c340e0f24e5fd4f8fc71a0))
+* support package-style charter contract run ([86e3150](https://github.com/andyconley/flow/commit/86e3150fb20575629f237d62db9e16ca5889713d))
+* use portable Python in chartered gateway fixture ([c247783](https://github.com/andyconley/flow/commit/c247783756eaf96dace617b34df4dc97a93cc334))
+
 ## [0.29.0](https://github.com/andyconley/flow/compare/v0.28.0...v0.29.0) (2026-09-14)
 
 ### Features
