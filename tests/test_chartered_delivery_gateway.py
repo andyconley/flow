@@ -1,5 +1,6 @@
 """Contract preparation and provider routes for chartered Delivery Lead jobs."""
 
+import copy
 import hashlib
 import json
 import subprocess
@@ -89,6 +90,64 @@ class CharteredPreparationTests(unittest.TestCase):
         (self.worktree / "target.py").write_text("changed\n")
         with self.assertRaisesRegex(ContractError, "not clean"):
             self.prepare()
+
+    def test_invalid_charter_intake_refuses_before_any_provider_send(self):
+        original_charter = copy.deepcopy(self.charter)
+        original_manifest = copy.deepcopy(self.manifest)
+        cases = {
+            "unknown_producer": lambda: self.charter.update(producer_instance_ids=["missing"]),
+            "duplicate_instance": lambda: self.manifest["assignments"].append(copy.deepcopy(self.manifest["assignments"][1])),
+            "roster_expansion": lambda: self.manifest["assignments"].extend(
+                {"id": f"reader-{number}", "lane": "implement", "role": "test-engineer",
+                 "execution": {"provider": "ollama", "model": "local"}, "read_only": True,
+                 "write_scopes": []} for number in range(5)),
+            "unsafe_scope": lambda: self.charter.update(write_paths=["../outside.py"]),
+            "unsafe_command": lambda: self.charter["test"].update(argv=["sh", "-c", "true"]),
+            "provider_permission_mismatch": lambda: self.manifest["assignments"][1].update(read_only=True),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name=name):
+                self.charter = copy.deepcopy(original_charter)
+                self.manifest = copy.deepcopy(original_manifest)
+                mutate()
+                self._write_inputs()
+                sends = []
+                with patch("delivery_gateway.run_status", return_value=self.state), \
+                     patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+                     patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+                    with self.assertRaises(ContractError):
+                        execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                   worker_adapter=lambda *args, **kwargs: sends.append(True))
+                self.assertEqual(sends, [])
+
+        sends = []
+        self.charter = copy.deepcopy(original_charter)
+        self.manifest = copy.deepcopy(original_manifest)
+        self._write_inputs()
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            with self.assertRaises(ContractError):
+                execute_chartered_delivery("sample", self.worktree, "0" * 40, root=self.root,
+                                           worker_adapter=lambda *args, **kwargs: sends.append(True))
+        self.assertEqual(sends, [], "a stale source commit must fail before dispatch")
+
+    def test_changed_charter_or_manifest_during_preparation_refuses_before_send(self):
+        sends = []
+
+        def snapshot(path, data):
+            path.write_bytes(data)
+            if path.name == "job-charter.snapshot.json":
+                (self.run / "orchestration.json").write_text('{"assignments": []}')
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role), \
+             patch("delivery_gateway._write_snapshot", side_effect=snapshot):
+            with self.assertRaisesRegex(ContractError, "source changed"):
+                execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                           worker_adapter=lambda *args, **kwargs: sends.append(True))
+        self.assertEqual(sends, [])
 
     def test_no_actions_yields_linked_failed_receipt(self):
         with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
@@ -340,6 +399,85 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(calls, ["editor"])
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual([action["status"] for action in receipt["actions"]], ["completed", "denied"])
+
+    def test_v6_duplicate_grant_replays_without_a_second_provider_send(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            proposal = self._proposal(envelope, "editor", 1)
+            checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+            checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                              "workflow_name": "flow-magentic-delivery-v6",
+                                              "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+            self.assertEqual(on_action(proposal)["status"], "completed")
+            self.assertEqual(on_action(proposal)["status"], "completed")
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            (workspace / "target.py").write_text("new\n")
+            return self._result("codex", "editor-model", "Edited target")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(calls, ["editor"])
+        self.assertEqual(result["status"], "failed")
+
+    def test_v6_provider_substitution_is_rejected_before_send(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            proposal = self._proposal(envelope, "editor", 1)
+            proposal["provider"] = "claude"
+            with self.assertRaises(ContractError):
+                on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor,
+                                                worker_adapter=lambda *args, **kwargs: calls.append(True))
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(calls, [])
+
+    def test_v6_six_delegation_limit_denies_seventh_local_action_without_send(self):
+        self.manifest["assignments"].append({
+            "id": "analyst", "lane": "implement", "role": "test-engineer",
+            "execution": {"provider": "ollama", "model": "local-model"}, "read_only": True,
+            "write_scopes": [],
+        })
+        self._write_inputs()
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence in range(1, 8):
+                proposal = self._proposal(envelope, "analyst", sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v6",
+                                                  "pending_request_info_events": {
+                                                      f"flow-magentic-action-{sequence}": {}}}))
+                outcome = on_action(proposal)
+                if sequence == 7:
+                    self.assertEqual(outcome["status"], "denied")
+                    self.assertEqual(outcome["reason"], "delegation_cap")
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            return self._result("ollama", "local-model", "Read-only analysis")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                      supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(calls, ["analyst"] * 6)
 
 
 class ProviderRouteTests(unittest.TestCase):
