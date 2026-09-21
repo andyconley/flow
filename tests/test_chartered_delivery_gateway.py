@@ -37,7 +37,7 @@ class CharteredPreparationTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.worktree), "commit", "-qm", "source"], check=True)
         self.commit = subprocess.check_output(["git", "-C", str(self.worktree), "rev-parse", "HEAD"], text=True).strip()
         self.charter = {"task": "Edit target.py", "read_paths": ["target.py"], "write_paths": ["target.py"],
-                        "test": {"argv": ["/opt/homebrew/bin/python3.12", "-m", "unittest", "discover", "-s", "tests", "-p", "test_target.py"], "timeout_seconds": 30},
+                        "test": {"argv": ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_target.py"], "timeout_seconds": 30},
                         "producer_instance_ids": ["editor"], "verifier_instance_ids": ["verifier"],
                         "baseline": {"kind": "clean", "diff_sha256": hashlib.sha256(b"").hexdigest()}}
         self.manifest = {"assignments": [
@@ -85,7 +85,7 @@ class CharteredPreparationTests(unittest.TestCase):
         self._write_inputs()
         with self.assertRaisesRegex(ContractError, "test argv"):
             self.prepare()
-        self.charter["test"]["argv"] = ["/opt/homebrew/bin/python3.12", "-m", "unittest", "discover", "-s", "tests", "-p", "test_target.py"]
+        self.charter["test"]["argv"] = ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_target.py"]
         self._write_inputs()
         (self.worktree / "target.py").write_text("changed\n")
         with self.assertRaisesRegex(ContractError, "not clean"):
