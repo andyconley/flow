@@ -1,0 +1,2 @@
+# Optional, private Shaper MCP adapter. Flow's CLI remains stdlib-only.
+mcp>=1.30,<2

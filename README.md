@@ -453,6 +453,7 @@ For maintainer-oriented documentation, start with:
 - [file-structure.md](docs/file-structure.md)
 - [cli-reference.md](docs/cli-reference.md)
 - [runtime-adapters.md](docs/runtime-adapters.md)
+- [shaper-mcp.md](docs/shaper-mcp.md) — optional private ChatGPT-to-Flow Shaper bridge
 - [backlog.md](docs/backlog.md)
 
 ## Current Repo Layout

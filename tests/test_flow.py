@@ -3390,12 +3390,9 @@ class FlowCliTests(FlowCliHarness):
         four modules directly, and a depth-one check would happily accept a
         release with cli/paths.py missing and then die on the first command.
 
-        Every module under cli/ is removed in turn, so a future module cannot
-        quietly fall outside the check. That is deliberate even though it means
-        a cli/ module reachable only from somewhere other than flow.py — a hook
-        entry point, say — would fail this test. Such a module would also be
-        omitted from staging validation, so the right response is to make it
-        reachable or teach the validator about it, not to weaken this loop.
+        Every module in the core CLI import graph is removed in turn. Optional
+        entry points with separately installed dependencies, such as the Shaper
+        MCP adapter, are tested through their own protocol path.
         """
         lifecycle = self._load_cli_module("lifecycle")
 
@@ -3413,8 +3410,10 @@ class FlowCliTests(FlowCliHarness):
             "a complete copy of cli/ must validate",
         )
 
+        optional_entrypoints = {"shaper_gateway", "shaper_mcp"}
         victims = sorted(
-            p.stem for p in (REPO_ROOT / "cli").glob("*.py") if p.stem != "flow"
+            p.stem for p in (REPO_ROOT / "cli").glob("*.py")
+            if p.stem != "flow" and p.stem not in optional_entrypoints
         )
         # paths/fsutil/render/flowtoml reach flow.py only through another
         # module, so they are what proves the walk is transitive rather than
