@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from execution_contracts import ContractError, validate_envelope, validate_receipt
 from test_magentic_execution_contract import envelope
