@@ -208,6 +208,72 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual([action["status"] for action in receipt["actions"]], ["completed"])
         self.assertEqual(receipt["evidence"]["tests"]["status"], "passed")
 
+    def test_v6_editor_head_drift_halts_after_one_send(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            proposal = self._proposal(envelope, "editor", 1)
+            checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+            checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                              "workflow_name": "flow-magentic-delivery-v6",
+                                              "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+            on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            (workspace / "target.py").write_text("new\n")
+            subprocess.run(["git", "-C", str(workspace), "commit", "--allow-empty", "-qm", "unapproved HEAD drift"], check=True)
+            return self._result("codex", "editor-model", "Edited target")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(calls, ["editor"])
+        self.assertEqual(result["status"], "unknown")
+        self.assertIn("pinned source commit", json.loads(Path(result["receipt_path"]).read_text())["failure_detail"])
+
+    def test_v6_second_producer_is_denied_without_second_send(self):
+        self.manifest["assignments"].insert(2, {
+            "id": "editor-2", "lane": "implement", "role": "architect",
+            "execution": {"provider": "codex", "model": "second-model"},
+            "read_only": False, "write_scopes": ["target.py"],
+        })
+        self.charter["producer_instance_ids"].append("editor-2")
+        self._write_inputs()
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            first = self._proposal(envelope, "editor", 1)
+            checkpoint = Path(envelope["checkpoint_dir"]) / f"{first['checkpoint_id']}.json"
+            checkpoint.write_text(json.dumps({"checkpoint_id": first["checkpoint_id"],
+                                              "workflow_name": "flow-magentic-delivery-v6",
+                                              "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+            self.assertEqual(on_action(first)["status"], "completed")
+            second = self._proposal(envelope, "editor-2", 2)
+            denied = on_action(second)
+            self.assertEqual(denied["status"], "denied")
+            self.assertEqual(denied["reason"], "producer_already_completed")
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            if action["assignment_id"] != "editor":
+                self.fail("second producer must not reach a provider")
+            (workspace / "target.py").write_text("new\n")
+            return self._result("codex", "editor-model", "Edited target")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(calls, ["editor"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual([action["status"] for action in receipt["actions"]], ["completed", "denied"])
+
 
 class ProviderRouteTests(unittest.TestCase):
     def test_codex_and_claude_direct_routes(self):
