@@ -287,7 +287,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "manager": {"provider": "claude", "model": manager["execution"]["model"]},
                 "roster": roster, "job_contract": job_contract,
                 "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
-                           "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 1}}
+                           "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 6}}
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)

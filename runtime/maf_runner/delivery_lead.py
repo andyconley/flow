@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 PROTOCOL_VERSION = 5
+_active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
 MAX_MANAGER_MESSAGE_BYTES = 48000
@@ -34,12 +35,17 @@ def _write(value: dict[str, Any]) -> None:
 
 
 def _read() -> dict[str, Any]:
+    global _active_protocol_version
     line = sys.stdin.buffer.readline(MAX_LINE_BYTES + 1)
     if not line or len(line) > MAX_LINE_BYTES or not line.endswith(b"\n"):
         raise RuntimeError("invalid or missing parent protocol line")
     value = json.loads(line)
-    if not isinstance(value, dict) or value.get("protocol_version") != PROTOCOL_VERSION:
+    if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6}:
         raise RuntimeError("unsupported parent protocol message")
+    if _active_protocol_version is None:
+        _active_protocol_version = value["protocol_version"]
+    elif value["protocol_version"] != _active_protocol_version:
+        raise RuntimeError("parent changed protocol version")
     return value
 
 
@@ -84,8 +90,9 @@ async def _run(start: dict[str, Any]) -> None:
     )
 
     envelope = start.get("envelope")
-    if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != PROTOCOL_VERSION:
-        raise RuntimeError("Delivery Lead requires a v5 envelope")
+    protocol_version = _active_protocol_version
+    if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != protocol_version:
+        raise RuntimeError("Delivery Lead envelope and transport protocol differ")
     attempt_id = envelope.get("attempt_id")
     task = start.get("task")
     assignments = envelope.get("roster")
@@ -111,7 +118,7 @@ async def _run(start: dict[str, Any]) -> None:
         "agent_framework_orchestrations._magentic:MagenticProgressLedger",
         "agent_framework_orchestrations._magentic:MagenticProgressLedgerItem",
     ])
-    workflow_name = "flow-magentic-delivery-v5"
+    workflow_name = f"flow-magentic-delivery-v{protocol_version}"
     manager_call = 0
     manager_round = 1
     replan_sequence = 0
@@ -147,7 +154,7 @@ async def _run(start: dict[str, Any]) -> None:
             if len(json.dumps(serialized, ensure_ascii=False).encode()) > MAX_MANAGER_MESSAGE_BYTES:
                 raise PolicyAbort("manager message exceeds transport cap")
             prompt_digest = _digest(serialized)
-            request = {"protocol_version": PROTOCOL_VERSION, "schema_version": 1,
+            request = {"protocol_version": protocol_version, "schema_version": 1,
                     "type": "manager_request",
                     "attempt_id": attempt_id, "envelope_digest": envelope_hash, "sequence": manager_call,
                     "phase": phase, "prompt_digest": prompt_digest,
@@ -155,7 +162,7 @@ async def _run(start: dict[str, Any]) -> None:
             if phase in {"replan_facts", "replan_plan"}:
                 request["replan_sequence"] = replan_sequence
                 request["replan_id"] = _digest({"attempt_id": attempt_id, "envelope_digest": envelope_hash,
-                                                "execution_protocol_version": PROTOCOL_VERSION,
+                                                "execution_protocol_version": protocol_version,
                                                 "kind": "replan", "sequence": replan_sequence})
             call_identity = {"kind": "manager_model", **{field: request[field] for field in
                 ("attempt_id", "envelope_digest", "sequence", "phase", "manager_round", "prompt_digest")}}
@@ -197,7 +204,7 @@ async def _run(start: dict[str, Any]) -> None:
             assignment = self.assignment
             # MAF must pause and persist the selected request before Flow may
             # authorize the provider send. The task is Magentic's own choice.
-            proposal = {"protocol_version": PROTOCOL_VERSION, "schema_version": 1,
+            proposal = {"protocol_version": protocol_version, "schema_version": 1,
                         "type": "propose_action", "kind": "delegate",
                         "attempt_id": attempt_id, "envelope_digest": envelope_hash,
                         "sequence": action_number, "assignment_id": assignment["assignment_id"],
@@ -280,7 +287,7 @@ async def _run(start: dict[str, Any]) -> None:
         result = await workflow.run(checkpoint_id=checkpoint_id, checkpoint_storage=storage,
                                     responses={request_id: reply["result"]})
     output = result.get_outputs()
-    _write({"protocol_version": PROTOCOL_VERSION, "type": "workflow_finished", "attempt_id": attempt_id,
+    _write({"protocol_version": protocol_version, "type": "workflow_finished", "attempt_id": attempt_id,
             "runtime_version": version("agent-framework-core"), "manager_calls": manager_call,
             "manager_rounds": manager_round, "actions": action_number,
             "summary": str(getattr(output[-1], "text", output[-1])) if output else "Magentic finished"})
@@ -294,7 +301,7 @@ def main() -> int:
         asyncio.run(_run(start))
         return 0
     except (Exception, PolicyAbort) as exc:
-        _write({"protocol_version": PROTOCOL_VERSION, "type": "error", "message": str(exc)})
+        _write({"protocol_version": _active_protocol_version or PROTOCOL_VERSION, "type": "error", "message": str(exc)})
         return 1
 
 

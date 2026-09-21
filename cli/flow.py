@@ -54,7 +54,7 @@ from runstate import (  # noqa: E402
 )
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
-from delivery_gateway import execute_delivery, recover_delivery, resume_delivery  # noqa: E402
+from delivery_gateway import execute_chartered_delivery, execute_delivery, recover_delivery, resume_delivery  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -560,6 +560,16 @@ def main() -> int:
     run_delivery_parser.add_argument("--project-root", type=Path, help="Flow project checkout containing the approved run overlay")
     run_delivery_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
 
+    run_chartered_parser = run_sub.add_parser(
+        "execute-chartered-job",
+        help="run an approved charter-selected specialist roster through Flow-gated Magentic",
+    )
+    run_chartered_parser.add_argument("work_id")
+    run_chartered_parser.add_argument("--worktree", required=True, type=Path, help="isolated Git worktree pinned by the approved job")
+    run_chartered_parser.add_argument("--source-commit", required=True, help="pinned source commit at the worktree HEAD")
+    run_chartered_parser.add_argument("--project-root", type=Path, help="Flow project checkout containing the approved run overlay")
+    run_chartered_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
+
     run_delivery_resume = run_sub.add_parser(
         "resume-delivery-lead", help="restore an evidence-linked completed Magentic worker action without another send")
     run_delivery_resume.add_argument("work_id")
@@ -945,6 +955,15 @@ def main() -> int:
             result = execute_delivery(args.work_id, args.worktree, args.source_commit, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery execution refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
+        return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "execute-chartered-job":
+        import json
+        try:
+            result = execute_chartered_delivery(args.work_id, args.worktree, args.source_commit, root=args.project_root)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"chartered execution refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1

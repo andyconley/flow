@@ -446,8 +446,9 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                      timeout_s: float = 900, python_path: str | None = None,
                      resume: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run credentialless stock Magentic behind Flow's two guarded callbacks."""
-    if envelope.get("execution_protocol_version") != 5 or not isinstance(task, str) or not task.strip():
-        raise MafProtocolError("delivery requires a v5 envelope and task")
+    protocol_version = envelope.get("execution_protocol_version")
+    if protocol_version not in {5, 6} or not isinstance(task, str) or not task.strip():
+        raise MafProtocolError("delivery requires a v5 or v6 envelope and task")
     if not callable(on_manager) or not callable(on_action) or not 0 < timeout_s <= 900:
         raise MafProtocolError("delivery callbacks or timeout are invalid")
     executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
@@ -463,10 +464,10 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     pending = bytearray()
     manager_calls = actions = 0
     try:
-        _write_bounded(process.stdin.fileno(), {"protocol_version": 5, "type": "resume" if resume else "start",
+        _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "resume" if resume else "start",
                                                    "envelope": envelope, "task": task, "resume": resume}, deadline)
         while True:
-            message = _read_message(process.stdout.fileno(), deadline, pending, 5)
+            message = _read_message(process.stdout.fileno(), deadline, pending, protocol_version)
             kind = message["type"]
             if kind == "manager_request":
                 manager_calls += 1
@@ -478,7 +479,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                 text = on_manager(message)
                 if not isinstance(text, str) or not text.strip() or len(text.encode()) > MAX_LINE_BYTES // 2:
                     raise MafProtocolError("Flow manager callback returned invalid text")
-                _write_bounded(process.stdin.fileno(), {"protocol_version": 5, "type": "manager_response",
+                _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "manager_response",
                                                            "call_id": message.get("call_id"), "text": text}, deadline)
                 continue
             if kind == "propose_action":
@@ -491,7 +492,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                 result = on_action(message)
                 if not isinstance(result, dict):
                     raise MafProtocolError("Flow action callback returned invalid result")
-                _write_bounded(process.stdin.fileno(), {"protocol_version": 5, "type": "action_result",
+                _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "action_result",
                                                            "action_id": result.get("action_id", message.get("action_id")), "result": result}, deadline)
                 continue
             if kind == "workflow_finished":
