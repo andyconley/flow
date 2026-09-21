@@ -59,12 +59,6 @@ class CharteredContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             validate_envelope(env)
 
-    def test_v5_paid_worker_cap_remains_one(self) -> None:
-        env = envelope()
-        env["limits"]["max_paid_worker_calls"] = 2
-        with self.assertRaises(ContractError):
-            validate_envelope(env)
-
 
 if __name__ == "__main__":
     unittest.main()

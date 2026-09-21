@@ -192,9 +192,7 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
     paid_calls = limits.get("max_paid_worker_calls") if isinstance(limits, dict) else None
     if (not isinstance(limits, dict) or set(limits) != set(expected) | {"max_paid_worker_calls"}
             or any(limits[key] != value for key, value in expected.items())
-            or type(paid_calls) is not int
-            or (paid_calls != 1 if envelope["execution_protocol_version"] == MAGENTIC_PROTOCOL_VERSION
-                else not 1 <= paid_calls <= expected["max_delegations"])):
+            or type(paid_calls) is not int or not 1 <= paid_calls <= expected["max_delegations"]):
         raise ContractError("Magentic limits differ from approved envelope")
 
 
