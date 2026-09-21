@@ -573,6 +573,10 @@ invocation = "flow run execute-local-claude WORK_ID --local-task-file PATH --cla
 summary = "Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter"
 
 [[help.cli_commands]]
+invocation = "flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]"
+summary = "Run an approved charter-selected specialist roster through Flow-gated Magentic"
+
+[[help.cli_commands]]
 invocation = "flow run inspect-execution WORK_ID ATTEMPT_ID"
 summary = "Inspect durable local execution evidence without dispatch"
 
