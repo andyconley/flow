@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from delivery_gateway import (ContractError, _default_worker_adapter,
                               execute_chartered_delivery, prepare_chartered_delivery)
 from execution_contracts import envelope_digest, expected_magentic_action_id
+from maf_supervisor import MafTransportError
 
 
 class CharteredPreparationTests(unittest.TestCase):
@@ -174,6 +175,38 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(calls, [])
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["actions"], [])
+
+    def test_v6_transport_loss_after_producer_seals_nonresumable_receipt(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            proposal = self._proposal(envelope, "editor", 1)
+            checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+            checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                              "workflow_name": "flow-magentic-delivery-v6",
+                                              "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+            on_action(proposal)
+            raise MafTransportError("simulated transport loss after committed producer")
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            (workspace / "target.py").write_text("new\n")
+            return self._result("codex", "editor-model", "Edited target")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(calls, ["editor"])
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result.get("resume_available", False))
+        receipt_path = Path(result["receipt_path"])
+        self.assertTrue(receipt_path.is_file())
+        receipt = json.loads(receipt_path.read_text())
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual([action["status"] for action in receipt["actions"]], ["completed"])
+        self.assertEqual(receipt["evidence"]["tests"]["status"], "passed")
 
 
 class ProviderRouteTests(unittest.TestCase):
