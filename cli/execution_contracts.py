@@ -12,6 +12,7 @@ EXECUTION_PROTOCOL_VERSION = 2
 MIXED_PROTOCOL_VERSION = 3
 CLAUDE_PROTOCOL_VERSION = 4
 MAGENTIC_PROTOCOL_VERSION = 5
+CHARTERED_PROTOCOL_VERSION = 6
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
@@ -51,10 +52,12 @@ def require_fields(record: dict[str, Any], fields: tuple[str, ...], *, kind: str
 
 def validate_envelope(envelope: dict[str, Any]) -> None:
     protocol_version = envelope.get("execution_protocol_version", 1)
-    if protocol_version not in {1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION, MAGENTIC_PROTOCOL_VERSION}:
+    if protocol_version not in {1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION, MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         raise ContractError("execution protocol version is unsupported")
-    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+    if protocol_version in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         _validate_magentic_envelope(envelope)
+        if protocol_version == CHARTERED_PROTOCOL_VERSION:
+            _validate_chartered_job(envelope)
         return
     shared = ("work_id", "attempt_id", "charter_digest", "charter_sources", "run_protocol_revision", "manifest_digest", "limits", "checkpoint_dir")
     legacy = ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "task_digest", "task")
@@ -152,7 +155,7 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
     if not isinstance(worktree, str) or not Path(worktree).is_absolute() or ".." in Path(worktree).parts:
         raise ContractError("worktree path is invalid")
     paths = envelope["allowed_paths"]
-    if not isinstance(paths, list) or not paths or len(paths) != len(set(paths)):
+    if not isinstance(paths, list) or not paths or any(not isinstance(path, str) for path in paths) or len(paths) != len(set(paths)):
         raise ContractError("allowed path scope is invalid")
     for path in paths:
         if not isinstance(path, str) or not path or Path(path).is_absolute() or any(part in {"", ".", ".."} for part in path.split("/")):
@@ -165,7 +168,10 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
         raise ContractError("specialist roster is invalid")
     seen_ids: set[str] = set()
     for assignment in roster:
-        if not isinstance(assignment, dict) or set(assignment) != {"assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "instructions"}:
+        fields = {"assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "instructions"}
+        if envelope["execution_protocol_version"] == CHARTERED_PROTOCOL_VERSION:
+            fields.add("capabilities")
+        if not isinstance(assignment, dict) or set(assignment) != fields:
             raise ContractError("specialist binding is invalid")
         if assignment["provider"] not in {"ollama", "claude", "codex", "local-stub"}:
             raise ContractError("specialist provider is invalid")
@@ -176,6 +182,10 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
         seen_ids.update((assignment["assignment_id"], assignment["instance_id"]))
         if assignment["definition_digest"] != digest({"role": assignment["role"], "instructions": assignment["instructions"]}):
             raise ContractError("specialist definition digest mismatch")
+        if envelope["execution_protocol_version"] == CHARTERED_PROTOCOL_VERSION:
+            expected_capabilities = ["read", "edit"] if assignment["provider"] in {"claude", "codex"} else ["read"]
+            if assignment["capabilities"] != expected_capabilities:
+                raise ContractError("specialist capabilities differ from provider")
     limits = envelope["limits"]
     expected = {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
                 "max_manager_calls": 12, "max_manager_rounds": 6}
@@ -186,13 +196,56 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
         raise ContractError("Magentic limits differ from approved envelope")
 
 
+def _safe_relative_paths(paths: Any) -> bool:
+    return (isinstance(paths, list) and bool(paths) and all(isinstance(path, str) for path in paths)
+            and len(paths) == len(set(paths))
+            and all(isinstance(path, str) and path and not Path(path).is_absolute()
+                    and all(part not in {"", ".", ".."} for part in path.split("/"))
+                    for path in paths))
+
+
+def _validate_chartered_job(envelope: dict[str, Any]) -> None:
+    job = envelope.get("job_contract")
+    required = {"task", "baseline", "read_paths", "write_paths", "test",
+                "producer_instance_ids", "verifier_instance_ids"}
+    if not isinstance(job, dict) or set(job) != required:
+        raise ContractError("chartered job contract fields are invalid")
+    if not isinstance(job["task"], str) or not job["task"].strip() or len(job["task"].encode()) > MAX_TASK_BYTES:
+        raise ContractError("chartered job task is invalid")
+    baseline = job["baseline"]
+    if (not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}
+            or baseline["kind"] not in {"clean", "declared_regression"}
+            or not _hex_digest(baseline["diff_sha256"])):
+        raise ContractError("chartered job baseline is invalid")
+    if not _safe_relative_paths(job["read_paths"]) or not _safe_relative_paths(job["write_paths"]) or job["write_paths"] != envelope["allowed_paths"]:
+        raise ContractError("chartered job path scope is invalid")
+    test = job["test"]
+    if (not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}
+            or not isinstance(test["argv"], list) or not test["argv"]
+            or any(not isinstance(arg, str) or not arg or "\x00" in arg or "\n" in arg for arg in test["argv"])
+            or test["argv"][0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
+            or test["argv"][1:3] != ["-m", "unittest"]
+            or type(test["timeout_seconds"]) is not int or not 1 <= test["timeout_seconds"] <= 3600):
+        raise ContractError("chartered job test command is invalid")
+    for kind, providers in (("producer_instance_ids", {"claude", "codex"}),
+                            ("verifier_instance_ids", {"ollama", "local-stub"})):
+        ids = job[kind]
+        if not isinstance(ids, list) or not ids or len(ids) != len(set(ids)):
+            raise ContractError(f"chartered job {kind} is invalid")
+        bindings = {item["instance_id"]: item for item in envelope["roster"]}
+        if any(instance not in bindings or bindings[instance]["provider"] not in providers for instance in ids):
+            raise ContractError(f"chartered job {kind} differs from roster")
+    if set(job["producer_instance_ids"]) & set(job["verifier_instance_ids"]):
+        raise ContractError("chartered job producer and verifier overlap")
+
+
 def action_assignment(envelope: dict[str, Any], sequence: int) -> dict[str, Any]:
     """Select the immutable assignment bound to this logical action."""
     if execution_protocol_version(envelope) in {MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION}:
         if type(sequence) is not int or not 1 <= sequence <= 2:
             raise ContractError("mixed action sequence is invalid")
         return envelope["assignments"][sequence - 1]
-    if execution_protocol_version(envelope) == MAGENTIC_PROTOCOL_VERSION:
+    if execution_protocol_version(envelope) in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         raise ContractError("dynamic action requires an assignment identity")
     return envelope
 
@@ -210,7 +263,7 @@ def envelope_digest(envelope: dict[str, Any]) -> str:
 
 def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
     protocol_version = execution_protocol_version(envelope)
-    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+    if protocol_version in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         raise ContractError("dynamic action identity requires its manager proposal")
     if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
         raise ContractError("action sequence is invalid")
@@ -239,7 +292,7 @@ def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
 def validate_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
     require_fields(action, ("action_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind"), kind="action")
     protocol_version = execution_protocol_version(envelope)
-    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+    if protocol_version in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         _validate_magentic_action(envelope, action)
         return
     if action["kind"] != "delegate" or not isinstance(action["sequence"], int) or isinstance(action["sequence"], bool):
@@ -310,8 +363,8 @@ def expected_manager_call_id(request: dict[str, Any]) -> str:
 
 
 def validate_manager_call(envelope: dict[str, Any], request: dict[str, Any]) -> None:
-    if execution_protocol_version(envelope) != MAGENTIC_PROTOCOL_VERSION:
-        raise ContractError("manager calls require protocol v5")
+    if execution_protocol_version(envelope) not in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
+        raise ContractError("manager calls require Magentic protocol")
     require_fields(request, ("call_id", "attempt_id", "envelope_digest", "sequence", "phase",
                              "manager_round", "prompt_digest"), kind="manager call")
     if type(request["sequence"]) is not int or not 1 <= request["sequence"] <= 2**31 - 1 or type(request["manager_round"]) is not int or not 1 <= request["manager_round"] <= 7:
@@ -331,11 +384,11 @@ def validate_manager_call(envelope: dict[str, Any], request: dict[str, Any]) -> 
 
 def expected_replan_id(envelope: dict[str, Any], sequence: int) -> str:
     protocol = execution_protocol_version(envelope)
-    if protocol == MAGENTIC_PROTOCOL_VERSION:
+    if protocol in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         if type(sequence) is not int or not 1 <= sequence <= 3:
             raise ContractError("replan sequence exceeds the approved slice")
         return digest({"attempt_id": envelope["attempt_id"], "envelope_digest": envelope_digest(envelope),
-                       "execution_protocol_version": 5, "kind": "replan", "sequence": sequence})
+                       "execution_protocol_version": protocol, "kind": "replan", "sequence": sequence})
     if protocol != EXECUTION_PROTOCOL_VERSION:
         raise ContractError("replans require execution protocol v2")
     if not isinstance(sequence, int) or isinstance(sequence, bool) or not 1 <= sequence <= 3:
@@ -353,7 +406,7 @@ def expected_replan_id(envelope: dict[str, Any], sequence: int) -> str:
 
 def validate_replan(envelope: dict[str, Any], replan: dict[str, Any]) -> None:
     """Validate a Flow-owned replan request without giving it action authority."""
-    if execution_protocol_version(envelope) == MAGENTIC_PROTOCOL_VERSION:
+    if execution_protocol_version(envelope) in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         require_fields(replan, ("replan_id", "attempt_id", "envelope_digest", "sequence", "kind", "proposal"), kind="replan")
         if replan["kind"] != "replan" or type(replan["sequence"]) is not int or not 1 <= replan["sequence"] <= 3 or not isinstance(replan["proposal"], dict) or not replan["proposal"]:
             raise ContractError("Magentic replan proposal is invalid")
@@ -378,7 +431,7 @@ def validate_replan(envelope: dict[str, Any], replan: dict[str, Any]) -> None:
 
 def validate_result(envelope: dict[str, Any], result: dict[str, Any], *, action: dict[str, Any] | None = None) -> None:
     require_fields(result, ("status", "provider", "model", "physical_call", "evidence_level", "output", "output_sha256"), kind="result")
-    if execution_protocol_version(envelope) == MAGENTIC_PROTOCOL_VERSION:
+    if execution_protocol_version(envelope) in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         if action is None:
             raise ContractError("Magentic result requires selected action identity")
         validate_action(envelope, action)
@@ -413,7 +466,7 @@ def validate_result(envelope: dict[str, Any], result: dict[str, Any], *, action:
 
 def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
     protocol_version = execution_protocol_version(envelope)
-    if protocol_version == MAGENTIC_PROTOCOL_VERSION:
+    if protocol_version in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION}:
         _validate_magentic_receipt(envelope, receipt)
         return
     common = ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest", "status", "actions")
@@ -530,7 +583,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
     require_fields(receipt, ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest",
                              "status", "execution_protocol_version", "roster", "manager_calls", "actions",
                              "replans", "checkpoints", "evidence"), kind="Magentic receipt", max_bytes=512 * 1024)
-    if receipt["execution_protocol_version"] != 5 or receipt["status"] not in {"completed", "failed", "denied", "unknown"}:
+    if receipt["execution_protocol_version"] != execution_protocol_version(envelope) or receipt["status"] not in {"completed", "failed", "denied", "unknown"}:
         raise ContractError("Magentic receipt status or protocol is invalid")
     for field in ("work_id", "attempt_id", "charter_digest", "manifest_digest"):
         if receipt[field] != envelope[field]:
@@ -595,6 +648,9 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
             validate_result(envelope, item.get("result"), action=action)
     if receipt["status"] == "completed":
         completed = [item["request"] for item in receipt["actions"] if item["status"] == "completed"]
+        if execution_protocol_version(envelope) == CHARTERED_PROTOCOL_VERSION:
+            _validate_chartered_completion(envelope, evidence, completed)
+            return
         producers = [item for item in completed if item["role"] == "lead-developer" and item["provider"] == "claude"]
         if len(producers) != 1 or not any(item["role"] == "test-engineer" and item["instance_id"] != producers[0]["instance_id"] and item["sequence"] > producers[0]["sequence"] for item in completed):
             raise ContractError("completed Magentic receipt requires Claude producer and later distinct verifier")
@@ -605,6 +661,33 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
             raise ContractError("Magentic edit evidence is invalid")
         if not isinstance(tests, dict) or tests.get("status") != "passed" or not isinstance(tests.get("command"), list) or not tests["command"] or not all(isinstance(v, str) and v for v in tests["command"]) or not _hex_digest(tests.get("output_sha256")):
             raise ContractError("Magentic focused test evidence is invalid")
+
+
+def _validate_chartered_completion(envelope: dict[str, Any], evidence: dict[str, Any],
+                                   completed: list[dict[str, Any]]) -> None:
+    job = envelope["job_contract"]
+    producers = [action for action in completed if action["instance_id"] in job["producer_instance_ids"]]
+    if len(producers) != 1 or not any(action["instance_id"] in job["verifier_instance_ids"]
+                                      and action["instance_id"] != producers[0]["instance_id"]
+                                      and action["sequence"] > producers[0]["sequence"]
+                                      for action in completed):
+        raise ContractError("completed chartered receipt requires producer and later distinct verifier")
+    baseline, edit, tests = (evidence.get(key) for key in ("baseline", "edit", "tests"))
+    if (not isinstance(baseline, dict) or baseline.get("source_commit") != envelope["source_commit"]
+            or baseline.get("regression_diff_sha256") != job["baseline"]["diff_sha256"]
+            or not isinstance(baseline.get("files"), dict)
+            or not all(_hex_digest(value) for value in baseline["files"].values())):
+        raise ContractError("chartered baseline evidence is invalid")
+    if (not isinstance(edit, dict) or not isinstance(edit.get("changed_files"), list)
+            or not edit["changed_files"] or not set(edit["changed_files"]).issubset(set(job["write_paths"]))
+            or not _hex_digest(edit.get("diff_sha256")) or not isinstance(edit.get("diff_path"), str)
+            or not edit["diff_path"] or not isinstance(edit.get("files"), dict)
+            or not all(_hex_digest(value) for value in edit["files"].values())):
+        raise ContractError("chartered edit evidence is invalid")
+    if (not isinstance(tests, dict) or tests.get("status") != "passed"
+            or tests.get("command") != job["test"]["argv"]
+            or not _hex_digest(tests.get("output_sha256"))):
+        raise ContractError("chartered test evidence is invalid")
 
 
 RECOVERY_DISPOSITIONS = frozenset({"resolved_completed", "resolved_not_dispatched", "still_unknown"})
