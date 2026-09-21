@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_gateway import (ContractError, _default_worker_adapter,
                               execute_chartered_delivery, prepare_chartered_delivery)
+from execution_contracts import envelope_digest, expected_magentic_action_id
 
 
 class CharteredPreparationTests(unittest.TestCase):
@@ -28,7 +29,9 @@ class CharteredPreparationTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.worktree), "config", "user.email", "test@example.com"], check=True)
         subprocess.run(["git", "-C", str(self.worktree), "config", "user.name", "Test"], check=True)
         (self.worktree / "target.py").write_text("old\n")
-        subprocess.run(["git", "-C", str(self.worktree), "add", "target.py"], check=True)
+        (self.worktree / "tests").mkdir()
+        (self.worktree / "tests" / "test_target.py").write_text("import unittest\n\n\nclass TargetTests(unittest.TestCase):\n    def test_target(self):\n        self.assertTrue(True)\n")
+        subprocess.run(["git", "-C", str(self.worktree), "add", "target.py", "tests/test_target.py"], check=True)
         subprocess.run(["git", "-C", str(self.worktree), "commit", "-qm", "source"], check=True)
         self.commit = subprocess.check_output(["git", "-C", str(self.worktree), "rev-parse", "HEAD"], text=True).strip()
         self.charter = {"task": "Edit target.py", "read_paths": ["target.py"], "write_paths": ["target.py"],
@@ -93,6 +96,84 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["execution_protocol_version"], 6)
+
+    def _proposal(self, envelope, assignment_id, sequence):
+        assignment = next(item for item in envelope["roster"] if item["assignment_id"] == assignment_id)
+        checkpoint_id = f"checkpoint-{sequence}"
+        action = {"schema_version": 1, "kind": "delegate", "attempt_id": envelope["attempt_id"],
+                  "envelope_digest": envelope_digest(envelope), "sequence": sequence,
+                  "assignment_id": assignment_id, "definition_digest": assignment["definition_digest"],
+                  "instance_id": assignment["instance_id"], "role": assignment["role"],
+                  "provider": assignment["provider"], "model": assignment["model"],
+                  "manager_turn": sequence, "task": "Edit target.py" if sequence == 1 else "Verify target.py",
+                  "rationale": "The selected specialist is eligible for this bounded task.",
+                  "parent_action_id": None if sequence == 1 else "a" * 64,
+                  "checkpoint_id": checkpoint_id}
+        action["task_digest"] = hashlib.sha256(action["task"].encode()).hexdigest()
+        action["action_id"] = expected_magentic_action_id(action)
+        return action
+
+    @staticmethod
+    def _result(provider, model, output):
+        return {"schema_version": 1, "status": "completed", "provider": provider, "model": model,
+                "physical_call": True,
+                "evidence_level": {"codex": "flow_observed_codex_cli_completed_turn",
+                                   "ollama": "flow_observed_local_http_response"}[provider],
+                "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "usage": None}
+
+    def test_v6_gateway_seals_producer_verifier_receipt_after_flow_observes_edit_and_test(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v6",
+                                                  "pending_request_info_events": {
+                                                      f"flow-magentic-action-{sequence}": {}}}))
+                on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            self.assertIn("Flow-verified complete bounded diff", action["provider_task"])
+            self.assertIn("Targeted test: passed", action["provider_task"])
+            return self._result("ollama", "local-model", "Verified target")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(calls, ["editor", "verifier"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["execution_protocol_version"], 6)
+        self.assertEqual([item["status"] for item in receipt["actions"]], ["completed", "completed"])
+        self.assertEqual(receipt["evidence"]["tests"]["command"], self.charter["test"]["argv"])
+        self.assertTrue(receipt["checkpoints"])
+
+    def test_v6_verifier_before_observed_edit_refuses_without_provider_send(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            proposal = self._proposal(envelope, "verifier", 1)
+            on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(*args, **kwargs):
+            calls.append(True)
+            self.fail("ineligible verifier must not reach provider dispatch")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(calls, [])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["actions"], [])
 
 
 class ProviderRouteTests(unittest.TestCase):
