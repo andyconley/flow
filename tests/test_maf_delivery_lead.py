@@ -15,7 +15,7 @@ MAF_PYTHON = os.environ.get("FLOW_MAF_PYTHON", "/private/tmp/flow-maf-runtime-sp
 
 @unittest.skipUnless(Path(MAF_PYTHON).exists(), "pinned MAF interpreter unavailable")
 class StockDeliveryLeadTest(unittest.TestCase):
-    def _exercise(self, speaker: str) -> tuple[list[str], list[str], dict]:
+    def _exercise(self, speaker: str, protocol_version: int = 5) -> tuple[list[str], list[str], dict]:
         roster = [
             {"assignment_id": "test", "definition_digest": "test-definition", "instance_id": "test-engineer-1",
              "role": "test-engineer", "provider": "local-stub", "model": "fake"},
@@ -23,13 +23,13 @@ class StockDeliveryLeadTest(unittest.TestCase):
              "role": "quality-reviewer", "provider": "local-stub", "model": "fake"},
         ]
         with tempfile.TemporaryDirectory() as checkpoints:
-            envelope = {"execution_protocol_version": 5, "attempt_id": "stock-probe", "checkpoint_dir": checkpoints,
+            envelope = {"execution_protocol_version": protocol_version, "attempt_id": "stock-probe", "checkpoint_dir": checkpoints,
                         "roster": roster}
             child = subprocess.Popen([MAF_PYTHON, "-m", "runtime.maf_runner.delivery_lead"],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                      text=True, cwd=Path(__file__).resolve().parents[1])
             assert child.stdin and child.stdout
-            child.stdin.write(json.dumps({"protocol_version": 5, "type": "start", "envelope": envelope,
+            child.stdin.write(json.dumps({"protocol_version": protocol_version, "type": "start", "envelope": envelope,
                                           "task": "Analyze the fixture"}) + "\n")
             child.stdin.flush()
             phases: list[str] = []
@@ -64,14 +64,14 @@ class StockDeliveryLeadTest(unittest.TestCase):
                         answer = {"facts": "Fixture facts", "plan": "- Select a specialist",
                                   "replan_facts": "Updated fixture facts", "replan_plan": "- Revised plan",
                                   "final": "Fixture analysis finished"}[phase]
-                    child.stdin.write(json.dumps({"protocol_version": 5, "type": "manager_response",
+                    child.stdin.write(json.dumps({"protocol_version": protocol_version, "type": "manager_response",
                                                   "call_id": event["call_id"], "text": answer}) + "\n")
                     child.stdin.flush()
                 elif kind == "propose_action":
                     self.assertEqual(event["action_id"], expected_magentic_action_id(event))
                     self.assertTrue(event["checkpoint_id"])
                     selected.append(event["instance_id"])
-                    child.stdin.write(json.dumps({"protocol_version": 5, "type": "action_result",
+                    child.stdin.write(json.dumps({"protocol_version": protocol_version, "type": "action_result",
                                                   "action_id": event["action_id"],
                                                   "result": {"summary": "Fixture analyzed"}}) + "\n")
                     child.stdin.flush()
@@ -95,6 +95,13 @@ class StockDeliveryLeadTest(unittest.TestCase):
         self.assertEqual(second_actions, ["reviewer-1"])
         self.assertEqual(first_terminal["type"], "workflow_finished")
         self.assertEqual(second_terminal["type"], "workflow_finished")
+
+    def test_stock_manager_routes_with_chartered_protocol(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=6)
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "final"])
+        self.assertEqual(actions, ["test-engineer-1"])
+        self.assertEqual(terminal["type"], "workflow_finished")
+        self.assertEqual(terminal["protocol_version"], 6)
 
     def test_unknown_speaker_does_not_fall_back_to_first_worker(self):
         phases, actions, terminal = self._exercise("unlisted-worker")

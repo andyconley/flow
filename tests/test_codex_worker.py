@@ -80,6 +80,12 @@ class CodexWorkerTests(unittest.TestCase):
             self.assertNotIn("CODEX_API_KEY", child_env)
             self.assertIn("HOME", child_env)
             self.assertEqual(child_env["PYTHONDONTWRITEBYTECODE"], "1")
+            call_codex(instructions="Manager", task="Return a plan", workspace=workspace,
+                       model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="read-only")
+            self.assertIn("read-only", json.loads((workspace / "argv.json").read_text()))
+            with self.assertRaises(ValueError):
+                call_codex(instructions="Manager", task="Return a plan", workspace=workspace,
+                           model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="danger-full-access")
 
     def test_timeout_is_uncertain(self):
         with tempfile.TemporaryDirectory() as temporary:

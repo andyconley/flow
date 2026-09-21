@@ -160,6 +160,18 @@ MAF is optional: ordinary Flow commands do not import it. For this first slice, 
 
 For the bounded multi-turn exercise, add `--multi-turn`. Flow then records three ordered action positions and three separate replan decisions. The first two replans may be allowed; the third is denied by the two-replan cap and ends that MAF phase. Flow checks the denial state before starting an independent action-3 phase in the same attempt. `--interrupt-after-third-send` is an exercise-only fault point: it marks the third action `unknown` immediately after Flow records `adapter_send_started`, before calling Ollama. The first two actions still make physical Ollama calls. This flag does not prove that Ollama received the third request. Inspect the v2 receipt and checkpoint positions for the evidence actually recorded. For a disposable loopback arrival observer, set `FLOW_OLLAMA_OBSERVER=1`, `FLOW_OLLAMA_URL=http://127.0.0.1:PORT/api/chat`, and `FLOW_OLLAMA_OBSERVER_LOG` to its owner-only JSONL file inside the run. The receipt seals a per-action arrival table; without an observer it labels endpoint arrival evidence unavailable.
 
+### `flow run execute-chartered-job <work-id> --worktree PATH --source-commit COMMIT`
+
+Run an approved charter-selected specialist roster through Flow-gated Magentic, for the revision-2 implementing run.
+
+```sh
+flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]
+```
+
+The run must be revision 2 and `implementing`, with a valid dispatch-stage `orchestration.json`. The approved `job-charter.json` must be linked through that orchestration manifest — the `magentic-manager` assignment's `input_evidence` must name the charter, or the run's declared `job_charter` artifact must match it. The charter pins the task, read/write paths, test, baseline, and the producer and verifier instance IDs drawn from the manifest's roster.
+
+Direct Claude and Codex edits are Flow-gated: only specialists the charter names as producers may hold edit capability, and their write scope must equal the charter's declared `write_paths`. Ollama performs read-only verification only — an Ollama-backed specialist must be read-only, and every declared verifier must be an independent read-only specialist disjoint from the producers. Native subagents are disabled; the roster runs only the Flow-approved specialists bound in the orchestration manifest.
+
 ### `flow run inspect-execution <work-id> <attempt-id>`
 
 Read the original envelope, action, ordered ledger events, source snapshot checks, checkpoint link, receipt, and missing evidence without creating a new attempt or calling a provider. Use `--json` for structured output. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that Ollama did not receive the request.
