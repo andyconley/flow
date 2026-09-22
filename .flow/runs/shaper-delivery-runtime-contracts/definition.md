@@ -46,6 +46,24 @@ A Shaper can define and, when necessary, solution work from any supported surfac
 
 See `requirements.md` and `acceptance-criteria.md`.
 
+### Success criteria
+
+- Shaping intent and delivery authority remain understandable and auditable when operators change runtimes.
+- The Delivery Lead can coordinate useful work without gaining authority to reshape the approved outcome.
+- Existing Flow lifecycle, policy, evidence, and recovery machinery remains the single control plane.
+
+### Constraints
+
+- Preserve append-only approved artifacts and compatibility with existing chartered execution records.
+- Use only Flow-enforceable controls; record usage observations without claiming unavailable dollar or token enforcement.
+- Keep MAF/Magentic and provider session state subordinate to Flow artifacts and identifiers.
+
+### Assumptions
+
+- ChatGPT Work, Claude Code, and Codex can each access the relevant Flow project artifacts through a supported local adapter; the exact Work adapter and locality rules remain unverified.
+- One active Delivery Lead per attempt is sufficient for the first contract version.
+- Existing specialist definitions and the chartered gateway are suitable extension points rather than replacement targets.
+
 ## Research implications
 
 - Current authority boundary is already aligned -> extend the gateway and launcher; do not build a second kernel.
@@ -72,6 +90,7 @@ See `adversarial-review.md`. Material risks are silent charter drift, duplicate 
 - Final schema names, versioning, canonical encoding, and digest algorithm.
 - Whether an amendment creates a new charter version, linked delivery epoch, or both.
 - Initial Work adapter packaging and operator identity binding.
+- The evidence and supported locality needed to prove ChatGPT Work can open the same canonical project/run on a given machine.
 - Initial specialist/provider eligibility and nested-subagent policy.
 - Which expansion decisions a Shaper may approve automatically, including expiry and revocation.
 - Whether Magentic needs an upstream extension for durable action metadata.
