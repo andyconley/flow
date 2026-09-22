@@ -1,6 +1,6 @@
 # Proposed acceptance criteria
 
-Status: **Draft — not approved**
+Status: **Approved 2026-09-22 by Andy Conley**
 
 - [ ] Flow validates and canonicalizes a runtime-neutral Shaper contract with all required identity, scope, evidence, authority, risk, and amendment fields.
 - [ ] Explicit approval creates a sealed Delivery Charter whose digest, source artifact digests, approval, roster, provider capabilities, limits, and verification obligations are inspectable.

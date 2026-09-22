@@ -1,6 +1,6 @@
 # Proposed requirements: Shaper and Delivery Lead runtime contracts
 
-Status: **Draft — not approved**
+Status: **Approved 2026-09-22 by Andy Conley**
 
 ## Ownership model
 

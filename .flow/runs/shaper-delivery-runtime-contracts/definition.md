@@ -3,8 +3,8 @@
 - Work item: `shaper-delivery-runtime-contracts`
 - Definition lead: Codex coordinator with Flow role review
 - Opening role: solution-architect
-- Status: Draft — not approved
-- Approver: Andy Conley
+- Status: Approved 2026-09-22
+- Approver: Andy Conley, explicit engineer approval
 
 ## Problem or opportunity
 
@@ -95,7 +95,13 @@ See `adversarial-review.md`. Material risks are silent charter drift, duplicate 
 - Which expansion decisions a Shaper may approve automatically, including expiry and revocation.
 - Whether Magentic needs an upstream extension for durable action metadata.
 
+## Approval record
+
+- Decision: Approved
+- Approver: Andy Conley
+- Date: 2026-09-22
+- Scope: The proposed Shaper contract, Delivery Charter, ownership transition, Delivery Lead, cross-runtime requirements, and explicitly unresolved items carried into `flow-solution`.
+
 ## Next lane
 
-- Further definition and explicit engineer approval.
-- After approval, use `flow-solution` because schema, compatibility, amendment, and adapter choices remain architectural.
+- `flow-solution`, because schema, compatibility, amendment, lease, locality, and adapter choices remain architectural.

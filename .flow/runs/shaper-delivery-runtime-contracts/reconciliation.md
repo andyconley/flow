@@ -8,3 +8,4 @@
 - Schema encoding, amendment mechanics, Work adapter packaging, and nested-provider controls: **deferred to approval/solution decisions**.
 - Provider substitution, transition replay/withdrawal, runtime conflicts/locality, Delivery Lead replacement, research-output status, and malformed migration handling: **accepted as requirements changes** after business-analysis review.
 - Exact Work adapter/locality mechanics: **unverified and explicitly unresolved**; a bounded feasibility probe must define them before cross-runtime implementation acceptance is fixed.
+- Requirements decision: **approved 2026-09-22 by Andy Conley**, including the explicitly unresolved items being carried into `flow-solution`.
