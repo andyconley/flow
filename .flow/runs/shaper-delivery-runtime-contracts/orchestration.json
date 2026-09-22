@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "work_id": "shaper-delivery-runtime-contracts",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": ["concurrency_or_cross_system_coordination", "material_unresolved_ambiguity"],
+    "classification": "high",
+    "rationale": "Cross-runtime lifecycle and execution authority contracts require independent review before approval."
+  },
+  "assignments": [
+    {
+      "id": "requirements-review",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {"kind": "agent", "id": "flow-business-analyst-definition"},
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/brief.md",
+      "input_evidence": ["docs/maf-adoption-design.md", ".flow/PROJECT.md"],
+      "read_scopes": [".flow", "cli", "docs", "scaffolds/default", "tests"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/shaper-delivery-runtime-contracts/requirements.md", "format": "markdown"},
+      "success_criteria": ["Identify complete proposed workflows, requirements, acceptance criteria, and ambiguities"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "definition-review"}
+    },
+    {
+      "id": "product-review",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {"kind": "agent", "id": "flow-product-manager-definition"},
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/brief.md",
+      "input_evidence": ["docs/maf-adoption-design.md", ".flow/runs/shaper-delivery-runtime-contracts/requirements.md"],
+      "read_scopes": [".flow", "cli", "docs", "scaffolds/default", "tests"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/shaper-delivery-runtime-contracts/definition.md", "format": "markdown"},
+      "success_criteria": ["Confirm smallest valuable roadmap, non-goals, and decision points"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "definition-review"}
+    },
+    {
+      "id": "architecture-review",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {"kind": "agent", "id": "flow-solution-architect-definition"},
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/brief.md",
+      "input_evidence": ["docs/maf-adoption-design.md", "scaffolds/default/standards/orchestration.md"],
+      "read_scopes": [".flow", "cli", "docs", "scaffolds/default", "tests"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/shaper-delivery-runtime-contracts/adversarial-review.md", "format": "markdown"},
+      "success_criteria": ["Confirm boundaries, transition semantics, reuse, and failure cases"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "definition-review"}
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/shaper-delivery-runtime-contracts/reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {"id": "existing-control-plane", "status": "observed", "disposition": "accepted", "evidence": ["docs/maf-adoption-design.md"]},
+      {"id": "runtime-neutral-contracts", "status": "recommended", "disposition": "deferred", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/requirements.md"]},
+      {"id": "ordinary-chat-ingress", "status": "unverified", "disposition": "deferred", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/definition.md"]}
+    ]
+  },
+  "verification": {
+    "producer_assignments": ["requirements-review", "product-review"],
+    "evidence_collector_assignment": "product-review",
+    "verifier_assignment": "architecture-review",
+    "independent": true,
+    "artifact_path": ".flow/runs/shaper-delivery-runtime-contracts/verification.md"
+  }
+}
