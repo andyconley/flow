@@ -8,12 +8,14 @@ table below is the only place that decides whether a lifecycle move is legal.
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from fsutil import ensure_dir, repo_root, write_atomic
+from delivery_control import start_plan as seal_delivery_start_plan
 from orchestration import manifest_path, valid_work_id, validate_orchestration
 
 
@@ -418,6 +420,32 @@ def apply_transition(
         ]
     if event_name not in TRANSITIONS:
         return False, {}, [f"unknown event: {event_name}"]
+    # ``start-plan`` has a stronger authority contract than an ordinary state
+    # transition.  It seals immutable delivery artifacts under a per-run lock
+    # and makes the one run.json replacement its commit point.  Keep the
+    # public lifecycle API unchanged while delegating that atomic operation.
+    if event_name == "start-plan":
+        if artifacts or dispositions or note:
+            return False, _load_run(work_id, root) or {}, [
+                "start-plan does not accept artifact, disposition, or note overrides"
+            ]
+        current_start = _load_run(work_id, root)
+        current_state = current_start.get("state") if current_start else None
+        active_root = (root or repo_root()).resolve()
+        declared = (current_start or {}).get("artifacts", {})
+        source_paths = [declared.get("requirements"), declared.get("acceptance_criteria")]
+        sources_exist = all(
+            isinstance(path, str) and (active_root / path).is_file()
+            for path in source_paths
+        )
+        revision = (current_start or {}).get("protocol_revision", 1)
+        # Revision two carries approved artifact bindings. It must never bypass
+        # authority sealing when those bytes are missing or unsafe. Revision
+        # one predates the delivery contract and retains the legacy lifecycle.
+        if current_state == STATE_PLANNING and (current_start or {}).get("delivery"):
+            return seal_delivery_start_plan(work_id, root=active_root)
+        if current_state in {STATE_DEFINITION_APPROVED, STATE_SOLUTION_APPROVED} and revision == PROTOCOL_REVISION_CURRENT:
+            return seal_delivery_start_plan(work_id, root=active_root)
     transition = TRANSITIONS[event_name]
     current = _load_run(work_id, root)
     current_state = current.get("state") if current else None
@@ -444,6 +472,24 @@ def apply_transition(
         return False, current or {}, ["orchestration_manifest cannot be replaced after it is recorded"]
     payload["artifacts"].update(artifacts or {})
     payload["dispositions"].update(dispositions or {})
+
+    if event_name in {"approve-definition", "approve-solution"} and _protocol_revision(payload) == PROTOCOL_REVISION_CURRENT:
+        active_root = (root or repo_root()).resolve()
+        expected_prefix = f".flow/runs/{work_id}/"
+        approval_names = (
+            ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest")
+            if event_name == "approve-definition" else ("solution",)
+        )
+        payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests", {}))
+        for name in approval_names:
+            relative = payload["artifacts"].get(name)
+            if not isinstance(relative, str) or not relative.startswith(expected_prefix):
+                return False, current or {}, [f"missing for {transition.gate}: artifact:{name}"]
+            path = active_root / relative
+            if (not path.is_file() or path.is_symlink()
+                    or not path.resolve().is_relative_to(active_root)):
+                return False, current or {}, [f"{name} must be a current-run regular file"]
+            payload["approved_artifact_digests"][name] = hashlib.sha256(path.read_bytes()).hexdigest()
 
     missing = _missing_gate_items(payload, transition)
     if missing:
@@ -488,6 +534,11 @@ def apply_transition(
         "artifacts": artifacts or {},
         "dispositions": dispositions or {},
     }
+    if event_name in {"approve-definition", "approve-solution"} and payload.get("approved_artifact_digests"):
+        names = ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest") if event_name == "approve-definition" else ("solution",)
+        event["approved_artifact_digests"] = {
+            name: payload["approved_artifact_digests"][name] for name in names
+        }
     if note:
         event["note"] = note
 

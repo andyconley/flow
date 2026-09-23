@@ -1,0 +1,22 @@
+# Definition reconciliation
+
+- Existing Flow/MAF boundary: **accepted as observed** from repository design and code.
+- Runtime-neutral Shaper and Delivery Charter schema: **recommended; pending engineer approval**.
+- Artifact-based cross-runtime continuation: **recommended; pending engineer approval**.
+- Ordinary Chat MCP ingress: **deferred** from this work item.
+- Archive retrieval evidence: **unavailable**, not accepted as proof.
+- Schema encoding, amendment mechanics, Work adapter packaging, and nested-provider controls: **deferred to approval/solution decisions**.
+- Provider substitution, transition replay/withdrawal, runtime conflicts/locality, Delivery Lead replacement, research-output status, and malformed migration handling: **accepted as requirements changes** after business-analysis review.
+- Exact Work adapter/locality mechanics: **unverified and explicitly unresolved**; a bounded feasibility probe must define them before cross-runtime implementation acceptance is fixed.
+- Requirements decision: **approved 2026-09-22 by Andy Conley**, including the explicitly unresolved items being carried into `flow-solution`.
+- Solution choice: **accepted by Andy Conley** — canonical Flow contracts with a projection into the existing gateway, plus an end-to-end first slice.
+- ChatGPT Work feasibility probe: **superseded by explicit engineer decision** — local access is established; retain runtime project/worktree binding validation.
+- V6 compatibility: **clarified by engineer** — records remain readable/inspectable but need not be executable or resumable through the new contract.
+- Ordinary Chat MCP ingress: remains **deferred**.
+- Solution decision: **approved 2026-09-22 by Andy Conley** with documented risks owned; Chunk 1 is eligible for `flow-plan`.
+- Chunk 1 shaped plan: **accepted by Andy Conley** — end-to-end contracts, atomic handoff, fenced lead, protocol-v7 projection, explainable producer choice, v6 inspection, CLI, deterministic gates, and one live handback job. Lifecycle plan approval remains pending capture review.
+- Plan decision: **approved 2026-09-22 by Andy Conley** through explicit `flow-implement` invocation.
+- Implementation quality review: **accepted** after the per-run Shaper intent, effective specialist-definition digest, inspection version, and approval-digest boundary fixes.
+- Data review: **accepted for v7 handback**; explicit durable SQLite migration history is deferred.
+- Live v7 runtime proof: **accepted with a limitation** — Magentic selected Claude, Flow observed the diff and passing targeted test, Ollama completed physical verification calls, and Flow denied later Codex producer proposals. Ollama's semantic responses were repetitive and not strong enough for the manager; improve the verifier contract in a later slice.
+- Live documentation diff: **evidence-only** in the isolated worktree because it contains the pinned proof commit. It is not part of the implementation branch.

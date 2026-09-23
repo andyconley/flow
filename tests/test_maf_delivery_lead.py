@@ -22,9 +22,15 @@ class StockDeliveryLeadTest(unittest.TestCase):
             {"assignment_id": "review", "definition_digest": "review-definition", "instance_id": "reviewer-1",
              "role": "quality-reviewer", "provider": "local-stub", "model": "fake"},
         ]
+        if protocol_version == 7:
+            for item in roster:
+                item["capabilities"] = ["read"]
         with tempfile.TemporaryDirectory() as checkpoints:
             envelope = {"execution_protocol_version": protocol_version, "attempt_id": "stock-probe", "checkpoint_dir": checkpoints,
                         "roster": roster}
+            if protocol_version == 7:
+                envelope["job_contract"] = {"producer_instance_ids": ["test-engineer-1"],
+                                            "verifier_instance_ids": ["reviewer-1"]}
             child = subprocess.Popen([MAF_PYTHON, "-m", "runtime.maf_runner.delivery_lead"],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                      text=True, cwd=Path(__file__).resolve().parents[1])
@@ -70,6 +76,12 @@ class StockDeliveryLeadTest(unittest.TestCase):
                 elif kind == "propose_action":
                     self.assertEqual(event["action_id"], expected_magentic_action_id(event))
                     self.assertTrue(event["checkpoint_id"])
+                    if protocol_version == 7:
+                        choice = event["provider_choice"]
+                        self.assertEqual(choice["selected_candidate"], event["instance_id"])
+                        self.assertEqual([item["instance_id"] for item in choice["eligible_candidates"]], ["test-engineer-1"])
+                        self.assertTrue(choice["rationale"]["facts"])
+                        self.assertEqual(choice["rejection_reasons"], {})
                     selected.append(event["instance_id"])
                     child.stdin.write(json.dumps({"protocol_version": protocol_version, "type": "action_result",
                                                   "action_id": event["action_id"],
@@ -102,6 +114,13 @@ class StockDeliveryLeadTest(unittest.TestCase):
         self.assertEqual(actions, ["test-engineer-1"])
         self.assertEqual(terminal["type"], "workflow_finished")
         self.assertEqual(terminal["protocol_version"], 6)
+
+    def test_stock_manager_routes_with_delivery_projection_protocol(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=7)
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "final"])
+        self.assertEqual(actions, ["test-engineer-1"])
+        self.assertEqual(terminal["type"], "workflow_finished")
+        self.assertEqual(terminal["protocol_version"], 7)
 
     def test_unknown_speaker_does_not_fall_back_to_first_worker(self):
         phases, actions, terminal = self._exercise("unlisted-worker")

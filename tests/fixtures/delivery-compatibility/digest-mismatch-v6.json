@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "execution_protocol_version": 6,
+  "work_id": "legacy-work",
+  "attempt_id": "legacy-attempt",
+  "charter_sources": {
+    "requirements": {"path": ".flow/runs/legacy-work/requirements.md", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "acceptance": {"path": ".flow/runs/legacy-work/acceptance-criteria.md", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+  },
+  "charter_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "roster": []
+}

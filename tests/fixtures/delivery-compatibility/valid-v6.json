@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "execution_protocol_version": 6,
+  "work_id": "legacy-work",
+  "attempt_id": "legacy-attempt",
+  "charter_sources": {
+    "requirements": {"path": ".flow/runs/legacy-work/requirements.md", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "acceptance": {"path": ".flow/runs/legacy-work/acceptance-criteria.md", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+  },
+  "charter_digest": "8c125c7504969320a9df6e51ef86662fd22503aa90f0dfa5a9ce7c0a7d1a1214",
+  "manifest_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "source_commit": "dddddddddddddddddddddddddddddddddddddddd",
+  "worktree": "/private/tmp/legacy-work",
+  "allowed_paths": ["cli/example.py"],
+  "roster": [
+    {
+      "assignment_id": "legacy-verifier",
+      "definition_digest": "59b1bcba1c407d8c5a19062f097df7d86d953681f62b3ee5911d11c2afdd01cb",
+      "instance_id": "legacy-verifier-1",
+      "role": "test-engineer",
+      "provider": "ollama",
+      "model": "local",
+      "instructions": "Verify the scoped change.",
+      "capabilities": ["read"]
+    }
+  ],
+  "job_contract": {"task": "Historical record only."}
+}

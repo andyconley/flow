@@ -1,0 +1,899 @@
+{
+  "schema_version": 1,
+  "work_id": "shaper-delivery-runtime-contracts",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination",
+      "material_unresolved_ambiguity"
+    ],
+    "classification": "high",
+    "rationale": "Cross-runtime lifecycle and execution authority contracts require independent review before approval."
+  },
+  "assignments": [
+    {
+      "id": "requirements-review",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-definition"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/brief.md",
+      "input_evidence": [
+        "docs/maf-adoption-design.md",
+        ".flow/PROJECT.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify complete proposed workflows, requirements, acceptance criteria, and ambiguities"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "product-review",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-definition"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/brief.md",
+      "input_evidence": [
+        "docs/maf-adoption-design.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/definition.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Confirm smallest valuable roadmap, non-goals, and decision points"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "architecture-review",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-definition"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/brief.md",
+      "input_evidence": [
+        "docs/maf-adoption-design.md",
+        "scaffolds/default/standards/orchestration.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Confirm boundaries, transition semantics, reuse, and failure cases"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "solution-design",
+      "lane": "solution",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-runtime-contracts"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/solution-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        "docs/maf-adoption-design.md",
+        "docs/adr/0011-supervise-maf-behind-flow-gateway.md",
+        "docs/adr/0012-flow-owned-maf-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/solution-architect-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Compare at least two viable architectures and recommend staged contracts and boundaries"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "solution-review"
+      }
+    },
+    {
+      "id": "platform-review",
+      "lane": "solution",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-architect-runtime-contracts"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/solution-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        "docs/maf-adoption-design.md",
+        "docs/adr/0011-supervise-maf-behind-flow-gateway.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/platform-architecture-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Challenge domain boundaries, versioning, ownership, compatibility, and decision durability"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "solution-review"
+      }
+    },
+    {
+      "id": "solution-test-review",
+      "lane": "solution",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-runtime-contracts"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/solution-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        "tests/test_chartered_delivery_gateway.py",
+        "tests/test_execution_recovery.py"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/solution-test-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Define deterministic contract, migration-readability, recovery, and real-job proof strategy"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "solution-review"
+      }
+    },
+    {
+      "id": "plan-requirements",
+      "lane": "plan",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-contract-plan"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/plan-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/solution.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/plan-business-analysis.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Make Chunk 1 workflow, states, boundaries, and acceptance implementation-ready"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    },
+    {
+      "id": "plan-scope",
+      "lane": "plan",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-contract-plan"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/plan-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/solution.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/plan-product-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Keep the first slice useful, bounded, prioritized, and independently acceptable"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    },
+    {
+      "id": "plan-architecture",
+      "lane": "plan",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-architect-contract-plan"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/plan-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/solution.md",
+        "docs/adr/0011-supervise-maf-behind-flow-gateway.md",
+        "docs/adr/0012-flow-owned-maf-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/plan-architecture-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Map the selected solution to concrete modules, contracts, transitions, and migration boundaries"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    },
+    {
+      "id": "plan-test",
+      "lane": "plan",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-contract-plan"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/plan-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/solution.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        "tests/test_chartered_delivery_gateway.py",
+        "tests/test_execution_recovery.py"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/plan-test-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Produce deterministic and live handback validation steps with exact failure boundaries"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "plan-test"
+      }
+    },
+    {
+      "id": "impl-domain-lifecycle",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-lead-developer-domain-lifecycle"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/implementation-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/plan-architecture-review.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli/delivery_contracts.py",
+        "cli/delivery_control.py",
+        "cli/runstate.py",
+        "tests/test_shaper_delivery_contracts.py",
+        "tests/test_delivery_control.py",
+        "docs/adr/0014-shaper-delivery-ownership.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/domain-lifecycle-implementation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/domain-lifecycle-implementation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implement canonical contracts and atomic idempotent start-plan ownership handoff with focused tests"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation"
+      }
+    },
+    {
+      "id": "impl-legacy-inspection",
+      "lane": "implement",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-legacy-inspection"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/implementation-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md",
+        "tests/test_chartered_execution_contract.py"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli/legacy_delivery.py",
+        "tests/test_legacy_delivery.py",
+        "tests/fixtures/delivery-compatibility",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/legacy-inspection-implementation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/legacy-inspection-implementation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implement tracked v6 inspection fixtures and hard execute/resume ineligibility"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation"
+      }
+    },
+    {
+      "id": "impl-runtime-projection",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-lead-developer-runtime-projection"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/implementation-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md",
+        "docs/adr/0011-supervise-maf-behind-flow-gateway.md",
+        "docs/adr/0012-flow-owned-maf-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "runtime",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli/delivery_projection.py",
+        "cli/execution_contracts.py",
+        "cli/execution_ledger.py",
+        "cli/delivery_gateway.py",
+        "runtime/maf_runner/delivery_lead.py",
+        "tests/test_delivery_projection.py",
+        "tests/test_delivery_lead_claims.py",
+        "tests/test_chartered_delivery_gateway.py",
+        "tests/test_magentic_execution_contract.py",
+        "tests/test_execution_recovery.py",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/runtime-projection-implementation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/runtime-projection-implementation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implement protocol-v7 projection, generation-linked ledger/gateway behavior, explainable producer choice, and focused tests"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation"
+      }
+    },
+    {
+      "id": "implementation-quality-review",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-implementation"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/review-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md",
+        "docs/adr/0014-shaper-delivery-ownership.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        "cli",
+        "docs",
+        "runtime",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/implementation-quality-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify acceptance-blocking correctness or evidence defects with file and line references"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation-review"
+      }
+    },
+    {
+      "id": "implementation-data-review",
+      "lane": "review",
+      "role": "data-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-data-engineer-implementation"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/data-review-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        "docs/adr/0014-shaper-delivery-ownership.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/implementation-data-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Assess additive ledger compatibility, transaction boundaries, and generation fencing"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implementation-review"
+      }
+    },
+    {
+      "id": "implementation-handback-writer",
+      "lane": "implement",
+      "role": "tech-writer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-tech-writer-handback"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/tech-writer-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/implementation-quality-review.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/implementation-data-review.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        ".flow/runs/shaper-delivery-v7-live-proof",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Produce a concise evidence-backed handback with explicit limitations and next actions."
+      ],
+      "claim_statuses": [
+        "observed",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "implementation-handback"
+      }
+    },
+    {
+      "id": "acceptance-quality-review",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-acceptance"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/acceptance-quality-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        ".flow/runs/shaper-delivery-v7-live-proof",
+        "cli",
+        "docs",
+        "runtime",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/acceptance-quality-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Judge requirement, technical, architecture, risk, and provenance fit with a clear verdict."
+      ],
+      "claim_statuses": [
+        "observed",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "acceptance-review"
+      }
+    },
+    {
+      "id": "acceptance-test-review",
+      "lane": "review",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-acceptance"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/acceptance-test-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        ".flow/runs/shaper-delivery-v7-live-proof",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/acceptance-test-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Judge whether deterministic and live proof establishes every in-scope acceptance criterion."
+      ],
+      "claim_statuses": [
+        "observed",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "acceptance-review"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/shaper-delivery-runtime-contracts/reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "existing-control-plane",
+        "status": "observed",
+        "disposition": "accepted",
+        "evidence": [
+          "docs/maf-adoption-design.md"
+        ]
+      },
+      {
+        "id": "runtime-neutral-contracts",
+        "status": "recommended",
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+          ".flow/runs/shaper-delivery-runtime-contracts/solution.md"
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
+      },
+      {
+        "id": "contract-projection-architecture",
+        "status": "recommended",
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/shaper-delivery-runtime-contracts/solution.md"
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
+      },
+      {
+        "id": "work-feasibility-probe",
+        "status": "recommended",
+        "disposition": "rejected",
+        "evidence": [
+          ".flow/runs/shaper-delivery-runtime-contracts/reconciliation.md"
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
+      },
+      {
+        "id": "v6-inspection-only",
+        "status": "recommended",
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/shaper-delivery-runtime-contracts/solution.md"
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
+      },
+      {
+        "id": "chunk-one-plan",
+        "status": "recommended",
+        "disposition": "accepted",
+        "evidence": [
+          ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+          ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md"
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
+      },
+      {
+        "id": "ordinary-chat-ingress",
+        "status": "unverified",
+        "disposition": "deferred",
+        "evidence": [
+          ".flow/runs/shaper-delivery-runtime-contracts/definition.md"
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "impl-domain-lifecycle",
+      "impl-legacy-inspection",
+      "impl-runtime-projection",
+      "implementation-handback-writer"
+    ],
+    "evidence_collector_assignment": "implementation-handback-writer",
+    "verifier_assignment": "acceptance-quality-review",
+    "independent": true,
+    "artifact_path": ".flow/runs/shaper-delivery-runtime-contracts/review.md"
+  }
+}

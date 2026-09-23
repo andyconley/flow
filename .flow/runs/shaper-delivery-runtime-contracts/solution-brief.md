@@ -1,0 +1,3 @@
+# Solution review brief
+
+Design a runtime-neutral Shaper and Delivery Charter architecture over Flow's existing lifecycle, orchestration manifest, execution ledger, gateway, launcher, receipts, and recovery controls. Cover the full staged architecture and identify the first independently mergeable slice. Treat ChatGPT Work local access as established. Use one active Delivery Lead per attempt with explicit resume or supersede. Existing v6 records must remain inspectable but need not remain executable or resumable. The first proof is a small real Flow change through Magentic, with Claude or Codex producing and Ollama verifying. Ordinary Chat MCP ingress remains deferred. Review only; do not implement.

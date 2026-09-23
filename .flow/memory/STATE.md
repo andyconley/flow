@@ -6,6 +6,12 @@
 
 ## Recently completed
 
+- `shaper-delivery-runtime-contracts` accepted and archived. Flow now projects
+  approved Shaper authority into a supervised Magentic Delivery Lead with
+  bounded Claude or Codex production, distinct Ollama verification, exact
+  policy and runtime limits, and authority-linked receipts. The full suite
+  passed 1,321 tests with 1 skipped. Publication and merge remain pending.
+
 - `role-method-differentiation-repair-3` accepted, merged, and released as
   `v0.28.0` at `6055b6b`. Architect, lead-developer, and test-engineer now use
   evidence-backed expertise; product-manager and quality-reviewer remain

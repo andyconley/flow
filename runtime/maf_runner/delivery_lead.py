@@ -13,7 +13,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
-PROTOCOL_VERSION = 5
+PROTOCOL_VERSION = 7
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
@@ -40,7 +40,7 @@ def _read() -> dict[str, Any]:
     if not line or len(line) > MAX_LINE_BYTES or not line.endswith(b"\n"):
         raise RuntimeError("invalid or missing parent protocol line")
     value = json.loads(line)
-    if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6}:
+    if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6, 7}:
         raise RuntimeError("unsupported parent protocol message")
     if _active_protocol_version is None:
         _active_protocol_version = value["protocol_version"]
@@ -126,6 +126,34 @@ async def _run(start: dict[str, Any]) -> None:
     previous_action_id: str | None = None
     selected_task = ""
     selected_reason = ""
+    job = envelope.get("job_contract") if protocol_version == 7 else None
+
+    def provider_choice(assignment: dict[str, Any]) -> dict[str, Any]:
+        """Record MAF's selection among the Flow-approved capability set."""
+        if not isinstance(job, dict):
+            raise PolicyAbort("v7 delivery job contract is absent")
+        selected = assignment["instance_id"]
+        if selected in job.get("producer_instance_ids", []):
+            candidate_ids = job["producer_instance_ids"]
+            capability_fact = "approved producer identity"
+        elif selected in job.get("verifier_instance_ids", []):
+            candidate_ids = job["verifier_instance_ids"]
+            capability_fact = "approved verifier identity"
+        else:
+            raise PolicyAbort("selected specialist is outside the chartered job roster")
+        candidates = [{key: roster[instance][key] for key in
+                       ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model")}
+                      for instance in candidate_ids if instance in roster]
+        if len(candidates) != len(candidate_ids):
+            raise PolicyAbort("selected specialist is outside its approved capability set")
+        return {"eligible_candidates": candidates, "selected_candidate": selected,
+                "rationale": {"manager_reason": selected_reason,
+                              "facts": [capability_fact, "task selected by Magentic progress decision"]},
+                "rejection_reasons": {
+                    candidate["instance_id"]: {"reason": "Magentic selected a different approved candidate for the stated task.",
+                                               "facts": ["candidate is authorized by the sealed Delivery Charter",
+                                                         "Magentic progress decision selected another candidate"]}
+                    for candidate in candidates if candidate["instance_id"] != selected}}
 
     class ManagerProxy:
         name = "flow-manager-proxy"
@@ -214,6 +242,8 @@ async def _run(start: dict[str, Any]) -> None:
                         "task": selected_task, "task_digest": hashlib.sha256(selected_task.encode()).hexdigest(),
                         "rationale": selected_reason,
                         "parent_action_id": previous_action_id}
+            if protocol_version == 7:
+                proposal["provider_choice"] = provider_choice(assignment)
             await ctx.request_info(proposal, dict, request_id=f"flow-magentic-action-{action_number}")
 
         @response_handler(request=dict, response=dict, output=GroupChatResponseMessage)
@@ -249,10 +279,13 @@ async def _run(start: dict[str, Any]) -> None:
         saved = pending[request_id].data
         if not isinstance(saved, dict) or saved.get("attempt_id") != attempt_id:
             raise PolicyAbort("restore action differs from attempt")
-        expected_id = _digest({"kind": "delegate", **{field: (
+        identity = {"kind": "delegate", **{field: (
             resume["checkpoint_id"] if field == "checkpoint_id" else saved[field]) for field in
             ("attempt_id", "envelope_digest", "assignment_id", "definition_digest", "instance_id",
-             "sequence", "manager_turn", "task_digest", "parent_action_id", "checkpoint_id")}})
+             "sequence", "manager_turn", "task_digest", "parent_action_id", "checkpoint_id")}}
+        if protocol_version == 7:
+            identity["provider_choice"] = saved.get("provider_choice")
+        expected_id = _digest(identity)
         if resume.get("action_id") != expected_id or not isinstance(resume.get("result"), dict):
             raise PolicyAbort("restore action identity or result differs")
         manager_call = resume["manager_calls_committed"]
@@ -276,9 +309,12 @@ async def _run(start: dict[str, Any]) -> None:
             raise PolicyAbort("MAF pending specialist checkpoint is absent or ambiguous")
         checkpoint_id = pending[0].checkpoint_id
         proposal["checkpoint_id"] = checkpoint_id
-        proposal["action_id"] = _digest({"kind": "delegate", **{field: proposal[field] for field in
+        identity = {"kind": "delegate", **{field: proposal[field] for field in
             ("attempt_id", "envelope_digest", "assignment_id", "definition_digest", "instance_id",
-             "sequence", "manager_turn", "task_digest", "parent_action_id", "checkpoint_id")}})
+             "sequence", "manager_turn", "task_digest", "parent_action_id", "checkpoint_id")}}
+        if protocol_version == 7:
+            identity["provider_choice"] = proposal.get("provider_choice")
+        proposal["action_id"] = _digest(identity)
         _write(proposal)
         reply = _read()
         if reply.get("type") != "action_result" or reply.get("action_id") != proposal["action_id"] or not isinstance(reply.get("result"), dict):

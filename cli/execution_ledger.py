@@ -160,7 +160,15 @@ class ExecutionLedger:
             ):
                 if name not in action_columns:
                     db.execute(f"ALTER TABLE actions ADD COLUMN {name} {definition}")
-            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS actions_attempt_kind_sequence ON actions(attempt_id, kind, sequence)")
+            # Older databases may already contain duplicate historical action
+            # positions.  Do not make those receipts unreadable merely to add
+            # a new lookup constraint. New writes are fenced by ``decide``'s
+            # transactional slot check; retain a non-unique lookup index when
+            # a legacy unique-index migration cannot be applied.
+            try:
+                db.execute("CREATE UNIQUE INDEX IF NOT EXISTS actions_attempt_kind_sequence ON actions(attempt_id, kind, sequence)")
+            except sqlite3.IntegrityError:
+                db.execute("CREATE INDEX IF NOT EXISTS actions_attempt_kind_sequence_lookup ON actions(attempt_id, kind, sequence)")
             continuation_columns = {row[1] for row in db.execute("PRAGMA table_info(continuation_epochs)")}
             if "sealed_receipt_sha256" not in continuation_columns:
                 db.execute("ALTER TABLE continuation_epochs ADD COLUMN sealed_receipt_sha256 TEXT")
@@ -218,7 +226,10 @@ class ExecutionLedger:
         protocol_version = execution_protocol_version(envelope)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor,execution_protocol_version) VALUES(?,?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, 1, "initial", protocol_version))
+            claim = envelope.get("delivery_lead_claim") if protocol_version == 7 else None
+            owner_generation = claim["generation"] if isinstance(claim, dict) else 1
+            owner_actor = claim["lead_id"] if isinstance(claim, dict) else "initial"
+            db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor,execution_protocol_version) VALUES(?,?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, owner_generation, owner_actor, protocol_version))
             self._event(db, envelope["attempt_id"], None, "attempt_started", "")
 
     def claim_recovery(self, attempt_id: str, actor: str = "flow-recovery") -> int:
@@ -303,7 +314,7 @@ class ExecutionLedger:
                 if existing[0] != request_json:
                     raise ContractError("action ID reused with changed payload")
                 self._event(db, attempt, aid, "duplicate_request", existing[1])
-                if protocol_version in {2, 3, 4, 5, 6}:
+                if protocol_version in {2, 3, 4, 5, 6, 7}:
                     return self._decision_from_action((aid, *existing[1:]))
                 return {"allowed": False, "reason": "duplicate_request", "action_id": aid}
             slot = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? AND kind='delegate' AND sequence=?", (attempt, action["sequence"])).fetchone()
@@ -315,7 +326,7 @@ class ExecutionLedger:
             unresolved = self._unresolved_action(db, attempt)
             if unresolved:
                 return {"allowed": False, "reason": "reconciliation_required", "action_id": aid}
-            if protocol_version in {2, 3, 4, 5, 6}:
+            if protocol_version in {2, 3, 4, 5, 6, 7}:
                 previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM actions WHERE attempt_id=? AND kind='delegate'", (attempt,)).fetchone()[0]
                 if action["sequence"] != previous + 1:
                     raise ContractError("action sequence is skipped or out of order")
@@ -328,9 +339,9 @@ class ExecutionLedger:
                 "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND actions.status IN ('allowed','started','unknown')",
                 (work_id,),
             ).fetchone()[0]
-            if protocol_version in {5, 6}:
+            if protocol_version in {5, 6, 7}:
                 completed_producer = False
-                if protocol_version == 6 and action["instance_id"] in envelope["job_contract"]["producer_instance_ids"]:
+                if protocol_version in {6, 7} and action["instance_id"] in envelope["job_contract"]["producer_instance_ids"]:
                     prior_completed = db.execute(
                         "SELECT request_json FROM actions WHERE attempt_id=? AND status='completed'",
                         (attempt,),
@@ -355,7 +366,7 @@ class ExecutionLedger:
                     "SELECT count(*) FROM actions WHERE attempt_id=? "
                     "AND status IN ('allowed','started','completed','unknown','failed')",
                     (attempt,),
-                ).fetchone()[0] if protocol_version == 6 else 0
+                ).fetchone()[0] if protocol_version in {6, 7} else 0
                 concurrent_count = db.execute(
                     "SELECT count(*) FROM actions WHERE attempt_id=? "
                     "AND status IN ('allowed','started','unknown')",
@@ -365,7 +376,7 @@ class ExecutionLedger:
                     reason = "producer_already_completed"
                 elif action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
                     reason = "paid_call_cap"
-                elif (chartered_delegations if protocol_version == 6 else paid_delegations) >= envelope["limits"]["max_delegations"]:
+                elif (chartered_delegations if protocol_version in {6, 7} else paid_delegations) >= envelope["limits"]["max_delegations"]:
                     reason = "delegation_cap"
                 elif concurrent_count >= envelope["limits"]["max_concurrent"]:
                     reason = "concurrency_cap"
@@ -435,7 +446,7 @@ class ExecutionLedger:
             previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM replan_decisions WHERE attempt_id=?", (attempt,)).fetchone()[0]
             if replan["sequence"] != previous + 1:
                 raise ContractError("replan sequence is skipped or out of order")
-            if stored[2] in {5, 6}:
+            if stored[2] in {5, 6, 7}:
                 prior_attempt_replans = db.execute(
                     "SELECT COUNT(*) FROM replan_decisions WHERE attempt_id=? AND status='allowed'",
                     (attempt,),
@@ -457,7 +468,7 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt, generation)
             stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
-            if (stored is None or stored[0] != canonical(envelope) or stored[2] not in {5, 6}
+            if (stored is None or stored[0] != canonical(envelope) or stored[2] not in {5, 6, 7}
                     or not (stored[1] == "started" or stored[1] == "unknown"
                             and self._magentic_continuation_open(db, attempt))):
                 raise ContractError("attempt is absent, changed, or closed")
@@ -875,7 +886,7 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
             attempt = db.execute("SELECT envelope_json,execution_protocol_version,status FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
-            if (attempt is None or attempt[1] not in {5, 6} or not (attempt[2] == "started"
+            if (attempt is None or attempt[1] not in {5, 6, 7} or not (attempt[2] == "started"
                     or attempt[2] == "unknown" and self._magentic_continuation_open(db, attempt_id))):
                 raise ContractError("Magentic attempt is absent or closed")
             table, key = ("manager_calls", "call_id") if pending_kind == "manager" else ("actions", "action_id")
@@ -918,7 +929,7 @@ class ExecutionLedger:
         with self._db() as db:
             attempt = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             row = db.execute("SELECT checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind=? AND pending_id=?", (attempt_id, pending_kind, pending_id)).fetchone()
-            if attempt is None or attempt[1] not in {5, 6} or row is None:
+            if attempt is None or attempt[1] not in {5, 6, 7} or row is None:
                 raise ContractError("Magentic checkpoint link is absent")
             high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
             if high_water < row[1]:
@@ -1016,7 +1027,7 @@ class ExecutionLedger:
             row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             if row is None or row[0] != "started":
                 raise ContractError("attempt not active")
-            if row[1] in {5, 6}:
+            if row[1] in {5, 6, 7}:
                 uncertain = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 uncertain += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 if (uncertain > 0) != (status == "unknown"):

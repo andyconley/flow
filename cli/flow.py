@@ -55,6 +55,7 @@ from runstate import (  # noqa: E402
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
 from delivery_gateway import execute_chartered_delivery, execute_delivery, recover_delivery, resume_delivery  # noqa: E402
+from delivery_projection import inspect_delivery  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -589,6 +590,12 @@ def main() -> int:
     run_inspect_parser.add_argument("attempt_id")
     run_inspect_parser.add_argument("--json", action="store_true")
 
+    run_inspect_delivery_parser = run_sub.add_parser(
+        "inspect-delivery", help="inspect sealed Shaper-to-Delivery authority and execution evidence")
+    run_inspect_delivery_parser.add_argument("work_id")
+    run_inspect_delivery_parser.add_argument("--attempt-id", help="specific execution attempt; defaults to the newest recorded attempt")
+    run_inspect_delivery_parser.add_argument("--json", action="store_true", help="emit JSON")
+
     run_resume_parser = run_sub.add_parser("resume-execution", help="fence and safely reopen one execution attempt")
     run_resume_parser.add_argument("work_id")
     run_resume_parser.add_argument("attempt_id")
@@ -993,6 +1000,31 @@ def main() -> int:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"inspection refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True, indent=2))
+        return 0
+    if args.command == "run" and args.run_target == "inspect-delivery":
+        import json
+        try:
+            result = inspect_delivery(args.work_id, args.attempt_id)
+        except (ContractError, FileNotFoundError, ValueError, OSError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery inspection refused: {exc}")
+            return 2
+        if args.json:
+            print(json.dumps(result, sort_keys=True, indent=2))
+        else:
+            authority = result.get("delivery_authority") or {}
+            attempt = result.get("attempt") or {}
+            contracts = result.get("contracts") or {}
+            charter = contracts.get("charter") or {}
+            print(f"work: {result['work_id']}\nstate: {result['lifecycle'].get('state')}\n"
+                  f"charter: v{charter.get('version', 'n/a')} {authority.get('charter_digest', 'unsealed')}\n"
+                  f"logical attempt: {authority.get('logical_delivery_attempt_id', 'none')}\n"
+                  f"owner: generation {authority.get('owner_generation', 'n/a')} ({authority.get('owner_status', 'n/a')})\n"
+                  f"attempt: {attempt.get('attempt_id', 'none')}\n"
+                  f"executable: {attempt.get('executable', False)}\nresumable: {attempt.get('resumable', False)}\n"
+                  f"pending unknowns: {len(attempt.get('pending_unknowns', []))}\n"
+                  f"pending approvals: {len(attempt.get('pending_approvals', []))}\n"
+                  f"provider choices: {len(attempt.get('provider_choices', []))}\n"
+                  f"compatibility diagnostics: {len(result.get('compatibility_diagnostics', []))}")
         return 0
     if args.command == "run" and args.run_target in {"resume-execution", "resolve-execution"}:
         import json
