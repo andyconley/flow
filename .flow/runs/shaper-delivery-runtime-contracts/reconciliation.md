@@ -13,3 +13,4 @@
 - ChatGPT Work feasibility probe: **superseded by explicit engineer decision** — local access is established; retain runtime project/worktree binding validation.
 - V6 compatibility: **clarified by engineer** — records remain readable/inspectable but need not be executable or resumable through the new contract.
 - Ordinary Chat MCP ingress: remains **deferred**.
+- Solution decision: **approved 2026-09-22 by Andy Conley** with documented risks owned; Chunk 1 is eligible for `flow-plan`.

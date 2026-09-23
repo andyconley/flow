@@ -1,7 +1,7 @@
 # Solution: Runtime-neutral Shaper and Delivery Lead contracts
 
 - Work item: `shaper-delivery-runtime-contracts`
-- Status: Recommended approach accepted by engineer; solution lifecycle approval pending
+- Status: Approved 2026-09-22 by Andy Conley
 - Decision: Flow-owned canonical contracts with projection into the existing supervised Magentic gateway
 - Decision date: 2026-09-22
 
@@ -181,3 +181,10 @@ Architect and test-engineer advisory expertise queries returned `no_match`; no a
 ## Next lane
 
 After explicit solution approval, use `flow-plan` to shape Chunk 1. Do not plan later chunks until the end-to-end proof has passed its acceptance gate.
+
+## Approval record
+
+- Decision: Approved
+- Approver: Andy Conley
+- Date: 2026-09-22
+- Risk disposition: Owned through the named owners and mitigations in this solution.
