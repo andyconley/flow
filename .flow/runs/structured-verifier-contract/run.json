@@ -7,6 +7,7 @@
     "orchestration_manifest": ".flow/runs/structured-verifier-contract/orchestration.json",
     "plan": ".flow/runs/structured-verifier-contract/plan.md",
     "requirements": ".flow/runs/structured-verifier-contract/requirements.md",
+    "review": ".flow/runs/structured-verifier-contract/review.md",
     "shaper_intent": ".flow/runs/structured-verifier-contract/shaper-intent.json",
     "solution": ".flow/runs/structured-verifier-contract/solution.md",
     "validation_plan": ".flow/runs/structured-verifier-contract/validation-plan.md"
@@ -16,6 +17,7 @@
     "risk": "owned"
   },
   "gates": {
+    "accept-review": "2026-09-23T18:36:31Z",
     "approve-definition": "2026-09-23T12:36:49Z",
     "approve-plan": "2026-09-23T14:49:19Z",
     "approve-solution": "2026-09-23T14:39:19Z",
@@ -27,11 +29,11 @@
     "start-solution": "2026-09-23T12:36:49Z"
   },
   "lane": "review",
-  "last_event": "start-review",
-  "phase": "reviewing",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "reviewing",
-  "updated_at": "2026-09-23T17:44:45Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-23T18:36:31Z",
   "work_id": "structured-verifier-contract"
 }

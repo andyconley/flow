@@ -7,3 +7,4 @@
 {"artifacts": {}, "at": "2026-09-23T14:53:23Z", "dispositions": {}, "event": "start-implementation", "from": "plan_approved", "note": "Implement protocol-v8 structured verifier contracts in three gated chunks.", "to": "implementing"}
 {"artifacts": {"handback": ".flow/runs/structured-verifier-contract/HANDOFF.md", "implementation_evidence": ".flow/runs/structured-verifier-contract/validation-results.md"}, "at": "2026-09-23T16:59:00Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "note": "Implementation and deterministic validation complete; ready for flow-review.", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-23T17:44:45Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
+{"artifacts": {"review": ".flow/runs/structured-verifier-contract/review.md"}, "at": "2026-09-23T18:36:31Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}
