@@ -22,7 +22,7 @@ from execution_contracts import (  # noqa: E402
 )
 from execution_ledger import ExecutionLedger  # noqa: E402
 from verifier_contracts import evaluate_candidate  # noqa: E402
-from tests.test_chartered_execution_contract import structured_verifier  # noqa: E402
+from tests.test_chartered_execution_contract import chartered, structured_verifier  # noqa: E402
 
 
 def _action(envelope: dict, sequence: int, assignment: dict, task: str) -> dict:
@@ -235,6 +235,31 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
                              ("legacy", "work", envelope_json, "completed", "", "receipt.json"))
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertTrue({"verifier_inputs", "verifier_evaluations"}.issubset(tables))
+
+    def test_pre_recovery_v8_database_gains_empty_recovery_tables_and_legacy_snapshots_are_unchanged(self):
+        env = self.envelope()
+        self.ledger.create_attempt(env)
+        legacy = chartered()
+        legacy["attempt_id"] = "legacy-v6"
+        self.ledger.create_attempt(legacy)
+        before_legacy = self.ledger.snapshot("legacy-v6")
+        with sqlite3.connect(self.ledger.path) as db:
+            db.execute("DROP TABLE attempt_interruptions")
+            db.execute("DROP TABLE attempt_recoveries")
+            db.execute("ALTER TABLE attempts DROP COLUMN sealed_receipt_sha256")
+        old = ExecutionLedger(self.ledger.path, read_only=True).snapshot(env["attempt_id"])
+        self.assertEqual((old["interruptions"], old["recoveries"], old["sealed_receipt_sha256"]), ([], [], None))
+        ExecutionLedger(self.ledger.path)
+        with sqlite3.connect(self.ledger.path) as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
+        self.assertTrue({"attempt_interruptions", "attempt_recoveries"}.issubset(tables))
+        self.assertIn("sealed_receipt_sha256", columns)
+        migrated = self.ledger.snapshot(env["attempt_id"])
+        self.assertEqual((migrated["interruptions"], migrated["recoveries"], migrated["sealed_receipt_sha256"]), ([], [], None))
+        after_legacy = self.ledger.snapshot("legacy-v6")
+        self.assertEqual(after_legacy, before_legacy)
+        self.assertFalse({"interruptions", "recoveries", "sealed_receipt_sha256"} & set(after_legacy))
 
     def test_expired_verifier_grant_is_committed_denied_not_left_reserved(self):
         env = self.envelope(maximum=1)

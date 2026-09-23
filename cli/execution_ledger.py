@@ -147,6 +147,20 @@ class ExecutionLedger:
                 evaluation_json TEXT NOT NULL, evaluation_digest TEXT NOT NULL, outcome TEXT NOT NULL,
                 reason TEXT NOT NULL, owner_generation INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS attempt_interruptions (
+                interruption_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                cause TEXT NOT NULL, detail TEXT NOT NULL, owner_generation INTEGER NOT NULL,
+                ledger_seq INTEGER NOT NULL, recorded_at TEXT NOT NULL,
+                UNIQUE(attempt_id, owner_generation, cause)
+            );
+            CREATE TABLE IF NOT EXISTS attempt_recoveries (
+                recovery_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                expected_generation INTEGER NOT NULL, generation INTEGER NOT NULL,
+                lead_generation INTEGER NOT NULL, actor TEXT NOT NULL, mode TEXT NOT NULL,
+                checkpoint_json TEXT, interruption_ids_json TEXT NOT NULL,
+                released_json TEXT NOT NULL, quarantined_json TEXT NOT NULL, claimed_at TEXT NOT NULL,
+                UNIQUE(attempt_id, generation)
+            );
             """)
             # SQLite's CREATE TABLE IF NOT EXISTS cannot evolve first-slice
             # databases. These columns make existing records explicitly v1 and
@@ -157,6 +171,7 @@ class ExecutionLedger:
                 ("owner_generation", "INTEGER NOT NULL DEFAULT 0"),
                 ("owner_actor", "TEXT"),
                 ("execution_protocol_version", "INTEGER NOT NULL DEFAULT 1"),
+                ("sealed_receipt_sha256", "TEXT"),
             ):
                 if name not in columns:
                     db.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
@@ -1573,6 +1588,7 @@ class ExecutionLedger:
             continuation_rows = db.execute("SELECT epoch_id FROM continuation_epochs WHERE attempt_id=? ORDER BY created_at, rowid", (attempt_id,)).fetchall() if "continuation_epochs" in tables else []
             attempt_protocol = a[9 if recovery_columns else 6] if protocol_column else 1
             structured_usage = self._verifier_usage(db, attempt_id, json.loads(a[2])) if attempt_protocol == 8 else None
+            recovery_view = self._recovery_view(db, attempt_id, attempt_columns, tables) if attempt_protocol == 8 else None
         continuations = [self.continuation_snapshot(epoch_id) for (epoch_id,) in continuation_rows]
         envelope = json.loads(a[2])
         snapshot = {"attempt_id": a[0], "work_id": a[1], "envelope": envelope, "status": a[3], "reason": a[4], "receipt_path": a[5],
@@ -1592,4 +1608,30 @@ class ExecutionLedger:
                 "continuations": continuations}
         if structured_usage is not None:
             snapshot["verifier_usage"] = structured_usage
+        if recovery_view is not None:
+            snapshot.update(recovery_view)
         return snapshot
+
+    @staticmethod
+    def _recovery_view(db: sqlite3.Connection, attempt_id: str, attempt_columns: set[str],
+                       tables: set[str]) -> dict[str, Any]:
+        """Expose v8 interruption and recovery evidence; absent tables read as empty."""
+        sealed = (db.execute("SELECT sealed_receipt_sha256 FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+                  if "sealed_receipt_sha256" in attempt_columns else None)
+        interruptions = db.execute(
+            "SELECT interruption_id,cause,detail,owner_generation,ledger_seq,recorded_at FROM attempt_interruptions "
+            "WHERE attempt_id=? ORDER BY ledger_seq, rowid", (attempt_id,)).fetchall() if "attempt_interruptions" in tables else []
+        recoveries = db.execute(
+            "SELECT recovery_id,expected_generation,generation,lead_generation,actor,mode,checkpoint_json,"
+            "interruption_ids_json,released_json,quarantined_json,claimed_at FROM attempt_recoveries "
+            "WHERE attempt_id=? ORDER BY generation", (attempt_id,)).fetchall() if "attempt_recoveries" in tables else []
+        return {
+            "sealed_receipt_sha256": sealed,
+            "interruptions": [{"interruption_id": r[0], "cause": r[1], "detail": r[2], "owner_generation": r[3],
+                               "ledger_seq": r[4], "recorded_at": r[5]} for r in interruptions],
+            "recoveries": [{"recovery_id": r[0], "expected_generation": r[1], "generation": r[2],
+                            "lead_generation": r[3], "actor": r[4], "mode": r[5],
+                            "checkpoint": json.loads(r[6]) if r[6] else None,
+                            "interruption_ids": json.loads(r[7]), "released_action_ids": json.loads(r[8]),
+                            "quarantined": json.loads(r[9]), "claimed_at": r[10]} for r in recoveries],
+        }
