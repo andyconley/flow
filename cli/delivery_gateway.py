@@ -19,6 +19,7 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import delivery_authority_guard
+from delivery_recovery import RecoveryRefused  # noqa: F401  (callers catch refusals here)
 from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
                                 validate_shaper_contract)
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot
