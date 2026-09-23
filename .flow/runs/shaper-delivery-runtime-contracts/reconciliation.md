@@ -14,3 +14,4 @@
 - V6 compatibility: **clarified by engineer** — records remain readable/inspectable but need not be executable or resumable through the new contract.
 - Ordinary Chat MCP ingress: remains **deferred**.
 - Solution decision: **approved 2026-09-22 by Andy Conley** with documented risks owned; Chunk 1 is eligible for `flow-plan`.
+- Chunk 1 shaped plan: **accepted by Andy Conley** — end-to-end contracts, atomic handoff, fenced lead, protocol-v7 projection, explainable producer choice, v6 inspection, CLI, deterministic gates, and one live handback job. Lifecycle plan approval remains pending capture review.

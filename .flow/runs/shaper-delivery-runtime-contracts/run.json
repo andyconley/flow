@@ -13,14 +13,15 @@
     "approve-definition": "2026-09-22T23:53:06Z",
     "approve-solution": "2026-09-23T00:20:46Z",
     "start-definition": "2026-09-22T03:11:02Z",
+    "start-plan": "2026-09-23T00:22:56Z",
     "start-solution": "2026-09-22T23:57:10Z"
   },
-  "lane": "solution",
-  "last_event": "approve-solution",
-  "phase": "solution_approved",
+  "lane": "plan",
+  "last_event": "start-plan",
+  "phase": "planning",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "solution_approved",
-  "updated_at": "2026-09-23T00:20:46Z",
+  "state": "planning",
+  "updated_at": "2026-09-23T00:22:56Z",
   "work_id": "shaper-delivery-runtime-contracts"
 }
