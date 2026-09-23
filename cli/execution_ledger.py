@@ -470,7 +470,7 @@ class ExecutionLedger:
             previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM replan_decisions WHERE attempt_id=?", (attempt,)).fetchone()[0]
             if replan["sequence"] != previous + 1:
                 raise ContractError("replan sequence is skipped or out of order")
-            if stored[2] in {5, 6, 7}:
+            if stored[2] in {5, 6, 7, 8}:
                 prior_attempt_replans = db.execute(
                     "SELECT COUNT(*) FROM replan_decisions WHERE attempt_id=? AND status='allowed'",
                     (attempt,),
@@ -492,7 +492,7 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt, generation)
             stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()
-            if (stored is None or stored[0] != canonical(envelope) or stored[2] not in {5, 6, 7}
+            if (stored is None or stored[0] != canonical(envelope) or stored[2] not in {5, 6, 7, 8}
                     or not (stored[1] == "started" or stored[1] == "unknown"
                             and self._magentic_continuation_open(db, attempt))):
                 raise ContractError("attempt is absent, changed, or closed")
@@ -682,8 +682,8 @@ class ExecutionLedger:
             attempt, _, _ = self._v8_verifier_action(db, action_id)
             self._assert_owner(db, attempt, generation)
             status = db.execute("SELECT status FROM actions WHERE action_id=?", (action_id,)).fetchone()[0]
-            if status != "allowed":
-                raise ContractError("verifier input requires an unconsumed grant")
+            if status not in {"allowed", "started"}:
+                raise ContractError("verifier input requires an active grant before send")
             prior = db.execute(
                 "SELECT input_json,input_digest,diff_digest,test_digest,recorded_at,owner_generation "
                 "FROM verifier_inputs WHERE action_id=?", (action_id,),
@@ -783,7 +783,27 @@ class ExecutionLedger:
             self._assert_owner(db, row[0], generation)
             envelope_row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (row[0],)).fetchone()
             envelope = json.loads(envelope_row[0])
-            validate_result(envelope, result, action=json.loads(row[2]))
+            action = json.loads(row[2])
+            is_v8_verifier = (execution_protocol_version(envelope) == 8
+                              and action.get("instance_id") in envelope.get("job_contract", {}).get("verifier_instance_ids", []))
+            if is_v8_verifier:
+                output = result.get("output") if isinstance(result, dict) else None
+                output_sha = result.get("output_sha256") if isinstance(result, dict) else None
+                if (not isinstance(result, dict) or result.get("schema_version") != 1
+                        or result.get("status") != "completed"
+                        or not isinstance(result.get("provider"), str) or not result["provider"]
+                        or not isinstance(result.get("model"), str) or not result["model"]
+                        or type(result.get("physical_call")) is not bool
+                        or not isinstance(result.get("evidence_level"), str) or not result["evidence_level"]
+                        or not isinstance(output, str) or not output or len(output.encode()) > 4096
+                        or output_sha != hashlib.sha256(output.encode()).hexdigest()):
+                    raise ContractError("structured verifier response is invalid")
+                usage = result.get("usage")
+                if usage is not None and (not isinstance(usage, dict) or any(
+                        isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in usage.values())):
+                    raise ContractError("structured verifier response usage is invalid")
+            else:
+                validate_result(envelope, result, action=action)
             encoded = canonical(result)
             stored = db.execute("SELECT result_json,result_digest FROM response_observations WHERE action_id=?", (action_id,)).fetchone()
             if stored:
@@ -1030,7 +1050,7 @@ class ExecutionLedger:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
             attempt = db.execute("SELECT envelope_json,execution_protocol_version,status FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
-            if (attempt is None or attempt[1] not in {5, 6, 7} or not (attempt[2] == "started"
+            if (attempt is None or attempt[1] not in {5, 6, 7, 8} or not (attempt[2] == "started"
                     or attempt[2] == "unknown" and self._magentic_continuation_open(db, attempt_id))):
                 raise ContractError("Magentic attempt is absent or closed")
             table, key = ("manager_calls", "call_id") if pending_kind == "manager" else ("actions", "action_id")
@@ -1073,7 +1093,7 @@ class ExecutionLedger:
         with self._db() as db:
             attempt = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             row = db.execute("SELECT checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind=? AND pending_id=?", (attempt_id, pending_kind, pending_id)).fetchone()
-            if attempt is None or attempt[1] not in {5, 6, 7} or row is None:
+            if attempt is None or attempt[1] not in {5, 6, 7, 8} or row is None:
                 raise ContractError("Magentic checkpoint link is absent")
             high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
             if high_water < row[1]:
@@ -1171,7 +1191,7 @@ class ExecutionLedger:
             row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             if row is None or row[0] != "started":
                 raise ContractError("attempt not active")
-            if row[1] in {5, 6, 7}:
+            if row[1] in {5, 6, 7, 8}:
                 uncertain = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 uncertain += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 if (uncertain > 0) != (status == "unknown"):

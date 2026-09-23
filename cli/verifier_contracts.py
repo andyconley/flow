@@ -23,6 +23,7 @@ MAX_FINDING_EVIDENCE_BYTES = 2048
 VALID_DECISIONS = frozenset({"pass", "fail"})
 VALID_SEVERITIES = frozenset({"blocking", "non_blocking"})
 VALID_DISPOSITIONS = frozenset({"valid_pass", "valid_fail", "unusable"})
+FORCED_UNUSABLE_REASONS = frozenset({"provider_binding_mismatch"})
 UNUSABLE_REASON_CODES = frozenset({
     "raw_output_invalid", "candidate_json_invalid", "candidate_root_invalid",
     "candidate_fields_invalid", "candidate_schema_version_unsupported",
@@ -30,7 +31,7 @@ UNUSABLE_REASON_CODES = frozenset({
     "candidate_findings_invalid", "candidate_finding_fields_invalid",
     "candidate_finding_severity_invalid", "candidate_finding_summary_invalid",
     "candidate_finding_evidence_invalid", "pass_contains_blocking_finding",
-    "fail_requires_blocking_finding",
+    "fail_requires_blocking_finding", "provider_binding_mismatch",
 })
 
 
@@ -134,7 +135,8 @@ def _unusable_reason(exc: VerifierContractError) -> str:
 
 
 def evaluate_candidate(*, action_id: str, verifier_input_digest: str, raw_output: str,
-                       diff_digest: str, test_evidence_digest: str) -> dict[str, Any]:
+                       diff_digest: str, test_evidence_digest: str,
+                       forced_unusable_reason: str | None = None) -> dict[str, Any]:
     """Return Flow's evidence-bound evaluation for a completed provider result.
 
     Invalid provider content becomes a durable ``unusable`` evaluation.  It is
@@ -152,13 +154,18 @@ def evaluate_candidate(*, action_id: str, verifier_input_digest: str, raw_output
         "test_evidence_digest": _digest(test_evidence_digest, "test_evidence_digest"),
     }
     verdict: dict[str, Any] | None = None
-    try:
-        verdict = validate_candidate(parse_candidate(raw_output))
-    except VerifierContractError as exc:
-        disposition, reason = "unusable", _unusable_reason(exc)
+    if forced_unusable_reason is not None:
+        if forced_unusable_reason not in FORCED_UNUSABLE_REASONS:
+            raise VerifierContractError("forced unusable reason is invalid")
+        disposition, reason = "unusable", forced_unusable_reason
     else:
-        disposition = "valid_pass" if verdict["decision"] == "pass" else "valid_fail"
-        reason = "accepted_pass" if disposition == "valid_pass" else "accepted_fail"
+        try:
+            verdict = validate_candidate(parse_candidate(raw_output))
+        except VerifierContractError as exc:
+            disposition, reason = "unusable", _unusable_reason(exc)
+        else:
+            disposition = "valid_pass" if verdict["decision"] == "pass" else "valid_fail"
+            reason = "accepted_pass" if disposition == "valid_pass" else "accepted_fail"
     evaluation = {
         "schema_version": VERIFIER_EVALUATION_SCHEMA_VERSION,
         "kind": "flow_verifier_evaluation",

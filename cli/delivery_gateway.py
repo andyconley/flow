@@ -30,6 +30,7 @@ from codex_worker import call_codex
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
+from verifier_contracts import evaluate_candidate
 
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
@@ -379,7 +380,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     job_contract = {"task": task, "baseline": job_baseline,
                     "read_paths": charter["read_paths"], "write_paths": charter["write_paths"],
                     "test": charter["test"], "producer_instance_ids": producers, "verifier_instance_ids": verifiers}
-    envelope = {"schema_version": 1, "execution_protocol_version": 7, "work_id": work_id, "attempt_id": attempt_id,
+    envelope = {"schema_version": 1, "execution_protocol_version": 8, "work_id": work_id, "attempt_id": attempt_id,
                 "charter_digest": digest({"requirements": sources["requirements"]["sha256"], "acceptance": sources["acceptance"]["sha256"]}),
                 "charter_sources": sources, "run_protocol_revision": 2,
                 "manifest_digest": hashlib.sha256(source_bytes[manifest_path]).hexdigest(),
@@ -400,7 +401,8 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                            "max_runtime_seconds": canonical_limits["runtime_seconds"],
                            "max_manager_calls": canonical_limits["max_manager_calls"],
                            "max_manager_rounds": canonical_limits["max_manager_rounds"],
-                           "max_paid_worker_calls": canonical_limits["max_paid_worker_calls"]}}
+                           "max_paid_worker_calls": canonical_limits["max_paid_worker_calls"],
+                           "max_verifier_calls": canonical_limits.get("max_verifier_calls", 2)}}
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
@@ -432,7 +434,7 @@ def _normalized_action(envelope: dict[str, Any], message: dict[str, Any]) -> dic
             "definition_digest", "instance_id", "role", "provider", "model", "manager_turn", "task",
             "rationale", "parent_action_id", "checkpoint_id")
     action = {key: message.get(key) for key in keys}
-    if envelope["execution_protocol_version"] == 7:
+    if envelope["execution_protocol_version"] in {7, 8}:
         action["provider_choice"] = message.get("provider_choice")
     action["task_digest"] = hashlib.sha256(task.encode()).hexdigest()
     expected_id = expected_magentic_action_id(action)
@@ -740,9 +742,10 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     source_commit = envelope["source_commit"]
     worktree = Path(envelope["worktree"])
     baseline = json.loads((attempt_dir / "baseline.json").read_text())
-    chartered = envelope["execution_protocol_version"] in {6, 7}
-    v7 = envelope["execution_protocol_version"] == 7
-    authority_guard = (lambda: delivery_authority_guard(attempt_dir.parents[1], envelope)) if v7 else nullcontext
+    chartered = envelope["execution_protocol_version"] in {6, 7, 8}
+    delivery_protocol = envelope["execution_protocol_version"] in {7, 8}
+    structured_verifier = envelope["execution_protocol_version"] == 8
+    authority_guard = (lambda: delivery_authority_guard(attempt_dir.parents[1], envelope)) if delivery_protocol else nullcontext
     job = envelope.get("job_contract") if chartered else None
     task += ("\n\nFlow-verified execution facts:\n"
              "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
@@ -863,8 +866,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             raise
         with authority_guard(), ledger.send_lock():
             ledger.assert_owner(aid, generation)
-            ledger.observe_send(action["action_id"], generation)
             response_completed = False
+            verifier_binding: dict[str, Any] | None = None
             try:
                 provider_action = action
                 if is_verifier:
@@ -874,8 +877,19 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                     provider_task = action["task"] + evidence
                     verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
                     provider_action = {**action, "provider_task": provider_task}
+                    if structured_verifier:
+                        verifier_binding = ledger.bind_verifier_input(
+                            action["action_id"], provider_action, edit_evidence["diff_sha256"],
+                            test_evidence["output_sha256"], generation=generation)
+                ledger.observe_send(action["action_id"], generation)
+                if structured_verifier and is_verifier:
+                    ledger.claim_verifier_send(action["action_id"], generation=generation)
                 result = worker_adapter(provider_action, envelope=envelope, workspace=worktree)
-                validate_result(envelope, result, action=action)
+                binding_mismatch = (structured_verifier and is_verifier and isinstance(result, dict)
+                                    and (result.get("provider") != action["provider"]
+                                         or result.get("model") != action["model"]))
+                if not (structured_verifier and is_verifier):
+                    validate_result(envelope, result, action=action)
                 ledger.observe_response(action["action_id"], result, generation)
                 if chartered:
                     # The provider turn is observed even when later Flow validation
@@ -883,6 +897,14 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                     # uncertain provider outcome.
                     ledger.complete(action["action_id"], result, generation=generation)
                     response_completed = True
+                    if structured_verifier and is_verifier:
+                        evaluation = evaluate_candidate(
+                            action_id=action["action_id"],
+                            verifier_input_digest=verifier_binding["input_digest"],
+                            raw_output=result["output"], diff_digest=edit_evidence["diff_sha256"],
+                            test_evidence_digest=test_evidence["output_sha256"],
+                            forced_unusable_reason="provider_binding_mismatch" if binding_mismatch else None)
+                        ledger.record_verifier_evaluation(action["action_id"], evaluation, generation=generation)
                 if is_producer:
                     edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
@@ -895,6 +917,12 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                     ledger.mark_unknown(action["action_id"], "specialist_send_outcome_uncertain", generation=generation)
                 raise
         summary = result["output"]
+        if structured_verifier and is_verifier:
+            usage = ledger.verifier_usage(aid)
+            summary = ("Flow verifier evaluation: " + evaluation["disposition"]
+                       + "; reason: " + evaluation["reason"]
+                       + "; retry eligible: " + str(usage["retry_eligible"]).lower()
+                       + ". Provider summary: " + result["output"])
         if is_producer and edit_evidence and test_evidence:
             summary += ("\n\nFlow verified the scoped repair. Diff SHA-256: " + edit_evidence["diff_sha256"]
                         + ". Targeted test: passed. Verified diff excerpt:\n" + (attempt_dir / "repair.diff").read_text()[:2048])
@@ -931,7 +959,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     producer = [item for item in actions if (item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"]
     verifier = [item for item in actions if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
     verified_order = bool(producer and any(item["request"]["sequence"] > producer[0]["request"]["sequence"] for item in verifier))
-    terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and edit_evidence and test_evidence else "failed")
+    structured_pass = (not structured_verifier or any(
+        item["outcome"] == "valid_pass" for item in snapshot.get("verifier_evaluations", [])))
+    terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and structured_pass and edit_evidence and test_evidence else "failed")
     reason = "reconciliation_required" if terminal == "unknown" else failure
     receipt = {"schema_version": 1, "execution_protocol_version": envelope["execution_protocol_version"], "work_id": work_id, "attempt_id": aid,
                "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],
@@ -944,7 +974,10 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                             "allowed_paths": envelope["allowed_paths"], "baseline": baseline,
                             "edit": edit_evidence, "tests": test_evidence,
                             "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
-    if envelope["execution_protocol_version"] == 7:
+    if structured_verifier:
+        receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
+        receipt["verifier_usage"] = snapshot["verifier_usage"]
+    if delivery_protocol:
         receipt.update({field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest",
                                                               "handoff_digest", "delivery_lead_claim_digest", "delivery_lead_claim")})
     trace_path = attempt_dir / "claude-implementer.debug.log"
@@ -1038,7 +1071,7 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
                                 workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,
                                 trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None)
-    if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7}:
+    if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7, 8}:
         return call_codex(instructions=assignment["instructions"], task=action["task"],
                           workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds)
     raise ContractError("selected specialist provider has no approved adapter")

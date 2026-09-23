@@ -13,7 +13,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
-PROTOCOL_VERSION = 7
+PROTOCOL_VERSION = 8
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
@@ -40,7 +40,7 @@ def _read() -> dict[str, Any]:
     if not line or len(line) > MAX_LINE_BYTES or not line.endswith(b"\n"):
         raise RuntimeError("invalid or missing parent protocol line")
     value = json.loads(line)
-    if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6, 7}:
+    if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6, 7, 8}:
         raise RuntimeError("unsupported parent protocol message")
     if _active_protocol_version is None:
         _active_protocol_version = value["protocol_version"]
@@ -126,12 +126,12 @@ async def _run(start: dict[str, Any]) -> None:
     previous_action_id: str | None = None
     selected_task = ""
     selected_reason = ""
-    job = envelope.get("job_contract") if protocol_version == 7 else None
+    job = envelope.get("job_contract") if protocol_version in {7, 8} else None
 
     def provider_choice(assignment: dict[str, Any]) -> dict[str, Any]:
         """Record MAF's selection among the Flow-approved capability set."""
         if not isinstance(job, dict):
-            raise PolicyAbort("v7 delivery job contract is absent")
+            raise PolicyAbort("delivery job contract is absent")
         selected = assignment["instance_id"]
         if selected in job.get("producer_instance_ids", []):
             candidate_ids = job["producer_instance_ids"]
@@ -242,7 +242,7 @@ async def _run(start: dict[str, Any]) -> None:
                         "task": selected_task, "task_digest": hashlib.sha256(selected_task.encode()).hexdigest(),
                         "rationale": selected_reason,
                         "parent_action_id": previous_action_id}
-            if protocol_version == 7:
+            if protocol_version in {7, 8}:
                 proposal["provider_choice"] = provider_choice(assignment)
             await ctx.request_info(proposal, dict, request_id=f"flow-magentic-action-{action_number}")
 
@@ -283,7 +283,7 @@ async def _run(start: dict[str, Any]) -> None:
             resume["checkpoint_id"] if field == "checkpoint_id" else saved[field]) for field in
             ("attempt_id", "envelope_digest", "assignment_id", "definition_digest", "instance_id",
              "sequence", "manager_turn", "task_digest", "parent_action_id", "checkpoint_id")}}
-        if protocol_version == 7:
+        if protocol_version in {7, 8}:
             identity["provider_choice"] = saved.get("provider_choice")
         expected_id = _digest(identity)
         if resume.get("action_id") != expected_id or not isinstance(resume.get("result"), dict):
@@ -312,7 +312,7 @@ async def _run(start: dict[str, Any]) -> None:
         identity = {"kind": "delegate", **{field: proposal[field] for field in
             ("attempt_id", "envelope_digest", "assignment_id", "definition_digest", "instance_id",
              "sequence", "manager_turn", "task_digest", "parent_action_id", "checkpoint_id")}}
-        if protocol_version == 7:
+        if protocol_version in {7, 8}:
             identity["provider_choice"] = proposal.get("provider_choice")
         proposal["action_id"] = _digest(identity)
         _write(proposal)
