@@ -67,6 +67,7 @@
         "id": "structured-verdict-and-cap",
         "status": "recommended",
         "disposition": "accepted",
+        "decision_owner": {"kind": "human", "id": "Andy Conley"},
         "evidence": [
           ".flow/runs/structured-verifier-contract/requirements.md",
           ".flow/runs/structured-verifier-contract/acceptance-criteria.md"
