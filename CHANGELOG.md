@@ -2,6 +2,30 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.32.0](https://github.com/andyconley/flow/compare/v0.31.0...v0.32.0) (2026-09-23)
+
+### Features
+
+* add shaper delivery runtime contracts ([aecabc4](https://github.com/andyconley/flow/commit/aecabc44a724b48924bd8fbce9c4f4eeae370b80))
+
+### Bug Fixes
+
+* preserve approved delivery authority ([03d553d](https://github.com/andyconley/flow/commit/03d553d194c99a40457d42fd3ea8120d0ba77333))
+
+### Documentation
+
+* accept shaper delivery review ([d3952af](https://github.com/andyconley/flow/commit/d3952afe9cbcf91e383f62ab275fb6fc2ddbada2))
+* add session handoff ([998d37f](https://github.com/andyconley/flow/commit/998d37f3de9f8a58e86733c90926723a0059d272))
+* approve shaper delivery definition ([45350f9](https://github.com/andyconley/flow/commit/45350f92c56294fdf449d6a71d60f9d0f2e96aa5))
+* approve shaper delivery solution ([eb65282](https://github.com/andyconley/flow/commit/eb65282d85dd9547f7f78438ef2a3a277a6980b3))
+* archive shaper delivery contracts ([2ac667a](https://github.com/andyconley/flow/commit/2ac667a0026c1b7a26717731225f72f8df16dd9d))
+* capture shaper delivery solution ([55432dd](https://github.com/andyconley/flow/commit/55432dd4317c24dd444cd0b78da20266955d6ee5))
+* define shaper and delivery runtime contracts ([e7c3ab3](https://github.com/andyconley/flow/commit/e7c3ab358b7c86e785db485cb1d2af9ba6115c8a))
+* normalize acceptance review formatting ([b9b0147](https://github.com/andyconley/flow/commit/b9b01471129cee183f522985e2d82e24668601fe))
+* plan shaper delivery execution proof ([5727ab5](https://github.com/andyconley/flow/commit/5727ab57135e0c120dba925f71b6429c43fd5bc5))
+* record shaper delivery handback ([c741a84](https://github.com/andyconley/flow/commit/c741a84da0b8a2a03571a9c629280ebfe01dcc4a))
+* refine shaper delivery definition ([e0eac78](https://github.com/andyconley/flow/commit/e0eac787d94395003c928679811c2d0458dd4d4c))
+
 ## [0.31.0](https://github.com/andyconley/flow/compare/v0.30.0...v0.31.0) (2026-09-21)
 
 ### Features
