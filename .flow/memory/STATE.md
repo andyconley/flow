@@ -6,6 +6,14 @@
 
 ## Recently completed
 
+- `structured-verifier-contract` accepted and archived on branch
+  `codex/structured-verifier-contract`. Protocol v8 adds a Flow-evaluated,
+  evidence-bound verifier verdict with a Charter-sealed call cap of one or
+  two. A contract prompt is appended to the verifier input, receipts recompute
+  each evaluation, and v6 and v7 receipts keep their meaning. The full suite
+  passed 1,370 tests. Publication and merge remain pending. A controlled live
+  Ollama verifier run and v8 resume support are the main follow-ups.
+
 - `shaper-delivery-runtime-contracts` accepted and archived. Flow now projects
   approved Shaper authority into a supervised Magentic Delivery Lead with
   bounded Claude or Codex production, distinct Ollama verification, exact
