@@ -1,3 +1,4 @@
+import hashlib
 import sys
 import unittest
 from pathlib import Path
@@ -11,10 +12,14 @@ from verifier_contracts import (  # noqa: E402
     MAX_FINDING_SUMMARY_BYTES,
     MAX_RAW_OUTPUT_BYTES,
     MAX_SUMMARY_BYTES,
+    VERIFIER_CONTRACT_INSTRUCTION,
     VerifierContractError,
+    digest,
     evaluate_candidate,
+    provider_binding_mismatch,
     validate_candidate,
     validate_evaluation,
+    validate_structured_verifier_result,
 )
 
 
@@ -53,6 +58,8 @@ class VerifierContractTests(unittest.TestCase):
             ("extra field", '{"schema_version":1,"decision":"pass","summary":"ok","findings":[],"extra":true}', "candidate_fields_invalid"),
             ("missing field", '{"schema_version":1,"decision":"pass","summary":"ok"}', "candidate_fields_invalid"),
             ("unsupported schema", self.candidate(schema_version=2), "candidate_schema_version_unsupported"),
+            ("boolean schema", self.candidate(schema_version=True), "candidate_schema_version_unsupported"),
+            ("float schema", self.candidate(schema_version=1.0), "candidate_schema_version_unsupported"),
             ("unsupported decision", self.candidate(decision="maybe"), "candidate_decision_invalid"),
             ("non-string decision", self.candidate(decision=[]), "candidate_decision_invalid"),
             ("non-string severity", self.candidate(decision="fail", findings=[{"severity":{},"summary":"bad","evidence":"x"}]), "candidate_finding_severity_invalid"),
@@ -97,3 +104,40 @@ class VerifierContractTests(unittest.TestCase):
         evaluation["diff_digest"] = "d" * 64
         with self.assertRaisesRegex(VerifierContractError, "digest mismatch"):
             validate_evaluation(evaluation)
+
+    def test_every_bound_evaluation_field_is_sealed(self):
+        evaluation = self.evaluate(self.candidate())
+        for field in ("action_id", "verifier_input_digest", "raw_output_digest", "diff_digest", "test_evidence_digest"):
+            with self.subTest(field=field):
+                changed = {**evaluation, field: "verifier-2" if field == "action_id" else "f" * 64}
+                with self.assertRaisesRegex(VerifierContractError, "digest mismatch"):
+                    validate_evaluation(changed)
+
+    def test_reason_must_match_disposition_even_when_resealed(self):
+        evaluation = self.evaluate(self.candidate())
+        forged = {key: value for key, value in evaluation.items() if key != "evaluation_digest"}
+        forged["reason"] = "accepted_fail"
+        forged["evaluation_digest"] = digest(forged)
+        with self.assertRaisesRegex(VerifierContractError, "reason is invalid"):
+            validate_evaluation(forged)
+
+    def test_contract_instruction_describes_the_closed_schema(self):
+        for token in ('"schema_version": 1', '"decision": "pass" | "fail"', '"findings"', '"blocking" | "non_blocking"'):
+            self.assertIn(token, VERIFIER_CONTRACT_INSTRUCTION)
+
+    def test_structured_result_keeps_empty_output_and_bounds_retention(self):
+        def result(output, **overrides):
+            return {"schema_version": 1, "status": "completed", "provider": "ollama", "model": "local-model",
+                    "physical_call": True, "evidence_level": "flow_observed_local_http_response",
+                    "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(), **overrides}
+        validate_structured_verifier_result(result(""))
+        self.assertEqual(self.evaluate("")["reason"], "raw_output_invalid")
+        validate_structured_verifier_result(result("x" * (MAX_RAW_OUTPUT_BYTES + 1)))
+        with self.assertRaisesRegex(VerifierContractError, "response is invalid"):
+            validate_structured_verifier_result(result("x" * (64 * 1024 + 1)))
+        with self.assertRaisesRegex(VerifierContractError, "response is invalid"):
+            validate_structured_verifier_result(result("ok", output_sha256="0" * 64))
+        action = {"provider": "ollama", "model": "local-model"}
+        self.assertFalse(provider_binding_mismatch(action, result("ok")))
+        self.assertTrue(provider_binding_mismatch(action, result("ok", model="other-model")))
+        self.assertTrue(provider_binding_mismatch(action, result("ok", evidence_level="local_stub")))

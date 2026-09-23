@@ -33,6 +33,26 @@ UNUSABLE_REASON_CODES = frozenset({
     "candidate_finding_evidence_invalid", "pass_contains_blocking_finding",
     "fail_requires_blocking_finding", "provider_binding_mismatch",
 })
+MAX_RETAINED_OUTPUT_BYTES = 64 * 1024
+ACCEPTED_REASONS = {"valid_pass": "accepted_pass", "valid_fail": "accepted_fail"}
+PROVIDER_EVIDENCE_LEVELS = {"ollama": "flow_observed_local_http_response",
+                            "codex": "flow_observed_codex_cli_completed_turn",
+                            "claude": "flow_observed_claude_cli_completed_turn",
+                            "local-stub": "local_stub"}
+
+# Flow appends this block to every protocol-v8 verifier input.  It is part of
+# the persisted, digested input, so a receipt proves which contract was asked.
+VERIFIER_CONTRACT_INSTRUCTION = (
+    "\n\nFlow verifier output contract (schema_version 1):\n"
+    "Reply with exactly one JSON object and nothing else: no prose, no code fence.\n"
+    'Shape: {"schema_version": 1, "decision": "pass" | "fail", "summary": "<text>", '
+    '"findings": [{"severity": "blocking" | "non_blocking", "summary": "<text>", "evidence": "<text>"}]}\n'
+    "Rules: judge only the diff and test result supplied above; do not claim to have inspected anything else. "
+    "A pass may contain only non_blocking findings. A fail must contain at least one blocking finding. "
+    f"At most {MAX_FINDINGS} findings. Summary at most {MAX_SUMMARY_BYTES} bytes; each finding summary at most "
+    f"{MAX_FINDING_SUMMARY_BYTES} bytes and evidence at most {MAX_FINDING_EVIDENCE_BYTES} bytes. "
+    "Every text field must be non-empty. Flow treats any other output as unusable.\n"
+)
 
 
 class VerifierContractError(ValueError):
@@ -78,7 +98,7 @@ def validate_candidate(candidate: object) -> dict[str, Any]:
     """Validate the closed provider candidate schema and its decision rules."""
     if not isinstance(candidate, dict) or set(candidate) != {"schema_version", "decision", "summary", "findings"}:
         raise VerifierContractError("candidate fields are invalid")
-    if candidate["schema_version"] != VERIFIER_VERDICT_SCHEMA_VERSION:
+    if type(candidate["schema_version"]) is not int or candidate["schema_version"] != VERIFIER_VERDICT_SCHEMA_VERSION:
         raise VerifierContractError("candidate schema version is unsupported")
     if not isinstance(candidate["decision"], str) or candidate["decision"] not in VALID_DECISIONS:
         raise VerifierContractError("candidate decision is invalid")
@@ -192,7 +212,8 @@ def validate_evaluation(evaluation: object) -> dict[str, Any]:
         _digest(evaluation[field], field)
     if evaluation["disposition"] not in VALID_DISPOSITIONS or not isinstance(evaluation["reason"], str) or not evaluation["reason"]:
         raise VerifierContractError("evaluation disposition or reason is invalid")
-    allowed_reasons = {"accepted_pass", "accepted_fail"} if evaluation["disposition"] != "unusable" else UNUSABLE_REASON_CODES
+    allowed_reasons = ({ACCEPTED_REASONS[evaluation["disposition"]]} if evaluation["disposition"] != "unusable"
+                       else UNUSABLE_REASON_CODES)
     if evaluation["reason"] not in allowed_reasons:
         raise VerifierContractError("evaluation reason is invalid")
     if evaluation["disposition"] == "unusable":
@@ -208,3 +229,34 @@ def validate_evaluation(evaluation: object) -> dict[str, Any]:
     if actual != digest(sealed):
         raise VerifierContractError("evaluation digest mismatch")
     return evaluation
+
+
+def provider_binding_mismatch(action: dict[str, Any], result: dict[str, Any]) -> bool:
+    """Whether a received result contradicts the approved verifier binding."""
+    return (result.get("provider") != action.get("provider")
+            or result.get("model") != action.get("model")
+            or result.get("physical_call") != (action.get("provider") != "local-stub")
+            or result.get("evidence_level") != PROVIDER_EVIDENCE_LEVELS.get(action.get("provider")))
+
+
+def validate_structured_verifier_result(result: object) -> dict[str, Any]:
+    """Validate the observed shape of a v8 verifier result, not its binding.
+
+    Unlike ordinary specialist results, empty output and mismatched provider
+    facts are retained so Flow can record them as a completed, unusable call.
+    """
+    if (not isinstance(result, dict) or result.get("schema_version") != 1 or result.get("status") != "completed"
+            or not isinstance(result.get("provider"), str) or not result["provider"]
+            or not isinstance(result.get("model"), str) or not result["model"]
+            or type(result.get("physical_call")) is not bool
+            or not isinstance(result.get("evidence_level"), str) or not result["evidence_level"]):
+        raise VerifierContractError("structured verifier response is invalid")
+    output = result.get("output")
+    if (not isinstance(output, str) or len(output.encode("utf-8")) > MAX_RETAINED_OUTPUT_BYTES
+            or result.get("output_sha256") != hashlib.sha256(output.encode("utf-8")).hexdigest()):
+        raise VerifierContractError("structured verifier response is invalid")
+    usage = result.get("usage")
+    if usage is not None and (not isinstance(usage, dict) or any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in usage.values())):
+        raise VerifierContractError("structured verifier response usage is invalid")
+    return result
