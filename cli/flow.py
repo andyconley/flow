@@ -1017,6 +1017,15 @@ def main() -> int:
             attempt = result.get("attempt") or {}
             contracts = result.get("contracts") or {}
             charter = contracts.get("charter") or {}
+            recovery_lines = ""
+            if "recovery" in attempt:
+                recovery = attempt["recovery"]
+                blocking = ", ".join(f"{item['kind']} {item['id']} {item['status']}: {item['evidence_needed']}"
+                                     for item in recovery["blockers"]) or "none"
+                recovery_lines = (f"recoverable: {recovery['recoverable']} ({recovery['reason'] or recovery['mode']})\n"
+                                  f"blocking: {blocking}\n"
+                                  f"predecessors: {len(attempt.get('predecessors', []))}\n"
+                                  f"sealed receipt: {'consistent' if attempt['sealed_receipt']['consistent'] else 'INCONSISTENT'}\n")
             print(f"work: {result['work_id']}\nstate: {result['lifecycle'].get('state')}\n"
                   f"charter: v{charter.get('version', 'n/a')} {authority.get('charter_digest', 'unsealed')}\n"
                   f"logical attempt: {authority.get('logical_delivery_attempt_id', 'none')}\n"
@@ -1026,6 +1035,7 @@ def main() -> int:
                   f"pending unknowns: {len(attempt.get('pending_unknowns', []))}\n"
                   f"pending approvals: {len(attempt.get('pending_approvals', []))}\n"
                   f"provider choices: {len(attempt.get('provider_choices', []))}\n"
+                  + recovery_lines +
                   f"compatibility diagnostics: {len(result.get('compatibility_diagnostics', []))}")
         return 0
     if args.command == "run" and args.run_target in {"resume-execution", "resolve-execution"}:

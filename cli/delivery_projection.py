@@ -7,10 +7,12 @@ started and its current owner generation matches the embedded lead claim.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
+from delivery_recovery import recovery_eligibility
 from execution_contracts import (ContractError, DELIVERY_PROTOCOL_VERSION,
                                  STRUCTURED_VERIFIER_PROTOCOL_VERSION, validate_envelope)
 from execution_ledger import ExecutionLedger
@@ -18,11 +20,26 @@ from fsutil import repo_root
 from legacy_delivery import inspect_legacy_delivery
 
 
-def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Return a stable, non-authorizing v7 delivery-inspection view.
+def lead_claim_active(delivery: Any, envelope: dict[str, Any]) -> bool:
+    """Whether run authority still names this envelope's Delivery Lead claim."""
+    claim = envelope.get("delivery_lead_claim")
+    return (isinstance(delivery, dict) and isinstance(claim, dict)
+            and delivery.get("owner_status") == "active"
+            and delivery.get("owner_generation") == claim.get("generation")
+            and delivery.get("lead_claim_digest") == envelope.get("delivery_lead_claim_digest")
+            and delivery.get("charter_digest") == envelope.get("delivery_charter_digest"))
+
+
+def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, Any], *,
+                                lead_active: bool | None = None, receipt_file: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return a stable, non-authorizing v7 or v8 delivery-inspection view.
 
     ``snapshot`` is the ledger's current snapshot. This function intentionally
-    does not grant, recover, or mutate anything.
+    does not grant, recover, or mutate anything. For v8, ``lead_active`` comes
+    from run authority: a recovered attempt's ledger fence has moved past the
+    envelope's claim generation, so the ledger generation cannot decide it.
+    ``receipt_file`` carries the receipt file's digest and whether it holds a
+    recovery block.
     """
     validate_envelope(envelope)
     protocol = envelope.get("execution_protocol_version")
@@ -33,14 +50,38 @@ def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, An
     claim = envelope["delivery_lead_claim"]
     current_generation = snapshot.get("owner_generation")
     status = snapshot.get("status")
-    active = status == "started" and current_generation == claim["generation"]
+    structured = protocol == STRUCTURED_VERIFIER_PROTOCOL_VERSION and lead_active is not None
+    active = status == "started" and (lead_active if structured else current_generation == claim["generation"])
+    recovery_view: dict[str, Any] = {}
+    if structured:
+        eligibility = recovery_eligibility(envelope, snapshot, lead_active=bool(lead_active))
+        recoveries = snapshot.get("recoveries", [])
+        ledger_sha = snapshot.get("sealed_receipt_sha256")
+        file_sha = (receipt_file or {}).get("sha256")
+        block_present = (receipt_file or {}).get("recovery_block_present")
+        recovery_view = {
+            "recovery": {key: eligibility[key] for key in ("recoverable", "reason", "mode", "blockers")},
+            "interruptions": snapshot.get("interruptions", []),
+            "recoveries": recoveries,
+            "predecessors": envelope.get("predecessors", []),
+            # The ledger digest is authoritative (R2): a recovered attempt whose
+            # receipt lost its recovery block is inconsistent even if the file
+            # still validates on its own.
+            "sealed_receipt": {"ledger_sha256": ledger_sha, "file_sha256": file_sha,
+                               "matches": ledger_sha is not None and ledger_sha == file_sha,
+                               "recovery_block_present": block_present,
+                               "recovery_block_required": bool(recoveries),
+                               "consistent": ledger_sha is None and file_sha is None and status == "started"
+                               or (ledger_sha is not None and ledger_sha == file_sha
+                                   and bool(block_present) == bool(recoveries))},
+        }
     return {
         "execution_protocol_version": protocol,
         "work_id": envelope["work_id"],
         "attempt_id": envelope["attempt_id"],
         "status": status,
         "executable": active,
-        "resumable": active,
+        "resumable": recovery_view["recovery"]["recoverable"] if structured else active,
         "delivery_lead": {"id": claim["lead_id"], "generation": claim["generation"],
                           "current_generation": current_generation, "active": active},
         "contracts": {field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest", "handoff_digest", "delivery_lead_claim_digest")},
@@ -50,6 +91,7 @@ def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, An
         **({"verifier_evaluations": snapshot.get("verifier_evaluations", []),
             "verifier_usage": snapshot.get("verifier_usage")}
            if protocol == STRUCTURED_VERIFIER_PROTOCOL_VERSION else {}),
+        **recovery_view,
     }
 
 
@@ -139,7 +181,20 @@ def inspect_delivery(work_id: str, attempt_id: str | None = None, *, root: Path 
     if not ledger_path.is_file() or ledger_path.is_symlink():
         raise ContractError("delivery execution ledger is absent")
     snapshot = ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
-    attempt = inspect_delivery_projection(envelope, snapshot)
+    if protocol == STRUCTURED_VERIFIER_PROTOCOL_VERSION:
+        receipt_path = attempt_dir / "receipt.json"
+        receipt_file = None
+        if receipt_path.is_file() and not receipt_path.is_symlink():
+            raw_receipt = receipt_path.read_bytes()
+            try:
+                present = "recovery" in json.loads(raw_receipt)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                present = None
+            receipt_file = {"sha256": hashlib.sha256(raw_receipt).hexdigest(), "recovery_block_present": present}
+        attempt = inspect_delivery_projection(envelope, snapshot, lead_active=lead_claim_active(delivery, envelope),
+                                              receipt_file=receipt_file)
+    else:
+        attempt = inspect_delivery_projection(envelope, snapshot)
     attempt["pending_unknowns"] = [
         item.get("action_id") or item.get("call_id")
         for item in snapshot.get("actions", []) + snapshot.get("manager_calls", [])

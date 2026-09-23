@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_control import change_lead_claim  # noqa: E402
+from delivery_projection import inspect_delivery, inspect_delivery_projection  # noqa: E402
 from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery,  # noqa: E402
                               recover_delivery, resume_delivery)
 from execution_gateway import resolve_attempt  # noqa: E402
@@ -152,8 +153,8 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
 
 
 
-class CharteredRecoveryTests(CharteredFixture):
-    """AC2-AC8, AC10: explicit recovery from the latest bound checkpoint."""
+class RecoveryHarness(CharteredFixture):
+    """Stub MAF that honours restore requests, counting adapters, and kill points."""
 
     def setUp(self):
         super().setUp()
@@ -183,6 +184,7 @@ class CharteredRecoveryTests(CharteredFixture):
 
     def _supervisor(self, plan, *, fail_after=None):
         def supervisor(envelope, task, on_manager, on_action, resume=None, **kwargs):
+            self.attempt_id = envelope["attempt_id"]
             self.resumes.append(resume)
             start = 1
             if resume is not None:
@@ -212,7 +214,7 @@ class CharteredRecoveryTests(CharteredFixture):
     def _killed(self, plan, outputs, **kwargs):
         with self.assertRaises(KillPoint):
             self._start(plan, outputs, **kwargs)
-        return next((self.run / "execution").glob("*/envelope.json")).parent.name
+        return self.attempt_id
 
     def _recover(self, attempt_id, plan, *, entry=None, seal_hook=None, supervisor=None):
         kwargs = {"supervisor": supervisor or self._supervisor(plan), "worker_adapter": self._worker}
@@ -247,6 +249,10 @@ class CharteredRecoveryTests(CharteredFixture):
         self.assertEqual(self._ledger().snapshot(result["attempt_id"])["sealed_receipt_sha256"],
                          hashlib.sha256(Path(result["receipt_path"]).read_bytes()).hexdigest())
         return receipt
+
+
+class CharteredRecoveryTests(RecoveryHarness):
+    """AC2-AC8, AC10: explicit recovery from the latest bound checkpoint."""
 
     def test_boundary_b_unconsumed_producer_grant_is_regranted_and_counted_once(self):
         with self._kill_once("consume_grant"):
@@ -477,6 +483,61 @@ class CharteredRecoveryTests(CharteredFixture):
                 mutate(changed)
                 with self.assertRaises(ExecutionContractError):
                     validate_receipt(envelope, changed)
+
+
+class CharteredRecoveryInspectionTests(RecoveryHarness):
+    """AC11: inspection reports eligibility, blockers, evidence needed, and the sealed digest."""
+
+    def test_inspection_reports_blockers_with_the_evidence_each_needs(self):
+        def worker(action, *, envelope, workspace):
+            if action["assignment_id"] == "verifier":
+                raise OSError("simulated connection reset during verifier send")
+            return self._worker(action, envelope=envelope, workspace=workspace)
+
+        self.outputs = [self.PASS]
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=self._supervisor(("editor", "verifier")), worker_adapter=worker)
+        view = inspect_delivery("sample", result["attempt_id"], root=self.root)["attempt"]
+        self.assertTrue(view["executable"])
+        self.assertFalse(view["resumable"])
+        self.assertEqual((view["recovery"]["recoverable"], view["recovery"]["reason"]), (False, "reconciliation_required"))
+        blocker = view["recovery"]["blockers"][0]
+        self.assertEqual((blocker["kind"], blocker["status"]), ("action", "unknown"))
+        self.assertIn("resolve-execution", blocker["evidence_needed"])
+        self.assertEqual([item["cause"] for item in view["interruptions"]], ["reconciliation_required"])
+        self.assertTrue(view["sealed_receipt"]["consistent"])
+
+    def test_inspection_shows_a_recoverable_mode_then_a_consistent_sealed_receipt(self):
+        result = self._start(("editor", "verifier"), [self.PASS], fail_after=1)
+        view = inspect_delivery("sample", result["attempt_id"], root=self.root)["attempt"]
+        self.assertEqual((view["resumable"], view["recovery"]["mode"]), (True, "answer"))
+        recovered = self._recover(result["attempt_id"], ("editor", "verifier"))
+        view = inspect_delivery("sample", result["attempt_id"], root=self.root)["attempt"]
+        self.assertFalse(view["executable"])
+        self.assertEqual(len(view["recoveries"]), 1)
+        sealed = view["sealed_receipt"]
+        self.assertEqual((sealed["matches"], sealed["recovery_block_present"], sealed["consistent"]), (True, True, True))
+        receipt = self._receipt(recovered)
+        receipt.pop("recovery")
+        Path(recovered["receipt_path"]).write_text(json.dumps(receipt))
+        sealed = inspect_delivery("sample", result["attempt_id"], root=self.root)["attempt"]["sealed_receipt"]
+        self.assertEqual((sealed["matches"], sealed["recovery_block_present"], sealed["consistent"]), (False, False, False))
+
+    def test_a_recovered_started_attempt_is_executable_under_its_active_lead(self):
+        envelope = self.prepare()[0]
+        snapshot = {"attempt_id": envelope["attempt_id"], "execution_protocol_version": 8, "status": "started",
+                    "owner_generation": 2, "actions": [], "manager_calls": [], "events": [],
+                    "verifier_evaluations": [], "verifier_usage": None, "recoveries": [{"generation": 2}]}
+        self.assertFalse(inspect_delivery_projection(envelope, snapshot)["executable"])
+        view = inspect_delivery_projection(envelope, snapshot, lead_active=True)
+        self.assertTrue(view["executable"])
+        self.assertEqual(view["delivery_lead"]["current_generation"], 2)
+        self.assertFalse(inspect_delivery_projection(envelope, snapshot, lead_active=False)["executable"])
+        self.assertEqual(view["recovery"]["reason"], "no_restorable_checkpoint")
+        self.assertTrue(view["recovery"]["blockers"][0]["evidence_needed"].startswith("none; abandon"))
 
 
 if __name__ == "__main__":
