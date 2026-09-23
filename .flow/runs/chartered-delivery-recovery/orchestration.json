@@ -666,6 +666,108 @@
         "mode": "concurrent",
         "group": "plan-review"
       }
+    },
+    {
+      "id": "implement-review-quality",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-delivery-recovery-implement-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/briefs/implement-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/briefs/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery/plan.md",
+        ".flow/runs/chartered-delivery-recovery/implementation-handoff.md",
+        ".flow/runs/chartered-delivery-recovery/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/research/plan-architecture.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/implement-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Correctness, no-resend, and AC1-AC12 (chunk 1a) findings with severity and file:line"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implement-review"
+      }
+    },
+    {
+      "id": "implement-review-security",
+      "lane": "implement",
+      "role": "security-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-security-reviewer-delivery-recovery-implement-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/briefs/implement-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/briefs/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery/plan.md",
+        ".flow/runs/chartered-delivery-recovery/implementation-handoff.md",
+        ".flow/runs/chartered-delivery-recovery/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/research/plan-architecture.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/implement-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Send-authority fencing, lock order, path safety, and tamper findings with severity and file:line"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implement-review"
+      }
     }
   ],
   "shared_state": [],
