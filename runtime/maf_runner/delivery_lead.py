@@ -286,15 +286,33 @@ async def _run(start: dict[str, Any]) -> None:
         if protocol_version in {7, 8}:
             identity["provider_choice"] = saved.get("provider_choice")
         expected_id = _digest(identity)
-        if resume.get("action_id") != expected_id or not isinstance(resume.get("result"), dict):
+        # ``answer`` restores a completed action with Flow's reply. ``pending``
+        # restores an action Flow never dispatched: the saved proposal is
+        # re-emitted with its original checkpoint and identity so Flow can
+        # re-grant it, and nothing is answered on Flow's behalf.
+        mode = resume.get("kind", "answer")
+        if mode not in {"answer", "pending"}:
+            raise PolicyAbort("invalid MAF restore mode")
+        if (resume.get("action_id") != expected_id
+                or (mode == "answer") != isinstance(resume.get("result"), dict)
+                or mode == "pending" and "result" in resume):
             raise PolicyAbort("restore action identity or result differs")
         manager_call = resume["manager_calls_committed"]
         manager_round = saved["manager_turn"]
         replan_sequence = resume["replans_committed"]
         action_number = saved["sequence"]
+        if mode == "answer":
+            response = resume["result"]
+        else:
+            proposal = {**saved, "checkpoint_id": resume["checkpoint_id"], "action_id": expected_id}
+            _write(proposal)
+            reply = _read()
+            if reply.get("type") != "action_result" or reply.get("action_id") != expected_id or not isinstance(reply.get("result"), dict):
+                raise PolicyAbort("invalid Flow action result")
+            response = reply["result"]
         previous_action_id = expected_id
         result = await workflow.run(checkpoint_id=resume["checkpoint_id"], checkpoint_storage=storage,
-                                    responses={request_id: resume["result"]})
+                                    responses={request_id: response})
     while requests := result.get_request_info_events():
         if len(requests) != 1:
             raise PolicyAbort("MAF has ambiguous pending specialist requests")
