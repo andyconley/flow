@@ -50,8 +50,11 @@ process-exit side effect. Only one recovery can own an attempt at a time.
   `run_lock` (the delivery authority guard), then `send_lock`, then SQLite
   `BEGIN IMMEDIATE`. The live v8 execution also holds `recovery_lock` for its
   whole run, so recovering a running attempt refuses with `attempt_running`;
-  a second concurrent recovery refuses with `recovery_in_progress`. The
-  durable claim is a compare-and-swap on the ledger owner generation.
+  a second concurrent recovery refuses with `recovery_in_progress`. The gates
+  run again under `recovery_lock`, where no live run can advance the attempt,
+  and worktree drift is checked there before the claim. The durable claim is
+  a compare-and-swap on the ledger owner generation and the event high-water
+  the gates saw, and it refuses any `started` or `unknown` row.
 - **Truthful receipt.** A recovered v8 receipt carries a `recovery` block with
   its interruptions, recovery claims, relied-on resolutions, and the digest of
   any replaced unsealed draft. The validator requires the block whenever the
@@ -88,6 +91,13 @@ diff is recorded, there is no durable reference to compare against. Recovery
 re-verifies the worktree against the pinned baseline and scope, and that
 worktree becomes the recorded diff. This is acceptable because no verifier has
 judged anything yet.
+
+Residual: a process death after Flow denied the latest proposal (for example
+at the verifier cap) but before the runtime outcome is recorded leaves a
+latest action with no bound checkpoint. R1 applies and recovery refuses with
+`no_restorable_checkpoint`; restoring from an earlier checkpoint would
+re-propose that action under a new identity. The remedy is a lead supersede
+and a successor attempt (chunk 1b).
 
 ## Rejected alternatives
 

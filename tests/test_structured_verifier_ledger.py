@@ -262,9 +262,29 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
         self.assertEqual(after_legacy, before_legacy)
         self.assertFalse({"interruptions", "recoveries", "sealed_receipt_sha256"} & set(after_legacy))
 
-    def _claim(self, env, *, expected=1, mode="pending"):
-        return self.ledger.claim_chartered_recovery(env["attempt_id"], expected_generation=expected, lead_generation=1,
+    def _claim(self, env, *, expected=1, mode="pending", seq=None):
+        high_water = self.ledger.snapshot(env["attempt_id"])["events"][-1]["seq"] if seq is None else seq
+        return self.ledger.claim_chartered_recovery(env["attempt_id"], expected_generation=expected,
+                                                    expected_event_seq=high_water, lead_generation=1,
                                                     actor="flow-chartered-resume", mode=mode, checkpoint=None, quarantined=[])
+
+    def test_recovery_claim_refuses_moved_facts_and_uncertain_sends_without_mutation(self):
+        env = self.envelope(maximum=1)
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        grant = self.ledger.decide(env, proposal, generation=1)
+        stale = self.ledger.snapshot(env["attempt_id"])["events"][-1]["seq"] - 1
+        before = self.ledger.snapshot(env["attempt_id"])
+        with self.assertRaises(RecoveryRefused) as moved:
+            self._claim(env, seq=stale)
+        self.assertEqual(moved.exception.reason, "recovery_in_progress")
+        self.ledger.prepare_verifier_send(proposal["action_id"], grant["grant_id"], {**proposal, "provider_task": "verify"},
+                                          "d" * 64, "e" * 64, generation=1)
+        before = self.ledger.snapshot(env["attempt_id"])
+        with self.assertRaises(RecoveryRefused) as uncertain:
+            self._claim(env)
+        self.assertEqual(uncertain.exception.reason, "reconciliation_required")
+        self.assertEqual(self.ledger.snapshot(env["attempt_id"]), before)
 
     def test_recovery_claim_is_a_compare_and_swap_that_releases_unconsumed_grants(self):
         env = self.envelope(maximum=1)

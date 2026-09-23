@@ -15,6 +15,8 @@ from delivery_projection import inspect_delivery, inspect_delivery_projection  #
 from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery,  # noqa: E402
                               recover_delivery, resume_delivery)
 from execution_gateway import resolve_attempt  # noqa: E402
+from execution_contracts import (ContractError as ExecutionContractError, digest, envelope_digest,  # noqa: E402
+                                 expected_manager_call_id)
 from execution_ledger import ExecutionLedger  # noqa: E402
 from maf_supervisor import MafTransportError  # noqa: E402
 from tests.test_chartered_delivery_gateway import CharteredFixture, KillPoint  # noqa: E402
@@ -327,22 +329,27 @@ class CharteredRecoveryTests(RecoveryHarness):
         self.assertEqual(self.test_calls, 1)
 
     def test_boundary_h_terminal_evaluations_seal_without_any_send(self):
-        for label, outputs, status in (("second fail", [self.FAIL, self.FAIL], "failed"),):
+        cases = (("second fail", ("editor", "verifier", "verifier", "verifier"), [self.FAIL, self.FAIL], 2, "failed", 1),
+                 ("pass", ("editor", "verifier"), [self.PASS], 1, "completed", 0))
+        for label, plan, outputs, nth, status, denied in cases:
             with self.subTest(label=label):
+                self.sends.clear()
+                self.test_calls = 0
+                (self.worktree / "target.py").write_text("old\n")
                 count = {"n": 0}
 
-                def second(ledger, *args, **kwargs):
+                def nth_call(ledger, *args, target=nth, **kwargs):
                     count["n"] += 1
-                    return count["n"] == 2
+                    return count["n"] == target
 
-                with self._kill_once("record_verifier_evaluation", after=True, when=second):
-                    attempt_id = self._killed(("editor", "verifier", "verifier", "verifier"), outputs)
+                with self._kill_once("record_verifier_evaluation", after=True, when=nth_call):
+                    attempt_id = self._killed(plan, outputs)
                 sent = list(self.sends)
-                result = self._recover(attempt_id, ("editor", "verifier", "verifier", "verifier"))
+                result = self._recover(attempt_id, plan)
                 self.assertEqual(result["status"], status, result)
                 self.assertEqual(self.sends, sent)
                 receipt = self._assert_recovered_receipt(result, mode="answer")
-                self.assertEqual(receipt["verifier_usage"]["denied"], 1)
+                self.assertEqual(receipt["verifier_usage"]["denied"], denied)
                 self.assertEqual(self.test_calls, 1)
 
     def test_boundary_i_kill_during_sealing_seals_once_without_the_runtime(self):
@@ -367,6 +374,83 @@ class CharteredRecoveryTests(RecoveryHarness):
                 self.assertEqual(receipt["recovery"]["replaced_draft_sha256"], draft_sha)
                 self.assertEqual(self.test_calls, 1)
                 self.test_calls = 0
+
+    def test_seal_mode_after_a_failed_test_seals_failed_without_rerunning_it(self):
+        def failing(worktree, job):
+            self.test_calls += 1
+            raise ExecutionContractError("targeted chartered test failed: boom")
+
+        def kill(point):
+            if point == "after-runtime-outcome":
+                raise KillPoint(point)
+
+        with patch("delivery_gateway._run_chartered_test", side_effect=failing):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS], seal_hook=kill)
+            self.assertEqual((self.sends, self.test_calls), (["editor"], 1))
+            result = self._recover(attempt_id, ("editor", "verifier"),
+                                   supervisor=lambda *args, **kwargs: self.fail("seal mode must skip MAF"))
+        self.assertEqual(result["status"], "failed", result)
+        self.assertEqual(self.test_calls, 1, "a recorded failure is sealed, never retested")
+        receipt = self._assert_recovered_receipt(result, mode="seal")
+        self.assertIsNone(receipt["evidence"]["tests"])
+        self.assertIn("targeted chartered test failed", receipt["reason"])
+
+    def test_never_sent_manager_grant_is_reissued_on_replay_and_sent_once(self):
+        manager_sends = []
+
+        def manager_request(envelope, sequence):
+            messages = [{"role": "user", "contents": [{"type": "text", "text": f"progress {sequence}"}]}]
+            request = {"schema_version": 1, "attempt_id": envelope["attempt_id"],
+                       "envelope_digest": envelope_digest(envelope), "sequence": sequence, "phase": "facts",
+                       "manager_round": 1, "prompt_digest": digest(messages)}
+            return {**request, "call_id": expected_manager_call_id(request), "messages": messages}
+
+        def supervisor(envelope, task, on_manager, on_action, resume=None, **kwargs):
+            self.attempt_id = envelope["attempt_id"]
+            self.resumes.append(resume)
+            if resume is None:
+                proposal = self._proposal(envelope, "editor", 1)
+                (Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json").write_text(json.dumps(
+                    {"checkpoint_id": proposal["checkpoint_id"], "workflow_name": "flow-magentic-delivery-v8",
+                     "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+                on_action(proposal)
+            # MAF restored after action 1 replays the manager call it made there.
+            on_manager(manager_request(envelope, 1))
+            proposal = self._proposal(envelope, "verifier", 2)
+            (Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json").write_text(json.dumps(
+                {"checkpoint_id": proposal["checkpoint_id"], "workflow_name": "flow-magentic-delivery-v8",
+                 "pending_request_info_events": {"flow-magentic-action-2": {}}}))
+            on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def manager(message, *, envelope, workspace):
+            manager_sends.append(message["call_id"])
+            self.adapter_marks.append(self._ledger().snapshot(envelope["attempt_id"])["events"][-1]["seq"])
+            return {"output": "Fixture facts", "usage": None}
+
+        self.outputs = [self.PASS]
+        with self._kill_once("consume_manager_grant"), \
+             patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role), \
+             self.assertRaises(KillPoint):
+            execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root, supervisor=supervisor,
+                                       worker_adapter=self._worker, manager_adapter=manager)
+        self.assertEqual((self.sends, manager_sends), (["editor"], []))
+        with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
+            result = resume_delivery("sample", self.attempt_id, root=self.root, supervisor=supervisor,
+                                     worker_adapter=self._worker, manager_adapter=manager)
+        self.assertEqual(result["status"], "completed", result)
+        self.assertEqual(len(manager_sends), 1)
+        self.assertEqual(self.sends, ["editor", "verifier"])
+        events = self._ledger().snapshot(self.attempt_id)["events"]
+        claimed = next(item["seq"] for item in events if item["event"] == "recovery_claimed")
+        reissued = next(item["seq"] for item in events if item["event"] == "manager_policy_allowed"
+                        and item["detail"] == "recovery_regranted")
+        self.assertLess(claimed, reissued)
+        self.assertLessEqual(reissued, self.adapter_marks[-2])
+        calls = self._receipt(result)["manager_calls"]
+        self.assertEqual([item["status"] for item in calls], ["completed"])
 
     def test_clean_transport_loss_recovers_from_the_committed_producer(self):
         result = self._start(("editor", "verifier"), [self.PASS], fail_after=1)
@@ -401,7 +485,9 @@ class CharteredRecoveryTests(RecoveryHarness):
         self.assertEqual(self.sends, ["editor"])
         snapshot = self._ledger().snapshot(attempt_id)
         self.assertEqual(snapshot["status"], "started")
-        self.assertEqual([item["status"] for item in snapshot["actions"]], ["completed", "not_dispatched"])
+        # Drift refuses before the claim: nothing is fenced or released.
+        self.assertEqual([item["status"] for item in snapshot["actions"]], ["completed", "allowed"])
+        self.assertEqual((snapshot["recoveries"], snapshot["owner_generation"]), ([], 1))
         self.assertEqual(self.resumes, [None], "drift refuses before any restore")
 
     def test_stale_unbound_checkpoint_is_quarantined_not_sealed_failed(self):
@@ -468,7 +554,7 @@ class CharteredRecoveryTests(RecoveryHarness):
         self.assertEqual(result["status"], "completed")
 
     def test_recovered_receipt_rejects_a_changed_generation_and_a_removed_marker(self):
-        from execution_contracts import ContractError as ExecutionContractError, validate_receipt
+        from execution_contracts import validate_receipt
 
         with self._kill_once("consume_grant"):
             attempt_id = self._killed(("editor", "verifier"), [self.PASS])
@@ -476,12 +562,13 @@ class CharteredRecoveryTests(RecoveryHarness):
         receipt = self._receipt(result)
         envelope = self._ledger().snapshot(attempt_id)["envelope"]
         validate_receipt(envelope, receipt)
-        for label, mutate in (("generation changed", lambda r: r["recovery"]["recoveries"][0].update(generation=3)),
-                              ("recovery marker removed", lambda r: r.pop("recovery"))):
+        for label, mutate, message in (
+                ("generation changed", lambda r: r["recovery"]["recoveries"][0].update(generation=3), "generation chain"),
+                ("recovery marker removed", lambda r: r.pop("recovery"), "lacks its recovery block")):
             with self.subTest(label=label):
                 changed = copy.deepcopy(receipt)
                 mutate(changed)
-                with self.assertRaises(ExecutionContractError):
+                with self.assertRaisesRegex(ExecutionContractError, message):
                     validate_receipt(envelope, changed)
 
 

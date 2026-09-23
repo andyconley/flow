@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -19,6 +20,7 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import delivery_authority_guard
+from delivery_projection import lead_claim_active
 from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, RecoveryRefused,
                                V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_DRIFT, build_recovery_block,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
@@ -529,7 +531,7 @@ def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
 
 
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
-                           job: dict[str, Any]) -> dict[str, Any]:
+                           job: dict[str, Any], *, record: bool = True) -> dict[str, Any]:
     if _git(worktree, "rev-parse", "HEAD") != baseline["source_commit"]:
         raise ContractError("editor changed the pinned source commit")
     allowed = set(job["write_paths"])
@@ -549,7 +551,7 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     if diff_path.exists():
         if diff_path.is_symlink() or diff_path.read_bytes() != diff:
             raise ContractError("recorded chartered diff changed")
-    else:
+    elif record:
         _write_snapshot(diff_path, diff)
     return {"changed_files": changed, "diff_sha256": hashlib.sha256(diff).hexdigest(),
             "diff_path": str(diff_path),
@@ -576,41 +578,18 @@ def _peek_snapshot(ledger_path: Path, attempt_id: str) -> dict[str, Any] | None:
         return None
     try:
         return ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
-    except ContractError:
+    except (ContractError, sqlite3.Error):
         return None
 
 
-def _lead_active(run_dir: Path, envelope: dict[str, Any]) -> bool:
-    """Whether run.json still names this envelope's Delivery Lead claim (the authority guard rule)."""
-    run_path = run_dir / "run.json"
-    try:
-        delivery = json.loads(run_path.read_text()).get("delivery") if run_path.is_file() and not run_path.is_symlink() else None
-    except (OSError, json.JSONDecodeError):
-        return False
-    claim = envelope.get("delivery_lead_claim")
-    return (isinstance(delivery, dict) and isinstance(claim, dict)
-            and delivery.get("owner_status") == "active"
-            and delivery.get("owner_generation") == claim.get("generation")
-            and delivery.get("lead_claim_digest") == envelope.get("delivery_lead_claim_digest")
-            and delivery.get("charter_digest") == envelope.get("delivery_charter_digest"))
+def _recovery_gates(work_id: str, attempt_id: str, run_dir: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Decide on a read-only snapshot whether recovery may claim the attempt.
 
-
-def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
-                      manager_adapter: Callable[..., dict[str, Any]] | None = None,
-                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
-                      supervisor: Callable[..., dict[str, Any]] | None = None,
-                      test_runner: Callable[[Path], dict[str, Any]] | None = None,
-                      python_path: str | None = None, actor: str = "flow-chartered-resume",
-                      seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
-    """Recover a v6-v8 chartered attempt; only v8 is recoverable (ADR 0016).
-
-    Every gate before the claim reads the ledger read-only, so a refusal
-    leaves the ledger and attempt files byte-for-byte unchanged.
+    Returns the snapshot and either the eligibility (recoverable) or None when
+    a completed recovery should be reported instead. Refuses otherwise.
     """
-    run_dir = root / ".flow" / "runs" / work_id
     attempt_dir = run_dir / "execution" / attempt_id
-    ledger_path = run_dir / "execution" / "ledger.sqlite"
-    snapshot = _peek_snapshot(ledger_path, attempt_id)
+    snapshot = _peek_snapshot(run_dir / "execution" / "ledger.sqlite", attempt_id)
     if snapshot is None or not attempt_dir.is_dir() or attempt_dir.is_symlink():
         raise ContractError("chartered attempt is absent")
     protocol = snapshot["execution_protocol_version"]
@@ -625,42 +604,82 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
         raise RecoveryRefused(ENVELOPE_CHANGED)
     if snapshot["status"] != "started":
         if snapshot.get("recoveries"):
-            # A completed recovery is reported, never repeated.
-            return {"attempt_id": attempt_id, "status": snapshot["status"], "reason": snapshot["reason"],
-                    "receipt_path": snapshot["receipt_path"], "replayed": True}
+            return snapshot, None
         raise RecoveryRefused(ATTEMPT_TERMINAL)
-    eligibility = recovery_eligibility(envelope, snapshot, lead_active=_lead_active(run_dir, envelope))
+    try:
+        delivery = json.loads((run_dir / "run.json").read_text()).get("delivery")
+    except (OSError, json.JSONDecodeError):
+        delivery = None
+    eligibility = recovery_eligibility(envelope, snapshot, lead_active=lead_claim_active(delivery, envelope))
     if not eligibility["recoverable"]:
         raise RecoveryRefused(eligibility["reason"], ", ".join(f"{item['kind']} {item['id']} {item['status']}"
                                                                for item in eligibility["blockers"]))
+    return snapshot, eligibility
+
+
+def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
+                      manager_adapter: Callable[..., dict[str, Any]] | None = None,
+                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
+                      supervisor: Callable[..., dict[str, Any]] | None = None,
+                      test_runner: Callable[[Path], dict[str, Any]] | None = None,
+                      python_path: str | None = None, actor: str = "flow-chartered-resume",
+                      seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
+    """Recover a v6-v8 chartered attempt; only v8 is recoverable (ADR 0016).
+
+    Every gate before the claim reads the ledger read-only, so a refusal
+    leaves the ledger and attempt files unchanged (a recovery lock file may
+    be created beside the ledger). The gates run again under the recovery
+    lock, where no live run can advance the attempt, and that decision is
+    the one the claim acts on.
+    """
+    run_dir = root / ".flow" / "runs" / work_id
+    attempt_dir = run_dir / "execution" / attempt_id
+    ledger_path = run_dir / "execution" / "ledger.sqlite"
+    _recovery_gates(work_id, attempt_id, run_dir)
     valid, _, findings = validate_orchestration(work_id, "dispatch", root=root)
     if not valid:
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
-    mode = eligibility["mode"]
-    link = eligibility["checkpoint"]
-    quarantine = _unbound_checkpoints(envelope, snapshot)
-    ledger = ExecutionLedger(ledger_path)
-    authority_guard = partial(delivery_authority_guard, run_dir, envelope)
-    with ledger.recovery_lock(attempt_id, holder="recovery"):
+    with ExecutionLedger(ledger_path, read_only=True).recovery_lock(attempt_id, holder="recovery"):
+        snapshot, eligibility = _recovery_gates(work_id, attempt_id, run_dir)
+        if eligibility is None:
+            # A completed recovery is reported, never repeated.
+            return {"attempt_id": attempt_id, "status": snapshot["status"], "reason": snapshot["reason"],
+                    "receipt_path": snapshot["receipt_path"], "replayed": True}
+        envelope = snapshot["envelope"]
+        mode = eligibility["mode"]
+        link = eligibility["checkpoint"]
+        outcome = runtime_outcome(snapshot) if mode == "seal" else None
+        recorded_failure = bool(outcome and outcome["failure"])
+        if not recorded_failure:
+            # Drift refuses before the claim, so it fences and releases nothing.
+            _check_chartered_evidence(envelope, snapshot, attempt_dir)
+        quarantine = _unbound_checkpoints(envelope, snapshot)
+        ledger = ExecutionLedger(ledger_path)
+        authority_guard = partial(delivery_authority_guard, run_dir, envelope)
         # Reconcile first: the claim fences and releases before any
         # checkpoint is read or any grant is issued.
         with authority_guard():
             claim = ledger.claim_chartered_recovery(
                 attempt_id, expected_generation=snapshot["owner_generation"],
+                expected_event_seq=snapshot["events"][-1]["seq"],
                 lead_generation=envelope["delivery_lead_claim"]["generation"], actor=actor, mode=mode,
                 checkpoint=({key: link[key] for key in ("pending_id", "checkpoint_id", "file_sha256")} if link else None),
                 quarantined=quarantine)
         generation = claim["generation"]
         _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
         state = ledger.snapshot(attempt_id)
-        outcome = runtime_outcome(state) if mode == "seal" else None
         try:
-            evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner)
-        except RecoveryRefused:
-            if not (outcome and outcome["failure"]):
+            # A recorded failure is sealed as it was; its test is never rerun.
+            evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner,
+                                                   run_test=not recorded_failure)
+        except (RecoveryRefused, ContractError):
+            if not recorded_failure:
                 raise
-            # The recorded outcome already failed; seal it without evidence.
             evidence = {"edit_evidence": None, "test_evidence": None}
+        # Only grants a recovery released (this claim or an earlier one that
+        # died before its regrant) may be re-granted.
+        evidence["regrantable_action_ids"] = [item["action_id"] for item in state["actions"]
+                                              if item["reason"] == "recovery_unconsumed_grant"]
         if mode == "seal":
             inputs = state.get("verifier_inputs", [])
             verifier_sha = (hashlib.sha256(inputs[-1]["input"]["provider_task"].encode()).hexdigest()
@@ -700,6 +719,22 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
         return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
 
 
+def _check_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, Any], attempt_dir: Path) -> None:
+    """Refuse worktree drift without writing anything or running the test."""
+    plan = rebuild_chartered_evidence_plan(envelope, snapshot)
+    worktree = Path(envelope["worktree"])
+    if not plan["producer_completed"]:
+        _verify_chartered_baseline(worktree, envelope)
+        return
+    baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    try:
+        edit = _verify_chartered_edit(worktree, baseline, attempt_dir, envelope["job_contract"], record=False)
+    except ContractError as exc:
+        raise RecoveryRefused(WORKTREE_DRIFT, str(exc)) from exc
+    if plan["diff_digest"] is not None and edit["diff_sha256"] != plan["diff_digest"]:
+        raise RecoveryRefused(WORKTREE_DRIFT, "worktree diff differs from the bound verifier input")
+
+
 def _unbound_checkpoints(envelope: dict[str, Any], snapshot: dict[str, Any]) -> list[dict[str, str]]:
     """List checkpoint files the ledger never bound; restoring beside them is ambiguous."""
     directory = Path(envelope["checkpoint_dir"])
@@ -715,8 +750,14 @@ def _quarantine_checkpoints(envelope: dict[str, Any], attempt_dir: Path, files: 
                             recovery_id: str) -> None:
     if not files:
         return
-    target = attempt_dir / "checkpoints-quarantine" / recovery_id
-    target.mkdir(parents=True, mode=0o700)
+    parent = attempt_dir / "checkpoints-quarantine"
+    if parent.is_symlink() or parent.exists() and not parent.is_dir():
+        raise ContractError("checkpoint quarantine path is unsafe")
+    parent.mkdir(mode=0o700, exist_ok=True)
+    target = parent / recovery_id
+    target.mkdir(mode=0o700)
+    if parent.is_symlink() or target.is_symlink():
+        raise ContractError("checkpoint quarantine path is unsafe")
     for item in files:
         source = Path(envelope["checkpoint_dir"]) / item["name"]
         if source.is_file() and not source.is_symlink():
@@ -738,7 +779,8 @@ def _verify_chartered_baseline(worktree: Path, envelope: dict[str, Any]) -> None
 
 
 def _rebuild_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, Any], attempt_dir: Path,
-                                test_runner: Callable[[Path], dict[str, Any]] | None) -> dict[str, Any]:
+                                test_runner: Callable[[Path], dict[str, Any]] | None, *,
+                                run_test: bool = True) -> dict[str, Any]:
     """Re-verify the worktree and reuse bound test evidence; run the test at most once."""
     plan = rebuild_chartered_evidence_plan(envelope, snapshot)
     worktree = Path(envelope["worktree"])
@@ -756,6 +798,8 @@ def _rebuild_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, An
     if plan["test_digest"] is not None:
         # The bound verifier input already judged this evidence; never rerun it.
         tests = {"command": job["test"]["argv"], "status": "passed", "output_sha256": plan["test_digest"]}
+    elif not run_test:
+        tests = None
     else:
         tests = (test_runner or partial(_run_chartered_test, job=job))(worktree)
         try:
@@ -1223,7 +1267,8 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             decision = ledger.decide(envelope, action, generation=generation)
             regranted = False
             if (recovery is not None and decision.get("replayed") and not decision["allowed"]
-                    and decision["reason"] == "recovery_unconsumed_grant"):
+                    and decision["reason"] == "recovery_unconsumed_grant"
+                    and action["action_id"] in recovery.get("regrantable_action_ids", [])):
                 decision = ledger.regrant_recovered_action(envelope, action, generation=generation)
                 regranted = decision["allowed"]
         if decision.get("replayed") and isinstance(decision.get("result"), dict):

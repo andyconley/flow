@@ -401,7 +401,11 @@ def _validate_recovery_block(envelope: dict[str, Any], receipt: dict[str, Any]) 
             raise ContractError("receipt recovery interruption is invalid")
     if any(value not in allowed for value in generations):
         raise ContractError("receipt evidence owner generation is outside the recovery chain")
-    if released != {item.get("action_id") for item in actions if item.get("reason") in RECOVERY_GRANT_REASONS}:
+    # A released grant's reason can later move on (grant expiry, a denied
+    # regrant), so every action still marked released must be listed, and
+    # every listed id must be an action of this receipt.
+    marked = {item.get("action_id") for item in actions if item.get("reason") in RECOVERY_GRANT_REASONS}
+    if not marked <= released or not released <= {item.get("action_id") for item in actions}:
         raise ContractError("receipt recovery released grants differ from actions")
     resolved = sum(str(reason).startswith("operator_resolved_") for reason in reasons)
     if (any(not isinstance(value, str) or not value for value in block["resolutions"])

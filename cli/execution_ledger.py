@@ -28,7 +28,8 @@ from execution_contracts import (
     RECOVERY_INTERRUPTION_CAUSES,
 )
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
-from delivery_recovery import ATTEMPT_RUNNING, ATTEMPT_TERMINAL, RECOVERY_IN_PROGRESS, RecoveryRefused
+from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, RECONCILIATION_REQUIRED, RECOVERY_IN_PROGRESS,
+                               RecoveryRefused)
 
 
 def utc_now() -> str:
@@ -239,14 +240,15 @@ class ExecutionLedger:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
+                # The holder names itself right after locking; an unnamed
+                # holder is a live run that has not written its name yet.
                 current = os.pread(fd, 16, 0).decode(errors="ignore")
-                raise RecoveryRefused(ATTEMPT_RUNNING if current == "live" else RECOVERY_IN_PROGRESS) from None
+                raise RecoveryRefused(RECOVERY_IN_PROGRESS if current == "recovery" else ATTEMPT_RUNNING) from None
             os.ftruncate(fd, 0)
             os.pwrite(fd, holder.encode(), 0)
             try:
                 yield
             finally:
-                os.ftruncate(fd, 0)
                 fcntl.flock(fd, fcntl.LOCK_UN)
         finally:
             os.close(fd)
@@ -322,7 +324,8 @@ class ExecutionLedger:
             self._event(db, attempt_id, None, "recovery_claimed", canonical({"actor": actor, "generation": generation}))
             return generation
 
-    def claim_chartered_recovery(self, attempt_id: str, *, expected_generation: int, lead_generation: int,
+    def claim_chartered_recovery(self, attempt_id: str, *, expected_generation: int, expected_event_seq: int,
+                                 lead_generation: int,
                                  actor: str, mode: str, checkpoint: dict[str, Any] | None,
                                  quarantined: list[dict[str, str]]) -> dict[str, Any]:
         """Fence a v8 attempt for one recovery with a compare-and-swap on its owner generation.
@@ -346,14 +349,16 @@ class ExecutionLedger:
                     raise RecoveryRefused(ATTEMPT_TERMINAL)
                 if row[1] != expected_generation:
                     raise RecoveryRefused(RECOVERY_IN_PROGRESS, "owner generation changed before the claim")
+                high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+                if high_water != expected_event_seq:
+                    # The eligibility decision was made on facts that moved.
+                    raise RecoveryRefused(RECOVERY_IN_PROGRESS, "attempt changed after eligibility was decided")
+                if self._unresolved_action(db, attempt_id):
+                    # An uncertain send is never fenced into a recovery; it
+                    # needs operator reconciliation first.
+                    raise RecoveryRefused(RECONCILIATION_REQUIRED)
                 generation = expected_generation + 1
                 db.execute("UPDATE attempts SET owner_generation=?,owner_actor=? WHERE attempt_id=?", (generation, actor, attempt_id))
-                for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='started'", (attempt_id,)).fetchall():
-                    db.execute("UPDATE actions SET status='unknown',reason='recovery_after_dispatch' WHERE action_id=?", (action_id,))
-                    self._event(db, attempt_id, action_id, "worker_unknown", "recovery_after_dispatch")
-                for (call_id,) in db.execute("SELECT call_id FROM manager_calls WHERE attempt_id=? AND status='started'", (attempt_id,)).fetchall():
-                    db.execute("UPDATE manager_calls SET status='unknown',reason='recovery_after_dispatch' WHERE call_id=?", (call_id,))
-                    self._event(db, attempt_id, call_id, "manager_unknown", "recovery_after_dispatch")
                 released = []
                 for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' ORDER BY rowid", (attempt_id,)).fetchall():
                     if db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,)).fetchone():
@@ -460,7 +465,9 @@ class ExecutionLedger:
             if row is None:
                 raise ContractError("manager call missing")
             self._assert_owner(db, row[0], generation)
-            if (row[1] != "allowed" or not self._active_recovery(db, row[0], generation)
+            attempt = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (row[0],)).fetchone()
+            if (row[1] != "allowed" or attempt != ("started", 8) or not self._active_recovery(db, row[0], generation)
+                    or self._unresolved_action(db, row[0])
                     or db.execute("SELECT 1 FROM events WHERE action_id=? AND event='manager_send_started'", (call_id,)).fetchone()):
                 raise ContractError("manager call is not eligible for recovery reissue")
             grant = uuid.uuid4().hex
