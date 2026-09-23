@@ -1297,6 +1297,30 @@ class ExecutionLedger:
         return {"interruption_id": interruption_id, "cause": cause, "owner_generation": owner_generation,
                 "ledger_seq": high_water, "recorded_at": recorded_at, "replayed": False}
 
+    def record_runtime_outcome(self, attempt_id: str, *, failure: str, transport: bool, generation: int) -> dict[str, Any]:
+        """Record that a v8 run finished and Flow committed to sealing it.
+
+        Recovery after this point skips the runtime and only seals. The record
+        is idempotent for one owner generation.
+        """
+        if not isinstance(failure, str) or type(transport) is not bool:
+            raise ContractError("runtime outcome is invalid")
+        outcome = {"generation": generation, "failure": failure[:4096], "transport": transport}
+        encoded = canonical(outcome)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[1] != 8 or row[0] != "started":
+                raise ContractError("only a started protocol v8 attempt records a runtime outcome")
+            for (detail,) in db.execute("SELECT detail FROM events WHERE attempt_id=? AND event='runtime_outcome_recorded'", (attempt_id,)):
+                if json.loads(detail).get("generation") == generation:
+                    if detail != encoded:
+                        raise ContractError("runtime outcome conflicts with durable outcome")
+                    return {**outcome, "replayed": True}
+            self._event(db, attempt_id, None, "runtime_outcome_recorded", encoded)
+            return {**outcome, "replayed": False}
+
     def record_interruption(self, attempt_id: str, cause: str, detail: str, *, generation: int) -> dict[str, Any]:
         """Record why a v8 attempt stopped while leaving it started and recoverable."""
         if cause not in self.INTERRUPTION_CAUSES or not isinstance(detail, str):

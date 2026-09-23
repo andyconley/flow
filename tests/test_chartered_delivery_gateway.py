@@ -26,6 +26,10 @@ from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier
 import delivery_gateway
 
 
+class KillPoint(BaseException):
+    """Simulated process death; escapes the gateway's ``except Exception`` handlers."""
+
+
 class CharteredPreparationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -511,7 +515,7 @@ class CharteredPreparationTests(unittest.TestCase):
     PASS = '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}'
     FAIL = '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
 
-    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None):
+    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None, seal_hook=None):
         """Drive one v8 attempt; ``repeat`` re-proposes that sequence once after an error."""
         sends, replies, captured = [], {}, {}
         outputs = list(verifier_outputs)
@@ -545,8 +549,33 @@ class CharteredPreparationTests(unittest.TestCase):
              patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
              patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
             result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
-                                                supervisor=supervisor, worker_adapter=worker)
+                                                supervisor=supervisor, worker_adapter=worker, seal_hook=seal_hook)
         return result, sends, replies, captured
+
+    def test_v8_seal_hook_reaches_each_sealing_boundary_after_the_runtime_outcome(self):
+        points = []
+        result, _, _, captured = self._run_v8([self.PASS], seal_hook=points.append)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(points, ["after-runtime-outcome", "after-receipt-draft", "before-finish-attempt"])
+        attempt_dir = Path(result["receipt_path"]).parent
+        snapshot = ExecutionLedger(attempt_dir.parent / "ledger.sqlite", read_only=True).snapshot(result["attempt_id"])
+        outcomes = [json.loads(item["detail"]) for item in snapshot["events"] if item["event"] == "runtime_outcome_recorded"]
+        self.assertEqual(outcomes, [{"failure": "", "generation": 1, "transport": False}])
+        self.assertEqual(snapshot["sealed_receipt_sha256"],
+                         hashlib.sha256(Path(result["receipt_path"]).read_bytes()).hexdigest())
+
+    def test_v8_kill_before_finish_leaves_an_unsealed_draft_and_a_started_attempt(self):
+        def kill(point):
+            if point == "before-finish-attempt":
+                raise KillPoint(point)
+
+        with self.assertRaises(KillPoint):
+            self._run_v8([self.PASS], seal_hook=kill)
+        attempt_dir = next((self.run / "execution").glob("*/envelope.json")).parent
+        snapshot = ExecutionLedger(attempt_dir.parent / "ledger.sqlite", read_only=True).snapshot(attempt_dir.name)
+        self.assertEqual(snapshot["status"], "started")
+        self.assertIsNone(snapshot["sealed_receipt_sha256"])
+        self.assertTrue((attempt_dir / "receipt.json").is_file())
 
     def test_v8_verifier_input_carries_the_flow_output_contract(self):
         result, _, _, captured = self._run_v8([self.PASS])

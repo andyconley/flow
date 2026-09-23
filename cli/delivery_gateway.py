@@ -514,12 +514,14 @@ def execute_delivery(work_id: str, worktree: Path, source_commit: str, *, root: 
 def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *, root: Path | None = None,
                                manager_adapter: Callable[..., dict[str, Any]] | None = None,
                                worker_adapter: Callable[..., dict[str, Any]] | None = None,
-                               supervisor: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
+                               supervisor: Callable[..., dict[str, Any]] | None = None,
+                               seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
     envelope, task, attempt_dir, ledger = prepare_chartered_delivery(work_id, worktree, source_commit, root=root)
     return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
                                       manager_adapter=manager_adapter, worker_adapter=worker_adapter,
                                       supervisor=supervisor, test_runner=None, python_path=None,
-                                      generation=envelope["delivery_lead_claim"]["generation"])
+                                      generation=envelope["delivery_lead_claim"]["generation"],
+                                      seal_hook=seal_hook)
 
 
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
@@ -878,8 +880,16 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                                python_path: str | None,
                                resume: dict[str, Any] | None = None,
                                generation: int = 1,
-                               continuation_epoch_id: str | None = None) -> dict[str, Any]:
+                               continuation_epoch_id: str | None = None,
+                               seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
+    """Run one attempt behind Flow's callbacks and seal its receipt.
+
+    ``seal_hook`` is a test seam only: it is called at ``after-runtime-outcome``,
+    ``after-receipt-draft``, and ``before-finish-attempt`` so a test can
+    simulate a process death at each sealing boundary.
+    """
     aid = envelope["attempt_id"]
+    hook = seal_hook or (lambda point: None)
     work_id = envelope["work_id"]
     source_commit = envelope["source_commit"]
     worktree = Path(envelope["worktree"])
@@ -1091,11 +1101,17 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         return {"attempt_id": aid, "status": "interrupted", "reason": cause, "detail": failure[:512],
                 "interruption_id": interruption["interruption_id"], "receipt_path": None,
                 "resume_available": not uncertain, "blocking": blocking}
+    if structured_verifier:
+        with authority_guard(), ledger.send_lock():
+            ledger.record_runtime_outcome(aid, failure=failure, transport=recoverable_transport_failure,
+                                          generation=generation)
+        hook("after-runtime-outcome")
     receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
                                                edit_evidence=edit_evidence, test_evidence=test_evidence,
                                                verifier_input_sha256=verifier_input_sha256,
                                                continuation_epoch_id=continuation_epoch_id)
     validate_receipt(envelope, receipt)
+    hook("after-receipt-draft")
     receipt_path = attempt_dir / (f"continuation-{continuation_epoch_id}.receipt.json"
                                   if continuation_epoch_id else "receipt.json")
     with authority_guard(), ledger.send_lock():
@@ -1106,6 +1122,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                                                 str(receipt_path), generation=generation)
         else:
             write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+            hook("before-finish-attempt")
             ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
     return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
             "evidence": receipt["evidence"]}
