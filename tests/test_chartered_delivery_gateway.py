@@ -21,6 +21,9 @@ from delivery_contracts import build_delivery_charter, build_shaper_contract, di
 from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
 from tests.shaper_intent_fixture import shaper_intent
+from execution_ledger import ExecutionLedger
+from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier_digest, evaluate_candidate
+import delivery_gateway
 
 
 class CharteredPreparationTests(unittest.TestCase):
@@ -504,6 +507,151 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["unusable", "valid_pass"])
+
+    PASS = '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}'
+    FAIL = '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
+
+    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None):
+        """Drive one v8 attempt; ``repeat`` re-proposes that sequence once after an error."""
+        sends, replies, captured = [], {}, {}
+        outputs = list(verifier_outputs)
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
+            for sequence, assignment_id in enumerate(plan, 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                try:
+                    replies[sequence] = on_action(proposal)
+                except Exception as exc:
+                    if sequence != repeat:
+                        raise
+                    captured["first_error"] = str(exc)
+                    replies[sequence] = on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            sends.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            captured.setdefault("provider_tasks", []).append(action["provider_task"])
+            return self._result("ollama", "local-model", outputs.pop(0))
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        return result, sends, replies, captured
+
+    def test_v8_verifier_input_carries_the_flow_output_contract(self):
+        result, _, _, captured = self._run_v8([self.PASS])
+        self.assertEqual(result["status"], "completed")
+        self.assertTrue(captured["provider_tasks"][0].endswith(VERIFIER_CONTRACT_INSTRUCTION))
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertTrue(receipt["verifier_inputs"][0]["input"]["provider_task"].endswith(VERIFIER_CONTRACT_INSTRUCTION))
+        validate_receipt(captured["envelope"], receipt)
+
+    def test_v8_completed_verifier_without_evaluation_is_reevaluated_on_replay_without_resend(self):
+        original = ExecutionLedger.record_verifier_evaluation
+        calls = []
+
+        def crash_once(ledger, *args, **kwargs):
+            calls.append(True)
+            if len(calls) == 1:
+                raise RuntimeError("simulated crash after provider completion")
+            return original(ledger, *args, **kwargs)
+
+        with patch.object(ExecutionLedger, "record_verifier_evaluation", crash_once):
+            result, sends, replies, captured = self._run_v8([self.PASS], repeat=2)
+        self.assertEqual(captured["first_error"], "simulated crash after provider completion")
+        self.assertEqual(sends, ["editor", "verifier"])
+        self.assertIn("valid_pass", replies[2]["summary"])
+        self.assertEqual(result["status"], "completed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["valid_pass"])
+
+    def test_v8_receipt_rejects_each_tampered_verifier_binding(self):
+        result, _, _, captured = self._run_v8([self.FAIL, self.PASS], plan=("editor", "verifier", "verifier"))
+        envelope = captured["envelope"]
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        validate_receipt(envelope, receipt)
+
+        def reseal(evaluation):
+            body = {key: value for key, value in evaluation.items() if key != "evaluation_digest"}
+            return {**body, "evaluation_digest": verifier_digest(body)}
+
+        def forged_pass(r):
+            # A self-consistent pass sealed over the first call's real fail output.
+            item = r["verifier_evaluations"][0]
+            item["evaluation"] = reseal({**item["evaluation"], "disposition": "valid_pass", "reason": "accepted_pass",
+                                         "candidate": json.loads(self.PASS)})
+            item["evaluation_digest"], item["outcome"] = item["evaluation"]["evaluation_digest"], "valid_pass"
+
+        def rebind_diff(r):
+            for binding, item in zip(r["verifier_inputs"], r["verifier_evaluations"]):
+                binding["diff_digest"] = "f" * 64
+                item["evaluation"] = reseal({**item["evaluation"], "diff_digest": "f" * 64})
+                item["evaluation_digest"] = item["evaluation"]["evaluation_digest"]
+
+        def rebind_evaluation_only(r):
+            # The binding stays true; only the evaluation's sealed copy moves.
+            item = r["verifier_evaluations"][0]
+            item["evaluation"] = reseal({**item["evaluation"], "diff_digest": "f" * 64})
+            item["evaluation_digest"] = item["evaluation"]["evaluation_digest"]
+
+        def strip_contract(r):
+            binding = r["verifier_inputs"][1]
+            binding["input"]["provider_task"] = binding["input"]["provider_task"].replace(VERIFIER_CONTRACT_INSTRUCTION, "")
+            binding["input_digest"] = verifier_digest(binding["input"])
+
+        mutations = {
+            "forged pass over fail output": forged_pass,
+            "diff rebound consistently": rebind_diff,
+            "evaluation diff rebound only": rebind_evaluation_only,
+            "test evidence changed": lambda r: r["evidence"]["tests"].update(output_sha256="f" * 64),
+            "evaluation removed": lambda r: r["verifier_evaluations"].pop(0),
+            "contract stripped from input": strip_contract,
+            "input digest changed": lambda r: r["verifier_inputs"][0].update(input_digest="f" * 64),
+            "evaluation action changed": lambda r: r["verifier_evaluations"][1]["evaluation"].update(action_id="other"),
+            "consumed counter changed": lambda r: r["verifier_usage"].update(consumed=1),
+            "maximum counter changed": lambda r: r["verifier_usage"].update(maximum=1),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(receipt)
+                mutate(changed)
+                with self.assertRaises(ExecutionContractError):
+                    validate_receipt(envelope, changed)
+
+    def test_v8_refuses_a_charter_that_never_sealed_the_verifier_cap(self):
+        original = delivery_gateway._sealed_delivery_authority
+
+        def legacy(*args, **kwargs):
+            authority = copy.deepcopy(original(*args, **kwargs))
+            authority["charter"]["limits"].pop("max_verifier_calls")
+            return authority
+
+        with patch("delivery_gateway._sealed_delivery_authority", side_effect=legacy):
+            with self.assertRaisesRegex(ContractError, "seals max_verifier_calls"):
+                self.prepare()
+
+    def test_v8_refused_send_preparation_releases_the_untouched_grant(self):
+        def refuse(*args, **kwargs):
+            raise ExecutionContractError("simulated preparation refusal")
+
+        with patch.object(ExecutionLedger, "prepare_verifier_send", refuse):
+            result, sends, _, _ = self._run_v8([self.PASS])
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(sends, ["editor"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        verifier = [item for item in receipt["actions"] if item["request"]["assignment_id"] == "verifier"]
+        self.assertEqual([item["status"] for item in verifier], ["not_dispatched"])
+        self.assertEqual((receipt["verifier_usage"]["reserved"], receipt["verifier_usage"]["consumed"]), (0, 0))
 
     def test_v7_verifier_before_observed_edit_refuses_without_provider_send(self):
         calls = []

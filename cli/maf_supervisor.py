@@ -448,7 +448,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     """Run credentialless stock Magentic behind Flow's two guarded callbacks."""
     protocol_version = envelope.get("execution_protocol_version")
     if protocol_version not in {5, 6, 7, 8} or not isinstance(task, str) or not task.strip():
-        raise MafProtocolError("delivery requires a v5, v6, or v7 envelope and task")
+        raise MafProtocolError("delivery requires a v5, v6, v7, or v8 envelope and task")
     if not callable(on_manager) or not callable(on_action) or not 0 < timeout_s <= 900:
         raise MafProtocolError("delivery callbacks or timeout are invalid")
     executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable

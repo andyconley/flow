@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 import uuid
-from contextlib import nullcontext
+from contextlib import nullcontext, suppress
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
@@ -30,7 +30,7 @@ from codex_worker import call_codex
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
-from verifier_contracts import evaluate_candidate
+from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch
 
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
@@ -323,6 +323,10 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 or not isinstance(role_limit, int) or role_counts[item["role"]] > role_limit):
             raise ContractError("runtime roster expands the sealed Delivery Charter")
     canonical_limits = canonical_charter["limits"]
+    if "max_verifier_calls" not in canonical_limits:
+        # Protocol v8 enforces the verifier allowance the Charter sealed; a
+        # legacy Charter never sealed one, so Flow will not invent a default.
+        raise ContractError("protocol v8 requires a Delivery Charter that seals max_verifier_calls")
     if len(specialists) > canonical_limits.get("delegations", 0):
         raise ContractError("runtime roster expands the sealed Delivery Charter")
     if (canonical_limits.get("paths") != ["charter-scoped"]
@@ -402,7 +406,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                            "max_manager_calls": canonical_limits["max_manager_calls"],
                            "max_manager_rounds": canonical_limits["max_manager_rounds"],
                            "max_paid_worker_calls": canonical_limits["max_paid_worker_calls"],
-                           "max_verifier_calls": canonical_limits.get("max_verifier_calls", 2)}}
+                           "max_verifier_calls": canonical_limits["max_verifier_calls"]}}
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
@@ -727,6 +731,13 @@ def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                            python_path=python_path, continuation_epoch_id=epoch["epoch_id"])
 
 
+def _verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structured: bool) -> str:
+    """Build the exact evidence-bearing verifier input Flow sends and digests."""
+    text = (task + "\n\nFlow-verified complete bounded diff for this review:\n"
+            + diff + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
+    return text + VERIFIER_CONTRACT_INSTRUCTION if structured else text
+
+
 def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
                                ledger: ExecutionLedger, *,
                                manager_adapter: Callable[..., dict[str, Any]] | None,
@@ -772,10 +783,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     prior_verifier = [item for item in initial_snapshot["actions"]
                       if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
     if prior_verifier and edit_evidence:
-        verifier_task = (prior_verifier[-1]["request"]["task"]
-                         + "\n\nFlow-verified complete bounded diff for this review:\n"
-                         + (attempt_dir / "repair.diff").read_text()
-                         + "\nTargeted test: passed. Diff SHA-256: " + edit_evidence["diff_sha256"])
+        verifier_task = _verifier_provider_task(prior_verifier[-1]["request"]["task"], (attempt_dir / "repair.diff").read_text(),
+                                                edit_evidence["diff_sha256"], structured=structured_verifier)
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
     def on_manager(message: dict[str, Any]) -> str:
@@ -820,6 +829,22 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 ledger.mark_manager_unknown(request["call_id"], "manager_send_outcome_uncertain", generation=generation)
                 raise
 
+    def evaluate_verifier(action: dict[str, Any], result: dict[str, Any], binding: dict[str, Any]) -> dict[str, Any]:
+        """Record Flow's judgment of an already completed verifier response."""
+        evaluation = evaluate_candidate(
+            action_id=action["action_id"], verifier_input_digest=binding["input_digest"],
+            raw_output=result["output"], diff_digest=binding["diff_digest"],
+            test_evidence_digest=binding["test_digest"],
+            forced_unusable_reason="provider_binding_mismatch" if provider_binding_mismatch(action, result) else None)
+        return ledger.record_verifier_evaluation(action["action_id"], evaluation, generation=generation)["evaluation"]
+
+    def verifier_summary(evaluation: dict[str, Any], output: str) -> str:
+        usage = ledger.verifier_usage(aid)
+        return ("Flow verifier evaluation: " + evaluation["disposition"]
+                + "; reason: " + evaluation["reason"]
+                + "; retry eligible: " + str(usage["retry_eligible"]).lower()
+                + ". Provider summary: " + output)
+
     def on_action(message: dict[str, Any]) -> dict[str, Any]:
         nonlocal edit_evidence, test_evidence, verifier_input_sha256
         action = _normalized_action(envelope, message)
@@ -838,7 +863,21 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 reply = json.loads(reply_path.read_text())
                 if reply.get("action_id") == action["action_id"] and reply.get("output") == result["output"]:
                     return reply
-            if is_producer and edit_evidence and test_evidence:
+            if structured_verifier and is_verifier:
+                # A crash can land between completion and evaluation. Replay
+                # re-evaluates the stored response; it never resends.
+                replay_state = ledger.snapshot(aid)
+                binding = next((item for item in replay_state.get("verifier_inputs", [])
+                                if item["action_id"] == action["action_id"]), None)
+                if binding is None:
+                    raise ContractError("completed structured verifier has no durable input binding")
+                evaluation = next((item["evaluation"] for item in replay_state.get("verifier_evaluations", [])
+                                   if item["action_id"] == action["action_id"]), None)
+                if evaluation is None:
+                    with authority_guard():
+                        evaluation = evaluate_verifier(action, result, binding)
+                summary = verifier_summary(evaluation, result["output"])
+            elif is_producer and edit_evidence and test_evidence:
                 summary = (result["output"] + "\n\nFlow verified the scoped repair. Diff SHA-256: "
                            + edit_evidence["diff_sha256"] + ". Targeted test: passed. Verified diff excerpt:\n"
                            + (attempt_dir / "repair.diff").read_text()[:2048])
@@ -852,10 +891,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             return {"status": "denied", "action_id": action["action_id"], "reason": decision["reason"], "summary": "Flow denied this specialist call"}
         provider_action = action
         if is_verifier:
-            diff = (attempt_dir / "repair.diff").read_text()
-            evidence = ("\n\nFlow-verified complete bounded diff for this review:\n"
-                        + diff + "\nTargeted test: passed. Diff SHA-256: " + edit_evidence["diff_sha256"])
-            provider_task = action["task"] + evidence
+            provider_task = _verifier_provider_task(action["task"], (attempt_dir / "repair.diff").read_text(),
+                                                    edit_evidence["diff_sha256"], structured=structured_verifier)
             verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
             provider_action = {**action, "provider_task": provider_task}
         try:
@@ -877,24 +914,24 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             ledger.assert_owner(aid, generation)
             response_completed = False
             verifier_binding: dict[str, Any] | None = None
-            try:
-                if structured_verifier and is_verifier:
+            if structured_verifier and is_verifier:
+                # Input binding, grant use, and send claim are one ledger
+                # transaction. If it refuses, nothing was sent: release an
+                # untouched grant rather than leaving it reserved.
+                try:
                     verifier_binding = ledger.prepare_verifier_send(
                         action["action_id"], decision["grant_id"], provider_action,
                         edit_evidence["diff_sha256"], test_evidence["output_sha256"],
                         generation=generation)
-                else:
+                except Exception:
+                    # Never let the release attempt mask the original refusal.
+                    with suppress(Exception):
+                        ledger.close_pre_send_failure(action["action_id"], decision["grant_id"], generation=generation)
+                    raise
+            try:
+                if not (structured_verifier and is_verifier):
                     ledger.observe_send(action["action_id"], generation)
                 result = worker_adapter(provider_action, envelope=envelope, workspace=worktree)
-                expected_evidence = ({"ollama": "flow_observed_local_http_response",
-                                      "codex": "flow_observed_codex_cli_completed_turn",
-                                      "claude": "flow_observed_claude_cli_completed_turn",
-                                      "local-stub": "local_stub"}).get(action["provider"])
-                binding_mismatch = (structured_verifier and is_verifier and isinstance(result, dict)
-                                    and (result.get("provider") != action["provider"]
-                                         or result.get("model") != action["model"]
-                                         or result.get("physical_call") != (action["provider"] != "local-stub")
-                                         or result.get("evidence_level") != expected_evidence))
                 if not (structured_verifier and is_verifier):
                     validate_result(envelope, result, action=action)
                 ledger.observe_response(action["action_id"], result, generation)
@@ -905,13 +942,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                     ledger.complete(action["action_id"], result, generation=generation)
                     response_completed = True
                     if structured_verifier and is_verifier:
-                        evaluation = evaluate_candidate(
-                            action_id=action["action_id"],
-                            verifier_input_digest=verifier_binding["input_digest"],
-                            raw_output=result["output"], diff_digest=edit_evidence["diff_sha256"],
-                            test_evidence_digest=test_evidence["output_sha256"],
-                            forced_unusable_reason="provider_binding_mismatch" if binding_mismatch else None)
-                        ledger.record_verifier_evaluation(action["action_id"], evaluation, generation=generation)
+                        evaluation = evaluate_verifier(action, result, verifier_binding)
                 if is_producer:
                     edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
@@ -925,11 +956,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 raise
         summary = result["output"]
         if structured_verifier and is_verifier:
-            usage = ledger.verifier_usage(aid)
-            summary = ("Flow verifier evaluation: " + evaluation["disposition"]
-                       + "; reason: " + evaluation["reason"]
-                       + "; retry eligible: " + str(usage["retry_eligible"]).lower()
-                       + ". Provider summary: " + result["output"])
+            summary = verifier_summary(evaluation, result["output"])
         if is_producer and edit_evidence and test_evidence:
             summary += ("\n\nFlow verified the scoped repair. Diff SHA-256: " + edit_evidence["diff_sha256"]
                         + ". Targeted test: passed. Verified diff excerpt:\n" + (attempt_dir / "repair.diff").read_text()[:2048])
@@ -966,8 +993,15 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     producer = [item for item in actions if (item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"]
     verifier = [item for item in actions if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
     verified_order = bool(producer and any(item["request"]["sequence"] > producer[0]["request"]["sequence"] for item in verifier))
-    structured_pass = (not structured_verifier or bool(snapshot.get("verifier_evaluations"))
-                       and snapshot["verifier_evaluations"][-1]["outcome"] == "valid_pass")
+    final_evaluation = (snapshot.get("verifier_evaluations") or [{}])[-1].get("evaluation")
+    structured_pass = (not structured_verifier or bool(final_evaluation)
+                       and final_evaluation["disposition"] == "valid_pass")
+    if (structured_pass and structured_verifier and not failure and edit_evidence and test_evidence
+            and (final_evaluation["diff_digest"] != edit_evidence["diff_sha256"]
+                 or final_evaluation["test_evidence_digest"] != test_evidence["output_sha256"])):
+        # The pass judged evidence Flow no longer holds; it cannot complete.
+        structured_pass = False
+        failure = "structured verifier pass is bound to stale evidence"
     terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and structured_pass and edit_evidence and test_evidence else "failed")
     reason = "reconciliation_required" if terminal == "unknown" else failure
     receipt = {"schema_version": 1, "execution_protocol_version": envelope["execution_protocol_version"], "work_id": work_id, "attempt_id": aid,
@@ -1073,8 +1107,11 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
     timeout_seconds = min(300, envelope.get("limits", {}).get("max_runtime_seconds", 300))
     if action["provider"] == "ollama":
+        structured = (envelope["execution_protocol_version"] == 8
+                      and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
         return call_local({**assignment, "task": action.get("provider_task", action["task"]), "attempt_id": envelope["attempt_id"]},
-                          correlation_id=action["action_id"], timeout_seconds=min(60, timeout_seconds))
+                          correlation_id=action["action_id"], timeout_seconds=min(60, timeout_seconds),
+                          structured_verifier=structured)
     if action["provider"] == "claude":
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
                                 workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,

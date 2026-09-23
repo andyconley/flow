@@ -8,9 +8,11 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from verifier_contracts import VERIFIER_EVALUATION_SCHEMA_VERSION, validate_evaluation
+    from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
+                                    provider_binding_mismatch, validate_evaluation, validate_structured_verifier_result)
 except ModuleNotFoundError:  # Package import used by isolated tests.
-    from .verifier_contracts import VERIFIER_EVALUATION_SCHEMA_VERSION, validate_evaluation
+    from .verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
+                                     provider_binding_mismatch, validate_evaluation, validate_structured_verifier_result)
 
 SCHEMA_VERSION = 1
 EXECUTION_PROTOCOL_VERSION = 2
@@ -791,7 +793,11 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
             if (not isinstance(item, dict) or item.get("action_id") not in action_ids
                     or item["action_id"] in input_by_action or not _hex_digest(item.get("input_digest"))
                     or not _hex_digest(item.get("diff_digest")) or not _hex_digest(item.get("test_digest"))
-                    or not isinstance(item.get("input"), dict)):
+                    or not isinstance(item.get("input"), dict)
+                    or item["input_digest"] != digest(item["input"])
+                    or item["input"].get("action_id") != item["action_id"]
+                    or not isinstance(item["input"].get("provider_task"), str)
+                    or not item["input"]["provider_task"].endswith(VERIFIER_CONTRACT_INSTRUCTION)):
                 raise ContractError("structured verifier input binding is invalid")
             input_by_action[item["action_id"]] = item
         seen_evaluations: set[str] = set()
@@ -813,7 +819,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                     or item.get("evaluation_digest") != evaluation["evaluation_digest"]
                     or item.get("outcome") != evaluation["disposition"]
                     or action_item.get("status") != "completed"
-                    or not isinstance(output, str) or not output
+                    or not isinstance(output, str)
                     or result.get("output_sha256") != hashlib.sha256(output.encode()).hexdigest()
                     or evaluation["raw_output_digest"] != result["output_sha256"]
                     or input_binding is None
@@ -821,20 +827,22 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                     or evaluation["diff_digest"] != input_binding["diff_digest"]
                     or evaluation["test_evidence_digest"] != input_binding["test_digest"]):
                 raise ContractError("structured verifier evaluation binding is invalid")
-            expected_evidence = ({"ollama": "flow_observed_local_http_response",
-                                  "codex": "flow_observed_codex_cli_completed_turn",
-                                  "claude": "flow_observed_claude_cli_completed_turn",
-                                  "local-stub": "local_stub"})[action_request["provider"]]
-            binding_mismatch = (result.get("provider") != action_request["provider"]
-                                or result.get("model") != action_request["model"]
-                                or result.get("physical_call") != (action_request["provider"] != "local-stub")
-                                or result.get("evidence_level") != expected_evidence)
-            if evaluation["reason"] == "provider_binding_mismatch":
-                if not binding_mismatch:
-                    raise ContractError("structured verifier mismatch evaluation lacks mismatched provider facts")
-            else:
-                validate_result(envelope, result, action=action_request)
+            # Flow's judgment is deterministic, so the receipt must carry
+            # exactly what Flow would decide again from the bound facts.
+            try:
+                validate_structured_verifier_result(result)
+                recomputed = evaluate_candidate(
+                    action_id=action_id, verifier_input_digest=input_binding["input_digest"], raw_output=output,
+                    diff_digest=input_binding["diff_digest"], test_evidence_digest=input_binding["test_digest"],
+                    forced_unusable_reason=("provider_binding_mismatch"
+                                            if provider_binding_mismatch(action_request, result) else None))
+            except ValueError as exc:
+                raise ContractError("structured verifier evaluation is invalid") from exc
+            if recomputed != evaluation:
+                raise ContractError("structured verifier evaluation differs from Flow recomputation")
             seen_evaluations.add(action_id)
+        if seen_evaluations != {item["action_id"] for item in verifier_actions if item["status"] == "completed"}:
+            raise ContractError("every completed structured verifier requires exactly one evaluation")
         reserved = sum(item["status"] in {"allowed", "started", "completed", "failed", "unknown"}
                        for item in verifier_actions)
         consumed = sum(item["status"] in {"started", "completed", "failed", "unknown"}
@@ -855,6 +863,10 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                     not receipt["verifier_evaluations"]
                     or receipt["verifier_evaluations"][-1]["evaluation"]["disposition"] != "valid_pass"):
                 raise ContractError("completed structured verifier receipt requires a valid pass")
+            final = receipt["verifier_evaluations"][-1]["evaluation"]
+            if (final["diff_digest"] != (evidence.get("edit") or {}).get("diff_sha256")
+                    or final["test_evidence_digest"] != (evidence.get("tests") or {}).get("output_sha256")):
+                raise ContractError("completed structured verifier pass is not bound to the receipt evidence")
             _validate_chartered_completion(envelope, evidence, completed)
             return
         producers = [item for item in completed if item["role"] == "lead-developer" and item["provider"] == "claude"]
