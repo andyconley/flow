@@ -1,7 +1,7 @@
 # Plan: Chunk 1 Shaper-to-Delivery execution proof
 
 - Work item: `shaper-delivery-runtime-contracts`
-- Status: Shaped plan accepted by engineer; lifecycle approval pending
+- Status: Approved 2026-09-22 by Andy Conley through explicit `flow-implement` invocation
 - Work type: high-risk, multi-module runtime contract change
 - Target lane: `flow-implement`
 
@@ -158,3 +158,10 @@ The prior ChatGPT Work feasibility-probe criterion is superseded by the engineer
 ## Recommended lane
 
 `flow-implement`. The work spans multiple modules, sessions, persistence and concurrency boundaries, CLI/documentation surfaces, deterministic validation, and a live acceptance job.
+
+## Approval record
+
+- Decision: Approved
+- Approver: Andy Conley
+- Date: 2026-09-22
+- Authorization: Explicit `flow-implement` invocation after reviewing the captured plan.

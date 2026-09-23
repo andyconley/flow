@@ -10,6 +10,7 @@ import tempfile
 import unittest
 import unittest.mock
 from pathlib import Path
+from tests.shaper_intent_fixture import shaper_intent
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -528,8 +529,10 @@ class OrchestrationCliTests(FlowCliHarness):
     def _write_valid_manifest(self, work_id: str = "demo") -> None:
         run_dir = self.repo / ".flow" / "runs" / work_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("brief.md", "input.md", "output.md", "reconciliation.md", "verification.md"):
+        for name in ("brief.md", "input.md", "output.md", "reconciliation.md", "verification.md",
+                     "requirements.md", "acceptance.md"):
             (run_dir / name).write_text(f"{name}\n")
+        (run_dir / "shaper-intent.json").write_text(json.dumps(shaper_intent()) + "\n")
         relative = f".flow/runs/{work_id}"
         identity = {"kind": "agent", "id": "producer-agent"}
         manifest = {
@@ -605,7 +608,7 @@ class OrchestrationCliTests(FlowCliHarness):
             "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
         )
         self.assertEqual(refused.returncode, 1)
-        self.assertIn("orchestration_manifest", refused.stdout)
+        self.assertIn("shaper_intent", refused.stdout)
         self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
 
     def test_complete_revision_two_lifecycle_reaches_archive(self) -> None:
@@ -614,7 +617,7 @@ class OrchestrationCliTests(FlowCliHarness):
         manifest_arg = "orchestration_manifest=.flow/runs/demo/orchestration.json"
         commands = (
             ("start-definition", ()),
-            ("approve-definition", ("--artifact", "requirements=.flow/runs/demo/requirements.md", "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md", "--artifact", manifest_arg)),
+            ("approve-definition", ("--artifact", "requirements=.flow/runs/demo/requirements.md", "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md", "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json", "--artifact", manifest_arg)),
             ("start-plan", ()),
             ("approve-plan", ("--artifact", "plan=.flow/runs/demo/plan.md", "--artifact", "handoff=.flow/runs/demo/handoff.md", "--artifact", "validation_plan=.flow/runs/demo/validation.md")),
             ("start-implementation", ()),
@@ -647,6 +650,7 @@ class OrchestrationCliTests(FlowCliHarness):
             "run", "transition", "demo", "approve-definition",
             "--artifact", "requirements=.flow/runs/demo/requirements.md",
             "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
             "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
         )
         self.assertEqual(refused.returncode, 1)
@@ -658,6 +662,7 @@ class OrchestrationCliTests(FlowCliHarness):
             "run", "transition", "demo", "approve-definition",
             "--artifact", "requirements=.flow/runs/demo/requirements.md",
             "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
             "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
         ))
         self.assert_ok(self.run_flow("run", "transition", "demo", "start-plan"))
@@ -905,6 +910,12 @@ class FlowCliTests(FlowCliHarness):
 
     def test_run_core_path_transitions_to_archive(self) -> None:
         self.setup_project()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "requirements.md").write_text("requirements\n")
+        (run_dir / "acceptance.md").write_text("acceptance\n")
+        (run_dir / "solution.md").write_text("solution\n")
+        (run_dir / "shaper-intent.json").write_text(json.dumps(shaper_intent()) + "\n")
         commands = (
             ("start-definition", ()),
             (
@@ -914,6 +925,8 @@ class FlowCliTests(FlowCliHarness):
                     "requirements=.flow/runs/demo/requirements.md",
                     "--artifact",
                     "acceptance_criteria=.flow/runs/demo/acceptance.md",
+                    "--artifact",
+                    "shaper_intent=.flow/runs/demo/shaper-intent.json",
                 ),
             ),
             ("start-solution", ()),
@@ -3445,7 +3458,10 @@ class FlowCliTests(FlowCliHarness):
                 "codex_collector",
                 "codex_worker",
                 "cost",
+                "delivery_contracts",
+                "delivery_control",
                 "delivery_gateway",
+                "delivery_projection",
                 "diagnostic_model",
                 "diagnostics",
                 "execution_contracts",
@@ -3469,6 +3485,7 @@ class FlowCliTests(FlowCliHarness):
                 "harvest",
                 "hookio",
                 "jsonl_watermark",
+                "legacy_delivery",
                 "lifecycle",
                 "local_worker",
                 "maf_supervisor",

@@ -176,6 +176,12 @@ Direct Claude and Codex edits are Flow-gated: only specialists the charter names
 
 Read the original envelope, action, ordered ledger events, source snapshot checks, checkpoint link, receipt, and missing evidence without creating a new attempt or calling a provider. Use `--json` for structured output. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that Ollama did not receive the request.
 
+### `flow run inspect-delivery <work-id> [--attempt-id <id>]`
+
+Read the current Flow-owned Shaper-to-Delivery authority and, when present, one execution attempt. With no attempt ID, Flow selects the newest attempt directory that contains an envelope. The command does not grant, resume, or dispatch work.
+
+The JSON view reports lifecycle state, the sealed charter and owner generation, protocol compatibility diagnostics, and the v7 attempt's current execution and resume eligibility. Historical v6 envelopes remain readable evidence but always report `executable: false` and `resumable: false`; create a new sealed Delivery Charter for new work.
+
 ### `flow run resume-execution <work-id> <attempt-id>`
 
 Fence the previous parent and reopen the same attempt. An uncertain dispatch returns `reconciliation_required` without a provider send. The v1 path can replay one committed result through a bound MAF checkpoint. For v2, a completed first or second action can be replayed through its verified pending checkpoint in a fresh MAF process; Flow reuses committed results and decisions and authorizes only the next logical action. A missing, changed, or incompatible checkpoint halts as a runtime protocol gap. A matching receipt written before the ledger's terminal update is repaired without dispatch. An unresolved third action always halts pending reconciliation. This command never allocates a replacement attempt.
@@ -206,6 +212,8 @@ Core path events:
 - `start-solution`
 - `approve-solution` — requires `--artifact solution=...` and `--disposition risk=...`
 - `start-plan`
+
+For revision-2 runs, `approve-definition` must record `requirements`, `acceptance_criteria`, and a reviewed `shaper_intent` JSON artifact. The intent file carries the per-run problem, users, outcomes, boundaries, approvals, and exact effective specialist-definition digests. `start-plan` fails closed if any source is missing or outside the current run; it never infers those semantics from Markdown or substitutes framework defaults.
 - `approve-plan` — requires `--artifact plan=...`, `--artifact handoff=...`, and `--artifact validation_plan=...`
 - `start-implementation`
 - `mark-handback-ready` — requires `--artifact implementation_evidence=...` and `--artifact handback=...`

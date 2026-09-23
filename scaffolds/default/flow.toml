@@ -581,6 +581,10 @@ invocation = "flow run inspect-execution WORK_ID ATTEMPT_ID"
 summary = "Inspect durable local execution evidence without dispatch"
 
 [[help.cli_commands]]
+invocation = "flow run inspect-delivery WORK_ID [--attempt-id ID]"
+summary = "Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch"
+
+[[help.cli_commands]]
 invocation = "flow run resume-execution WORK_ID ATTEMPT_ID"
 summary = "Fence the former owner and reopen a safe local attempt"
 

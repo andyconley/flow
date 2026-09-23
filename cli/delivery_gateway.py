@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import uuid
+from contextlib import nullcontext
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
@@ -17,6 +18,9 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
+from delivery_control import delivery_authority_guard
+from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
+                                validate_shaper_contract)
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
@@ -38,6 +42,75 @@ def _safe_job_path(path: Any) -> str:
             or "\\" in path or ".git" in path.split("/")):
         raise ContractError("job path is not a safe relative path")
     return path
+
+
+def _read_sealed_json(path: Path, name: str) -> dict[str, Any]:
+    if not path.is_file() or path.is_symlink():
+        raise ContractError(f"sealed delivery {name} is unavailable")
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ContractError(f"sealed delivery {name} is invalid") from exc
+    if not isinstance(value, dict):
+        raise ContractError(f"sealed delivery {name} is invalid")
+    return value
+
+
+def _sealed_delivery_authority(run_dir: Path, delivery: dict[str, Any]) -> dict[str, Any]:
+    """Load every sealed ownership record and prove its cross-links.
+
+    Runtime preparation must not trust a digest copied into mutable run state.
+    It reads the immutable contract files, validates their own digests, then
+    proves that the current active claim belongs to the sealed charter.
+    """
+    required = {"shaper_contract_digest", "charter_digest", "handoff_digest", "lead_claim_digest",
+                "lead_claim_path", "delivery_artifact_dir", "owner_generation", "owner_status", "source_digests"}
+    if not isinstance(delivery, dict) or not required.issubset(delivery):
+        raise ContractError("chartered delivery requires sealed Flow ownership artifacts")
+    if delivery["owner_status"] != "active" or type(delivery["owner_generation"]) is not int or delivery["owner_generation"] < 1:
+        raise ContractError("sealed Flow delivery owner is not active")
+    for field in ("shaper_contract_digest", "charter_digest", "handoff_digest", "lead_claim_digest"):
+        if not isinstance(delivery[field], str) or len(delivery[field]) != 64:
+            raise ContractError("sealed Flow delivery ownership is invalid")
+    claim_rel = delivery["lead_claim_path"]
+    if (not isinstance(claim_rel, str) or not claim_rel.startswith("delivery/")
+            or any(part in {"", ".", ".."} for part in claim_rel.split("/"))):
+        raise ContractError("sealed Flow lead claim path is invalid")
+    artifact_rel = delivery["delivery_artifact_dir"]
+    if (not isinstance(artifact_rel, str) or not artifact_rel.startswith("delivery/")
+            or any(part in {"", ".", ".."} for part in artifact_rel.split("/"))):
+        raise ContractError("sealed Flow delivery artifact path is invalid")
+    delivery_dir = run_dir / artifact_rel
+    shaper = _read_sealed_json(delivery_dir / "shaper-contract.json", "Shaper Contract")
+    charter = _read_sealed_json(delivery_dir / "delivery-charter.json", "Delivery Charter")
+    handoff = _read_sealed_json(delivery_dir / "handoff.json", "handoff")
+    claim = _read_sealed_json(run_dir / claim_rel, "lead claim")
+    try:
+        validate_shaper_contract(shaper)
+        validate_delivery_charter(charter)
+    except DeliveryContractError as exc:
+        raise ContractError("sealed Flow contract is invalid") from exc
+    if shaper.get("digest") != delivery["shaper_contract_digest"] or charter.get("digest") != delivery["charter_digest"]:
+        raise ContractError("sealed Flow contract digest differs from run authority")
+    handoff_payload = dict(handoff)
+    handoff_digest = handoff_payload.pop("digest", None)
+    if handoff_digest != delivery_digest(handoff_payload) or handoff_digest != delivery["handoff_digest"]:
+        raise ContractError("sealed Flow handoff digest differs from run authority")
+    claim_payload = dict(claim)
+    claim_digest = claim_payload.pop("digest", None)
+    if claim_digest != delivery_digest(claim_payload) or claim_digest != delivery["lead_claim_digest"]:
+        raise ContractError("sealed Flow lead claim digest differs from run authority")
+    if (charter.get("shaper_contract", {}).get("digest") != shaper.get("digest")
+            or handoff.get("shaper_contract_digest") != shaper.get("digest")
+            or handoff.get("delivery_charter_digest") != charter.get("digest")
+            or claim.get("charter_digest") != charter.get("digest")
+            or claim.get("generation") != delivery["owner_generation"]
+            or claim.get("status") != "active"
+            or not isinstance(claim.get("owner"), str) or not claim["owner"].strip()):
+        raise ContractError("sealed Flow ownership cross-link is invalid")
+    if charter.get("approved_sources") != delivery["source_digests"] or handoff.get("source_digests") != delivery["source_digests"]:
+        raise ContractError("sealed Flow source snapshot differs from delivery authority")
+    return {"shaper": shaper, "charter": charter, "handoff": handoff, "claim": claim}
 
 
 def _job_test(test: Any) -> dict[str, Any]:
@@ -158,12 +231,14 @@ def prepare_delivery(work_id: str, worktree: Path, source_commit: str, *,
 
 def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *,
                                root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
-    """Resolve an approved generic charter into a pinned v6 attempt before any send."""
+    """Resolve an approved generic charter into a pinned v7 attempt before any send."""
     project_root = (root or repo_root()).resolve()
     run_dir = project_root / ".flow" / "runs" / work_id
     state = run_status(work_id, root=project_root)
     if state.get("state") != "implementing" or state.get("protocol_revision") != 2:
         raise ContractError("chartered delivery requires an implementing revision-2 run")
+    delivery = state.get("delivery")
+    authority = _sealed_delivery_authority(run_dir, delivery)
     valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
     if not valid:
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
@@ -231,6 +306,32 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         raise ContractError("producer is not an approved editor")
     if any(item not in by_id or by_id[item]["capabilities"] != ["read"] for item in verifiers) or set(producers) & set(verifiers):
         raise ContractError("verifier is not an independent read-only specialist")
+    # The execution projection may narrow the canonical Charter, never widen
+    # it. Provider, role cardinality, limits, and producer/verifier separation
+    # are proven before an attempt or grant exists.
+    canonical_charter = authority["charter"]
+    eligible_roles = canonical_charter["eligible_specialists"]
+    role_counts: dict[str, int] = {}
+    for item in roster:
+        role_counts[item["role"]] = role_counts.get(item["role"], 0) + 1
+        sealed_role = eligible_roles.get(item["role"], {})
+        role_limit = sealed_role.get("maximum_instances")
+        if (item["provider"] not in canonical_charter["provider_capabilities"]
+                or item["definition_digest"] != sealed_role.get("definition_digest")
+                or not isinstance(role_limit, int) or role_counts[item["role"]] > role_limit):
+            raise ContractError("runtime roster expands the sealed Delivery Charter")
+    canonical_limits = canonical_charter["limits"]
+    projected_limits = {"delegations": 6, "concurrency": 3, "replans": 2}
+    if any(projected_limits[key] > canonical_limits.get(key, -1) for key in projected_limits):
+        raise ContractError("runtime limits expand the sealed Delivery Charter")
+    if (canonical_limits.get("paths") != ["charter-scoped"]
+            or not {"read", "edit", "test"}.issubset(set(canonical_limits.get("tools", [])))
+            or not {"diff", "test", "receipt"}.issubset(set(canonical_limits.get("outputs", [])))):
+        raise ContractError("runtime scope is not permitted by the sealed Delivery Charter")
+    verifier_rules = canonical_charter.get("producer_verifier_rules")
+    if (not isinstance(verifier_rules, dict) or not verifier_rules.get("distinct_identities")
+            or not verifier_rules.get("verifier_read_only")):
+        raise ContractError("runtime verifier rules expand the sealed Delivery Charter")
     raw_worktree = Path(worktree)
     if raw_worktree.is_symlink():
         raise ContractError("isolated worktree path is a symlink")
@@ -278,7 +379,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     job_contract = {"task": task, "baseline": job_baseline,
                     "read_paths": charter["read_paths"], "write_paths": charter["write_paths"],
                     "test": charter["test"], "producer_instance_ids": producers, "verifier_instance_ids": verifiers}
-    envelope = {"schema_version": 1, "execution_protocol_version": 6, "work_id": work_id, "attempt_id": attempt_id,
+    envelope = {"schema_version": 1, "execution_protocol_version": 7, "work_id": work_id, "attempt_id": attempt_id,
                 "charter_digest": digest({"requirements": sources["requirements"]["sha256"], "acceptance": sources["acceptance"]["sha256"]}),
                 "charter_sources": sources, "run_protocol_revision": 2,
                 "manifest_digest": hashlib.sha256(source_bytes[manifest_path]).hexdigest(),
@@ -286,6 +387,13 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "worktree": str(worktree), "allowed_paths": charter["write_paths"],
                 "manager": {"provider": manager["execution"]["provider"], "model": manager["execution"]["model"]},
                 "roster": roster, "job_contract": job_contract,
+                # These links project Flow's canonical authority into the
+                # runtime boundary. The child receives digests only.
+                "shaper_contract_digest": delivery["shaper_contract_digest"],
+                "delivery_charter_digest": delivery["charter_digest"],
+                "handoff_digest": delivery["handoff_digest"],
+                "delivery_lead_claim_digest": delivery["lead_claim_digest"],
+                "delivery_lead_claim": {"lead_id": authority["claim"]["owner"], "generation": delivery["owner_generation"]},
                 "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
                            "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 6}}
     envelope_digest(envelope)
@@ -319,6 +427,8 @@ def _normalized_action(envelope: dict[str, Any], message: dict[str, Any]) -> dic
             "definition_digest", "instance_id", "role", "provider", "model", "manager_turn", "task",
             "rationale", "parent_action_id", "checkpoint_id")
     action = {key: message.get(key) for key in keys}
+    if envelope["execution_protocol_version"] == 7:
+        action["provider_choice"] = message.get("provider_choice")
     action["task_digest"] = hashlib.sha256(task.encode()).hexdigest()
     expected_id = expected_magentic_action_id(action)
     if message.get("action_id") != expected_id:
@@ -397,7 +507,8 @@ def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     envelope, task, attempt_dir, ledger = prepare_chartered_delivery(work_id, worktree, source_commit, root=root)
     return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
                                       manager_adapter=manager_adapter, worker_adapter=worker_adapter,
-                                      supervisor=supervisor, test_runner=None, python_path=None)
+                                      supervisor=supervisor, test_runner=None, python_path=None,
+                                      generation=envelope["delivery_lead_claim"]["generation"])
 
 
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
@@ -624,7 +735,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     source_commit = envelope["source_commit"]
     worktree = Path(envelope["worktree"])
     baseline = json.loads((attempt_dir / "baseline.json").read_text())
-    chartered = envelope["execution_protocol_version"] == 6
+    chartered = envelope["execution_protocol_version"] in {6, 7}
+    v7 = envelope["execution_protocol_version"] == 7
+    authority_guard = (lambda: delivery_authority_guard(attempt_dir.parents[1], envelope)) if v7 else nullcontext
     job = envelope.get("job_contract") if chartered else None
     task += ("\n\nFlow-verified execution facts:\n"
              "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
@@ -664,10 +777,12 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                       "envelope_digest": envelope_digest(envelope), "sequence": request["replan_sequence"],
                       "proposal": {"prompt_digest": request["prompt_digest"]}}
             replan["replan_id"] = request["replan_id"]
-            decision = ledger.decide_replan(envelope, replan, generation=generation)
+            with authority_guard():
+                decision = ledger.decide_replan(envelope, replan, generation=generation)
             if not decision["allowed"]:
                 raise ContractError("Magentic replan denied: " + decision["reason"])
-        decision = ledger.decide_manager_call(envelope, request, generation=generation)
+        with authority_guard():
+            decision = ledger.decide_manager_call(envelope, request, generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             observed = decision["result"].get("output")
             if isinstance(observed, str) and observed.strip():
@@ -676,7 +791,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             raise ContractError("Magentic manager call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
             raise ContractError("Magentic manager call denied: " + decision["reason"])
-        with ledger.send_lock():
+        with authority_guard(), ledger.send_lock():
             ledger.assert_owner(aid, generation)
             if not ledger.consume_manager_grant(request["call_id"], decision["grant_id"], generation=generation):
                 raise ContractError("Magentic manager grant was already consumed")
@@ -706,7 +821,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             raise ContractError("selected editor is not eligible to produce this job")
         if is_verifier and (edit_evidence is None or test_evidence is None):
             raise ContractError("Magentic verifier selected before Flow verified Claude repair")
-        decision = ledger.decide(envelope, action, generation=generation)
+        with authority_guard():
+            decision = ledger.decide(envelope, action, generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             result = decision["result"]
             reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
@@ -727,18 +843,20 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         if not decision["allowed"]:
             return {"status": "denied", "action_id": action["action_id"], "reason": decision["reason"], "summary": "Flow denied this specialist call"}
         try:
-            checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
-            if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
-                raise ContractError("Magentic pending-action checkpoint is absent")
-            high_water = ledger.snapshot(aid)["events"][-1]["seq"]
-            ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
-                                            high_water, str(checkpoint_path), generation=generation)
-            if not ledger.consume_grant(action["action_id"], decision["grant_id"], generation=generation):
-                raise ContractError("Magentic specialist grant was already consumed")
+            with authority_guard():
+                checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
+                if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
+                    raise ContractError("Magentic pending-action checkpoint is absent")
+                high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+                ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
+                                                high_water, str(checkpoint_path), generation=generation)
+                if not ledger.consume_grant(action["action_id"], decision["grant_id"], generation=generation):
+                    raise ContractError("Magentic specialist grant was already consumed")
         except Exception:
-            ledger.close_pre_send_failure(action["action_id"], decision["grant_id"], generation=generation)
+            with authority_guard():
+                ledger.close_pre_send_failure(action["action_id"], decision["grant_id"], generation=generation)
             raise
-        with ledger.send_lock():
+        with authority_guard(), ledger.send_lock():
             ledger.assert_owner(aid, generation)
             ledger.observe_send(action["action_id"], generation)
             response_completed = False
@@ -821,6 +939,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                             "allowed_paths": envelope["allowed_paths"], "baseline": baseline,
                             "edit": edit_evidence, "tests": test_evidence,
                             "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
+    if envelope["execution_protocol_version"] == 7:
+        receipt.update({field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest",
+                                                              "handoff_digest", "delivery_lead_claim_digest", "delivery_lead_claim")})
     trace_path = attempt_dir / "claude-implementer.debug.log"
     if trace_path.is_file() and not trace_path.is_symlink():
         trace_size = trace_path.stat().st_size
@@ -847,7 +968,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     validate_receipt(envelope, receipt)
     receipt_path = attempt_dir / (f"continuation-{continuation_epoch_id}.receipt.json"
                                   if continuation_epoch_id else "receipt.json")
-    with ledger.send_lock():
+    with authority_guard(), ledger.send_lock():
         ledger.assert_owner(aid, generation)
         if continuation_epoch_id:
             _write_snapshot(receipt_path, (canonical(receipt) + "\n").encode())
@@ -910,7 +1031,7 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
                                 workspace=workspace, model=assignment["model"], timeout_seconds=300,
                                 trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None)
-    if action["provider"] == "codex" and envelope["execution_protocol_version"] == 6:
+    if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7}:
         return call_codex(instructions=assignment["instructions"], task=action["task"],
                           workspace=workspace, model=assignment["model"], timeout_seconds=300)
     raise ContractError("selected specialist provider has no approved adapter")
