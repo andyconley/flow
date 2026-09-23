@@ -1,7 +1,9 @@
 {
   "artifacts": {
     "acceptance_criteria": ".flow/runs/structured-verifier-contract/acceptance-criteria.md",
+    "handback": ".flow/runs/structured-verifier-contract/HANDOFF.md",
     "handoff": ".flow/runs/structured-verifier-contract/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/structured-verifier-contract/validation-results.md",
     "orchestration_manifest": ".flow/runs/structured-verifier-contract/orchestration.json",
     "plan": ".flow/runs/structured-verifier-contract/plan.md",
     "requirements": ".flow/runs/structured-verifier-contract/requirements.md",
@@ -17,18 +19,19 @@
     "approve-definition": "2026-09-23T12:36:49Z",
     "approve-plan": "2026-09-23T14:49:19Z",
     "approve-solution": "2026-09-23T14:39:19Z",
+    "mark-handback-ready": "2026-09-23T16:59:00Z",
     "start-definition": "2026-09-23T04:06:00Z",
     "start-implementation": "2026-09-23T14:53:23Z",
     "start-plan": "2026-09-23T14:41:10Z",
     "start-solution": "2026-09-23T12:36:49Z"
   },
   "lane": "implement",
-  "last_event": "start-implementation",
-  "next_action": "Implement protocol-v8 structured verifier contracts in three gated chunks.",
-  "phase": "implementing",
+  "last_event": "mark-handback-ready",
+  "next_action": "Implementation and deterministic validation complete; ready for flow-review.",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-23T14:53:23Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-23T16:59:00Z",
   "work_id": "structured-verifier-contract"
 }
