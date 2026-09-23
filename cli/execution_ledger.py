@@ -394,10 +394,20 @@ class ExecutionLedger:
                         )
                         if json.loads(request_json).get("instance_id") in verifier_ids
                     )
+                    latest_verifier_outcome = db.execute(
+                        "SELECT verifier_evaluations.outcome FROM verifier_evaluations "
+                        "JOIN actions USING(action_id) WHERE actions.attempt_id=? "
+                        "ORDER BY verifier_evaluations.evaluated_at DESC, verifier_evaluations.rowid DESC LIMIT 1",
+                        (attempt,),
+                    ).fetchone()
                 if completed_producer:
                     reason = "producer_already_completed"
                 elif is_verifier and verifier_reserved >= envelope["limits"]["max_verifier_calls"]:
                     reason = "verifier_call_cap"
+                elif is_verifier and verifier_reserved > 0 and (
+                        latest_verifier_outcome is None
+                        or latest_verifier_outcome[0] not in {"valid_fail", "unusable"}):
+                    reason = "verifier_retry_denied"
                 elif action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
                     reason = "paid_call_cap"
                 elif (chartered_delegations if protocol_version in {6, 7, 8} else paid_delegations) >= envelope["limits"]["max_delegations"]:
@@ -613,6 +623,43 @@ class ExecutionLedger:
             self._event(db, row[0], action_id, "worker_dispatched", "grant_consumed")
             return True
 
+    def prepare_verifier_send(self, action_id: str, grant_id: str, verifier_input: dict[str, Any],
+                              diff_digest: str, test_digest: str, *, generation: int) -> dict[str, Any]:
+        """Atomically bind v8 verifier input, consume its grant, and claim send."""
+        if not isinstance(verifier_input, dict):
+            raise ContractError("verifier input must be an object")
+        if not all(isinstance(value, str) and len(value) == 64
+                   and all(char in "0123456789abcdef" for char in value)
+                   for value in (diff_digest, test_digest)):
+            raise ContractError("verifier evidence digest is invalid")
+        encoded = canonical(verifier_input)
+        input_digest = hashlib.sha256(encoded.encode()).hexdigest()
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt, _, _ = self._v8_verifier_action(db, action_id)
+            self._assert_owner(db, attempt, generation)
+            row = db.execute("SELECT status,grant_id FROM actions WHERE action_id=?", (action_id,)).fetchone()
+            if row != ("allowed", grant_id):
+                raise ContractError("verifier grant is absent or already consumed")
+            issued = db.execute("SELECT at FROM events WHERE action_id=? AND event='policy_allowed' ORDER BY seq DESC LIMIT 1", (action_id,)).fetchone()
+            if not issued or datetime.now(timezone.utc) > datetime.fromisoformat(issued[0]) + timedelta(seconds=60):
+                db.execute("UPDATE actions SET status='denied',reason='grant_expired' WHERE action_id=?", (action_id,))
+                self._event(db, attempt, action_id, "policy_denied", "grant_expired")
+                raise ContractError("verifier grant expired")
+            if db.execute("SELECT 1 FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone():
+                raise ContractError("verifier input was already prepared")
+            now = utc_now()
+            db.execute("INSERT INTO verifier_inputs VALUES(?,?,?,?,?,?,?,?)",
+                       (action_id, now, encoded, input_digest, diff_digest, test_digest, now, generation))
+            db.execute("UPDATE actions SET status='started' WHERE action_id=?", (action_id,))
+            self._event(db, attempt, action_id, "verifier_input_recorded", input_digest)
+            self._event(db, attempt, action_id, "worker_dispatched", "grant_consumed")
+            self._event(db, attempt, action_id, "adapter_send_started", "flow_observed_boundary")
+            self._event(db, attempt, action_id, "verifier_send_claimed", "flow_observed_boundary")
+            return {"action_id": action_id, "input": verifier_input, "input_digest": input_digest,
+                    "diff_digest": diff_digest, "test_digest": test_digest,
+                    "recorded_at": now, "owner_generation": generation, "replayed": False}
+
     def close_pre_send_failure(self, action_id: str, grant_id: str, *, generation: int) -> None:
         """Close a guarded grant when the gateway failed before crossing dispatch.
 
@@ -795,7 +842,7 @@ class ExecutionLedger:
                         or not isinstance(result.get("model"), str) or not result["model"]
                         or type(result.get("physical_call")) is not bool
                         or not isinstance(result.get("evidence_level"), str) or not result["evidence_level"]
-                        or not isinstance(output, str) or not output or len(output.encode()) > 4096
+                        or not isinstance(output, str) or not output or len(output.encode()) > 65536
                         or output_sha != hashlib.sha256(output.encode()).hexdigest()):
                     raise ContractError("structured verifier response is invalid")
                 usage = result.get("usage")

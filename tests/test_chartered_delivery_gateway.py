@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from delivery_gateway import (ContractError, _default_worker_adapter,
                               _execute_prepared_delivery, execute_chartered_delivery,
                               prepare_chartered_delivery)
-from execution_contracts import ContractError as ExecutionContractError, envelope_digest, expected_magentic_action_id, validate_action
+from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
+                                 expected_magentic_action_id, validate_action, validate_receipt)
 from delivery_contracts import build_delivery_charter, build_shaper_contract, digest as delivery_digest
 from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
@@ -312,8 +313,10 @@ class CharteredPreparationTests(unittest.TestCase):
 
     def test_v7_gateway_seals_producer_verifier_receipt_after_flow_observes_edit_and_test(self):
         calls = []
+        captured = {}
 
         def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
             self.assertEqual(kwargs["timeout_s"], 300)
             for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
                 proposal = self._proposal(envelope, assignment_id, sequence)
@@ -344,6 +347,16 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual([item["status"] for item in receipt["actions"]], ["completed", "completed"])
         self.assertEqual(receipt["evidence"]["tests"]["command"], self.charter["test"]["argv"])
         self.assertTrue(receipt["checkpoints"])
+        for field, value in (("consumed", 0), ("denied", 1), ("retry_eligible", True)):
+            with self.subTest(field=field):
+                tampered = copy.deepcopy(receipt)
+                tampered["verifier_usage"][field] = value
+                with self.assertRaisesRegex(ExecutionContractError, "usage differs"):
+                    validate_receipt(captured["envelope"], tampered)
+        tampered = copy.deepcopy(receipt)
+        tampered["verifier_inputs"][0]["diff_digest"] = "0" * 64
+        with self.assertRaisesRegex(ExecutionContractError, "binding"):
+            validate_receipt(captured["envelope"], tampered)
 
     def test_v7_claude_producer_runs_under_flow_grant_before_verifier(self):
         self.manifest["assignments"][1]["execution"] = {"provider": "claude", "model": "claude-model"}

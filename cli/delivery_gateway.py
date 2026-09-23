@@ -850,6 +850,14 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
             return {"status": "denied", "action_id": action["action_id"], "reason": decision["reason"], "summary": "Flow denied this specialist call"}
+        provider_action = action
+        if is_verifier:
+            diff = (attempt_dir / "repair.diff").read_text()
+            evidence = ("\n\nFlow-verified complete bounded diff for this review:\n"
+                        + diff + "\nTargeted test: passed. Diff SHA-256: " + edit_evidence["diff_sha256"])
+            provider_task = action["task"] + evidence
+            verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
+            provider_action = {**action, "provider_task": provider_task}
         try:
             with authority_guard():
                 checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
@@ -858,7 +866,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 high_water = ledger.snapshot(aid)["events"][-1]["seq"]
                 ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
                                                 high_water, str(checkpoint_path), generation=generation)
-                if not ledger.consume_grant(action["action_id"], decision["grant_id"], generation=generation):
+                if not (structured_verifier and is_verifier) and not ledger.consume_grant(
+                        action["action_id"], decision["grant_id"], generation=generation):
                     raise ContractError("Magentic specialist grant was already consumed")
         except Exception:
             with authority_guard():
@@ -869,25 +878,23 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             response_completed = False
             verifier_binding: dict[str, Any] | None = None
             try:
-                provider_action = action
-                if is_verifier:
-                    diff = (attempt_dir / "repair.diff").read_text()
-                    evidence = ("\n\nFlow-verified complete bounded diff for this review:\n"
-                                + diff + "\nTargeted test: passed. Diff SHA-256: " + edit_evidence["diff_sha256"])
-                    provider_task = action["task"] + evidence
-                    verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
-                    provider_action = {**action, "provider_task": provider_task}
-                    if structured_verifier:
-                        verifier_binding = ledger.bind_verifier_input(
-                            action["action_id"], provider_action, edit_evidence["diff_sha256"],
-                            test_evidence["output_sha256"], generation=generation)
-                ledger.observe_send(action["action_id"], generation)
                 if structured_verifier and is_verifier:
-                    ledger.claim_verifier_send(action["action_id"], generation=generation)
+                    verifier_binding = ledger.prepare_verifier_send(
+                        action["action_id"], decision["grant_id"], provider_action,
+                        edit_evidence["diff_sha256"], test_evidence["output_sha256"],
+                        generation=generation)
+                else:
+                    ledger.observe_send(action["action_id"], generation)
                 result = worker_adapter(provider_action, envelope=envelope, workspace=worktree)
+                expected_evidence = ({"ollama": "flow_observed_local_http_response",
+                                      "codex": "flow_observed_codex_cli_completed_turn",
+                                      "claude": "flow_observed_claude_cli_completed_turn",
+                                      "local-stub": "local_stub"}).get(action["provider"])
                 binding_mismatch = (structured_verifier and is_verifier and isinstance(result, dict)
                                     and (result.get("provider") != action["provider"]
-                                         or result.get("model") != action["model"]))
+                                         or result.get("model") != action["model"]
+                                         or result.get("physical_call") != (action["provider"] != "local-stub")
+                                         or result.get("evidence_level") != expected_evidence))
                 if not (structured_verifier and is_verifier):
                     validate_result(envelope, result, action=action)
                 ledger.observe_response(action["action_id"], result, generation)
@@ -959,8 +966,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     producer = [item for item in actions if (item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"]
     verifier = [item for item in actions if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
     verified_order = bool(producer and any(item["request"]["sequence"] > producer[0]["request"]["sequence"] for item in verifier))
-    structured_pass = (not structured_verifier or any(
-        item["outcome"] == "valid_pass" for item in snapshot.get("verifier_evaluations", [])))
+    structured_pass = (not structured_verifier or bool(snapshot.get("verifier_evaluations"))
+                       and snapshot["verifier_evaluations"][-1]["outcome"] == "valid_pass")
     terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and structured_pass and edit_evidence and test_evidence else "failed")
     reason = "reconciliation_required" if terminal == "unknown" else failure
     receipt = {"schema_version": 1, "execution_protocol_version": envelope["execution_protocol_version"], "work_id": work_id, "attempt_id": aid,
@@ -975,6 +982,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                             "edit": edit_evidence, "tests": test_evidence,
                             "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
     if structured_verifier:
+        receipt["verifier_inputs"] = snapshot.get("verifier_inputs", [])
         receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
         receipt["verifier_usage"] = snapshot["verifier_usage"]
     if delivery_protocol:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import tempfile
 import unittest
@@ -109,6 +111,34 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
         self.assertEqual(self.ledger.decide(env, second, generation=1)["reason"], "verifier_call_cap")
         self.assertFalse(self.ledger.verifier_usage(env["attempt_id"])["retry_eligible"])
 
+    def test_pass_denies_an_unneeded_second_verifier_before_send(self):
+        env = self.envelope()
+        self.ledger.create_attempt(env)
+        first = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        self._complete_and_evaluate(env, first, '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}')
+        second = _action(env, 2, env["roster"][0], "Unneeded retry.")
+        decision = self.ledger.decide(env, second, generation=1)
+        self.assertFalse(decision["allowed"])
+        self.assertEqual(decision["reason"], "verifier_retry_denied")
+        self.assertEqual(self.ledger.verifier_usage(env["attempt_id"])["denied"], 1)
+
+    def test_concurrent_identical_proposals_reserve_one_atomic_grant(self):
+        env = self.envelope(maximum=1)
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify concurrently.")
+        barrier = threading.Barrier(2)
+
+        def decide():
+            barrier.wait()
+            return self.ledger.decide(env, proposal, generation=1)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            decisions = [future.result() for future in (pool.submit(decide), pool.submit(decide))]
+        self.assertTrue(all(item["allowed"] for item in decisions))
+        self.assertEqual(len({item["grant_id"] for item in decisions}), 1)
+        self.assertEqual(len(self.ledger.snapshot(env["attempt_id"])["actions"]), 1)
+        self.assertEqual(self.ledger.verifier_usage(env["attempt_id"])["reserved"], 1)
+
     def test_exact_bindings_and_evaluations_replay_but_conflicts_refuse(self):
         env = self.envelope()
         self.ledger.create_attempt(env)
@@ -160,6 +190,16 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
         events = [item["event"] for item in self.ledger.snapshot(env["attempt_id"])["events"]]
         positions = [events.index(name) for name in ("verifier_input_recorded", "verifier_send_claimed", "response_observed", "worker_completed", "verifier_evaluated")]
         self.assertEqual(positions, sorted(positions))
+
+    def test_received_oversized_candidate_is_completed_and_unusable_not_unknown(self):
+        env = self.envelope()
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify oversized response handling.")
+        recorded = self._complete_and_evaluate(env, proposal, "x" * (16 * 1024 + 1))
+        snapshot = self.ledger.snapshot(env["attempt_id"])
+        self.assertEqual(snapshot["actions"][0]["status"], "completed")
+        self.assertEqual(recorded["evaluation"]["disposition"], "unusable")
+        self.assertEqual(recorded["evaluation"]["reason"], "raw_output_invalid")
 
     def test_pre_v8_database_migrates_additively_without_rewriting_legacy_row(self):
         path = Path(self.temporary.name) / "legacy.sqlite"

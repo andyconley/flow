@@ -7,7 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from verifier_contracts import VERIFIER_EVALUATION_SCHEMA_VERSION, validate_evaluation
+try:
+    from verifier_contracts import VERIFIER_EVALUATION_SCHEMA_VERSION, validate_evaluation
+except ModuleNotFoundError:  # Package import used by isolated tests.
+    from .verifier_contracts import VERIFIER_EVALUATION_SCHEMA_VERSION, validate_evaluation
 
 SCHEMA_VERSION = 1
 EXECUTION_PROTOCOL_VERSION = 2
@@ -770,15 +773,27 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
             if not is_structured_verifier:
                 validate_result(envelope, item.get("result"), action=action)
     if has_structured_verifier_evaluations(execution_protocol_version(envelope)):
+        inputs = receipt.get("verifier_inputs")
         evaluations = receipt.get("verifier_evaluations")
         usage = receipt.get("verifier_usage")
-        if not isinstance(evaluations, list) or not isinstance(usage, dict) or set(usage) != {
+        if not isinstance(inputs, list) or not isinstance(evaluations, list) or not isinstance(usage, dict) or set(usage) != {
                 "maximum", "reserved", "consumed", "denied", "retry_eligible"}:
             raise ContractError("structured verifier receipt evidence is invalid")
         if usage["maximum"] != envelope["limits"]["max_verifier_calls"] or any(
                 type(usage[key]) is not int or usage[key] < 0 for key in ("maximum", "reserved", "consumed", "denied")) or type(usage["retry_eligible"]) is not bool:
             raise ContractError("structured verifier usage is invalid")
         action_ids = {item["action_id"] for item in receipt["actions"]}
+        verifier_ids = set(envelope["job_contract"]["verifier_instance_ids"])
+        verifier_actions = [item for item in receipt["actions"]
+                            if item["request"]["instance_id"] in verifier_ids]
+        input_by_action: dict[str, dict[str, Any]] = {}
+        for item in inputs:
+            if (not isinstance(item, dict) or item.get("action_id") not in action_ids
+                    or item["action_id"] in input_by_action or not _hex_digest(item.get("input_digest"))
+                    or not _hex_digest(item.get("diff_digest")) or not _hex_digest(item.get("test_digest"))
+                    or not isinstance(item.get("input"), dict)):
+                raise ContractError("structured verifier input binding is invalid")
+            input_by_action[item["action_id"]] = item
         seen_evaluations: set[str] = set()
         for item in evaluations:
             evaluation = item.get("evaluation") if isinstance(item, dict) else None
@@ -790,20 +805,55 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
             action_item = next((entry for entry in receipt["actions"] if entry["action_id"] == action_id), None)
             result = action_item.get("result") if isinstance(action_item, dict) else None
             output = result.get("output") if isinstance(result, dict) else None
+            input_binding = input_by_action.get(action_id)
+            action_request = action_item.get("request") if isinstance(action_item, dict) else None
             if (action_id not in action_ids or action_id in seen_evaluations
+                    or not isinstance(action_request, dict)
+                    or action_request.get("instance_id") not in verifier_ids
                     or item.get("evaluation_digest") != evaluation["evaluation_digest"]
                     or item.get("outcome") != evaluation["disposition"]
                     or action_item.get("status") != "completed"
                     or not isinstance(output, str) or not output
                     or result.get("output_sha256") != hashlib.sha256(output.encode()).hexdigest()
-                    or evaluation["raw_output_digest"] != result["output_sha256"]):
+                    or evaluation["raw_output_digest"] != result["output_sha256"]
+                    or input_binding is None
+                    or evaluation["verifier_input_digest"] != input_binding["input_digest"]
+                    or evaluation["diff_digest"] != input_binding["diff_digest"]
+                    or evaluation["test_evidence_digest"] != input_binding["test_digest"]):
                 raise ContractError("structured verifier evaluation binding is invalid")
+            expected_evidence = ({"ollama": "flow_observed_local_http_response",
+                                  "codex": "flow_observed_codex_cli_completed_turn",
+                                  "claude": "flow_observed_claude_cli_completed_turn",
+                                  "local-stub": "local_stub"})[action_request["provider"]]
+            binding_mismatch = (result.get("provider") != action_request["provider"]
+                                or result.get("model") != action_request["model"]
+                                or result.get("physical_call") != (action_request["provider"] != "local-stub")
+                                or result.get("evidence_level") != expected_evidence)
+            if evaluation["reason"] == "provider_binding_mismatch":
+                if not binding_mismatch:
+                    raise ContractError("structured verifier mismatch evaluation lacks mismatched provider facts")
+            else:
+                validate_result(envelope, result, action=action_request)
             seen_evaluations.add(action_id)
+        reserved = sum(item["status"] in {"allowed", "started", "completed", "failed", "unknown"}
+                       for item in verifier_actions)
+        consumed = sum(item["status"] in {"started", "completed", "failed", "unknown"}
+                       for item in verifier_actions)
+        denied = sum(item["status"] == "denied" and item.get("reason") in {
+            "verifier_call_cap", "verifier_retry_denied"} for item in verifier_actions)
+        latest = evaluations[-1]["outcome"] if evaluations else None
+        expected_usage = {"maximum": envelope["limits"]["max_verifier_calls"],
+                          "reserved": reserved, "consumed": consumed, "denied": denied,
+                          "retry_eligible": latest in {"valid_fail", "unusable"}
+                          and reserved < envelope["limits"]["max_verifier_calls"]}
+        if usage != expected_usage:
+            raise ContractError("structured verifier usage differs from receipt facts")
     if receipt["status"] == "completed":
         completed = [item["request"] for item in receipt["actions"] if item["status"] == "completed"]
         if is_chartered_protocol(execution_protocol_version(envelope)):
-            if has_structured_verifier_evaluations(execution_protocol_version(envelope)) and not any(
-                    item["evaluation"]["disposition"] == "valid_pass" for item in receipt["verifier_evaluations"]):
+            if has_structured_verifier_evaluations(execution_protocol_version(envelope)) and (
+                    not receipt["verifier_evaluations"]
+                    or receipt["verifier_evaluations"][-1]["evaluation"]["disposition"] != "valid_pass"):
                 raise ContractError("completed structured verifier receipt requires a valid pass")
             _validate_chartered_completion(envelope, evidence, completed)
             return
