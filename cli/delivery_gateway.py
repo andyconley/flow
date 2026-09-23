@@ -19,7 +19,8 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import delivery_authority_guard
-from delivery_recovery import RecoveryRefused  # noqa: F401  (callers catch refusals here)
+from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, RecoveryRefused,
+                               V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, recovery_eligibility)
 from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
                                 validate_shaper_contract)
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot
@@ -567,6 +568,72 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any]) -> dict[str, Any]:
     return {"command": test["argv"], "status": "passed", "output_sha256": hashlib.sha256(output.encode()).hexdigest()}
 
 
+def _peek_snapshot(ledger_path: Path, attempt_id: str) -> dict[str, Any] | None:
+    """Read an attempt without opening the ledger for writing (which would run DDL)."""
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        return None
+    try:
+        return ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
+    except ContractError:
+        return None
+
+
+def _lead_active(run_dir: Path, envelope: dict[str, Any]) -> bool:
+    """Whether run.json still names this envelope's Delivery Lead claim (the authority guard rule)."""
+    run_path = run_dir / "run.json"
+    try:
+        delivery = json.loads(run_path.read_text()).get("delivery") if run_path.is_file() and not run_path.is_symlink() else None
+    except (OSError, json.JSONDecodeError):
+        return False
+    claim = envelope.get("delivery_lead_claim")
+    return (isinstance(delivery, dict) and isinstance(claim, dict)
+            and delivery.get("owner_status") == "active"
+            and delivery.get("owner_generation") == claim.get("generation")
+            and delivery.get("lead_claim_digest") == envelope.get("delivery_lead_claim_digest")
+            and delivery.get("charter_digest") == envelope.get("delivery_charter_digest"))
+
+
+def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
+                      manager_adapter: Callable[..., dict[str, Any]] | None = None,
+                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
+                      supervisor: Callable[..., dict[str, Any]] | None = None,
+                      test_runner: Callable[[Path], dict[str, Any]] | None = None,
+                      python_path: str | None = None, actor: str = "flow-chartered-resume",
+                      seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
+    """Recover a v6-v8 chartered attempt; only v8 is recoverable (ADR 0016).
+
+    Every gate before the claim reads the ledger read-only, so a refusal
+    leaves the ledger and attempt files byte-for-byte unchanged.
+    """
+    run_dir = root / ".flow" / "runs" / work_id
+    attempt_dir = run_dir / "execution" / attempt_id
+    ledger_path = run_dir / "execution" / "ledger.sqlite"
+    snapshot = _peek_snapshot(ledger_path, attempt_id)
+    if snapshot is None or not attempt_dir.is_dir() or attempt_dir.is_symlink():
+        raise ContractError("chartered attempt is absent")
+    protocol = snapshot["execution_protocol_version"]
+    if protocol == 6:
+        raise RecoveryRefused(V6_INSPECTION_ONLY)
+    if protocol == 7:
+        raise RecoveryRefused(V7_NOT_RECOVERABLE)
+    envelope = snapshot["envelope"]
+    envelope_path = attempt_dir / "envelope.json"
+    if (envelope["work_id"] != work_id or not envelope_path.is_file() or envelope_path.is_symlink()
+            or json.loads(envelope_path.read_text()) != envelope):
+        raise RecoveryRefused(ENVELOPE_CHANGED)
+    if snapshot["status"] != "started":
+        if snapshot.get("recoveries"):
+            # A completed recovery is reported, never repeated.
+            return {"attempt_id": attempt_id, "status": snapshot["status"], "reason": snapshot["reason"],
+                    "receipt_path": snapshot["receipt_path"], "replayed": True}
+        raise RecoveryRefused(ATTEMPT_TERMINAL)
+    eligibility = recovery_eligibility(envelope, snapshot, lead_active=_lead_active(run_dir, envelope))
+    if not eligibility["recoverable"]:
+        raise RecoveryRefused(eligibility["reason"], ", ".join(f"{item['kind']} {item['id']} {item['status']}"
+                                                               for item in eligibility["blockers"]))
+    raise ContractError("chartered v8 recovery is not yet enabled")
+
+
 def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                     manager_adapter: Callable[..., dict[str, Any]] | None = None,
                     worker_adapter: Callable[..., dict[str, Any]] | None = None,
@@ -574,12 +641,19 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                     test_runner: Callable[[Path], dict[str, Any]] | None = None,
                     python_path: str | None = None,
                     continuation_epoch_id: str | None = None) -> dict[str, Any]:
-    """Restore only a completed worker response from its exact pinned MAF pause."""
+    """Restore a paused attempt: v5 from its completed worker response, v8 per ADR 0016."""
     project_root = (root or repo_root()).resolve()
     run_dir = project_root / ".flow" / "runs" / work_id
     attempt_dir = run_dir / "execution" / attempt_id
     if not attempt_dir.is_dir() or attempt_dir.is_symlink():
         raise ContractError("Magentic attempt directory is absent")
+    peek = _peek_snapshot(run_dir / "execution" / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
+        if continuation_epoch_id:
+            raise RecoveryRefused(CONTINUATION_EPOCHS_V5_ONLY)
+        return _resume_chartered(work_id, attempt_id, root=project_root, manager_adapter=manager_adapter,
+                                 worker_adapter=worker_adapter, supervisor=supervisor, test_runner=test_runner,
+                                 python_path=python_path, actor="flow-chartered-resume")
     ledger = ExecutionLedger(run_dir / "execution" / "ledger.sqlite")
     snapshot = ledger.snapshot(attempt_id)
     envelope = snapshot["envelope"]
@@ -664,12 +738,18 @@ def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
                      supervisor: Callable[..., dict[str, Any]] | None = None,
                      test_runner: Callable[[Path], dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Resolve one observed v5 Claude result, then resume its exact pending MAF action."""
+    """Resolve one observed v5 Claude result and resume it; route v6-v8 to chartered recovery."""
     project_root = (root or repo_root()).resolve()
     valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
     if not valid:
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
     attempt_dir = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id
+    peek = _peek_snapshot(attempt_dir.parent / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
+        # Chunk 1 needs no operator evidence, so v8 recover equals resume.
+        return _resume_chartered(work_id, attempt_id, root=project_root, manager_adapter=manager_adapter,
+                                 worker_adapter=worker_adapter, supervisor=supervisor, test_runner=test_runner,
+                                 python_path=python_path, actor=actor)
     ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
     snapshot = ledger.snapshot(attempt_id)
     envelope = snapshot["envelope"]

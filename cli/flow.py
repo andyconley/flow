@@ -979,7 +979,8 @@ def main() -> int:
         try:
             result = resume_delivery(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
-            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery resume refused: {exc}")
+            print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
+                  if args.json else f"delivery resume refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1
@@ -988,7 +989,8 @@ def main() -> int:
         try:
             result = recover_delivery(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
-            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery recovery refused: {exc}")
+            print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
+                  if args.json else f"delivery recovery refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1

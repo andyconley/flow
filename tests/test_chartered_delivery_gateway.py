@@ -31,7 +31,9 @@ class KillPoint(BaseException):
     """Simulated process death; escapes the gateway's ``except Exception`` handlers."""
 
 
-class CharteredPreparationTests(unittest.TestCase):
+class CharteredFixture(unittest.TestCase):
+    """Hermetic worktree, sealed delivery authority, and a stub-driven v8 run."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -110,6 +112,86 @@ class CharteredPreparationTests(unittest.TestCase):
         with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
             return prepare_chartered_delivery("sample", self.worktree, self.commit, root=self.root)
 
+    def _proposal(self, envelope, assignment_id, sequence):
+        assignment = next(item for item in envelope["roster"] if item["assignment_id"] == assignment_id)
+        checkpoint_id = f"checkpoint-{sequence}"
+        action = {"schema_version": 1, "kind": "delegate", "attempt_id": envelope["attempt_id"],
+                  "envelope_digest": envelope_digest(envelope), "sequence": sequence,
+                  "assignment_id": assignment_id, "definition_digest": assignment["definition_digest"],
+                  "instance_id": assignment["instance_id"], "role": assignment["role"],
+                  "provider": assignment["provider"], "model": assignment["model"],
+                  "manager_turn": sequence, "task": "Edit target.py" if sequence == 1 else "Verify target.py",
+                  "rationale": "The selected specialist is eligible for this bounded task.",
+                  "parent_action_id": None if sequence == 1 else "a" * 64,
+                  "checkpoint_id": checkpoint_id}
+        action["task_digest"] = hashlib.sha256(action["task"].encode()).hexdigest()
+        if envelope["execution_protocol_version"] in {7, 8}:
+            eligible_ids = (envelope["job_contract"]["producer_instance_ids"]
+                            if assignment_id in envelope["job_contract"]["producer_instance_ids"]
+                            else envelope["job_contract"]["verifier_instance_ids"])
+            eligible = [{key: next(item for item in envelope["roster"] if item["instance_id"] == instance)[key]
+                         for key in ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model")}
+                        for instance in eligible_ids]
+            action["provider_choice"] = {
+                "eligible_candidates": eligible, "selected_candidate": assignment["instance_id"],
+                "rationale": {"manager_reason": action["rationale"], "facts": ["approved specialist identity"]},
+                "rejection_reasons": {candidate["instance_id"]: {"reason": "Magentic selected another approved candidate.",
+                                                                    "facts": ["approved candidate not selected"]}
+                                      for candidate in eligible if candidate["instance_id"] != assignment["instance_id"]}}
+        action["action_id"] = expected_magentic_action_id(action)
+        return action
+
+    @staticmethod
+    def _result(provider, model, output):
+        return {"schema_version": 1, "status": "completed", "provider": provider, "model": model,
+                "physical_call": True,
+                "evidence_level": {"codex": "flow_observed_codex_cli_completed_turn",
+                                   "claude": "flow_observed_claude_cli_completed_turn",
+                                   "ollama": "flow_observed_local_http_response"}[provider],
+                "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "usage": None}
+
+    PASS = '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}'
+    FAIL = '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
+
+    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None, seal_hook=None):
+        """Drive one v8 attempt; ``repeat`` re-proposes that sequence once after an error."""
+        sends, replies, captured = [], {}, {}
+        outputs = list(verifier_outputs)
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
+            for sequence, assignment_id in enumerate(plan, 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                try:
+                    replies[sequence] = on_action(proposal)
+                except Exception as exc:
+                    if sequence != repeat:
+                        raise
+                    captured["first_error"] = str(exc)
+                    replies[sequence] = on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            sends.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            captured.setdefault("provider_tasks", []).append(action["provider_task"])
+            return self._result("ollama", "local-model", outputs.pop(0))
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker, seal_hook=seal_hook)
+        return result, sends, replies, captured
+
+
+class CharteredPreparationTests(CharteredFixture):
     def test_clean_job_pins_roster_and_contract(self):
         envelope, task, attempt_dir, ledger = self.prepare()
         self.assertEqual(envelope["execution_protocol_version"], 8)
@@ -280,44 +362,6 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["execution_protocol_version"], 8)
-
-    def _proposal(self, envelope, assignment_id, sequence):
-        assignment = next(item for item in envelope["roster"] if item["assignment_id"] == assignment_id)
-        checkpoint_id = f"checkpoint-{sequence}"
-        action = {"schema_version": 1, "kind": "delegate", "attempt_id": envelope["attempt_id"],
-                  "envelope_digest": envelope_digest(envelope), "sequence": sequence,
-                  "assignment_id": assignment_id, "definition_digest": assignment["definition_digest"],
-                  "instance_id": assignment["instance_id"], "role": assignment["role"],
-                  "provider": assignment["provider"], "model": assignment["model"],
-                  "manager_turn": sequence, "task": "Edit target.py" if sequence == 1 else "Verify target.py",
-                  "rationale": "The selected specialist is eligible for this bounded task.",
-                  "parent_action_id": None if sequence == 1 else "a" * 64,
-                  "checkpoint_id": checkpoint_id}
-        action["task_digest"] = hashlib.sha256(action["task"].encode()).hexdigest()
-        if envelope["execution_protocol_version"] in {7, 8}:
-            eligible_ids = (envelope["job_contract"]["producer_instance_ids"]
-                            if assignment_id in envelope["job_contract"]["producer_instance_ids"]
-                            else envelope["job_contract"]["verifier_instance_ids"])
-            eligible = [{key: next(item for item in envelope["roster"] if item["instance_id"] == instance)[key]
-                         for key in ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model")}
-                        for instance in eligible_ids]
-            action["provider_choice"] = {
-                "eligible_candidates": eligible, "selected_candidate": assignment["instance_id"],
-                "rationale": {"manager_reason": action["rationale"], "facts": ["approved specialist identity"]},
-                "rejection_reasons": {candidate["instance_id"]: {"reason": "Magentic selected another approved candidate.",
-                                                                    "facts": ["approved candidate not selected"]}
-                                      for candidate in eligible if candidate["instance_id"] != assignment["instance_id"]}}
-        action["action_id"] = expected_magentic_action_id(action)
-        return action
-
-    @staticmethod
-    def _result(provider, model, output):
-        return {"schema_version": 1, "status": "completed", "provider": provider, "model": model,
-                "physical_call": True,
-                "evidence_level": {"codex": "flow_observed_codex_cli_completed_turn",
-                                   "claude": "flow_observed_claude_cli_completed_turn",
-                                   "ollama": "flow_observed_local_http_response"}[provider],
-                "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "usage": None}
 
     def test_v7_gateway_seals_producer_verifier_receipt_after_flow_observes_edit_and_test(self):
         calls = []
@@ -512,46 +556,6 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["unusable", "valid_pass"])
-
-    PASS = '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}'
-    FAIL = '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
-
-    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None, seal_hook=None):
-        """Drive one v8 attempt; ``repeat`` re-proposes that sequence once after an error."""
-        sends, replies, captured = [], {}, {}
-        outputs = list(verifier_outputs)
-
-        def supervisor(envelope, task, on_manager, on_action, **kwargs):
-            captured["envelope"] = envelope
-            for sequence, assignment_id in enumerate(plan, 1):
-                proposal = self._proposal(envelope, assignment_id, sequence)
-                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
-                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                                  "workflow_name": "flow-magentic-delivery-v8",
-                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
-                try:
-                    replies[sequence] = on_action(proposal)
-                except Exception as exc:
-                    if sequence != repeat:
-                        raise
-                    captured["first_error"] = str(exc)
-                    replies[sequence] = on_action(proposal)
-            return {"attempt_id": envelope["attempt_id"]}
-
-        def worker(action, *, envelope, workspace):
-            sends.append(action["assignment_id"])
-            if action["assignment_id"] == "editor":
-                (workspace / "target.py").write_text("new\n")
-                return self._result("codex", "editor-model", "Edited target")
-            captured.setdefault("provider_tasks", []).append(action["provider_task"])
-            return self._result("ollama", "local-model", outputs.pop(0))
-
-        with patch("delivery_gateway.run_status", return_value=self.state), \
-             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
-             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
-            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
-                                                supervisor=supervisor, worker_adapter=worker, seal_hook=seal_hook)
-        return result, sends, replies, captured
 
     def test_v8_seal_hook_reaches_each_sealing_boundary_after_the_runtime_outcome(self):
         points = []
