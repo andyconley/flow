@@ -318,12 +318,12 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         role_limit = sealed_role.get("maximum_instances")
         if (item["provider"] not in canonical_charter["provider_capabilities"]
                 or item["definition_digest"] != sealed_role.get("definition_digest")
+                or not set(item["capabilities"]).issubset(set(sealed_role.get("runtime_capabilities", [])))
                 or not isinstance(role_limit, int) or role_counts[item["role"]] > role_limit):
             raise ContractError("runtime roster expands the sealed Delivery Charter")
     canonical_limits = canonical_charter["limits"]
-    projected_limits = {"delegations": 6, "concurrency": 3, "replans": 2}
-    if any(projected_limits[key] > canonical_limits.get(key, -1) for key in projected_limits):
-        raise ContractError("runtime limits expand the sealed Delivery Charter")
+    if len(specialists) > canonical_limits.get("delegations", 0):
+        raise ContractError("runtime roster expands the sealed Delivery Charter")
     if (canonical_limits.get("paths") != ["charter-scoped"]
             or not {"read", "edit", "test"}.issubset(set(canonical_limits.get("tools", [])))
             or not {"diff", "test", "receipt"}.issubset(set(canonical_limits.get("outputs", [])))):
@@ -394,8 +394,13 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "handoff_digest": delivery["handoff_digest"],
                 "delivery_lead_claim_digest": delivery["lead_claim_digest"],
                 "delivery_lead_claim": {"lead_id": authority["claim"]["owner"], "generation": delivery["owner_generation"]},
-                "limits": {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
-                           "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 6}}
+                "limits": {"max_delegations": canonical_limits["delegations"],
+                           "max_concurrent": canonical_limits["concurrency"],
+                           "max_replans": canonical_limits["replans"],
+                           "max_runtime_seconds": canonical_limits["runtime_seconds"],
+                           "max_manager_calls": canonical_limits["max_manager_calls"],
+                           "max_manager_rounds": canonical_limits["max_manager_rounds"],
+                           "max_paid_worker_calls": canonical_limits["max_paid_worker_calls"]}}
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
@@ -903,7 +908,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         return reply
 
     try:
-        runner_kwargs = {"python_path": python_path, "timeout_s": 900}
+        runner_kwargs = {"python_path": python_path, "timeout_s": envelope["limits"].get("max_runtime_seconds", 900)}
         if resume is not None:
             runner_kwargs["resume"] = resume
         outcome = (supervisor or run_maf_delivery)(envelope, task, on_manager, on_action, **runner_kwargs)
@@ -995,15 +1000,16 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
     prompt = "\n\n".join(turns)
     if not prompt.strip():
         raise ContractError("stock manager prompt text is absent")
+    timeout_seconds = min(120, envelope.get("limits", {}).get("max_runtime_seconds", 120))
     if envelope["manager"].get("provider", "claude") == "claude":
         result = call_claude(instructions="stock Magentic manager", task="model response",
                              prompt_override=prompt, workspace=workspace,
-                             model=envelope["manager"]["model"], timeout_seconds=120,
+                             model=envelope["manager"]["model"], timeout_seconds=timeout_seconds,
                              max_output_bytes=32768)
     elif envelope["manager"]["provider"] == "codex":
         result = call_codex(instructions="Respond to the stock Magentic manager request only. Return the requested response text without editing files.",
                             task=prompt, workspace=workspace, model=envelope["manager"]["model"],
-                            timeout_seconds=120, sandbox="read-only",
+                            timeout_seconds=timeout_seconds, sandbox="read-only",
                             max_prompt_bytes=32768, max_output_bytes=32768)
     else:
         raise ContractError("approved manager provider has no adapter")
@@ -1024,14 +1030,15 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
 def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
                             trace_dir: Path | None = None) -> dict[str, Any]:
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
+    timeout_seconds = min(300, envelope.get("limits", {}).get("max_runtime_seconds", 300))
     if action["provider"] == "ollama":
         return call_local({**assignment, "task": action.get("provider_task", action["task"]), "attempt_id": envelope["attempt_id"]},
-                          correlation_id=action["action_id"])
+                          correlation_id=action["action_id"], timeout_seconds=min(60, timeout_seconds))
     if action["provider"] == "claude":
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
-                                workspace=workspace, model=assignment["model"], timeout_seconds=300,
+                                workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,
                                 trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None)
     if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7}:
         return call_codex(instructions=assignment["instructions"], task=action["task"],
-                          workspace=workspace, model=assignment["model"], timeout_seconds=300)
+                          workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds)
     raise ContractError("selected specialist provider has no approved adapter")

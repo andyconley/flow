@@ -24,6 +24,8 @@ class DeliveryControlTests(unittest.TestCase):
         self._write("requirements.md", "requirements\n")
         self._write("acceptance.md", "acceptance\n")
         self._write("shaper-intent.json", json.dumps(shaper_intent()) + "\n")
+        self._write("solution.md", "solution\n")
+        self._write("orchestration.json", "{}\n")
         payload = {
             "schema_version": 1, "protocol_revision": 2, "work_id": self.work_id,
             "state": "solution_approved", "lane": "solution", "phase": "solution_approved",
@@ -32,9 +34,15 @@ class DeliveryControlTests(unittest.TestCase):
                 "requirements": f".flow/runs/{self.work_id}/requirements.md",
                 "acceptance_criteria": f".flow/runs/{self.work_id}/acceptance.md",
                 "shaper_intent": f".flow/runs/{self.work_id}/shaper-intent.json",
+                "solution": f".flow/runs/{self.work_id}/solution.md",
+                "orchestration_manifest": f".flow/runs/{self.work_id}/orchestration.json",
             }, "dispositions": {"risk": "owned"}, "gates": {}, "last_event": "approve-solution",
             "approved_artifact_digests": {
-                "shaper_intent": hashlib.sha256((self.run_dir / "shaper-intent.json").read_bytes()).hexdigest()
+                "requirements": hashlib.sha256((self.run_dir / "requirements.md").read_bytes()).hexdigest(),
+                "acceptance_criteria": hashlib.sha256((self.run_dir / "acceptance.md").read_bytes()).hexdigest(),
+                "shaper_intent": hashlib.sha256((self.run_dir / "shaper-intent.json").read_bytes()).hexdigest(),
+                "solution": hashlib.sha256((self.run_dir / "solution.md").read_bytes()).hexdigest(),
+                "orchestration_manifest": hashlib.sha256((self.run_dir / "orchestration.json").read_bytes()).hexdigest(),
             },
         }
         (self.run_dir / "run.json").write_text(json.dumps(payload) + "\n")
@@ -69,7 +77,7 @@ class DeliveryControlTests(unittest.TestCase):
         self._write("requirements.md", "changed requirements\n")
         ok, _, errors = runstate.apply_transition(self.work_id, "start-plan", root=self.root)
         self.assertFalse(ok)
-        self.assertIn("source bytes changed", errors[0])
+        self.assertIn("approved requirements changed after approval", errors[0])
         self.assertEqual((self.run_dir / "run.json").read_bytes(), before)
 
     def test_changed_shaper_intent_after_approval_refuses_start_plan(self):
@@ -79,9 +87,24 @@ class DeliveryControlTests(unittest.TestCase):
         })) + "\n")
         ok, _, errors = runstate.apply_transition(self.work_id, "start-plan", root=self.root)
         self.assertFalse(ok)
-        self.assertIn("changed after definition approval", errors[0])
+        self.assertIn("changed after approval", errors[0])
         self.assertEqual(before[0], (self.run_dir / "run.json").read_bytes())
         self.assertEqual(before[1], (self.run_dir / "events.jsonl").read_bytes())
+
+    def test_changed_definition_source_before_start_plan_is_refused(self):
+        for name, artifact in (("requirements", "requirements.md"), ("acceptance_criteria", "acceptance.md"),
+                               ("solution", "solution.md"), ("orchestration_manifest", "orchestration.json")):
+            with self.subTest(name=name):
+                original = (self.run_dir / artifact).read_text()
+                before = ((self.run_dir / "run.json").read_bytes(), (self.run_dir / "events.jsonl").read_bytes())
+                self._write(artifact, original + "changed after approval\n")
+                ok, _, errors = runstate.apply_transition(self.work_id, "start-plan", root=self.root)
+                self.assertFalse(ok)
+                self.assertIn(f"approved {name} changed after approval", errors[0])
+                self.assertFalse((self.run_dir / "delivery").exists())
+                self.assertEqual(before[0], (self.run_dir / "run.json").read_bytes())
+                self.assertEqual(before[1], (self.run_dir / "events.jsonl").read_bytes())
+                self._write(artifact, original)
 
     def test_staged_artifacts_are_inert_if_commit_never_happens(self):
         ok, _, errors = delivery_control.start_plan(self.work_id, root=self.root, failure_point="after-staging")
@@ -138,11 +161,11 @@ class DeliveryControlTests(unittest.TestCase):
         self.assertIn("outside the current run", errors[0])
         self.assertEqual(before, ((self.run_dir / "run.json").read_bytes(), (self.run_dir / "events.jsonl").read_bytes()))
 
-    def test_changed_source_after_inert_stage_uses_new_authority_directory(self):
+    def test_changed_source_after_inert_stage_requires_new_approval(self):
         ok, _, _ = delivery_control.start_plan(self.work_id, root=self.root, failure_point="after-staging")
         self.assertFalse(ok)
         self._write("requirements.md", "corrected requirements\n")
-        ok, run, errors = runstate.apply_transition(self.work_id, "start-plan", root=self.root)
-        self.assertTrue(ok, errors)
-        self.assertTrue((self.run_dir / run["delivery"]["delivery_artifact_dir"]).is_dir())
-        self.assertEqual(len([path for path in (self.run_dir / "delivery").iterdir() if path.is_dir()]), 2)
+        ok, _, errors = runstate.apply_transition(self.work_id, "start-plan", root=self.root)
+        self.assertFalse(ok)
+        self.assertIn("approved requirements changed after approval", errors[0])
+        self.assertEqual(len([path for path in (self.run_dir / "delivery").iterdir() if path.is_dir()]), 1)

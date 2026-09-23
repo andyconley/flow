@@ -15,6 +15,17 @@ SCHEMA_VERSION = 1
 SHAPER_CONTRACT_VERSION = 1
 DELIVERY_CHARTER_VERSION = 1
 
+CAPABILITY_TO_RUNTIME = {
+    "scoped-edit": ["read", "edit"],
+    "read-only-review": ["read"],
+    "bounded-verification": ["read"],
+}
+ENFORCEABLE_LIMIT_FIELDS = {
+    "max_concurrent", "max_replans", "runtime_seconds", "tools", "paths",
+    "outputs", "retries", "max_manager_calls", "max_manager_rounds",
+    "max_paid_worker_calls",
+}
+
 
 class DeliveryContractError(ValueError):
     pass
@@ -96,14 +107,38 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
     for name in ("delegation_matrix", "approval_matrix", "budget_safety_envelope", "boundaries"):
         _mapping(intent[name], name)
     for specialist in intent["allowed_specialists"]:
-        specialist = _mapping(specialist, "allowed specialist", keys={"role", "capabilities", "definition_digest"})
+        specialist = _mapping(specialist, "allowed specialist", keys={"role", "capabilities", "definition_digest", "maximum_instances"})
         _text(specialist["role"], "allowed specialist role")
-        _list(specialist["capabilities"], "allowed specialist capabilities", nonempty=True)
+        capabilities = _list(specialist["capabilities"], "allowed specialist capabilities", nonempty=True)
+        if len(capabilities) != len(set(capabilities)) or any(capability not in CAPABILITY_TO_RUNTIME for capability in capabilities):
+            raise DeliveryContractError("allowed specialist capabilities contain an unsupported or duplicate value")
         _sha(specialist["definition_digest"], "allowed specialist definition_digest")
+        if type(specialist["maximum_instances"]) is not int or specialist["maximum_instances"] < 1:
+            raise DeliveryContractError("allowed specialist maximum_instances is invalid")
     if intent["delegation_matrix"].get("delegated_expansion") is not False:
         raise DeliveryContractError("delegated expansion must remain explicitly disabled")
     if intent["approval_matrix"].get("provider_dispatch") != "Flow_grant":
         raise DeliveryContractError("provider dispatch must require a Flow grant")
+    delegation = intent["delegation_matrix"]
+    if set(delegation) != {"max_delegations", "delegated_expansion"} or type(delegation["max_delegations"]) is not int or delegation["max_delegations"] < 1:
+        raise DeliveryContractError("delegation_matrix is invalid")
+    envelope = intent["budget_safety_envelope"]
+    if set(envelope) != {"enforceable", "observations"}:
+        raise DeliveryContractError("budget_safety_envelope is invalid")
+    enforceable = _mapping(envelope["enforceable"], "budget_safety_envelope enforceable", keys=ENFORCEABLE_LIMIT_FIELDS)
+    for name in ("max_concurrent", "max_replans", "runtime_seconds", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls"):
+        minimum = 1 if name in {"max_concurrent", "runtime_seconds", "max_manager_calls", "max_manager_rounds"} else 0
+        if type(enforceable[name]) is not int or enforceable[name] < minimum:
+            raise DeliveryContractError(f"{name} is invalid")
+    for name in ("tools", "paths", "outputs"):
+        values = _list(enforceable[name], name, nonempty=True)
+        if len(values) != len(set(values)) or any(not isinstance(value, str) or not value for value in values):
+            raise DeliveryContractError(f"{name} is invalid")
+    if not set(enforceable["tools"]).issubset({"read", "edit", "test"}) or enforceable["paths"] != ["charter-scoped"] or not set(enforceable["outputs"]).issubset({"diff", "test", "receipt"}):
+        raise DeliveryContractError("enforceable tools, paths, or outputs are unsupported")
+    if enforceable["max_concurrent"] > delegation["max_delegations"] or enforceable["max_paid_worker_calls"] > delegation["max_delegations"]:
+        raise DeliveryContractError("concurrency or paid-worker limit exceeds max_delegations")
+    _list(envelope["observations"], "budget_safety_envelope observations")
     return intent
 
 
@@ -145,7 +180,14 @@ def build_shaper_contract(work_id: str, sources: dict[str, dict[str, str]], inte
 def build_delivery_charter(shaper: dict[str, Any]) -> dict[str, Any]:
     validate_shaper_contract(shaper)
     charter_id = f"delivery-{digest({'shaper': shaper['digest']})[:20]}"
-    definitions = {item["role"]: {"definition_digest": item["definition_digest"], "maximum_instances": 1} for item in shaper["allowed_specialists"]}
+    definitions = {}
+    for item in shaper["allowed_specialists"]:
+        runtime_capabilities = sorted({runtime for capability in item["capabilities"] for runtime in CAPABILITY_TO_RUNTIME[capability]})
+        if item["role"] in definitions:
+            raise DeliveryContractError("allowed specialist role is duplicated")
+        definitions[item["role"]] = {"definition_digest": item["definition_digest"], "maximum_instances": item["maximum_instances"],
+                                     "approved_capabilities": item["capabilities"], "runtime_capabilities": runtime_capabilities}
+    enforceable = shaper["budget_safety_envelope"]["enforceable"]
     record = {
         "schema_version": SCHEMA_VERSION, "charter_version": DELIVERY_CHARTER_VERSION, "kind": "delivery_charter",
         "charter_id": charter_id, "run_id": shaper["run_id"], "delivery_attempt_policy": {"one_active_lead": True, "resume_or_supersede": "explicit"},
@@ -153,8 +195,11 @@ def build_delivery_charter(shaper: dict[str, Any]) -> dict[str, Any]:
         "approved_sources": shaper["approved_sources"], "outcomes": shaper["outcomes"], "scope": shaper["scope"],
         "exclusions": shaper["exclusions"], "constraints": shaper["constraints"], "acceptance_criteria": shaper["acceptance_criteria"],
         "accepted_risks": shaper["risks"], "eligible_specialists": definitions,
+        "prohibited_capabilities": shaper["prohibited_capabilities"],
         "provider_capabilities": {"claude": {"binding": "capability"}, "codex": {"binding": "capability"}, "ollama": {"binding": "verifier"}},
-        "limits": {"delegations": 6, "concurrency": 3, "replans": 2, "runtime_seconds": 300, "tools": ["read", "edit", "test"], "paths": ["charter-scoped"], "outputs": ["diff", "test", "receipt"], "retries": 0},
+        "limits": {"delegations": shaper["delegation_matrix"]["max_delegations"],
+                   "concurrency": enforceable["max_concurrent"], "replans": enforceable["max_replans"],
+                   **{name: enforceable[name] for name in ("runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")}},
         "approval_matrix": shaper["approval_matrix"], "producer_verifier_rules": {"distinct_identities": True, "verifier_read_only": True},
         "validation": {"flow_observed_diff_and_test_before_verifier": True}, "recovery": {"unknown_action_blocks_successor": True, "takeover": "explicit_resume_or_supersede"},
         "escalation_stop_cancellation": {"scope_expansion": "halt_for_shaper", "cancellation": "Flow_only"},
@@ -184,6 +229,19 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
     _mapping(record.get("problem"), "problem", keys={"value", "provenance"})
     for name in required_lists:
         _list(record.get(name), name, nonempty=name not in {"open_decisions", "decision_owners", "amendment_lineage"})
+    roles: set[str] = set()
+    for specialist in record["allowed_specialists"]:
+        specialist = _mapping(specialist, "allowed specialist", keys={"role", "capabilities", "definition_digest", "maximum_instances"})
+        role = _text(specialist["role"], "allowed specialist role")
+        if role in roles:
+            raise DeliveryContractError("allowed specialist role is duplicated")
+        roles.add(role)
+        capabilities = _list(specialist["capabilities"], "allowed specialist capabilities", nonempty=True)
+        if len(capabilities) != len(set(capabilities)) or any(capability not in CAPABILITY_TO_RUNTIME for capability in capabilities):
+            raise DeliveryContractError("allowed specialist capabilities contain an unsupported or duplicate value")
+        _sha(specialist["definition_digest"], "allowed specialist definition_digest")
+        if type(specialist["maximum_instances"]) is not int or specialist["maximum_instances"] < 1:
+            raise DeliveryContractError("allowed specialist maximum_instances is invalid")
     for name in ("delegation_matrix", "approval_matrix", "budget_safety_envelope", "boundaries"):
         _mapping(record.get(name), name)
     if record["delegation_matrix"].get("delegated_expansion") is not False:
@@ -212,13 +270,18 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
     _mapping(record.get("eligible_specialists"), "eligible_specialists")
     for role, definition in record["eligible_specialists"].items():
         _text(role, "eligible specialist role")
-        definition = _mapping(definition, "eligible specialist", keys={"definition_digest", "maximum_instances"})
+        definition = _mapping(definition, "eligible specialist", keys={"definition_digest", "maximum_instances", "approved_capabilities", "runtime_capabilities"})
         _sha(definition["definition_digest"], "specialist definition digest")
         if not isinstance(definition["maximum_instances"], int) or definition["maximum_instances"] < 1:
             raise DeliveryContractError("maximum_instances is invalid")
+        approved = _list(definition["approved_capabilities"], "approved specialist capabilities", nonempty=True)
+        runtime = _list(definition["runtime_capabilities"], "runtime specialist capabilities", nonempty=True)
+        if any(value not in CAPABILITY_TO_RUNTIME for value in approved) or runtime != sorted({item for value in approved for item in CAPABILITY_TO_RUNTIME[value]}):
+            raise DeliveryContractError("specialist capability projection is invalid")
+    _list(record.get("prohibited_capabilities"), "prohibited_capabilities", nonempty=True)
     _mapping(record.get("provider_capabilities"), "provider_capabilities")
-    limits = _mapping(record.get("limits"), "limits", keys={"delegations", "concurrency", "replans", "runtime_seconds", "tools", "paths", "outputs", "retries"})
-    if not all(isinstance(limits[key], int) and limits[key] >= 0 for key in ("delegations", "concurrency", "replans", "runtime_seconds", "retries")):
+    limits = _mapping(record.get("limits"), "limits", keys={"delegations", "concurrency", "replans", "runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls"})
+    if not all(type(limits[key]) is int and limits[key] >= 0 for key in ("delegations", "concurrency", "replans", "runtime_seconds", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")):
         raise DeliveryContractError("Delivery Charter numeric limits are invalid")
     for name in ("approval_matrix", "producer_verifier_rules", "validation", "recovery", "escalation_stop_cancellation", "boundaries", "approver"):
         _mapping(record.get(name), name)

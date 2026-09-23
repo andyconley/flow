@@ -131,8 +131,9 @@ def start_plan(work_id: str, *, root: Path, expected_updated_at: str | None = No
             state = current.get("state")
             snapshots = _source_snapshot(root, work_id, current.get("artifacts", {}))
             approved_digests = current.get("approved_artifact_digests", {})
-            if approved_digests.get("shaper_intent") != snapshots["shaper_intent"]["sha256"]:
-                return False, current, ["approved Shaper intent changed after definition approval"]
+            for name, source in snapshots.items():
+                if approved_digests.get(name) != source["sha256"]:
+                    return False, current, [f"approved {name} changed after approval"]
             if state == "planning" and current.get("delivery"):
                 delivery = current["delivery"]
                 if delivery.get("source_digests") != snapshots:

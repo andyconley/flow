@@ -65,6 +65,26 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         with self.assertRaisesRegex(DeliveryContractError, "Flow grant"):
             validate_delivery_charter(charter)
 
+    def test_delivery_charter_preserves_approved_capabilities_and_limits(self):
+        intent = shaper_intent()
+        intent["delegation_matrix"]["max_delegations"] = 2
+        enforceable = intent["budget_safety_envelope"]["enforceable"]
+        enforceable.update(max_concurrent=1, max_replans=0, max_paid_worker_calls=2)
+        charter = build_delivery_charter(build_shaper_contract("demo", self.sources(), intent))
+        self.assertEqual(charter["limits"]["delegations"], 2)
+        self.assertEqual(charter["limits"]["concurrency"], 1)
+        self.assertEqual(charter["limits"]["replans"], 0)
+        self.assertEqual(charter["limits"]["max_paid_worker_calls"], 2)
+        self.assertEqual(charter["eligible_specialists"]["lead-developer"]["approved_capabilities"], ["scoped-edit"])
+        self.assertEqual(charter["eligible_specialists"]["lead-developer"]["runtime_capabilities"], ["edit", "read"])
+        self.assertEqual(charter["prohibited_capabilities"], intent["prohibited_capabilities"])
+
+    def test_unsupported_specialist_capability_is_refused(self):
+        intent = shaper_intent()
+        intent["allowed_specialists"][0]["capabilities"] = ["arbitrary-shell"]
+        with self.assertRaisesRegex(DeliveryContractError, "unsupported"):
+            build_shaper_contract("demo", self.sources(), intent)
+
     def test_source_from_a_different_run_is_refused(self):
         sources = self.sources()
         sources["requirements"]["path"] = ".flow/runs/other/requirements.md"

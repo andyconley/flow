@@ -601,6 +601,8 @@ class OrchestrationCliTests(FlowCliHarness):
         payload = json.loads(run_path.read_text())
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["protocol_revision"], 2)
+        (run_path.parent / "requirements.md").write_text("requirements\n")
+        (run_path.parent / "acceptance.md").write_text("acceptance\n")
         before = (run_path.read_bytes(), events_path.read_bytes())
         refused = self.run_flow(
             "run", "transition", "demo", "approve-definition",
@@ -632,6 +634,9 @@ class OrchestrationCliTests(FlowCliHarness):
         status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
         self.assertEqual(status["state"], "archived")
         self.assertEqual(status["protocol_revision"], 2)
+        self.assertEqual(set(status["approved_artifact_digests"]), {
+            "requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest"
+        })
 
     def test_revision_two_stage_refusals_leave_lifecycle_files_unchanged(self) -> None:
         self.setup_project()

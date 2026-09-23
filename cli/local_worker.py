@@ -26,7 +26,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None = None,
-               correlation_id: str | None = None) -> dict[str, Any]:
+               correlation_id: str | None = None, timeout_seconds: int = 60) -> dict[str, Any]:
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 60:
+        raise ContractError("local worker timeout is invalid")
     provider = envelope["provider"]
     if provider == "local-stub":
         if transport is None:
@@ -60,7 +62,7 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
         })
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
         try:
-            with opener.open(request, timeout=60) as response:
+            with opener.open(request, timeout=timeout_seconds) as response:
                 if response.status != 200:
                     raise RuntimeError(f"Ollama HTTP {response.status}")
                 raw = response.read(MAX_RESPONSE_BYTES + 1)

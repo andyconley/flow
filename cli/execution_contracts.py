@@ -193,9 +193,18 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
     expected = {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
                 "max_manager_calls": 12, "max_manager_rounds": 6}
     paid_calls = limits.get("max_paid_worker_calls") if isinstance(limits, dict) else None
-    if (not isinstance(limits, dict) or set(limits) != set(expected) | {"max_paid_worker_calls"}
-            or any(limits[key] != value for key, value in expected.items())
-            or type(paid_calls) is not int or not 1 <= paid_calls <= expected["max_delegations"]):
+    if envelope["execution_protocol_version"] == DELIVERY_PROTOCOL_VERSION:
+        valid_limits = (isinstance(limits, dict) and set(limits) == set(expected) | {"max_paid_worker_calls", "max_runtime_seconds"}
+                        and all(type(limits[key]) is int and 0 <= limits[key] <= maximum for key, maximum in expected.items())
+                        and limits["max_delegations"] >= 1 and limits["max_concurrent"] >= 1
+                        and limits["max_manager_calls"] >= 1 and limits["max_manager_rounds"] >= 1
+                        and type(limits["max_runtime_seconds"]) is int and 1 <= limits["max_runtime_seconds"] <= 600
+                        and type(paid_calls) is int and 0 <= paid_calls <= limits["max_delegations"])
+    else:
+        valid_limits = (isinstance(limits, dict) and set(limits) == set(expected) | {"max_paid_worker_calls"}
+                        and all(limits[key] == value for key, value in expected.items())
+                        and type(paid_calls) is int and 1 <= paid_calls <= expected["max_delegations"])
+    if not valid_limits:
         raise ContractError("Magentic limits differ from approved envelope")
 
 

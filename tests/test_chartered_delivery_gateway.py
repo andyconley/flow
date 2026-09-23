@@ -116,6 +116,27 @@ class CharteredPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(ContractError, "expands the sealed Delivery Charter"):
                 prepare_chartered_delivery("sample", self.worktree, self.commit, root=self.root)
 
+    def test_read_only_approved_role_cannot_be_projected_as_editor(self):
+        for specialist in self.intent["allowed_specialists"]:
+            if specialist["role"] == "lead-developer":
+                specialist["capabilities"] = ["read-only-review"]
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+        with self.assertRaisesRegex(ContractError, "expands the sealed Delivery Charter"):
+            self.prepare()
+
+    def test_runtime_limits_are_projected_from_the_sealed_charter(self):
+        self.intent["delegation_matrix"]["max_delegations"] = 2
+        enforceable = self.intent["budget_safety_envelope"]["enforceable"]
+        enforceable.update(max_concurrent=1, max_replans=0, max_paid_worker_calls=2)
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+        envelope, _, _, _ = self.prepare()
+        self.assertEqual(envelope["limits"], {"max_delegations": 2, "max_concurrent": 1,
+                         "max_replans": 0, "max_manager_calls": 12,
+                         "max_manager_rounds": 6, "max_paid_worker_calls": 2,
+                         "max_runtime_seconds": 300})
+
     def test_v7_projects_ownership_and_requires_auditable_provider_choice(self):
         envelope, _, _, _ = self.prepare()
         self.assertEqual(envelope["delivery_lead_claim"], {"lead_id": "delivery-lead", "generation": 1})
@@ -293,6 +314,7 @@ class CharteredPreparationTests(unittest.TestCase):
         calls = []
 
         def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            self.assertEqual(kwargs["timeout_s"], 300)
             for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
                 proposal = self._proposal(envelope, assignment_id, sequence)
                 checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
@@ -547,16 +569,22 @@ class ProviderRouteTests(unittest.TestCase):
     def test_codex_and_claude_direct_routes(self):
         with tempfile.TemporaryDirectory() as dirname:
             workspace = Path(dirname)
-            roster = [{"assignment_id": "editor", "instructions": "do task", "model": "pinned"}]
-            envelope = {"execution_protocol_version": 6, "roster": roster}
-            action = {"assignment_id": "editor", "provider": "codex", "task": "edit"}
+            roster = [{"assignment_id": "editor", "instructions": "do task", "model": "pinned",
+                       "provider": "codex"}]
+            envelope = {"execution_protocol_version": 7, "attempt_id": "attempt", "roster": roster,
+                        "limits": {"max_runtime_seconds": 45}}
+            action = {"action_id": "action", "assignment_id": "editor", "provider": "codex", "task": "edit"}
             with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "codex")
-                codex.assert_called_once()
+                self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 45)
             action["provider"] = "claude"
             with patch("delivery_gateway.call_claude_edit", return_value={"provider": "claude"}) as claude:
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "claude")
-                claude.assert_called_once()
+                self.assertEqual(claude.call_args.kwargs["timeout_seconds"], 45)
+            action["provider"] = "ollama"
+            with patch("delivery_gateway.call_local", return_value={"provider": "ollama"}) as ollama:
+                self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "ollama")
+                self.assertEqual(ollama.call_args.kwargs["timeout_seconds"], 45)
 
 
 if __name__ == "__main__":

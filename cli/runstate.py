@@ -473,18 +473,23 @@ def apply_transition(
     payload["artifacts"].update(artifacts or {})
     payload["dispositions"].update(dispositions or {})
 
-    if event_name == "approve-definition" and _protocol_revision(payload) == PROTOCOL_REVISION_CURRENT:
-        intent_relative = payload["artifacts"].get("shaper_intent")
+    if event_name in {"approve-definition", "approve-solution"} and _protocol_revision(payload) == PROTOCOL_REVISION_CURRENT:
         active_root = (root or repo_root()).resolve()
         expected_prefix = f".flow/runs/{work_id}/"
-        if (not isinstance(intent_relative, str) or not intent_relative.startswith(expected_prefix)):
-            return False, current or {}, ["missing for definition approval: artifact:shaper_intent"]
-        intent_path = active_root / intent_relative
-        if (not intent_path.is_file() or intent_path.is_symlink()
-                or not intent_path.resolve().is_relative_to(active_root)):
-            return False, current or {}, ["shaper_intent must be a current-run regular file"]
+        approval_names = (
+            ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest")
+            if event_name == "approve-definition" else ("solution",)
+        )
         payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests", {}))
-        payload["approved_artifact_digests"]["shaper_intent"] = hashlib.sha256(intent_path.read_bytes()).hexdigest()
+        for name in approval_names:
+            relative = payload["artifacts"].get(name)
+            if not isinstance(relative, str) or not relative.startswith(expected_prefix):
+                return False, current or {}, [f"missing for {transition.gate}: artifact:{name}"]
+            path = active_root / relative
+            if (not path.is_file() or path.is_symlink()
+                    or not path.resolve().is_relative_to(active_root)):
+                return False, current or {}, [f"{name} must be a current-run regular file"]
+            payload["approved_artifact_digests"][name] = hashlib.sha256(path.read_bytes()).hexdigest()
 
     missing = _missing_gate_items(payload, transition)
     if missing:
@@ -529,9 +534,10 @@ def apply_transition(
         "artifacts": artifacts or {},
         "dispositions": dispositions or {},
     }
-    if event_name == "approve-definition" and payload.get("approved_artifact_digests"):
+    if event_name in {"approve-definition", "approve-solution"} and payload.get("approved_artifact_digests"):
+        names = ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest") if event_name == "approve-definition" else ("solution",)
         event["approved_artifact_digests"] = {
-            "shaper_intent": payload["approved_artifact_digests"]["shaper_intent"]
+            name: payload["approved_artifact_digests"][name] for name in names
         }
     if note:
         event["note"] = note

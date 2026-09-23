@@ -20,7 +20,7 @@ def shaper_intent(definition_digests=None):
         "open_decisions": [],
         "decision_owners": [],
         "allowed_specialists": [
-            {"role": role, "capabilities": capabilities, "definition_digest": definition_digests[role]}
+            {"role": role, "capabilities": capabilities, "definition_digest": definition_digests[role], "maximum_instances": 1}
             for role, capabilities in (
                 ("lead-developer", ["scoped-edit"]),
                 ("quality-reviewer", ["read-only-review"]),
@@ -30,7 +30,12 @@ def shaper_intent(definition_digests=None):
         "prohibited_capabilities": ["silent-charter-amendment", "ungranted-provider-dispatch"],
         "delegation_matrix": {"max_delegations": 6, "delegated_expansion": False},
         "approval_matrix": {"charter_amendment": "shaper_or_engineer", "provider_dispatch": "Flow_grant", "acceptance": "Flow_gate"},
-        "budget_safety_envelope": {"enforceable": {"max_concurrent": 3, "max_replans": 2}, "observations": ["provider_usage_when_available"]},
+        "budget_safety_envelope": {"enforceable": {
+            "max_concurrent": 3, "max_replans": 2, "runtime_seconds": 300,
+            "tools": ["read", "edit", "test"], "paths": ["charter-scoped"],
+            "outputs": ["diff", "test", "receipt"], "retries": 0,
+            "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 6,
+        }, "observations": ["provider_usage_when_available"]},
         "boundaries": {"artifact_root": ".flow/runs/current", "worktree_policy": "Flow-bound"},
         "amendment_lineage": [],
         "approval_history": [{"event": "approve-definition", "authority": "engineer"}],
