@@ -2,6 +2,39 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.33.0](https://github.com/andyconley/flow/compare/v0.32.0...v0.33.0) (2026-09-23)
+
+### Features
+
+* add verifier output contract and harden evaluation checks ([9498562](https://github.com/andyconley/flow/commit/9498562780047873ee3a7d47f127d2b9229dceb6))
+* define structured verifier contracts ([b358bca](https://github.com/andyconley/flow/commit/b358bca19e407b489b2d4f201d195dcc8cc4711f))
+* enforce structured verifier handback ([83323b1](https://github.com/andyconley/flow/commit/83323b1f013e7307c87b544439cf7d8b295f0b3e))
+* persist structured verifier evaluations ([b5614c7](https://github.com/andyconley/flow/commit/b5614c7669f9a2807e246b8f1e7eddadf2274e7b))
+
+### Bug Fixes
+
+* bind verifier contract, replay evaluation, and receipt recomputation ([09d3d32](https://github.com/andyconley/flow/commit/09d3d32d0a7e528e6aa18f841998d0b4c630d525))
+* enforce verifier retry and receipt truth ([e1d183e](https://github.com/andyconley/flow/commit/e1d183e88e0887cfa9cde061ad75af9d7543614f))
+* keep received verifier responses observable in ledger and adapter ([872abaa](https://github.com/andyconley/flow/commit/872abaa6e0cd5f13c1031ea95a80988311001387))
+* keep v6 and v7 completed receipts off v8 verifier checks ([d513ff3](https://github.com/andyconley/flow/commit/d513ff3308769ac30e51dc6fdb02e09a117266b2))
+* treat non-string verifier decision and severity as unusable ([134072a](https://github.com/andyconley/flow/commit/134072a58aa57d44f3ceb09d9606a8ec7929d637))
+
+### Documentation
+
+* define structured verifier contract ([fe59fce](https://github.com/andyconley/flow/commit/fe59fce9cc862ab8b732b9705b857c523373da0f))
+* plan structured verifier implementation ([0168013](https://github.com/andyconley/flow/commit/0168013c86f26820a9a2595c95928a4b40ee2a15))
+* record structured verifier acceptance review ([4f0076d](https://github.com/andyconley/flow/commit/4f0076d19236c6c4882fd5cb684e6e66e06ee5cf))
+* record structured verifier handoff ([af95bdb](https://github.com/andyconley/flow/commit/af95bdbf7c01519ea4864cc3e50de4c81fd2142c))
+* record structured verifier refinement handback ([2966d09](https://github.com/andyconley/flow/commit/2966d09a06b6bf80bf79d764d043fe5efbb735b8))
+* record structured verifier review requesting refinement ([ea05d37](https://github.com/andyconley/flow/commit/ea05d37008c96f1ebf887453a806226726b700c6))
+* refresh Magentic adoption status through protocol v8 ([e7de2d8](https://github.com/andyconley/flow/commit/e7de2d891768f7e0bedef72ed7e4b7d7171b73f8))
+
+### Maintenance
+
+* archive structured verifier contract run ([f78d184](https://github.com/andyconley/flow/commit/f78d184506e0382e2df5042255e12e460d44fdfb))
+* mark structured verifier review accepted ([02f78c5](https://github.com/andyconley/flow/commit/02f78c51ec72082561f2fdee0560e954c50607cf))
+* mark verifier implementation handback ready ([c95433b](https://github.com/andyconley/flow/commit/c95433bfcfab87c16ec98194c38a410fac760c31))
+
 ## [0.32.0](https://github.com/andyconley/flow/compare/v0.31.0...v0.32.0) (2026-09-23)
 
 ### Features
