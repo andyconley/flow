@@ -23,15 +23,15 @@
     "start-definition": "2026-09-23T04:06:00Z",
     "start-implementation": "2026-09-23T14:53:23Z",
     "start-plan": "2026-09-23T14:41:10Z",
+    "start-review": "2026-09-23T17:44:45Z",
     "start-solution": "2026-09-23T12:36:49Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "next_action": "Implementation and deterministic validation complete; ready for flow-review.",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "start-review",
+  "phase": "reviewing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-23T16:59:00Z",
+  "state": "reviewing",
+  "updated_at": "2026-09-23T17:44:45Z",
   "work_id": "structured-verifier-contract"
 }
