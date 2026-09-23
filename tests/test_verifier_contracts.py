@@ -54,6 +54,8 @@ class VerifierContractTests(unittest.TestCase):
             ("missing field", '{"schema_version":1,"decision":"pass","summary":"ok"}', "candidate_fields_invalid"),
             ("unsupported schema", self.candidate(schema_version=2), "candidate_schema_version_unsupported"),
             ("unsupported decision", self.candidate(decision="maybe"), "candidate_decision_invalid"),
+            ("non-string decision", self.candidate(decision=[]), "candidate_decision_invalid"),
+            ("non-string severity", self.candidate(decision="fail", findings=[{"severity":{},"summary":"bad","evidence":"x"}]), "candidate_finding_severity_invalid"),
             ("pass blocking", self.candidate(findings=[{"severity":"blocking","summary":"bad","evidence":"x"}]), "pass_contains_blocking_finding"),
             ("fail no blocking", self.candidate(decision="fail"), "fail_requires_blocking_finding"),
         )

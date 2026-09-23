@@ -80,7 +80,7 @@ def validate_candidate(candidate: object) -> dict[str, Any]:
         raise VerifierContractError("candidate fields are invalid")
     if candidate["schema_version"] != VERIFIER_VERDICT_SCHEMA_VERSION:
         raise VerifierContractError("candidate schema version is unsupported")
-    if candidate["decision"] not in VALID_DECISIONS:
+    if not isinstance(candidate["decision"], str) or candidate["decision"] not in VALID_DECISIONS:
         raise VerifierContractError("candidate decision is invalid")
     _bounded_text(candidate["summary"], "candidate summary", MAX_SUMMARY_BYTES)
     findings = candidate["findings"]
@@ -90,7 +90,7 @@ def validate_candidate(candidate: object) -> dict[str, Any]:
     for finding in findings:
         if not isinstance(finding, dict) or set(finding) != {"severity", "summary", "evidence"}:
             raise VerifierContractError("candidate finding fields are invalid")
-        if finding["severity"] not in VALID_SEVERITIES:
+        if not isinstance(finding["severity"], str) or finding["severity"] not in VALID_SEVERITIES:
             raise VerifierContractError("candidate finding severity is invalid")
         _bounded_text(finding["summary"], "candidate finding summary", MAX_FINDING_SUMMARY_BYTES)
         _bounded_text(finding["evidence"], "candidate finding evidence", MAX_FINDING_EVIDENCE_BYTES)
