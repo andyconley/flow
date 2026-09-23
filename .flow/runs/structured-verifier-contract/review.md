@@ -64,3 +64,47 @@ Roles: coordinator review (code read and probed directly), `quality-reviewer`, a
 
 - **Needs refinement.** Return to implementation for Critical 1 and Important 3, 4, and 5. Important 2 was fixed in this lane and is awaiting commit.
 - Run state stays `reviewing`. `accept-review` was not run. Nothing was published or merged.
+
+## Acceptance Review (after refinement)
+
+Reviewed 2026-09-23 on the final branch: `origin/main..HEAD`, including the refinement commits and the AC8 fix below. The verifier assignment was `acceptance-quality`, and the proof review was `acceptance-test`. Both reports are in `research/`. The orchestration manifest now declares both producers: the original implementation and the refinement.
+
+### Verdict
+
+- **Ready to accept.**
+
+### Findings
+
+- **Critical (found and fixed in this round):** a round-2 refinement change broke AC8. Completed v6 and v7 receipts raised `KeyError: 'verifier_evaluations'`, because the final-evidence check sat outside the v8 guard. The quality reviewer found it. A new regression test reproduced the exact `KeyError` before the fix and passes after it. The reviewer re-checked the fix and accepted.
+- **Important:** none open.
+- **Suggestions (deferred):**
+  - Add a direct test for the stale-evidence gate.
+  - Test attempt inspection on a stored v7 receipt.
+  - Record truncation of output over 64 KiB.
+  - Add tests for `num_predict`, the `rowid` tiebreak, and the supervisor message.
+  - Assert AC5 cap denial with the global budgets explicitly non-exhausted.
+  - The Codex and Claude adapters don't pass `provider_task`. Neither is an approved verifier today.
+
+### Requirement Fit
+
+- **AC1–AC8:** met.
+  - The verifier input carries the Flow output contract.
+  - Observation comes before evaluation, received faults are `unusable`, and replay re-evaluates.
+  - The cap is enforced before send.
+  - Receipts recompute each evaluation and bind it to the evidence.
+  - v6 and v7 receipts keep their original semantics.
+- **AC9:** met. See `research/acceptance-test.md`.
+- **AC10:** met. No live run was required.
+- **Scope drift:** none. The only additions beyond the plan are the round-2 hardening and the AC8 fix, both inside this slice.
+
+### Validation Fit
+
+- The full suite at the final change set (`python3.12 -m unittest discover -s tests`) passed 1370 tests, with 0 skipped. `git diff --check` is clean.
+- Mutation checks are recorded in the `validation-results.md` addendum: five checks, each caught by its intended test. The AC8 regression test was also shown to fail before its fix.
+- The reviewers read the code only. The coordinator ran every suite.
+
+### Residual Risks
+
+- A v8 attempt that crashes cannot be resumed. The replay re-evaluation and stale-evidence paths guard future resume support, but a crash today leaves the attempt `started`, which needs operator reconciliation.
+- Real verifier output hasn't been tested. A controlled live Ollama run is advisable before production reliance.
+
