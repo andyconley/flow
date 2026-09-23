@@ -26,6 +26,7 @@ from execution_contracts import (
     validate_result,
     validate_manager_call,
 )
+from verifier_contracts import validate_evaluation
 
 
 def utc_now() -> str:
@@ -136,6 +137,16 @@ class ExecutionLedger:
                 epoch_id TEXT PRIMARY KEY REFERENCES continuation_epochs(epoch_id),
                 result_json TEXT NOT NULL, result_digest TEXT NOT NULL, observed_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS verifier_inputs (
+                action_id TEXT PRIMARY KEY REFERENCES actions(action_id), recorded_at TEXT NOT NULL,
+                input_json TEXT NOT NULL, input_digest TEXT NOT NULL, diff_digest TEXT NOT NULL,
+                test_digest TEXT NOT NULL, send_claimed_at TEXT, owner_generation INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS verifier_evaluations (
+                action_id TEXT PRIMARY KEY REFERENCES actions(action_id), evaluated_at TEXT NOT NULL,
+                evaluation_json TEXT NOT NULL, evaluation_digest TEXT NOT NULL, outcome TEXT NOT NULL,
+                reason TEXT NOT NULL, owner_generation INTEGER NOT NULL
+            );
             """)
             # SQLite's CREATE TABLE IF NOT EXISTS cannot evolve first-slice
             # databases. These columns make existing records explicitly v1 and
@@ -226,7 +237,7 @@ class ExecutionLedger:
         protocol_version = execution_protocol_version(envelope)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            claim = envelope.get("delivery_lead_claim") if protocol_version == 7 else None
+            claim = envelope.get("delivery_lead_claim") if protocol_version in {7, 8} else None
             owner_generation = claim["generation"] if isinstance(claim, dict) else 1
             owner_actor = claim["lead_id"] if isinstance(claim, dict) else "initial"
             db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor,execution_protocol_version) VALUES(?,?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, owner_generation, owner_actor, protocol_version))
@@ -314,7 +325,7 @@ class ExecutionLedger:
                 if existing[0] != request_json:
                     raise ContractError("action ID reused with changed payload")
                 self._event(db, attempt, aid, "duplicate_request", existing[1])
-                if protocol_version in {2, 3, 4, 5, 6, 7}:
+                if protocol_version in {2, 3, 4, 5, 6, 7, 8}:
                     return self._decision_from_action((aid, *existing[1:]))
                 return {"allowed": False, "reason": "duplicate_request", "action_id": aid}
             slot = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? AND kind='delegate' AND sequence=?", (attempt, action["sequence"])).fetchone()
@@ -326,7 +337,7 @@ class ExecutionLedger:
             unresolved = self._unresolved_action(db, attempt)
             if unresolved:
                 return {"allowed": False, "reason": "reconciliation_required", "action_id": aid}
-            if protocol_version in {2, 3, 4, 5, 6, 7}:
+            if protocol_version in {2, 3, 4, 5, 6, 7, 8}:
                 previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM actions WHERE attempt_id=? AND kind='delegate'", (attempt,)).fetchone()[0]
                 if action["sequence"] != previous + 1:
                     raise ContractError("action sequence is skipped or out of order")
@@ -339,9 +350,9 @@ class ExecutionLedger:
                 "SELECT count(*) FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? AND actions.status IN ('allowed','started','unknown')",
                 (work_id,),
             ).fetchone()[0]
-            if protocol_version in {5, 6, 7}:
+            if protocol_version in {5, 6, 7, 8}:
                 completed_producer = False
-                if protocol_version in {6, 7} and action["instance_id"] in envelope["job_contract"]["producer_instance_ids"]:
+                if protocol_version in {6, 7, 8} and action["instance_id"] in envelope["job_contract"]["producer_instance_ids"]:
                     prior_completed = db.execute(
                         "SELECT request_json FROM actions WHERE attempt_id=? AND status='completed'",
                         (attempt,),
@@ -366,17 +377,30 @@ class ExecutionLedger:
                     "SELECT count(*) FROM actions WHERE attempt_id=? "
                     "AND status IN ('allowed','started','completed','unknown','failed')",
                     (attempt,),
-                ).fetchone()[0] if protocol_version in {6, 7} else 0
+                ).fetchone()[0] if protocol_version in {6, 7, 8} else 0
                 concurrent_count = db.execute(
                     "SELECT count(*) FROM actions WHERE attempt_id=? "
                     "AND status IN ('allowed','started','unknown')",
                     (attempt,),
                 ).fetchone()[0]
+                verifier_reserved = 0
+                is_verifier = protocol_version == 8 and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"]
+                if protocol_version == 8:
+                    verifier_ids = set(envelope["job_contract"]["verifier_instance_ids"])
+                    verifier_reserved = sum(
+                        1 for request_json, status in db.execute(
+                            "SELECT request_json,status FROM actions WHERE attempt_id=? "
+                            "AND status IN ('allowed','started','completed','failed','unknown')", (attempt,)
+                        )
+                        if json.loads(request_json).get("instance_id") in verifier_ids
+                    )
                 if completed_producer:
                     reason = "producer_already_completed"
+                elif is_verifier and verifier_reserved >= envelope["limits"]["max_verifier_calls"]:
+                    reason = "verifier_call_cap"
                 elif action["provider"] in {"codex", "claude"} and paid_count >= envelope["limits"]["max_paid_worker_calls"]:
                     reason = "paid_call_cap"
-                elif (chartered_delegations if protocol_version in {6, 7} else paid_delegations) >= envelope["limits"]["max_delegations"]:
+                elif (chartered_delegations if protocol_version in {6, 7, 8} else paid_delegations) >= envelope["limits"]["max_delegations"]:
                     reason = "delegation_cap"
                 elif concurrent_count >= envelope["limits"]["max_concurrent"]:
                     reason = "concurrency_cap"
@@ -604,7 +628,7 @@ class ExecutionLedger:
             if row is None:
                 raise ContractError("action missing")
             self._assert_owner(db, row[0], generation)
-            if row[3] not in {3, 4, 5, 6} or row[1] != "allowed" or row[2] != grant_id:
+            if row[3] not in {3, 4, 5, 6, 8} or row[1] != "allowed" or row[2] != grant_id:
                 raise ContractError("action is not an unconsumed mixed grant")
             crossed = db.execute(
                 "SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,),
@@ -628,6 +652,126 @@ class ExecutionLedger:
             if existing:
                 raise ContractError("adapter send was already observed")
             self._event(db, row[0], action_id, "adapter_send_started", "flow_observed_boundary")
+
+    @staticmethod
+    def _v8_verifier_action(db: sqlite3.Connection, action_id: str) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        """Return the sealed v8 action and envelope or refuse a foreign caller."""
+        row = db.execute(
+            "SELECT actions.attempt_id,actions.request_json,attempts.envelope_json,attempts.execution_protocol_version "
+            "FROM actions JOIN attempts USING(attempt_id) WHERE actions.action_id=?", (action_id,),
+        ).fetchone()
+        if row is None or row[3] != 8:
+            raise ContractError("structured verifier action is absent or incompatible")
+        action, envelope = json.loads(row[1]), json.loads(row[2])
+        if action.get("instance_id") not in envelope.get("job_contract", {}).get("verifier_instance_ids", []):
+            raise ContractError("action is not an approved structured verifier")
+        return row[0], action, envelope
+
+    def bind_verifier_input(self, action_id: str, verifier_input: dict[str, Any],
+                            diff_digest: str, test_digest: str, *, generation: int) -> dict[str, Any]:
+        """Persist the exact Flow-supplied verifier input before the send boundary."""
+        if not isinstance(verifier_input, dict):
+            raise ContractError("verifier input must be an object")
+        if not all(isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+                   for value in (diff_digest, test_digest)):
+            raise ContractError("verifier evidence digest is invalid")
+        encoded = canonical(verifier_input)
+        input_digest = hashlib.sha256(encoded.encode()).hexdigest()
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt, _, _ = self._v8_verifier_action(db, action_id)
+            self._assert_owner(db, attempt, generation)
+            status = db.execute("SELECT status FROM actions WHERE action_id=?", (action_id,)).fetchone()[0]
+            if status != "allowed":
+                raise ContractError("verifier input requires an unconsumed grant")
+            prior = db.execute(
+                "SELECT input_json,input_digest,diff_digest,test_digest,recorded_at,owner_generation "
+                "FROM verifier_inputs WHERE action_id=?", (action_id,),
+            ).fetchone()
+            record = {"action_id": action_id, "input": verifier_input, "input_digest": input_digest,
+                      "diff_digest": diff_digest, "test_digest": test_digest}
+            if prior:
+                if prior[:4] != (encoded, input_digest, diff_digest, test_digest):
+                    raise ContractError("verifier input conflicts with durable binding")
+                return {**record, "recorded_at": prior[4], "owner_generation": prior[5], "replayed": True}
+            recorded_at = utc_now()
+            db.execute("INSERT INTO verifier_inputs(action_id,recorded_at,input_json,input_digest,diff_digest,test_digest,send_claimed_at,owner_generation) VALUES(?,?,?,?,?,?,NULL,?)",
+                       (action_id, recorded_at, encoded, input_digest, diff_digest, test_digest, generation))
+            self._event(db, attempt, action_id, "verifier_input_recorded", input_digest)
+            return {**record, "recorded_at": recorded_at, "owner_generation": generation, "replayed": False}
+
+    def claim_verifier_send(self, action_id: str, *, generation: int) -> None:
+        """Record that a v8 verifier input crossed Flow's provider-send boundary."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt, _, _ = self._v8_verifier_action(db, action_id)
+            self._assert_owner(db, attempt, generation)
+            row = db.execute("SELECT actions.status,verifier_inputs.send_claimed_at FROM actions JOIN verifier_inputs USING(action_id) WHERE actions.action_id=?", (action_id,)).fetchone()
+            if row is None:
+                raise ContractError("verifier send requires a durable input binding")
+            if row[1] is not None:
+                raise ContractError("verifier send was already claimed")
+            if row[0] != "started":
+                raise ContractError("verifier send requires a consumed grant")
+            claimed_at = utc_now()
+            db.execute("UPDATE verifier_inputs SET send_claimed_at=? WHERE action_id=?", (claimed_at, action_id))
+            self._event(db, attempt, action_id, "verifier_send_claimed", "flow_observed_boundary")
+
+    def record_verifier_evaluation(self, action_id: str, evaluation: dict[str, Any], *, generation: int) -> dict[str, Any]:
+        """Persist one idempotent Flow evaluation after response observation and completion."""
+        validate_evaluation(evaluation)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt, _, _ = self._v8_verifier_action(db, action_id)
+            self._assert_owner(db, attempt, generation)
+            if evaluation["action_id"] != action_id:
+                raise ContractError("verifier evaluation action binding is invalid")
+            input_row = db.execute("SELECT input_digest,diff_digest,test_digest,send_claimed_at FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone()
+            response = db.execute("SELECT result_json FROM response_observations WHERE action_id=?", (action_id,)).fetchone()
+            action_row = db.execute("SELECT status FROM actions WHERE action_id=?", (action_id,)).fetchone()
+            if input_row is None or input_row[3] is None:
+                raise ContractError("verifier evaluation requires a claimed input")
+            if response is None or action_row is None or action_row[0] not in {"completed", "failed"}:
+                raise ContractError("verifier evaluation requires observed completed response")
+            result = json.loads(response[0])
+            if (evaluation["verifier_input_digest"], evaluation["diff_digest"], evaluation["test_evidence_digest"], evaluation["raw_output_digest"]) != (
+                    input_row[0], input_row[1], input_row[2], result.get("output_sha256")):
+                raise ContractError("verifier evaluation evidence binding conflicts")
+            encoded = canonical(evaluation)
+            prior = db.execute("SELECT evaluation_json,evaluation_digest,outcome,reason,evaluated_at,owner_generation FROM verifier_evaluations WHERE action_id=?", (action_id,)).fetchone()
+            if prior:
+                if prior[0] != encoded:
+                    raise ContractError("verifier evaluation conflicts with durable evaluation")
+                return {"evaluation": json.loads(prior[0]), "evaluated_at": prior[4], "owner_generation": prior[5], "replayed": True}
+            evaluated_at = utc_now()
+            db.execute("INSERT INTO verifier_evaluations VALUES(?,?,?,?,?,?,?)", (action_id, evaluated_at, encoded,
+                       evaluation["evaluation_digest"], evaluation["disposition"], evaluation["reason"], generation))
+            self._event(db, attempt, action_id, "verifier_evaluated", evaluation["disposition"])
+            return {"evaluation": evaluation, "evaluated_at": evaluated_at, "owner_generation": generation, "replayed": False}
+
+    @staticmethod
+    def _verifier_usage(db: sqlite3.Connection, attempt_id: str, envelope: dict[str, Any]) -> dict[str, Any]:
+        verifier_ids = set(envelope["job_contract"]["verifier_instance_ids"])
+        rows = db.execute("SELECT action_id,request_json,status,reason FROM actions WHERE attempt_id=?", (attempt_id,)).fetchall()
+        verifier_rows = [row for row in rows if json.loads(row[1]).get("instance_id") in verifier_ids]
+        reserved = sum(row[2] in {"allowed", "started", "completed", "failed", "unknown"} for row in verifier_rows)
+        consumed = 0
+        for action_id, _, status, _ in verifier_rows:
+            claimed = db.execute("SELECT send_claimed_at FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone()
+            consumed += bool((claimed and claimed[0] is not None) or status in {"completed", "failed", "unknown"})
+        denied = sum(row[2] == "denied" and row[3] in {"verifier_call_cap", "verifier_retry_denied"} for row in verifier_rows)
+        evaluations = db.execute("SELECT outcome FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at", (attempt_id,)).fetchall()
+        latest = evaluations[-1][0] if evaluations else None
+        maximum = envelope["limits"]["max_verifier_calls"]
+        return {"maximum": maximum, "reserved": reserved, "consumed": consumed, "denied": denied,
+                "retry_eligible": latest in {"valid_fail", "unusable"} and reserved < maximum}
+
+    def verifier_usage(self, attempt_id: str) -> dict[str, Any]:
+        with self._db() as db:
+            row = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[1] != 8:
+                raise ContractError("structured verifier usage is unavailable")
+            return self._verifier_usage(db, attempt_id, json.loads(row[0]))
 
     def observe_response(self, action_id: str, result: dict[str, Any], generation: int) -> dict[str, Any]:
         """Durably retain a validated normalized response before replaying it."""
@@ -1346,6 +1490,8 @@ class ExecutionLedger:
             events = db.execute("SELECT seq,at,action_id,event,detail FROM events WHERE attempt_id=? ORDER BY seq", (attempt_id,)).fetchall()
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             observations = db.execute("SELECT action_id,observed_at,result_json,result_digest,owner_generation FROM response_observations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY observed_at", (attempt_id,)).fetchall() if "response_observations" in tables else []
+            verifier_inputs = db.execute("SELECT action_id,recorded_at,input_json,input_digest,diff_digest,test_digest,send_claimed_at,owner_generation FROM verifier_inputs WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY recorded_at", (attempt_id,)).fetchall() if "verifier_inputs" in tables else []
+            verifier_evaluations = db.execute("SELECT action_id,evaluated_at,evaluation_json,evaluation_digest,outcome,reason,owner_generation FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at", (attempt_id,)).fetchall() if "verifier_evaluations" in tables else []
             resolutions = db.execute("SELECT resolution_id,action_id,actor,disposition,explanation,evidence_json,result_json,resolution_digest,created_at,owner_generation FROM recovery_resolutions WHERE attempt_id=? ORDER BY created_at", (attempt_id,)).fetchall() if "recovery_resolutions" in tables else []
             replans = db.execute("SELECT replan_id,sequence,request_json,proposal_digest,status,reason FROM replan_decisions WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "replan_decisions" in tables else []
             manager_calls = db.execute("SELECT call_id,sequence,request_json,status,reason,grant_id,result_json,observed_at FROM manager_calls WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "manager_calls" in tables else []
@@ -1355,8 +1501,11 @@ class ExecutionLedger:
             checkpoint_query = "SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,path,bound_at,owner_generation" + (",file_sha256" if "file_sha256" in checkpoint_columns else "") + " FROM checkpoint_links WHERE attempt_id=?"
             checkpoint = db.execute(checkpoint_query, (attempt_id,)).fetchone() if "checkpoint_links" in tables else None
             continuation_rows = db.execute("SELECT epoch_id FROM continuation_epochs WHERE attempt_id=? ORDER BY created_at, rowid", (attempt_id,)).fetchall() if "continuation_epochs" in tables else []
+            attempt_protocol = a[9 if recovery_columns else 6] if protocol_column else 1
+            structured_usage = self._verifier_usage(db, attempt_id, json.loads(a[2])) if attempt_protocol == 8 else None
         continuations = [self.continuation_snapshot(epoch_id) for (epoch_id,) in continuation_rows]
-        return {"attempt_id": a[0], "work_id": a[1], "envelope": json.loads(a[2]), "status": a[3], "reason": a[4], "receipt_path": a[5],
+        envelope = json.loads(a[2])
+        snapshot = {"attempt_id": a[0], "work_id": a[1], "envelope": envelope, "status": a[3], "reason": a[4], "receipt_path": a[5],
                 "recovery_version": a[6] if recovery_columns else 1, "owner_generation": a[7] if recovery_columns else 0, "owner_actor": a[8] if recovery_columns else None,
                 "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
                 "actions": [{"action_id": r[0], "request": json.loads(r[1]), "status": r[2], "reason": r[3], "grant_id": r[4], "result": json.loads(r[5]) if r[5] else None} for r in actions],
@@ -1366,6 +1515,11 @@ class ExecutionLedger:
                 "checkpoint_positions": [{"kind": r[0], "sequence": r[1], "checkpoint_id": r[2], "envelope_digest": r[3], "ledger_seq": r[4], "format_version": r[5], "runtime_version": r[6], "protocol_version": r[7], "path": r[8], "file_sha256": r[9], "file_size": r[10], "bound_at": r[11], "owner_generation": r[12]} for r in checkpoint_positions],
                 "events": [{"seq": r[0], "at": r[1], "action_id": r[2], "event": r[3], "detail": r[4]} for r in events],
                 "response_observations": [{"action_id": r[0], "observed_at": r[1], "result": json.loads(r[2]), "result_digest": r[3], "owner_generation": r[4]} for r in observations],
+                "verifier_inputs": [{"action_id": r[0], "recorded_at": r[1], "input": json.loads(r[2]), "input_digest": r[3], "diff_digest": r[4], "test_digest": r[5], "send_claimed_at": r[6], "owner_generation": r[7]} for r in verifier_inputs],
+                "verifier_evaluations": [{"action_id": r[0], "evaluated_at": r[1], "evaluation": json.loads(r[2]), "evaluation_digest": r[3], "outcome": r[4], "reason": r[5], "owner_generation": r[6]} for r in verifier_evaluations],
                 "resolutions": [{"resolution_id": r[0], "action_id": r[1], "actor": r[2], "disposition": r[3], "explanation": r[4], "evidence": json.loads(r[5]), "result": json.loads(r[6]) if r[6] else None, "resolution_digest": r[7], "created_at": r[8], "owner_generation": r[9]} for r in resolutions],
                 "checkpoint": ({"checkpoint_id": checkpoint[0], "envelope_digest": checkpoint[1], "ledger_seq": checkpoint[2], "format_version": checkpoint[3], "runtime_version": checkpoint[4], "path": checkpoint[5], "bound_at": checkpoint[6], "owner_generation": checkpoint[7], "file_sha256": checkpoint[8] if len(checkpoint) > 8 else None} if checkpoint else None),
                 "continuations": continuations}
+        if structured_usage is not None:
+            snapshot["verifier_usage"] = structured_usage
+        return snapshot

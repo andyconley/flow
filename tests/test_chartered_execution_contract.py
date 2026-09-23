@@ -33,6 +33,20 @@ def chartered() -> dict:
     return env
 
 
+def structured_verifier() -> dict:
+    env = chartered()
+    env["execution_protocol_version"] = 8
+    env["limits"] = {**env["limits"], "max_runtime_seconds": 300, "max_verifier_calls": 2}
+    env.update({
+        "shaper_contract_digest": "e" * 64,
+        "delivery_charter_digest": "f" * 64,
+        "handoff_digest": "0" * 64,
+        "delivery_lead_claim_digest": "1" * 64,
+        "delivery_lead_claim": {"lead_id": "delivery-lead", "generation": 1},
+    })
+    return env
+
+
 class CharteredContractTests(unittest.TestCase):
     def test_v6_envelope_accepts_explicit_generic_job(self) -> None:
         validate_envelope(chartered())
@@ -58,6 +72,15 @@ class CharteredContractTests(unittest.TestCase):
         env["roster"][0]["capabilities"] = ["read"]
         with self.assertRaises(ContractError):
             validate_envelope(env)
+
+    def test_v8_envelope_requires_a_sealed_verifier_allowance(self) -> None:
+        validate_envelope(structured_verifier())
+        for value in (0, 3):
+            with self.subTest(value=value):
+                env = structured_verifier()
+                env["limits"]["max_verifier_calls"] = value
+                with self.assertRaisesRegex(ContractError, "limits"):
+                    validate_envelope(env)
 
 
 if __name__ == "__main__":
