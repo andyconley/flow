@@ -454,6 +454,218 @@
         "mode": "concurrent",
         "group": "solution-exploration"
       }
+    },
+    {
+      "id": "plan-architecture",
+      "lane": "plan",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-architect-delivery-recovery-plan"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/briefs/plan-architecture.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/solution.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/research/solution-options.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/plan-architecture.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/plan-architecture.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "R1 verdict with code citations and file-level chunk-1 design"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-shaping"
+      }
+    },
+    {
+      "id": "plan-validation",
+      "lane": "plan",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-delivery-recovery-plan"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/briefs/plan-test.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/solution.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/research/solution-options.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/plan-validation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/plan-validation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Every chunk-1 AC mapped to named deterministic tests and mutation checks"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-shaping"
+      }
+    },
+    {
+      "id": "plan-review-requirements",
+      "lane": "plan",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-delivery-recovery-plan-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/briefs/plan-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/plan.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/research/plan-architecture.md",
+        ".flow/runs/chartered-delivery-recovery/research/plan-validation.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/plan-review-ba.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/plan-review-ba.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Every AC traced to chunk, commit and named test; silent requirement changes flagged"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    },
+    {
+      "id": "plan-review-product",
+      "lane": "plan",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-delivery-recovery-plan-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/briefs/plan-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/plan.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/research/plan-architecture.md",
+        ".flow/runs/chartered-delivery-recovery/research/plan-validation.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/plan-review-pm.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/plan-review-pm.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Slicing and scope challenged; recommendation on P1-P5"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
     }
   ],
   "shared_state": [],

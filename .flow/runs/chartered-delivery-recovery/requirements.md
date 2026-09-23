@@ -111,6 +111,10 @@ This is one definition, delivered in two chunks, which `flow-solution` orders.
   - The chartered diff re-check is deterministic.
   - v8 durably records the verifier's test digest before the send.
 - **Test seams:** the existing seams prove every boundary except interrupted receipt sealing, which needs a new pre-seal test seam. This comes from the test review.
+- **Amendment (2026-09-23, engineer decision P1 in `plan.md`):**
+  - The pinned MAF restore accepts v8, but it can only restore by **answering** a pending action (`runtime/maf_runner/delivery_lead.py:289`, `:296`).
+  - Boundary (b), an unconsumed grant, therefore needs a new additive `pending` restore mode in the runner. It lands in chunk 1, and ADR 0016 records it.
+  - No requirement or acceptance criterion changes.
 
 ## Evidence
 
