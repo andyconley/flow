@@ -12,8 +12,10 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-SHAPER_CONTRACT_VERSION = 1
-DELIVERY_CHARTER_VERSION = 1
+SHAPER_CONTRACT_VERSION = 2
+DELIVERY_CHARTER_VERSION = 2
+LEGACY_SHAPER_CONTRACT_VERSION = 1
+LEGACY_DELIVERY_CHARTER_VERSION = 1
 
 CAPABILITY_TO_RUNTIME = {
     "scoped-edit": ["read", "edit"],
@@ -96,7 +98,15 @@ INTENT_FIELDS = {
 
 
 def validate_shaper_intent(intent: object) -> dict[str, Any]:
-    intent = _mapping(intent, "shaper_intent", keys=INTENT_FIELDS)
+    """Normalize approved intent for the v2 contract without mutating callers.
+
+    V1 intent did not carry a verifier allowance.  New contracts preserve that
+    input as an explicit default of two total verifier calls.
+    """
+    if not isinstance(intent, dict) or (set(intent) != INTENT_FIELDS and set(intent) != INTENT_FIELDS | {"max_verifier_calls"}):
+        raise DeliveryContractError("shaper_intent is invalid")
+    intent = dict(intent)
+    intent.setdefault("max_verifier_calls", 2)
     _text(intent["problem"], "problem")
     for name in ("intended_users", "outcomes", "scope", "exclusions", "constraints", "assumptions", "acceptance_criteria"):
         values = _list(intent[name], name, nonempty=True)
@@ -138,6 +148,8 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
         raise DeliveryContractError("enforceable tools, paths, or outputs are unsupported")
     if enforceable["max_concurrent"] > delegation["max_delegations"] or enforceable["max_paid_worker_calls"] > delegation["max_delegations"]:
         raise DeliveryContractError("concurrency or paid-worker limit exceeds max_delegations")
+    if type(intent["max_verifier_calls"]) is not int or intent["max_verifier_calls"] not in {1, 2}:
+        raise DeliveryContractError("max_verifier_calls must be one or two")
     _list(envelope["observations"], "budget_safety_envelope observations")
     return intent
 
@@ -152,7 +164,7 @@ def _intent(work_id: str, sources: dict[str, dict[str, str]], approved: dict[str
            ("intended_users", "outcomes", "scope", "exclusions", "constraints", "assumptions", "acceptance_criteria")},
         "source_evidence": [{"source": name, "sha256": source["sha256"], "claim_status": "approved", "provenance": source["path"]} for name, source in sorted(sources.items())],
         **{name: approved[name] for name in ("risks", "open_decisions", "decision_owners", "allowed_specialists",
-           "prohibited_capabilities", "delegation_matrix", "approval_matrix", "budget_safety_envelope",
+           "prohibited_capabilities", "delegation_matrix", "approval_matrix", "budget_safety_envelope", "max_verifier_calls",
            "boundaries", "amendment_lineage", "approval_history", "next_lane_eligibility")},
     }
 
@@ -199,7 +211,8 @@ def build_delivery_charter(shaper: dict[str, Any]) -> dict[str, Any]:
         "provider_capabilities": {"claude": {"binding": "capability"}, "codex": {"binding": "capability"}, "ollama": {"binding": "verifier"}},
         "limits": {"delegations": shaper["delegation_matrix"]["max_delegations"],
                    "concurrency": enforceable["max_concurrent"], "replans": enforceable["max_replans"],
-                   **{name: enforceable[name] for name in ("runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")}},
+                   **{name: enforceable[name] for name in ("runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")},
+                   "max_verifier_calls": shaper["max_verifier_calls"]},
         "approval_matrix": shaper["approval_matrix"], "producer_verifier_rules": {"distinct_identities": True, "verifier_read_only": True},
         "validation": {"flow_observed_diff_and_test_before_verifier": True}, "recovery": {"unknown_action_blocks_successor": True, "takeover": "explicit_resume_or_supersede"},
         "escalation_stop_cancellation": {"scope_expansion": "halt_for_shaper", "cancellation": "Flow_only"},
@@ -217,7 +230,7 @@ def _validate_digest(record: dict[str, Any], label: str) -> None:
 
 
 def validate_shaper_contract(record: dict[str, Any]) -> None:
-    if not isinstance(record, dict) or record.get("schema_version") != SCHEMA_VERSION or record.get("version") != SHAPER_CONTRACT_VERSION or record.get("kind") != "shaper_contract":
+    if not isinstance(record, dict) or record.get("schema_version") != SCHEMA_VERSION or record.get("version") not in {LEGACY_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION} or record.get("kind") != "shaper_contract":
         raise DeliveryContractError("unsupported Shaper Contract version")
     work_id = _text(record.get("run_id"), "run_id")
     _text(record.get("shaper_contract_id"), "shaper_contract_id")
@@ -248,11 +261,16 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
         raise DeliveryContractError("delegated expansion must remain explicitly disabled")
     if record["approval_matrix"].get("provider_dispatch") != "Flow_grant":
         raise DeliveryContractError("provider dispatch must require a Flow grant")
+    if record["version"] == SHAPER_CONTRACT_VERSION:
+        if type(record.get("max_verifier_calls")) is not int or record["max_verifier_calls"] not in {1, 2}:
+            raise DeliveryContractError("Shaper Contract max_verifier_calls is invalid")
+    elif "max_verifier_calls" in record:
+        raise DeliveryContractError("legacy Shaper Contract cannot carry max_verifier_calls")
     _validate_digest(record, "Shaper Contract")
 
 
 def validate_delivery_charter(record: dict[str, Any]) -> None:
-    if not isinstance(record, dict) or record.get("schema_version") != SCHEMA_VERSION or record.get("charter_version") != DELIVERY_CHARTER_VERSION or record.get("kind") != "delivery_charter":
+    if not isinstance(record, dict) or record.get("schema_version") != SCHEMA_VERSION or record.get("charter_version") not in {LEGACY_DELIVERY_CHARTER_VERSION, DELIVERY_CHARTER_VERSION} or record.get("kind") != "delivery_charter":
         raise DeliveryContractError("unsupported Delivery Charter version")
     work_id = _text(record.get("run_id"), "run_id")
     _text(record.get("charter_id"), "charter_id")
@@ -262,7 +280,7 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
         raise DeliveryContractError("Delivery Charter attempt policy is invalid")
     source = _mapping(record.get("shaper_contract"), "shaper_contract", keys={"id", "version", "digest"})
     _text(source["id"], "shaper_contract id")
-    if source["version"] != SHAPER_CONTRACT_VERSION:
+    if source["version"] not in {LEGACY_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION}:
         raise DeliveryContractError("shaper_contract version is invalid")
     _sha(source["digest"], "shaper_contract digest")
     for name in ("outcomes", "scope", "exclusions", "constraints", "acceptance_criteria", "accepted_risks", "handback", "amendment_lineage"):
@@ -280,9 +298,17 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
             raise DeliveryContractError("specialist capability projection is invalid")
     _list(record.get("prohibited_capabilities"), "prohibited_capabilities", nonempty=True)
     _mapping(record.get("provider_capabilities"), "provider_capabilities")
-    limits = _mapping(record.get("limits"), "limits", keys={"delegations", "concurrency", "replans", "runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls"})
+    limit_keys = {"delegations", "concurrency", "replans", "runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls"}
+    if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+        limit_keys.add("max_verifier_calls")
+    limits = _mapping(record.get("limits"), "limits", keys=limit_keys)
     if not all(type(limits[key]) is int and limits[key] >= 0 for key in ("delegations", "concurrency", "replans", "runtime_seconds", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")):
         raise DeliveryContractError("Delivery Charter numeric limits are invalid")
+    if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+        if source["version"] != SHAPER_CONTRACT_VERSION or limits["max_verifier_calls"] not in {1, 2}:
+            raise DeliveryContractError("Delivery Charter max_verifier_calls is invalid")
+    elif "max_verifier_calls" in limits:
+        raise DeliveryContractError("legacy Delivery Charter cannot carry max_verifier_calls")
     for name in ("approval_matrix", "producer_verifier_rules", "validation", "recovery", "escalation_stop_cancellation", "boundaries", "approver"):
         _mapping(record.get(name), name)
     if record["approval_matrix"].get("provider_dispatch") != "Flow_grant":

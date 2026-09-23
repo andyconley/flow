@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from verifier_contracts import VERIFIER_EVALUATION_SCHEMA_VERSION
+
 SCHEMA_VERSION = 1
 EXECUTION_PROTOCOL_VERSION = 2
 MIXED_PROTOCOL_VERSION = 3
@@ -14,11 +16,46 @@ CLAUDE_PROTOCOL_VERSION = 4
 MAGENTIC_PROTOCOL_VERSION = 5
 CHARTERED_PROTOCOL_VERSION = 6
 DELIVERY_PROTOCOL_VERSION = 7
+STRUCTURED_VERIFIER_PROTOCOL_VERSION = 8
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
 MIXED_ASSIGNMENTS = (("test-engineer", "ollama"), ("lead-developer", "codex"))
 CLAUDE_ASSIGNMENTS = (("test-engineer", "ollama"), ("quality-reviewer", "claude"))
+
+
+def is_magentic_protocol(protocol_version: int) -> bool:
+    """Whether an execution protocol uses the supervised Magentic boundary."""
+    return protocol_version in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION,
+                                DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION}
+
+
+def is_chartered_protocol(protocol_version: int) -> bool:
+    """Whether an execution protocol carries a chartered specialist job."""
+    return protocol_version in {CHARTERED_PROTOCOL_VERSION, DELIVERY_PROTOCOL_VERSION,
+                                STRUCTURED_VERIFIER_PROTOCOL_VERSION}
+
+
+def is_delivery_protocol(protocol_version: int) -> bool:
+    """Whether an execution protocol projects sealed Delivery authority."""
+    return protocol_version in {DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION}
+
+
+def has_structured_verifier_evaluations(protocol_version: int) -> bool:
+    """Whether receipts require Flow-owned structured verifier evaluations."""
+    return protocol_version == STRUCTURED_VERIFIER_PROTOCOL_VERSION
+
+
+def structured_verifier_evaluation_schema_version(protocol_version: int) -> int | None:
+    """Return the evaluation schema for protocols that persist Flow verdicts."""
+    return VERIFIER_EVALUATION_SCHEMA_VERSION if has_structured_verifier_evaluations(protocol_version) else None
+
+
+def supported_execution_protocol_versions() -> frozenset[int]:
+    """Return all known protocol numbers, including dormant v8 capability."""
+    return frozenset({1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION,
+                      MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION, DELIVERY_PROTOCOL_VERSION,
+                      STRUCTURED_VERIFIER_PROTOCOL_VERSION})
 
 
 class ContractError(ValueError):

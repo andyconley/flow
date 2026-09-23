@@ -3510,6 +3510,7 @@ class FlowCliTests(FlowCliHarness):
                 "sync",
                 "telemetry_freshness",
                 "usage_store",
+                "verifier_contracts",
             ],
         )
 
