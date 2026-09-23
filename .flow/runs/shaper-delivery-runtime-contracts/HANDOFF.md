@@ -12,7 +12,8 @@ The change turns approved Shaper intent into durable, inspectable delivery autho
 
 ## Validation
 
-- The full implementation suite passed: **1,316 tests passed, 1 skipped** in 131.079 seconds.
+- The final full implementation suite passed after acceptance-review corrections: **1,321 tests passed, 1 skipped** in 137.725 seconds.
+- The accepted runtime limit is projected into protocol v7 and governs the Magentic supervisor plus Claude, Codex, and Ollama adapter calls.
 - Focused contract, lifecycle, compatibility, gateway, recovery, and Magentic checks passed; the approval-boundary suite passed after binding the reviewed `shaper_intent` bytes and digest.
 - Orchestration dispatch validation passed with no findings.
 - `git diff --check` passed.

@@ -7,6 +7,7 @@
     "orchestration_manifest": ".flow/runs/shaper-delivery-runtime-contracts/orchestration.json",
     "plan": ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
     "requirements": ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+    "review": ".flow/runs/shaper-delivery-runtime-contracts/review.md",
     "solution": ".flow/runs/shaper-delivery-runtime-contracts/solution.md",
     "validation_plan": ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md"
   },
@@ -15,6 +16,7 @@
     "risk": "owned"
   },
   "gates": {
+    "accept-review": "2026-09-23T03:36:53Z",
     "approve-definition": "2026-09-22T23:53:06Z",
     "approve-plan": "2026-09-23T00:38:13Z",
     "approve-solution": "2026-09-23T00:20:46Z",
@@ -22,14 +24,15 @@
     "start-definition": "2026-09-22T03:11:02Z",
     "start-implementation": "2026-09-23T00:38:13Z",
     "start-plan": "2026-09-23T00:22:56Z",
+    "start-review": "2026-09-23T02:03:44Z",
     "start-solution": "2026-09-22T23:57:10Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-23T01:55:27Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-23T03:36:53Z",
   "work_id": "shaper-delivery-runtime-contracts"
 }

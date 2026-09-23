@@ -711,6 +711,92 @@
         "mode": "serialized",
         "group": "implementation-handback"
       }
+    },
+    {
+      "id": "acceptance-quality-review",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-acceptance"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/acceptance-quality-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        ".flow/runs/shaper-delivery-v7-live-proof",
+        "cli",
+        "docs",
+        "runtime",
+        "scaffolds/default",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/acceptance-quality-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Judge requirement, technical, architecture, risk, and provenance fit with a clear verdict."
+      ],
+      "claim_statuses": [
+        "observed",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "acceptance-review"
+      }
+    },
+    {
+      "id": "acceptance-test-review",
+      "lane": "review",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-acceptance"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/acceptance-test-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        ".flow/runs/shaper-delivery-v7-live-proof",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/research/acceptance-test-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Judge whether deterministic and live proof establishes every in-scope acceptance criterion."
+      ],
+      "claim_statuses": [
+        "observed",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "acceptance-review"
+      }
     }
   ],
   "shared_state": [],
@@ -802,11 +888,12 @@
     "producer_assignments": [
       "impl-domain-lifecycle",
       "impl-legacy-inspection",
-      "impl-runtime-projection"
+      "impl-runtime-projection",
+      "implementation-handback-writer"
     ],
-    "evidence_collector_assignment": "plan-test",
-    "verifier_assignment": "implementation-quality-review",
+    "evidence_collector_assignment": "implementation-handback-writer",
+    "verifier_assignment": "acceptance-quality-review",
     "independent": true,
-    "artifact_path": ".flow/runs/shaper-delivery-runtime-contracts/verification.md"
+    "artifact_path": ".flow/runs/shaper-delivery-runtime-contracts/review.md"
   }
 }

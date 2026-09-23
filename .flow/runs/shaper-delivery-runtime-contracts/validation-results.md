@@ -5,7 +5,8 @@
 - Focused contract, lifecycle, compatibility, gateway, recovery, and Magentic suite: 87 tests passed before the final approval-boundary correction.
 - Approval-boundary lifecycle suite: 12 tests passed after requiring and digest-binding `shaper_intent` at `approve-definition`.
 - Independent quality re-review: APPROVE; 42 focused tests passed and `git diff --check` passed.
-- Full implementation suite after all corrections: 1,316 tests passed, 1 skipped, in 131.079 seconds.
+- Final full implementation suite after acceptance-review corrections: 1,321 tests passed, 1 skipped, in 137.725 seconds.
+- Runtime-bound propagation checks prove the sealed `runtime_seconds` value reaches the v7 execution envelope, Magentic supervisor, and the Claude, Codex, and Ollama provider adapters.
 - Orchestration dispatch validation: passed with no findings.
 - Data review: acceptable for the v7 handback; durable SQLite migration history remains a nonblocking follow-up.
 
@@ -26,7 +27,7 @@ The `start-plan` comparison between the approved Shaper-intent digest and curren
 - Flow ran `tests/test_documentation_contracts.py`; it passed.
 - The distinct `ollama-verifier` made three completed physical `llama3.1:8b` calls. Its responses were not strong enough for the manager, which then proposed Codex twice; Flow denied both proposals with `producer_already_completed`.
 - The receipt links Shaper Contract `b44fe2df5b98132214f9689fb5afbb973642e34190fcdf68423b78a671eaa5dd`, Delivery Charter `1c7695f5d2c044d72b60a5e11fec13c352fd1ebc79c872ea8606e632ba8259a1`, handoff `6d249cfb7f431e70818bbc497958a06ad56ea200edecc9298cb9a37ee71887af`, and lead claim `0743ba21e2d3c849fbb3ff8151d8fbb60f5c8afc234d50c9569e374cbc3b8a36`.
-- Full suite in the changed live worktree: 1,316 tests passed, 1 skipped, in 133.094 seconds.
+- Full suite in the changed live worktree: 1,316 tests passed, 1 skipped, in 133.094 seconds. This historical live proof predates the acceptance-review authority corrections; the corrected contracts are established by the final deterministic suite above.
 
 ## Evidence verdicts
 
