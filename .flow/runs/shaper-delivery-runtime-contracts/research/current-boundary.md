@@ -31,3 +31,5 @@ The Flow model advisor recommended the judgment profile, provisionally mapped to
 - Delivered advice: leave requirements explicitly unresolved when evidence is thin.
 - Disposition: applied. The Work adapter/locality acceptance is now conditional on a bounded feasibility probe, while the overall cross-runtime target remains explicit.
 - Post-receipt digest: `87cbc0ddca3302614ea57911094aea6705b36607a715bd20790d496bde589fbf`.
+
+Subsequent solution engagement superseded the feasibility-probe condition: Andy Conley confirmed ChatGPT Work local access and directed that no feasibility probe is required. The solution retains direct runtime binding validation and records the supersession without rewriting the approved definition event.

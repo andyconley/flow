@@ -1,2 +1,3 @@
 {"artifacts": {}, "at": "2026-09-22T03:11:02Z", "dispositions": {}, "event": "start-definition", "from": null, "to": "defining"}
 {"artifacts": {"acceptance_criteria": ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md", "orchestration_manifest": ".flow/runs/shaper-delivery-runtime-contracts/orchestration.json", "requirements": ".flow/runs/shaper-delivery-runtime-contracts/requirements.md"}, "at": "2026-09-22T23:53:06Z", "dispositions": {}, "event": "approve-definition", "from": "defining", "to": "definition_approved"}
+{"artifacts": {}, "at": "2026-09-22T23:57:10Z", "dispositions": {}, "event": "start-solution", "from": "definition_approved", "to": "solutioning"}

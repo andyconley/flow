@@ -9,3 +9,7 @@
 - Provider substitution, transition replay/withdrawal, runtime conflicts/locality, Delivery Lead replacement, research-output status, and malformed migration handling: **accepted as requirements changes** after business-analysis review.
 - Exact Work adapter/locality mechanics: **unverified and explicitly unresolved**; a bounded feasibility probe must define them before cross-runtime implementation acceptance is fixed.
 - Requirements decision: **approved 2026-09-22 by Andy Conley**, including the explicitly unresolved items being carried into `flow-solution`.
+- Solution choice: **accepted by Andy Conley** — canonical Flow contracts with a projection into the existing gateway, plus an end-to-end first slice.
+- ChatGPT Work feasibility probe: **superseded by explicit engineer decision** — local access is established; retain runtime project/worktree binding validation.
+- V6 compatibility: **clarified by engineer** — records remain readable/inspectable but need not be executable or resumable through the new contract.
+- Ordinary Chat MCP ingress: remains **deferred**.

@@ -8,14 +8,15 @@
   "dispositions": {},
   "gates": {
     "approve-definition": "2026-09-22T23:53:06Z",
-    "start-definition": "2026-09-22T03:11:02Z"
+    "start-definition": "2026-09-22T03:11:02Z",
+    "start-solution": "2026-09-22T23:57:10Z"
   },
-  "lane": "define",
-  "last_event": "approve-definition",
-  "phase": "definition_approved",
+  "lane": "solution",
+  "last_event": "start-solution",
+  "phase": "solutioning",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "definition_approved",
-  "updated_at": "2026-09-22T23:53:06Z",
+  "state": "solutioning",
+  "updated_at": "2026-09-22T23:57:10Z",
   "work_id": "shaper-delivery-runtime-contracts"
 }

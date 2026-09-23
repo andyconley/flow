@@ -56,6 +56,54 @@
       "success_criteria": ["Confirm boundaries, transition semantics, reuse, and failure cases"],
       "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
       "coordination": {"mode": "concurrent", "group": "definition-review"}
+    },
+    {
+      "id": "solution-design",
+      "lane": "solution",
+      "role": "solution-architect",
+      "provider": {"kind": "agent", "id": "flow-solution-architect-runtime-contracts"},
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/solution-brief.md",
+      "input_evidence": [".flow/runs/shaper-delivery-runtime-contracts/requirements.md", ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md", "docs/maf-adoption-design.md", "docs/adr/0011-supervise-maf-behind-flow-gateway.md", "docs/adr/0012-flow-owned-maf-recovery.md"],
+      "read_scopes": [".flow", "cli", "docs", "scaffolds/default", "tests"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/shaper-delivery-runtime-contracts/research/solution-architect-review.md", "format": "markdown"},
+      "success_criteria": ["Compare at least two viable architectures and recommend staged contracts and boundaries"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "solution-review"}
+    },
+    {
+      "id": "platform-review",
+      "lane": "solution",
+      "role": "architect",
+      "provider": {"kind": "agent", "id": "flow-architect-runtime-contracts"},
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/solution-brief.md",
+      "input_evidence": [".flow/runs/shaper-delivery-runtime-contracts/requirements.md", "docs/maf-adoption-design.md", "docs/adr/0011-supervise-maf-behind-flow-gateway.md"],
+      "read_scopes": [".flow", "cli", "docs", "scaffolds/default", "tests"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/shaper-delivery-runtime-contracts/research/platform-architecture-review.md", "format": "markdown"},
+      "success_criteria": ["Challenge domain boundaries, versioning, ownership, compatibility, and decision durability"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "solution-review"}
+    },
+    {
+      "id": "solution-test-review",
+      "lane": "solution",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "flow-test-engineer-runtime-contracts"},
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/solution-brief.md",
+      "input_evidence": [".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md", "tests/test_chartered_delivery_gateway.py", "tests/test_execution_recovery.py"],
+      "read_scopes": [".flow", "cli", "docs", "scaffolds/default", "tests"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/shaper-delivery-runtime-contracts/research/solution-test-review.md", "format": "markdown"},
+      "success_criteria": ["Define deterministic contract, migration-readability, recovery, and real-job proof strategy"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "concurrent", "group": "solution-review"}
     }
   ],
   "shared_state": [],
@@ -64,14 +112,17 @@
     "status": "resolved",
     "claims": [
       {"id": "existing-control-plane", "status": "observed", "disposition": "accepted", "evidence": ["docs/maf-adoption-design.md"]},
-      {"id": "runtime-neutral-contracts", "status": "recommended", "disposition": "deferred", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/requirements.md"]},
+      {"id": "runtime-neutral-contracts", "status": "recommended", "disposition": "accepted", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/requirements.md", ".flow/runs/shaper-delivery-runtime-contracts/solution.md"]},
+      {"id": "contract-projection-architecture", "status": "recommended", "disposition": "accepted", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/solution.md"]},
+      {"id": "work-feasibility-probe", "status": "recommended", "disposition": "rejected", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/reconciliation.md"]},
+      {"id": "v6-inspection-only", "status": "recommended", "disposition": "accepted", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/solution.md"]},
       {"id": "ordinary-chat-ingress", "status": "unverified", "disposition": "deferred", "evidence": [".flow/runs/shaper-delivery-runtime-contracts/definition.md"]}
     ]
   },
   "verification": {
-    "producer_assignments": ["requirements-review", "product-review"],
-    "evidence_collector_assignment": "product-review",
-    "verifier_assignment": "architecture-review",
+    "producer_assignments": ["solution-design"],
+    "evidence_collector_assignment": "solution-test-review",
+    "verifier_assignment": "platform-review",
     "independent": true,
     "artifact_path": ".flow/runs/shaper-delivery-runtime-contracts/verification.md"
   }
