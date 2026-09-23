@@ -63,4 +63,3 @@ The three authority-boundary defects found during acceptance review are resolved
 - SQLite migration history, default attempt selection, deletion evidence, and cumulative wall-clock budgeting remain explicit later-operability work.
 - Security/privacy review found no acceptance blocker for this local slice: provider sends remain Flow-granted, worktree paths are bounded, diagnostic traces are private, and the reviewed receipt contains no credential material.
 - UX is limited to CLI inspection and diagnostics; those surfaces are documented and deterministically covered.
-
