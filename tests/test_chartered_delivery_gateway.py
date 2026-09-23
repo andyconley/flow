@@ -16,7 +16,8 @@ from delivery_gateway import (ContractError, _default_worker_adapter,
                               _execute_prepared_delivery, execute_chartered_delivery,
                               prepare_chartered_delivery)
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
-                                 expected_magentic_action_id, validate_action, validate_receipt)
+                                 expected_magentic_action_id, validate_action, validate_envelope,
+                                 validate_receipt)
 from delivery_contracts import build_delivery_charter, build_shaper_contract, digest as delivery_digest
 from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
@@ -656,6 +657,66 @@ class CharteredPreparationTests(unittest.TestCase):
                 mutate(changed)
                 with self.assertRaises(ExecutionContractError):
                     validate_receipt(envelope, changed)
+
+    def test_v8_receipt_recovery_block_is_required_and_bound_to_its_evidence(self):
+        result, _, _, captured = self._run_v8([self.PASS])
+        envelope = captured["envelope"]
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        validate_receipt(envelope, receipt)
+        editor = receipt["actions"][0]["action_id"]
+        recovered = copy.deepcopy(receipt)
+        recovered["actions"][0]["reason"] = "recovery_regranted"
+        for item in recovered["verifier_inputs"] + recovered["verifier_evaluations"]:
+            item["owner_generation"] = 2
+        recovered["recovery"] = {
+            "schema_version": 1, "resolutions": [], "replaced_draft_sha256": None,
+            "interruptions": [{"interruption_id": "i1", "cause": "unmarked_process_exit",
+                               "owner_generation": 1, "recorded_at": "2026-09-23T00:00:00+00:00"}],
+            "recoveries": [{"recovery_id": "r1", "expected_generation": 1, "generation": 2, "lead_generation": 1,
+                            "actor": "flow-chartered-resume", "mode": "pending",
+                            "released_action_ids": [editor], "claimed_at": "2026-09-23T00:00:01+00:00"}]}
+        validate_receipt(envelope, recovered)
+        mutations = {
+            "recovery generation changed": lambda r: r["recovery"]["recoveries"][0].update(generation=3),
+            "recovery marker removed": lambda r: r.pop("recovery"),
+            "lead generation changed": lambda r: r["recovery"]["recoveries"][0].update(lead_generation=2),
+            "released grant removed": lambda r: r["recovery"]["recoveries"][0].update(released_action_ids=[]),
+            "evaluation generation outside chain": lambda r: r["verifier_evaluations"][0].update(owner_generation=5),
+            "interruption cause invented": lambda r: r["recovery"]["interruptions"][0].update(cause="timeout"),
+            "resolution added": lambda r: r["recovery"].update(resolutions=["extra"]),
+            "draft digest malformed": lambda r: r["recovery"].update(replaced_draft_sha256="draft"),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(recovered)
+                mutate(changed)
+                with self.assertRaises(ExecutionContractError):
+                    validate_receipt(envelope, changed)
+        marker_only = copy.deepcopy(receipt)
+        marker_only["verifier_evaluations"][0]["owner_generation"] = 2
+        with self.assertRaisesRegex(ExecutionContractError, "lacks its recovery block"):
+            validate_receipt(envelope, marker_only)
+
+    def test_v8_predecessor_links_are_validated_only_for_v8(self):
+        envelope, _, _, _ = self.prepare()
+        envelope = copy.deepcopy(envelope)
+        envelope["delivery_lead_claim"]["generation"] = 2
+        valid = {"attempt_id": "a" * 32, "terminal_status": "superseded", "receipt_sha256": None, "lead_generation": 1}
+        envelope["predecessors"] = [valid]
+        validate_envelope(envelope)
+        cases = {
+            "empty list": [],
+            "current generation": [{**valid, "lead_generation": 2}],
+            "non-terminal status": [{**valid, "terminal_status": "started"}],
+            "missing sealed digest": [{**valid, "terminal_status": "failed"}],
+            "duplicate": [valid, valid],
+            "self link": [{**valid, "attempt_id": envelope["attempt_id"]}],
+            "extra field": [{**valid, "note": "x"}],
+        }
+        for label, predecessors in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaises(ExecutionContractError):
+                    validate_envelope({**envelope, "predecessors": predecessors})
 
     def test_completed_v7_receipt_keeps_its_original_validation_semantics(self):
         result, _, _, captured = self._run_v8([self.PASS])
