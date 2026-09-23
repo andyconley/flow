@@ -1080,6 +1080,17 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         write_atomic(attempt_dir / "interruption.json", canonical(interruption) + "\n", mode=0o600)
         return {"attempt_id": aid, "status": "interrupted", "reason": failure,
                 "receipt_path": None, "resume_available": True}
+    if structured_verifier and (uncertain or (failure and recoverable_transport_failure)):
+        # v8 never seals transport loss or uncertainty. The attempt stays
+        # started; an explicit recovery reconciles and continues it.
+        cause = "reconciliation_required" if uncertain else "transport"
+        with authority_guard(), ledger.send_lock():
+            interruption = ledger.record_interruption(aid, cause, failure, generation=generation)
+        blocking = [item.get("action_id") or item.get("call_id") for item in actions + manager_calls
+                    if item["status"] in {"started", "unknown"}]
+        return {"attempt_id": aid, "status": "interrupted", "reason": cause, "detail": failure[:512],
+                "interruption_id": interruption["interruption_id"], "receipt_path": None,
+                "resume_available": not uncertain, "blocking": blocking}
     receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
                                                edit_evidence=edit_evidence, test_evidence=test_evidence,
                                                verifier_input_sha256=verifier_input_sha256,

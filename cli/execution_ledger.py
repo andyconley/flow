@@ -1250,19 +1250,64 @@ class ExecutionLedger:
     def finish_attempt(self, attempt_id: str, status: str, reason: str, receipt_path: str, *, generation: int | None = None) -> None:
         if status not in {"completed", "failed", "denied", "unknown"}:
             raise ContractError("invalid attempt terminal status")
+        receipt = Path(receipt_path) if isinstance(receipt_path, str) and receipt_path else None
+        receipt_sha256 = (hashlib.sha256(receipt.read_bytes()).hexdigest()
+                          if receipt is not None and receipt.is_file() and not receipt.is_symlink() else None)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
             row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             if row is None or row[0] != "started":
                 raise ContractError("attempt not active")
+            if row[1] == 8 and status == "unknown":
+                # v8 records an interruption and stays recoverable instead.
+                raise ContractError("protocol v8 never seals an unknown receipt")
             if row[1] in {5, 6, 7, 8}:
                 uncertain = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 uncertain += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 if (uncertain > 0) != (status == "unknown"):
                     raise ContractError("Magentic terminal status contradicts uncertain sends")
-            db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
+            if row[1] == 8:
+                if receipt_sha256 is None:
+                    raise ContractError("protocol v8 seal requires the written receipt")
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
+                           (status, reason, receipt_path, receipt_sha256, attempt_id))
+            else:
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
+
+    INTERRUPTION_CAUSES = frozenset({"transport", "reconciliation_required", "unmarked_process_exit"})
+
+    @staticmethod
+    def _record_interruption_locked(db: sqlite3.Connection, attempt_id: str, cause: str, detail: str,
+                                    owner_generation: int) -> dict[str, Any]:
+        prior = db.execute("SELECT interruption_id,ledger_seq,recorded_at FROM attempt_interruptions "
+                           "WHERE attempt_id=? AND owner_generation=? AND cause=?",
+                           (attempt_id, owner_generation, cause)).fetchone()
+        if prior:
+            return {"interruption_id": prior[0], "cause": cause, "owner_generation": owner_generation,
+                    "ledger_seq": prior[1], "recorded_at": prior[2], "replayed": True}
+        interruption_id = uuid.uuid4().hex
+        high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+        recorded_at = utc_now()
+        db.execute("INSERT INTO attempt_interruptions VALUES(?,?,?,?,?,?,?)",
+                   (interruption_id, attempt_id, cause, detail[:512], owner_generation, high_water, recorded_at))
+        ExecutionLedger._event(db, attempt_id, None, "attempt_interrupted",
+                               canonical({"interruption_id": interruption_id, "cause": cause}))
+        return {"interruption_id": interruption_id, "cause": cause, "owner_generation": owner_generation,
+                "ledger_seq": high_water, "recorded_at": recorded_at, "replayed": False}
+
+    def record_interruption(self, attempt_id: str, cause: str, detail: str, *, generation: int) -> dict[str, Any]:
+        """Record why a v8 attempt stopped while leaving it started and recoverable."""
+        if cause not in self.INTERRUPTION_CAUSES or not isinstance(detail, str):
+            raise ContractError("attempt interruption is invalid")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[1] != 8 or row[0] != "started":
+                raise ContractError("only a started protocol v8 attempt can be interrupted")
+            return self._record_interruption_locked(db, attempt_id, cause, detail, generation)
 
     def finish_magentic_continuation(self, epoch_id: str, status: str, reason: str,
                                      receipt_path: str, *, generation: int) -> None:

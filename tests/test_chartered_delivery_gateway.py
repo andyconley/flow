@@ -722,10 +722,15 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertIsNotNone(receipt["evidence"]["edit"])
         self.assertIsNone(receipt["evidence"]["tests"])
 
-    def test_v7_transport_loss_after_producer_seals_nonresumable_receipt(self):
+    def test_v8_transport_loss_after_producer_records_a_resumable_interruption(self):
+        # Formerly test_v7_transport_loss_after_producer_seals_nonresumable_receipt:
+        # the gateway always mints v8, and v8 now records an interruption
+        # instead of sealing a non-resumable failed receipt.
         calls = []
+        captured = {}
 
         def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
             proposal = self._proposal(envelope, "editor", 1)
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
             checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
@@ -745,14 +750,54 @@ class CharteredPreparationTests(unittest.TestCase):
             result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
                                                 supervisor=supervisor, worker_adapter=worker)
         self.assertEqual(calls, ["editor"])
-        self.assertEqual(result["status"], "failed")
-        self.assertFalse(result.get("resume_available", False))
-        receipt_path = Path(result["receipt_path"])
-        self.assertTrue(receipt_path.is_file())
-        receipt = json.loads(receipt_path.read_text())
-        self.assertEqual(receipt["status"], "failed")
-        self.assertEqual([action["status"] for action in receipt["actions"]], ["completed"])
-        self.assertEqual(receipt["evidence"]["tests"]["status"], "passed")
+        self.assertEqual((result["status"], result["reason"]), ("interrupted", "transport"))
+        self.assertTrue(result["resume_available"])
+        self.assertEqual(result["blocking"], [])
+        self.assertIsNone(result["receipt_path"])
+        attempt_dir = Path(captured["envelope"]["checkpoint_dir"]).parent
+        self.assertFalse((attempt_dir / "receipt.json").exists())
+        snapshot = ExecutionLedger(attempt_dir.parent / "ledger.sqlite", read_only=True).snapshot(result["attempt_id"])
+        self.assertEqual(snapshot["status"], "started")
+        self.assertEqual([item["cause"] for item in snapshot["interruptions"]], ["transport"])
+        self.assertEqual([action["status"] for action in snapshot["actions"]], ["completed"])
+
+    def test_v8_uncertain_send_records_reconciliation_interruption_not_unknown_receipt(self):
+        def worker(action, *, envelope, workspace):
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            raise OSError("simulated connection reset during verifier send")
+
+        captured = {}
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
+            for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual((result["status"], result["reason"]), ("interrupted", "reconciliation_required"))
+        self.assertFalse(result["resume_available"])
+        self.assertEqual(len(result["blocking"]), 1)
+        attempt_dir = Path(captured["envelope"]["checkpoint_dir"]).parent
+        self.assertFalse((attempt_dir / "receipt.json").exists())
+        ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+        snapshot = ledger.snapshot(result["attempt_id"])
+        self.assertEqual(snapshot["status"], "started")
+        self.assertEqual([item["status"] for item in snapshot["actions"]], ["completed", "unknown"])
+        with self.assertRaisesRegex(ExecutionContractError, "never seals an unknown"):
+            ledger.finish_attempt(result["attempt_id"], "unknown", "reconciliation_required",
+                                  str(attempt_dir / "receipt.json"), generation=1)
 
     def test_v7_editor_head_drift_halts_after_one_send(self):
         calls = []
