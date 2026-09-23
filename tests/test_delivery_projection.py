@@ -58,6 +58,19 @@ class DeliveryProjectionTests(unittest.TestCase):
         view = inspect_delivery_projection(envelope(), {"attempt_id": "attempt", "status": "started", "owner_generation": 2, "actions": []})
         self.assertFalse(view["executable"])
 
+    def test_v8_projects_structured_verifier_state(self):
+        value = envelope()
+        value["execution_protocol_version"] = 8
+        value["limits"]["max_verifier_calls"] = 2
+        snapshot = {"attempt_id": "attempt", "status": "started", "owner_generation": 1,
+                    "actions": [], "verifier_evaluations": [{"outcome": "valid_fail"}],
+                    "verifier_usage": {"maximum": 2, "reserved": 1, "consumed": 1,
+                                       "denied": 0, "retry_eligible": True}}
+        view = inspect_delivery_projection(value, snapshot)
+        self.assertEqual(view["execution_protocol_version"], 8)
+        self.assertEqual(view["verifier_usage"]["consumed"], 1)
+        self.assertEqual(view["verifier_evaluations"][0]["outcome"], "valid_fail")
+
     def test_different_attempt_is_rejected(self):
         with self.assertRaisesRegex(ContractError, "attempt differs"):
             inspect_delivery_projection(envelope(), {"attempt_id": "other", "status": "started", "owner_generation": 1})

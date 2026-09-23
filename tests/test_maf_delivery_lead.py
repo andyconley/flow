@@ -15,20 +15,22 @@ MAF_PYTHON = os.environ.get("FLOW_MAF_PYTHON", "/private/tmp/flow-maf-runtime-sp
 
 @unittest.skipUnless(Path(MAF_PYTHON).exists(), "pinned MAF interpreter unavailable")
 class StockDeliveryLeadTest(unittest.TestCase):
-    def _exercise(self, speaker: str, protocol_version: int = 5) -> tuple[list[str], list[str], dict]:
+    def _exercise(self, speaker: str | list[str], protocol_version: int = 5) -> tuple[list[str], list[str], dict]:
+        target_sequence = [speaker] if isinstance(speaker, str) else speaker
+        control = speaker if isinstance(speaker, str) else "<sequence>"
         roster = [
             {"assignment_id": "test", "definition_digest": "test-definition", "instance_id": "test-engineer-1",
              "role": "test-engineer", "provider": "local-stub", "model": "fake"},
             {"assignment_id": "review", "definition_digest": "review-definition", "instance_id": "reviewer-1",
              "role": "quality-reviewer", "provider": "local-stub", "model": "fake"},
         ]
-        if protocol_version == 7:
+        if protocol_version in {7, 8}:
             for item in roster:
                 item["capabilities"] = ["read"]
         with tempfile.TemporaryDirectory() as checkpoints:
             envelope = {"execution_protocol_version": protocol_version, "attempt_id": "stock-probe", "checkpoint_dir": checkpoints,
                         "roster": roster}
-            if protocol_version == 7:
+            if protocol_version in {7, 8}:
                 envelope["job_contract"] = {"producer_instance_ids": ["test-engineer-1"],
                                             "verifier_instance_ids": ["reviewer-1"]}
             child = subprocess.Popen([MAF_PYTHON, "-m", "runtime.maf_runner.delivery_lead"],
@@ -54,17 +56,17 @@ class StockDeliveryLeadTest(unittest.TestCase):
                     if phase.startswith("replan_"):
                         replan_requests.append(event)
                     if phase == "progress":
-                        done = event["manager_round"] > 1 and speaker != "<replan>"
-                        if speaker == "<replan>" and replan_requests:
+                        done = len(selected) >= len(target_sequence) and control != "<replan>"
+                        if control == "<replan>" and replan_requests:
                             done = True
                         answer = json.dumps({
                             "is_request_satisfied": {"reason": "complete" if done else "pending", "answer": done},
-                            "is_in_loop": {"reason": "loop" if speaker == "<replan>" else "no", "answer": speaker == "<replan>"},
+                            "is_in_loop": {"reason": "loop" if control == "<replan>" else "no", "answer": control == "<replan>"},
                             "is_progress_being_made": {"reason": "yes", "answer": True},
-                            "next_speaker": {"reason": "evidence-based selection", "answer": "test-engineer-1" if speaker == "<replan>" else speaker},
+                            "next_speaker": {"reason": "evidence-based selection", "answer": "test-engineer-1" if control == "<replan>" else target_sequence[min(len(selected), len(target_sequence) - 1)]},
                             "instruction_or_question": {"reason": "bounded", "answer": "Analyze the fixture"},
                         })
-                        if speaker == "<malformed>":
+                        if control == "<malformed>":
                             answer = "not JSON"
                     else:
                         answer = {"facts": "Fixture facts", "plan": "- Select a specialist",
@@ -76,16 +78,18 @@ class StockDeliveryLeadTest(unittest.TestCase):
                 elif kind == "propose_action":
                     self.assertEqual(event["action_id"], expected_magentic_action_id(event))
                     self.assertTrue(event["checkpoint_id"])
-                    if protocol_version == 7:
+                    if protocol_version in {7, 8}:
                         choice = event["provider_choice"]
                         self.assertEqual(choice["selected_candidate"], event["instance_id"])
-                        self.assertEqual([item["instance_id"] for item in choice["eligible_candidates"]], ["test-engineer-1"])
+                        self.assertEqual([item["instance_id"] for item in choice["eligible_candidates"]], [event["instance_id"]])
                         self.assertTrue(choice["rationale"]["facts"])
                         self.assertEqual(choice["rejection_reasons"], {})
                     selected.append(event["instance_id"])
+                    summary = ("Flow verifier evaluation: valid_fail; reason: accepted_fail; retry eligible: true"
+                               if len(target_sequence) > 1 and len(selected) < len(target_sequence) else "Fixture analyzed")
                     child.stdin.write(json.dumps({"protocol_version": protocol_version, "type": "action_result",
                                                   "action_id": event["action_id"],
-                                                  "result": {"summary": "Fixture analyzed"}}) + "\n")
+                                                  "result": {"summary": summary}}) + "\n")
                     child.stdin.flush()
                 else:
                     terminal = event
@@ -121,6 +125,19 @@ class StockDeliveryLeadTest(unittest.TestCase):
         self.assertEqual(actions, ["test-engineer-1"])
         self.assertEqual(terminal["type"], "workflow_finished")
         self.assertEqual(terminal["protocol_version"], 7)
+
+    def test_stock_manager_routes_with_structured_verifier_protocol(self):
+        phases, actions, terminal = self._exercise("reviewer-1", protocol_version=8)
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "final"])
+        self.assertEqual(actions, ["reviewer-1"])
+        self.assertEqual(terminal["type"], "workflow_finished")
+        self.assertEqual(terminal["protocol_version"], 8)
+
+    def test_stock_manager_accepts_retry_signal_and_selects_verifier_again(self):
+        phases, actions, terminal = self._exercise(["reviewer-1", "reviewer-1"], protocol_version=8)
+        self.assertEqual(actions, ["reviewer-1", "reviewer-1"])
+        self.assertEqual(terminal["type"], "workflow_finished")
+        self.assertGreaterEqual(phases.count("progress"), 3)
 
     def test_unknown_speaker_does_not_fall_back_to_first_worker(self):
         phases, actions, terminal = self._exercise("unlisted-worker")

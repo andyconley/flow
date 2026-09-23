@@ -1,0 +1,26 @@
+{
+  "problem": "Turn verifier output into a Flow-enforced acceptance signal.",
+  "intended_users": ["Flow maintainers, Shapers, and operators."],
+  "outcomes": ["Require an evidence-bound structured verifier verdict before successful handback.", "Bound verifier calls independently from global delegation."],
+  "scope": ["Protocol-v8 verifier verdict and evaluation contract.", "One bounded verifier retry within a configurable total-call cap.", "Legacy v7 read compatibility."],
+  "exclusions": ["Ollama feasibility testing.", "Semantic scoring or quorum.", "Producer routing changes.", "Nested subagents."],
+  "constraints": ["Flow owns verdict validation and terminal status.", "Observed provider responses remain completed calls.", "Only transport uncertainty becomes unknown."],
+  "assumptions": ["Flow-observed diff and test evidence remain authoritative.", "Verifier work is read-only and evidence-bound."],
+  "acceptance_criteria": ["Valid pass permits the existing handback gate.", "Valid fail or unusable output cannot hand back successfully.", "Default two-call cap permits one retry and denies a third send.", "Protocol-v7 receipts remain readable."],
+  "risks": [{"risk": "Strict structured output may increase visible verifier failures", "owner": "Flow", "status": "owned"}],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {"role": "lead-developer", "capabilities": ["scoped-edit"], "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80", "maximum_instances": 1},
+    {"role": "test-engineer", "capabilities": ["bounded-verification"], "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f", "maximum_instances": 2},
+    {"role": "quality-reviewer", "capabilities": ["read-only-review"], "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718", "maximum_instances": 1}
+  ],
+  "prohibited_capabilities": ["silent-charter-amendment", "ungranted-provider-dispatch"],
+  "delegation_matrix": {"max_delegations": 6, "delegated_expansion": false},
+  "approval_matrix": {"charter_amendment": "shaper_or_engineer", "provider_dispatch": "Flow_grant", "acceptance": "Flow_gate"},
+  "budget_safety_envelope": {"enforceable": {"max_concurrent": 3, "max_replans": 2, "runtime_seconds": 300, "tools": ["read", "edit", "test"], "paths": ["charter-scoped"], "outputs": ["diff", "test", "receipt"], "retries": 1, "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 6, "max_verifier_calls": 2}, "observations": ["provider_usage_when_available"]},
+  "boundaries": {"artifact_root": ".flow/runs/structured-verifier-contract", "worktree_policy": "Flow-bound"},
+  "amendment_lineage": [],
+  "approval_history": [{"event": "approve-definition", "authority": "engineer", "at": "2026-09-23"}],
+  "next_lane_eligibility": ["solution"]
+}

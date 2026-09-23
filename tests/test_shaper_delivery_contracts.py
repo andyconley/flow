@@ -9,6 +9,7 @@ from delivery_contracts import (  # noqa: E402
     DeliveryContractError,
     build_delivery_charter,
     build_shaper_contract,
+    digest,
     validate_delivery_charter,
     validate_shaper_contract,
 )
@@ -31,6 +32,32 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         validate_delivery_charter(charter)
         self.assertEqual(charter, build_delivery_charter(first))
         self.assertEqual(charter["compatibility_version"], 7)
+        self.assertEqual(first["version"], 2)
+        self.assertEqual(first["max_verifier_calls"], 2)
+        self.assertEqual(charter["charter_version"], 2)
+        self.assertEqual(charter["limits"]["max_verifier_calls"], 2)
+
+    def test_v2_verifier_allowance_is_sealed_and_bounded(self):
+        intent = shaper_intent()
+        intent["max_verifier_calls"] = 1
+        charter = build_delivery_charter(build_shaper_contract("demo", self.sources(), intent))
+        self.assertEqual(charter["limits"]["max_verifier_calls"], 1)
+        charter["limits"]["max_verifier_calls"] = 3
+        with self.assertRaisesRegex(DeliveryContractError, "max_verifier_calls"):
+            validate_delivery_charter(charter)
+
+    def test_v1_contract_and_charter_remain_readable(self):
+        shaper = build_shaper_contract("demo", self.sources(), shaper_intent())
+        shaper["version"] = 1
+        del shaper["max_verifier_calls"]
+        shaper["digest"] = digest({key: value for key, value in shaper.items() if key != "digest"})
+        validate_shaper_contract(shaper)
+        charter = build_delivery_charter(build_shaper_contract("demo", self.sources(), shaper_intent()))
+        charter["charter_version"] = 1
+        charter["shaper_contract"] = {**charter["shaper_contract"], "version": 1}
+        del charter["limits"]["max_verifier_calls"]
+        charter["digest"] = digest({key: value for key, value in charter.items() if key != "digest"})
+        validate_delivery_charter(charter)
 
     def test_per_run_intent_changes_the_sealed_semantics(self):
         first_intent = shaper_intent()

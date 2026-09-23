@@ -15,11 +15,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from delivery_gateway import (ContractError, _default_worker_adapter,
                               _execute_prepared_delivery, execute_chartered_delivery,
                               prepare_chartered_delivery)
-from execution_contracts import ContractError as ExecutionContractError, envelope_digest, expected_magentic_action_id, validate_action
+from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
+                                 expected_magentic_action_id, validate_action, validate_receipt)
 from delivery_contracts import build_delivery_charter, build_shaper_contract, digest as delivery_digest
 from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
 from tests.shaper_intent_fixture import shaper_intent
+from execution_ledger import ExecutionLedger
+from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier_digest, evaluate_candidate
+import delivery_gateway
 
 
 class CharteredPreparationTests(unittest.TestCase):
@@ -103,7 +107,7 @@ class CharteredPreparationTests(unittest.TestCase):
 
     def test_clean_job_pins_roster_and_contract(self):
         envelope, task, attempt_dir, ledger = self.prepare()
-        self.assertEqual(envelope["execution_protocol_version"], 7)
+        self.assertEqual(envelope["execution_protocol_version"], 8)
         self.assertEqual(envelope["job_contract"]["task"], task)
         self.assertEqual([r["capabilities"] for r in envelope["roster"]], [["read", "edit"], ["read"]])
         self.assertTrue((attempt_dir / "job-charter.snapshot.json").is_file())
@@ -135,7 +139,7 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(envelope["limits"], {"max_delegations": 2, "max_concurrent": 1,
                          "max_replans": 0, "max_manager_calls": 12,
                          "max_manager_rounds": 6, "max_paid_worker_calls": 2,
-                         "max_runtime_seconds": 300})
+                         "max_runtime_seconds": 300, "max_verifier_calls": 2})
 
     def test_v7_projects_ownership_and_requires_auditable_provider_choice(self):
         envelope, _, _, _ = self.prepare()
@@ -169,7 +173,7 @@ class CharteredPreparationTests(unittest.TestCase):
             proposal = self._proposal(envelope, "editor", 1)
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
             checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                              "workflow_name": "flow-magentic-delivery-v7",
+                                              "workflow_name": "flow-magentic-delivery-v8",
                                               "pending_request_info_events": {"flow-magentic-action-1": {}}}))
             on_action(proposal)
             return {"attempt_id": envelope["attempt_id"]}
@@ -188,7 +192,7 @@ class CharteredPreparationTests(unittest.TestCase):
             self.prepare()
         self.manifest["assignments"][0]["input_evidence"] = [".flow/runs/sample/job-charter.json"]
         self._write_inputs()
-        self.assertEqual(self.prepare()[0]["execution_protocol_version"], 7)
+        self.assertEqual(self.prepare()[0]["execution_protocol_version"], 8)
         self.state["artifacts"]["job_charter"] = ".flow/runs/sample/job-charter.json"
         self.manifest["assignments"][1]["read_only"] = True
         self._write_inputs()
@@ -270,7 +274,7 @@ class CharteredPreparationTests(unittest.TestCase):
                                                 supervisor=lambda envelope, task, on_manager, on_action, **kwargs: {"attempt_id": envelope["attempt_id"]})
         self.assertEqual(result["status"], "failed")
         receipt = json.loads(Path(result["receipt_path"]).read_text())
-        self.assertEqual(receipt["execution_protocol_version"], 7)
+        self.assertEqual(receipt["execution_protocol_version"], 8)
 
     def _proposal(self, envelope, assignment_id, sequence):
         assignment = next(item for item in envelope["roster"] if item["assignment_id"] == assignment_id)
@@ -285,7 +289,7 @@ class CharteredPreparationTests(unittest.TestCase):
                   "parent_action_id": None if sequence == 1 else "a" * 64,
                   "checkpoint_id": checkpoint_id}
         action["task_digest"] = hashlib.sha256(action["task"].encode()).hexdigest()
-        if envelope["execution_protocol_version"] == 7:
+        if envelope["execution_protocol_version"] in {7, 8}:
             eligible_ids = (envelope["job_contract"]["producer_instance_ids"]
                             if assignment_id in envelope["job_contract"]["producer_instance_ids"]
                             else envelope["job_contract"]["verifier_instance_ids"])
@@ -312,14 +316,16 @@ class CharteredPreparationTests(unittest.TestCase):
 
     def test_v7_gateway_seals_producer_verifier_receipt_after_flow_observes_edit_and_test(self):
         calls = []
+        captured = {}
 
         def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
             self.assertEqual(kwargs["timeout_s"], 300)
             for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
                 proposal = self._proposal(envelope, assignment_id, sequence)
                 checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
                 checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                                  "workflow_name": "flow-magentic-delivery-v7",
+                                                  "workflow_name": "flow-magentic-delivery-v8",
                                                   "pending_request_info_events": {
                                                       f"flow-magentic-action-{sequence}": {}}}))
                 on_action(proposal)
@@ -332,7 +338,7 @@ class CharteredPreparationTests(unittest.TestCase):
                 return self._result("codex", "editor-model", "Edited target")
             self.assertIn("Flow-verified complete bounded diff", action["provider_task"])
             self.assertIn("Targeted test: passed", action["provider_task"])
-            return self._result("ollama", "local-model", "Verified target")
+            return self._result("ollama", "local-model", '{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}')
 
         with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
             result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
@@ -340,10 +346,20 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(calls, ["editor", "verifier"])
         receipt = json.loads(Path(result["receipt_path"]).read_text())
-        self.assertEqual(receipt["execution_protocol_version"], 7)
+        self.assertEqual(receipt["execution_protocol_version"], 8)
         self.assertEqual([item["status"] for item in receipt["actions"]], ["completed", "completed"])
         self.assertEqual(receipt["evidence"]["tests"]["command"], self.charter["test"]["argv"])
         self.assertTrue(receipt["checkpoints"])
+        for field, value in (("consumed", 0), ("denied", 1), ("retry_eligible", True)):
+            with self.subTest(field=field):
+                tampered = copy.deepcopy(receipt)
+                tampered["verifier_usage"][field] = value
+                with self.assertRaisesRegex(ExecutionContractError, "usage differs"):
+                    validate_receipt(captured["envelope"], tampered)
+        tampered = copy.deepcopy(receipt)
+        tampered["verifier_inputs"][0]["diff_digest"] = "0" * 64
+        with self.assertRaisesRegex(ExecutionContractError, "binding"):
+            validate_receipt(captured["envelope"], tampered)
 
     def test_v7_claude_producer_runs_under_flow_grant_before_verifier(self):
         self.manifest["assignments"][1]["execution"] = {"provider": "claude", "model": "claude-model"}
@@ -355,7 +371,7 @@ class CharteredPreparationTests(unittest.TestCase):
                 proposal = self._proposal(envelope, assignment_id, sequence)
                 checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
                 checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                                  "workflow_name": "flow-magentic-delivery-v7",
+                                                  "workflow_name": "flow-magentic-delivery-v8",
                                                   "pending_request_info_events": {
                                                       f"flow-magentic-action-{sequence}": {}}}))
                 self.assertEqual(on_action(proposal)["status"], "completed")
@@ -368,7 +384,7 @@ class CharteredPreparationTests(unittest.TestCase):
                 return {**self._result("claude", "claude-model", "Edited target"),
                         "session_id": "claude-session-1"}
             self.assertIn("Flow-verified complete bounded diff", action["provider_task"])
-            return self._result("ollama", "local-model", "Verified target")
+            return self._result("ollama", "local-model", '{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}')
 
         with patch("delivery_gateway.run_status", return_value=self.state), \
              patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
@@ -382,6 +398,283 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(receipt["actions"][0]["result"]["session_id"], "claude-session-1")
         self.assertEqual([action["status"] for action in receipt["actions"]], ["completed", "completed"])
         self.assertEqual(receipt["evidence"]["tests"]["status"], "passed")
+
+    def test_v8_first_fail_then_explicit_retry_pass_completes(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence, assignment_id in enumerate(("editor", "verifier", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {
+                                                      f"flow-magentic-action-{sequence}": {}}}))
+                reply = on_action(proposal)
+                self.assertEqual(reply["status"], "completed")
+                if sequence == 2:
+                    self.assertIn("valid_fail", reply["summary"])
+                    self.assertIn("retry eligible: true", reply["summary"])
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            decision = "fail" if calls.count("verifier") == 1 else "pass"
+            findings = '[{"severity":"blocking","summary":"repair","evidence":"test"}]' if decision == "fail" else "[]"
+            return self._result("ollama", "local-model",
+                                f'{{"schema_version":1,"decision":"{decision}","summary":"review","findings":{findings}}}')
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(result["status"], "completed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["valid_fail", "valid_pass"])
+        self.assertEqual(receipt["verifier_usage"], {"maximum": 2, "reserved": 2, "consumed": 2,
+                                                     "denied": 0, "retry_eligible": False})
+
+    def test_v8_two_nonpasses_are_terminal_and_third_proposal_is_denied(self):
+        sends = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence, assignment_id in enumerate(("editor", "verifier", "verifier", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {
+                                                      f"flow-magentic-action-{sequence}": {}}}))
+                reply = on_action(proposal)
+                if sequence == 4:
+                    self.assertEqual(reply["status"], "denied")
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            sends.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            return self._result("ollama", "local-model", '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}')
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(sends, ["editor", "verifier", "verifier"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["verifier_usage"]["denied"], 1)
+
+    def test_v8_provider_mismatch_is_unusable_then_retry_can_pass(self):
+        verifier_calls = 0
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence, assignment_id in enumerate(("editor", "verifier", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {
+                                                      f"flow-magentic-action-{sequence}": {}}}))
+                reply = on_action(proposal)
+                if sequence == 2:
+                    self.assertIn("unusable", reply["summary"])
+                    self.assertIn("provider_binding_mismatch", reply["summary"])
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            nonlocal verifier_calls
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            verifier_calls += 1
+            result = self._result("ollama", "local-model", '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}')
+            if verifier_calls == 1:
+                result["provider"] = "claude"
+            return result
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(result["status"], "completed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["unusable", "valid_pass"])
+
+    PASS = '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}'
+    FAIL = '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
+
+    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None):
+        """Drive one v8 attempt; ``repeat`` re-proposes that sequence once after an error."""
+        sends, replies, captured = [], {}, {}
+        outputs = list(verifier_outputs)
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
+            for sequence, assignment_id in enumerate(plan, 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                try:
+                    replies[sequence] = on_action(proposal)
+                except Exception as exc:
+                    if sequence != repeat:
+                        raise
+                    captured["first_error"] = str(exc)
+                    replies[sequence] = on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            sends.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            captured.setdefault("provider_tasks", []).append(action["provider_task"])
+            return self._result("ollama", "local-model", outputs.pop(0))
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        return result, sends, replies, captured
+
+    def test_v8_verifier_input_carries_the_flow_output_contract(self):
+        result, _, _, captured = self._run_v8([self.PASS])
+        self.assertEqual(result["status"], "completed")
+        self.assertTrue(captured["provider_tasks"][0].endswith(VERIFIER_CONTRACT_INSTRUCTION))
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertTrue(receipt["verifier_inputs"][0]["input"]["provider_task"].endswith(VERIFIER_CONTRACT_INSTRUCTION))
+        validate_receipt(captured["envelope"], receipt)
+
+    def test_v8_completed_verifier_without_evaluation_is_reevaluated_on_replay_without_resend(self):
+        original = ExecutionLedger.record_verifier_evaluation
+        calls = []
+
+        def crash_once(ledger, *args, **kwargs):
+            calls.append(True)
+            if len(calls) == 1:
+                raise RuntimeError("simulated crash after provider completion")
+            return original(ledger, *args, **kwargs)
+
+        with patch.object(ExecutionLedger, "record_verifier_evaluation", crash_once):
+            result, sends, replies, captured = self._run_v8([self.PASS], repeat=2)
+        self.assertEqual(captured["first_error"], "simulated crash after provider completion")
+        self.assertEqual(sends, ["editor", "verifier"])
+        self.assertIn("valid_pass", replies[2]["summary"])
+        self.assertEqual(result["status"], "completed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["valid_pass"])
+
+    def test_v8_receipt_rejects_each_tampered_verifier_binding(self):
+        result, _, _, captured = self._run_v8([self.FAIL, self.PASS], plan=("editor", "verifier", "verifier"))
+        envelope = captured["envelope"]
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        validate_receipt(envelope, receipt)
+
+        def reseal(evaluation):
+            body = {key: value for key, value in evaluation.items() if key != "evaluation_digest"}
+            return {**body, "evaluation_digest": verifier_digest(body)}
+
+        def forged_pass(r):
+            # A self-consistent pass sealed over the first call's real fail output.
+            item = r["verifier_evaluations"][0]
+            item["evaluation"] = reseal({**item["evaluation"], "disposition": "valid_pass", "reason": "accepted_pass",
+                                         "candidate": json.loads(self.PASS)})
+            item["evaluation_digest"], item["outcome"] = item["evaluation"]["evaluation_digest"], "valid_pass"
+
+        def rebind_diff(r):
+            for binding, item in zip(r["verifier_inputs"], r["verifier_evaluations"]):
+                binding["diff_digest"] = "f" * 64
+                item["evaluation"] = reseal({**item["evaluation"], "diff_digest": "f" * 64})
+                item["evaluation_digest"] = item["evaluation"]["evaluation_digest"]
+
+        def rebind_evaluation_only(r):
+            # The binding stays true; only the evaluation's sealed copy moves.
+            item = r["verifier_evaluations"][0]
+            item["evaluation"] = reseal({**item["evaluation"], "diff_digest": "f" * 64})
+            item["evaluation_digest"] = item["evaluation"]["evaluation_digest"]
+
+        def strip_contract(r):
+            binding = r["verifier_inputs"][1]
+            binding["input"]["provider_task"] = binding["input"]["provider_task"].replace(VERIFIER_CONTRACT_INSTRUCTION, "")
+            binding["input_digest"] = verifier_digest(binding["input"])
+
+        mutations = {
+            "forged pass over fail output": forged_pass,
+            "diff rebound consistently": rebind_diff,
+            "evaluation diff rebound only": rebind_evaluation_only,
+            "test evidence changed": lambda r: r["evidence"]["tests"].update(output_sha256="f" * 64),
+            "evaluation removed": lambda r: r["verifier_evaluations"].pop(0),
+            "contract stripped from input": strip_contract,
+            "input digest changed": lambda r: r["verifier_inputs"][0].update(input_digest="f" * 64),
+            "evaluation action changed": lambda r: r["verifier_evaluations"][1]["evaluation"].update(action_id="other"),
+            "consumed counter changed": lambda r: r["verifier_usage"].update(consumed=1),
+            "maximum counter changed": lambda r: r["verifier_usage"].update(maximum=1),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(receipt)
+                mutate(changed)
+                with self.assertRaises(ExecutionContractError):
+                    validate_receipt(envelope, changed)
+
+    def test_completed_v7_receipt_keeps_its_original_validation_semantics(self):
+        result, _, _, captured = self._run_v8([self.PASS])
+        envelope = copy.deepcopy(captured["envelope"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        # Re-derive a genuine v7 receipt from the same facts: v7 carries no
+        # verifier allowance, inputs, evaluations, or usage.
+        envelope["execution_protocol_version"] = 7
+        envelope["limits"].pop("max_verifier_calls")
+        receipt["execution_protocol_version"] = 7
+        for field in ("verifier_inputs", "verifier_evaluations", "verifier_usage"):
+            receipt.pop(field)
+        receipt["envelope_digest"] = envelope_digest(envelope)
+        for item in receipt["actions"]:
+            item["request"]["envelope_digest"] = receipt["envelope_digest"]
+            item["request"]["action_id"] = item["action_id"] = expected_magentic_action_id(item["request"])
+        for item in receipt.get("manager_calls", []):
+            self.assertEqual(item, None, "stub supervisor makes no manager calls")
+        self.assertEqual(receipt["status"], "completed")
+        validate_receipt(envelope, receipt)
+        receipt["evidence"]["tests"]["status"] = "failed"
+        with self.assertRaisesRegex(ExecutionContractError, "chartered test evidence is invalid"):
+            validate_receipt(envelope, receipt)
+
+    def test_v8_refuses_a_charter_that_never_sealed_the_verifier_cap(self):
+        original = delivery_gateway._sealed_delivery_authority
+
+        def legacy(*args, **kwargs):
+            authority = copy.deepcopy(original(*args, **kwargs))
+            authority["charter"]["limits"].pop("max_verifier_calls")
+            return authority
+
+        with patch("delivery_gateway._sealed_delivery_authority", side_effect=legacy):
+            with self.assertRaisesRegex(ContractError, "seals max_verifier_calls"):
+                self.prepare()
+
+    def test_v8_refused_send_preparation_releases_the_untouched_grant(self):
+        def refuse(*args, **kwargs):
+            raise ExecutionContractError("simulated preparation refusal")
+
+        with patch.object(ExecutionLedger, "prepare_verifier_send", refuse):
+            result, sends, _, _ = self._run_v8([self.PASS])
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(sends, ["editor"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        verifier = [item for item in receipt["actions"] if item["request"]["assignment_id"] == "verifier"]
+        self.assertEqual([item["status"] for item in verifier], ["not_dispatched"])
+        self.assertEqual((receipt["verifier_usage"]["reserved"], receipt["verifier_usage"]["consumed"]), (0, 0))
 
     def test_v7_verifier_before_observed_edit_refuses_without_provider_send(self):
         calls = []
@@ -408,7 +701,7 @@ class CharteredPreparationTests(unittest.TestCase):
             proposal = self._proposal(envelope, "editor", 1)
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
             checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                              "workflow_name": "flow-magentic-delivery-v7",
+                                              "workflow_name": "flow-magentic-delivery-v8",
                                               "pending_request_info_events": {"flow-magentic-action-1": {}}}))
             on_action(proposal)
             return {"attempt_id": envelope["attempt_id"]}
@@ -436,7 +729,7 @@ class CharteredPreparationTests(unittest.TestCase):
             proposal = self._proposal(envelope, "editor", 1)
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
             checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                              "workflow_name": "flow-magentic-delivery-v7",
+                                              "workflow_name": "flow-magentic-delivery-v8",
                                               "pending_request_info_events": {"flow-magentic-action-1": {}}}))
             on_action(proposal)
             raise MafTransportError("simulated transport loss after committed producer")
@@ -468,7 +761,7 @@ class CharteredPreparationTests(unittest.TestCase):
             proposal = self._proposal(envelope, "editor", 1)
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
             checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                              "workflow_name": "flow-magentic-delivery-v7",
+                                              "workflow_name": "flow-magentic-delivery-v8",
                                               "pending_request_info_events": {"flow-magentic-action-1": {}}}))
             on_action(proposal)
             return {"attempt_id": envelope["attempt_id"]}
@@ -512,7 +805,7 @@ class CharteredPreparationTests(unittest.TestCase):
             proposal = self._proposal(envelope, "editor", 1)
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
             checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                              "workflow_name": "flow-magentic-delivery-v7",
+                                              "workflow_name": "flow-magentic-delivery-v8",
                                               "pending_request_info_events": {"flow-magentic-action-1": {}}}))
             self.assertEqual(on_action(proposal)["status"], "completed")
             self.assertEqual(on_action(proposal)["status"], "completed")

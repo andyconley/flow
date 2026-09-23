@@ -1,4 +1,4 @@
-"""Read-only view of a Flow v7 Delivery Lead projection.
+"""Read-only view of Flow v7 and v8 Delivery Lead projections.
 
 The CLI layer uses this module rather than reconstructing authority from a
 receipt.  A v7 execution record remains executable only while its attempt is
@@ -11,7 +11,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from execution_contracts import ContractError, DELIVERY_PROTOCOL_VERSION, validate_envelope
+from execution_contracts import (ContractError, DELIVERY_PROTOCOL_VERSION,
+                                 STRUCTURED_VERIFIER_PROTOCOL_VERSION, validate_envelope)
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
 from legacy_delivery import inspect_legacy_delivery
@@ -24,8 +25,9 @@ def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, An
     does not grant, recover, or mutate anything.
     """
     validate_envelope(envelope)
-    if envelope.get("execution_protocol_version") != DELIVERY_PROTOCOL_VERSION:
-        raise ContractError("delivery inspection requires execution protocol v7")
+    protocol = envelope.get("execution_protocol_version")
+    if protocol not in {DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION}:
+        raise ContractError("delivery inspection requires execution protocol v7 or v8")
     if snapshot.get("attempt_id") != envelope["attempt_id"]:
         raise ContractError("delivery inspection attempt differs from projection")
     claim = envelope["delivery_lead_claim"]
@@ -33,7 +35,7 @@ def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, An
     status = snapshot.get("status")
     active = status == "started" and current_generation == claim["generation"]
     return {
-        "execution_protocol_version": DELIVERY_PROTOCOL_VERSION,
+        "execution_protocol_version": protocol,
         "work_id": envelope["work_id"],
         "attempt_id": envelope["attempt_id"],
         "status": status,
@@ -45,6 +47,9 @@ def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, An
         "provider_choices": [item["request"]["provider_choice"] for item in snapshot.get("actions", [])
                              if isinstance(item, dict) and isinstance(item.get("request"), dict)
                              and "provider_choice" in item["request"]],
+        **({"verifier_evaluations": snapshot.get("verifier_evaluations", []),
+            "verifier_usage": snapshot.get("verifier_usage")}
+           if protocol == STRUCTURED_VERIFIER_PROTOCOL_VERSION else {}),
     }
 
 
@@ -117,7 +122,7 @@ def inspect_delivery(work_id: str, attempt_id: str | None = None, *, root: Path 
         result["attempt"] = legacy
         result["compatibility_diagnostics"] = legacy["diagnostics"]
         return result
-    if protocol != DELIVERY_PROTOCOL_VERSION:
+    if protocol not in {DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION}:
         result["attempt"] = {
             "execution_protocol_version": protocol,
             "readable": True,

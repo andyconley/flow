@@ -1,8 +1,22 @@
 # Adopting Microsoft Agent Framework beneath Flow
 
-Status: architecture direction accepted 2026-09-19. The supervised local runner, local-plus-Codex fixture job, and local-plus-Claude review job run through Flow's gateway. The stock Magentic Delivery Lead implementation is under acceptance: deterministic contracts, policy denials, selected-worker execution, and cross-process recovery pass; its first live manager call ended without a durable response and is blocked for reconciliation. No real-code Delivery Lead repair has been accepted or merged.
+Status: architecture direction accepted 2026-09-19. Updated 2026-09-23.
 
-The current v5 path uses stock `StandardMagenticManager` in a supervised child. Flow constructs the eligible roster, authorizes each manager model call and selected specialist action, and seals a receipt. The first real repair is restricted to the Codex worker adapter and its regression tests in an isolated worktree. A distinct local verifier receives the complete bounded diff and focused test result. The live unknown manager call produced no specialist send or file edit; the next provider send requires a new authorized attempt or evidence-backed resolution.
+- **Accepted and merged:**
+  - The supervised local runner, and the local-plus-Codex and local-plus-Claude jobs, run through Flow's gateway.
+  - The stock Magentic Delivery Lead (protocol v5) passed deterministic contract, denial, and cross-process recovery tests.
+  - Chartered execution (v6) and the Shaper Contract, Delivery Charter, and fenced Delivery Lead claim (v7, ADR 0014) are merged.
+  - A live v7 job completed the Flow, Magentic, Claude, and Ollama route. It made one scoped edit, ran the targeted test, and sealed a complete receipt. That run predates the final authority corrections, and Ollama's verdict text was repetitive and weakly grounded.
+- **Accepted, not yet merged:** protocol v8 makes the verifier result a Flow-evaluated, evidence-bound verdict with a Charter-sealed verifier call cap (ADR 0015).
+- **Not yet built:**
+  - delegated Shaper expansion approval;
+  - resume and recovery for chartered protocols (v6 to v8);
+  - cancellation and operator diagnostics;
+  - MCP ingress beyond charter submission;
+  - an enforced token cap;
+  - a live run of the v8 verifier contract.
+
+The current chartered path is v8. Flow seals the Shaper Contract and Delivery Charter at `start-plan`, prepares an attempt, and runs stock Magentic in a supervised child. Flow authorizes each manager call and specialist action. It verifies the producer's scoped diff and runs the targeted test before a distinct Ollama verifier may run. Then it seals a receipt linked to that authority. v5 remains the only path that can resume after interruption.
 
 ## Target boundary
 
@@ -23,6 +37,8 @@ Flow accepts a versioned charter and approved orchestration manifest, creates a 
 The canonical boundary uses separate Flow-owned records. A reviewed, per-run `shaper_intent` JSON artifact supplies the structured problem, outcomes, controls, and exact specialist-definition digests; Flow does not guess these semantics from Markdown. A Shaper Contract seals that intent and its approved source digests. At `start-plan`, Flow creates an immutable Delivery Charter, a definition-to-delivery handoff, and generation 1 of the Delivery Lead claim under a per-run lock. The single `run.json` replacement is the authority commit point; staged artifacts before that point are inert, and append-only events are reconciled afterward. Provider sessions and MAF checkpoints are evidence linked to this chain, not authority.
 
 Execution protocol v7 projects only the runtime fields Magentic needs and links them to the Shaper Contract, Delivery Charter, handoff, logical delivery attempt, and active owner generation. Magentic may choose among approved Claude and Codex producers, but Flow validates the selected assignment and a bounded comparative rationale before dispatch. A distinct Ollama verifier receives the Flow-observed diff and test evidence. Historical v6 records remain inspectable and cannot execute or resume through this path.
+
+Execution protocol v8 keeps the v7 projection and adds a verifier contract that Flow owns (ADR 0015). Flow appends a versioned JSON output instruction to the verifier input, then records the provider response before judging it. A deterministic evaluator classifies the response as `valid_pass`, `valid_fail`, or `unusable`, bound by digest to the exact input, raw output, diff, and test evidence. Only a received response is judged; an uncertain send stays `unknown`. The Delivery Charter seals `max_verifier_calls`: one or two calls, two by default, which allows one retry after a non-pass. Flow denies an excess call before send. Completion requires the final evaluation to be `valid_pass`, and receipts recompute every evaluation. v7 receipts keep their original meaning.
 
 MAF's checkpoint is execution state. Flow's run, manifest, charter version, policy decisions, receipt, artifact hashes, and reconciliation state remain authoritative. A checkpoint cannot authorize a new call merely because it contains a queued message. Flow can change the runtime behind the execution gateway without migrating the project record into MAF's models.
 

@@ -1,0 +1,392 @@
+{
+  "schema_version": 1,
+  "work_id": "structured-verifier-contract",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "classification": "standard",
+    "rationale": "Verifier verdicts influence acceptance and require independent requirements and boundary review."
+  },
+  "assignments": [
+    {
+      "id": "definition-business-analysis",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-verifier-contract"
+      },
+      "brief_path": ".flow/runs/structured-verifier-contract/brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/archive.md",
+        "cli/delivery_gateway.py",
+        "cli/execution_contracts.py"
+      ],
+      "read_scopes": [
+        ".flow/runs/structured-verifier-contract",
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        "cli",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/structured-verifier-contract/research/business-analysis.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Define workflows, failure behavior, edge cases, and measurable acceptance criteria"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "definition-product-review",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-verifier-contract"
+      },
+      "brief_path": ".flow/runs/structured-verifier-contract/brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/archive.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/review.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/structured-verifier-contract",
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        "cli",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/structured-verifier-contract/research/product-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Confirm value, smallest useful scope, success criteria, and non-goals"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "definition-architecture-review",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-verifier-contract"
+      },
+      "brief_path": ".flow/runs/structured-verifier-contract/brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/archive.md",
+        "cli/delivery_gateway.py",
+        "cli/execution_contracts.py",
+        "tests/test_chartered_delivery_gateway.py"
+      ],
+      "read_scopes": [
+        ".flow/runs/structured-verifier-contract",
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        "cli",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/structured-verifier-contract/research/architecture-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Challenge contract ownership, fail-closed semantics, compatibility, and limit placement"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "implementation-root",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "codex-implementation-root"
+      },
+      "brief_path": ".flow/runs/structured-verifier-contract/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/structured-verifier-contract/requirements.md",
+        ".flow/runs/structured-verifier-contract/acceptance-criteria.md",
+        ".flow/runs/structured-verifier-contract/plan.md",
+        ".flow/runs/structured-verifier-contract/validation-plan.md"
+      ],
+      "read_scopes": [
+        "cli",
+        "tests",
+        "runtime",
+        "docs",
+        ".flow/runs/structured-verifier-contract"
+      ],
+      "write_scopes": [
+        "cli",
+        "tests",
+        "runtime",
+        "docs",
+        ".flow/runs/structured-verifier-contract/HANDOFF.md",
+        ".flow/runs/structured-verifier-contract/validation-results.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/structured-verifier-contract/validation-results.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implement protocol-v8 structured verifier evaluation with deterministic proof"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "root-owned-writes"
+      }
+    },
+    {
+      "id": "refinement-root",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-refinement-root"
+      },
+      "brief_path": ".flow/runs/structured-verifier-contract/refinement-plan.md",
+      "input_evidence": [
+        ".flow/runs/structured-verifier-contract/review.md",
+        ".flow/runs/structured-verifier-contract/refinement-plan.md",
+        ".flow/runs/structured-verifier-contract/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        "cli",
+        "tests",
+        "runtime",
+        "docs",
+        ".flow/runs/structured-verifier-contract"
+      ],
+      "write_scopes": [
+        "cli",
+        "tests",
+        ".flow/runs/structured-verifier-contract/review.md",
+        ".flow/runs/structured-verifier-contract/refinement-plan.md",
+        ".flow/runs/structured-verifier-contract/HANDOFF.md",
+        ".flow/runs/structured-verifier-contract/validation-results.md",
+        ".flow/runs/structured-verifier-contract/orchestration.json",
+        ".flow/runs/structured-verifier-contract/briefs",
+        ".flow/runs/structured-verifier-contract/research"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/structured-verifier-contract/validation-results.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Resolve every approved review finding and collect suite and mutation evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "root-owned-writes"
+      }
+    },
+    {
+      "id": "acceptance-quality",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-acceptance"
+      },
+      "brief_path": ".flow/runs/structured-verifier-contract/briefs/acceptance-quality.md",
+      "input_evidence": [
+        ".flow/runs/structured-verifier-contract/acceptance-criteria.md",
+        ".flow/runs/structured-verifier-contract/review.md",
+        ".flow/runs/structured-verifier-contract/refinement-plan.md"
+      ],
+      "read_scopes": [
+        "cli",
+        "tests",
+        "runtime",
+        "docs",
+        ".flow/runs/structured-verifier-contract"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/structured-verifier-contract/research/acceptance-quality.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Judge the final branch against every acceptance criterion"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "acceptance-review"
+      }
+    },
+    {
+      "id": "acceptance-test",
+      "lane": "review",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-acceptance"
+      },
+      "brief_path": ".flow/runs/structured-verifier-contract/briefs/acceptance-test.md",
+      "input_evidence": [
+        ".flow/runs/structured-verifier-contract/acceptance-criteria.md",
+        ".flow/runs/structured-verifier-contract/validation-results.md",
+        ".flow/runs/structured-verifier-contract/refinement-plan.md"
+      ],
+      "read_scopes": [
+        "cli",
+        "tests",
+        "runtime",
+        "docs",
+        ".flow/runs/structured-verifier-contract"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/structured-verifier-contract/research/acceptance-test.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Judge whether the proof supports AC9 and the refinement plan"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "acceptance-review"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/structured-verifier-contract/reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "structured-verdict-and-cap",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/structured-verifier-contract/requirements.md",
+          ".flow/runs/structured-verifier-contract/acceptance-criteria.md"
+        ]
+      },
+      {
+        "id": "versioning-mechanism",
+        "status": "unverified",
+        "disposition": "deferred",
+        "evidence": [
+          ".flow/runs/structured-verifier-contract/research/architecture-review.md",
+          ".flow/runs/structured-verifier-contract/reconciliation.md"
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "implementation-root",
+      "refinement-root"
+    ],
+    "evidence_collector_assignment": "refinement-root",
+    "verifier_assignment": "acceptance-quality",
+    "independent": true,
+    "artifact_path": ".flow/runs/structured-verifier-contract/review.md"
+  }
+}
