@@ -565,6 +565,22 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(snapshot["sealed_receipt_sha256"],
                          hashlib.sha256(Path(result["receipt_path"]).read_bytes()).hexdigest())
 
+    def test_live_v8_run_holds_the_attempt_recovery_fence(self):
+        observed = []
+
+        def probe(point):
+            if point == "after-runtime-outcome":
+                attempt_dir = next((self.run / "execution").glob("*/envelope.json")).parent
+                ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+                with self.assertRaises(ExecutionContractError) as raised:
+                    with ledger.recovery_lock(attempt_dir.name, holder="recovery"):
+                        pass
+                observed.append(raised.exception.reason)
+
+        result, _, _, _ = self._run_v8([self.PASS], seal_hook=probe)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(observed, ["attempt_running"])
+
     def test_v8_kill_before_finish_leaves_an_unsealed_draft_and_a_started_attempt(self):
         def kill(point):
             if point == "before-finish-attempt":

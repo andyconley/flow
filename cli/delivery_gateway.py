@@ -873,6 +873,15 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
 
 
 def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
+                               ledger: ExecutionLedger, **kwargs: Any) -> dict[str, Any]:
+    """Run one prepared attempt; a live v8 run holds the attempt's recovery fence throughout."""
+    if envelope["execution_protocol_version"] == 8 and kwargs.get("recovery") is None:
+        with ledger.recovery_lock(envelope["attempt_id"], holder="live"):
+            return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
+    return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
+
+
+def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
                                ledger: ExecutionLedger, *,
                                manager_adapter: Callable[..., dict[str, Any]] | None,
                                worker_adapter: Callable[..., dict[str, Any]] | None,
