@@ -628,6 +628,29 @@ class CharteredPreparationTests(unittest.TestCase):
                 with self.assertRaises(ExecutionContractError):
                     validate_receipt(envelope, changed)
 
+    def test_completed_v7_receipt_keeps_its_original_validation_semantics(self):
+        result, _, _, captured = self._run_v8([self.PASS])
+        envelope = copy.deepcopy(captured["envelope"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        # Re-derive a genuine v7 receipt from the same facts: v7 carries no
+        # verifier allowance, inputs, evaluations, or usage.
+        envelope["execution_protocol_version"] = 7
+        envelope["limits"].pop("max_verifier_calls")
+        receipt["execution_protocol_version"] = 7
+        for field in ("verifier_inputs", "verifier_evaluations", "verifier_usage"):
+            receipt.pop(field)
+        receipt["envelope_digest"] = envelope_digest(envelope)
+        for item in receipt["actions"]:
+            item["request"]["envelope_digest"] = receipt["envelope_digest"]
+            item["request"]["action_id"] = item["action_id"] = expected_magentic_action_id(item["request"])
+        for item in receipt.get("manager_calls", []):
+            self.assertEqual(item, None, "stub supervisor makes no manager calls")
+        self.assertEqual(receipt["status"], "completed")
+        validate_receipt(envelope, receipt)
+        receipt["evidence"]["tests"]["status"] = "failed"
+        with self.assertRaisesRegex(ExecutionContractError, "chartered test evidence is invalid"):
+            validate_receipt(envelope, receipt)
+
     def test_v8_refuses_a_charter_that_never_sealed_the_verifier_cap(self):
         original = delivery_gateway._sealed_delivery_authority
 

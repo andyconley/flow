@@ -859,14 +859,14 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
     if receipt["status"] == "completed":
         completed = [item["request"] for item in receipt["actions"] if item["status"] == "completed"]
         if is_chartered_protocol(execution_protocol_version(envelope)):
-            if has_structured_verifier_evaluations(execution_protocol_version(envelope)) and (
-                    not receipt["verifier_evaluations"]
-                    or receipt["verifier_evaluations"][-1]["evaluation"]["disposition"] != "valid_pass"):
-                raise ContractError("completed structured verifier receipt requires a valid pass")
-            final = receipt["verifier_evaluations"][-1]["evaluation"]
-            if (final["diff_digest"] != (evidence.get("edit") or {}).get("diff_sha256")
-                    or final["test_evidence_digest"] != (evidence.get("tests") or {}).get("output_sha256")):
-                raise ContractError("completed structured verifier pass is not bound to the receipt evidence")
+            if has_structured_verifier_evaluations(execution_protocol_version(envelope)):
+                if (not receipt["verifier_evaluations"]
+                        or receipt["verifier_evaluations"][-1]["evaluation"]["disposition"] != "valid_pass"):
+                    raise ContractError("completed structured verifier receipt requires a valid pass")
+                final = receipt["verifier_evaluations"][-1]["evaluation"]
+                if (final["diff_digest"] != (evidence.get("edit") or {}).get("diff_sha256")
+                        or final["test_evidence_digest"] != (evidence.get("tests") or {}).get("output_sha256")):
+                    raise ContractError("completed structured verifier pass is not bound to the receipt evidence")
             _validate_chartered_completion(envelope, evidence, completed)
             return
         producers = [item for item in completed if item["role"] == "lead-developer" and item["provider"] == "claude"]

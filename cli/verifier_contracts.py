@@ -204,7 +204,8 @@ def validate_evaluation(evaluation: object) -> dict[str, Any]:
                 "diff_digest", "test_evidence_digest", "disposition", "reason", "candidate", "evaluation_digest"}
     if not isinstance(evaluation, dict) or set(evaluation) != required:
         raise VerifierContractError("evaluation fields are invalid")
-    if evaluation["schema_version"] != VERIFIER_EVALUATION_SCHEMA_VERSION or evaluation["kind"] != "flow_verifier_evaluation":
+    if (type(evaluation["schema_version"]) is not int or evaluation["schema_version"] != VERIFIER_EVALUATION_SCHEMA_VERSION
+            or evaluation["kind"] != "flow_verifier_evaluation"):
         raise VerifierContractError("evaluation schema version is unsupported")
     if not isinstance(evaluation["action_id"], str) or not evaluation["action_id"].strip():
         raise VerifierContractError("evaluation action_id is invalid")

@@ -113,6 +113,14 @@ class VerifierContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(VerifierContractError, "digest mismatch"):
                     validate_evaluation(changed)
 
+    def test_evaluation_schema_version_must_be_the_integer_one(self):
+        evaluation = self.evaluate(self.candidate())
+        forged = {key: value for key, value in evaluation.items() if key != "evaluation_digest"}
+        forged["schema_version"] = True
+        forged["evaluation_digest"] = digest(forged)
+        with self.assertRaisesRegex(VerifierContractError, "schema version is unsupported"):
+            validate_evaluation(forged)
+
     def test_reason_must_match_disposition_even_when_resealed(self):
         evaluation = self.evaluate(self.candidate())
         forged = {key: value for key, value in evaluation.items() if key != "evaluation_digest"}
