@@ -666,6 +666,51 @@
         "mode": "concurrent",
         "group": "implementation-review"
       }
+    },
+    {
+      "id": "implementation-handback-writer",
+      "lane": "implement",
+      "role": "tech-writer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-tech-writer-handback"
+      },
+      "brief_path": ".flow/runs/shaper-delivery-runtime-contracts/tech-writer-brief.md",
+      "input_evidence": [
+        ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/implementation-quality-review.md",
+        ".flow/runs/shaper-delivery-runtime-contracts/research/implementation-data-review.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts",
+        ".flow/runs/shaper-delivery-v7-live-proof",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Produce a concise evidence-backed handback with explicit limitations and next actions."
+      ],
+      "claim_statuses": [
+        "observed",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "implementation-handback"
+      }
     }
   ],
   "shared_state": [],
@@ -688,7 +733,11 @@
         "evidence": [
           ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
           ".flow/runs/shaper-delivery-runtime-contracts/solution.md"
-        ]
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
       },
       {
         "id": "contract-projection-architecture",
@@ -696,7 +745,11 @@
         "disposition": "accepted",
         "evidence": [
           ".flow/runs/shaper-delivery-runtime-contracts/solution.md"
-        ]
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
       },
       {
         "id": "work-feasibility-probe",
@@ -704,7 +757,11 @@
         "disposition": "rejected",
         "evidence": [
           ".flow/runs/shaper-delivery-runtime-contracts/reconciliation.md"
-        ]
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
       },
       {
         "id": "v6-inspection-only",
@@ -712,7 +769,11 @@
         "disposition": "accepted",
         "evidence": [
           ".flow/runs/shaper-delivery-runtime-contracts/solution.md"
-        ]
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
       },
       {
         "id": "chunk-one-plan",
@@ -721,7 +782,11 @@
         "evidence": [
           ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
           ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md"
-        ]
+        ],
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        }
       },
       {
         "id": "ordinary-chat-ingress",

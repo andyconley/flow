@@ -16,3 +16,7 @@
 - Solution decision: **approved 2026-09-22 by Andy Conley** with documented risks owned; Chunk 1 is eligible for `flow-plan`.
 - Chunk 1 shaped plan: **accepted by Andy Conley** — end-to-end contracts, atomic handoff, fenced lead, protocol-v7 projection, explainable producer choice, v6 inspection, CLI, deterministic gates, and one live handback job. Lifecycle plan approval remains pending capture review.
 - Plan decision: **approved 2026-09-22 by Andy Conley** through explicit `flow-implement` invocation.
+- Implementation quality review: **accepted** after the per-run Shaper intent, effective specialist-definition digest, inspection version, and approval-digest boundary fixes.
+- Data review: **accepted for v7 handback**; explicit durable SQLite migration history is deferred.
+- Live v7 runtime proof: **accepted with a limitation** — Magentic selected Claude, Flow observed the diff and passing targeted test, Ollama completed physical verification calls, and Flow denied later Codex producer proposals. Ollama's semantic responses were repetitive and not strong enough for the manager; improve the verifier contract in a later slice.
+- Live documentation diff: **evidence-only** in the isolated worktree because it contains the pinned proof commit. It is not part of the implementation branch.

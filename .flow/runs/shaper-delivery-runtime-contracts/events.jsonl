@@ -5,3 +5,4 @@
 {"artifacts": {}, "at": "2026-09-23T00:22:56Z", "dispositions": {}, "event": "start-plan", "from": "solution_approved", "to": "planning"}
 {"artifacts": {"handoff": ".flow/runs/shaper-delivery-runtime-contracts/implementation-handoff.md", "plan": ".flow/runs/shaper-delivery-runtime-contracts/plan.md", "validation_plan": ".flow/runs/shaper-delivery-runtime-contracts/validation-plan.md"}, "at": "2026-09-23T00:38:13Z", "dispositions": {}, "event": "approve-plan", "from": "planning", "to": "plan_approved"}
 {"artifacts": {}, "at": "2026-09-23T00:38:13Z", "dispositions": {}, "event": "start-implementation", "from": "plan_approved", "to": "implementing"}
+{"artifacts": {"handback": ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md", "implementation_evidence": ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md"}, "at": "2026-09-23T01:55:27Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}

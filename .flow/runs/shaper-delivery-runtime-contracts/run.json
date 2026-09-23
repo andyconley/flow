@@ -1,7 +1,9 @@
 {
   "artifacts": {
     "acceptance_criteria": ".flow/runs/shaper-delivery-runtime-contracts/acceptance-criteria.md",
+    "handback": ".flow/runs/shaper-delivery-runtime-contracts/HANDOFF.md",
     "handoff": ".flow/runs/shaper-delivery-runtime-contracts/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/shaper-delivery-runtime-contracts/validation-results.md",
     "orchestration_manifest": ".flow/runs/shaper-delivery-runtime-contracts/orchestration.json",
     "plan": ".flow/runs/shaper-delivery-runtime-contracts/plan.md",
     "requirements": ".flow/runs/shaper-delivery-runtime-contracts/requirements.md",
@@ -16,17 +18,18 @@
     "approve-definition": "2026-09-22T23:53:06Z",
     "approve-plan": "2026-09-23T00:38:13Z",
     "approve-solution": "2026-09-23T00:20:46Z",
+    "mark-handback-ready": "2026-09-23T01:55:27Z",
     "start-definition": "2026-09-22T03:11:02Z",
     "start-implementation": "2026-09-23T00:38:13Z",
     "start-plan": "2026-09-23T00:22:56Z",
     "start-solution": "2026-09-22T23:57:10Z"
   },
   "lane": "implement",
-  "last_event": "start-implementation",
-  "phase": "implementing",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-23T00:38:13Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-23T01:55:27Z",
   "work_id": "shaper-delivery-runtime-contracts"
 }
