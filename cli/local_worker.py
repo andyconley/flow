@@ -14,10 +14,14 @@ from execution_contracts import ContractError
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MAX_RESPONSE_BYTES = 131072
+# Structured verifier output is judged by Flow's evaluator, which owns the
+# size limit. The adapter retains up to the ledger's response ceiling.
+STRUCTURED_VERIFIER_OUTPUT_BYTES = 64 * 1024
+STRUCTURED_VERIFIER_NUM_PREDICT = 1024
 
 
-def _bounded_output(value: str) -> str:
-    return value.encode("utf-8")[:4096].decode("utf-8", errors="ignore")
+def _bounded_output(value: str, limit: int = 4096) -> str:
+    return value.encode("utf-8")[:limit].decode("utf-8", errors="ignore")
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -26,14 +30,22 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None = None,
-               correlation_id: str | None = None, timeout_seconds: int = 60) -> dict[str, Any]:
+               correlation_id: str | None = None, timeout_seconds: int = 60,
+               structured_verifier: bool = False) -> dict[str, Any]:
+    """Make one local call.
+
+    With ``structured_verifier``, a received response is always returned as a
+    completed observation: empty content and a different reported model are
+    facts for Flow's evaluator to judge, not transport failures.
+    """
     if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 60:
         raise ContractError("local worker timeout is invalid")
     provider = envelope["provider"]
     if provider == "local-stub":
         if transport is None:
             raise ContractError("local-stub requires an explicit test transport")
-        answer = _bounded_output(str(transport(envelope)))
+        answer = _bounded_output(str(transport(envelope)),
+                                 STRUCTURED_VERIFIER_OUTPUT_BYTES if structured_verifier else 4096)
         return {"schema_version": 1, "status": "completed", "provider": "local-stub", "model": envelope["model"], "physical_call": False,
                 "evidence_level": "local_stub",
                 "output": answer, "output_sha256": hashlib.sha256(answer.encode()).hexdigest(), "usage": None}
@@ -55,7 +67,8 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
         body = json.dumps({"model": envelope["model"], "stream": False, "messages": [
             {"role": "system", "content": envelope["instructions"]},
             {"role": "user", "content": envelope["task"]},
-        ], "options": {"num_predict": 256}}, sort_keys=True).encode()
+        ], "options": {"num_predict": STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256}},
+            sort_keys=True).encode()
         request = urllib.request.Request(url, data=body, headers={
             "Content-Type": "application/json",
             "X-Flow-Correlation-Id": correlation_id or envelope["attempt_id"],
@@ -74,10 +87,19 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
     if not isinstance(payload.get("message"), dict):
         raise RuntimeError("Ollama response has no message object")
     text = payload["message"].get("content")
-    if not isinstance(text, str) or not text:
-        raise RuntimeError("Ollama returned empty response")
-    if payload.get("model") != envelope["model"]:
-        raise RuntimeError("Ollama reported a different model than the approved model")
+    reported_model = payload.get("model")
+    if structured_verifier:
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            raise RuntimeError("Ollama response content is not text")
+        if not isinstance(reported_model, str) or not reported_model:
+            reported_model = "unreported"
+    else:
+        if not isinstance(text, str) or not text:
+            raise RuntimeError("Ollama returned empty response")
+        if reported_model != envelope["model"]:
+            raise RuntimeError("Ollama reported a different model than the approved model")
     usage = {}
     for key in ("prompt_eval_count", "eval_count"):
         value = payload.get(key)
@@ -85,8 +107,9 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise RuntimeError("Ollama returned invalid usage")
             usage[key] = value
-    text = _bounded_output(text)
-    return {"schema_version": 1, "status": "completed", "provider": "ollama", "model": envelope["model"], "physical_call": True,
+    text = _bounded_output(text, STRUCTURED_VERIFIER_OUTPUT_BYTES if structured_verifier else 4096)
+    return {"schema_version": 1, "status": "completed", "provider": "ollama",
+            "model": reported_model if structured_verifier else envelope["model"], "physical_call": True,
             "evidence_level": "flow_observed_local_http_response",
             "output": text, "output_sha256": hashlib.sha256(text.encode()).hexdigest(),
             "usage": usage or None, "response_created_at": payload.get("created_at")}

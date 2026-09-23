@@ -26,7 +26,7 @@ from execution_contracts import (
     validate_result,
     validate_manager_call,
 )
-from verifier_contracts import validate_evaluation
+from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
 
 
 def utc_now() -> str:
@@ -634,6 +634,7 @@ class ExecutionLedger:
             raise ContractError("verifier evidence digest is invalid")
         encoded = canonical(verifier_input)
         input_digest = hashlib.sha256(encoded.encode()).hexdigest()
+        expired = False
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             attempt, _, _ = self._v8_verifier_action(db, action_id)
@@ -643,22 +644,27 @@ class ExecutionLedger:
                 raise ContractError("verifier grant is absent or already consumed")
             issued = db.execute("SELECT at FROM events WHERE action_id=? AND event='policy_allowed' ORDER BY seq DESC LIMIT 1", (action_id,)).fetchone()
             if not issued or datetime.now(timezone.utc) > datetime.fromisoformat(issued[0]) + timedelta(seconds=60):
+                # Commit the denial before refusing; raising inside the
+                # transaction would roll it back and leave the grant reserved.
                 db.execute("UPDATE actions SET status='denied',reason='grant_expired' WHERE action_id=?", (action_id,))
                 self._event(db, attempt, action_id, "policy_denied", "grant_expired")
-                raise ContractError("verifier grant expired")
-            if db.execute("SELECT 1 FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone():
+                expired = True
+            elif db.execute("SELECT 1 FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone():
                 raise ContractError("verifier input was already prepared")
-            now = utc_now()
-            db.execute("INSERT INTO verifier_inputs VALUES(?,?,?,?,?,?,?,?)",
-                       (action_id, now, encoded, input_digest, diff_digest, test_digest, now, generation))
-            db.execute("UPDATE actions SET status='started' WHERE action_id=?", (action_id,))
-            self._event(db, attempt, action_id, "verifier_input_recorded", input_digest)
-            self._event(db, attempt, action_id, "worker_dispatched", "grant_consumed")
-            self._event(db, attempt, action_id, "adapter_send_started", "flow_observed_boundary")
-            self._event(db, attempt, action_id, "verifier_send_claimed", "flow_observed_boundary")
-            return {"action_id": action_id, "input": verifier_input, "input_digest": input_digest,
-                    "diff_digest": diff_digest, "test_digest": test_digest,
-                    "recorded_at": now, "owner_generation": generation, "replayed": False}
+            else:
+                now = utc_now()
+                db.execute("INSERT INTO verifier_inputs VALUES(?,?,?,?,?,?,?,?)",
+                           (action_id, now, encoded, input_digest, diff_digest, test_digest, now, generation))
+                db.execute("UPDATE actions SET status='started' WHERE action_id=?", (action_id,))
+                self._event(db, attempt, action_id, "verifier_input_recorded", input_digest)
+                self._event(db, attempt, action_id, "worker_dispatched", "grant_consumed")
+                self._event(db, attempt, action_id, "adapter_send_started", "flow_observed_boundary")
+                self._event(db, attempt, action_id, "verifier_send_claimed", "flow_observed_boundary")
+        if expired:
+            raise ContractError("verifier grant expired")
+        return {"action_id": action_id, "input": verifier_input, "input_digest": input_digest,
+                "diff_digest": diff_digest, "test_digest": test_digest,
+                "recorded_at": now, "owner_generation": generation, "replayed": False}
 
     def close_pre_send_failure(self, action_id: str, grant_id: str, *, generation: int) -> None:
         """Close a guarded grant when the gateway failed before crossing dispatch.
@@ -807,7 +813,7 @@ class ExecutionLedger:
             claimed = db.execute("SELECT send_claimed_at FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone()
             consumed += bool((claimed and claimed[0] is not None) or status in {"completed", "failed", "unknown"})
         denied = sum(row[2] == "denied" and row[3] in {"verifier_call_cap", "verifier_retry_denied"} for row in verifier_rows)
-        evaluations = db.execute("SELECT outcome FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at", (attempt_id,)).fetchall()
+        evaluations = db.execute("SELECT outcome FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at, rowid", (attempt_id,)).fetchall()
         latest = evaluations[-1][0] if evaluations else None
         maximum = envelope["limits"]["max_verifier_calls"]
         return {"maximum": maximum, "reserved": reserved, "consumed": consumed, "denied": denied,
@@ -834,21 +840,10 @@ class ExecutionLedger:
             is_v8_verifier = (execution_protocol_version(envelope) == 8
                               and action.get("instance_id") in envelope.get("job_contract", {}).get("verifier_instance_ids", []))
             if is_v8_verifier:
-                output = result.get("output") if isinstance(result, dict) else None
-                output_sha = result.get("output_sha256") if isinstance(result, dict) else None
-                if (not isinstance(result, dict) or result.get("schema_version") != 1
-                        or result.get("status") != "completed"
-                        or not isinstance(result.get("provider"), str) or not result["provider"]
-                        or not isinstance(result.get("model"), str) or not result["model"]
-                        or type(result.get("physical_call")) is not bool
-                        or not isinstance(result.get("evidence_level"), str) or not result["evidence_level"]
-                        or not isinstance(output, str) or not output or len(output.encode()) > 65536
-                        or output_sha != hashlib.sha256(output.encode()).hexdigest()):
-                    raise ContractError("structured verifier response is invalid")
-                usage = result.get("usage")
-                if usage is not None and (not isinstance(usage, dict) or any(
-                        isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in usage.values())):
-                    raise ContractError("structured verifier response usage is invalid")
+                try:
+                    validate_structured_verifier_result(result)
+                except VerifierContractError as exc:
+                    raise ContractError(str(exc)) from exc
             else:
                 validate_result(envelope, result, action=action)
             encoded = canonical(result)
@@ -926,7 +921,15 @@ class ExecutionLedger:
                     raise ContractError("durable response observation digest mismatch")
                 envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0])
                 request = json.loads(db.execute("SELECT request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()[0])
-                validate_result(envelope, json.loads(observed[0]), action=request)
+                if (execution_protocol_version(envelope) == 8
+                        and request.get("instance_id") in envelope.get("job_contract", {}).get("verifier_instance_ids", [])):
+                    # Same shape rule as observe_response; Flow judges content later.
+                    try:
+                        validate_structured_verifier_result(json.loads(observed[0]))
+                    except VerifierContractError as exc:
+                        raise ContractError(str(exc)) from exc
+                else:
+                    validate_result(envelope, json.loads(observed[0]), action=request)
             if disposition == "resolved_not_dispatched":
                 if row[0] != "allowed":
                     raise ContractError("no-dispatch resolution requires an unconsumed grant")
@@ -1558,7 +1561,7 @@ class ExecutionLedger:
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             observations = db.execute("SELECT action_id,observed_at,result_json,result_digest,owner_generation FROM response_observations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY observed_at", (attempt_id,)).fetchall() if "response_observations" in tables else []
             verifier_inputs = db.execute("SELECT action_id,recorded_at,input_json,input_digest,diff_digest,test_digest,send_claimed_at,owner_generation FROM verifier_inputs WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY recorded_at", (attempt_id,)).fetchall() if "verifier_inputs" in tables else []
-            verifier_evaluations = db.execute("SELECT action_id,evaluated_at,evaluation_json,evaluation_digest,outcome,reason,owner_generation FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at", (attempt_id,)).fetchall() if "verifier_evaluations" in tables else []
+            verifier_evaluations = db.execute("SELECT action_id,evaluated_at,evaluation_json,evaluation_digest,outcome,reason,owner_generation FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at, rowid", (attempt_id,)).fetchall() if "verifier_evaluations" in tables else []
             resolutions = db.execute("SELECT resolution_id,action_id,actor,disposition,explanation,evidence_json,result_json,resolution_digest,created_at,owner_generation FROM recovery_resolutions WHERE attempt_id=? ORDER BY created_at", (attempt_id,)).fetchall() if "recovery_resolutions" in tables else []
             replans = db.execute("SELECT replan_id,sequence,request_json,proposal_digest,status,reason FROM replan_decisions WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "replan_decisions" in tables else []
             manager_calls = db.execute("SELECT call_id,sequence,request_json,status,reason,grant_id,result_json,observed_at FROM manager_calls WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "manager_calls" in tables else []

@@ -157,9 +157,14 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
         evaluation = evaluate_candidate(action_id=proposal["action_id"], verifier_input_digest=binding["input_digest"], raw_output=raw, diff_digest="d" * 64, test_evidence_digest="e" * 64)
         self.assertFalse(self.ledger.record_verifier_evaluation(proposal["action_id"], evaluation, generation=1)["replayed"])
         self.assertTrue(self.ledger.record_verifier_evaluation(proposal["action_id"], evaluation, generation=1)["replayed"])
-        changed = {**evaluation, "reason": "accepted_fail"}
-        with self.assertRaisesRegex(Exception, "contradicts|conflicts|digest mismatch"):
+        # A validly sealed but different judgment over the same bindings.
+        changed = evaluate_candidate(action_id=proposal["action_id"], verifier_input_digest=binding["input_digest"],
+                                     raw_output=raw, diff_digest="d" * 64, test_evidence_digest="e" * 64,
+                                     forced_unusable_reason="provider_binding_mismatch")
+        with self.assertRaisesRegex(Exception, "conflicts with durable evaluation"):
             self.ledger.record_verifier_evaluation(proposal["action_id"], changed, generation=1)
+        with self.assertRaisesRegex(Exception, "reason is invalid"):
+            self.ledger.record_verifier_evaluation(proposal["action_id"], {**evaluation, "reason": "accepted_fail"}, generation=1)
 
     def test_unknown_consumes_and_proven_not_dispatched_releases_allowance(self):
         env = self.envelope(maximum=1)
@@ -230,3 +235,36 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
                              ("legacy", "work", envelope_json, "completed", "", "receipt.json"))
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertTrue({"verifier_inputs", "verifier_evaluations"}.issubset(tables))
+
+    def test_expired_verifier_grant_is_committed_denied_not_left_reserved(self):
+        env = self.envelope(maximum=1)
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        grant = self.ledger.decide(env, proposal, generation=1)
+        self.assertTrue(grant["allowed"], grant)
+        with sqlite3.connect(self.ledger.path) as db:
+            db.execute("UPDATE events SET at='2000-01-01T00:00:00+00:00' WHERE action_id=? AND event='policy_allowed'",
+                       (proposal["action_id"],))
+        with self.assertRaisesRegex(ContractError, "grant expired"):
+            self.ledger.prepare_verifier_send(proposal["action_id"], grant["grant_id"], {**proposal, "provider_task": "verify"},
+                                              "d" * 64, "e" * 64, generation=1)
+        action = next(item for item in self.ledger.snapshot(env["attempt_id"])["actions"]
+                      if item["action_id"] == proposal["action_id"])
+        self.assertEqual((action["status"], action["reason"]), ("denied", "grant_expired"))
+        self.assertEqual(self.ledger.verifier_usage(env["attempt_id"])["reserved"], 0)
+        self.assertEqual(self.ledger.snapshot(env["attempt_id"])["verifier_inputs"], [])
+
+    def test_operator_can_resolve_unknown_verifier_with_empty_observed_output(self):
+        env = self.envelope(maximum=1)
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        grant = self.ledger.decide(env, proposal, generation=1)
+        self.ledger.prepare_verifier_send(proposal["action_id"], grant["grant_id"], {**proposal, "provider_task": "verify"},
+                                          "d" * 64, "e" * 64, generation=1)
+        self.ledger.observe_response(proposal["action_id"], _result(proposal, ""), generation=1)
+        self.ledger.mark_unknown(proposal["action_id"], "specialist_send_outcome_uncertain", generation=1)
+        resolved = self.ledger.resolve_unknown(env["attempt_id"], proposal["action_id"], "operator", "resolved_completed",
+                                               "observed response was durably retained",
+                                               [{"kind": "response", "path": ".flow/runs/proof.json", "sha256": "a" * 64}],
+                                               generation=1)
+        self.assertEqual(resolved["disposition"], "resolved_completed")
