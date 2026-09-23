@@ -1,0 +1,523 @@
+{
+  "schema_version": 1,
+  "work_id": "chartered-delivery-recovery",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "classification": "standard",
+    "rationale": "Recovery semantics decide whether a provider call can be resent; requirements need independent boundary review."
+  },
+  "assignments": [
+    {
+      "id": "definition-architecture",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-delivery-recovery"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/brief.md",
+        "docs/maf-adoption-design.md",
+        "docs/adr/0014-shaper-delivery-ownership.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/recovery-boundary.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/recovery-boundary.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Map v5 recovery machinery and what blocks chartered v6-v8 attempts from reusing it"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-discovery"
+      }
+    },
+    {
+      "id": "definition-business-analysis",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-delivery-recovery"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/brief.md",
+        "docs/maf-adoption-design.md",
+        "docs/adr/0014-shaper-delivery-ownership.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/failure-scenarios.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/failure-scenarios.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Enumerate chartered attempt failure states and the operator workflow and acceptance criteria for each"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-discovery"
+      }
+    },
+    {
+      "id": "definition-product",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-delivery-recovery"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/brief.md",
+        "docs/maf-adoption-design.md",
+        "docs/adr/0014-shaper-delivery-ownership.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/increment-scope.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/increment-scope.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Define the smallest valuable recovery increment, its success criteria and non-goals"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-discovery"
+      }
+    },
+    {
+      "id": "adversarial-product",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-delivery-recovery-adversarial"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/adversarial-brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/reconciliation.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Is the outcome worth doing now, is scope right-sized, are non-goals honest"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-adversarial"
+      }
+    },
+    {
+      "id": "adversarial-requirements",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-delivery-recovery-adversarial"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/adversarial-brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/reconciliation.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Are workflows, acceptance criteria, and edge cases clear and testable"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-adversarial"
+      }
+    },
+    {
+      "id": "adversarial-architecture",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-delivery-recovery-adversarial"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/adversarial-brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/reconciliation.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Are boundaries, ADR constraints, and feasibility assumptions sound"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-adversarial"
+      }
+    },
+    {
+      "id": "adversarial-test",
+      "lane": "define",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-delivery-recovery-adversarial"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/adversarial-brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/reconciliation.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Is every acceptance criterion measurable and the kill-boundary matrix provable"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-adversarial"
+      }
+    },
+    {
+      "id": "solution-options",
+      "lane": "solution",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-delivery-recovery-solution"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/solution-brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/solution-brief.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/solution-options.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/solution-options.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Propose at least two recovery designs honoring the engagement answers, with tradeoffs and a recommendation"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "solution-exploration"
+      }
+    },
+    {
+      "id": "solution-data",
+      "lane": "solution",
+      "role": "data-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-data-engineer-delivery-recovery-solution"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/solution-brief.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/solution-brief.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery/research/solution-data.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        },
+        {
+          "name": "filesystem-write",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/research/solution-data.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Design the ledger and receipt state changes: interrupted state, unresolved-unknown attempts, superseded record, attempt lineage, migration"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "solution-exploration"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/chartered-delivery-recovery/reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "v8-recovery-scope",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery/requirements.md",
+          ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+          ".flow/runs/chartered-delivery-recovery/adversarial-review.md"
+        ]
+      },
+      {
+        "id": "two-chunk-delivery",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery/requirements.md",
+          ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+          ".flow/runs/chartered-delivery-recovery/adversarial-review.md"
+        ]
+      },
+      {
+        "id": "lead-change-fences-attempt",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery/requirements.md",
+          ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+          ".flow/runs/chartered-delivery-recovery/adversarial-review.md"
+        ]
+      },
+      {
+        "id": "recovery-mechanism",
+        "status": "unverified",
+        "disposition": "deferred",
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery/requirements.md"
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [],
+    "evidence_collector_assignment": null,
+    "verifier_assignment": "adversarial-architecture",
+    "independent": true,
+    "artifact_path": ".flow/runs/chartered-delivery-recovery/adversarial-review.md"
+  }
+}
