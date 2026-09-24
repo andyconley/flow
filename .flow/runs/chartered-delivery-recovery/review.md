@@ -87,3 +87,22 @@ Both reviewers found no chunk mismapping.
 - **Fix-up:** fix I1 to I4 on branch `codex/chartered-delivery-recovery-1a`, re-run the AC12 mutation and the full suite, and update `validation-results.md`.
 - **Suggestions:** apply S1 to S5 or record a disposition for each.
 - **Re-review:** after that, run a targeted re-review of the fix commit, then `accept-review`.
+
+## Re-review (`review-recheck`, quality-reviewer, brief `briefs/review-recheck.md`)
+
+- **Verdict: ready to accept.** I1–I4 and S1–S5 are fixed in `f01ea35` and `c39d7fa`, with no regressions. The reviewer confirmed:
+  - AC1 refusals still write only the excluded lock file;
+  - the lock is released on every refusal path;
+  - the lock order is intact;
+  - no seal case needs a fresh test run: a completed receipt needs a `valid_pass`, which is always bound to a `test_digest`.
+- **New suggestions and their dispositions:**
+  - **N1, fixed:** the I1 test now asserts that its runtime outcome is failure-free.
+  - **N2, fixed:** each command entry may be loaded only once inside `cli/flow.py:main`. An `atexit.register(recover_delivery)` mutation there fails the test. The alias, `getattr`, and outside-tree limits are stated in the proof map.
+  - **N3, fixed:** the AC2 proof-map wording now says the test catches any load.
+  - **N4, accepted and recorded in `HANDOFF.md`:** a stale lock label can give the reason `recovery_in_progress` instead of `attempt_running` for a moment while a live run takes the lock. It predates 1a, still refuses, and mutates nothing.
+  - **N5, recorded as a chunk-2 requirement in `HANDOFF.md`:** the v8 `resolve-execution` must take `recovery_lock`.
+  - **S5 note, accepted:** two subtests share the message "generation chain". Both mutations target the same chain check.
+
+## Final disposition
+
+**Ready to accept.** All in-scope ACs are met: AC1–AC4 (b, d, f, g, h, i, and transport), AC6–AC8, AC9 clause 1, AC10 (generation and marker), AC11, and AC12 (test-runner half). The residual risks are as listed above and in `HANDOFF.md`.

@@ -12,6 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_control import change_lead_claim  # noqa: E402
+from delivery_recovery import runtime_outcome  # noqa: E402
 from delivery_projection import inspect_delivery, inspect_delivery_projection  # noqa: E402
 from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery,  # noqa: E402
                               recover_delivery, resume_delivery)
@@ -405,6 +406,8 @@ class CharteredRecoveryTests(RecoveryHarness):
         self.assertEqual(self.sends, ["editor"])
         snapshot = self._ledger().snapshot(attempt_id)
         self.assertEqual(snapshot.get("verifier_inputs", []), [])
+        # The scenario: a recorded, failure-free outcome, so seal mode is not the recorded-failure path.
+        self.assertEqual(runtime_outcome(snapshot)["failure"], "")
         before = self.test_calls
         result = self._recover(attempt_id, ("editor",),
                                supervisor=lambda *args, **kwargs: self.fail("seal mode must skip MAF"))
@@ -643,6 +646,7 @@ class CharteredRecoveryEntryTests(unittest.TestCase):
     def _references(self):
         repo = Path(__file__).resolve().parents[1]
         found: dict[str, set[str]] = {}
+        self.counts: dict[str, int] = {}
         for path in sorted([*(repo / "cli").rglob("*.py"), *(repo / "runtime").rglob("*.py")]):
             label = path.relative_to(repo).as_posix()
 
@@ -654,7 +658,9 @@ class CharteredRecoveryEntryTests(unittest.TestCase):
                     name = (child.id if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
                             else child.attr if isinstance(child, ast.Attribute) else None)
                     if name in self.ENTRY_POINTS:
-                        found.setdefault(name, set()).add(f"{label}:{function}")
+                        site = f"{label}:{function}"
+                        found.setdefault(name, set()).add(site)
+                        self.counts[f"{name}@{site}"] = self.counts.get(f"{name}@{site}", 0) + 1
                     walk(child, inner)
 
             walk(ast.parse(path.read_text()), "<module>")
@@ -662,6 +668,10 @@ class CharteredRecoveryEntryTests(unittest.TestCase):
 
     def test_recovery_entry_points_are_referenced_only_from_the_operator_commands(self):
         self.assertEqual(self._references(), self.ALLOWED)
+        # main is allowed as a whole, so each entry may be loaded there only once:
+        # a second load (a timer or atexit hook inside main) fails here.
+        for name in ("resume_delivery", "recover_delivery"):
+            self.assertEqual(self.counts[f"{name}@cli/flow.py:main"], 1, name)
 
     def test_the_cli_reaches_recovery_only_through_its_two_named_subcommands(self):
         source = (Path(__file__).resolve().parents[1] / "cli" / "flow.py").read_text()

@@ -44,7 +44,11 @@ All test names below are in `tests/test_chartered_delivery_recovery.py` unless a
   - The ledger test for the compare-and-swap claim confirms a stale claim is refused.
   - `test_reinvoking_after_a_completed_recovery_returns_state_without_mutation` confirms a re-invoke changes nothing.
   - `test_a_live_attempt_mid_send_refuses_as_attempt_running_not_reconciliation`: an action `started` under a held live fence refuses as `attempt_running` through both entry points, with the snapshot unchanged. Once the fence is free, the same attempt refuses as `reconciliation_required`.
-  - No time-, expiry-, or exit-triggered path exists. This is proven by `CharteredRecoveryEntryTests`, an AST test over `cli/` and `runtime/`: every reference to `resume_delivery`, `recover_delivery`, `_resume_chartered`, or `claim_chartered_recovery` is a call site or a callable handed to a timer. That test pins the reference set to the two operator subcommands in `cli/flow.py`. Adding a `threading.Timer(..., recover_delivery)` fails it (mutation below).
+  - No time-, expiry-, or exit-triggered path exists. `CharteredRecoveryEntryTests` checks this. It is an AST test over `cli/` and `runtime/`.
+    - It finds every load of `resume_delivery`, `recover_delivery`, `_resume_chartered`, or `claim_chartered_recovery`, whether a call or a bare callable handed to a hook.
+    - It requires the set of enclosing functions to equal the allowlist, which ends at the two operator subcommands in `cli/flow.py`.
+    - It requires exactly one load of each command entry inside `main`.
+    - **Limits:** it does not see an aliased import (`import ... as x`), a `getattr` by string, or callers outside `cli/` and `runtime/`. Adding a `threading.Timer(..., recover_delivery)` fails it (mutation below).
 - **AC3: the ledger decides first.** In the boundary (b) producer test, the `recovery_claimed` event and then the call's `policy_allowed`/`recovery_regranted` event both come before the ledger high-water mark recorded at the adapter call. The adapter count is zero before the regrant.
 - **AC4: boundaries b, d, f, g, h, and i, plus transport loss.** Each is killed with `KillPoint(BaseException)` and then recovered explicitly:
   - `test_boundary_b_unconsumed_producer_grant_is_regranted_and_counted_once`, `test_boundary_b_unconsumed_verifier_grant_captures_the_test_once`;
@@ -110,6 +114,7 @@ All test names below are in `tests/test_chartered_delivery_recovery.py` unless a
 | Seal mode runs the test again (`run_test=not recorded_failure`, the pre-fix code) | `test_seal_mode_without_a_recorded_failure_or_verifier_input_never_runs_the_test` | **FAIL**: `2 != 1` |
 | Gates run before the recovery lock (the pre-fix order) | `test_a_live_attempt_mid_send_refuses_as_attempt_running_not_reconciliation` | **FAIL**: `'reconciliation_required' != 'attempt_running'` |
 | A `threading.Timer(60, recover_delivery, ...)` watchdog added to `cli/delivery_gateway.py` | `CharteredRecoveryEntryTests` | **FAIL**: an unexpected reference, `cli/delivery_gateway.py:_watchdog` |
+| `atexit.register(recover_delivery)` added inside `cli/flow.py:main` | `CharteredRecoveryEntryTests` | **FAIL**: `2 != 1 : recover_delivery` |
 
 Notes on the AC12 row:
 - The first AC12 run, before `f01ea35`, failed on the status assertion. The acceptance review found that this did not show the named assertion failing (`review.md` I2). The AC6 test now asserts the zero-rerun count first, and has an answer-mode case.

@@ -73,6 +73,7 @@ Commits (Conventional Commits, and the full suite passed after each one):
 
   The remedy is supersede and a successor (1b).
 - **Inspection is ledger-only:** it cannot see the live-run fence. The command decides `attempt_running`. Chunk 2's v8 `resolve-execution` must take the recovery lock too, so it cannot resolve a send that is still in flight.
+- **Stale lock label (predates 1a):** a refused recovery leaves `recovery` in the lock file, because release does not truncate it. For the instant between a live run taking the lock and writing its own label, a concurrent recovery would report `recovery_in_progress` instead of `attempt_running`. It still refuses, and nothing is mutated.
 - **Not covered in CI:** CI has no MAF job, so the pending-mode runtime test only runs locally.
 - **Declined nits, recorded as follow-ups:** the raw-path read-only URI and `send_lock`'s missing `O_NOFOLLOW` both predate this diff.
 
