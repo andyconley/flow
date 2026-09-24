@@ -1,0 +1,27 @@
+== M1a: pre-check only (lead_change_blocker returns None)
+OK
+== M1b: pre-check and in-transaction recheck both removed
+FAIL: test_lead_resume_or_supersede_is_refused_while_any_action_is_unknown (tests.test_chartered_delivery_recovery.LeadChangeFenceTests.test_lead_resume_or_supersede_is_refused_while_any_action_is_unknown) (action='resume')
+AssertionError: True is not false
+FAIL: test_lead_resume_or_supersede_is_refused_while_any_action_is_unknown (tests.test_chartered_delivery_recovery.LeadChangeFenceTests.test_lead_resume_or_supersede_is_refused_while_any_action_is_unknown) (action='supersede')
+AssertionError: True is not false
+== M2: decide ignores the lineage
+FAIL: test_successor_paid_and_verifier_limits_count_predecessor_sends (tests.test_chartered_delivery_recovery.SuccessorLineageTests.test_successor_paid_and_verifier_limits_count_predecessor_sends)
+AssertionError: Lists differ: ['editor', 'verifier'] != ['editor']
+FAILED (failures=1)
+== restored
+ 1 file changed, 86 insertions(+), 9 deletions(-)
+0
+== M1a repeated against the v7-unknown guard test
+FAIL: test_an_unknown_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal (tests.test_chartered_delivery_recovery.LeadChangeFenceTests.test_an_unknown_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal)
+AssertionError: True is not false
+FAILED (failures=1)
+== restored: 0 markers
+== M3: receipt lineage cap-bound check removed
+FAIL: test_tampering_only_lineage_usage_fails_receipt_validation (tests.test_chartered_delivery_recovery.SuccessorLineageTamperTests.test_tampering_only_lineage_usage_fails_receipt_validation) (label='inflated verifier sends')
+FAIL: test_tampering_only_lineage_usage_fails_receipt_validation (tests.test_chartered_delivery_recovery.SuccessorLineageTamperTests.test_tampering_only_lineage_usage_fails_receipt_validation) (label='inflated paid calls')
+FAILED (failures=2)
+== M4: seal ignores the probed set
+FAIL: test_the_seal_refuses_attempts_that_were_not_probed (tests.test_chartered_delivery_recovery.LeadChangeFenceTests.test_the_seal_refuses_attempts_that_were_not_probed)
+FAILED (failures=1)
+== restored: cli/execution_contracts.py:0 cli/execution_ledger.py:0 

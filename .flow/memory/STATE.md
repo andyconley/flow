@@ -2,9 +2,11 @@
 
 ## Active work
 
-- `chartered-delivery-recovery-1b`: the superseded seal, ledger-backed
-  lead guard, successor predecessors, and lineage limits (plan commits 12-13
-  of `chartered-delivery-recovery`). Chunk 2 follows as its own linked run.
+- `chartered-delivery-recovery-1b` is handback-ready on branch
+  `codex/chartered-delivery-recovery-1b` (not pushed): the superseded seal,
+  ledger-backed lead guard, successor predecessors, and lineage limits. The
+  full suite passed 1,442 tests and the 11 MAF-gated tests ran locally. Next:
+  acceptance review, then its PR. Chunk 2 follows as its own linked run.
 
 ## Recently completed
 

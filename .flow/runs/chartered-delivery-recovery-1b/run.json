@@ -1,7 +1,9 @@
 {
   "artifacts": {
     "acceptance_criteria": ".flow/runs/chartered-delivery-recovery-1b/acceptance-criteria.md",
+    "handback": ".flow/runs/chartered-delivery-recovery-1b/HANDOFF.md",
     "handoff": ".flow/runs/chartered-delivery-recovery-1b/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/chartered-delivery-recovery-1b/validation-results.md",
     "orchestration_manifest": ".flow/runs/chartered-delivery-recovery-1b/orchestration.json",
     "plan": ".flow/runs/chartered-delivery-recovery-1b/plan.md",
     "requirements": ".flow/runs/chartered-delivery-recovery-1b/requirements.md",
@@ -12,16 +14,18 @@
   "gates": {
     "approve-definition": "2026-09-24T02:28:03Z",
     "approve-plan": "2026-09-24T02:28:09Z",
+    "mark-handback-ready": "2026-09-24T02:52:23Z",
     "start-definition": "2026-09-24T02:27:33Z",
     "start-implementation": "2026-09-24T02:28:09Z",
     "start-plan": "2026-09-24T02:28:09Z"
   },
   "lane": "implement",
-  "last_event": "start-implementation",
-  "phase": "implementing",
+  "last_event": "mark-handback-ready",
+  "next_action": "next: /flow-review chartered-delivery-recovery-1b",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-24T02:28:09Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-24T02:52:23Z",
   "work_id": "chartered-delivery-recovery-1b"
 }

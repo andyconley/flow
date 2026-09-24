@@ -1,0 +1,38 @@
+....................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................fatal: repository '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpuac0h76y/does-not-exist.git' does not exist
+..Cloning into '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp3r6dxfyq/user.clone-tmp'...
+done.
+.Cloning into '/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp1n9x1li2/user.clone-tmp'...
+done.
+.Initialized empty Git repository in /private/var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmprf44v6vd/user/.git/
+.........................................................(no active sessions in range)
+
+freshness: no usage harvests recorded yet; run `flow harvest claude`, `flow harvest codex`, then `flow normalize`.
+ignoring managed path outside the root: ../../escape.md
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpzwtbw8d1/victim.txt
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpbjr48xtc/victim.txt
+claude sync wrote managed files:
+- removed: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpbjr48xtc/repo/.claude/ok.md
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp_53yi1rh/victim.txt
+...........................................................................................................................To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp6oum07gk/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpgtff9qlv/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpgtff9qlv/remote.git
+ * [new tag]         v0.22.0 -> v0.22.0
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpsake4mgq/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpsake4mgq/remote.git
+   3dd9df0..da81d21  main -> main
+.To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp_iw7aw3d/remote.git
+ * [new branch]      main -> main
+ * [new tag]         v0.21.0 -> v0.21.0
+To /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp_iw7aw3d/remote.git
+ + d3a99a4...a6d04c8 v0.21.0 -> v0.21.0 (forced update)
+...................................................................
+----------------------------------------------------------------------
+Ran 1442 tests in 160.796s
+
+OK
