@@ -2,6 +2,45 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.34.0](https://github.com/andyconley/flow/compare/v0.33.0...v0.34.0) (2026-09-24)
+
+### Features
+
+* **contracts:** validate predecessors and the v8 receipt recovery block ([92756d0](https://github.com/andyconley/flow/commit/92756d0cd6d64a0de6387c7bc7923167ecfbc2c4))
+* **gateway:** add seal_hook test seam and runtime_outcome_recorded event ([0c8d25c](https://github.com/andyconley/flow/commit/0c8d25c36629c01d7b11c80720a7420fe2f5da79))
+* **gateway:** record v8 interruptions instead of sealing transport loss or unknown ([4a05beb](https://github.com/andyconley/flow/commit/4a05bebb57ccf3bb70ee6d2b8001131a96f669f9))
+* **gateway:** recover chartered v8 attempts from the latest bound checkpoint ([d164106](https://github.com/andyconley/flow/commit/d16410608179217f3a0f6c2acd97beda95e5d1e5))
+* **gateway:** route resume and recover by protocol with stable refusals ([4d3e5b6](https://github.com/andyconley/flow/commit/4d3e5b6347f61d16870c125a6084af4fb5a5f08e))
+* **inspect:** report v8 recovery eligibility, blockers, predecessors, and sealed digest ([7de46ee](https://github.com/andyconley/flow/commit/7de46ee3af05ba33cd9e0933030c5cc5d421ba3b))
+* **ledger:** add exclusive chartered recovery claim, grant release, and regrant ([72a8b3e](https://github.com/andyconley/flow/commit/72a8b3eba14043d05b81a88f080c1af88b26f71a))
+* **ledger:** add v8 interruption and recovery tables and sealed receipt digest column ([cdfb6bf](https://github.com/andyconley/flow/commit/cdfb6bf7c86b983e2ec0f6a8a716b355e99f3c77))
+* **recovery:** add pure recovery eligibility and evidence plan module ([7954471](https://github.com/andyconley/flow/commit/7954471f6021027e156bd8997bc0166578005d01))
+* **runtime:** add pending-request restore mode to the delivery lead runner ([b69d1a1](https://github.com/andyconley/flow/commit/b69d1a1a008ed528762dc49c5ab0635d77ec11ad))
+
+### Bug Fixes
+
+* **recovery:** decide eligibility under the recovery lock and address review findings ([3a69f3f](https://github.com/andyconley/flow/commit/3a69f3f8ea4aeade42b5b1fa745dc79456363993))
+* **recovery:** fence before gating, never test in seal mode, and pin the entry points ([f01ea35](https://github.com/andyconley/flow/commit/f01ea35b777e831e92ee70be6c67cfae35a41a4c))
+
+### Documentation
+
+* accept chunk 1a review ([880edda](https://github.com/andyconley/flow/commit/880eddaf592a32786020eaed85dca649d9de6fd7))
+* **adr:** add ADR 0016 chartered v8 recovery ([27b68d5](https://github.com/andyconley/flow/commit/27b68d5b8652bb15264447a982dea56b5a3397ff))
+* bring chunk 1a handoff up to the accepted review ([4bd0009](https://github.com/andyconley/flow/commit/4bd0009634c4a5a779cb2914e700afcdff7d4926))
+* define and solution chartered delivery recovery ([3fa6711](https://github.com/andyconley/flow/commit/3fa67117a4eeb5dce7e80654c09c7908d5979a40))
+* plan chartered delivery recovery ([e43c109](https://github.com/andyconley/flow/commit/e43c109562a1891e2e730d9d620e56a71b7e9a97))
+* record chartered delivery recovery chunk 1a evidence ([0b47695](https://github.com/andyconley/flow/commit/0b476951a337d66d049d6006e93c605605d9a7e7))
+* record chunk 1a acceptance review and its fixes ([38b15ac](https://github.com/andyconley/flow/commit/38b15ac822c71e745e8b251e09129aaf32edae9e))
+
+### Code Refactoring
+
+* **gateway:** extract chartered receipt builder and reply rebuild helpers ([85ae614](https://github.com/andyconley/flow/commit/85ae614102da77c695030fedee1a9c1430b1bc68))
+
+### Tests
+
+* **recovery:** pin tamper reasons, prove the seal-mode R2 limit, and record the grant-to-bind window ([c39d7fa](https://github.com/andyconley/flow/commit/c39d7fada76b481e74472aa24d58d8caab000108))
+* **recovery:** pin the I1 scenario and each entry load inside main ([e5f06b7](https://github.com/andyconley/flow/commit/e5f06b7efce3b05bfbb8e96d5e1a48c0af728b01))
+
 ## [0.33.0](https://github.com/andyconley/flow/compare/v0.32.0...v0.33.0) (2026-09-23)
 
 ### Features
