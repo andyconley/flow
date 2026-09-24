@@ -1,0 +1,311 @@
+{
+  "schema_version": 1,
+  "work_id": "execution-provider-receipt-charter",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": [
+      "material_unresolved_ambiguity"
+    ],
+    "classification": "standard",
+    "rationale": "Definition and bounded investigative spike only; no real worker, model call, or external/shared mutation."
+  },
+  "assignments": [
+    {
+      "id": "architecture-definition",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "solution-architect-definition"
+      },
+      "brief_path": ".flow/runs/execution-provider-receipt-charter/briefs/core-roles.md",
+      "input_evidence": [
+        "scaffolds/default/standards/orchestration.md",
+        "cli/orchestration.py",
+        "cli/runstate.py"
+      ],
+      "read_scopes": [
+        "scaffolds",
+        "cli",
+        ".flow"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/execution-provider-receipt-charter/research/architecture.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify contract boundaries and unresolved decisions with source paths"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition"
+      }
+    },
+    {
+      "id": "workflow-definition",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "business-analyst-definition"
+      },
+      "brief_path": ".flow/runs/execution-provider-receipt-charter/briefs/core-roles.md",
+      "input_evidence": [
+        "scaffolds/default/standards/orchestration.md",
+        "cli/orchestration.py",
+        "cli/runstate.py"
+      ],
+      "read_scopes": [
+        "scaffolds",
+        "cli",
+        ".flow"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/execution-provider-receipt-charter/research/workflow.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify operator workflow, failure cases, and testable acceptance needs"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition"
+      }
+    },
+    {
+      "id": "product-definition",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "product-manager-definition"
+      },
+      "brief_path": ".flow/runs/execution-provider-receipt-charter/briefs/core-roles.md",
+      "input_evidence": [
+        "scaffolds/default/standards/orchestration.md",
+        "cli/orchestration.py",
+        "cli/runstate.py"
+      ],
+      "read_scopes": [
+        "scaffolds",
+        "cli",
+        ".flow"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/execution-provider-receipt-charter/research/product.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify outcome, value, non-goals, and scope challenges"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition"
+      }
+    },
+    {
+      "id": "security-definition",
+      "lane": "define",
+      "role": "security-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "security-reviewer-definition"
+      },
+      "brief_path": ".flow/runs/execution-provider-receipt-charter/briefs/core-roles.md",
+      "input_evidence": [
+        "scaffolds/default/standards/orchestration.md",
+        "cli/orchestration.py",
+        "docs/adr/0001-separate-orchestration-contracts.md"
+      ],
+      "read_scopes": [
+        "scaffolds",
+        "cli",
+        "docs",
+        ".flow"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/execution-provider-receipt-charter/research/security.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Identify trust boundary and abuse cases for one worker dispatch and receipt"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition"
+      }
+    },
+    {
+      "id": "spike-implementation",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "codex-coordinator-spike"
+      },
+      "brief_path": ".flow/runs/execution-provider-receipt-charter/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/execution-provider-receipt-charter/plan.md",
+        ".flow/runs/execution-provider-receipt-charter/solution.md",
+        ".flow/runs/execution-provider-receipt-charter/validation-plan.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "scaffolds",
+        "docs"
+      ],
+      "write_scopes": [
+        ".flow/runs/execution-provider-receipt-charter/research/spike",
+        ".flow/runs/execution-provider-receipt-charter/research/reuse-spike.md",
+        ".flow/runs/execution-provider-receipt-charter/reconciliation.md",
+        ".flow/runs/execution-provider-receipt-charter/verification.md",
+        ".flow/runs/execution-provider-receipt-charter/validation-results.md",
+        ".flow/runs/execution-provider-receipt-charter/HANDOFF.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/execution-provider-receipt-charter/research/reuse-spike.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Produce a reproducible, claim-bounded capability and MAF stub report without a real worker"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "spike"
+      }
+    },
+    {
+      "id": "spike-review",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "quality-reviewer-spike"
+      },
+      "brief_path": ".flow/runs/execution-provider-receipt-charter/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/execution-provider-receipt-charter/plan.md",
+        ".flow/runs/execution-provider-receipt-charter/research/reuse-spike.md",
+        ".flow/runs/execution-provider-receipt-charter/research/spike/sdk-inventory.json",
+        ".flow/runs/execution-provider-receipt-charter/research/spike/maf-result.json"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "scaffolds",
+        "docs"
+      ],
+      "write_scopes": [
+        ".flow/runs/execution-provider-receipt-charter/research/spike-review.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/execution-provider-receipt-charter/research/spike-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Review scope, evidence, reproducibility, and recommendation limits"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "spike"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/execution-provider-receipt-charter/reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "sdk-public-interface",
+        "status": "observed",
+        "evidence": [
+          ".flow/runs/execution-provider-receipt-charter/research/spike/sdk-inventory.json",
+          ".flow/runs/execution-provider-receipt-charter/research/spike/preflight.json"
+        ],
+        "disposition": "accepted"
+      },
+      {
+        "id": "maf-stub-request-checkpoint",
+        "status": "observed",
+        "evidence": [
+          ".flow/runs/execution-provider-receipt-charter/research/spike/maf-result.json",
+          ".flow/runs/execution-provider-receipt-charter/research/spike/maf_stub.py"
+        ],
+        "disposition": "accepted"
+      },
+      {
+        "id": "flow-first-next-probe",
+        "status": "recommended",
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        },
+        "disposition": "deferred"
+      },
+      {
+        "id": "real-worker-behavior",
+        "status": "unverified",
+        "disposition": "deferred"
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "spike-implementation"
+    ],
+    "evidence_collector_assignment": "spike-implementation",
+    "verifier_assignment": "spike-review",
+    "independent": true,
+    "artifact_path": ".flow/runs/execution-provider-receipt-charter/verification.md"
+  }
+}

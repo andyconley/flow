@@ -1,0 +1,21 @@
+{
+  "codex_cli_auth_mode": "chatgpt",
+  "codex_login_status_command": "codex login status",
+  "codex_login_status_exit_code": 0,
+  "maf_core_named_reference_scan": {
+    "matches": 0,
+    "names": [
+      "CodexAgent",
+      "CodexClient",
+      "openai_codex"
+    ],
+    "python_files_scanned": 84,
+    "scope": "installed agent_framework core package only"
+  },
+  "packages": {
+    "agent-framework-core": "1.19.0",
+    "openai-codex": "0.154.0",
+    "openai-codex-cli-bin": "0.154.0"
+  },
+  "python": "3.12.13"
+}

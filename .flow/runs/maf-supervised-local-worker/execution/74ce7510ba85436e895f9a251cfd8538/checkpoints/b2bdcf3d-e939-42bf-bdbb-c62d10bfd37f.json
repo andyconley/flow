@@ -1,0 +1,116 @@
+{
+  "workflow_name": "flow-supervised-local-worker",
+  "graph_signature_hash": "11ff0fdfa33f945c2b5189ae4c9841a488f42144dd7ea03dbdd380be354d5b6e",
+  "checkpoint_id": "b2bdcf3d-e939-42bf-bdbb-c62d10bfd37f",
+  "previous_checkpoint_id": "fadbabde-0788-4fe1-bf48-d9279fcea891",
+  "timestamp": "2026-09-19T21:50:14.768016+00:00",
+  "messages": {
+    "test-engineer-1": [
+      {
+        "__pickled__": "gAWV4AMAAAAAAACMKmFnZW50X2ZyYW1ld29yay5fd29ya2Zsb3dzLl9ydW5uZXJfY29udGV4dJSMD1dvcmtmbG93TWVzc2FnZZSTlCmBlH2UKIwEZGF0YZSMPGFnZW50X2ZyYW1ld29ya19vcmNoZXN0cmF0aW9ucy5fYmFzZV9ncm91cF9jaGF0X29yY2hlc3RyYXRvcpSMGEdyb3VwQ2hhdFJlc3BvbnNlTWVzc2FnZZSTlCmBlH2UjAdtZXNzYWdllIwWYWdlbnRfZnJhbWV3b3JrLl90eXBlc5SMB01lc3NhZ2WUk5QpgZR9lCiMBHJvbGWUjAlhc3Npc3RhbnSUjAhjb250ZW50c5RdlGgMjAdDb250ZW50lJOUKYGUfZQojAR0eXBllIwEdGV4dJSMC2Fubm90YXRpb25zlE6MFWFkZGl0aW9uYWxfcHJvcGVydGllc5R9lGgajAljb21wbGV0ZWSUjA5wcm90ZWN0ZWRfZGF0YZROjAN1cmmUTowKbWVkaWFfdHlwZZROaAtOjAplcnJvcl9jb2RllE6MDWVycm9yX2RldGFpbHOUTowNdXNhZ2VfZGV0YWlsc5ROjAdjYWxsX2lklE6MBG5hbWWUTowJYXJndW1lbnRzlE6MCWV4Y2VwdGlvbpROjBJpbmZvcm1hdGlvbmFsX29ubHmUiYwGcmVzdWx0lE6MBWl0ZW1zlE6MB2ZpbGVfaWSUTowPdmVjdG9yX3N0b3JlX2lklE6MBmlucHV0c5ROjAdvdXRwdXRzlE6MCGltYWdlX2lklE6MCGNvbW1hbmRzlE6MCnRpbWVvdXRfbXOUTowRbWF4X291dHB1dF9sZW5ndGiUTowGc3RhdHVzlE6MBnN0ZG91dJROjAZzdGRlcnKUTowJZXhpdF9jb2RllE6MCXRpbWVkX291dJROjAl0b29sX25hbWWUTowLc2VydmVyX25hbWWUTowGb3V0cHV0lE6MAmlklE6MDWZ1bmN0aW9uX2NhbGyUTowSdXNlcl9pbnB1dF9yZXF1ZXN0lE6MCGFwcHJvdmVklE6MDGNvbnNlbnRfbGlua5ROdWJhjAthdXRob3JfbmFtZZSMD3Rlc3QtZW5naW5lZXItMZSMCm1lc3NhZ2VfaWSUTmgcfZR1YnNijAlzb3VyY2VfaWSUaEKMCXRhcmdldF9pZJROaBloAIwLTWVzc2FnZVR5cGWUk5SMCHN0YW5kYXJklIWUUpSMDnRyYWNlX2NvbnRleHRzlE6MD3NvdXJjZV9zcGFuX2lkc5ROjBtvcmlnaW5hbF9yZXF1ZXN0X2luZm9fZXZlbnSUTnViLg==",
+        "__type__": "agent_framework._workflows._runner_context:WorkflowMessage"
+      }
+    ]
+  },
+  "state": {
+    "_workflow_run_kwargs": {},
+    "_resolved_workflow_run_kwargs": {},
+    "_executor_state": {
+      "magentic_orchestrator": {
+        "conversation": [],
+        "round_index": 1,
+        "orchestrator_name": "magentic_orchestrator",
+        "metadata": {},
+        "terminated": false,
+        "magentic_context": {
+          "task": "Execute the one Flow-authorized bounded task.",
+          "chat_history": [
+            {
+              "type": "message",
+              "role": "user",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Execute the one Flow-authorized bounded task.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Ask the guarded Flow specialist once.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Return Flow's normalized result.",
+                  "additional_properties": {}
+                }
+              ],
+              "author_name": "magentic_manager",
+              "additional_properties": {}
+            }
+          ],
+          "participant_descriptions": {
+            "test-engineer-1": "<no description, use name to identify the purpose of this participant>"
+          },
+          "round_count": 1,
+          "stall_count": 0,
+          "reset_count": 0
+        },
+        "task_ledger": {
+          "type": "message",
+          "role": "assistant",
+          "contents": [
+            {
+              "type": "text",
+              "text": "Ask the guarded Flow specialist once.",
+              "additional_properties": {}
+            }
+          ],
+          "additional_properties": {}
+        },
+        "progress_ledger": {
+          "is_request_satisfied": {
+            "reason": "one guarded action",
+            "answer": false
+          },
+          "is_in_loop": {
+            "reason": "one guarded action",
+            "answer": false
+          },
+          "is_progress_being_made": {
+            "reason": "one guarded action",
+            "answer": true
+          },
+          "next_speaker": {
+            "reason": "guarded Flow worker",
+            "answer": "test-engineer-1"
+          },
+          "instruction_or_question": {
+            "reason": "bounded task",
+            "answer": "Return Flow's normalized result."
+          }
+        },
+        "manager_state": {}
+      },
+      "test-engineer-1": {}
+    }
+  },
+  "pending_request_info_events": {},
+  "iteration_count": 2,
+  "metadata": {},
+  "version": "1.0"
+}

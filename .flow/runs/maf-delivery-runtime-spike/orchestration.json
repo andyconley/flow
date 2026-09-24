@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "work_id": "maf-delivery-runtime-spike",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [
+      "security_or_privacy_boundary"
+    ],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "classification": "high",
+    "rationale": "Authenticated provider dispatch, mixed runtimes, and recovery across Flow/MAF state are in scope."
+  },
+  "assignments": [
+    {
+      "id": "spike-producer",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "codex-coordinator-maf-spike"
+      },
+      "brief_path": ".flow/runs/maf-delivery-runtime-spike/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-delivery-runtime-spike/requirements.md",
+        ".flow/runs/maf-delivery-runtime-spike/acceptance-criteria.md",
+        ".flow/runs/maf-delivery-runtime-spike/research/decision.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "scaffolds",
+        "docs"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-delivery-runtime-spike"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-delivery-runtime-spike/validation-results.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Produce bounded multi-provider runtime evidence and a decision without a production dependency change"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "spike"
+      }
+    },
+    {
+      "id": "spike-verifier",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "quality-reviewer-maf-spike"
+      },
+      "brief_path": ".flow/runs/maf-delivery-runtime-spike/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-delivery-runtime-spike/requirements.md",
+        ".flow/runs/maf-delivery-runtime-spike/acceptance-criteria.md",
+        ".flow/runs/maf-delivery-runtime-spike/research/decision.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "scaffolds",
+        "docs"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-delivery-runtime-spike/review.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-delivery-runtime-spike/review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Independently review claims, cost boundary, reproducibility, and adoption decision"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "spike"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/maf-delivery-runtime-spike/reconciliation.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "mixed-provider-invocation",
+        "status": "observed",
+        "evidence": [
+          ".flow/runs/maf-delivery-runtime-spike/research/mixed-provider-result.json"
+        ],
+        "disposition": "accepted"
+      },
+      {
+        "id": "codex-cost-boundary",
+        "status": "unverified",
+        "disposition": "deferred"
+      },
+      {
+        "id": "dynamic-flow-delegation-gate",
+        "status": "unverified",
+        "disposition": "deferred"
+      },
+      {
+        "id": "live-recovery-and-receipt",
+        "status": "unverified",
+        "disposition": "deferred"
+      },
+      {
+        "id": "maf-runtime-adoption",
+        "status": "recommended",
+        "decision_owner": {
+          "kind": "human",
+          "id": "andy-conley"
+        },
+        "disposition": "deferred"
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "spike-producer"
+    ],
+    "evidence_collector_assignment": "spike-producer",
+    "verifier_assignment": "spike-verifier",
+    "independent": true,
+    "artifact_path": ".flow/runs/maf-delivery-runtime-spike/verification.md"
+  }
+}

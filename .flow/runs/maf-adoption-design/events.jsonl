@@ -1,0 +1,6 @@
+{"artifacts": {}, "at": "2026-09-19T21:21:17Z", "dispositions": {}, "event": "start-definition", "from": null, "to": "defining"}
+{"artifacts": {"acceptance_criteria": ".flow/runs/maf-adoption-design/acceptance-criteria.md", "orchestration_manifest": ".flow/runs/maf-adoption-design/orchestration.json", "requirements": ".flow/runs/maf-adoption-design/requirements.md"}, "at": "2026-09-19T21:21:36Z", "dispositions": {}, "event": "approve-definition", "from": "defining", "to": "definition_approved"}
+{"artifacts": {}, "at": "2026-09-19T21:21:36Z", "dispositions": {}, "event": "start-solution", "from": "definition_approved", "to": "solutioning"}
+{"artifacts": {"solution": ".flow/runs/maf-adoption-design/solution.md"}, "at": "2026-09-19T21:32:27Z", "dispositions": {"risk": "owned"}, "event": "approve-solution", "from": "solutioning", "to": "solution_approved"}
+{"artifacts": {}, "at": "2026-09-19T21:34:25Z", "dispositions": {}, "event": "start-plan", "from": "solution_approved", "to": "planning"}
+{"artifacts": {"handoff": ".flow/runs/maf-adoption-design/implementation-handoff.md", "plan": ".flow/runs/maf-adoption-design/plan.md", "validation_plan": ".flow/runs/maf-adoption-design/validation-plan.md"}, "at": "2026-09-19T21:40:54Z", "dispositions": {}, "event": "approve-plan", "from": "planning", "to": "plan_approved"}

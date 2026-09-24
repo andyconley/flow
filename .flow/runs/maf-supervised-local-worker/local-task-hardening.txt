@@ -1,0 +1,1 @@
+For a tiny arithmetic test, write only the assertion `assert 2 + 2 == 4` and one sentence explaining it. Do not edit files or request tools.

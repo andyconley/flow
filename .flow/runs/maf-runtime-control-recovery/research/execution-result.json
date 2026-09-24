@@ -1,0 +1,24 @@
+{
+  "source": "sanitized terminal outputs from separate invocations of live_recovery.py",
+  "denied_process": {
+    "scenario": "denied",
+    "policy": "specialist_denied",
+    "provider_dispatch_count": 0
+  },
+  "start_process": {
+    "scenario": "allowed",
+    "policy": "allowed",
+    "provider_dispatch_count": 1,
+    "checkpoint_written": true,
+    "reported_result_sha256": "5647e37a0c07004b9a3e99c6c14c253a08afac583bba768fb265cb08d2e5dad7"
+  },
+  "resume_process": {
+    "scenario": "resume",
+    "terminal_output": true,
+    "provider_dispatch_count_before": 1,
+    "provider_dispatch_count_after": 1,
+    "replay_decision": "duplicate_request",
+    "reported_result_sha256": "5647e37a0c07004b9a3e99c6c14c253a08afac583bba768fb265cb08d2e5dad7"
+  },
+  "paid_provider_calls": 0
+}

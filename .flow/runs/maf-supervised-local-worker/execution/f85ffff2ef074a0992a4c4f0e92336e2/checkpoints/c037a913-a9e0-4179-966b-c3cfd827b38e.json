@@ -1,0 +1,116 @@
+{
+  "workflow_name": "flow-supervised-local-worker",
+  "graph_signature_hash": "11ff0fdfa33f945c2b5189ae4c9841a488f42144dd7ea03dbdd380be354d5b6e",
+  "checkpoint_id": "c037a913-a9e0-4179-966b-c3cfd827b38e",
+  "previous_checkpoint_id": "24c21e6a-2f18-4c42-aa27-7c9070b17c82",
+  "timestamp": "2026-09-19T21:55:11.173180+00:00",
+  "messages": {
+    "magentic_orchestrator": [
+      {
+        "__pickled__": "gAWVqgEAAAAAAACMKmFnZW50X2ZyYW1ld29yay5fd29ya2Zsb3dzLl9ydW5uZXJfY29udGV4dJSMD1dvcmtmbG93TWVzc2FnZZSTlCmBlH2UKIwEZGF0YZSMPGFnZW50X2ZyYW1ld29ya19vcmNoZXN0cmF0aW9ucy5fYmFzZV9ncm91cF9jaGF0X29yY2hlc3RyYXRvcpSMF0dyb3VwQ2hhdFJlcXVlc3RNZXNzYWdllJOUKYGUfZQojBZhZGRpdGlvbmFsX2luc3RydWN0aW9ulIwgUmV0dXJuIEZsb3cncyBub3JtYWxpemVkIHJlc3VsdC6UjAhtZXRhZGF0YZROdWKMCXNvdXJjZV9pZJSMFW1hZ2VudGljX29yY2hlc3RyYXRvcpSMCXRhcmdldF9pZJSMD3Rlc3QtZW5naW5lZXItMZSMBHR5cGWUaACMC01lc3NhZ2VUeXBllJOUjAhzdGFuZGFyZJSFlFKUjA50cmFjZV9jb250ZXh0c5ROjA9zb3VyY2Vfc3Bhbl9pZHOUTowbb3JpZ2luYWxfcmVxdWVzdF9pbmZvX2V2ZW50lE51Yi4=",
+        "__type__": "agent_framework._workflows._runner_context:WorkflowMessage"
+      }
+    ]
+  },
+  "state": {
+    "_workflow_run_kwargs": {},
+    "_resolved_workflow_run_kwargs": {},
+    "_executor_state": {
+      "magentic_orchestrator": {
+        "conversation": [],
+        "round_index": 1,
+        "orchestrator_name": "magentic_orchestrator",
+        "metadata": {},
+        "terminated": false,
+        "magentic_context": {
+          "task": "Execute the one Flow-authorized bounded task.",
+          "chat_history": [
+            {
+              "type": "message",
+              "role": "user",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Execute the one Flow-authorized bounded task.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Ask the guarded Flow specialist once.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Return Flow's normalized result.",
+                  "additional_properties": {}
+                }
+              ],
+              "author_name": "magentic_manager",
+              "additional_properties": {}
+            }
+          ],
+          "participant_descriptions": {
+            "test-engineer-1": "<no description, use name to identify the purpose of this participant>"
+          },
+          "round_count": 1,
+          "stall_count": 0,
+          "reset_count": 0
+        },
+        "task_ledger": {
+          "type": "message",
+          "role": "assistant",
+          "contents": [
+            {
+              "type": "text",
+              "text": "Ask the guarded Flow specialist once.",
+              "additional_properties": {}
+            }
+          ],
+          "additional_properties": {}
+        },
+        "progress_ledger": {
+          "is_request_satisfied": {
+            "reason": "one guarded action",
+            "answer": false
+          },
+          "is_in_loop": {
+            "reason": "one guarded action",
+            "answer": false
+          },
+          "is_progress_being_made": {
+            "reason": "one guarded action",
+            "answer": true
+          },
+          "next_speaker": {
+            "reason": "guarded Flow worker",
+            "answer": "test-engineer-1"
+          },
+          "instruction_or_question": {
+            "reason": "bounded task",
+            "answer": "Return Flow's normalized result."
+          }
+        },
+        "manager_state": {}
+      },
+      "test-engineer-1": {}
+    }
+  },
+  "pending_request_info_events": {},
+  "iteration_count": 1,
+  "metadata": {},
+  "version": "1.0"
+}
