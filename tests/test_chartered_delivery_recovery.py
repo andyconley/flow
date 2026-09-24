@@ -701,6 +701,25 @@ class CharteredRecoveryInspectionTests(RecoveryHarness):
         self.assertEqual([item["cause"] for item in view["interruptions"]], ["reconciliation_required"])
         self.assertTrue(view["sealed_receipt"]["consistent"])
 
+    def test_seal_mode_receipt_without_its_block_is_caught_only_by_the_sealed_digest(self):
+        from execution_contracts import validate_receipt
+
+        def kill(point):
+            if point == "after-runtime-outcome":
+                raise KillPoint(point)
+
+        attempt_id = self._killed(("editor", "verifier"), [self.PASS], seal_hook=kill)
+        recovered = self._recover(attempt_id, ("editor", "verifier"))
+        self.assertEqual(recovered["mode"], "seal")
+        receipt = self._receipt(recovered)
+        receipt.pop("recovery")
+        # R2: a seal-mode receipt carries no generation above the claim, so the
+        # receipt alone still validates; the ledger's sealed digest decides.
+        validate_receipt(self._ledger().snapshot(attempt_id)["envelope"], receipt)
+        Path(recovered["receipt_path"]).write_text(json.dumps(receipt))
+        sealed = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["sealed_receipt"]
+        self.assertEqual((sealed["matches"], sealed["recovery_block_present"], sealed["consistent"]), (False, False, False))
+
     def test_inspection_shows_a_recoverable_mode_then_a_consistent_sealed_receipt(self):
         result = self._start(("editor", "verifier"), [self.PASS], fail_after=1)
         view = inspect_delivery("sample", result["attempt_id"], root=self.root)["attempt"]

@@ -99,6 +99,12 @@ latest action with no bound checkpoint. R1 applies and recovery refuses with
 re-propose that action under a new identity. The remedy is a lead supersede
 and a successor attempt (chunk 1b).
 
+Residual: the same rule covers a process death after Flow grants the latest
+proposal but before its checkpoint is bound. The latest action is `allowed`
+with no bound checkpoint, so recovery refuses with `no_restorable_checkpoint`
+and the remedy is again a successor. No send has happened in that window, so
+nothing is lost but the proposal.
+
 ## Rejected alternatives
 
 - **B, successor-only recovery.** Always superseding and starting a successor

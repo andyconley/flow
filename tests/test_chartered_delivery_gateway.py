@@ -696,21 +696,28 @@ class CharteredPreparationTests(CharteredFixture):
                             "actor": "flow-chartered-resume", "mode": "pending",
                             "released_action_ids": [editor], "claimed_at": "2026-09-23T00:00:01+00:00"}]}
         validate_receipt(envelope, recovered)
+        # Each mutation must trip its own guard, not a coincidental earlier check.
         mutations = {
-            "recovery generation changed": lambda r: r["recovery"]["recoveries"][0].update(generation=3),
-            "recovery marker removed": lambda r: r.pop("recovery"),
-            "lead generation changed": lambda r: r["recovery"]["recoveries"][0].update(lead_generation=2),
-            "released grant removed": lambda r: r["recovery"]["recoveries"][0].update(released_action_ids=[]),
-            "evaluation generation outside chain": lambda r: r["verifier_evaluations"][0].update(owner_generation=5),
-            "interruption cause invented": lambda r: r["recovery"]["interruptions"][0].update(cause="timeout"),
-            "resolution added": lambda r: r["recovery"].update(resolutions=["extra"]),
-            "draft digest malformed": lambda r: r["recovery"].update(replaced_draft_sha256="draft"),
+            "recovery generation changed": (lambda r: r["recovery"]["recoveries"][0].update(generation=3),
+                                            "generation chain"),
+            "recovery marker removed": (lambda r: r.pop("recovery"), "lacks its recovery block"),
+            "lead generation changed": (lambda r: r["recovery"]["recoveries"][0].update(lead_generation=2),
+                                        "generation chain"),
+            "released grant removed": (lambda r: r["recovery"]["recoveries"][0].update(released_action_ids=[]),
+                                       "released grants differ"),
+            "evaluation generation outside chain": (lambda r: r["verifier_evaluations"][0].update(owner_generation=5),
+                                                    "outside the recovery chain"),
+            "interruption cause invented": (lambda r: r["recovery"]["interruptions"][0].update(cause="timeout"),
+                                            "interruption is invalid"),
+            "resolution added": (lambda r: r["recovery"].update(resolutions=["extra"]), "resolutions differ"),
+            "draft digest malformed": (lambda r: r["recovery"].update(replaced_draft_sha256="draft"),
+                                       "recovery block is invalid"),
         }
-        for label, mutate in mutations.items():
+        for label, (mutate, message) in mutations.items():
             with self.subTest(label=label):
                 changed = copy.deepcopy(recovered)
                 mutate(changed)
-                with self.assertRaises(ExecutionContractError):
+                with self.assertRaisesRegex(ExecutionContractError, message):
                     validate_receipt(envelope, changed)
         marker_only = copy.deepcopy(receipt)
         marker_only["verifier_evaluations"][0]["owner_generation"] = 2
