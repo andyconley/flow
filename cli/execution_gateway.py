@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from execution_contracts import ContractError, canonical, digest, envelope_digest, validate_action, validate_receipt, validate_result, validate_replan
 from execution_ledger import ExecutionLedger, utc_now
+from delivery_recovery import RecoveryRefused, V8_RESOLUTION_REQUIRES_CHUNK_2
 from codex_worker import call_codex
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
@@ -900,6 +901,16 @@ def resolve_attempt(work_id: str, attempt_id: str, action_id: str, actor: str,
                     disposition: str, explanation: str, evidence_file: str,
                     *, root: Path | None = None) -> dict[str, Any]:
     """Record an operator decision only against immutable, local evidence."""
+    ledger_path = (root or repo_root()).resolve() / ".flow" / "runs" / work_id / "execution" / "ledger.sqlite"
+    if ledger_path.is_file() and not ledger_path.is_symlink():
+        try:
+            protocol = ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)["execution_protocol_version"]
+        except ContractError:
+            protocol = None
+        if protocol == 8:
+            # v8 resolution needs the fenced, authority-guarded route of
+            # chunk 2; refuse before inspection can mutate anything.
+            raise RecoveryRefused(V8_RESOLUTION_REQUIRES_CHUNK_2)
     inspected = inspect_attempt(work_id, attempt_id, root=root)
     snapshot = inspected["snapshot"]
     if snapshot.get("recovery_version") != 2 or inspected["missing_evidence"]:

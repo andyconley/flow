@@ -21,8 +21,9 @@ from execution_contracts import (  # noqa: E402
     expected_magentic_action_id,
 )
 from execution_ledger import ExecutionLedger  # noqa: E402
+from delivery_recovery import RecoveryRefused  # noqa: E402
 from verifier_contracts import evaluate_candidate  # noqa: E402
-from tests.test_chartered_execution_contract import structured_verifier  # noqa: E402
+from tests.test_chartered_execution_contract import chartered, structured_verifier  # noqa: E402
 
 
 def _action(envelope: dict, sequence: int, assignment: dict, task: str) -> dict:
@@ -235,6 +236,136 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
                              ("legacy", "work", envelope_json, "completed", "", "receipt.json"))
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertTrue({"verifier_inputs", "verifier_evaluations"}.issubset(tables))
+
+    def test_pre_recovery_v8_database_gains_empty_recovery_tables_and_legacy_snapshots_are_unchanged(self):
+        env = self.envelope()
+        self.ledger.create_attempt(env)
+        legacy = chartered()
+        legacy["attempt_id"] = "legacy-v6"
+        self.ledger.create_attempt(legacy)
+        before_legacy = self.ledger.snapshot("legacy-v6")
+        with sqlite3.connect(self.ledger.path) as db:
+            db.execute("DROP TABLE attempt_interruptions")
+            db.execute("DROP TABLE attempt_recoveries")
+            db.execute("ALTER TABLE attempts DROP COLUMN sealed_receipt_sha256")
+        old = ExecutionLedger(self.ledger.path, read_only=True).snapshot(env["attempt_id"])
+        self.assertEqual((old["interruptions"], old["recoveries"], old["sealed_receipt_sha256"]), ([], [], None))
+        ExecutionLedger(self.ledger.path)
+        with sqlite3.connect(self.ledger.path) as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
+        self.assertTrue({"attempt_interruptions", "attempt_recoveries"}.issubset(tables))
+        self.assertIn("sealed_receipt_sha256", columns)
+        migrated = self.ledger.snapshot(env["attempt_id"])
+        self.assertEqual((migrated["interruptions"], migrated["recoveries"], migrated["sealed_receipt_sha256"]), ([], [], None))
+        after_legacy = self.ledger.snapshot("legacy-v6")
+        self.assertEqual(after_legacy, before_legacy)
+        self.assertFalse({"interruptions", "recoveries", "sealed_receipt_sha256"} & set(after_legacy))
+
+    def _claim(self, env, *, expected=1, mode="pending", seq=None):
+        high_water = self.ledger.snapshot(env["attempt_id"])["events"][-1]["seq"] if seq is None else seq
+        return self.ledger.claim_chartered_recovery(env["attempt_id"], expected_generation=expected,
+                                                    expected_event_seq=high_water, lead_generation=1,
+                                                    actor="flow-chartered-resume", mode=mode, checkpoint=None, quarantined=[])
+
+    def test_recovery_claim_refuses_moved_facts_and_uncertain_sends_without_mutation(self):
+        env = self.envelope(maximum=1)
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        grant = self.ledger.decide(env, proposal, generation=1)
+        stale = self.ledger.snapshot(env["attempt_id"])["events"][-1]["seq"] - 1
+        before = self.ledger.snapshot(env["attempt_id"])
+        with self.assertRaises(RecoveryRefused) as moved:
+            self._claim(env, seq=stale)
+        self.assertEqual(moved.exception.reason, "recovery_in_progress")
+        self.ledger.prepare_verifier_send(proposal["action_id"], grant["grant_id"], {**proposal, "provider_task": "verify"},
+                                          "d" * 64, "e" * 64, generation=1)
+        before = self.ledger.snapshot(env["attempt_id"])
+        with self.assertRaises(RecoveryRefused) as uncertain:
+            self._claim(env)
+        self.assertEqual(uncertain.exception.reason, "reconciliation_required")
+        self.assertEqual(self.ledger.snapshot(env["attempt_id"]), before)
+
+    def test_recovery_claim_is_a_compare_and_swap_that_releases_unconsumed_grants(self):
+        env = self.envelope(maximum=1)
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        self.assertTrue(self.ledger.decide(env, proposal, generation=1)["allowed"])
+        claim = self._claim(env)
+        self.assertEqual((claim["generation"], claim["released_action_ids"]), (2, [proposal["action_id"]]))
+        snapshot = self.ledger.snapshot(env["attempt_id"])
+        action = snapshot["actions"][0]
+        self.assertEqual((action["status"], action["reason"], action["grant_id"]),
+                         ("not_dispatched", "recovery_unconsumed_grant", None))
+        self.assertEqual([item["cause"] for item in snapshot["interruptions"]], ["unmarked_process_exit"])
+        self.assertEqual(snapshot["recoveries"][0]["interruption_ids"], [snapshot["interruptions"][0]["interruption_id"]])
+        with self.assertRaises(RecoveryRefused) as stale:
+            self._claim(env, expected=1)
+        self.assertEqual(stale.exception.reason, "recovery_in_progress")
+        self.assertEqual(len(self.ledger.snapshot(env["attempt_id"])["recoveries"]), 1)
+
+    def test_regrant_counts_the_released_proposal_once_and_restarts_the_grant_clock(self):
+        env = self.envelope(maximum=1)
+        self.ledger.create_attempt(env)
+        proposal = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        self.ledger.decide(env, proposal, generation=1)
+        with sqlite3.connect(self.ledger.path) as db:
+            db.execute("UPDATE events SET at='2000-01-01T00:00:00+00:00' WHERE event='policy_allowed'")
+        generation = self._claim(env)["generation"]
+        replay = self.ledger.decide(env, proposal, generation=generation)
+        self.assertEqual((replay["replayed"], replay["allowed"], replay["reason"]), (True, False, "recovery_unconsumed_grant"))
+        with self.assertRaises(ContractError):
+            self.ledger.regrant_recovered_action(env, proposal, generation=1)
+        grant = self.ledger.regrant_recovered_action(env, proposal, generation=generation)
+        self.assertEqual((grant["allowed"], grant["reason"]), (True, "recovery_regranted"))
+        binding = self.ledger.prepare_verifier_send(proposal["action_id"], grant["grant_id"],
+                                                    {**proposal, "provider_task": "verify"}, "d" * 64, "e" * 64,
+                                                    generation=generation)
+        self.assertEqual(binding["owner_generation"], generation)
+        self.assertEqual(self.ledger.verifier_usage(env["attempt_id"])["reserved"], 1)
+        with self.assertRaises(ContractError):
+            self.ledger.regrant_recovered_action(env, proposal, generation=generation)
+
+    def test_regrant_applies_the_verifier_retry_rule_before_any_grant(self):
+        env = self.envelope(maximum=2)
+        self.ledger.create_attempt(env)
+        first = _action(env, 1, env["roster"][0], "Verify bounded evidence.")
+        self._complete_and_evaluate(env, first, '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}')
+        second = _action(env, 2, env["roster"][0], "Verify bounded evidence again.")
+        with sqlite3.connect(self.ledger.path) as db:
+            # A pass leaves no retry allowance, so decide would deny; force the
+            # released shape that only a recovery can produce.
+            db.execute("INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,kind,sequence) VALUES(?,?,?,?,?,?,?,?)",
+                       (second["action_id"], env["attempt_id"], __import__("execution_contracts").canonical(second),
+                        "allowed", "allowed", "g" * 32, "delegate", 2))
+        generation = self._claim(env)["generation"]
+        denied = self.ledger.regrant_recovered_action(env, second, generation=generation)
+        self.assertEqual((denied["allowed"], denied["reason"]), (False, "verifier_retry_denied"))
+
+    def test_manager_grant_is_reissued_in_place_only_under_an_active_recovery(self):
+        env = self.envelope()
+        self.ledger.create_attempt(env)
+        request = {"schema_version": 1, "attempt_id": env["attempt_id"], "envelope_digest": envelope_digest(env),
+                   "sequence": 1, "phase": "facts", "manager_round": 1, "prompt_digest": "a" * 64}
+        request["call_id"] = __import__("execution_contracts").expected_manager_call_id(request)
+        first = self.ledger.decide_manager_call(env, request, generation=1)
+        with self.assertRaises(ContractError):
+            self.ledger.reissue_recovered_manager_grant(request["call_id"], generation=1)
+        generation = self._claim(env, mode="answer")["generation"]
+        reissued = self.ledger.reissue_recovered_manager_grant(request["call_id"], generation=generation)
+        self.assertNotEqual(reissued["grant_id"], first["grant_id"])
+        self.assertTrue(self.ledger.consume_manager_grant(request["call_id"], reissued["grant_id"], generation=generation))
+
+    def test_recovery_lock_names_a_live_run_and_a_concurrent_recovery(self):
+        for holder, reason in (("live", "attempt_running"), ("recovery", "recovery_in_progress")):
+            with self.subTest(holder=holder):
+                with self.ledger.recovery_lock("attempt", holder=holder):
+                    with self.assertRaises(RecoveryRefused) as raised:
+                        with self.ledger.recovery_lock("attempt", holder="recovery"):
+                            pass
+                self.assertEqual(raised.exception.reason, reason)
+        with self.ledger.recovery_lock("attempt", holder="recovery"):
+            pass
 
     def test_expired_verifier_grant_is_committed_denied_not_left_reserved(self):
         env = self.envelope(maximum=1)

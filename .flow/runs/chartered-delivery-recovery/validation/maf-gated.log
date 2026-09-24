@@ -1,0 +1,16 @@
+test_checkpoint_after_replan_requires_matching_ledger_count (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_checkpoint_after_replan_requires_matching_ledger_count) ... ok
+test_completed_action_restores_from_pending_checkpoint (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_completed_action_restores_from_pending_checkpoint) ... ok
+test_malformed_progress_aborts_without_retry_or_worker (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_malformed_progress_aborts_without_retry_or_worker) ... ok
+test_replan_facts_and_plan_share_flow_identity (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_replan_facts_and_plan_share_flow_identity) ... ok
+test_stock_manager_accepts_retry_signal_and_selects_verifier_again (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_stock_manager_accepts_retry_signal_and_selects_verifier_again) ... ok
+test_stock_manager_routes_to_selected_worker (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_stock_manager_routes_to_selected_worker) ... ok
+test_stock_manager_routes_with_chartered_protocol (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_stock_manager_routes_with_chartered_protocol) ... ok
+test_stock_manager_routes_with_delivery_projection_protocol (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_stock_manager_routes_with_delivery_projection_protocol) ... ok
+test_stock_manager_routes_with_structured_verifier_protocol (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_stock_manager_routes_with_structured_verifier_protocol) ... ok
+test_unanswered_action_restores_in_pending_mode_with_its_original_identity (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_unanswered_action_restores_in_pending_mode_with_its_original_identity) ... ok
+test_unknown_speaker_does_not_fall_back_to_first_worker (tests.test_maf_delivery_lead.StockDeliveryLeadTest.test_unknown_speaker_does_not_fall_back_to_first_worker) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 2.073s
+
+OK

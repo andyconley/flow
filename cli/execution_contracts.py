@@ -103,6 +103,8 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
             _validate_chartered_job(envelope)
         if is_delivery_protocol(protocol_version):
             _validate_delivery_projection(envelope)
+        if protocol_version == STRUCTURED_VERIFIER_PROTOCOL_VERSION and "predecessors" in envelope:
+            _validate_predecessors(envelope)
         return
     shared = ("work_id", "attempt_id", "charter_digest", "charter_sources", "run_protocol_revision", "manifest_digest", "limits", "checkpoint_dir")
     legacy = ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "task_digest", "task")
@@ -322,6 +324,93 @@ def _validate_delivery_projection(envelope: dict[str, Any]) -> None:
             or not isinstance(claim["lead_id"], str) or not claim["lead_id"].strip()
             or type(claim["generation"]) is not int or claim["generation"] < 1):
         raise ContractError("delivery lead claim is invalid")
+
+
+PREDECESSOR_TERMINAL_STATUSES = frozenset({"completed", "failed", "denied", "superseded"})
+RECOVERY_INTERRUPTION_CAUSES = frozenset({"transport", "reconciliation_required", "unmarked_process_exit"})
+RECOVERY_MODES = frozenset({"answer", "pending", "seal"})
+RECOVERY_GRANT_REASONS = frozenset({"recovery_unconsumed_grant", "recovery_regranted"})
+RECOVERY_TRIGGER_REASONS = RECOVERY_GRANT_REASONS | {"recovery_after_dispatch"}
+
+
+def _validate_predecessors(envelope: dict[str, Any]) -> None:
+    """Validate a v8 successor's immutable links to its terminal predecessors."""
+    predecessors = envelope["predecessors"]
+    generation = envelope["delivery_lead_claim"]["generation"]
+    if not isinstance(predecessors, list) or not predecessors or len(predecessors) > 64:
+        raise ContractError("delivery predecessors are invalid")
+    seen: set[str] = set()
+    for item in predecessors:
+        if (not isinstance(item, dict)
+                or set(item) != {"attempt_id", "terminal_status", "receipt_sha256", "lead_generation"}
+                or not isinstance(item["attempt_id"], str) or not item["attempt_id"]
+                or item["attempt_id"] in seen or item["attempt_id"] == envelope["attempt_id"]
+                or item["terminal_status"] not in PREDECESSOR_TERMINAL_STATUSES
+                or not (_hex_digest(item["receipt_sha256"])
+                        or item["receipt_sha256"] is None and item["terminal_status"] == "superseded")
+                or type(item["lead_generation"]) is not int or not 1 <= item["lead_generation"] < generation):
+            raise ContractError("delivery predecessor link is invalid")
+        seen.add(item["attempt_id"])
+
+
+def _validate_recovery_block(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
+    """Bind a v8 receipt's recovery claims to the evidence that shows recovery happened."""
+    claim_generation = envelope["delivery_lead_claim"]["generation"]
+    actions = [item for item in receipt["actions"] if isinstance(item, dict)]
+    reasons = [item.get("reason") for item in actions]
+    generations = [item.get("owner_generation") for key in ("checkpoints", "verifier_inputs", "verifier_evaluations")
+                   for item in receipt.get(key) or [] if isinstance(item, dict)]
+    block = receipt.get("recovery")
+    if block is None:
+        if (any(reason in RECOVERY_TRIGGER_REASONS or str(reason).startswith("operator_resolved_") for reason in reasons)
+                or any(type(value) is int and value > claim_generation for value in generations)):
+            raise ContractError("recovered receipt lacks its recovery block")
+        return
+    if (not isinstance(block, dict)
+            or set(block) != {"schema_version", "interruptions", "recoveries", "resolutions", "replaced_draft_sha256"}
+            or block["schema_version"] != 1 or not isinstance(block["interruptions"], list)
+            or not isinstance(block["recoveries"], list) or not block["recoveries"]
+            or not isinstance(block["resolutions"], list)
+            or not (block["replaced_draft_sha256"] is None or _hex_digest(block["replaced_draft_sha256"]))):
+        raise ContractError("receipt recovery block is invalid")
+    expected = claim_generation
+    allowed = {claim_generation}
+    released: set[str] = set()
+    for item in block["recoveries"]:
+        if (not isinstance(item, dict)
+                or set(item) != {"recovery_id", "expected_generation", "generation", "lead_generation",
+                                 "actor", "mode", "released_action_ids", "claimed_at"}
+                or not isinstance(item["recovery_id"], str) or not item["recovery_id"]
+                or not isinstance(item["actor"], str) or not item["actor"].strip()
+                or not isinstance(item["claimed_at"], str) or item["mode"] not in RECOVERY_MODES
+                or not isinstance(item["released_action_ids"], list)
+                or any(not isinstance(value, str) for value in item["released_action_ids"])):
+            raise ContractError("receipt recovery claim is invalid")
+        if (item["expected_generation"] != expected or item["generation"] != expected + 1
+                or item["lead_generation"] != claim_generation):
+            raise ContractError("receipt recovery generation chain is invalid")
+        expected = item["generation"]
+        allowed.add(item["generation"])
+        released.update(item["released_action_ids"])
+    for item in block["interruptions"]:
+        if (not isinstance(item, dict)
+                or set(item) != {"interruption_id", "cause", "owner_generation", "recorded_at"}
+                or not isinstance(item["interruption_id"], str) or not item["interruption_id"]
+                or item["cause"] not in RECOVERY_INTERRUPTION_CAUSES or item["owner_generation"] not in allowed
+                or not isinstance(item["recorded_at"], str)):
+            raise ContractError("receipt recovery interruption is invalid")
+    if any(value not in allowed for value in generations):
+        raise ContractError("receipt evidence owner generation is outside the recovery chain")
+    # A released grant's reason can later move on (grant expiry, a denied
+    # regrant), so every action still marked released must be listed, and
+    # every listed id must be an action of this receipt.
+    marked = {item.get("action_id") for item in actions if item.get("reason") in RECOVERY_GRANT_REASONS}
+    if not marked <= released or not released <= {item.get("action_id") for item in actions}:
+        raise ContractError("receipt recovery released grants differ from actions")
+    resolved = sum(str(reason).startswith("operator_resolved_") for reason in reasons)
+    if (any(not isinstance(value, str) or not value for value in block["resolutions"])
+            or len(set(block["resolutions"])) != len(block["resolutions"]) or len(block["resolutions"]) != resolved):
+        raise ContractError("receipt recovery resolutions differ from actions")
 
 
 def action_assignment(envelope: dict[str, Any], sequence: int) -> dict[str, Any]:
@@ -856,6 +945,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                           and reserved < envelope["limits"]["max_verifier_calls"]}
         if usage != expected_usage:
             raise ContractError("structured verifier usage differs from receipt facts")
+        _validate_recovery_block(envelope, receipt)
     if receipt["status"] == "completed":
         completed = [item["request"] for item in receipt["actions"] if item["status"] == "completed"]
         if is_chartered_protocol(execution_protocol_version(envelope)):

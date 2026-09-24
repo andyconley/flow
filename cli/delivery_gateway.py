@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -19,6 +20,11 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import delivery_authority_guard
+from delivery_projection import lead_claim_active
+from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, RecoveryRefused,
+                               V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_DRIFT, build_recovery_block,
+                               rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
+                               runtime_outcome)
 from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
                                 validate_shaper_contract)
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot
@@ -514,16 +520,18 @@ def execute_delivery(work_id: str, worktree: Path, source_commit: str, *, root: 
 def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *, root: Path | None = None,
                                manager_adapter: Callable[..., dict[str, Any]] | None = None,
                                worker_adapter: Callable[..., dict[str, Any]] | None = None,
-                               supervisor: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
+                               supervisor: Callable[..., dict[str, Any]] | None = None,
+                               seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
     envelope, task, attempt_dir, ledger = prepare_chartered_delivery(work_id, worktree, source_commit, root=root)
     return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
                                       manager_adapter=manager_adapter, worker_adapter=worker_adapter,
                                       supervisor=supervisor, test_runner=None, python_path=None,
-                                      generation=envelope["delivery_lead_claim"]["generation"])
+                                      generation=envelope["delivery_lead_claim"]["generation"],
+                                      seal_hook=seal_hook)
 
 
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
-                           job: dict[str, Any]) -> dict[str, Any]:
+                           job: dict[str, Any], *, record: bool = True) -> dict[str, Any]:
     if _git(worktree, "rev-parse", "HEAD") != baseline["source_commit"]:
         raise ContractError("editor changed the pinned source commit")
     allowed = set(job["write_paths"])
@@ -543,7 +551,7 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     if diff_path.exists():
         if diff_path.is_symlink() or diff_path.read_bytes() != diff:
             raise ContractError("recorded chartered diff changed")
-    else:
+    elif record:
         _write_snapshot(diff_path, diff)
     return {"changed_files": changed, "diff_sha256": hashlib.sha256(diff).hexdigest(),
             "diff_path": str(diff_path),
@@ -564,6 +572,248 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any]) -> dict[str, Any]:
     return {"command": test["argv"], "status": "passed", "output_sha256": hashlib.sha256(output.encode()).hexdigest()}
 
 
+def _peek_snapshot(ledger_path: Path, attempt_id: str) -> dict[str, Any] | None:
+    """Read an attempt without opening the ledger for writing (which would run DDL)."""
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        return None
+    try:
+        return ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
+    except (ContractError, sqlite3.Error):
+        return None
+
+
+def _recovery_gates(work_id: str, attempt_id: str, run_dir: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Decide on a read-only snapshot whether recovery may claim the attempt.
+
+    Returns the snapshot and either the eligibility (recoverable) or None when
+    a completed recovery should be reported instead. Refuses otherwise.
+    """
+    attempt_dir = run_dir / "execution" / attempt_id
+    snapshot = _peek_snapshot(run_dir / "execution" / "ledger.sqlite", attempt_id)
+    if snapshot is None or not attempt_dir.is_dir() or attempt_dir.is_symlink():
+        raise ContractError("chartered attempt is absent")
+    protocol = snapshot["execution_protocol_version"]
+    if protocol == 6:
+        raise RecoveryRefused(V6_INSPECTION_ONLY)
+    if protocol == 7:
+        raise RecoveryRefused(V7_NOT_RECOVERABLE)
+    envelope = snapshot["envelope"]
+    envelope_path = attempt_dir / "envelope.json"
+    if (envelope["work_id"] != work_id or not envelope_path.is_file() or envelope_path.is_symlink()
+            or json.loads(envelope_path.read_text()) != envelope):
+        raise RecoveryRefused(ENVELOPE_CHANGED)
+    if snapshot["status"] != "started":
+        if snapshot.get("recoveries"):
+            return snapshot, None
+        raise RecoveryRefused(ATTEMPT_TERMINAL)
+    try:
+        delivery = json.loads((run_dir / "run.json").read_text()).get("delivery")
+    except (OSError, json.JSONDecodeError):
+        delivery = None
+    eligibility = recovery_eligibility(envelope, snapshot, lead_active=lead_claim_active(delivery, envelope))
+    if not eligibility["recoverable"]:
+        raise RecoveryRefused(eligibility["reason"], ", ".join(f"{item['kind']} {item['id']} {item['status']}"
+                                                               for item in eligibility["blockers"]))
+    return snapshot, eligibility
+
+
+def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
+                      manager_adapter: Callable[..., dict[str, Any]] | None = None,
+                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
+                      supervisor: Callable[..., dict[str, Any]] | None = None,
+                      test_runner: Callable[[Path], dict[str, Any]] | None = None,
+                      python_path: str | None = None, actor: str = "flow-chartered-resume",
+                      seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
+    """Recover a v6-v8 chartered attempt; only v8 is recoverable (ADR 0016).
+
+    Every gate before the claim reads the ledger read-only, so a refusal
+    leaves the ledger and attempt files unchanged (a recovery lock file may
+    be created beside the ledger). The gates run only under the recovery
+    lock: a live run holds it, so it refuses as ``attempt_running`` whatever
+    its rows look like mid-send, and no live run can advance the attempt
+    between the decision and the claim that acts on it.
+    """
+    run_dir = root / ".flow" / "runs" / work_id
+    attempt_dir = run_dir / "execution" / attempt_id
+    ledger_path = run_dir / "execution" / "ledger.sqlite"
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        raise ContractError("chartered attempt is absent")
+    with ExecutionLedger(ledger_path, read_only=True).recovery_lock(attempt_id, holder="recovery"):
+        snapshot, eligibility = _recovery_gates(work_id, attempt_id, run_dir)
+        valid, _, findings = validate_orchestration(work_id, "dispatch", root=root)
+        if not valid:
+            raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+        if eligibility is None:
+            # A completed recovery is reported, never repeated.
+            return {"attempt_id": attempt_id, "status": snapshot["status"], "reason": snapshot["reason"],
+                    "receipt_path": snapshot["receipt_path"], "replayed": True}
+        envelope = snapshot["envelope"]
+        mode = eligibility["mode"]
+        link = eligibility["checkpoint"]
+        outcome = runtime_outcome(snapshot) if mode == "seal" else None
+        recorded_failure = bool(outcome and outcome["failure"])
+        if not recorded_failure:
+            # Drift refuses before the claim, so it fences and releases nothing.
+            _check_chartered_evidence(envelope, snapshot, attempt_dir)
+        quarantine = _unbound_checkpoints(envelope, snapshot)
+        ledger = ExecutionLedger(ledger_path)
+        authority_guard = partial(delivery_authority_guard, run_dir, envelope)
+        # Reconcile first: the claim fences and releases before any
+        # checkpoint is read or any grant is issued.
+        with authority_guard():
+            claim = ledger.claim_chartered_recovery(
+                attempt_id, expected_generation=snapshot["owner_generation"],
+                expected_event_seq=snapshot["events"][-1]["seq"],
+                lead_generation=envelope["delivery_lead_claim"]["generation"], actor=actor, mode=mode,
+                checkpoint=({key: link[key] for key in ("pending_id", "checkpoint_id", "file_sha256")} if link else None),
+                quarantined=quarantine)
+        generation = claim["generation"]
+        _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
+        state = ledger.snapshot(attempt_id)
+        try:
+            # Seal mode only records what the run already decided, so it never
+            # runs the test: a bound digest is reused, otherwise tests are absent.
+            evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner,
+                                                   run_test=mode != "seal")
+        except (RecoveryRefused, ContractError):
+            if not recorded_failure:
+                raise
+            evidence = {"edit_evidence": None, "test_evidence": None}
+        # Only grants a recovery released (this claim or an earlier one that
+        # died before its regrant) may be re-granted.
+        evidence["regrantable_action_ids"] = [item["action_id"] for item in state["actions"]
+                                              if item["reason"] == "recovery_unconsumed_grant"]
+        if mode == "seal":
+            inputs = state.get("verifier_inputs", [])
+            verifier_sha = (hashlib.sha256(inputs[-1]["input"]["provider_task"].encode()).hexdigest()
+                            if inputs and evidence["edit_evidence"] else None)
+            result = _seal_attempt(envelope, attempt_dir, ledger, state, failure=outcome["failure"],
+                                   edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
+                                   verifier_input_sha256=verifier_sha, generation=generation,
+                                   authority_guard=authority_guard, hook=seal_hook or (lambda point: None))
+            return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+        row = next(item for item in state["actions"] if item["action_id"] == eligibility["action_id"])
+        action = row["request"]
+        checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
+        if checkpoint["metadata"]["checkpoint_id"] != action["checkpoint_id"]:
+            raise ContractError("Magentic restore checkpoint differs from worker action")
+        resume: dict[str, Any] = {"checkpoint_id": action["checkpoint_id"],
+                                  "request_id": f"flow-magentic-action-{action['sequence']}",
+                                  "action_id": action["action_id"],
+                                  **restore_position(envelope, state, checkpoint["metadata"]["ledger_seq"])}
+        job = envelope["job_contract"]
+        if mode == "answer":
+            reply = _completed_reply(ledger, envelope, attempt_dir, action, row["result"],
+                                     is_verifier=action["instance_id"] in job["verifier_instance_ids"],
+                                     is_producer=action["instance_id"] in job["producer_instance_ids"],
+                                     edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
+                                     generation=generation, authority_guard=authority_guard)
+            reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
+            if not reply_path.exists():
+                _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
+            resume["result"] = reply
+        else:
+            resume["kind"] = "pending"
+        result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
+                                            manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                            supervisor=supervisor, test_runner=test_runner, python_path=python_path,
+                                            resume=resume, generation=generation, recovery=evidence,
+                                            seal_hook=seal_hook)
+        return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+
+
+def _check_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, Any], attempt_dir: Path) -> None:
+    """Refuse worktree drift without writing anything or running the test."""
+    plan = rebuild_chartered_evidence_plan(envelope, snapshot)
+    worktree = Path(envelope["worktree"])
+    if not plan["producer_completed"]:
+        _verify_chartered_baseline(worktree, envelope)
+        return
+    baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    try:
+        edit = _verify_chartered_edit(worktree, baseline, attempt_dir, envelope["job_contract"], record=False)
+    except ContractError as exc:
+        raise RecoveryRefused(WORKTREE_DRIFT, str(exc)) from exc
+    if plan["diff_digest"] is not None and edit["diff_sha256"] != plan["diff_digest"]:
+        raise RecoveryRefused(WORKTREE_DRIFT, "worktree diff differs from the bound verifier input")
+
+
+def _unbound_checkpoints(envelope: dict[str, Any], snapshot: dict[str, Any]) -> list[dict[str, str]]:
+    """List checkpoint files the ledger never bound; restoring beside them is ambiguous."""
+    directory = Path(envelope["checkpoint_dir"])
+    bound = {Path(item["path"]).name for item in snapshot.get("magentic_checkpoints", [])}
+    if not directory.is_dir() or directory.is_symlink():
+        return []
+    return [{"name": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            for path in sorted(directory.iterdir())
+            if path.is_file() and not path.is_symlink() and path.name not in bound]
+
+
+def _quarantine_checkpoints(envelope: dict[str, Any], attempt_dir: Path, files: list[dict[str, str]],
+                            recovery_id: str) -> None:
+    if not files:
+        return
+    parent = attempt_dir / "checkpoints-quarantine"
+    if parent.is_symlink() or parent.exists() and not parent.is_dir():
+        raise ContractError("checkpoint quarantine path is unsafe")
+    parent.mkdir(mode=0o700, exist_ok=True)
+    target = parent / recovery_id
+    target.mkdir(mode=0o700)
+    if parent.is_symlink() or target.is_symlink():
+        raise ContractError("checkpoint quarantine path is unsafe")
+    for item in files:
+        source = Path(envelope["checkpoint_dir"]) / item["name"]
+        if source.is_file() and not source.is_symlink():
+            os.replace(source, target / item["name"])
+
+
+def _verify_chartered_baseline(worktree: Path, envelope: dict[str, Any]) -> None:
+    """Before any producer edit, the worktree must still equal the pinned baseline."""
+    baseline = envelope["job_contract"]["baseline"]
+    try:
+        head = _git(worktree, "rev-parse", "HEAD")
+        diff = _git(worktree, "diff", "HEAD", "--").encode()
+        changed = _git(worktree, "status", "--porcelain", "--untracked-files=all")
+    except ContractError as exc:
+        raise RecoveryRefused(WORKTREE_DRIFT, str(exc)) from exc
+    if head != envelope["source_commit"] or (
+            (changed or diff) if baseline["kind"] == "clean" else hashlib.sha256(diff).hexdigest() != baseline["diff_sha256"]):
+        raise RecoveryRefused(WORKTREE_DRIFT, "worktree differs from the pinned baseline")
+
+
+def _rebuild_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, Any], attempt_dir: Path,
+                                test_runner: Callable[[Path], dict[str, Any]] | None, *,
+                                run_test: bool = True) -> dict[str, Any]:
+    """Re-verify the worktree and reuse bound test evidence; run the test at most once."""
+    plan = rebuild_chartered_evidence_plan(envelope, snapshot)
+    worktree = Path(envelope["worktree"])
+    job = envelope["job_contract"]
+    if not plan["producer_completed"]:
+        _verify_chartered_baseline(worktree, envelope)
+        return {"edit_evidence": None, "test_evidence": None}
+    baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    try:
+        edit = _verify_chartered_edit(worktree, baseline, attempt_dir, job)
+    except ContractError as exc:
+        raise RecoveryRefused(WORKTREE_DRIFT, str(exc)) from exc
+    if plan["diff_digest"] is not None and edit["diff_sha256"] != plan["diff_digest"]:
+        raise RecoveryRefused(WORKTREE_DRIFT, "worktree diff differs from the bound verifier input")
+    if plan["test_digest"] is not None:
+        # The bound verifier input already judged this evidence; never rerun it.
+        tests = {"command": job["test"]["argv"], "status": "passed", "output_sha256": plan["test_digest"]}
+    elif not run_test:
+        tests = None
+    else:
+        tests = (test_runner or partial(_run_chartered_test, job=job))(worktree)
+        try:
+            unchanged = _verify_chartered_edit(worktree, baseline, attempt_dir, job) == edit
+        except ContractError:
+            unchanged = False
+        if not unchanged:
+            raise RecoveryRefused(WORKTREE_DRIFT, "targeted test changed the verified worktree diff")
+    return {"edit_evidence": edit, "test_evidence": tests}
+
+
 def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                     manager_adapter: Callable[..., dict[str, Any]] | None = None,
                     worker_adapter: Callable[..., dict[str, Any]] | None = None,
@@ -571,12 +821,19 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                     test_runner: Callable[[Path], dict[str, Any]] | None = None,
                     python_path: str | None = None,
                     continuation_epoch_id: str | None = None) -> dict[str, Any]:
-    """Restore only a completed worker response from its exact pinned MAF pause."""
+    """Restore a paused attempt: v5 from its completed worker response, v8 per ADR 0016."""
     project_root = (root or repo_root()).resolve()
     run_dir = project_root / ".flow" / "runs" / work_id
     attempt_dir = run_dir / "execution" / attempt_id
     if not attempt_dir.is_dir() or attempt_dir.is_symlink():
         raise ContractError("Magentic attempt directory is absent")
+    peek = _peek_snapshot(run_dir / "execution" / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
+        if continuation_epoch_id:
+            raise RecoveryRefused(CONTINUATION_EPOCHS_V5_ONLY)
+        return _resume_chartered(work_id, attempt_id, root=project_root, manager_adapter=manager_adapter,
+                                 worker_adapter=worker_adapter, supervisor=supervisor, test_runner=test_runner,
+                                 python_path=python_path, actor="flow-chartered-resume")
     ledger = ExecutionLedger(run_dir / "execution" / "ledger.sqlite")
     snapshot = ledger.snapshot(attempt_id)
     envelope = snapshot["envelope"]
@@ -661,12 +918,18 @@ def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
                      supervisor: Callable[..., dict[str, Any]] | None = None,
                      test_runner: Callable[[Path], dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Resolve one observed v5 Claude result, then resume its exact pending MAF action."""
+    """Resolve one observed v5 Claude result and resume it; route v6-v8 to chartered recovery."""
     project_root = (root or repo_root()).resolve()
     valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
     if not valid:
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
     attempt_dir = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id
+    peek = _peek_snapshot(attempt_dir.parent / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
+        # Chunk 1 needs no operator evidence, so v8 recover equals resume.
+        return _resume_chartered(work_id, attempt_id, root=project_root, manager_adapter=manager_adapter,
+                                 worker_adapter=worker_adapter, supervisor=supervisor, test_runner=test_runner,
+                                 python_path=python_path, actor=actor)
     ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
     snapshot = ledger.snapshot(attempt_id)
     envelope = snapshot["envelope"]
@@ -738,7 +1001,154 @@ def _verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structure
     return text + VERIFIER_CONTRACT_INSTRUCTION if structured else text
 
 
+def _evaluate_verifier(ledger: ExecutionLedger, action: dict[str, Any], result: dict[str, Any],
+                       binding: dict[str, Any], *, generation: int) -> dict[str, Any]:
+    """Record Flow's judgment of an already completed verifier response."""
+    evaluation = evaluate_candidate(
+        action_id=action["action_id"], verifier_input_digest=binding["input_digest"],
+        raw_output=result["output"], diff_digest=binding["diff_digest"],
+        test_evidence_digest=binding["test_digest"],
+        forced_unusable_reason="provider_binding_mismatch" if provider_binding_mismatch(action, result) else None)
+    return ledger.record_verifier_evaluation(action["action_id"], evaluation, generation=generation)["evaluation"]
+
+
+def _verifier_summary(ledger: ExecutionLedger, attempt_id: str, evaluation: dict[str, Any], output: str) -> str:
+    usage = ledger.verifier_usage(attempt_id)
+    return ("Flow verifier evaluation: " + evaluation["disposition"]
+            + "; reason: " + evaluation["reason"]
+            + "; retry eligible: " + str(usage["retry_eligible"]).lower()
+            + ". Provider summary: " + output)
+
+
+def _producer_summary(output: str, edit_evidence: dict[str, Any], attempt_dir: Path) -> str:
+    return (output + "\n\nFlow verified the scoped repair. Diff SHA-256: " + edit_evidence["diff_sha256"]
+            + ". Targeted test: passed. Verified diff excerpt:\n" + (attempt_dir / "repair.diff").read_text()[:2048])
+
+
+def _completed_reply(ledger: ExecutionLedger, envelope: dict[str, Any], attempt_dir: Path,
+                     action: dict[str, Any], result: dict[str, Any], *, is_verifier: bool, is_producer: bool,
+                     edit_evidence: dict[str, Any] | None, test_evidence: dict[str, Any] | None,
+                     generation: int, authority_guard: Callable[[], Any]) -> dict[str, Any]:
+    """Rebuild the reply for an already completed action; it never resends."""
+    reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
+    if reply_path.is_file() and not reply_path.is_symlink():
+        reply = json.loads(reply_path.read_text())
+        if reply.get("action_id") == action["action_id"] and reply.get("output") == result["output"]:
+            return reply
+    aid = envelope["attempt_id"]
+    if envelope["execution_protocol_version"] == 8 and is_verifier:
+        # A crash can land between completion and evaluation. Replay
+        # re-evaluates the stored response; it never resends.
+        replay_state = ledger.snapshot(aid)
+        binding = next((item for item in replay_state.get("verifier_inputs", [])
+                        if item["action_id"] == action["action_id"]), None)
+        if binding is None:
+            raise ContractError("completed structured verifier has no durable input binding")
+        evaluation = next((item["evaluation"] for item in replay_state.get("verifier_evaluations", [])
+                           if item["action_id"] == action["action_id"]), None)
+        if evaluation is None:
+            with authority_guard():
+                evaluation = _evaluate_verifier(ledger, action, result, binding, generation=generation)
+        summary = _verifier_summary(ledger, aid, evaluation, result["output"])
+    elif is_producer and edit_evidence and test_evidence:
+        summary = _producer_summary(result["output"], edit_evidence, attempt_dir)
+    else:
+        summary = result["output"]
+    return {"status": "completed", "action_id": action["action_id"],
+            "summary": summary, "output": result["output"]}
+
+
+def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: ExecutionLedger,
+                   snapshot: dict[str, Any], *, failure: str, edit_evidence: dict[str, Any] | None,
+                   test_evidence: dict[str, Any] | None, verifier_input_sha256: str | None,
+                   continuation_epoch_id: str | None) -> tuple[dict[str, Any], str, str]:
+    """Derive the terminal status and the linked receipt from ledger facts."""
+    aid = envelope["attempt_id"]
+    source_commit = envelope["source_commit"]
+    worktree = Path(envelope["worktree"])
+    baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    chartered = envelope["execution_protocol_version"] in {6, 7, 8}
+    delivery_protocol = envelope["execution_protocol_version"] in {7, 8}
+    structured_verifier = envelope["execution_protocol_version"] == 8
+    job = envelope.get("job_contract") if chartered else None
+    actions = snapshot["actions"]
+    manager_calls = snapshot.get("manager_calls", [])
+    uncertain = any(item["status"] in {"started", "unknown"} for item in actions + manager_calls)
+    producer = [item for item in actions if (item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"]
+    verifier = [item for item in actions if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
+    verified_order = bool(producer and any(item["request"]["sequence"] > producer[0]["request"]["sequence"] for item in verifier))
+    final_evaluation = (snapshot.get("verifier_evaluations") or [{}])[-1].get("evaluation")
+    structured_pass = (not structured_verifier or bool(final_evaluation)
+                       and final_evaluation["disposition"] == "valid_pass")
+    if (structured_pass and structured_verifier and not failure and edit_evidence and test_evidence
+            and (final_evaluation["diff_digest"] != edit_evidence["diff_sha256"]
+                 or final_evaluation["test_evidence_digest"] != test_evidence["output_sha256"])):
+        # The pass judged evidence Flow no longer holds; it cannot complete.
+        structured_pass = False
+        failure = "structured verifier pass is bound to stale evidence"
+    terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and structured_pass and edit_evidence and test_evidence else "failed")
+    reason = "reconciliation_required" if terminal == "unknown" else failure
+    receipt = {"schema_version": 1, "execution_protocol_version": envelope["execution_protocol_version"], "work_id": envelope["work_id"], "attempt_id": aid,
+               "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],
+               "manifest_digest": envelope["manifest_digest"], "charter_sources": envelope["charter_sources"],
+               "run_protocol_revision": 2, "roster": envelope["roster"], "status": terminal, "reason": reason,
+               "manager_calls": manager_calls, "actions": actions, "replans": snapshot["replans"],
+               "checkpoints": snapshot.get("magentic_checkpoints", []),
+               "failure_detail": failure[:512],
+               "evidence": {"source_commit": source_commit, "worktree": str(worktree),
+                            "allowed_paths": envelope["allowed_paths"], "baseline": baseline,
+                            "edit": edit_evidence, "tests": test_evidence,
+                            "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
+    if structured_verifier:
+        receipt["verifier_inputs"] = snapshot.get("verifier_inputs", [])
+        receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
+        receipt["verifier_usage"] = snapshot["verifier_usage"]
+        if snapshot.get("recoveries"):
+            # A receipt on disk while the attempt is started is an unsealed
+            # draft from a process that died before finish_attempt.
+            draft = attempt_dir / "receipt.json"
+            replaced = (hashlib.sha256(draft.read_bytes()).hexdigest()
+                        if snapshot["status"] == "started" and draft.is_file() and not draft.is_symlink() else None)
+            receipt["recovery"] = build_recovery_block(snapshot, replaced_draft_sha256=replaced)
+    if delivery_protocol:
+        receipt.update({field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest",
+                                                              "handoff_digest", "delivery_lead_claim_digest", "delivery_lead_claim")})
+    trace_path = attempt_dir / "claude-implementer.debug.log"
+    if trace_path.is_file() and not trace_path.is_symlink():
+        trace_size = trace_path.stat().st_size
+        if trace_size > MAX_TRACE_BYTES:
+            raise ContractError("Claude diagnostic trace exceeds limit")
+        receipt["evidence"]["diagnostic_trace"] = {
+            "path": trace_path.name, "sha256": hashlib.sha256(trace_path.read_bytes()).hexdigest(),
+            "bytes": trace_size}
+    event_path = attempt_dir / "claude-implementer.events.ndjson"
+    if event_path.is_file() and not event_path.is_symlink():
+        event_size = event_path.stat().st_size
+        if event_size > MAX_EVENT_BYTES:
+            raise ContractError("Claude event trace exceeds limit")
+        receipt["evidence"]["event_trace"] = {
+            "path": event_path.name, "sha256": hashlib.sha256(event_path.read_bytes()).hexdigest(),
+            "bytes": event_size}
+    if continuation_epoch_id:
+        epoch = ledger.continuation_snapshot(continuation_epoch_id)
+        receipt["evidence"]["continuation"] = {
+            "epoch_id": continuation_epoch_id,
+            "original_receipt_sha256": epoch["receipt_sha256"],
+            "checkpoint_sha256": epoch["checkpoint_sha256"],
+            "resolution_id": epoch["resolution_id"]}
+    return receipt, terminal, reason
+
+
 def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
+                               ledger: ExecutionLedger, **kwargs: Any) -> dict[str, Any]:
+    """Run one prepared attempt; a live v8 run holds the attempt's recovery fence throughout."""
+    if envelope["execution_protocol_version"] == 8 and kwargs.get("recovery") is None:
+        with ledger.recovery_lock(envelope["attempt_id"], holder="live"):
+            return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
+    return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
+
+
+def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
                                ledger: ExecutionLedger, *,
                                manager_adapter: Callable[..., dict[str, Any]] | None,
                                worker_adapter: Callable[..., dict[str, Any]] | None,
@@ -747,8 +1157,21 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                                python_path: str | None,
                                resume: dict[str, Any] | None = None,
                                generation: int = 1,
-                               continuation_epoch_id: str | None = None) -> dict[str, Any]:
+                               continuation_epoch_id: str | None = None,
+                               seal_hook: Callable[[str], None] | None = None,
+                               recovery: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Run one attempt behind Flow's callbacks and seal its receipt.
+
+    ``recovery`` carries evidence a v8 recovery rebuilt; it replaces the live
+    preamble so the targeted test is not rerun, and it enables re-granting
+    grants the recovery claim released.
+
+    ``seal_hook`` is a test seam only: it is called at ``after-runtime-outcome``,
+    ``after-receipt-draft``, and ``before-finish-attempt`` so a test can
+    simulate a process death at each sealing boundary.
+    """
     aid = envelope["attempt_id"]
+    hook = seal_hook or (lambda point: None)
     work_id = envelope["work_id"]
     source_commit = envelope["source_commit"]
     worktree = Path(envelope["worktree"])
@@ -776,7 +1199,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     recoverable_transport_failure = False
     verifier_input_sha256: str | None = None
     initial_snapshot = ledger.snapshot(aid)
-    if any((item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"
+    if recovery is not None:
+        edit_evidence, test_evidence = recovery["edit_evidence"], recovery["test_evidence"]
+    elif any((item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"
            for item in initial_snapshot["actions"]):
         edit_evidence = verify_edit(worktree, baseline, attempt_dir)
         test_evidence = test_runner(worktree)
@@ -800,6 +1225,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 raise ContractError("Magentic replan denied: " + decision["reason"])
         with authority_guard():
             decision = ledger.decide_manager_call(envelope, request, generation=generation)
+            if recovery is not None and decision.get("replayed") and decision["allowed"]:
+                # A replayed, never-sent grant would expire when consumed.
+                decision = ledger.reissue_recovered_manager_grant(request["call_id"], generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             observed = decision["result"].get("output")
             if isinstance(observed, str) and observed.strip():
@@ -829,22 +1257,6 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 ledger.mark_manager_unknown(request["call_id"], "manager_send_outcome_uncertain", generation=generation)
                 raise
 
-    def evaluate_verifier(action: dict[str, Any], result: dict[str, Any], binding: dict[str, Any]) -> dict[str, Any]:
-        """Record Flow's judgment of an already completed verifier response."""
-        evaluation = evaluate_candidate(
-            action_id=action["action_id"], verifier_input_digest=binding["input_digest"],
-            raw_output=result["output"], diff_digest=binding["diff_digest"],
-            test_evidence_digest=binding["test_digest"],
-            forced_unusable_reason="provider_binding_mismatch" if provider_binding_mismatch(action, result) else None)
-        return ledger.record_verifier_evaluation(action["action_id"], evaluation, generation=generation)["evaluation"]
-
-    def verifier_summary(evaluation: dict[str, Any], output: str) -> str:
-        usage = ledger.verifier_usage(aid)
-        return ("Flow verifier evaluation: " + evaluation["disposition"]
-                + "; reason: " + evaluation["reason"]
-                + "; retry eligible: " + str(usage["retry_eligible"]).lower()
-                + ". Provider summary: " + output)
-
     def on_action(message: dict[str, Any]) -> dict[str, Any]:
         nonlocal edit_evidence, test_evidence, verifier_input_sha256
         action = _normalized_action(envelope, message)
@@ -856,35 +1268,17 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
             raise ContractError("Magentic verifier selected before Flow verified Claude repair")
         with authority_guard():
             decision = ledger.decide(envelope, action, generation=generation)
+            regranted = False
+            if (recovery is not None and decision.get("replayed") and not decision["allowed"]
+                    and decision["reason"] == "recovery_unconsumed_grant"
+                    and action["action_id"] in recovery.get("regrantable_action_ids", [])):
+                decision = ledger.regrant_recovered_action(envelope, action, generation=generation)
+                regranted = decision["allowed"]
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
-            result = decision["result"]
-            reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
-            if reply_path.is_file() and not reply_path.is_symlink():
-                reply = json.loads(reply_path.read_text())
-                if reply.get("action_id") == action["action_id"] and reply.get("output") == result["output"]:
-                    return reply
-            if structured_verifier and is_verifier:
-                # A crash can land between completion and evaluation. Replay
-                # re-evaluates the stored response; it never resends.
-                replay_state = ledger.snapshot(aid)
-                binding = next((item for item in replay_state.get("verifier_inputs", [])
-                                if item["action_id"] == action["action_id"]), None)
-                if binding is None:
-                    raise ContractError("completed structured verifier has no durable input binding")
-                evaluation = next((item["evaluation"] for item in replay_state.get("verifier_evaluations", [])
-                                   if item["action_id"] == action["action_id"]), None)
-                if evaluation is None:
-                    with authority_guard():
-                        evaluation = evaluate_verifier(action, result, binding)
-                summary = verifier_summary(evaluation, result["output"])
-            elif is_producer and edit_evidence and test_evidence:
-                summary = (result["output"] + "\n\nFlow verified the scoped repair. Diff SHA-256: "
-                           + edit_evidence["diff_sha256"] + ". Targeted test: passed. Verified diff excerpt:\n"
-                           + (attempt_dir / "repair.diff").read_text()[:2048])
-            else:
-                summary = result["output"]
-            return {"status": "completed", "action_id": action["action_id"],
-                    "summary": summary, "output": result["output"]}
+            return _completed_reply(ledger, envelope, attempt_dir, action, decision["result"],
+                                    is_verifier=is_verifier, is_producer=is_producer,
+                                    edit_evidence=edit_evidence, test_evidence=test_evidence,
+                                    generation=generation, authority_guard=authority_guard)
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
@@ -900,9 +1294,11 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
                 if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
                     raise ContractError("Magentic pending-action checkpoint is absent")
-                high_water = ledger.snapshot(aid)["events"][-1]["seq"]
-                ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
-                                                high_water, str(checkpoint_path), generation=generation)
+                if not regranted:
+                    # A re-granted proposal keeps the checkpoint it was bound to.
+                    high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+                    ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
+                                                    high_water, str(checkpoint_path), generation=generation)
                 if not (structured_verifier and is_verifier) and not ledger.consume_grant(
                         action["action_id"], decision["grant_id"], generation=generation):
                     raise ContractError("Magentic specialist grant was already consumed")
@@ -942,7 +1338,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                     ledger.complete(action["action_id"], result, generation=generation)
                     response_completed = True
                     if structured_verifier and is_verifier:
-                        evaluation = evaluate_verifier(action, result, verifier_binding)
+                        evaluation = _evaluate_verifier(ledger, action, result, verifier_binding, generation=generation)
                 if is_producer:
                     edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
@@ -956,10 +1352,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                 raise
         summary = result["output"]
         if structured_verifier and is_verifier:
-            summary = verifier_summary(evaluation, result["output"])
+            summary = _verifier_summary(ledger, aid, evaluation, result["output"])
         if is_producer and edit_evidence and test_evidence:
-            summary += ("\n\nFlow verified the scoped repair. Diff SHA-256: " + edit_evidence["diff_sha256"]
-                        + ". Targeted test: passed. Verified diff excerpt:\n" + (attempt_dir / "repair.diff").read_text()[:2048])
+            summary = _producer_summary(summary, edit_evidence, attempt_dir)
         reply = {"status": "completed", "action_id": action["action_id"], "summary": summary, "output": result["output"]}
         reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
         if reply_path.exists():
@@ -990,73 +1385,60 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
         write_atomic(attempt_dir / "interruption.json", canonical(interruption) + "\n", mode=0o600)
         return {"attempt_id": aid, "status": "interrupted", "reason": failure,
                 "receipt_path": None, "resume_available": True}
-    producer = [item for item in actions if (item["request"]["instance_id"] in job["producer_instance_ids"] if chartered else item["request"]["assignment_id"] == "claude-implementer") and item["status"] == "completed"]
-    verifier = [item for item in actions if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
-    verified_order = bool(producer and any(item["request"]["sequence"] > producer[0]["request"]["sequence"] for item in verifier))
-    final_evaluation = (snapshot.get("verifier_evaluations") or [{}])[-1].get("evaluation")
-    structured_pass = (not structured_verifier or bool(final_evaluation)
-                       and final_evaluation["disposition"] == "valid_pass")
-    if (structured_pass and structured_verifier and not failure and edit_evidence and test_evidence
-            and (final_evaluation["diff_digest"] != edit_evidence["diff_sha256"]
-                 or final_evaluation["test_evidence_digest"] != test_evidence["output_sha256"])):
-        # The pass judged evidence Flow no longer holds; it cannot complete.
-        structured_pass = False
-        failure = "structured verifier pass is bound to stale evidence"
-    terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and structured_pass and edit_evidence and test_evidence else "failed")
-    reason = "reconciliation_required" if terminal == "unknown" else failure
-    receipt = {"schema_version": 1, "execution_protocol_version": envelope["execution_protocol_version"], "work_id": work_id, "attempt_id": aid,
-               "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],
-               "manifest_digest": envelope["manifest_digest"], "charter_sources": envelope["charter_sources"],
-               "run_protocol_revision": 2, "roster": envelope["roster"], "status": terminal, "reason": reason,
-               "manager_calls": manager_calls, "actions": actions, "replans": snapshot["replans"],
-               "checkpoints": snapshot.get("magentic_checkpoints", []),
-               "failure_detail": failure[:512],
-               "evidence": {"source_commit": source_commit, "worktree": str(worktree),
-                            "allowed_paths": envelope["allowed_paths"], "baseline": baseline,
-                            "edit": edit_evidence, "tests": test_evidence,
-                            "verifier_input_sha256": verifier_input_sha256}, "created_at": utc_now()}
+    if structured_verifier and (uncertain or (failure and recoverable_transport_failure)):
+        # v8 never seals transport loss or uncertainty. The attempt stays
+        # started; an explicit recovery reconciles and continues it.
+        cause = "reconciliation_required" if uncertain else "transport"
+        with authority_guard(), ledger.send_lock():
+            interruption = ledger.record_interruption(aid, cause, failure, generation=generation)
+        blocking = [item.get("action_id") or item.get("call_id") for item in actions + manager_calls
+                    if item["status"] in {"started", "unknown"}]
+        return {"attempt_id": aid, "status": "interrupted", "reason": cause, "detail": failure[:512],
+                "interruption_id": interruption["interruption_id"], "receipt_path": None,
+                "resume_available": not uncertain, "blocking": blocking}
     if structured_verifier:
-        receipt["verifier_inputs"] = snapshot.get("verifier_inputs", [])
-        receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
-        receipt["verifier_usage"] = snapshot["verifier_usage"]
-    if delivery_protocol:
-        receipt.update({field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest",
-                                                              "handoff_digest", "delivery_lead_claim_digest", "delivery_lead_claim")})
-    trace_path = attempt_dir / "claude-implementer.debug.log"
-    if trace_path.is_file() and not trace_path.is_symlink():
-        trace_size = trace_path.stat().st_size
-        if trace_size > MAX_TRACE_BYTES:
-            raise ContractError("Claude diagnostic trace exceeds limit")
-        receipt["evidence"]["diagnostic_trace"] = {
-            "path": trace_path.name, "sha256": hashlib.sha256(trace_path.read_bytes()).hexdigest(),
-            "bytes": trace_size}
-    event_path = attempt_dir / "claude-implementer.events.ndjson"
-    if event_path.is_file() and not event_path.is_symlink():
-        event_size = event_path.stat().st_size
-        if event_size > MAX_EVENT_BYTES:
-            raise ContractError("Claude event trace exceeds limit")
-        receipt["evidence"]["event_trace"] = {
-            "path": event_path.name, "sha256": hashlib.sha256(event_path.read_bytes()).hexdigest(),
-            "bytes": event_size}
-    if continuation_epoch_id:
-        epoch = ledger.continuation_snapshot(continuation_epoch_id)
-        receipt["evidence"]["continuation"] = {
-            "epoch_id": continuation_epoch_id,
-            "original_receipt_sha256": epoch["receipt_sha256"],
-            "checkpoint_sha256": epoch["checkpoint_sha256"],
-            "resolution_id": epoch["resolution_id"]}
+        with authority_guard(), ledger.send_lock():
+            ledger.record_runtime_outcome(aid, failure=failure, transport=recoverable_transport_failure,
+                                          generation=generation)
+        hook("after-runtime-outcome")
+    if not continuation_epoch_id:
+        return _seal_attempt(envelope, attempt_dir, ledger, snapshot, failure=failure,
+                             edit_evidence=edit_evidence, test_evidence=test_evidence,
+                             verifier_input_sha256=verifier_input_sha256, generation=generation,
+                             authority_guard=authority_guard, hook=hook)
+    receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
+                                               edit_evidence=edit_evidence, test_evidence=test_evidence,
+                                               verifier_input_sha256=verifier_input_sha256,
+                                               continuation_epoch_id=continuation_epoch_id)
     validate_receipt(envelope, receipt)
-    receipt_path = attempt_dir / (f"continuation-{continuation_epoch_id}.receipt.json"
-                                  if continuation_epoch_id else "receipt.json")
+    receipt_path = attempt_dir / f"continuation-{continuation_epoch_id}.receipt.json"
     with authority_guard(), ledger.send_lock():
         ledger.assert_owner(aid, generation)
-        if continuation_epoch_id:
-            _write_snapshot(receipt_path, (canonical(receipt) + "\n").encode())
-            ledger.finish_magentic_continuation(continuation_epoch_id, terminal, reason,
-                                                str(receipt_path), generation=generation)
-        else:
-            write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
-            ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+        _write_snapshot(receipt_path, (canonical(receipt) + "\n").encode())
+        ledger.finish_magentic_continuation(continuation_epoch_id, terminal, reason,
+                                            str(receipt_path), generation=generation)
+    return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
+            "evidence": receipt["evidence"]}
+
+
+def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: ExecutionLedger, snapshot: dict[str, Any], *,
+                  failure: str, edit_evidence: dict[str, Any] | None, test_evidence: dict[str, Any] | None,
+                  verifier_input_sha256: str | None, generation: int, authority_guard: Callable[[], Any],
+                  hook: Callable[[str], None]) -> dict[str, Any]:
+    """Build, validate, write, and seal an attempt receipt under the owner fence."""
+    aid = envelope["attempt_id"]
+    receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
+                                               edit_evidence=edit_evidence, test_evidence=test_evidence,
+                                               verifier_input_sha256=verifier_input_sha256,
+                                               continuation_epoch_id=None)
+    validate_receipt(envelope, receipt)
+    hook("after-receipt-draft")
+    receipt_path = attempt_dir / "receipt.json"
+    with authority_guard(), ledger.send_lock():
+        ledger.assert_owner(aid, generation)
+        write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+        hook("before-finish-attempt")
+        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
     return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
             "evidence": receipt["evidence"]}
 

@@ -16,7 +16,8 @@ from delivery_gateway import (ContractError, _default_worker_adapter,
                               _execute_prepared_delivery, execute_chartered_delivery,
                               prepare_chartered_delivery)
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
-                                 expected_magentic_action_id, validate_action, validate_receipt)
+                                 expected_magentic_action_id, validate_action, validate_envelope,
+                                 validate_receipt)
 from delivery_contracts import build_delivery_charter, build_shaper_contract, digest as delivery_digest
 from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
@@ -26,7 +27,13 @@ from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier
 import delivery_gateway
 
 
-class CharteredPreparationTests(unittest.TestCase):
+class KillPoint(BaseException):
+    """Simulated process death; escapes the gateway's ``except Exception`` handlers."""
+
+
+class CharteredFixture(unittest.TestCase):
+    """Hermetic worktree, sealed delivery authority, and a stub-driven v8 run."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -105,6 +112,86 @@ class CharteredPreparationTests(unittest.TestCase):
         with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
             return prepare_chartered_delivery("sample", self.worktree, self.commit, root=self.root)
 
+    def _proposal(self, envelope, assignment_id, sequence):
+        assignment = next(item for item in envelope["roster"] if item["assignment_id"] == assignment_id)
+        checkpoint_id = f"checkpoint-{sequence}"
+        action = {"schema_version": 1, "kind": "delegate", "attempt_id": envelope["attempt_id"],
+                  "envelope_digest": envelope_digest(envelope), "sequence": sequence,
+                  "assignment_id": assignment_id, "definition_digest": assignment["definition_digest"],
+                  "instance_id": assignment["instance_id"], "role": assignment["role"],
+                  "provider": assignment["provider"], "model": assignment["model"],
+                  "manager_turn": sequence, "task": "Edit target.py" if sequence == 1 else "Verify target.py",
+                  "rationale": "The selected specialist is eligible for this bounded task.",
+                  "parent_action_id": None if sequence == 1 else "a" * 64,
+                  "checkpoint_id": checkpoint_id}
+        action["task_digest"] = hashlib.sha256(action["task"].encode()).hexdigest()
+        if envelope["execution_protocol_version"] in {7, 8}:
+            eligible_ids = (envelope["job_contract"]["producer_instance_ids"]
+                            if assignment_id in envelope["job_contract"]["producer_instance_ids"]
+                            else envelope["job_contract"]["verifier_instance_ids"])
+            eligible = [{key: next(item for item in envelope["roster"] if item["instance_id"] == instance)[key]
+                         for key in ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model")}
+                        for instance in eligible_ids]
+            action["provider_choice"] = {
+                "eligible_candidates": eligible, "selected_candidate": assignment["instance_id"],
+                "rationale": {"manager_reason": action["rationale"], "facts": ["approved specialist identity"]},
+                "rejection_reasons": {candidate["instance_id"]: {"reason": "Magentic selected another approved candidate.",
+                                                                    "facts": ["approved candidate not selected"]}
+                                      for candidate in eligible if candidate["instance_id"] != assignment["instance_id"]}}
+        action["action_id"] = expected_magentic_action_id(action)
+        return action
+
+    @staticmethod
+    def _result(provider, model, output):
+        return {"schema_version": 1, "status": "completed", "provider": provider, "model": model,
+                "physical_call": True,
+                "evidence_level": {"codex": "flow_observed_codex_cli_completed_turn",
+                                   "claude": "flow_observed_claude_cli_completed_turn",
+                                   "ollama": "flow_observed_local_http_response"}[provider],
+                "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "usage": None}
+
+    PASS = '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}'
+    FAIL = '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
+
+    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None, seal_hook=None):
+        """Drive one v8 attempt; ``repeat`` re-proposes that sequence once after an error."""
+        sends, replies, captured = [], {}, {}
+        outputs = list(verifier_outputs)
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
+            for sequence, assignment_id in enumerate(plan, 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                try:
+                    replies[sequence] = on_action(proposal)
+                except Exception as exc:
+                    if sequence != repeat:
+                        raise
+                    captured["first_error"] = str(exc)
+                    replies[sequence] = on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            sends.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            captured.setdefault("provider_tasks", []).append(action["provider_task"])
+            return self._result("ollama", "local-model", outputs.pop(0))
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker, seal_hook=seal_hook)
+        return result, sends, replies, captured
+
+
+class CharteredPreparationTests(CharteredFixture):
     def test_clean_job_pins_roster_and_contract(self):
         envelope, task, attempt_dir, ledger = self.prepare()
         self.assertEqual(envelope["execution_protocol_version"], 8)
@@ -275,44 +362,6 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["execution_protocol_version"], 8)
-
-    def _proposal(self, envelope, assignment_id, sequence):
-        assignment = next(item for item in envelope["roster"] if item["assignment_id"] == assignment_id)
-        checkpoint_id = f"checkpoint-{sequence}"
-        action = {"schema_version": 1, "kind": "delegate", "attempt_id": envelope["attempt_id"],
-                  "envelope_digest": envelope_digest(envelope), "sequence": sequence,
-                  "assignment_id": assignment_id, "definition_digest": assignment["definition_digest"],
-                  "instance_id": assignment["instance_id"], "role": assignment["role"],
-                  "provider": assignment["provider"], "model": assignment["model"],
-                  "manager_turn": sequence, "task": "Edit target.py" if sequence == 1 else "Verify target.py",
-                  "rationale": "The selected specialist is eligible for this bounded task.",
-                  "parent_action_id": None if sequence == 1 else "a" * 64,
-                  "checkpoint_id": checkpoint_id}
-        action["task_digest"] = hashlib.sha256(action["task"].encode()).hexdigest()
-        if envelope["execution_protocol_version"] in {7, 8}:
-            eligible_ids = (envelope["job_contract"]["producer_instance_ids"]
-                            if assignment_id in envelope["job_contract"]["producer_instance_ids"]
-                            else envelope["job_contract"]["verifier_instance_ids"])
-            eligible = [{key: next(item for item in envelope["roster"] if item["instance_id"] == instance)[key]
-                         for key in ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model")}
-                        for instance in eligible_ids]
-            action["provider_choice"] = {
-                "eligible_candidates": eligible, "selected_candidate": assignment["instance_id"],
-                "rationale": {"manager_reason": action["rationale"], "facts": ["approved specialist identity"]},
-                "rejection_reasons": {candidate["instance_id"]: {"reason": "Magentic selected another approved candidate.",
-                                                                    "facts": ["approved candidate not selected"]}
-                                      for candidate in eligible if candidate["instance_id"] != assignment["instance_id"]}}
-        action["action_id"] = expected_magentic_action_id(action)
-        return action
-
-    @staticmethod
-    def _result(provider, model, output):
-        return {"schema_version": 1, "status": "completed", "provider": provider, "model": model,
-                "physical_call": True,
-                "evidence_level": {"codex": "flow_observed_codex_cli_completed_turn",
-                                   "claude": "flow_observed_claude_cli_completed_turn",
-                                   "ollama": "flow_observed_local_http_response"}[provider],
-                "output": output, "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "usage": None}
 
     def test_v7_gateway_seals_producer_verifier_receipt_after_flow_observes_edit_and_test(self):
         calls = []
@@ -508,45 +557,46 @@ class CharteredPreparationTests(unittest.TestCase):
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["unusable", "valid_pass"])
 
-    PASS = '{"schema_version":1,"decision":"pass","summary":"ok","findings":[]}'
-    FAIL = '{"schema_version":1,"decision":"fail","summary":"repair","findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
+    def test_v8_seal_hook_reaches_each_sealing_boundary_after_the_runtime_outcome(self):
+        points = []
+        result, _, _, captured = self._run_v8([self.PASS], seal_hook=points.append)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(points, ["after-runtime-outcome", "after-receipt-draft", "before-finish-attempt"])
+        attempt_dir = Path(result["receipt_path"]).parent
+        snapshot = ExecutionLedger(attempt_dir.parent / "ledger.sqlite", read_only=True).snapshot(result["attempt_id"])
+        outcomes = [json.loads(item["detail"]) for item in snapshot["events"] if item["event"] == "runtime_outcome_recorded"]
+        self.assertEqual(outcomes, [{"failure": "", "generation": 1, "transport": False}])
+        self.assertEqual(snapshot["sealed_receipt_sha256"],
+                         hashlib.sha256(Path(result["receipt_path"]).read_bytes()).hexdigest())
 
-    def _run_v8(self, verifier_outputs, *, plan=("editor", "verifier"), on_reply=None, repeat=None):
-        """Drive one v8 attempt; ``repeat`` re-proposes that sequence once after an error."""
-        sends, replies, captured = [], {}, {}
-        outputs = list(verifier_outputs)
+    def test_live_v8_run_holds_the_attempt_recovery_fence(self):
+        observed = []
 
-        def supervisor(envelope, task, on_manager, on_action, **kwargs):
-            captured["envelope"] = envelope
-            for sequence, assignment_id in enumerate(plan, 1):
-                proposal = self._proposal(envelope, assignment_id, sequence)
-                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
-                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
-                                                  "workflow_name": "flow-magentic-delivery-v8",
-                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
-                try:
-                    replies[sequence] = on_action(proposal)
-                except Exception as exc:
-                    if sequence != repeat:
-                        raise
-                    captured["first_error"] = str(exc)
-                    replies[sequence] = on_action(proposal)
-            return {"attempt_id": envelope["attempt_id"]}
+        def probe(point):
+            if point == "after-runtime-outcome":
+                attempt_dir = next((self.run / "execution").glob("*/envelope.json")).parent
+                ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+                with self.assertRaises(ExecutionContractError) as raised:
+                    with ledger.recovery_lock(attempt_dir.name, holder="recovery"):
+                        pass
+                observed.append(raised.exception.reason)
 
-        def worker(action, *, envelope, workspace):
-            sends.append(action["assignment_id"])
-            if action["assignment_id"] == "editor":
-                (workspace / "target.py").write_text("new\n")
-                return self._result("codex", "editor-model", "Edited target")
-            captured.setdefault("provider_tasks", []).append(action["provider_task"])
-            return self._result("ollama", "local-model", outputs.pop(0))
+        result, _, _, _ = self._run_v8([self.PASS], seal_hook=probe)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(observed, ["attempt_running"])
 
-        with patch("delivery_gateway.run_status", return_value=self.state), \
-             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
-             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
-            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
-                                                supervisor=supervisor, worker_adapter=worker)
-        return result, sends, replies, captured
+    def test_v8_kill_before_finish_leaves_an_unsealed_draft_and_a_started_attempt(self):
+        def kill(point):
+            if point == "before-finish-attempt":
+                raise KillPoint(point)
+
+        with self.assertRaises(KillPoint):
+            self._run_v8([self.PASS], seal_hook=kill)
+        attempt_dir = next((self.run / "execution").glob("*/envelope.json")).parent
+        snapshot = ExecutionLedger(attempt_dir.parent / "ledger.sqlite", read_only=True).snapshot(attempt_dir.name)
+        self.assertEqual(snapshot["status"], "started")
+        self.assertIsNone(snapshot["sealed_receipt_sha256"])
+        self.assertTrue((attempt_dir / "receipt.json").is_file())
 
     def test_v8_verifier_input_carries_the_flow_output_contract(self):
         result, _, _, captured = self._run_v8([self.PASS])
@@ -627,6 +677,73 @@ class CharteredPreparationTests(unittest.TestCase):
                 mutate(changed)
                 with self.assertRaises(ExecutionContractError):
                     validate_receipt(envelope, changed)
+
+    def test_v8_receipt_recovery_block_is_required_and_bound_to_its_evidence(self):
+        result, _, _, captured = self._run_v8([self.PASS])
+        envelope = captured["envelope"]
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        validate_receipt(envelope, receipt)
+        editor = receipt["actions"][0]["action_id"]
+        recovered = copy.deepcopy(receipt)
+        recovered["actions"][0]["reason"] = "recovery_regranted"
+        for item in recovered["verifier_inputs"] + recovered["verifier_evaluations"]:
+            item["owner_generation"] = 2
+        recovered["recovery"] = {
+            "schema_version": 1, "resolutions": [], "replaced_draft_sha256": None,
+            "interruptions": [{"interruption_id": "i1", "cause": "unmarked_process_exit",
+                               "owner_generation": 1, "recorded_at": "2026-09-23T00:00:00+00:00"}],
+            "recoveries": [{"recovery_id": "r1", "expected_generation": 1, "generation": 2, "lead_generation": 1,
+                            "actor": "flow-chartered-resume", "mode": "pending",
+                            "released_action_ids": [editor], "claimed_at": "2026-09-23T00:00:01+00:00"}]}
+        validate_receipt(envelope, recovered)
+        # Each mutation must trip its own guard, not a coincidental earlier check.
+        mutations = {
+            "recovery generation changed": (lambda r: r["recovery"]["recoveries"][0].update(generation=3),
+                                            "generation chain"),
+            "recovery marker removed": (lambda r: r.pop("recovery"), "lacks its recovery block"),
+            "lead generation changed": (lambda r: r["recovery"]["recoveries"][0].update(lead_generation=2),
+                                        "generation chain"),
+            "released grant removed": (lambda r: r["recovery"]["recoveries"][0].update(released_action_ids=[]),
+                                       "released grants differ"),
+            "evaluation generation outside chain": (lambda r: r["verifier_evaluations"][0].update(owner_generation=5),
+                                                    "outside the recovery chain"),
+            "interruption cause invented": (lambda r: r["recovery"]["interruptions"][0].update(cause="timeout"),
+                                            "interruption is invalid"),
+            "resolution added": (lambda r: r["recovery"].update(resolutions=["extra"]), "resolutions differ"),
+            "draft digest malformed": (lambda r: r["recovery"].update(replaced_draft_sha256="draft"),
+                                       "recovery block is invalid"),
+        }
+        for label, (mutate, message) in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(recovered)
+                mutate(changed)
+                with self.assertRaisesRegex(ExecutionContractError, message):
+                    validate_receipt(envelope, changed)
+        marker_only = copy.deepcopy(receipt)
+        marker_only["verifier_evaluations"][0]["owner_generation"] = 2
+        with self.assertRaisesRegex(ExecutionContractError, "lacks its recovery block"):
+            validate_receipt(envelope, marker_only)
+
+    def test_v8_predecessor_links_are_validated_only_for_v8(self):
+        envelope, _, _, _ = self.prepare()
+        envelope = copy.deepcopy(envelope)
+        envelope["delivery_lead_claim"]["generation"] = 2
+        valid = {"attempt_id": "a" * 32, "terminal_status": "superseded", "receipt_sha256": None, "lead_generation": 1}
+        envelope["predecessors"] = [valid]
+        validate_envelope(envelope)
+        cases = {
+            "empty list": [],
+            "current generation": [{**valid, "lead_generation": 2}],
+            "non-terminal status": [{**valid, "terminal_status": "started"}],
+            "missing sealed digest": [{**valid, "terminal_status": "failed"}],
+            "duplicate": [valid, valid],
+            "self link": [{**valid, "attempt_id": envelope["attempt_id"]}],
+            "extra field": [{**valid, "note": "x"}],
+        }
+        for label, predecessors in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaises(ExecutionContractError):
+                    validate_envelope({**envelope, "predecessors": predecessors})
 
     def test_completed_v7_receipt_keeps_its_original_validation_semantics(self):
         result, _, _, captured = self._run_v8([self.PASS])
@@ -722,10 +839,15 @@ class CharteredPreparationTests(unittest.TestCase):
         self.assertIsNotNone(receipt["evidence"]["edit"])
         self.assertIsNone(receipt["evidence"]["tests"])
 
-    def test_v7_transport_loss_after_producer_seals_nonresumable_receipt(self):
+    def test_v8_transport_loss_after_producer_records_a_resumable_interruption(self):
+        # Formerly test_v7_transport_loss_after_producer_seals_nonresumable_receipt:
+        # the gateway always mints v8, and v8 now records an interruption
+        # instead of sealing a non-resumable failed receipt.
         calls = []
+        captured = {}
 
         def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
             proposal = self._proposal(envelope, "editor", 1)
             checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
             checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
@@ -745,14 +867,54 @@ class CharteredPreparationTests(unittest.TestCase):
             result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
                                                 supervisor=supervisor, worker_adapter=worker)
         self.assertEqual(calls, ["editor"])
-        self.assertEqual(result["status"], "failed")
-        self.assertFalse(result.get("resume_available", False))
-        receipt_path = Path(result["receipt_path"])
-        self.assertTrue(receipt_path.is_file())
-        receipt = json.loads(receipt_path.read_text())
-        self.assertEqual(receipt["status"], "failed")
-        self.assertEqual([action["status"] for action in receipt["actions"]], ["completed"])
-        self.assertEqual(receipt["evidence"]["tests"]["status"], "passed")
+        self.assertEqual((result["status"], result["reason"]), ("interrupted", "transport"))
+        self.assertTrue(result["resume_available"])
+        self.assertEqual(result["blocking"], [])
+        self.assertIsNone(result["receipt_path"])
+        attempt_dir = Path(captured["envelope"]["checkpoint_dir"]).parent
+        self.assertFalse((attempt_dir / "receipt.json").exists())
+        snapshot = ExecutionLedger(attempt_dir.parent / "ledger.sqlite", read_only=True).snapshot(result["attempt_id"])
+        self.assertEqual(snapshot["status"], "started")
+        self.assertEqual([item["cause"] for item in snapshot["interruptions"]], ["transport"])
+        self.assertEqual([action["status"] for action in snapshot["actions"]], ["completed"])
+
+    def test_v8_uncertain_send_records_reconciliation_interruption_not_unknown_receipt(self):
+        def worker(action, *, envelope, workspace):
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            raise OSError("simulated connection reset during verifier send")
+
+        captured = {}
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            captured["envelope"] = envelope
+            for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual((result["status"], result["reason"]), ("interrupted", "reconciliation_required"))
+        self.assertFalse(result["resume_available"])
+        self.assertEqual(len(result["blocking"]), 1)
+        attempt_dir = Path(captured["envelope"]["checkpoint_dir"]).parent
+        self.assertFalse((attempt_dir / "receipt.json").exists())
+        ledger = ExecutionLedger(attempt_dir.parent / "ledger.sqlite")
+        snapshot = ledger.snapshot(result["attempt_id"])
+        self.assertEqual(snapshot["status"], "started")
+        self.assertEqual([item["status"] for item in snapshot["actions"]], ["completed", "unknown"])
+        with self.assertRaisesRegex(ExecutionContractError, "never seals an unknown"):
+            ledger.finish_attempt(result["attempt_id"], "unknown", "reconciliation_required",
+                                  str(attempt_dir / "receipt.json"), generation=1)
 
     def test_v7_editor_head_drift_halts_after_one_send(self):
         calls = []

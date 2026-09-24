@@ -979,7 +979,8 @@ def main() -> int:
         try:
             result = resume_delivery(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
-            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery resume refused: {exc}")
+            print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
+                  if args.json else f"delivery resume refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1
@@ -988,7 +989,8 @@ def main() -> int:
         try:
             result = recover_delivery(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
-            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery recovery refused: {exc}")
+            print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
+                  if args.json else f"delivery recovery refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1
@@ -1015,6 +1017,16 @@ def main() -> int:
             attempt = result.get("attempt") or {}
             contracts = result.get("contracts") or {}
             charter = contracts.get("charter") or {}
+            recovery_lines = ""
+            if "recovery" in attempt:
+                recovery = attempt["recovery"]
+                blocking = ", ".join(f"{item['kind']} {item['id']} {item['status']}: {item['evidence_needed']}"
+                                     for item in recovery["blockers"]) or "none"
+                recovery_lines = (f"recoverable (ledger view): {recovery['recoverable']} ({recovery['reason'] or recovery['mode']})\n"
+                                  f"checked only by the command: {', '.join(recovery['checked_by_command'])}\n"
+                                  f"blocking: {blocking}\n"
+                                  f"predecessors: {len(attempt.get('predecessors', []))}\n"
+                                  f"sealed receipt: {'consistent' if attempt['sealed_receipt']['consistent'] else 'INCONSISTENT'}\n")
             print(f"work: {result['work_id']}\nstate: {result['lifecycle'].get('state')}\n"
                   f"charter: v{charter.get('version', 'n/a')} {authority.get('charter_digest', 'unsealed')}\n"
                   f"logical attempt: {authority.get('logical_delivery_attempt_id', 'none')}\n"
@@ -1024,6 +1036,7 @@ def main() -> int:
                   f"pending unknowns: {len(attempt.get('pending_unknowns', []))}\n"
                   f"pending approvals: {len(attempt.get('pending_approvals', []))}\n"
                   f"provider choices: {len(attempt.get('provider_choices', []))}\n"
+                  + recovery_lines +
                   f"compatibility diagnostics: {len(result.get('compatibility_diagnostics', []))}")
         return 0
     if args.command == "run" and args.run_target in {"resume-execution", "resolve-execution"}:

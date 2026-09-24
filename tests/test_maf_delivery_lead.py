@@ -233,6 +233,94 @@ class StockDeliveryLeadTest(unittest.TestCase):
                 if pipe:
                     pipe.close()
 
+    def test_unanswered_action_restores_in_pending_mode_with_its_original_identity(self):
+        roster = [{"assignment_id": "test", "definition_digest": "test-definition", "instance_id": "test-engineer-1",
+                   "role": "test-engineer", "provider": "local-stub", "model": "fake", "capabilities": ["read"]},
+                  {"assignment_id": "review", "definition_digest": "review-definition", "instance_id": "reviewer-1",
+                   "role": "quality-reviewer", "provider": "local-stub", "model": "fake", "capabilities": ["read"]}]
+        with tempfile.TemporaryDirectory() as checkpoints:
+            envelope = {"execution_protocol_version": 8, "attempt_id": "pending-probe", "checkpoint_dir": checkpoints,
+                        "roster": roster, "job_contract": {"producer_instance_ids": ["test-engineer-1"],
+                                                           "verifier_instance_ids": ["reviewer-1"]}}
+
+            def launch(payload):
+                process = subprocess.Popen([MAF_PYTHON, "-m", "runtime.maf_runner.delivery_lead"],
+                                           stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, cwd=Path(__file__).resolve().parents[1])
+                assert process.stdin
+                process.stdin.write(json.dumps(payload) + "\n")
+                process.stdin.flush()
+                return process
+
+            def answer_manager(process, event):
+                phase = event["phase"]
+                response = {"facts": "Fixture facts", "plan": "- Ask specialist", "final": "Done"}.get(phase)
+                if phase == "progress":
+                    finished = event["manager_round"] > 1
+                    response = json.dumps({"is_request_satisfied": {"reason": "done" if finished else "pending", "answer": finished},
+                                           "is_in_loop": {"reason": "no", "answer": False},
+                                           "is_progress_being_made": {"reason": "yes", "answer": True},
+                                           "next_speaker": {"reason": "best", "answer": "test-engineer-1"},
+                                           "instruction_or_question": {"reason": "task", "answer": "Analyze fixture"}})
+                process.stdin.write(json.dumps({"protocol_version": 8, "type": "manager_response",
+                                                "call_id": event["call_id"], "text": response}) + "\n")
+                process.stdin.flush()
+
+            def close(process):
+                for pipe in (process.stdin, process.stdout, process.stderr):
+                    if pipe:
+                        pipe.close()
+
+            initial = launch({"protocol_version": 8, "type": "start", "envelope": envelope, "task": "Analyze fixture"})
+            manager_calls = 0
+            for _ in range(6):
+                event = json.loads(initial.stdout.readline())
+                if event["type"] == "manager_request":
+                    manager_calls += 1
+                    answer_manager(initial, event)
+                else:
+                    self.assertEqual(event["type"], "propose_action")
+                    proposal = event
+                    break
+            # The process dies before Flow answers: the grant was never used.
+            initial.kill()
+            initial.wait(timeout=10)
+            close(initial)
+            resume = {"kind": "pending", "checkpoint_id": proposal["checkpoint_id"],
+                      "request_id": "flow-magentic-action-1", "action_id": proposal["action_id"],
+                      "manager_calls_committed": manager_calls, "replans_committed": 0}
+
+            wrong = launch({"protocol_version": 8, "type": "resume", "envelope": envelope, "task": "Analyze fixture",
+                            "resume": {**resume, "result": {"summary": "answered on Flow's behalf"}}})
+            self.assertEqual(json.loads(wrong.stdout.readline())["type"], "error")
+            wrong.wait(timeout=10)
+            close(wrong)
+
+            restored = launch({"protocol_version": 8, "type": "resume", "envelope": envelope,
+                               "task": "Analyze fixture", "resume": resume})
+            first = json.loads(restored.stdout.readline())
+            self.assertEqual(first["type"], "propose_action", first)
+            self.assertEqual((first["action_id"], first["checkpoint_id"], first["sequence"]),
+                             (proposal["action_id"], proposal["checkpoint_id"], 1))
+            self.assertEqual(first["action_id"], expected_magentic_action_id(first))
+            restored.stdin.write(json.dumps({"protocol_version": 8, "type": "action_result", "action_id": first["action_id"],
+                                             "result": {"summary": "Fixture analyzed"}}) + "\n")
+            restored.stdin.flush()
+            seen = []
+            for _ in range(4):
+                event = json.loads(restored.stdout.readline())
+                seen.append(event["type"])
+                if event["type"] == "manager_request":
+                    self.assertGreater(event["sequence"], manager_calls)
+                    answer_manager(restored, event)
+                else:
+                    self.assertEqual(event["type"], "workflow_finished", event)
+                    break
+            restored.wait(timeout=10)
+            self.assertEqual(restored.returncode, 0)
+            self.assertEqual(seen[-1], "workflow_finished")
+            close(restored)
+
     def test_checkpoint_after_replan_requires_matching_ledger_count(self):
         roster = [{"assignment_id": "test", "definition_digest": "test-definition", "instance_id": "test-engineer-1",
                    "role": "test-engineer", "provider": "local-stub", "model": "fake"}]

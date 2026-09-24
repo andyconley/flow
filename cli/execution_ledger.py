@@ -25,8 +25,11 @@ from execution_contracts import (
     validate_recovery_resolution,
     validate_result,
     validate_manager_call,
+    RECOVERY_INTERRUPTION_CAUSES,
 )
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
+from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, RECONCILIATION_REQUIRED, RECOVERY_IN_PROGRESS,
+                               RecoveryRefused)
 
 
 def utc_now() -> str:
@@ -147,6 +150,20 @@ class ExecutionLedger:
                 evaluation_json TEXT NOT NULL, evaluation_digest TEXT NOT NULL, outcome TEXT NOT NULL,
                 reason TEXT NOT NULL, owner_generation INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS attempt_interruptions (
+                interruption_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                cause TEXT NOT NULL, detail TEXT NOT NULL, owner_generation INTEGER NOT NULL,
+                ledger_seq INTEGER NOT NULL, recorded_at TEXT NOT NULL,
+                UNIQUE(attempt_id, owner_generation, cause)
+            );
+            CREATE TABLE IF NOT EXISTS attempt_recoveries (
+                recovery_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                expected_generation INTEGER NOT NULL, generation INTEGER NOT NULL,
+                lead_generation INTEGER NOT NULL, actor TEXT NOT NULL, mode TEXT NOT NULL,
+                checkpoint_json TEXT, interruption_ids_json TEXT NOT NULL,
+                released_json TEXT NOT NULL, quarantined_json TEXT NOT NULL, claimed_at TEXT NOT NULL,
+                UNIQUE(attempt_id, generation)
+            );
             """)
             # SQLite's CREATE TABLE IF NOT EXISTS cannot evolve first-slice
             # databases. These columns make existing records explicitly v1 and
@@ -157,6 +174,7 @@ class ExecutionLedger:
                 ("owner_generation", "INTEGER NOT NULL DEFAULT 0"),
                 ("owner_actor", "TEXT"),
                 ("execution_protocol_version", "INTEGER NOT NULL DEFAULT 1"),
+                ("sealed_receipt_sha256", "TEXT"),
             ):
                 if name not in columns:
                     db.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
@@ -202,6 +220,37 @@ class ExecutionLedger:
             yield
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    @contextmanager
+    def recovery_lock(self, attempt_id: str, *, holder: str):
+        """Hold the per-attempt execution fence without waiting.
+
+        The live v8 run holds it as ``live`` and a recovery as ``recovery``, so
+        a second owner refuses at once with a stable reason. It is the
+        outermost lock: recovery_lock, run_lock, send_lock, then SQLite.
+        """
+        if holder not in {"live", "recovery"} or not attempt_id or any(
+                not (char.isalnum() or char in "-_") for char in attempt_id):
+            raise ContractError("recovery lock request is invalid")
+        path = self.path.parent / f"recovery-{attempt_id}.lock"
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                # The holder names itself right after locking; an unnamed
+                # holder is a live run that has not written its name yet.
+                current = os.pread(fd, 16, 0).decode(errors="ignore")
+                raise RecoveryRefused(RECOVERY_IN_PROGRESS if current == "recovery" else ATTEMPT_RUNNING) from None
+            os.ftruncate(fd, 0)
+            os.pwrite(fd, holder.encode(), 0)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
             os.close(fd)
 
     @staticmethod
@@ -274,6 +323,157 @@ class ExecutionLedger:
                 self._event(db, attempt_id, call_id, "manager_unknown", "recovery_after_dispatch")
             self._event(db, attempt_id, None, "recovery_claimed", canonical({"actor": actor, "generation": generation}))
             return generation
+
+    def claim_chartered_recovery(self, attempt_id: str, *, expected_generation: int, expected_event_seq: int,
+                                 lead_generation: int,
+                                 actor: str, mode: str, checkpoint: dict[str, Any] | None,
+                                 quarantined: list[dict[str, str]]) -> dict[str, Any]:
+        """Fence a v8 attempt for one recovery with a compare-and-swap on its owner generation.
+
+        The same transaction fences former sends, releases unconsumed grants,
+        records a process exit that left no interruption, and appends the
+        recovery row. The caller holds the delivery authority guard.
+        """
+        if not isinstance(actor, str) or not actor.strip() or len(actor) > 256 or mode not in {"answer", "pending", "seal"}:
+            raise ContractError("recovery claim is invalid")
+        with self.send_lock():
+            with self._db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                row = db.execute("SELECT recovery_version,owner_generation,status,execution_protocol_version "
+                                 "FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+                if row is None:
+                    raise ContractError("attempt missing")
+                if row[3] != 8 or row[0] != 2:
+                    raise ContractError("chartered recovery requires a protocol v8 attempt")
+                if row[2] != "started":
+                    raise RecoveryRefused(ATTEMPT_TERMINAL)
+                if row[1] != expected_generation:
+                    raise RecoveryRefused(RECOVERY_IN_PROGRESS, "owner generation changed before the claim")
+                high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+                if high_water != expected_event_seq:
+                    # The eligibility decision was made on facts that moved.
+                    raise RecoveryRefused(RECOVERY_IN_PROGRESS, "attempt changed after eligibility was decided")
+                if self._unresolved_action(db, attempt_id):
+                    # An uncertain send is never fenced into a recovery; it
+                    # needs operator reconciliation first.
+                    raise RecoveryRefused(RECONCILIATION_REQUIRED)
+                generation = expected_generation + 1
+                db.execute("UPDATE attempts SET owner_generation=?,owner_actor=? WHERE attempt_id=?", (generation, actor, attempt_id))
+                released = []
+                for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' ORDER BY rowid", (attempt_id,)).fetchall():
+                    if db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,)).fetchone():
+                        continue
+                    db.execute("UPDATE actions SET status='not_dispatched',reason='recovery_unconsumed_grant',grant_id=NULL WHERE action_id=?", (action_id,))
+                    self._event(db, attempt_id, action_id, "recovery_grant_released", canonical({"generation": generation}))
+                    released.append(action_id)
+                if not db.execute("SELECT 1 FROM attempt_interruptions WHERE attempt_id=? AND owner_generation=?",
+                                  (attempt_id, expected_generation)).fetchone():
+                    self._record_interruption_locked(db, attempt_id, "unmarked_process_exit",
+                                                     "no interruption was recorded before the process ended",
+                                                     expected_generation)
+                interruption_ids = [item[0] for item in db.execute(
+                    "SELECT interruption_id FROM attempt_interruptions WHERE attempt_id=? AND owner_generation=? ORDER BY ledger_seq, rowid",
+                    (attempt_id, expected_generation))]
+                recovery_id = uuid.uuid4().hex
+                claimed_at = utc_now()
+                db.execute("INSERT INTO attempt_recoveries VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                           (recovery_id, attempt_id, expected_generation, generation, lead_generation, actor, mode,
+                            canonical(checkpoint) if checkpoint is not None else None, canonical(interruption_ids),
+                            canonical(released), canonical(quarantined), claimed_at))
+                self._event(db, attempt_id, None, "recovery_claimed",
+                            canonical({"actor": actor, "generation": generation, "recovery_id": recovery_id, "mode": mode}))
+                return {"recovery_id": recovery_id, "generation": generation, "released_action_ids": released,
+                        "interruption_ids": interruption_ids, "claimed_at": claimed_at}
+
+    @staticmethod
+    def _active_recovery(db: sqlite3.Connection, attempt_id: str, generation: int) -> bool:
+        return db.execute("SELECT 1 FROM attempt_recoveries WHERE attempt_id=? AND generation=?",
+                          (attempt_id, generation)).fetchone() is not None
+
+    def regrant_recovered_action(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int) -> dict[str, Any]:
+        """Re-grant a proposal whose grant a recovery released, counting it once.
+
+        The limits are the v8 ``decide`` limits evaluated without this row, so
+        the released and re-granted proposal occupies a single slot.
+        """
+        validate_action(envelope, action)
+        attempt_id, action_id = envelope["attempt_id"], action["action_id"]
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            row = db.execute("SELECT status,reason,request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()
+            if (stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] != 8
+                    or row is None or row[:2] != ("not_dispatched", "recovery_unconsumed_grant") or row[2] != canonical(action)
+                    or not self._active_recovery(db, attempt_id, generation)):
+                raise ContractError("action is not eligible for recovery regrant")
+            if db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,)).fetchone():
+                raise ContractError("recovery regrant conflicts with dispatch evidence")
+            if self._unresolved_action(db, attempt_id):
+                reason = "reconciliation_required"
+            else:
+                reason = self._v8_limit_reason(db, envelope, action, exclude=action_id)
+            if reason != "allowed":
+                db.execute("UPDATE actions SET status='denied',reason=? WHERE action_id=?", (reason, action_id))
+                self._event(db, attempt_id, action_id, "policy_denied", reason)
+                return {"allowed": False, "reason": reason, "action_id": action_id, "grant_id": None}
+            grant = uuid.uuid4().hex
+            db.execute("UPDATE actions SET status='allowed',reason='recovery_regranted',grant_id=? WHERE action_id=?", (grant, action_id))
+            # Grant expiry reads policy_allowed events, so the re-grant starts
+            # its own clock rather than inheriting the released grant's.
+            self._event(db, attempt_id, action_id, "policy_allowed", "recovery_regranted")
+            return {"allowed": True, "reason": "recovery_regranted", "action_id": action_id, "grant_id": grant}
+
+    @staticmethod
+    def _v8_limit_reason(db: sqlite3.Connection, envelope: dict[str, Any], action: dict[str, Any], *, exclude: str) -> str:
+        """The v8 ``decide`` limit checks, excluding one row (mirrors ``decide``)."""
+        attempt, limits, job = envelope["attempt_id"], envelope["limits"], envelope["job_contract"]
+        rows = [(json.loads(r[0]), r[1]) for r in db.execute(
+            "SELECT request_json,status FROM actions WHERE attempt_id=? AND action_id<>?", (attempt, exclude))]
+        paid = {"codex", "claude"}
+        completed_producer = (action["instance_id"] in job["producer_instance_ids"]
+                              and any(req.get("instance_id") in job["producer_instance_ids"] and status == "completed" for req, status in rows))
+        paid_count = sum(req.get("provider") in paid and status in {"allowed", "started", "completed", "unknown", "failed", "not_dispatched"}
+                         for req, status in rows)
+        delegations = sum(status in {"allowed", "started", "completed", "unknown", "failed"} for _, status in rows)
+        concurrent = sum(status in {"allowed", "started", "unknown"} for _, status in rows)
+        is_verifier = action["instance_id"] in job["verifier_instance_ids"]
+        verifier_reserved = sum(req.get("instance_id") in job["verifier_instance_ids"]
+                                and status in {"allowed", "started", "completed", "failed", "unknown"} for req, status in rows)
+        latest = db.execute("SELECT verifier_evaluations.outcome FROM verifier_evaluations JOIN actions USING(action_id) "
+                            "WHERE actions.attempt_id=? ORDER BY verifier_evaluations.evaluated_at DESC, verifier_evaluations.rowid DESC LIMIT 1",
+                            (attempt,)).fetchone()
+        if completed_producer:
+            return "producer_already_completed"
+        if is_verifier and verifier_reserved >= limits["max_verifier_calls"]:
+            return "verifier_call_cap"
+        if is_verifier and verifier_reserved > 0 and (latest is None or latest[0] not in {"valid_fail", "unusable"}):
+            return "verifier_retry_denied"
+        if action["provider"] in paid and paid_count >= limits["max_paid_worker_calls"]:
+            return "paid_call_cap"
+        if delegations >= limits["max_delegations"]:
+            return "delegation_cap"
+        if concurrent >= limits["max_concurrent"]:
+            return "concurrency_cap"
+        return "allowed"
+
+    def reissue_recovered_manager_grant(self, call_id: str, *, generation: int) -> dict[str, Any]:
+        """Rotate an allowed, never-sent manager grant in place under an active recovery."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT attempt_id,status FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            if row is None:
+                raise ContractError("manager call missing")
+            self._assert_owner(db, row[0], generation)
+            attempt = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (row[0],)).fetchone()
+            if (row[1] != "allowed" or attempt != ("started", 8) or not self._active_recovery(db, row[0], generation)
+                    or self._unresolved_action(db, row[0])
+                    or db.execute("SELECT 1 FROM events WHERE action_id=? AND event='manager_send_started'", (call_id,)).fetchone()):
+                raise ContractError("manager call is not eligible for recovery reissue")
+            grant = uuid.uuid4().hex
+            db.execute("UPDATE manager_calls SET grant_id=? WHERE call_id=?", (grant, call_id))
+            self._event(db, row[0], call_id, "manager_policy_allowed", "recovery_regranted")
+            return {"allowed": True, "reason": "allowed", "call_id": call_id, "grant_id": grant, "replayed": True}
 
     def assert_owner(self, attempt_id: str, generation: int) -> None:
         with self._db() as db:
@@ -1235,19 +1435,86 @@ class ExecutionLedger:
     def finish_attempt(self, attempt_id: str, status: str, reason: str, receipt_path: str, *, generation: int | None = None) -> None:
         if status not in {"completed", "failed", "denied", "unknown"}:
             raise ContractError("invalid attempt terminal status")
+        receipt = Path(receipt_path) if isinstance(receipt_path, str) and receipt_path else None
+        receipt_sha256 = (hashlib.sha256(receipt.read_bytes()).hexdigest()
+                          if receipt is not None and receipt.is_file() and not receipt.is_symlink() else None)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
             row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             if row is None or row[0] != "started":
                 raise ContractError("attempt not active")
+            if row[1] == 8 and status == "unknown":
+                # v8 records an interruption and stays recoverable instead.
+                raise ContractError("protocol v8 never seals an unknown receipt")
             if row[1] in {5, 6, 7, 8}:
                 uncertain = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 uncertain += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 if (uncertain > 0) != (status == "unknown"):
                     raise ContractError("Magentic terminal status contradicts uncertain sends")
-            db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
+            if row[1] == 8:
+                if receipt_sha256 is None:
+                    raise ContractError("protocol v8 seal requires the written receipt")
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
+                           (status, reason, receipt_path, receipt_sha256, attempt_id))
+            else:
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
+
+    @staticmethod
+    def _record_interruption_locked(db: sqlite3.Connection, attempt_id: str, cause: str, detail: str,
+                                    owner_generation: int) -> dict[str, Any]:
+        prior = db.execute("SELECT interruption_id,ledger_seq,recorded_at FROM attempt_interruptions "
+                           "WHERE attempt_id=? AND owner_generation=? AND cause=?",
+                           (attempt_id, owner_generation, cause)).fetchone()
+        if prior:
+            return {"interruption_id": prior[0], "cause": cause, "owner_generation": owner_generation,
+                    "ledger_seq": prior[1], "recorded_at": prior[2], "replayed": True}
+        interruption_id = uuid.uuid4().hex
+        high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+        recorded_at = utc_now()
+        db.execute("INSERT INTO attempt_interruptions VALUES(?,?,?,?,?,?,?)",
+                   (interruption_id, attempt_id, cause, detail[:512], owner_generation, high_water, recorded_at))
+        ExecutionLedger._event(db, attempt_id, None, "attempt_interrupted",
+                               canonical({"interruption_id": interruption_id, "cause": cause}))
+        return {"interruption_id": interruption_id, "cause": cause, "owner_generation": owner_generation,
+                "ledger_seq": high_water, "recorded_at": recorded_at, "replayed": False}
+
+    def record_runtime_outcome(self, attempt_id: str, *, failure: str, transport: bool, generation: int) -> dict[str, Any]:
+        """Record that a v8 run finished and Flow committed to sealing it.
+
+        Recovery after this point skips the runtime and only seals. The record
+        is idempotent for one owner generation.
+        """
+        if not isinstance(failure, str) or type(transport) is not bool:
+            raise ContractError("runtime outcome is invalid")
+        outcome = {"generation": generation, "failure": failure[:4096], "transport": transport}
+        encoded = canonical(outcome)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[1] != 8 or row[0] != "started":
+                raise ContractError("only a started protocol v8 attempt records a runtime outcome")
+            for (detail,) in db.execute("SELECT detail FROM events WHERE attempt_id=? AND event='runtime_outcome_recorded'", (attempt_id,)):
+                if json.loads(detail).get("generation") == generation:
+                    if detail != encoded:
+                        raise ContractError("runtime outcome conflicts with durable outcome")
+                    return {**outcome, "replayed": True}
+            self._event(db, attempt_id, None, "runtime_outcome_recorded", encoded)
+            return {**outcome, "replayed": False}
+
+    def record_interruption(self, attempt_id: str, cause: str, detail: str, *, generation: int) -> dict[str, Any]:
+        """Record why a v8 attempt stopped while leaving it started and recoverable."""
+        if cause not in RECOVERY_INTERRUPTION_CAUSES or not isinstance(detail, str):
+            raise ContractError("attempt interruption is invalid")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[1] != 8 or row[0] != "started":
+                raise ContractError("only a started protocol v8 attempt can be interrupted")
+            return self._record_interruption_locked(db, attempt_id, cause, detail, generation)
 
     def finish_magentic_continuation(self, epoch_id: str, status: str, reason: str,
                                      receipt_path: str, *, generation: int) -> None:
@@ -1573,6 +1840,7 @@ class ExecutionLedger:
             continuation_rows = db.execute("SELECT epoch_id FROM continuation_epochs WHERE attempt_id=? ORDER BY created_at, rowid", (attempt_id,)).fetchall() if "continuation_epochs" in tables else []
             attempt_protocol = a[9 if recovery_columns else 6] if protocol_column else 1
             structured_usage = self._verifier_usage(db, attempt_id, json.loads(a[2])) if attempt_protocol == 8 else None
+            recovery_view = self._recovery_view(db, attempt_id, attempt_columns, tables) if attempt_protocol == 8 else None
         continuations = [self.continuation_snapshot(epoch_id) for (epoch_id,) in continuation_rows]
         envelope = json.loads(a[2])
         snapshot = {"attempt_id": a[0], "work_id": a[1], "envelope": envelope, "status": a[3], "reason": a[4], "receipt_path": a[5],
@@ -1592,4 +1860,30 @@ class ExecutionLedger:
                 "continuations": continuations}
         if structured_usage is not None:
             snapshot["verifier_usage"] = structured_usage
+        if recovery_view is not None:
+            snapshot.update(recovery_view)
         return snapshot
+
+    @staticmethod
+    def _recovery_view(db: sqlite3.Connection, attempt_id: str, attempt_columns: set[str],
+                       tables: set[str]) -> dict[str, Any]:
+        """Expose v8 interruption and recovery evidence; absent tables read as empty."""
+        sealed = (db.execute("SELECT sealed_receipt_sha256 FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+                  if "sealed_receipt_sha256" in attempt_columns else None)
+        interruptions = db.execute(
+            "SELECT interruption_id,cause,detail,owner_generation,ledger_seq,recorded_at FROM attempt_interruptions "
+            "WHERE attempt_id=? ORDER BY ledger_seq, rowid", (attempt_id,)).fetchall() if "attempt_interruptions" in tables else []
+        recoveries = db.execute(
+            "SELECT recovery_id,expected_generation,generation,lead_generation,actor,mode,checkpoint_json,"
+            "interruption_ids_json,released_json,quarantined_json,claimed_at FROM attempt_recoveries "
+            "WHERE attempt_id=? ORDER BY generation", (attempt_id,)).fetchall() if "attempt_recoveries" in tables else []
+        return {
+            "sealed_receipt_sha256": sealed,
+            "interruptions": [{"interruption_id": r[0], "cause": r[1], "detail": r[2], "owner_generation": r[3],
+                               "ledger_seq": r[4], "recorded_at": r[5]} for r in interruptions],
+            "recoveries": [{"recovery_id": r[0], "expected_generation": r[1], "generation": r[2],
+                            "lead_generation": r[3], "actor": r[4], "mode": r[5],
+                            "checkpoint": json.loads(r[6]) if r[6] else None,
+                            "interruption_ids": json.loads(r[7]), "released_action_ids": json.loads(r[8]),
+                            "quarantined": json.loads(r[9]), "claimed_at": r[10]} for r in recoveries],
+        }
