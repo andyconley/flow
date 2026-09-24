@@ -256,6 +256,23 @@ class LeadChangeFenceTests(CharteredFixture):
         self.assertEqual(ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
                          .snapshot(attempt_id)["status"], "started")
 
+    def test_an_unknown_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal(self):
+        # With no started v8 attempt there is no seal transaction to re-check,
+        # so the read-only guard alone must refuse.
+        envelope = self._run_v8([self.PASS])[3]["envelope"]
+        v7_id = self._v7_started_row(envelope["attempt_id"])
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
+        legacy = ledger.snapshot(v7_id)["envelope"]
+        proposal = self._proposal(legacy, "editor", 1)
+        grant = ledger.decide(legacy, proposal, generation=1)
+        self.assertTrue(ledger.consume_grant(proposal["action_id"], grant["grant_id"], generation=1))
+        ledger.mark_unknown(proposal["action_id"], "transport_lost", generation=1)
+        before = self._authority()
+        changed, _, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
+        self.assertFalse(changed)
+        self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+        self.assertEqual(self._authority(), before)
+
     def test_lead_change_fails_closed_on_an_unreadable_ledger(self):
         self.prepare()
         (self.run / "execution" / "ledger.sqlite").write_bytes(b"not a sqlite database" * 64)
