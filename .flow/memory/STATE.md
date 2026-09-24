@@ -6,6 +6,11 @@
 
 ## Recently completed
 
+- `v7-pre-send-failure-allow-list` scout archived on branch
+  `codex/v7-pre-send-failure-allow-list`. `close_pre_send_failure` now
+  releases an unconsumed v7 grant instead of raising over the original
+  pre-dispatch error. The full suite passed 1,371 tests.
+
 - `structured-verifier-contract` accepted and archived on branch
   `codex/structured-verifier-contract`. Protocol v8 adds a Flow-evaluated,
   evidence-bound verifier verdict with a Charter-sealed call cap of one or
