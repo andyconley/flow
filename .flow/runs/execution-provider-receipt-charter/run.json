@@ -1,0 +1,35 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/execution-provider-receipt-charter/acceptance-criteria.md",
+    "handback": ".flow/runs/execution-provider-receipt-charter/HANDOFF.md",
+    "handoff": ".flow/runs/execution-provider-receipt-charter/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/execution-provider-receipt-charter/validation-results.md",
+    "orchestration_manifest": ".flow/runs/execution-provider-receipt-charter/orchestration.json",
+    "plan": ".flow/runs/execution-provider-receipt-charter/plan.md",
+    "requirements": ".flow/runs/execution-provider-receipt-charter/requirements.md",
+    "solution": ".flow/runs/execution-provider-receipt-charter/solution.md",
+    "validation_plan": ".flow/runs/execution-provider-receipt-charter/validation-plan.md"
+  },
+  "created_at": "2026-09-19T18:43:59Z",
+  "dispositions": {
+    "risk": "owned"
+  },
+  "gates": {
+    "approve-definition": "2026-09-19T19:12:57Z",
+    "approve-plan": "2026-09-19T19:32:55Z",
+    "approve-solution": "2026-09-19T19:19:22Z",
+    "mark-handback-ready": "2026-09-19T19:44:30Z",
+    "start-definition": "2026-09-19T18:43:59Z",
+    "start-implementation": "2026-09-19T19:34:02Z",
+    "start-plan": "2026-09-19T19:29:42Z",
+    "start-solution": "2026-09-19T19:15:48Z"
+  },
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "handback_ready",
+  "updated_at": "2026-09-19T19:44:30Z",
+  "work_id": "execution-provider-receipt-charter"
+}

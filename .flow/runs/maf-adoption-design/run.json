@@ -1,0 +1,31 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/maf-adoption-design/acceptance-criteria.md",
+    "handoff": ".flow/runs/maf-adoption-design/implementation-handoff.md",
+    "orchestration_manifest": ".flow/runs/maf-adoption-design/orchestration.json",
+    "plan": ".flow/runs/maf-adoption-design/plan.md",
+    "requirements": ".flow/runs/maf-adoption-design/requirements.md",
+    "solution": ".flow/runs/maf-adoption-design/solution.md",
+    "validation_plan": ".flow/runs/maf-adoption-design/validation-plan.md"
+  },
+  "created_at": "2026-09-19T21:21:17Z",
+  "dispositions": {
+    "risk": "owned"
+  },
+  "gates": {
+    "approve-definition": "2026-09-19T21:21:36Z",
+    "approve-plan": "2026-09-19T21:40:54Z",
+    "approve-solution": "2026-09-19T21:32:27Z",
+    "start-definition": "2026-09-19T21:21:17Z",
+    "start-plan": "2026-09-19T21:34:25Z",
+    "start-solution": "2026-09-19T21:21:36Z"
+  },
+  "lane": "plan",
+  "last_event": "approve-plan",
+  "phase": "plan_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "plan_approved",
+  "updated_at": "2026-09-19T21:40:54Z",
+  "work_id": "maf-adoption-design"
+}

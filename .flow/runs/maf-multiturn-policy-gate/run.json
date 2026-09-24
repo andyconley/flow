@@ -1,0 +1,30 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/maf-multiturn-policy-gate/acceptance-criteria.md",
+    "handback": ".flow/runs/maf-multiturn-policy-gate/HANDOFF.md",
+    "handoff": ".flow/runs/maf-multiturn-policy-gate/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/maf-multiturn-policy-gate/validation-results.md",
+    "orchestration_manifest": ".flow/runs/maf-multiturn-policy-gate/orchestration.json",
+    "plan": ".flow/runs/maf-multiturn-policy-gate/plan.md",
+    "requirements": ".flow/runs/maf-multiturn-policy-gate/requirements.md",
+    "validation_plan": ".flow/runs/maf-multiturn-policy-gate/validation-plan.md"
+  },
+  "created_at": "2026-09-19T20:52:26Z",
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-19T20:52:38Z",
+    "approve-plan": "2026-09-19T20:52:46Z",
+    "mark-handback-ready": "2026-09-19T20:56:25Z",
+    "start-definition": "2026-09-19T20:52:26Z",
+    "start-implementation": "2026-09-19T20:52:46Z",
+    "start-plan": "2026-09-19T20:52:46Z"
+  },
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "handback_ready",
+  "updated_at": "2026-09-19T20:56:25Z",
+  "work_id": "maf-multiturn-policy-gate"
+}

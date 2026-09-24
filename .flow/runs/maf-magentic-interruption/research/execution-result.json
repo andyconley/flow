@@ -1,0 +1,26 @@
+{
+  "source": "sanitized terminal outputs and process status from distinct magentic_guard_probe.py invocations",
+  "denied_magentic": {
+    "role": "security-reviewer",
+    "plan_review_pending": true,
+    "flow_request_status": "denied",
+    "flow_recorded_dispatch_count": 0,
+    "terminal_output_count": 1
+  },
+  "interrupted_magentic": {
+    "role": "test-engineer",
+    "plan_review_pending": true,
+    "worker_process_exit_code": 77,
+    "first_stream_chunk_observed": true,
+    "flow_request_status": "unknown",
+    "flow_recorded_dispatch_count": 1,
+    "reported_worker_result": false
+  },
+  "separate_process_recovery": {
+    "terminal_output_count": 1,
+    "terminal_reconciliation_required": true,
+    "flow_request_status": "unknown",
+    "flow_recorded_dispatch_count_after_replay": 1
+  },
+  "paid_provider_calls": 0
+}

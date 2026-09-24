@@ -1,0 +1,24 @@
+{
+  "checkpoint_count": 2,
+  "checkpoint_restored": true,
+  "checkpoint_storage": "temporary_file_store",
+  "codex_client_constructed": false,
+  "flow_policy_decision": "denied",
+  "maf_version": "1.19.0",
+  "model_calls": 0,
+  "outputs": [
+    {
+      "policy_decision": "denied",
+      "request": "approve_out_of_envelope_action"
+    }
+  ],
+  "pending_request_count": 1,
+  "process_restart_tested": false,
+  "states": [
+    "started",
+    "pending_request",
+    "checkpointed",
+    "resumed_new_workflow_instance",
+    "terminal_output"
+  ]
+}

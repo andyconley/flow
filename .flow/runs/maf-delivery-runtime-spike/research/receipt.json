@@ -1,0 +1,32 @@
+{
+  "charter_sha256": "d96fd58956447a124191f50814eaf4f43eeeb9a47f189558916a0361f14f690e",
+  "definition_sha256": {
+    "lead-developer": "2dc53fe1b1b5b671ddfddf1fc666dd6280d954282c34621cce626a375f22c513",
+    "quality-reviewer": "4cd2d84d7500bc240bafb5c79f7f3cf8cff738195b870aad5ed4acbe0eea3592",
+    "test-engineer": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1"
+  },
+  "observed_changed_paths": [],
+  "observed_git_head": "f23b769cd00636f11cb06d1c7e52e8b2add9e795",
+  "provider_result_attested": false,
+  "provider_sessions": [
+    {
+      "agent_id": null,
+      "provider": "codex",
+      "session_id": "01a0bb49-5ca9-7642-bcee-68ef69b73f13"
+    },
+    {
+      "agent_id": null,
+      "provider": "claude",
+      "session_id": "7c0100b9-d1e9-47ea-b913-2dd274bbe766"
+    },
+    {
+      "agent_id": "flow-test-engineer-1",
+      "provider": "ollama",
+      "session_id": null
+    }
+  ],
+  "read_only_work": true,
+  "schema_version": 1,
+  "source": "Flow-side observer; provider output is imported evidence, not independently attested",
+  "workflow": "flow-maf-mixed-providers"
+}

@@ -1,0 +1,122 @@
+{
+  "workflow_name": "flow-supervised-local-worker",
+  "graph_signature_hash": "11ff0fdfa33f945c2b5189ae4c9841a488f42144dd7ea03dbdd380be354d5b6e",
+  "checkpoint_id": "fa058d0f-42e5-46a5-ad99-032511c17e7e",
+  "previous_checkpoint_id": "4dc2f86c-30d7-4b71-9dd2-cf47bc86c280",
+  "timestamp": "2026-09-19T21:55:12.289687+00:00",
+  "messages": {},
+  "state": {
+    "_workflow_run_kwargs": {},
+    "_resolved_workflow_run_kwargs": {},
+    "_executor_state": {
+      "magentic_orchestrator": {
+        "conversation": [],
+        "round_index": 2,
+        "orchestrator_name": "magentic_orchestrator",
+        "metadata": {},
+        "terminated": true,
+        "magentic_context": {
+          "task": "Execute the one Flow-authorized bounded task.",
+          "chat_history": [
+            {
+              "type": "message",
+              "role": "user",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Execute the one Flow-authorized bounded task.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Ask the guarded Flow specialist once.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Return Flow's normalized result.",
+                  "additional_properties": {}
+                }
+              ],
+              "author_name": "magentic_manager",
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "completed",
+                  "additional_properties": {}
+                }
+              ],
+              "author_name": "test-engineer-1",
+              "additional_properties": {}
+            }
+          ],
+          "participant_descriptions": {
+            "test-engineer-1": "<no description, use name to identify the purpose of this participant>"
+          },
+          "round_count": 2,
+          "stall_count": 0,
+          "reset_count": 0
+        },
+        "task_ledger": {
+          "type": "message",
+          "role": "assistant",
+          "contents": [
+            {
+              "type": "text",
+              "text": "Ask the guarded Flow specialist once.",
+              "additional_properties": {}
+            }
+          ],
+          "additional_properties": {}
+        },
+        "progress_ledger": {
+          "is_request_satisfied": {
+            "reason": "one guarded action",
+            "answer": true
+          },
+          "is_in_loop": {
+            "reason": "one guarded action",
+            "answer": false
+          },
+          "is_progress_being_made": {
+            "reason": "one guarded action",
+            "answer": true
+          },
+          "next_speaker": {
+            "reason": "guarded Flow worker",
+            "answer": "test-engineer-1"
+          },
+          "instruction_or_question": {
+            "reason": "bounded task",
+            "answer": "Return Flow's normalized result."
+          }
+        },
+        "manager_state": {}
+      },
+      "test-engineer-1": {}
+    }
+  },
+  "pending_request_info_events": {},
+  "iteration_count": 3,
+  "metadata": {},
+  "version": "1.0"
+}

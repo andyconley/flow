@@ -1,0 +1,20 @@
+{
+  "changed_paths": [],
+  "charter_sha256": "0e8de1973088ea193f0b26c29c978b1bddf992c9349b20567d8215f42925cdec",
+  "checkpoint_readback": true,
+  "definition_sha256": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+  "denied_flow_recorded_dispatches": 0,
+  "denied_magentic_role": "security-reviewer",
+  "dispatch_state": "unknown",
+  "first_stream_chunk_observed_by_wrapper": true,
+  "first_stream_chunk_sha256": "76a71fbef8a8339fcbcaff8c9aadfb85c834bc3cc0c07069a5ebb2eea3d90d68",
+  "git_head": "f23b769cd00636f11cb06d1c7e52e8b2add9e795",
+  "interrupted_flow_recorded_dispatches": 1,
+  "interrupted_role": "test-engineer",
+  "model_output_semantics_attested": false,
+  "paid_flow_recorded_dispatches": 0,
+  "physical_ollama_request_count_independently_observed": false,
+  "recovery_requires_manual_reconciliation": true,
+  "schema_version": 1,
+  "source": "Flow-side policy ledger, MAF checkpoint, stream marker, and Git readback"
+}

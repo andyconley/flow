@@ -1,0 +1,290 @@
+{
+  "schema_version": 1,
+  "work_id": "maf-adoption-design",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [
+      "security_or_privacy_boundary"
+    ],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "classification": "high",
+    "rationale": "Architecture design only; no production mutation or provider execution."
+  },
+  "assignments": [
+    {
+      "id": "spike-producer",
+      "lane": "implement",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-maf-adoption"
+      },
+      "brief_path": ".flow/runs/maf-adoption-design/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-adoption-design/requirements.md",
+        ".flow/runs/maf-adoption-design/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "scaffolds",
+        "docs"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-adoption-design/research/architecture-review.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-adoption-design/research/architecture-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Produce bounded multi-provider runtime evidence and a decision without a production dependency change"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "spike"
+      }
+    },
+    {
+      "id": "spike-verifier",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "quality-reviewer-maf-spike"
+      },
+      "brief_path": ".flow/runs/maf-adoption-design/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-adoption-design/requirements.md",
+        ".flow/runs/maf-adoption-design/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "scaffolds",
+        "docs"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-adoption-design/review.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-adoption-design/review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Independently review claims, cost boundary, reproducibility, and adoption decision"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "spike"
+      }
+    },
+    {
+      "id": "plan-requirements",
+      "lane": "plan",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-maf-plan"
+      },
+      "brief_path": ".flow/runs/maf-adoption-design/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-adoption-design/requirements.md",
+        ".flow/runs/maf-adoption-design/solution.md",
+        "docs/maf-adoption-design.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-adoption-design/research/plan-requirements.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-adoption-design/research/plan-requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Provide bounded first-slice planning review with concrete acceptance evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    },
+    {
+      "id": "plan-priority",
+      "lane": "plan",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-maf-plan"
+      },
+      "brief_path": ".flow/runs/maf-adoption-design/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-adoption-design/requirements.md",
+        ".flow/runs/maf-adoption-design/solution.md",
+        "docs/maf-adoption-design.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-adoption-design/research/plan-priority.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-adoption-design/research/plan-priority.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Provide bounded first-slice planning review with concrete acceptance evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    },
+    {
+      "id": "plan-integration",
+      "lane": "plan",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-architect-maf-plan"
+      },
+      "brief_path": ".flow/runs/maf-adoption-design/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-adoption-design/requirements.md",
+        ".flow/runs/maf-adoption-design/solution.md",
+        "docs/maf-adoption-design.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-adoption-design/research/plan-integration.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-adoption-design/research/plan-integration.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Provide bounded first-slice planning review with concrete acceptance evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    },
+    {
+      "id": "plan-test",
+      "lane": "plan",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-maf-plan"
+      },
+      "brief_path": ".flow/runs/maf-adoption-design/brief.md",
+      "input_evidence": [
+        ".flow/runs/maf-adoption-design/requirements.md",
+        ".flow/runs/maf-adoption-design/solution.md",
+        ".flow/runs/maf-adoption-design/research/plan-requirements.md",
+        ".flow/runs/maf-adoption-design/research/plan-integration.md"
+      ],
+      "read_scopes": [
+        ".flow",
+        "cli",
+        "docs",
+        "scaffolds",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/maf-adoption-design/research/plan-validation.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/maf-adoption-design/research/plan-validation.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Propose first-slice verification that distinguishes stub from physical local calls and covers failure boundaries"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "plan-review"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/maf-adoption-design/reconciliation.md",
+    "status": "pending",
+    "claims": []
+  },
+  "verification": {
+    "producer_assignments": [
+      "spike-producer"
+    ],
+    "evidence_collector_assignment": "spike-producer",
+    "verifier_assignment": "spike-verifier",
+    "independent": true,
+    "artifact_path": ".flow/runs/maf-adoption-design/verification.md"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "changed_paths": [],
+  "charter_sha256": "8e3973ebaa73a3fc7972a7afd2d5067707f2a84bd2ed36ab092ce765b129891a",
+  "checkpoint_id": "640e5bd4-3554-433c-b919-35740578c3f1",
+  "checkpoint_readback": true,
+  "definition_sha256": "4581172d9e6c40130225f96513402af1a5a272b4b055471d359d9a2f935661b1",
+  "denied_scenario_flow_recorded_dispatch_count": 0,
+  "flow_policy_allowed_count": 1,
+  "flow_policy_denial_count": 2,
+  "git_head": "f23b769cd00636f11cb06d1c7e52e8b2add9e795",
+  "live_flow_recorded_dispatch_count": 1,
+  "live_provider": "ollama:llama3.1:8b",
+  "paid_flow_recorded_dispatch_count": 0,
+  "physical_provider_call_count_independently_observed": false,
+  "reported_result_independently_attested": false,
+  "reported_result_sha256": "5647e37a0c07004b9a3e99c6c14c253a08afac583bba768fb265cb08d2e5dad7",
+  "schema_version": 1,
+  "source": "Flow-side Git, definition, policy-ledger, and MAF-checkpoint readback",
+  "worker_commit_created": false
+}
