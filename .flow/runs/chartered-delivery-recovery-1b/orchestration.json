@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "work_id": "chartered-delivery-recovery-1b",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "classification": "standard",
+    "rationale": "Lead changes fence live attempts and successor limits decide whether paid sends are allowed."
+  },
+  "assignments": [
+    {
+      "id": "implementation-root",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-implementation-root"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-1b/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-1b/implementation-handoff.md",
+        ".flow/runs/chartered-delivery-recovery-1b/plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-1b",
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli",
+        "tests",
+        "docs/adr/0016-chartered-v8-recovery.md",
+        ".flow/runs/chartered-delivery-recovery-1b/HANDOFF.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation",
+        ".flow/runs/chartered-delivery-recovery-1b/review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/briefs",
+        ".flow/runs/chartered-delivery-recovery-1b/research"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-1b/validation-results.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Chunk 1b implemented per plan.md with validation evidence and dispositioned review findings"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "implementation"
+      }
+    },
+    {
+      "id": "implement-review-quality",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-delivery-recovery-1b-implement-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-1b/briefs/implement-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-1b/briefs/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/requirements.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-1b",
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-1b/research/implement-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Correctness and AC1-AC6 findings with severity and file:line"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implement-review"
+      }
+    },
+    {
+      "id": "implement-review-security",
+      "lane": "implement",
+      "role": "security-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-security-reviewer-delivery-recovery-1b-implement-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-1b/briefs/implement-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-1b/briefs/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-1b",
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-1b/research/implement-review-security.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Fencing, lock, and limit-evasion findings with severity and file:line"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implement-review"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/chartered-delivery-recovery-1b/requirements.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "linked-run-for-1b",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-1b/requirements.md"
+        ]
+      },
+      {
+        "id": "no-unknown-supersede-fixture",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-1b/requirements.md"
+        ]
+      },
+      {
+        "id": "superseded-seal-v8-only",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-1b/requirements.md"
+        ]
+      },
+      {
+        "id": "same-generation-predecessor",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-1b/requirements.md"
+        ]
+      },
+      {
+        "id": "live-run-fence",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-1b/requirements.md"
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "implementation-root"
+    ],
+    "evidence_collector_assignment": "implementation-root",
+    "independent": true
+  }
+}

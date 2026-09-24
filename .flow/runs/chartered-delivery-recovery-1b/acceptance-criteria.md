@@ -1,0 +1,10 @@
+# Acceptance Criteria: chunk 1b
+
+Status: **approved by the engineer on 2026-09-23** (parent AC9 clauses 2–4 and R4, with decisions E1–E5 in `requirements.md`). Parent AC numbering is kept.
+
+1. **AC9.2 Superseded record.** After a lead `resume` or `supersede`, the old `started` v8 attempt is terminal `superseded` in the ledger, with its unconsumed grants released and an `attempt_superseded` event. Recovery of it then refuses with `attempt_terminal`. A `started` v7 attempt in the same ledger is left unchanged.
+2. **AC9.3 Lead guard.** A lead `resume` or `supersede` is refused, with no mutation of `run.json`, the claim files, or the ledger, while any action or manager call is `started` or `unknown`. It is also refused when the ledger file is unreadable, and with `attempt_running` while a live process holds the attempt's `recovery_lock`.
+3. **AC9.4 Abandonment.** In the same `unknown` fixture, `release` and the lifecycle `block` transition both succeed.
+4. **Lineage link.** A successor prepared after a superseded (or failed) attempt carries `predecessors == [{attempt_id, terminal_status, receipt_sha256, lead_generation}]` matching the ledger. `create_attempt` refuses a list that drops, adds, or alters a predecessor with `predecessor_link_invalid`. `prepare` refuses with `sibling_attempt_not_terminal` while an earlier v8 attempt is `started`. A first attempt has no `predecessors` key.
+5. **Lineage limits.** `test_successor_paid_and_verifier_limits_count_predecessor_sends`: predecessor paid and verifier sends reduce the successor's allowance, and the cap denies before any adapter call. `test_successor_first_verifier_is_not_a_retry`: a successor's first verifier is allowed when allowance remains. The receipt's `lineage_usage` and `verifier_usage.retry_eligible` agree with `decide`, and tampering with `lineage_usage` fails receipt validation.
+6. **Suite and mutation checks.** The full suite passes with 0 skipped, and the MAF-gated tests run locally. Mutation checks: removing the ledger guard fails AC9.3; dropping the lineage count fails the lineage-limit test.
