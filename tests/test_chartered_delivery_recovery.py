@@ -231,6 +231,7 @@ class LeadChangeFenceTests(CharteredFixture):
         self.assertEqual(json.loads(snapshot["reason"]),
                          {"action": action, "lead_generation": 1, "successor_generation": 2})
         self.assertIsNone(snapshot["receipt_path"])
+        self.assertEqual((snapshot["owner_generation"], snapshot["owner_actor"]), (2, "superseded"))
         self.assertEqual([(item["status"], item["reason"], item["grant_id"]) for item in snapshot["actions"]],
                          [("not_dispatched", "superseded_unconsumed_grant", None)])
         self.assertEqual([item["event"] for item in snapshot["events"]][-2:],
@@ -256,9 +257,10 @@ class LeadChangeFenceTests(CharteredFixture):
         self.assertEqual(ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
                          .snapshot(attempt_id)["status"], "started")
 
-    def test_an_unknown_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal(self):
+    def test_an_uncertain_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal(self):
         # With no started v8 attempt there is no seal transaction to re-check,
-        # so the read-only guard alone must refuse.
+        # so the read-only guard alone must refuse, for a send still in
+        # flight (started) and for one whose outcome is lost (unknown).
         envelope = self._run_v8([self.PASS])[3]["envelope"]
         v7_id = self._v7_started_row(envelope["attempt_id"])
         ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
@@ -266,12 +268,42 @@ class LeadChangeFenceTests(CharteredFixture):
         proposal = self._proposal(legacy, "editor", 1)
         grant = ledger.decide(legacy, proposal, generation=1)
         self.assertTrue(ledger.consume_grant(proposal["action_id"], grant["grant_id"], generation=1))
-        ledger.mark_unknown(proposal["action_id"], "transport_lost", generation=1)
+        for status in ("started", "unknown"):
+            with self.subTest(status=status):
+                if status == "unknown":
+                    ledger.mark_unknown(proposal["action_id"], "transport_lost", generation=1)
+                self.assertEqual(ledger.snapshot(v7_id)["actions"][0]["status"], status)
+                before = self._authority()
+                changed, _, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
+                self.assertFalse(changed)
+                self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+                self.assertEqual(self._authority(), before)
+
+    def test_the_seal_refuses_attempts_that_were_not_probed(self):
+        attempt_id = self._killed_before_bind()
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
         before = self._authority()
-        changed, _, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
-        self.assertFalse(changed)
-        self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+        with self.assertRaises(RecoveryRefused) as raised:
+            ledger.seal_superseded_attempts("sample", lead_generation=1, successor_generation=2,
+                                            action="supersede", expected=[])
+        self.assertEqual(raised.exception.reason, "recovery_in_progress")
         self.assertEqual(self._authority(), before)
+        self.assertEqual(ledger.snapshot(attempt_id)["status"], "started")
+
+    def test_a_lost_or_symlinked_ledger_is_never_read_as_empty(self):
+        self.prepare()
+        ledger_path = self.run / "execution" / "ledger.sqlite"
+        moved = self.run / "ledger.moved"
+        ledger_path.rename(moved)
+        for label in ("missing with attempts", "symlink"):
+            with self.subTest(label=label):
+                if label == "symlink":
+                    ledger_path.symlink_to(moved)
+                before = (self.run / "run.json").read_bytes()
+                changed, _, errors = change_lead_claim("sample", "supersede", root=self.root, owner="replacement")
+                self.assertFalse(changed)
+                self.assertEqual(errors, ["lead_guard_ledger_unreadable"])
+                self.assertEqual((self.run / "run.json").read_bytes(), before)
 
     def test_lead_change_fails_closed_on_an_unreadable_ledger(self):
         self.prepare()
@@ -362,12 +394,16 @@ class SuccessorLineageTests(CharteredFixture):
         cases = {"dropped": None,
                  "added": [link, {**link, "attempt_id": "c" * 32}],
                  "altered status": [{**link, "terminal_status": "completed"}],
+                 "altered generation": [{**link, "lead_generation": 2}],
                  "altered digest": [{**link, "receipt_sha256": "0" * 64}]}
         for index, (label, predecessors) in enumerate(cases.items()):
             with self.subTest(label=label):
-                with self.assertRaises(RecoveryRefused) as raised:
+                # The envelope validator or the ledger's exact-lineage check
+                # refuses, depending on whether the forged link is well formed.
+                with self.assertRaisesRegex(ExecutionContractError, "predecessor") as raised:
                     ledger.create_attempt(candidate(f"{index:032x}", predecessors))
-                self.assertEqual(raised.exception.reason, "predecessor_link_invalid")
+                if isinstance(raised.exception, RecoveryRefused):
+                    self.assertEqual(raised.exception.reason, "predecessor_link_invalid")
         self.assertEqual(self._ledger().v8_lineage("sample"), ([link], []))
         ledger.create_attempt(candidate("d" * 32, [link]))
         self.assertEqual(self._ledger().snapshot("d" * 32)["status"], "started")
@@ -414,8 +450,7 @@ class SuccessorLineageTests(CharteredFixture):
         tampered = {"removed": lambda r: r.pop("lineage_usage"),
                     "negative": lambda r: r["lineage_usage"].update(predecessor_paid_calls=-1),
                     "extra key": lambda r: r["lineage_usage"].update(note=1),
-                    "retry disagrees": lambda r: r["lineage_usage"].update(predecessor_verifier_sends=0)
-                    or r["verifier_usage"].update(retry_eligible=True)}
+                    "exceeds the verifier cap": lambda r: r["lineage_usage"].update(predecessor_verifier_sends=2)}
         for label, mutate in tampered.items():
             with self.subTest(label=label):
                 forged = copy.deepcopy(receipt)
@@ -427,6 +462,42 @@ class SuccessorLineageTests(CharteredFixture):
         first_envelope = json.loads((self.run / "execution" / first["attempt_id"] / "envelope.json").read_text())
         with self.assertRaisesRegex(ExecutionContractError, "lineage usage requires predecessors"):
             validate_receipt(first_envelope, first_receipt)
+
+
+class SuccessorLineageTamperTests(CharteredFixture):
+    """Receipt lineage_usage alone is checked against the caps and retry rule."""
+
+    _reset_worktree = SuccessorLineageTests._reset_worktree
+
+    def test_tampering_only_lineage_usage_fails_receipt_validation(self):
+        first, _, _, _ = self._run_v8([self.FAIL], plan=("editor", "verifier"))
+        self._reset_worktree()
+        second, _, _, captured = self._run_v8([self.FAIL], plan=("editor", "verifier"))
+        self.assertEqual(second["status"], "failed")
+        receipt = json.loads(Path(second["receipt_path"]).read_text())
+        # One own send plus one predecessor send exhausts the cap of two, so
+        # the lineage alone is what makes this valid_fail not retry-eligible.
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+        self.assertFalse(receipt["verifier_usage"]["retry_eligible"])
+        validate_receipt(captured["envelope"], receipt)
+        for label, field, value, message in (
+                ("hidden verifier send", "predecessor_verifier_sends", 0, "structured verifier usage differs"),
+                ("inflated verifier sends", "predecessor_verifier_sends", 2, "exceeds the charter caps"),
+                ("inflated paid calls", "predecessor_paid_calls", 6, "exceeds the charter caps")):
+            with self.subTest(label=label):
+                forged = copy.deepcopy(receipt)
+                forged["lineage_usage"][field] = value
+                with self.assertRaisesRegex(ExecutionContractError, message):
+                    validate_receipt(captured["envelope"], forged)
+
+    def test_prepare_refuses_a_claim_that_changed_before_the_attempt_was_created(self):
+        run = json.loads((self.run / "run.json").read_text())
+        run["delivery"]["owner_generation"] = 2
+        (self.run / "run.json").write_text(json.dumps(run))
+        with self.assertRaisesRegex(Exception, "generation is stale"):
+            self.prepare()
+        self.assertFalse((self.run / "execution" / "ledger.sqlite").exists()
+                         and ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True).v8_lineage("sample")[1])
 
 
 class RecoveryHarness(CharteredFixture):

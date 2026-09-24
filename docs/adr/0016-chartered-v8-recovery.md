@@ -67,12 +67,14 @@ process-exit side effect. Only one recovery can own an attempt at a time.
 
 A Delivery Lead `resume` or `supersede` first seals every `started` v8
 attempt at or below the outgoing lead generation as terminal `superseded`,
-releasing its unconsumed grants, before the claim generation changes. v5, v6
+releasing its unconsumed grants and bumping its owner generation so the ledger
+fences its grants too, before the claim generation changes. v5, v6
 and v7 attempts are not sealed; a stale v7 attempt is already fenced at every
 dispatch. The lead guard reads the ledger: a lead change is refused with
 `reconciliation_required` while any action or manager call is `started` or
-`unknown`, and with `lead_guard_ledger_unreadable` when the ledger exists but
-cannot be read. It is also refused with `attempt_running` while a live
+`unknown` in any attempt of the run, v7 included, and with
+`lead_guard_ledger_unreadable` when the ledger is unreadable, a symlink, or
+missing while attempt directories exist. It is also refused with `attempt_running` while a live
 process holds a `started` attempt's `recovery_lock`. That probe runs under
 `run_lock`, inverting the lock order above, but it never waits, so it cannot
 deadlock. `attention`, `release`, and the lifecycle `pause` and `block`

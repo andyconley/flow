@@ -306,17 +306,15 @@ class ExecutionLedger:
         columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
         sealed = "sealed_receipt_sha256" if "sealed_receipt_sha256" in columns else "NULL"
         lineage, started = [], []
-        for attempt_id, status, envelope_json, receipt_path, digest_value in db.execute(
-                f"SELECT attempt_id,status,envelope_json,receipt_path,{sealed} FROM attempts "
+        for attempt_id, status, envelope_json, digest_value in db.execute(
+                f"SELECT attempt_id,status,envelope_json,{sealed} FROM attempts "
                 "WHERE work_id=? AND execution_protocol_version=8 ORDER BY rowid", (work_id,)).fetchall():
             if status == "started":
                 started.append(attempt_id)
                 continue
-            if digest_value is None and status != "superseded" and receipt_path:
-                # A v8 receipt sealed before the column existed: bind the file.
-                receipt = Path(receipt_path)
-                if receipt.is_file() and not receipt.is_symlink():
-                    digest_value = hashlib.sha256(receipt.read_bytes()).hexdigest()
+            # A v8 receipt sealed before the column existed has no sealed
+            # digest; its link then fails validation, so a successor refuses
+            # rather than hashing an unconfined file here.
             lineage.append({"attempt_id": attempt_id, "terminal_status": status,
                             "receipt_sha256": None if status == "superseded" else digest_value,
                             "lead_generation": json.loads(envelope_json)["delivery_lead_claim"]["generation"]})
@@ -335,6 +333,8 @@ class ExecutionLedger:
             row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (item["attempt_id"],)).fetchone()
             if row is None:
                 raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
+            # Sends only: a predecessor's released grant (not_dispatched) cost
+            # nothing, unlike the current attempt's rule, which reserves it.
             paid += db.execute(
                 "SELECT count(*) FROM actions WHERE attempt_id=? "
                 "AND json_extract(request_json,'$.provider') IN ('codex','claude') "
@@ -362,21 +362,24 @@ class ExecutionLedger:
                     return blocker
         return None
 
-    def started_v8_attempts(self, *, max_lead_generation: int) -> list[str]:
+    def started_v8_attempts(self, work_id: str, *, max_lead_generation: int) -> list[str]:
         """Attempts a lead change at ``max_lead_generation`` would seal as superseded."""
         with self._db() as db:
-            rows = db.execute("SELECT attempt_id,envelope_json FROM attempts WHERE status='started' "
-                              "AND execution_protocol_version=8 ORDER BY rowid").fetchall()
+            rows = db.execute("SELECT attempt_id,envelope_json FROM attempts WHERE work_id=? AND status='started' "
+                              "AND execution_protocol_version=8 ORDER BY rowid", (work_id,)).fetchall()
         return [attempt_id for attempt_id, envelope_json in rows
                 if json.loads(envelope_json)["delivery_lead_claim"]["generation"] <= max_lead_generation]
 
     def seal_superseded_attempts(self, work_id: str, *, lead_generation: int, successor_generation: int,
-                                 action: str) -> list[str]:
+                                 action: str, expected: list[str]) -> list[str]:
         """Seal every started v8 attempt of the outgoing lead generation as superseded.
 
         Runs before the claim generation changes, so a crash leaves terminal
         attempts under an unchanged claim and a retry is a no-op seal. v5-v7
-        attempts are never sealed here.
+        attempts are never sealed here. ``expected`` is the set whose
+        ``recovery_lock`` the caller holds; any other started attempt means the
+        ledger moved after the probe, so the seal refuses instead of fencing
+        an attempt nobody probed.
         """
         if action not in {"resume", "supersede"} or not 1 <= lead_generation < successor_generation:
             raise ContractError("superseded seal request is invalid")
@@ -387,11 +390,13 @@ class ExecutionLedger:
                 if any(self._unresolved_action(db, attempt_id) for attempt_id in attempts):
                     raise RecoveryRefused(RECONCILIATION_REQUIRED, "an uncertain send blocks the Delivery Lead successor")
                 sealed = []
-                rows = db.execute("SELECT attempt_id,envelope_json FROM attempts WHERE work_id=? AND status='started' "
-                                  "AND execution_protocol_version=8 ORDER BY rowid", (work_id,)).fetchall()
+                rows = [(attempt_id, envelope_json) for attempt_id, envelope_json in db.execute(
+                    "SELECT attempt_id,envelope_json FROM attempts WHERE work_id=? AND status='started' "
+                    "AND execution_protocol_version=8 ORDER BY rowid", (work_id,)).fetchall()
+                    if json.loads(envelope_json)["delivery_lead_claim"]["generation"] <= lead_generation]
+                if [attempt_id for attempt_id, _ in rows] != list(expected):
+                    raise RecoveryRefused(RECOVERY_IN_PROGRESS, "attempts changed during the lead change")
                 for attempt_id, envelope_json in rows:
-                    if json.loads(envelope_json)["delivery_lead_claim"]["generation"] > lead_generation:
-                        continue
                     for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' "
                                                    "ORDER BY rowid", (attempt_id,)).fetchall():
                         db.execute("UPDATE actions SET status='not_dispatched',reason='superseded_unconsumed_grant',"
@@ -399,7 +404,11 @@ class ExecutionLedger:
                         self._event(db, attempt_id, action_id, "superseded_grant_released", "")
                     reason = canonical({"action": action, "lead_generation": lead_generation,
                                         "successor_generation": successor_generation})
-                    db.execute("UPDATE attempts SET status='superseded',reason=?,receipt_path=NULL WHERE attempt_id=?",
+                    # Bumping the owner generation fences every grant, manager
+                    # call, and verifier send of the attempt at the ledger too,
+                    # not only at the delivery authority guard.
+                    db.execute("UPDATE attempts SET status='superseded',reason=?,receipt_path=NULL,"
+                               "owner_generation=owner_generation+1,owner_actor='superseded' WHERE attempt_id=?",
                                (reason, attempt_id))
                     self._event(db, attempt_id, None, "attempt_superseded", reason)
                     sealed.append(attempt_id)

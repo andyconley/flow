@@ -367,6 +367,17 @@ def _validate_lineage_usage(envelope: dict[str, Any], receipt: dict[str, Any]) -
     if (not isinstance(usage, dict) or set(usage) != {"predecessor_paid_calls", "predecessor_verifier_sends"}
             or any(type(value) is not int or value < 0 for value in usage.values())):
         raise ContractError("receipt lineage usage is invalid")
+    # The lineage shares the charter caps, so the attempt's own sends plus its
+    # predecessors' can never exceed them.
+    limits, job = envelope["limits"], envelope["job_contract"]
+    sent = {"started", "completed", "failed", "unknown"}
+    own_paid = sum(item["request"].get("provider") in {"codex", "claude"} and item["status"] in sent
+                   for item in receipt["actions"])
+    own_verifier = sum(item["request"].get("instance_id") in job["verifier_instance_ids"] and item["status"] in sent
+                       for item in receipt["actions"])
+    if (own_paid + usage["predecessor_paid_calls"] > limits["max_paid_worker_calls"]
+            or own_verifier + usage["predecessor_verifier_sends"] > limits["max_verifier_calls"]):
+        raise ContractError("receipt lineage usage exceeds the charter caps")
     return usage
 
 

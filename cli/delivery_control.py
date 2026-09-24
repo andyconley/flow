@@ -277,30 +277,39 @@ def _fence_and_seal_attempts(run_dir: Path, work_id: str, fences: ExitStack, *, 
     probes stay held until the claim is written, so no recovery or live run
     can start on a sealed attempt. Returns a stable reason on refusal.
     """
-    ledger_path = run_dir / "execution" / "ledger.sqlite"
-    if not ledger_path.exists():
-        return None
     # Imported lazily: the ledger must not become an import-time dependency
     # of the lifecycle kernel (ADR 0014 keeps it a separate authority).
     from delivery_recovery import LEAD_GUARD_LEDGER_UNREADABLE, RecoveryRefused
-    from execution_ledger import ExecutionLedger
+    from execution_ledger import ContractError, ExecutionLedger
     import sqlite3
+    execution_dir = run_dir / "execution"
+    ledger_path = execution_dir / "ledger.sqlite"
+    if ledger_path.is_symlink():
+        return LEAD_GUARD_LEDGER_UNREADABLE
+    if not ledger_path.exists():
+        # No ledger yet is not a blocker, but attempt directories without one
+        # mean it was lost: never read that as "no uncertain sends".
+        attempts_exist = execution_dir.is_dir() and any(execution_dir.glob("*/envelope.json"))
+        return LEAD_GUARD_LEDGER_UNREADABLE if attempts_exist else None
+    unreadable = (sqlite3.Error, OSError, LookupError, TypeError, ValueError)
     try:
         reader = ExecutionLedger(ledger_path, read_only=True)
         if reader.lead_change_blocker():
             return "reconciliation_required: an uncertain send blocks the Delivery Lead successor"
-        attempts = reader.started_v8_attempts(max_lead_generation=lead_generation)
-    except (sqlite3.Error, OSError, ValueError):
+        attempts = reader.started_v8_attempts(work_id, max_lead_generation=lead_generation)
+    except unreadable:
         return LEAD_GUARD_LEDGER_UNREADABLE
     try:
         for attempt_id in attempts:
             fences.enter_context(reader.recovery_lock(attempt_id, holder="recovery"))
         if attempts:
             ExecutionLedger(ledger_path).seal_superseded_attempts(
-                work_id, lead_generation=lead_generation, successor_generation=successor_generation, action=action)
+                work_id, lead_generation=lead_generation, successor_generation=successor_generation,
+                action=action, expected=attempts)
     except RecoveryRefused as exc:
         return str(exc)
-    except (sqlite3.Error, OSError):
+    except (ContractError, *unreadable):
+        # ContractError is a ValueError; listed for the reader.
         return LEAD_GUARD_LEDGER_UNREADABLE
     return None
 
