@@ -2,9 +2,16 @@
 
 ## Active work
 
-- None.
+- `chartered-delivery-recovery-1b`: the superseded seal, ledger-backed
+  lead guard, successor predecessors, and lineage limits (plan commits 12-13
+  of `chartered-delivery-recovery`). Chunk 2 follows as its own linked run.
 
 ## Recently completed
+
+- `chartered-delivery-recovery` chunk 1a accepted, merged as PR #26, and
+  archived. Interrupted v8 chartered attempts now recover explicitly on the
+  same attempt from the latest Flow-bound checkpoint (ADR 0016). The full
+  suite passed 1,425 tests and the 11 MAF-gated tests ran locally.
 
 - `v7-pre-send-failure-allow-list` scout archived on branch
   `codex/v7-pre-send-failure-allow-list`. `close_pre_send_failure` now
