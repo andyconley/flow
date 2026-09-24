@@ -1,5 +1,6 @@
 """Explicit recovery of interrupted protocol v8 chartered attempts (ADR 0016)."""
 
+import ast
 import copy
 import hashlib
 import json
@@ -395,6 +396,49 @@ class CharteredRecoveryTests(RecoveryHarness):
         self.assertIsNone(receipt["evidence"]["tests"])
         self.assertIn("targeted chartered test failed", receipt["reason"])
 
+    def test_seal_mode_without_a_recorded_failure_or_verifier_input_never_runs_the_test(self):
+        def kill(point):
+            if point == "after-runtime-outcome":
+                raise KillPoint(point)
+
+        attempt_id = self._killed(("editor",), [], seal_hook=kill)
+        self.assertEqual(self.sends, ["editor"])
+        snapshot = self._ledger().snapshot(attempt_id)
+        self.assertEqual(snapshot.get("verifier_inputs", []), [])
+        before = self.test_calls
+        result = self._recover(attempt_id, ("editor",),
+                               supervisor=lambda *args, **kwargs: self.fail("seal mode must skip MAF"))
+        self.assertEqual(self.test_calls, before, "seal mode records the outcome; it never runs the test")
+        self.assertEqual(result["status"], "failed", result)
+        receipt = self._assert_recovered_receipt(result, mode="seal")
+        self.assertIsNone(receipt["evidence"]["tests"])
+        self.assertEqual(self.sends, ["editor"])
+
+    def test_a_live_attempt_mid_send_refuses_as_attempt_running_not_reconciliation(self):
+        worker = self._worker
+
+        def in_flight(action, *, envelope, workspace):
+            if action["assignment_id"] == "verifier":
+                raise KillPoint("verifier send in flight")
+            return worker(action, envelope=envelope, workspace=workspace)
+
+        with patch.object(self, "_worker", in_flight):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        before = self._ledger().snapshot(attempt_id)
+        self.assertEqual([item["status"] for item in before["actions"]], ["completed", "started"])
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
+        with ledger.recovery_lock(attempt_id, holder="live"):
+            for entry in (resume_delivery, recover_delivery):
+                with self.subTest(entry=entry.__name__), self.assertRaises(RecoveryRefused) as raised:
+                    self._recover(attempt_id, ("editor", "verifier"), entry=entry)
+                self.assertEqual(raised.exception.reason, "attempt_running")
+        self.assertEqual(self._ledger().snapshot(attempt_id), before)
+        # Once no live run holds the fence, the uncertain send is what refuses.
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._recover(attempt_id, ("editor", "verifier"))
+        self.assertEqual(raised.exception.reason, "reconciliation_required")
+        self.assertEqual(self.sends, ["editor"])
+
     def test_never_sent_manager_grant_is_reissued_on_replay_and_sent_once(self):
         manager_sends = []
 
@@ -465,15 +509,28 @@ class CharteredRecoveryTests(RecoveryHarness):
             if point == "after-runtime-outcome":
                 raise KillPoint(point)
 
-        attempt_id = self._killed(("editor", "verifier"), [self.PASS], seal_hook=kill)
-        self.assertEqual(self.test_calls, 1)
-        result = self._recover(attempt_id, ("editor", "verifier"))
-        self.assertEqual(result["status"], "completed", result)
-        self.assertEqual(self.test_calls, 1, "recovery must reuse the bound test evidence")
-        receipt = self._assert_recovered_receipt(result, mode="seal")
-        final = receipt["verifier_evaluations"][-1]["evaluation"]
-        self.assertEqual(receipt["evidence"]["tests"]["output_sha256"], final["test_evidence_digest"])
-        self.assertEqual(final["test_evidence_digest"], receipt["verifier_inputs"][-1]["test_digest"])
+        # Answer mode restores MAF with a verifier input bound, so only the
+        # evidence-reuse branch stops a rerun there; seal mode never runs it.
+        for mode in ("answer", "seal"):
+            with self.subTest(mode=mode):
+                self.sends.clear()
+                self.test_calls = 0
+                (self.worktree / "target.py").write_text("old\n")
+                if mode == "answer":
+                    with self._kill_once("record_verifier_evaluation", after=True):
+                        attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+                else:
+                    attempt_id = self._killed(("editor", "verifier"), [self.PASS], seal_hook=kill)
+                self.assertEqual(self.test_calls, 1)
+                result = self._recover(attempt_id, ("editor", "verifier"))
+                # The zero-rerun assertion comes first so it is the one a broken
+                # reuse guard trips (AC12), not the later stale-evidence status.
+                self.assertEqual(self.test_calls, 1, "recovery must reuse the bound test evidence")
+                self.assertEqual(result["status"], "completed", result)
+                receipt = self._assert_recovered_receipt(result, mode=mode)
+                final = receipt["verifier_evaluations"][-1]["evaluation"]
+                self.assertEqual(receipt["evidence"]["tests"]["output_sha256"], final["test_evidence_digest"])
+                self.assertEqual(final["test_evidence_digest"], receipt["verifier_inputs"][-1]["test_digest"])
 
     def test_worktree_drift_fails_closed_before_any_send_or_completion(self):
         with self._kill_once("prepare_verifier_send"):
@@ -572,6 +629,50 @@ class CharteredRecoveryTests(RecoveryHarness):
                     validate_receipt(envelope, changed)
 
 
+class CharteredRecoveryEntryTests(unittest.TestCase):
+    """AC2: recovery runs only from the operator commands, never from a timer, expiry, or exit."""
+
+    ENTRY_POINTS = {"resume_delivery", "recover_delivery", "_resume_chartered", "claim_chartered_recovery"}
+    ALLOWED = {
+        "claim_chartered_recovery": {"cli/delivery_gateway.py:_resume_chartered"},
+        "_resume_chartered": {"cli/delivery_gateway.py:resume_delivery", "cli/delivery_gateway.py:recover_delivery"},
+        "resume_delivery": {"cli/delivery_gateway.py:recover_delivery", "cli/flow.py:main"},
+        "recover_delivery": {"cli/flow.py:main"},
+    }
+
+    def _references(self):
+        repo = Path(__file__).resolve().parents[1]
+        found: dict[str, set[str]] = {}
+        for path in sorted([*(repo / "cli").rglob("*.py"), *(repo / "runtime").rglob("*.py")]):
+            label = path.relative_to(repo).as_posix()
+
+            def walk(node, function):
+                for child in ast.iter_child_nodes(node):
+                    inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else function
+                    # Any load, not only a call: a callable handed to a timer,
+                    # signal, or atexit hook is a reference too.
+                    name = (child.id if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+                            else child.attr if isinstance(child, ast.Attribute) else None)
+                    if name in self.ENTRY_POINTS:
+                        found.setdefault(name, set()).add(f"{label}:{function}")
+                    walk(child, inner)
+
+            walk(ast.parse(path.read_text()), "<module>")
+        return found
+
+    def test_recovery_entry_points_are_referenced_only_from_the_operator_commands(self):
+        self.assertEqual(self._references(), self.ALLOWED)
+
+    def test_the_cli_reaches_recovery_only_through_its_two_named_subcommands(self):
+        source = (Path(__file__).resolve().parents[1] / "cli" / "flow.py").read_text()
+        for command, entry in (("resume-delivery-lead", "resume_delivery("), ("recover-delivery-lead", "recover_delivery(")):
+            with self.subTest(command=command):
+                branch = source.index(f'args.run_target == "{command}"')
+                following = source.index("\n    if args.command", branch)
+                self.assertEqual(source.count(entry), 1)
+                self.assertTrue(branch < source.index(entry) < following)
+
+
 class CharteredRecoveryInspectionTests(RecoveryHarness):
     """AC11: inspection reports eligibility, blockers, evidence needed, and the sealed digest."""
 
@@ -591,6 +692,9 @@ class CharteredRecoveryInspectionTests(RecoveryHarness):
         self.assertTrue(view["executable"])
         self.assertFalse(view["resumable"])
         self.assertEqual((view["recovery"]["recoverable"], view["recovery"]["reason"]), (False, "reconciliation_required"))
+        # Inspection cannot see the live-run fence; it says so rather than implying a command verdict.
+        self.assertEqual((view["recovery"]["decided_from"], view["recovery"]["checked_by_command"]),
+                         ("ledger", ["live_run_fence", "worktree_drift", "envelope_file"]))
         blocker = view["recovery"]["blockers"][0]
         self.assertEqual((blocker["kind"], blocker["status"]), ("action", "unknown"))
         self.assertIn("resolve-execution", blocker["evidence_needed"])

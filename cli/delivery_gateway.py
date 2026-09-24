@@ -628,19 +628,21 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
 
     Every gate before the claim reads the ledger read-only, so a refusal
     leaves the ledger and attempt files unchanged (a recovery lock file may
-    be created beside the ledger). The gates run again under the recovery
-    lock, where no live run can advance the attempt, and that decision is
-    the one the claim acts on.
+    be created beside the ledger). The gates run only under the recovery
+    lock: a live run holds it, so it refuses as ``attempt_running`` whatever
+    its rows look like mid-send, and no live run can advance the attempt
+    between the decision and the claim that acts on it.
     """
     run_dir = root / ".flow" / "runs" / work_id
     attempt_dir = run_dir / "execution" / attempt_id
     ledger_path = run_dir / "execution" / "ledger.sqlite"
-    _recovery_gates(work_id, attempt_id, run_dir)
-    valid, _, findings = validate_orchestration(work_id, "dispatch", root=root)
-    if not valid:
-        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        raise ContractError("chartered attempt is absent")
     with ExecutionLedger(ledger_path, read_only=True).recovery_lock(attempt_id, holder="recovery"):
         snapshot, eligibility = _recovery_gates(work_id, attempt_id, run_dir)
+        valid, _, findings = validate_orchestration(work_id, "dispatch", root=root)
+        if not valid:
+            raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
         if eligibility is None:
             # A completed recovery is reported, never repeated.
             return {"attempt_id": attempt_id, "status": snapshot["status"], "reason": snapshot["reason"],
@@ -669,9 +671,10 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
         _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
         state = ledger.snapshot(attempt_id)
         try:
-            # A recorded failure is sealed as it was; its test is never rerun.
+            # Seal mode only records what the run already decided, so it never
+            # runs the test: a bound digest is reused, otherwise tests are absent.
             evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner,
-                                                   run_test=not recorded_failure)
+                                                   run_test=mode != "seal")
         except (RecoveryRefused, ContractError):
             if not recorded_failure:
                 raise

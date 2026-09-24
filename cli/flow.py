@@ -1022,7 +1022,8 @@ def main() -> int:
                 recovery = attempt["recovery"]
                 blocking = ", ".join(f"{item['kind']} {item['id']} {item['status']}: {item['evidence_needed']}"
                                      for item in recovery["blockers"]) or "none"
-                recovery_lines = (f"recoverable: {recovery['recoverable']} ({recovery['reason'] or recovery['mode']})\n"
+                recovery_lines = (f"recoverable (ledger view): {recovery['recoverable']} ({recovery['reason'] or recovery['mode']})\n"
+                                  f"checked only by the command: {', '.join(recovery['checked_by_command'])}\n"
                                   f"blocking: {blocking}\n"
                                   f"predecessors: {len(attempt.get('predecessors', []))}\n"
                                   f"sealed receipt: {'consistent' if attempt['sealed_receipt']['consistent'] else 'INCONSISTENT'}\n")

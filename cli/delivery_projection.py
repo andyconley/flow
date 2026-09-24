@@ -20,6 +20,9 @@ from fsutil import repo_root
 from legacy_delivery import inspect_legacy_delivery
 
 
+COMMAND_ONLY_RECOVERY_CHECKS = ("live_run_fence", "worktree_drift", "envelope_file")
+
+
 def lead_claim_active(delivery: Any, envelope: dict[str, Any]) -> bool:
     """Whether run authority still names this envelope's Delivery Lead claim."""
     claim = envelope.get("delivery_lead_claim")
@@ -60,7 +63,10 @@ def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, An
         file_sha = (receipt_file or {}).get("sha256")
         block_present = (receipt_file or {}).get("recovery_block_present")
         recovery_view = {
-            "recovery": {key: eligibility[key] for key in ("recoverable", "reason", "mode", "blockers")},
+            # A ledger-only verdict: the command alone checks the live-run
+            # fence, worktree drift, and the envelope file under its lock.
+            "recovery": {**{key: eligibility[key] for key in ("recoverable", "reason", "mode", "blockers")},
+                         "decided_from": "ledger", "checked_by_command": list(COMMAND_ONLY_RECOVERY_CHECKS)},
             "interruptions": snapshot.get("interruptions", []),
             "recoveries": recoveries,
             "predecessors": envelope.get("predecessors", []),
