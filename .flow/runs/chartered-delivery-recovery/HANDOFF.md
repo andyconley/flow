@@ -39,13 +39,22 @@ Commits (Conventional Commits, and the full suite passed after each one):
 - `d164106` recovery
 - `7de46ee` inspection
 - `3a69f3f` review fixes
+- `f01ea35` acceptance-review fixes: the fence taken before the gates, seal mode never running the test, the AC2 entry-point test, and the AC6/AC12 answer-mode case
+- `c39d7fa` acceptance-review suggestions: pinned tamper reasons, the seal-mode R2 test, and the grant-to-bind residual
 
 ## Proof
 
-- **Validation results:** see `validation-results.md`. The full suite ran 1420 tests with **0 skipped** (the baseline was 1370).
+- **Validation results:** see `validation-results.md`. The full suite ran 1425 tests with **0 skipped** (the baseline was 1370).
 - **MAF-gated tests:** all 11 ran locally and none skipped (`validation/maf-gated.log`). This is the R9 merge gate, and the PR description must carry this log.
-- **AC12 mutation check:** disabling evidence reuse fails the AC6 test. The source was restored, and the check was repeated on the final code.
-- **Review:** see `research/implement-review.md`. The quality and security reviewers found 0 blockers and 3 majors, and all 3 are fixed. There were 18 findings in all, each dispositioned.
+- **Mutation checks:** each of four guards was broken and its covering test failed:
+  - disabling evidence reuse fails the named AC6 zero-rerun assertion (`2 != 1`) in answer mode;
+  - rerunning the test in seal mode;
+  - running the gates before the fence;
+  - adding a timer path.
+
+  The source was restored after each one.
+- **Acceptance review:** see `review.md`. Its first pass was **needs refinement**: 4 important findings and 5 suggestions. All are addressed in `f01ea35` and `c39d7fa`, and a targeted re-review is pending.
+- **Implementation review:** see `research/implement-review.md`. The quality and security reviewers found 0 blockers and 3 majors, and all 3 are fixed. There were 18 findings in all, each dispositioned.
 
 ## Deviations from the plan
 
@@ -58,7 +67,12 @@ Commits (Conventional Commits, and the full suite passed after each one):
 
 - **R2:** a receipt-only check cannot see a removed recovery block after a seal-mode recovery. The ledger's sealed digest and inspection are authoritative.
 - **R8:** at boundary (d), when there is no `repair.diff` yet, the current worktree becomes the recorded diff, bounded by the baseline and scope checks.
-- **Trailing denial:** a crash after Flow denies the latest proposal, and before the runtime outcome, refuses with `no_restorable_checkpoint` under R1. The remedy is supersede and a successor (1b).
+- **Trailing denial, and grant-to-bind:** a crash in either of these windows refuses with `no_restorable_checkpoint` under R1:
+  - after Flow denies the latest proposal, and before the runtime outcome;
+  - after Flow grants the latest proposal, and before its checkpoint is bound.
+
+  The remedy is supersede and a successor (1b).
+- **Inspection is ledger-only:** it cannot see the live-run fence. The command decides `attempt_running`. Chunk 2's v8 `resolve-execution` must take the recovery lock too, so it cannot resolve a send that is still in flight.
 - **Not covered in CI:** CI has no MAF job, so the pending-mode runtime test only runs locally.
 - **Declined nits, recorded as follow-ups:** the raw-path read-only URI and `send_lock`'s missing `O_NOFOLLOW` both predate this diff.
 
