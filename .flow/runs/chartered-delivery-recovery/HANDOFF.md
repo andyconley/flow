@@ -1,7 +1,7 @@
 # Handoff: Chartered v8 Delivery Recovery, chunk 1a
 
-- **Status:** chunk 1a is implemented, reviewed, and validated. It is ready for `flow-review` and a PR.
-- **Branch:** `codex/chartered-delivery-recovery-1a`, local only and not pushed.
+- **Status:** chunk 1a is implemented, validated, and acceptance-reviewed (`review_accepted`). It is ready for its PR.
+- **Branch:** `codex/chartered-delivery-recovery-1a`.
 - **Worktree:** `/Users/andyconley/.codex/worktrees/delivery-recovery/flow`.
 - **Base:** the branch stacks on the definition and plan commits (`3fa6711` and `e43c109`) above `main` `6015e9b`. The engineer chose this stacking, so the 1a PR carries the definition and plan docs together with the code.
 
@@ -41,19 +41,21 @@ Commits (Conventional Commits, and the full suite passed after each one):
 - `3a69f3f` review fixes
 - `f01ea35` acceptance-review fixes: the fence taken before the gates, seal mode never running the test, the AC2 entry-point test, and the AC6/AC12 answer-mode case
 - `c39d7fa` acceptance-review suggestions: pinned tamper reasons, the seal-mode R2 test, and the grant-to-bind residual
+- `e5f06b7` re-review suggestions: the I1 test pins a failure-free outcome, and each entry point may load only once inside `main`
 
 ## Proof
 
 - **Validation results:** see `validation-results.md`. The full suite ran 1425 tests with **0 skipped** (the baseline was 1370).
 - **MAF-gated tests:** all 11 ran locally and none skipped (`validation/maf-gated.log`). This is the R9 merge gate, and the PR description must carry this log.
-- **Mutation checks:** each of four guards was broken and its covering test failed:
+- **Mutation checks:** each of five guards was broken and its covering test failed:
   - disabling evidence reuse fails the named AC6 zero-rerun assertion (`2 != 1`) in answer mode;
   - rerunning the test in seal mode;
   - running the gates before the fence;
-  - adding a timer path.
+  - adding a timer path;
+  - adding an `atexit` hook inside `main`.
 
   The source was restored after each one.
-- **Acceptance review:** see `review.md`. Its first pass was **needs refinement**: 4 important findings and 5 suggestions. All are addressed in `f01ea35` and `c39d7fa`, and a targeted re-review is pending.
+- **Acceptance review:** see `review.md`. Its first pass was **needs refinement**: 4 important findings and 5 suggestions. All are addressed in `f01ea35` and `c39d7fa`. The targeted re-review found them fixed and returned **ready to accept**; its suggestions N1–N3 are fixed in `e5f06b7`.
 - **Implementation review:** see `research/implement-review.md`. The quality and security reviewers found 0 blockers and 3 majors, and all 3 are fixed. There were 18 findings in all, each dispositioned.
 
 ## Deviations from the plan
@@ -79,7 +81,6 @@ Commits (Conventional Commits, and the full suite passed after each one):
 
 ## Next actions
 
-1. `/flow-review chartered-delivery-recovery` to accept 1a.
-2. On request: push the branch and open the 1a PR, with the MAF log in the body.
-3. Chunk 1b (commits 12 and 13: the superseded seal, the ledger-backed lead guard, predecessors, and lineage limits) comes after 1a merges. Chunk 2 is a second cycle of this run.
-4. The separate D4 scout (the v7 `close_pre_send_failure` allow-list) is still open.
+1. Merge the 1a PR; its description carries the MAF log.
+2. Chunk 1b (commits 12 and 13: the superseded seal, the ledger-backed lead guard, predecessors, and lineage limits) comes after 1a merges. Chunk 2 is a second cycle of this run.
+3. The separate D4 scout (the v7 `close_pre_send_failure` allow-list) is still open.
