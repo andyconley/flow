@@ -2,6 +2,16 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.34.1](https://github.com/andyconley/flow/compare/v0.34.0...v0.34.1) (2026-09-24)
+
+### Bug Fixes
+
+* **ledger:** release unconsumed v7 grants on pre-send failure ([661a9d9](https://github.com/andyconley/flow/commit/661a9d9b90122987d289ae7f512c5844cc4f985f))
+
+### Maintenance
+
+* archive v7 pre-send failure scout ([a61a520](https://github.com/andyconley/flow/commit/a61a520c4fbd54a6f3156d5bc63c1de097f36b8c))
+
 ## [0.34.0](https://github.com/andyconley/flow/compare/v0.33.0...v0.34.0) (2026-09-24)
 
 ### Features
