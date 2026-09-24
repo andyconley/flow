@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -236,8 +236,6 @@ def change_lead_claim(
             return False, current, ["delivery owner generation is invalid"]
         if expected_generation is not None and expected_generation != generation:
             return False, current, ["stale delivery owner generation"]
-        if action in {"resume", "supersede"} and current.get("pending_unknown_actions"):
-            return False, current, ["unknown action blocks Delivery Lead successor"]
         status = delivery.get("owner_status")
         if action == "attention":
             if status != "active":
@@ -259,30 +257,81 @@ def change_lead_claim(
         previous_claim = run_dir / previous_relative
         if not previous_claim.is_file():
             return False, current, ["current Delivery Lead claim is unavailable"]
-        claim = {
-            "schema_version": 1, "kind": "delivery_lead_claim",
-            "logical_delivery_attempt_id": delivery["logical_delivery_attempt_id"],
-            "owner": owner.strip() if action in {"resume", "supersede"} else json.loads(previous_claim.read_text())["owner"],
-            "generation": next_generation, "status": next_status,
-            "charter_digest": delivery["charter_digest"],
-            "supersedes": delivery["lead_claim_digest"],
-        }
-        claim["digest"] = digest(claim)
-        claim_name = f"lead-claim-g{next_generation}-{next_status}.json"
-        claim_relative = f"{previous_relative.rsplit('/', 1)[0]}/{claim_name}"
-        _write_immutable(run_dir / claim_relative, claim)
-        now = _now()
-        next_run = dict(current)
-        next_delivery = dict(delivery)
-        next_delivery.update({
-            "lead_claim_digest": claim["digest"], "owner_generation": next_generation,
-            "owner_status": next_status, "lead_claim_path": claim_relative,
-        })
-        next_run["delivery"] = next_delivery
-        next_run["updated_at"] = now
-        write_atomic(run_path, json.dumps(next_run, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-        _append_event(run_dir / "events.jsonl", {
-            "at": now, "event": f"delivery-lead-{action}", "from": status, "to": next_status,
-            "delivery_charter_digest": delivery["charter_digest"], "owner_generation": next_generation,
-        })
-        return True, next_run, []
+        with ExitStack() as fences:
+            if action in {"resume", "supersede"}:
+                refusal = _fence_and_seal_attempts(run_dir, work_id, fences, action=action,
+                                                   lead_generation=generation, successor_generation=next_generation)
+                if refusal:
+                    return False, current, [refusal]
+            return _write_lead_claim(run_dir, run_path, current, delivery, action, status, owner,
+                                     previous_relative, previous_claim, next_generation, next_status)
+
+
+def _fence_and_seal_attempts(run_dir: Path, work_id: str, fences: ExitStack, *, action: str,
+                             lead_generation: int, successor_generation: int) -> str | None:
+    """Refuse a lead change on ledger uncertainty or a live run, else seal superseded attempts.
+
+    The caller holds ``run_lock``. Each attempt's ``recovery_lock`` is only
+    probed without waiting, so taking it here, inside ``run_lock``, cannot
+    deadlock with a recovery that holds it and waits for ``run_lock``. The
+    probes stay held until the claim is written, so no recovery or live run
+    can start on a sealed attempt. Returns a stable reason on refusal.
+    """
+    ledger_path = run_dir / "execution" / "ledger.sqlite"
+    if not ledger_path.exists():
+        return None
+    # Imported lazily: the ledger must not become an import-time dependency
+    # of the lifecycle kernel (ADR 0014 keeps it a separate authority).
+    from delivery_recovery import LEAD_GUARD_LEDGER_UNREADABLE, RecoveryRefused
+    from execution_ledger import ExecutionLedger
+    import sqlite3
+    try:
+        reader = ExecutionLedger(ledger_path, read_only=True)
+        if reader.lead_change_blocker():
+            return "reconciliation_required: an uncertain send blocks the Delivery Lead successor"
+        attempts = reader.started_v8_attempts(max_lead_generation=lead_generation)
+    except (sqlite3.Error, OSError, ValueError):
+        return LEAD_GUARD_LEDGER_UNREADABLE
+    try:
+        for attempt_id in attempts:
+            fences.enter_context(reader.recovery_lock(attempt_id, holder="recovery"))
+        if attempts:
+            ExecutionLedger(ledger_path).seal_superseded_attempts(
+                work_id, lead_generation=lead_generation, successor_generation=successor_generation, action=action)
+    except RecoveryRefused as exc:
+        return str(exc)
+    except (sqlite3.Error, OSError):
+        return LEAD_GUARD_LEDGER_UNREADABLE
+    return None
+
+
+def _write_lead_claim(run_dir: Path, run_path: Path, current: dict[str, Any], delivery: dict[str, Any],
+                      action: str, status: str, owner: str | None, previous_relative: str, previous_claim: Path,
+                      next_generation: int, next_status: str) -> tuple[bool, dict[str, Any], list[str]]:
+    claim = {
+        "schema_version": 1, "kind": "delivery_lead_claim",
+        "logical_delivery_attempt_id": delivery["logical_delivery_attempt_id"],
+        "owner": owner.strip() if action in {"resume", "supersede"} else json.loads(previous_claim.read_text())["owner"],
+        "generation": next_generation, "status": next_status,
+        "charter_digest": delivery["charter_digest"],
+        "supersedes": delivery["lead_claim_digest"],
+    }
+    claim["digest"] = digest(claim)
+    claim_name = f"lead-claim-g{next_generation}-{next_status}.json"
+    claim_relative = f"{previous_relative.rsplit('/', 1)[0]}/{claim_name}"
+    _write_immutable(run_dir / claim_relative, claim)
+    now = _now()
+    next_run = dict(current)
+    next_delivery = dict(delivery)
+    next_delivery.update({
+        "lead_claim_digest": claim["digest"], "owner_generation": next_generation,
+        "owner_status": next_status, "lead_claim_path": claim_relative,
+    })
+    next_run["delivery"] = next_delivery
+    next_run["updated_at"] = now
+    write_atomic(run_path, json.dumps(next_run, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    _append_event(run_dir / "events.jsonl", {
+        "at": now, "event": f"delivery-lead-{action}", "from": status, "to": next_status,
+        "delivery_charter_digest": delivery["charter_digest"], "owner_generation": next_generation,
+    })
+    return True, next_run, []

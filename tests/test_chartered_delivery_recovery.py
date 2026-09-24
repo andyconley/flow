@@ -12,6 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_control import change_lead_claim  # noqa: E402
+import runstate  # noqa: E402
 from delivery_recovery import runtime_outcome  # noqa: E402
 from delivery_projection import inspect_delivery, inspect_delivery_projection  # noqa: E402
 from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery,  # noqa: E402
@@ -139,8 +140,11 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
 
     def test_recovery_refuses_once_lead_claim_generation_is_no_longer_active(self):
         attempt_id = self._interrupted_after_producer()
-        changed, _, errors = change_lead_claim("sample", "supersede", root=self.root, owner="replacement")
-        self.assertTrue(changed, errors)
+        # A lead change now seals the attempt as superseded (AC9.2), so model
+        # a started attempt left behind under an older generation directly.
+        run = json.loads((self.run / "run.json").read_text())
+        run["delivery"]["owner_generation"] = 2
+        (self.run / "run.json").write_text(json.dumps(run))
         self._assert_refused_without_mutation(attempt_id, "lead_generation_inactive")
 
     def test_v8_refuses_continuation_epochs_and_resolve_execution(self):
@@ -155,6 +159,135 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
         self.assertEqual(raised.exception.reason, "v8_resolution_requires_chunk_2")
         self.assertEqual(self._state(attempt_id), before)
 
+
+
+class LeadChangeFenceTests(CharteredFixture):
+    """AC9.2-9.4: a lead change seals, or refuses on uncertainty or a live run."""
+
+    _state = CharteredRecoveryRefusalTests._state
+    _assert_refused_without_mutation = CharteredRecoveryRefusalTests._assert_refused_without_mutation
+
+    def _killed_before_bind(self):
+        def die(*args, **kwargs):
+            raise KillPoint("before the first checkpoint bind")
+
+        with patch.object(ExecutionLedger, "bind_magentic_checkpoint", die), self.assertRaises(KillPoint):
+            self._run_v8([self.PASS])
+        return next((self.run / "execution").glob("*/envelope.json")).parent.name
+
+    def _uncertain_verifier_send(self):
+        def worker(action, *, envelope, workspace):
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            raise OSError("simulated connection reset during verifier send")
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence, assignment_id in enumerate(("editor", "verifier"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                (Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json").write_text(json.dumps(
+                    {"checkpoint_id": proposal["checkpoint_id"], "workflow_name": "flow-magentic-delivery-v8",
+                     "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(result["reason"], "reconciliation_required")
+        return result["attempt_id"]
+
+    def _v7_started_row(self, attempt_id):
+        envelope = json.loads((self.run / "execution" / attempt_id / "envelope.json").read_text())
+        legacy = copy.deepcopy(envelope)
+        legacy["attempt_id"] = "b" * 32
+        legacy["execution_protocol_version"] = 7
+        legacy["limits"].pop("max_verifier_calls")
+        legacy["checkpoint_dir"] = str(self.run / "execution" / legacy["attempt_id"] / "checkpoints")
+        ExecutionLedger(self.run / "execution" / "ledger.sqlite").create_attempt(legacy)
+        return legacy["attempt_id"]
+
+    def _authority(self):
+        """Every byte a lead change may write: run.json, claim files, and the ledger."""
+        files = {str(path.relative_to(self.run)): hashlib.sha256(path.read_bytes()).hexdigest()
+                 for path in sorted(self.run.rglob("*")) if path.is_file() and not path.name.endswith(".lock")}
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
+        attempts = [path.parent.name for path in sorted((self.run / "execution").glob("*/envelope.json"))]
+        return files, [ledger.snapshot(attempt_id) for attempt_id in attempts]
+
+    def _assert_seals(self, action):
+        attempt_id = self._killed_before_bind()
+        v7_id = self._v7_started_row(attempt_id)
+        changed, run, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
+        self.assertTrue(changed, errors)
+        self.assertEqual(run["delivery"]["owner_generation"], 2)
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
+        snapshot = ledger.snapshot(attempt_id)
+        self.assertEqual(snapshot["status"], "superseded")
+        self.assertEqual(json.loads(snapshot["reason"]),
+                         {"action": action, "lead_generation": 1, "successor_generation": 2})
+        self.assertIsNone(snapshot["receipt_path"])
+        self.assertEqual([(item["status"], item["reason"], item["grant_id"]) for item in snapshot["actions"]],
+                         [("not_dispatched", "superseded_unconsumed_grant", None)])
+        self.assertEqual([item["event"] for item in snapshot["events"]][-2:],
+                         ["superseded_grant_released", "attempt_superseded"])
+        self.assertEqual(ledger.snapshot(v7_id)["status"], "started")
+        self._assert_refused_without_mutation(attempt_id, "attempt_terminal")
+
+    def test_lead_resume_seals_the_old_attempt_as_superseded(self):
+        self._assert_seals("resume")
+
+    def test_lead_supersede_seals_the_old_attempt_as_superseded(self):
+        self._assert_seals("supersede")
+
+    def test_lead_resume_or_supersede_is_refused_while_any_action_is_unknown(self):
+        attempt_id = self._uncertain_verifier_send()
+        before = self._authority()
+        for action in ("resume", "supersede"):
+            with self.subTest(action=action):
+                changed, _, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
+                self.assertFalse(changed)
+                self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+        self.assertEqual(self._authority(), before)
+        self.assertEqual(ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
+                         .snapshot(attempt_id)["status"], "started")
+
+    def test_lead_change_fails_closed_on_an_unreadable_ledger(self):
+        self.prepare()
+        (self.run / "execution" / "ledger.sqlite").write_bytes(b"not a sqlite database" * 64)
+        before = self._authority_files()
+        changed, _, errors = change_lead_claim("sample", "supersede", root=self.root, owner="replacement")
+        self.assertFalse(changed)
+        self.assertEqual(errors, ["lead_guard_ledger_unreadable"])
+        self.assertEqual(self._authority_files(), before)
+
+    def _authority_files(self):
+        return {str(path.relative_to(self.run)): path.read_bytes()
+                for path in sorted(self.run.rglob("*")) if path.is_file() and not path.name.endswith(".lock")}
+
+    def test_lead_change_refuses_attempt_running_while_a_live_run_holds_the_lock(self):
+        envelope, _, _, ledger = self.prepare()
+        before = self._authority()
+        with ledger.recovery_lock(envelope["attempt_id"], holder="live"):
+            changed, _, errors = change_lead_claim("sample", "supersede", root=self.root, owner="replacement")
+        self.assertFalse(changed)
+        self.assertEqual(errors, ["attempt_running"])
+        self.assertEqual(self._authority(), before)
+
+    def test_abandonment_succeeds_while_actions_are_unknown(self):
+        attempt_id = self._uncertain_verifier_send()
+        changed, run, errors = change_lead_claim("sample", "release", root=self.root)
+        self.assertTrue(changed, errors)
+        self.assertEqual(run["delivery"]["owner_status"], "released")
+        blocked, run, errors = runstate.apply_transition("sample", "block", note="abandoned: unknown verifier send",
+                                                         root=self.root.resolve())
+        self.assertTrue(blocked, errors)
+        self.assertEqual(run["state"], "blocked")
+        # Abandonment fences no ledger row; the uncertain send stays visible.
+        self.assertEqual(ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
+                         .snapshot(attempt_id)["status"], "started")
 
 
 class RecoveryHarness(CharteredFixture):

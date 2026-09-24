@@ -292,6 +292,62 @@ class ExecutionLedger:
             db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor,execution_protocol_version) VALUES(?,?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, owner_generation, owner_actor, protocol_version))
             self._event(db, envelope["attempt_id"], None, "attempt_started", "")
 
+    def lead_change_blocker(self) -> str | None:
+        """Return the first uncertain action or manager call of any attempt.
+
+        A Delivery Lead resume or supersede must not hand a successor work
+        whose provider outcome is unknown (ADR 0016, the ADR 0014 amendment).
+        """
+        with self._db() as db:
+            for (attempt_id,) in db.execute("SELECT attempt_id FROM attempts ORDER BY rowid").fetchall():
+                blocker = self._unresolved_action(db, attempt_id)
+                if blocker:
+                    return blocker
+        return None
+
+    def started_v8_attempts(self, *, max_lead_generation: int) -> list[str]:
+        """Attempts a lead change at ``max_lead_generation`` would seal as superseded."""
+        with self._db() as db:
+            rows = db.execute("SELECT attempt_id,envelope_json FROM attempts WHERE status='started' "
+                              "AND execution_protocol_version=8 ORDER BY rowid").fetchall()
+        return [attempt_id for attempt_id, envelope_json in rows
+                if json.loads(envelope_json)["delivery_lead_claim"]["generation"] <= max_lead_generation]
+
+    def seal_superseded_attempts(self, work_id: str, *, lead_generation: int, successor_generation: int,
+                                 action: str) -> list[str]:
+        """Seal every started v8 attempt of the outgoing lead generation as superseded.
+
+        Runs before the claim generation changes, so a crash leaves terminal
+        attempts under an unchanged claim and a retry is a no-op seal. v5-v7
+        attempts are never sealed here.
+        """
+        if action not in {"resume", "supersede"} or not 1 <= lead_generation < successor_generation:
+            raise ContractError("superseded seal request is invalid")
+        with self.send_lock():
+            with self._db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                attempts = [row[0] for row in db.execute("SELECT attempt_id FROM attempts ORDER BY rowid")]
+                if any(self._unresolved_action(db, attempt_id) for attempt_id in attempts):
+                    raise RecoveryRefused(RECONCILIATION_REQUIRED, "an uncertain send blocks the Delivery Lead successor")
+                sealed = []
+                rows = db.execute("SELECT attempt_id,envelope_json FROM attempts WHERE work_id=? AND status='started' "
+                                  "AND execution_protocol_version=8 ORDER BY rowid", (work_id,)).fetchall()
+                for attempt_id, envelope_json in rows:
+                    if json.loads(envelope_json)["delivery_lead_claim"]["generation"] > lead_generation:
+                        continue
+                    for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' "
+                                                   "ORDER BY rowid", (attempt_id,)).fetchall():
+                        db.execute("UPDATE actions SET status='not_dispatched',reason='superseded_unconsumed_grant',"
+                                   "grant_id=NULL WHERE action_id=?", (action_id,))
+                        self._event(db, attempt_id, action_id, "superseded_grant_released", "")
+                    reason = canonical({"action": action, "lead_generation": lead_generation,
+                                        "successor_generation": successor_generation})
+                    db.execute("UPDATE attempts SET status='superseded',reason=?,receipt_path=NULL WHERE attempt_id=?",
+                               (reason, attempt_id))
+                    self._event(db, attempt_id, None, "attempt_superseded", reason)
+                    sealed.append(attempt_id)
+                return sealed
+
     def claim_recovery(self, attempt_id: str, actor: str = "flow-recovery") -> int:
         with self.send_lock():
             return self._claim_recovery_locked(attempt_id, actor)
