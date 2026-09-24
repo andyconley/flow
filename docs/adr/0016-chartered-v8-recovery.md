@@ -65,18 +65,28 @@ process-exit side effect. Only one recovery can own an attempt at a time.
 
 ## ADR 0014 amendment (implemented in chunk 1b)
 
-A Delivery Lead `resume` or `supersede` first seals every `started` v7 or v8
-attempt of the outgoing lead generation as terminal `superseded`, fencing its
-owner generation, before the claim generation changes. The lead guard reads
-the ledger: a lead change is refused while any action or manager call is
-`started` or `unknown`, and fails closed when the ledger is unreadable.
-Abandonment remains available.
+A Delivery Lead `resume` or `supersede` first seals every `started` v8
+attempt at or below the outgoing lead generation as terminal `superseded`,
+releasing its unconsumed grants, before the claim generation changes. v5, v6
+and v7 attempts are not sealed; a stale v7 attempt is already fenced at every
+dispatch. The lead guard reads the ledger: a lead change is refused with
+`reconciliation_required` while any action or manager call is `started` or
+`unknown`, and with `lead_guard_ledger_unreadable` when the ledger exists but
+cannot be read. It is also refused with `attempt_running` while a live
+process holds a `started` attempt's `recovery_lock`. That probe runs under
+`run_lock`, inverting the lock order above, but it never waits, so it cannot
+deadlock. `attention`, `release`, and the lifecycle `pause` and `block`
+transitions stay unguarded, so abandonment remains available.
 
 A successor attempt lists its predecessors in its envelope. The list must equal
-the ledger's attempts for the work item exactly, so a successor cannot drop a
-predecessor. Paid worker sends and verifier sends are counted across the
-lineage. `max_manager_calls` stays per attempt, so a successor has a fresh
-manager budget; the first verifier of a successor is not a retry.
+the ledger's v8 attempts for the work item exactly, so a successor cannot drop
+a predecessor, and a predecessor still `started` refuses the successor with
+`sibling_attempt_not_terminal`. A predecessor's lead generation may equal the
+successor's, so retrying after a failed attempt needs no lead change. Paid
+worker sends and verifier sends are counted across the lineage and reported in
+the receipt's `lineage_usage`. `max_manager_calls` stays per attempt, so a
+successor has a fresh manager budget; the first verifier of a successor is not
+a retry.
 
 ## Consequences
 
