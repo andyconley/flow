@@ -348,9 +348,26 @@ def _validate_predecessors(envelope: dict[str, Any]) -> None:
                 or item["terminal_status"] not in PREDECESSOR_TERMINAL_STATUSES
                 or not (_hex_digest(item["receipt_sha256"])
                         or item["receipt_sha256"] is None and item["terminal_status"] == "superseded")
-                or type(item["lead_generation"]) is not int or not 1 <= item["lead_generation"] < generation):
+                or type(item["lead_generation"]) is not int or not 1 <= item["lead_generation"] <= generation):
             raise ContractError("delivery predecessor link is invalid")
         seen.add(item["attempt_id"])
+
+
+def _validate_lineage_usage(envelope: dict[str, Any], receipt: dict[str, Any]) -> dict[str, int]:
+    """A successor receipt reports its predecessors' sends; a first attempt reports none.
+
+    The counts are the ledger's; a receipt can only be checked for shape and
+    for agreeing with its own verifier usage (the ledger stays authoritative).
+    """
+    usage = receipt.get("lineage_usage")
+    if not envelope.get("predecessors"):
+        if "lineage_usage" in receipt:
+            raise ContractError("receipt lineage usage requires predecessors")
+        return {"predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
+    if (not isinstance(usage, dict) or set(usage) != {"predecessor_paid_calls", "predecessor_verifier_sends"}
+            or any(type(value) is not int or value < 0 for value in usage.values())):
+        raise ContractError("receipt lineage usage is invalid")
+    return usage
 
 
 def _validate_recovery_block(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
@@ -939,10 +956,11 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         denied = sum(item["status"] == "denied" and item.get("reason") in {
             "verifier_call_cap", "verifier_retry_denied"} for item in verifier_actions)
         latest = evaluations[-1]["outcome"] if evaluations else None
+        lineage = _validate_lineage_usage(envelope, receipt)
         expected_usage = {"maximum": envelope["limits"]["max_verifier_calls"],
                           "reserved": reserved, "consumed": consumed, "denied": denied,
                           "retry_eligible": latest in {"valid_fail", "unusable"}
-                          and reserved < envelope["limits"]["max_verifier_calls"]}
+                          and reserved + lineage["predecessor_verifier_sends"] < envelope["limits"]["max_verifier_calls"]}
         if usage != expected_usage:
             raise ContractError("structured verifier usage differs from receipt facts")
         _validate_recovery_block(envelope, receipt)

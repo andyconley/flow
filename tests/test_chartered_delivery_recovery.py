@@ -4,6 +4,8 @@ import ast
 import copy
 import hashlib
 import json
+import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -19,7 +21,7 @@ from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_charte
                               recover_delivery, resume_delivery)
 from execution_gateway import resolve_attempt  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, digest, envelope_digest,  # noqa: E402
-                                 expected_manager_call_id)
+                                 expected_manager_call_id, validate_receipt)
 from execution_ledger import ExecutionLedger  # noqa: E402
 from maf_supervisor import MafTransportError  # noqa: E402
 from tests.test_chartered_delivery_gateway import CharteredFixture, KillPoint  # noqa: E402
@@ -290,6 +292,126 @@ class LeadChangeFenceTests(CharteredFixture):
                          .snapshot(attempt_id)["status"], "started")
 
 
+class SuccessorLineageTests(CharteredFixture):
+    """A successor links every earlier v8 attempt and shares its charter caps (R4)."""
+
+    def _reset_worktree(self):
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+
+    def _ledger(self):
+        return ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
+
+    def _seal_caps(self, **limits):
+        self.intent["budget_safety_envelope"]["enforceable"].update(limits)
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+
+    def test_first_attempt_has_no_predecessors_and_a_started_sibling_blocks_prepare(self):
+        envelope, _, _, _ = self.prepare()
+        self.assertNotIn("predecessors", envelope)
+        with self.assertRaises(RecoveryRefused) as raised:
+            self.prepare()
+        self.assertEqual(raised.exception.reason, "sibling_attempt_not_terminal")
+        self.assertEqual(len(list((self.run / "execution").glob("*/envelope.json"))), 1)
+
+    def test_successor_after_supersede_lists_the_superseded_predecessor(self):
+        first, _, _, _ = self.prepare()
+        changed, run, errors = change_lead_claim("sample", "supersede", root=self.root, owner="replacement")
+        self.assertTrue(changed, errors)
+        self.state = run
+        second, _, _, _ = self.prepare()
+        self.assertEqual(second["delivery_lead_claim"]["generation"], 2)
+        self.assertEqual(second["predecessors"], [{"attempt_id": first["attempt_id"], "terminal_status": "superseded",
+                                                   "receipt_sha256": None, "lead_generation": 1}])
+
+    def test_create_attempt_requires_the_exact_lineage(self):
+        result, _, _, captured = self._run_v8([self.FAIL], plan=("editor", "verifier"))
+        self.assertEqual(result["status"], "failed")
+        link = {"attempt_id": result["attempt_id"], "terminal_status": "failed",
+                "receipt_sha256": hashlib.sha256(Path(result["receipt_path"]).read_bytes()).hexdigest(),
+                "lead_generation": 1}
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
+
+        def candidate(attempt_id, predecessors):
+            envelope = copy.deepcopy(captured["envelope"])
+            envelope["attempt_id"] = attempt_id
+            envelope["checkpoint_dir"] = str(self.run / "execution" / attempt_id / "checkpoints")
+            if predecessors is None:
+                envelope.pop("predecessors", None)
+            else:
+                envelope["predecessors"] = predecessors
+            return envelope
+
+        cases = {"dropped": None,
+                 "added": [link, {**link, "attempt_id": "c" * 32}],
+                 "altered status": [{**link, "terminal_status": "completed"}],
+                 "altered digest": [{**link, "receipt_sha256": "0" * 64}]}
+        for index, (label, predecessors) in enumerate(cases.items()):
+            with self.subTest(label=label):
+                with self.assertRaises(RecoveryRefused) as raised:
+                    ledger.create_attempt(candidate(f"{index:032x}", predecessors))
+                self.assertEqual(raised.exception.reason, "predecessor_link_invalid")
+        self.assertEqual(self._ledger().v8_lineage("sample"), ([link], []))
+        ledger.create_attempt(candidate("d" * 32, [link]))
+        self.assertEqual(self._ledger().snapshot("d" * 32)["status"], "started")
+
+    def test_successor_paid_and_verifier_limits_count_predecessor_sends(self):
+        # Verifier cap: two predecessor verifier sends exhaust the sealed cap of two.
+        first, sends, _, _ = self._run_v8([self.FAIL, self.FAIL], plan=("editor", "verifier", "verifier"))
+        self.assertEqual((first["status"], sends), ("failed", ["editor", "verifier", "verifier"]))
+        self._reset_worktree()
+        second, sends, _, captured = self._run_v8([self.PASS], plan=("editor", "verifier"))
+        self.assertEqual(sends, ["editor"], "the verifier cap must deny before the verifier adapter")
+        self.assertEqual(captured["envelope"]["predecessors"][0]["attempt_id"], first["attempt_id"])
+        actions = self._ledger().snapshot(second["attempt_id"])["actions"]
+        self.assertEqual([(item["status"], item["reason"]) for item in actions][-1], ("denied", "verifier_call_cap"))
+        receipt = json.loads(Path(second["receipt_path"]).read_text())
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 2})
+        self.assertFalse(receipt["verifier_usage"]["retry_eligible"])
+        validate_receipt(captured["envelope"], receipt)
+
+        # Paid cap: a new delivery whose charter seals one paid worker call.
+        shutil.rmtree(self.run / "execution")
+        self._reset_worktree()
+        self._seal_caps(max_paid_worker_calls=1)
+        first, sends, _, _ = self._run_v8([self.FAIL], plan=("editor", "verifier"))
+        self.assertEqual((first["status"], sends), ("failed", ["editor", "verifier"]))
+        self._reset_worktree()
+        second, sends, _, _ = self._run_v8([self.PASS], plan=("editor", "verifier"))
+        self.assertEqual(sends, [], "the paid cap must deny before the producer adapter")
+        actions = self._ledger().snapshot(second["attempt_id"])["actions"]
+        self.assertEqual([(item["status"], item["reason"]) for item in actions], [("denied", "paid_call_cap")])
+
+    def test_successor_first_verifier_is_not_a_retry(self):
+        first, _, _, _ = self._run_v8([self.FAIL], plan=("editor", "verifier"))
+        self.assertEqual(first["status"], "failed")
+        self._reset_worktree()
+        second, sends, _, captured = self._run_v8([self.PASS], plan=("editor", "verifier"))
+        self.assertEqual((second["status"], sends), ("completed", ["editor", "verifier"]))
+        self.assertIn(f"Predecessor attempt {first['attempt_id']} ended failed under lead generation 1; "
+                      "its evidence is not reused.", captured["task"])
+        envelope = captured["envelope"]
+        receipt = json.loads(Path(second["receipt_path"]).read_text())
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+        validate_receipt(envelope, receipt)
+        tampered = {"removed": lambda r: r.pop("lineage_usage"),
+                    "negative": lambda r: r["lineage_usage"].update(predecessor_paid_calls=-1),
+                    "extra key": lambda r: r["lineage_usage"].update(note=1),
+                    "retry disagrees": lambda r: r["lineage_usage"].update(predecessor_verifier_sends=0)
+                    or r["verifier_usage"].update(retry_eligible=True)}
+        for label, mutate in tampered.items():
+            with self.subTest(label=label):
+                forged = copy.deepcopy(receipt)
+                mutate(forged)
+                with self.assertRaises(ExecutionContractError):
+                    validate_receipt(envelope, forged)
+        first_receipt = json.loads(Path(first["receipt_path"]).read_text())
+        first_receipt["lineage_usage"] = {"predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
+        first_envelope = json.loads((self.run / "execution" / first["attempt_id"] / "envelope.json").read_text())
+        with self.assertRaisesRegex(ExecutionContractError, "lineage usage requires predecessors"):
+            validate_receipt(first_envelope, first_receipt)
+
+
 class RecoveryHarness(CharteredFixture):
     """Stub MAF that honours restore requests, counting adapters, and kill points."""
 
@@ -471,6 +593,9 @@ class CharteredRecoveryTests(RecoveryHarness):
                 self.sends.clear()
                 self.test_calls = 0
                 (self.worktree / "target.py").write_text("old\n")
+                # Each case is a separate delivery; a same-work successor
+                # would inherit the earlier case's verifier sends.
+                shutil.rmtree(self.run / "execution", ignore_errors=True)
                 count = {"n": 0}
 
                 def nth_call(ledger, *args, target=nth, **kwargs):

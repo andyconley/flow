@@ -28,8 +28,8 @@ from execution_contracts import (
     RECOVERY_INTERRUPTION_CAUSES,
 )
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
-from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, RECONCILIATION_REQUIRED, RECOVERY_IN_PROGRESS,
-                               RecoveryRefused)
+from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, PREDECESSOR_LINK_INVALID, RECONCILIATION_REQUIRED,
+                               RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL, RecoveryRefused)
 
 
 def utc_now() -> str:
@@ -289,8 +289,65 @@ class ExecutionLedger:
             claim = envelope.get("delivery_lead_claim") if protocol_version in {7, 8} else None
             owner_generation = claim["generation"] if isinstance(claim, dict) else 1
             owner_actor = claim["lead_id"] if isinstance(claim, dict) else "initial"
+            if protocol_version == 8:
+                # Re-checked inside the write transaction, so two concurrent
+                # prepares cannot both pass, and a successor cannot drop a
+                # predecessor to evade the lineage limits.
+                lineage, started = self._v8_lineage_locked(db, envelope["work_id"])
+                if started:
+                    raise RecoveryRefused(SIBLING_ATTEMPT_NOT_TERMINAL)
+                if envelope.get("predecessors", []) != lineage:
+                    raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
             db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor,execution_protocol_version) VALUES(?,?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, owner_generation, owner_actor, protocol_version))
             self._event(db, envelope["attempt_id"], None, "attempt_started", "")
+
+    @staticmethod
+    def _v8_lineage_locked(db: sqlite3.Connection, work_id: str) -> tuple[list[dict[str, Any]], list[str]]:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
+        sealed = "sealed_receipt_sha256" if "sealed_receipt_sha256" in columns else "NULL"
+        lineage, started = [], []
+        for attempt_id, status, envelope_json, receipt_path, digest_value in db.execute(
+                f"SELECT attempt_id,status,envelope_json,receipt_path,{sealed} FROM attempts "
+                "WHERE work_id=? AND execution_protocol_version=8 ORDER BY rowid", (work_id,)).fetchall():
+            if status == "started":
+                started.append(attempt_id)
+                continue
+            if digest_value is None and status != "superseded" and receipt_path:
+                # A v8 receipt sealed before the column existed: bind the file.
+                receipt = Path(receipt_path)
+                if receipt.is_file() and not receipt.is_symlink():
+                    digest_value = hashlib.sha256(receipt.read_bytes()).hexdigest()
+            lineage.append({"attempt_id": attempt_id, "terminal_status": status,
+                            "receipt_sha256": None if status == "superseded" else digest_value,
+                            "lead_generation": json.loads(envelope_json)["delivery_lead_claim"]["generation"]})
+        return lineage, started
+
+    def v8_lineage(self, work_id: str) -> tuple[list[dict[str, Any]], list[str]]:
+        """Terminal v8 predecessors of ``work_id`` in creation order, and any still-started v8 attempts."""
+        with self._db() as db:
+            return self._v8_lineage_locked(db, work_id)
+
+    @staticmethod
+    def _lineage_usage(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
+        """Sends the predecessors made, counted against a successor's charter caps."""
+        paid = verifier = 0
+        for item in envelope.get("predecessors", []):
+            row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (item["attempt_id"],)).fetchone()
+            if row is None:
+                raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
+            paid += db.execute(
+                "SELECT count(*) FROM actions WHERE attempt_id=? "
+                "AND json_extract(request_json,'$.provider') IN ('codex','claude') "
+                "AND status IN ('started','completed','failed','unknown')", (item["attempt_id"],)).fetchone()[0]
+            verifier += ExecutionLedger._verifier_consumed(db, item["attempt_id"], json.loads(row[0]))
+        return {"predecessor_paid_calls": paid, "predecessor_verifier_sends": verifier}
+
+    def lineage_usage(self, attempt_id: str) -> dict[str, int]:
+        with self._db() as db:
+            row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None:
+                raise ContractError("attempt missing")
+            return self._lineage_usage(db, json.loads(row[0]))
 
     def lead_change_blocker(self) -> str | None:
         """Return the first uncertain action or manager call of any attempt.
@@ -499,9 +556,11 @@ class ExecutionLedger:
         latest = db.execute("SELECT verifier_evaluations.outcome FROM verifier_evaluations JOIN actions USING(action_id) "
                             "WHERE actions.attempt_id=? ORDER BY verifier_evaluations.evaluated_at DESC, verifier_evaluations.rowid DESC LIMIT 1",
                             (attempt,)).fetchone()
+        lineage = ExecutionLedger._lineage_usage(db, envelope)
+        paid_count += lineage["predecessor_paid_calls"]
         if completed_producer:
             return "producer_already_completed"
-        if is_verifier and verifier_reserved >= limits["max_verifier_calls"]:
+        if is_verifier and verifier_reserved + lineage["predecessor_verifier_sends"] >= limits["max_verifier_calls"]:
             return "verifier_call_cap"
         if is_verifier and verifier_reserved > 0 and (latest is None or latest[0] not in {"valid_fail", "unusable"}):
             return "verifier_retry_denied"
@@ -656,9 +715,17 @@ class ExecutionLedger:
                         "ORDER BY verifier_evaluations.evaluated_at DESC, verifier_evaluations.rowid DESC LIMIT 1",
                         (attempt,),
                     ).fetchone()
+                    # Predecessor sends share the charter caps; the retry rule
+                    # below stays per attempt, so a successor's first verifier
+                    # is not a retry.
+                    lineage = self._lineage_usage(db, envelope)
+                    paid_count += lineage["predecessor_paid_calls"]
+                    verifier_lineage = lineage["predecessor_verifier_sends"]
+                else:
+                    verifier_lineage = 0
                 if completed_producer:
                     reason = "producer_already_completed"
-                elif is_verifier and verifier_reserved >= envelope["limits"]["max_verifier_calls"]:
+                elif is_verifier and verifier_reserved + verifier_lineage >= envelope["limits"]["max_verifier_calls"]:
                     reason = "verifier_call_cap"
                 elif is_verifier and verifier_reserved > 0 and (
                         latest_verifier_outcome is None
@@ -1064,16 +1131,26 @@ class ExecutionLedger:
         rows = db.execute("SELECT action_id,request_json,status,reason FROM actions WHERE attempt_id=?", (attempt_id,)).fetchall()
         verifier_rows = [row for row in rows if json.loads(row[1]).get("instance_id") in verifier_ids]
         reserved = sum(row[2] in {"allowed", "started", "completed", "failed", "unknown"} for row in verifier_rows)
-        consumed = 0
-        for action_id, _, status, _ in verifier_rows:
-            claimed = db.execute("SELECT send_claimed_at FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone()
-            consumed += bool((claimed and claimed[0] is not None) or status in {"completed", "failed", "unknown"})
+        consumed = ExecutionLedger._verifier_consumed(db, attempt_id, envelope)
         denied = sum(row[2] == "denied" and row[3] in {"verifier_call_cap", "verifier_retry_denied"} for row in verifier_rows)
         evaluations = db.execute("SELECT outcome FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at, rowid", (attempt_id,)).fetchall()
         latest = evaluations[-1][0] if evaluations else None
         maximum = envelope["limits"]["max_verifier_calls"]
+        lineage = ExecutionLedger._lineage_usage(db, envelope)["predecessor_verifier_sends"]
         return {"maximum": maximum, "reserved": reserved, "consumed": consumed, "denied": denied,
-                "retry_eligible": latest in {"valid_fail", "unusable"} and reserved < maximum}
+                "retry_eligible": latest in {"valid_fail", "unusable"} and reserved + lineage < maximum}
+
+    @staticmethod
+    def _verifier_consumed(db: sqlite3.Connection, attempt_id: str, envelope: dict[str, Any]) -> int:
+        verifier_ids = set(envelope["job_contract"]["verifier_instance_ids"])
+        consumed = 0
+        for action_id, request_json, status in db.execute(
+                "SELECT action_id,request_json,status FROM actions WHERE attempt_id=?", (attempt_id,)).fetchall():
+            if json.loads(request_json).get("instance_id") not in verifier_ids:
+                continue
+            claimed = db.execute("SELECT send_claimed_at FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone()
+            consumed += bool((claimed and claimed[0] is not None) or status in {"completed", "failed", "unknown"})
+        return consumed
 
     def verifier_usage(self, attempt_id: str) -> dict[str, Any]:
         with self._db() as db:
