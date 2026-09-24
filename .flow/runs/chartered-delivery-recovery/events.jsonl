@@ -7,3 +7,4 @@
 {"artifacts": {}, "at": "2026-09-23T21:13:23Z", "dispositions": {}, "event": "start-implementation", "from": "plan_approved", "to": "implementing"}
 {"artifacts": {"handback": ".flow/runs/chartered-delivery-recovery/HANDOFF.md", "implementation_evidence": ".flow/runs/chartered-delivery-recovery/validation-results.md"}, "at": "2026-09-23T22:25:51Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-24T00:22:56Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
+{"artifacts": {"review": ".flow/runs/chartered-delivery-recovery/review.md"}, "at": "2026-09-24T01:00:29Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}

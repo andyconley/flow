@@ -925,6 +925,69 @@
         "mode": "serialized",
         "group": "review-recheck"
       }
+    },
+    {
+      "id": "implementation-root",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-implementation-root"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery/implementation-handoff.md",
+        ".flow/runs/chartered-delivery-recovery/plan.md",
+        ".flow/runs/chartered-delivery-recovery/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/research/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery/review.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli",
+        "tests",
+        "runtime",
+        "docs/adr/0016-chartered-v8-recovery.md",
+        ".flow/runs/chartered-delivery-recovery/HANDOFF.md",
+        ".flow/runs/chartered-delivery-recovery/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery/validation",
+        ".flow/runs/chartered-delivery-recovery/review.md",
+        ".flow/runs/chartered-delivery-recovery/briefs/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery/briefs/review.md",
+        ".flow/runs/chartered-delivery-recovery/briefs/review-recheck.md",
+        ".flow/runs/chartered-delivery-recovery/research/implement-review.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery/validation-results.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Chunk 1a implemented per plan.md with validation evidence and dispositioned review findings"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "implementation"
+      }
     }
   ],
   "shared_state": [],
@@ -985,10 +1048,21 @@
     ]
   },
   "verification": {
-    "producer_assignments": [],
-    "evidence_collector_assignment": null,
-    "verifier_assignment": "adversarial-architecture",
+    "producer_assignments": [
+      "definition-architecture",
+      "definition-business-analysis",
+      "definition-product",
+      "solution-options",
+      "solution-data",
+      "plan-architecture",
+      "plan-validation",
+      "plan-review-requirements",
+      "plan-review-product",
+      "implementation-root"
+    ],
+    "evidence_collector_assignment": "implementation-root",
+    "verifier_assignment": "review-recheck",
     "independent": true,
-    "artifact_path": ".flow/runs/chartered-delivery-recovery/adversarial-review.md"
+    "artifact_path": ".flow/runs/chartered-delivery-recovery/review.md"
   }
 }
