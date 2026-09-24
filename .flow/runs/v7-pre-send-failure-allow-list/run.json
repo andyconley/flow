@@ -1,0 +1,22 @@
+{
+  "artifacts": {
+    "scout_summary": ".flow/runs/v7-pre-send-failure-allow-list/scout-summary.md"
+  },
+  "created_at": "2026-09-24T02:01:46Z",
+  "dispositions": {
+    "archive_enrichment": "1",
+    "capability_gaps": "n/a",
+    "memory": "n/a"
+  },
+  "gates": {
+    "archive-scout": "2026-09-24T02:01:46Z"
+  },
+  "lane": "scout",
+  "last_event": "archive-scout",
+  "phase": "archived",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "archived",
+  "updated_at": "2026-09-24T02:01:46Z",
+  "work_id": "v7-pre-send-failure-allow-list"
+}
