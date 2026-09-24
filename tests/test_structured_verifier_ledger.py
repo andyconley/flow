@@ -22,7 +22,7 @@ from execution_contracts import (  # noqa: E402
 )
 from execution_ledger import ExecutionLedger  # noqa: E402
 from verifier_contracts import evaluate_candidate  # noqa: E402
-from tests.test_chartered_execution_contract import structured_verifier  # noqa: E402
+from tests.test_chartered_execution_contract import chartered, structured_verifier  # noqa: E402
 
 
 def _action(envelope: dict, sequence: int, assignment: dict, task: str) -> dict:
@@ -186,6 +186,23 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
         self.assertEqual(self.ledger.verifier_usage(retry_env["attempt_id"])["reserved"], 0)
         second = _action(retry_env, 2, retry_env["roster"][0], "Use released verifier allowance.")
         self.assertTrue(self.ledger.decide(retry_env, second, generation=1)["allowed"])
+
+    def test_pre_send_failure_releases_an_unconsumed_grant_on_every_chartered_protocol(self):
+        for version in (6, 7, 8):
+            with self.subTest(protocol=version):
+                env = chartered() if version == 6 else self.envelope()
+                env["attempt_id"] = f"attempt-pre-send-v{version}"
+                if version == 7:
+                    env["execution_protocol_version"] = 7
+                    env["limits"].pop("max_verifier_calls")
+                self.ledger.create_attempt(env)
+                proposal = _action(env, 1, env["roster"][1], "Edit, then fail before dispatch.")
+                grant = self.ledger.decide(env, proposal, generation=1)
+                self.assertTrue(grant["allowed"], grant)
+                self.ledger.close_pre_send_failure(proposal["action_id"], grant["grant_id"], generation=1)
+                action = self.ledger.snapshot(env["attempt_id"])["actions"][0]
+                self.assertEqual((action["status"], action["reason"]), ("not_dispatched", "pre_send_failure"))
+                self.assertFalse(self.ledger.consume_grant(proposal["action_id"], grant["grant_id"], generation=1))
 
     def test_event_order_requires_input_response_completion_then_evaluation(self):
         env = self.envelope()

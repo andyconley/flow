@@ -681,7 +681,7 @@ class ExecutionLedger:
             if row is None:
                 raise ContractError("action missing")
             self._assert_owner(db, row[0], generation)
-            if row[3] not in {3, 4, 5, 6, 8} or row[1] != "allowed" or row[2] != grant_id:
+            if row[3] not in {3, 4, 5, 6, 7, 8} or row[1] != "allowed" or row[2] != grant_id:
                 raise ContractError("action is not an unconsumed mixed grant")
             crossed = db.execute(
                 "SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,),
