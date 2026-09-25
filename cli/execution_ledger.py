@@ -29,7 +29,8 @@ from execution_contracts import (
 )
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
 from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, PREDECESSOR_LINK_INVALID, RECONCILIATION_REQUIRED,
-                               RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL, RecoveryRefused)
+                               RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL, V8_NO_DISPATCH_REGRANT_UNSUPPORTED,
+                               RecoveryRefused)
 
 
 def utc_now() -> str:
@@ -1312,6 +1313,11 @@ class ExecutionLedger:
         attempt_id, action_id = envelope["attempt_id"], action["action_id"]
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
+            protocol = db.execute("SELECT execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if protocol is not None and protocol[0] == 8:
+                # v8 re-grants unconsumed grants during recovery, and a claimed
+                # send is never proven unsent (ADR 0012), so this path is v5 only.
+                raise RecoveryRefused(V8_NO_DISPATCH_REGRANT_UNSUPPORTED)
             self._assert_owner(db, attempt_id, generation)
             stored = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             row = db.execute("SELECT status,request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()

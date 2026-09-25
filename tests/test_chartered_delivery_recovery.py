@@ -162,6 +162,16 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
         self.assertEqual(raised.exception.reason, "v8_resolution_requires_chunk_2")
         self.assertEqual(self._state(attempt_id), before)
 
+    def test_v8_no_dispatch_regrant_is_refused_without_mutation(self):
+        attempt_id = self._interrupted_after_producer()
+        snapshot = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True).snapshot(attempt_id)
+        before = self._state(attempt_id)
+        with self.assertRaises(RecoveryRefused) as raised:
+            ExecutionLedger(self.run / "execution" / "ledger.sqlite").regrant_not_dispatched(
+                snapshot["envelope"], snapshot["actions"][0]["request"], generation=snapshot["owner_generation"])
+        self.assertEqual(raised.exception.reason, "v8_no_dispatch_regrant_unsupported")
+        self.assertEqual(self._state(attempt_id), before)
+
 
 
 class LeadChangeFenceTests(CharteredFixture):
