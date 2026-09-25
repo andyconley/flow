@@ -1,13 +1,17 @@
 """Local Ollama adapter behavior for ordinary and structured-verifier calls."""
 
 import hashlib
+import json
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from local_worker import call_local  # noqa: E402
+from verifier_contracts import VERIFIER_OUTPUT_SCHEMA  # noqa: E402
 
 
 ENVELOPE = {"provider": "ollama", "model": "local-model", "instructions": "verify", "task": "task", "attempt_id": "a"}
@@ -15,6 +19,42 @@ ENVELOPE = {"provider": "ollama", "model": "local-model", "instructions": "verif
 
 def payload(content, model="local-model"):
     return {"model": model, "message": {"role": "assistant", "content": content}}
+
+
+class _Response:
+    status = 200
+
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, _limit):
+        return self.body
+
+
+class OllamaRequestBodyTests(unittest.TestCase):
+    def sent_body(self, *, structured):
+        sent = []
+
+        class Opener:
+            def open(self, request, timeout):
+                sent.append(json.loads(request.data))
+                return _Response(json.dumps(payload("{}")).encode())
+
+        with patch("local_worker.urllib.request.build_opener", return_value=Opener()), \
+             patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("FLOW_OLLAMA_URL", None)
+            call_local(ENVELOPE, structured_verifier=structured)
+        return sent[0]
+
+    def test_only_a_structured_verifier_call_requests_constrained_json(self):
+        self.assertEqual(self.sent_body(structured=True)["format"], VERIFIER_OUTPUT_SCHEMA)
+        self.assertNotIn("format", self.sent_body(structured=False))
 
 
 class StructuredVerifierAdapterTests(unittest.TestCase):

@@ -1,0 +1,14 @@
+gemma4:26b | correct #0 | 17s | valid_pass/accepted_pass | '{"decision": "pass", "findings": [], "schema_version": 1, "summary": "The implementation correctly u'
+gemma4:26b | correct #1 | 8s | valid_pass/accepted_pass | '{\n  "decision": "pass",\n  "findings": [],\n  "schema_version": 1,\n  "summary": "The implementation ac'
+gemma4:26b | correct #2 | 9s | valid_pass/accepted_pass | '{"decision": "pass", "findings": [], "schema_version": 1, "summary": "The implementation correctly u'
+gemma4:26b | wrong #0 | 12s | valid_fail/accepted_fail | '{"decision": "fail", "findings": [{"evidence": "The specification requires the function to return \'H'
+gemma4:26b | wrong #1 | 10s | valid_fail/accepted_fail | '{\n  "decision": "fail",\n  "findings": [\n    {\n      "evidence": "The diff shows the function now ret'
+gemma4:26b | wrong #2 | 8s | valid_fail/accepted_fail | '{"decision": "fail", "findings": [{"evidence": "The specification requires the function to return \'H'
+gemma4:26b: 6/6 usable and correct
+llama3.1:8b | correct #0 | 5s | valid_pass/accepted_pass | '{"decision": "pass", "findings": [], "schema_version": 1, "summary": "Code change to greet.py succes'
+llama3.1:8b | correct #1 | 1s | valid_pass/accepted_pass | '{"decision": "pass", "findings": [{"evidence": "The diff for the greet.py file shows that the return'
+llama3.1:8b | correct #2 | 1s | valid_pass/accepted_pass | '{"decision": "pass", "findings": [], "schema_version": 1, "summary": "Code review pass for greet.py.'
+llama3.1:8b | wrong #0 | 2s | valid_fail/accepted_fail | '{"decision": "fail", "findings": [{"evidence": "The diff shows that the greet() function now returns'
+llama3.1:8b | wrong #1 | 2s | valid_fail/accepted_fail | '{"decision": "fail", "findings": [{"evidence": "The code diff shows that the greet() function return'
+llama3.1:8b | wrong #2 | 1s | valid_fail/accepted_fail | '{"decision": "fail", "findings": [{"evidence": "The diff shows the function return changed from \'Hel'
+llama3.1:8b: 6/6 usable and correct
