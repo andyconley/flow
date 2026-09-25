@@ -1,0 +1,69 @@
+# Mutation checks, chunk 2 (each source file restored from a byte copy; sha256 compared after)
+
+== M1: continuation skips the resolution-binding check
+ERROR: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (entry='resume', case='another action')
+execution_contracts.ContractError: receipt recovery resolutions differ from actions
+ERROR: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (entry='recover', case='another action')
+execution_contracts.ContractError: receipt recovery resolutions differ from actions
+ERROR: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (entry='resume', case='another attempt')
+execution_contracts.ContractError: receipt recovery resolutions differ from actions
+ERROR: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (entry='recover', case='another attempt')
+execution_contracts.ContractError: receipt recovery resolutions differ from actions
+FAIL: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (case='another action')
+AssertionError: Lists differ: ['supervisor'] != []
+FAIL: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (case='another attempt')
+AssertionError: Lists differ: ['supervisor'] != []
+FAIL: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (entry='resume', case='outside the chain')
+AssertionError: RecoveryRefused not raised
+FAIL: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (entry='recover', case='outside the chain')
+AssertionError: RecoveryRefused not raised
+FAIL: test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain (tests.test_chartered_delivery_recovery.ObservedReconcileLedgerTests.test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain) (case='outside the chain')
+AssertionError: Lists differ: ['supervisor'] != []
+Ran 1 test in 0.895s
+FAILED (failures=5, errors=4)
+restored identical: True
+== M2: a resolved action is left re-grantable, so recovery sends it again
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='producer', how='killed')
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='producer', how='raised')
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='verifier', how='killed')
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='verifier', how='raised')
+Ran 1 test in 0.605s
+FAILED (errors=4)
+restored identical: True
+== M3: the v8 no-dispatch regrant guard is removed
+ERROR: test_v8_no_dispatch_regrant_is_refused_without_mutation (tests.test_chartered_delivery_recovery.CharteredRecoveryRefusalTests.test_v8_no_dispatch_regrant_is_refused_without_mutation)
+execution_contracts.ContractError: action is not eligible for no-dispatch regrant
+Ran 1 test in 0.264s
+FAILED (errors=1)
+restored identical: True
+== M4: the resolution is recorded at a bumped generation
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='producer', how='killed')
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='producer', how='raised')
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='verifier', how='killed')
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='verifier', how='raised')
+Ran 1 test in 0.600s
+FAILED (errors=4)
+restored identical: True
+
+== M2 retry: flip the resolved action back to allowed with a fresh grant
+Recovery refused checkpoint_position_unrecoverable (an allowed row with a recorded send), so no resend occurred.
+M2 is not constructible as a single mutation: answer-mode restore, the ledger's replay of completed rows, and eligibility's refusal of an allowed row with a recorded send each block a resend independently. The zero-resend assertion is kept, and now runs before the status assertion.
+
+== Error causes of the first run (captured after the implementation review)
+M2 (first attempt, not_dispatched/recovery_unconsumed_grant): recovery refused checkpoint_position_unrecoverable; no resend occurred.
+M4 (resolution at generation+1): recovery refused resolution_unbound before any seal; the binding check is the guard (the receipt never reads a resolution's generation).
+
+== M2 (two-point): the resolved action is re-armed as an unconsumed grant (status allowed, fresh grant, recorded send erased)
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='producer', how='killed')
+    raise RecoveryRefused(WORKTREE_DRIFT, "worktree differs from the pinned baseline")
+delivery_recovery.RecoveryRefused: worktree_drift: worktree differs from the pinned baseline
+ERROR: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='producer', how='raised')
+    raise RecoveryRefused(WORKTREE_DRIFT, "worktree differs from the pinned baseline")
+delivery_recovery.RecoveryRefused: worktree_drift: worktree differs from the pinned baseline
+FAIL: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='verifier', how='killed')
+AssertionError: 'failed' != 'completed'
+FAIL: test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends (tests.test_chartered_delivery_recovery.BoundaryReconcileTests.test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends) (role='verifier', how='raised')
+AssertionError: 'failed' != 'completed'
+['Ran 1 test in 0.832s', 'FAILED (failures=2, errors=2)']
+restored identical: True
+Reading: the verifier re-send was denied by the verifier limits (no resend; the zero-sends assertion held and the status assertion failed); the producer was refused by worktree drift. With the retry above, a resend of a resolved action is blocked independently by: answer-mode restore, the ledger's replay of completed rows, eligibility's refusal of an allowed row with a recorded send, worktree drift, and the verifier limits. M2 is recorded as an AC11 deviation for the engineer.

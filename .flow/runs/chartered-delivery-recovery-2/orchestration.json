@@ -58,7 +58,7 @@
       ],
       "coordination": {
         "mode": "serialized",
-        "group": "definition"
+        "group": "run-authoring"
       }
     },
     {
@@ -529,6 +529,171 @@
         "mode": "concurrent",
         "group": "plan-review"
       }
+    },
+    {
+      "id": "implementation-root",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-implementation-root"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/implementation-handoff.md",
+        ".flow/runs/chartered-delivery-recovery-2/plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-2/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [
+        "cli",
+        "tests",
+        "docs/adr/0016-chartered-v8-recovery.md",
+        ".flow/runs/chartered-delivery-recovery-2/HANDOFF.md",
+        ".flow/runs/chartered-delivery-recovery-2/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery-2/validation",
+        ".flow/runs/chartered-delivery-recovery-2/review.md",
+        ".flow/runs/chartered-delivery-recovery-2/briefs",
+        ".flow/runs/chartered-delivery-recovery-2/research"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/validation-results.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Chunk 2 implemented per plan.md with validation evidence and dispositioned review findings"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "run-authoring"
+      }
+    },
+    {
+      "id": "implement-review-quality",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-delivery-recovery-2-implement-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/implement-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery-2/plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-2/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/research/implement-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implementation review findings and verdict"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implement-review"
+      }
+    },
+    {
+      "id": "implement-review-security",
+      "lane": "implement",
+      "role": "security-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-security-reviewer-delivery-recovery-2-implement-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/implement-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery-2/plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-2/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/research/implement-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Implementation review findings and verdict"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "implement-review"
+      }
     }
   ],
   "shared_state": [],
@@ -578,9 +743,10 @@
     "producer_assignments": [
       "definition-root",
       "plan-architecture",
-      "plan-validation"
+      "plan-validation",
+      "implementation-root"
     ],
-    "evidence_collector_assignment": "definition-root",
+    "evidence_collector_assignment": "implementation-root",
     "independent": true
   }
 }
