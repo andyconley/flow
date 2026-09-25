@@ -14,18 +14,22 @@
   "gates": {
     "approve-definition": "2026-09-09T17:57:22Z",
     "approve-plan": "2026-09-09T18:00:20Z",
+    "block": "2026-09-25T02:57:40Z",
     "mark-handback-ready": "2026-09-10T01:35:14Z",
     "start-definition": "2026-09-09T17:29:01Z",
     "start-implementation": "2026-09-09T18:00:21Z",
     "start-plan": "2026-09-09T17:57:22Z",
     "start-review": "2026-09-10T01:37:42Z"
   },
-  "lane": "review",
-  "last_event": "start-review",
-  "phase": "reviewing",
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "superseded by role-method-differentiation-repair-3, accepted and released as v0.28.0; closed without its own review",
+  "phase": "blocked",
   "protocol_revision": 2,
+  "return_lane": "review",
+  "return_state": "reviewing",
   "schema_version": 1,
-  "state": "reviewing",
-  "updated_at": "2026-09-10T01:37:42Z",
+  "state": "blocked",
+  "updated_at": "2026-09-25T02:57:40Z",
   "work_id": "role-method-differentiation"
 }

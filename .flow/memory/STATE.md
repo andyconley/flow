@@ -2,14 +2,19 @@
 
 ## Active work
 
-- `chartered-delivery-recovery-1b` is PR #29 (open, CI green); merge it first.
-- `chartered-delivery-recovery-2` accepted and archived on branch
-  `codex/chartered-delivery-recovery-2`, stacked on 1b (not pushed). Next:
-  rebase onto `main` after #29 merges, then push and open its PR with
-  `validation/maf-gated.log` in the body. Run MAF-gated tests with
-  `FLOW_MAF_PYTHON` set.
+- `release-validation-gate` is handback-ready: its release gate shipped and
+  runs on every merge to main. It needs a light acceptance review before
+  archive.
+- Seven superseded runs are blocked, not archived: the Sept 19 MAF runs,
+  `execution-provider-receipt-charter`, and `role-method-differentiation`.
+  Flow has no close-as-superseded transition.
+- Open follow-up: a controlled live Ollama run against the strict v8 verifier
+  contract.
 
 ## Recently completed
+
+- v8 chartered delivery recovery merged and released as v0.35.0 (PRs #26,
+  #29, #30).
 
 - `chartered-delivery-recovery-2` accepted and archived. An interrupted v8
   attempt whose producer or verifier response Flow already stored is completed
