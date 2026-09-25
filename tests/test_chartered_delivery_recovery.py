@@ -1452,10 +1452,11 @@ class BoundaryReconcileTests(ObservedReconcileHarness):
                     resolution = self._route(attempt_id, action_id)
                     self.outputs = [self.PASS] if role == "producer" else []
                     result = self._recover(attempt_id, ("editor", "verifier"))
-                    self.assertEqual(result["status"], "completed", result)
                     # The resolved action is never sent again; only later work is.
+                    # Checked first, so a resend fails here and not on a later assertion.
                     self.assertEqual(self.sends, sends + sent_after)
                     self.assertEqual(self.test_calls, tests + (1 if role == "producer" else 0))
+                    self.assertEqual(result["status"], "completed", result)
                     receipt = self._assert_recovered_receipt(result, mode=result["mode"], cause=cause,
                                                              resolutions=[resolution["resolution_id"]])
                     resolved = next(item for item in receipt["actions"] if item["action_id"] == action_id)
