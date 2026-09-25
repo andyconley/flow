@@ -1296,16 +1296,24 @@ class ExecutionLedger:
                 crossed = db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,)).fetchone()
                 if crossed:
                     raise ContractError("no-dispatch resolution conflicts with dispatch evidence")
-            result_json = None
-            if disposition == "resolved_completed":
-                result_json = db.execute("SELECT result_json FROM response_observations WHERE action_id=?", (action_id,)).fetchone()[0]
-                db.execute("UPDATE actions SET status='completed',result_json=?,reason='operator_resolved_completed' WHERE action_id=?", (result_json, action_id))
-            elif disposition == "resolved_not_dispatched":
-                db.execute("UPDATE actions SET status='not_dispatched',reason='operator_resolved_not_dispatched',grant_id=NULL WHERE action_id=?", (action_id,))
-            resolution_id = uuid.uuid4().hex
-            db.execute("INSERT INTO recovery_resolutions VALUES(?,?,?,?,?,?,?,?,?,?,?)", (resolution_id, attempt_id, action_id, actor, disposition, explanation, canonical(evidence), result_json, record_digest, utc_now(), generation or 0))
-            self._event(db, attempt_id, action_id, "operator_resolution", canonical({"resolution_id": resolution_id, "disposition": disposition, "evidence_digest": hashlib.sha256(canonical(evidence).encode()).hexdigest()}))
+            resolution_id, result_json = self._append_resolution_locked(
+                db, attempt_id, action_id, actor, disposition, explanation, evidence, record_digest, generation or 0)
             return {"resolution_id": resolution_id, **resolved, "result": json.loads(result_json) if result_json else None, "replayed": False}
+
+    def _append_resolution_locked(self, db: sqlite3.Connection, attempt_id: str, action_id: str, actor: str,
+                                  disposition: str, explanation: str, evidence: list[dict[str, Any]],
+                                  record_digest: str, generation: int) -> tuple[str, str | None]:
+        """Apply one operator resolution inside the caller's transaction; history is only appended."""
+        result_json = None
+        if disposition == "resolved_completed":
+            result_json = db.execute("SELECT result_json FROM response_observations WHERE action_id=?", (action_id,)).fetchone()[0]
+            db.execute("UPDATE actions SET status='completed',result_json=?,reason='operator_resolved_completed' WHERE action_id=?", (result_json, action_id))
+        elif disposition == "resolved_not_dispatched":
+            db.execute("UPDATE actions SET status='not_dispatched',reason='operator_resolved_not_dispatched',grant_id=NULL WHERE action_id=?", (action_id,))
+        resolution_id = uuid.uuid4().hex
+        db.execute("INSERT INTO recovery_resolutions VALUES(?,?,?,?,?,?,?,?,?,?,?)", (resolution_id, attempt_id, action_id, actor, disposition, explanation, canonical(evidence), result_json, record_digest, utc_now(), generation))
+        self._event(db, attempt_id, action_id, "operator_resolution", canonical({"resolution_id": resolution_id, "disposition": disposition, "evidence_digest": hashlib.sha256(canonical(evidence).encode()).hexdigest()}))
+        return resolution_id, result_json
 
     def regrant_not_dispatched(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int) -> dict[str, Any]:
         """Re-evaluate one proven-unsent logical action under the same identity."""
