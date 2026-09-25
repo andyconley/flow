@@ -1,0 +1,33 @@
+{
+  "delivery_charter_digest": "ea7d591a2a6b447cdac16a935b7e0bb709ba0a898863ccf3e4c15cc615ed6f5c",
+  "delivery_charter_id": "delivery-247d43939cc11e25c4d3",
+  "digest": "673c84d7d01c863202de64fb4dbf7fe500526f71dd16bc9a6d7c9430ad9d5ce3",
+  "kind": "definition_to_delivery_handoff",
+  "run_id": "shaper-expansion-approval",
+  "schema_version": 1,
+  "shaper_contract_digest": "ca0451ccebf547e7ff885fb08869608e37b7c2f85cd30f14f6f3b8fb766bba58",
+  "shaper_contract_id": "shaper-1c3e06fdaa1415c48c18",
+  "source_digests": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+      "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/shaper-expansion-approval/orchestration.json",
+      "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45"
+    },
+    "requirements": {
+      "path": ".flow/runs/shaper-expansion-approval/requirements.md",
+      "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/shaper-expansion-approval/shaper-intent.json",
+      "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd"
+    },
+    "solution": {
+      "path": ".flow/runs/shaper-expansion-approval/solution.md",
+      "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25"
+    }
+  },
+  "transition": "start-plan"
+}

@@ -1,0 +1,131 @@
+{
+  "problem": "A chartered v8 Delivery Lead that hits a charter limit is denied outright; nobody is asked and nothing records what it wanted.",
+  "intended_users": [
+    "Andy, as Shaper and sole Flow operator."
+  ],
+  "outcomes": [
+    "Expandable limit denials pause the attempt and record a Flow-computed expansion request.",
+    "Requests within sealed charter headroom are auto-approved deterministically; others await an engineer CLI decision.",
+    "The attempt resumes with the grant (Flow re-issues the paused proposal) or with the denial reported."
+  ],
+  "scope": [
+    "Protocol-v8 expansion request, pause, decision, and resume for delegation, paid-call, manager-call, manager-round, and verifier-call limits.",
+    "Lineage-scoped sealed headroom validated against runner ceilings.",
+    "Receipt evidence for every request and decision."
+  ],
+  "exclusions": [
+    "Replan expansion.",
+    "Optional specialist pool.",
+    "Model recommendations.",
+    "Cancellation, diagnostics, MCP decisions.",
+    "Token or dollar caps.",
+    "Live provider runs."
+  ],
+  "constraints": [
+    "No model or provider output grants authority or sets an amount.",
+    "Nothing is sent for a paused proposal until a grant exists.",
+    "ADR 0016 lock order and generation fencing hold."
+  ],
+  "assumptions": [
+    "A Flow-reissued pending action bound to a grant is accepted by the resumed Magentic run (to verify in solutioning)."
+  ],
+  "acceptance_criteria": [
+    "AC1-AC12 in .flow/runs/shaper-expansion-approval/acceptance-criteria.md."
+  ],
+  "risks": [
+    {
+      "risk": "Resume mechanics for a deliberate pause may need runner changes",
+      "owner": "Flow",
+      "status": "owned"
+    },
+    {
+      "risk": "Headroom could be over-spent through replay or concurrency",
+      "owner": "Flow",
+      "status": "owned"
+    }
+  ],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {
+      "role": "lead-developer",
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1
+    },
+    {
+      "role": "test-engineer",
+      "capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 2
+    },
+    {
+      "role": "quality-reviewer",
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1
+    }
+  ],
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "ungranted-provider-dispatch"
+  ],
+  "delegation_matrix": {
+    "max_delegations": 6,
+    "delegated_expansion": false
+  },
+  "approval_matrix": {
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant",
+    "acceptance": "Flow_gate"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 3,
+      "max_replans": 2,
+      "runtime_seconds": 300,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "retries": 1,
+      "max_manager_calls": 12,
+      "max_manager_rounds": 6,
+      "max_paid_worker_calls": 6
+    },
+    "observations": [
+      "provider_usage_when_available"
+    ]
+  },
+  "max_verifier_calls": 2,
+  "boundaries": {
+    "artifact_root": ".flow/runs/shaper-expansion-approval",
+    "worktree_policy": "Flow-bound"
+  },
+  "amendment_lineage": [],
+  "approval_history": [
+    {
+      "event": "approve-definition",
+      "authority": "engineer",
+      "at": "2026-09-25"
+    }
+  ],
+  "next_lane_eligibility": [
+    "solution"
+  ]
+}

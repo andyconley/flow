@@ -1,0 +1,75 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+    "orchestration_manifest": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+    "requirements": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+    "shaper_intent": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+    "solution": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+    "handoff": ".flow/runs/shaper-expansion-approval/implementation-handoff.md",
+    "orchestration_manifest": ".flow/runs/shaper-expansion-approval/orchestration.json",
+    "plan": ".flow/runs/shaper-expansion-approval/plan.md",
+    "requirements": ".flow/runs/shaper-expansion-approval/requirements.md",
+    "shaper_intent": ".flow/runs/shaper-expansion-approval/shaper-intent.json",
+    "solution": ".flow/runs/shaper-expansion-approval/solution.md",
+    "validation_plan": ".flow/runs/shaper-expansion-approval/validation-plan.md"
+  },
+  "created_at": "2026-09-25T21:44:54Z",
+  "delivery": {
+    "charter_digest": "ea7d591a2a6b447cdac16a935b7e0bb709ba0a898863ccf3e4c15cc615ed6f5c",
+    "charter_id": "delivery-247d43939cc11e25c4d3",
+    "delivery_artifact_dir": "delivery/ea7d591a2a6b447cdac16a935b7e0bb709ba0a898863ccf3e4c15cc615ed6f5c",
+    "handoff_digest": "673c84d7d01c863202de64fb4dbf7fe500526f71dd16bc9a6d7c9430ad9d5ce3",
+    "lead_claim_digest": "b02e04aef084173b1bd0481a7abd165a0bb04296d0e785afe206131cd37f83f2",
+    "lead_claim_path": "delivery/ea7d591a2a6b447cdac16a935b7e0bb709ba0a898863ccf3e4c15cc615ed6f5c/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-ea7d591a2a6b447cdac1",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "ca0451ccebf547e7ff885fb08869608e37b7c2f85cd30f14f6f3b8fb766bba58",
+    "shaper_contract_id": "shaper-1c3e06fdaa1415c48c18",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+        "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/shaper-expansion-approval/orchestration.json",
+        "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45"
+      },
+      "requirements": {
+        "path": ".flow/runs/shaper-expansion-approval/requirements.md",
+        "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/shaper-expansion-approval/shaper-intent.json",
+        "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd"
+      },
+      "solution": {
+        "path": ".flow/runs/shaper-expansion-approval/solution.md",
+        "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25"
+      }
+    }
+  },
+  "dispositions": {
+    "risk": "owned"
+  },
+  "gates": {
+    "approve-definition": "2026-09-25T22:04:16Z",
+    "approve-plan": "2026-09-25T22:32:41Z",
+    "approve-solution": "2026-09-25T22:13:40Z",
+    "start-definition": "2026-09-25T21:44:54Z",
+    "start-implementation": "2026-09-25T22:33:13Z",
+    "start-plan": "2026-09-25T22:14:44Z",
+    "start-solution": "2026-09-25T22:05:56Z"
+  },
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "implementing",
+  "updated_at": "2026-09-25T22:33:13Z",
+  "work_id": "shaper-expansion-approval"
+}
