@@ -472,3 +472,17 @@ Status: observed 2 times, promoted from the capability-gap ledger
 a subagent dispatched to assess material blind still inherits ambient user context; isolation checks cover the supplied corpus but nothing bounds what the agent already carries
 
 Proving a headless agent under test saw no ambient instruction files needed an ad hoc positive-control probe; there is no standard for sealing and proving agent-under-test isolation.
+
+### Project Test Command Declaration
+
+Status: observed 5 times, promoted from the capability-gap ledger
+
+No project-level declaration of the canonical test command and interpreter, so each lane rediscovers how to run the suite
+
+Canonical suite command rediscovered again (discover -t . fails; python3.12 required)
+
+The project test command and interpreter had to be restated by hand in every review brief
+
+The project test command, its interpreter variable, and a fail-closed exit check had to be scripted by hand; a piped run once masked a failing suite
+
+No declared project test command with fail-closed failure and skip detection; the suite runner was scripted by hand again
