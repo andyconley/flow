@@ -674,13 +674,13 @@ class RecoveryHarness(CharteredFixture):
             return original(ledger, *args, **kwargs)
         return patch.object(ExecutionLedger, name, wrapper)
 
-    def _assert_recovered_receipt(self, result, *, mode, cause="unmarked_process_exit"):
+    def _assert_recovered_receipt(self, result, *, mode, cause="unmarked_process_exit", resolutions=()):
         receipt = self._receipt(result)
         self.assertEqual(result["mode"], mode)
         self.assertEqual([item["cause"] for item in receipt["recovery"]["interruptions"]], [cause])
         self.assertEqual([(r["expected_generation"], r["generation"], r["mode"]) for r in receipt["recovery"]["recoveries"]],
                          [(1, 2, mode)])
-        self.assertEqual(receipt["recovery"]["resolutions"], [])
+        self.assertEqual(receipt["recovery"]["resolutions"], list(resolutions))
         self.assertEqual(self._ledger().snapshot(result["attempt_id"])["sealed_receipt_sha256"],
                          hashlib.sha256(Path(result["receipt_path"]).read_bytes()).hexdigest())
         return receipt
@@ -1424,6 +1424,101 @@ class V8ResolveRouteTests(ObservedReconcileHarness):
                     resolve_execution("sample", "a" * 32, "b" * 64, "operator", "resolved_completed", "x",
                                       root=self.root, **kwargs)
                 self.assertEqual(raised.exception.reason, reason)
+
+
+class BoundaryReconcileTests(ObservedReconcileHarness):
+    """Chunk 2 AC1, AC7, AC8: boundaries (a), (c), (e) through the operator sequence."""
+
+    _route = V8ResolveRouteTests._route
+
+    def _refused_recovery(self, attempt_id):
+        with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             self.assertRaises(RecoveryRefused) as raised:
+            resume_delivery("sample", attempt_id, root=self.root, supervisor=self._supervisor(("editor", "verifier")),
+                            worker_adapter=self._worker)
+        self.assertEqual(raised.exception.reason, "reconciliation_required")
+
+    def test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends(self):
+        for role, sent_after in (("producer", ["verifier"]), ("verifier", [])):
+            for how, cause in (("killed", "unmarked_process_exit"), ("raised", "reconciliation_required")):
+                with self.subTest(role=role, how=how):
+                    shutil.rmtree(self.run / "execution", ignore_errors=True)
+                    subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                    self.sends, self.outputs, self.test_calls = [], [], 0
+                    attempt_id = self._interrupted(role, how=how)
+                    sends, tests = list(self.sends), self.test_calls
+                    self._refused_recovery(attempt_id)
+                    action_id = self._action(attempt_id, role)["action_id"]
+                    resolution = self._route(attempt_id, action_id)
+                    self.outputs = [self.PASS] if role == "producer" else []
+                    result = self._recover(attempt_id, ("editor", "verifier"))
+                    self.assertEqual(result["status"], "completed", result)
+                    # The resolved action is never sent again; only later work is.
+                    self.assertEqual(self.sends, sends + sent_after)
+                    self.assertEqual(self.test_calls, tests + (1 if role == "producer" else 0))
+                    receipt = self._assert_recovered_receipt(result, mode=result["mode"], cause=cause,
+                                                             resolutions=[resolution["resolution_id"]])
+                    resolved = next(item for item in receipt["actions"] if item["action_id"] == action_id)
+                    self.assertEqual(resolved["reason"], "operator_resolved_completed")
+                    if role == "verifier":
+                        self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["valid_pass"])
+
+    def test_boundary_a_an_unresolved_manager_call_is_abandon_only(self):
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "progress 1"}]}]
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            request = {"schema_version": 1, "attempt_id": envelope["attempt_id"],
+                       "envelope_digest": envelope_digest(envelope), "sequence": 1, "phase": "facts",
+                       "manager_round": 1, "prompt_digest": digest(messages)}
+            on_manager({**request, "call_id": expected_manager_call_id(request), "messages": messages})
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def manager(message, *, envelope, workspace):
+            raise OSError("simulated connection reset during the manager send")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            attempt_id = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                    supervisor=supervisor, manager_adapter=manager)["attempt_id"]
+        [call] = self._ledger().snapshot(attempt_id)["manager_calls"]
+        before = self._state(attempt_id)
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._route(attempt_id, call["call_id"])
+        self.assertEqual(raised.exception.reason, "unresolvable_abandon_only")
+        self.assertEqual(self._state(attempt_id), before)
+        [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
+        self.assertEqual(blocker["kind"], "manager_call")
+        self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
+        changed, run, errors = change_lead_claim("sample", "release", root=self.root)
+        self.assertTrue(changed, errors)
+
+    def test_a_lead_change_succeeds_once_every_uncertain_action_is_resolved(self):
+        attempt_id = self._interrupted("verifier")
+        changed, _, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
+        self.assertFalse(changed)
+        self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+        self._route(attempt_id, self._action(attempt_id, "verifier")["action_id"])
+        changed, run, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
+        self.assertTrue(changed, errors)
+        self.assertEqual(self._ledger().snapshot(attempt_id)["status"], "superseded")
+
+    def test_receipt_validation_rejects_an_added_or_removed_resolution(self):
+        from execution_contracts import validate_receipt
+
+        attempt_id = self._interrupted("verifier")
+        self._route(attempt_id, self._action(attempt_id, "verifier")["action_id"])
+        result = self._recover(attempt_id, ("editor", "verifier"))
+        receipt = self._receipt(result)
+        envelope = self._ledger().snapshot(attempt_id)["envelope"]
+        validate_receipt(envelope, receipt)
+        for label, mutate in (("added", lambda r: r["recovery"]["resolutions"].append("0" * 32)),
+                              ("removed", lambda r: r["recovery"]["resolutions"].pop())):
+            with self.subTest(case=label):
+                forged = copy.deepcopy(receipt)
+                mutate(forged)
+                with self.assertRaises(ExecutionContractError):
+                    validate_receipt(envelope, forged)
 
 
 if __name__ == "__main__":
