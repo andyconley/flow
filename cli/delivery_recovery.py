@@ -138,7 +138,9 @@ def paused_expansion(snapshot: dict[str, Any]) -> dict[str, Any] | None:
     order = (lambda item: item["request"]["sequence"]) if request["kind"] == "delegate" else (lambda item: item["sequence"])
     latest = max(rows, key=order)
     row_id = latest["action_id"] if request["kind"] == "delegate" else latest["call_id"]
-    if row_id != request["denied_row_id"] or latest["status"] != "denied":
+    # A row whose send grant expired after its unit was spent is a runtime
+    # failure, not a pause; ordinary recovery seals it.
+    if row_id != request["denied_row_id"] or latest["status"] != "denied" or latest["reason"] == "grant_expired":
         return None
     return request
 
@@ -227,15 +229,16 @@ def _expansion_eligibility(result: dict[str, Any], envelope: dict[str, Any], sna
     blocker = lambda reason: [{"id": paused["request_id"], "kind": "expansion_request", "status": paused["status"],
                                "reason": reason, "evidence_needed": EVIDENCE_NEEDED[reason]}]
     refuse = lambda reason, blockers: {**result, "reason": reason, "blockers": blockers, "expansion": paused}
-    if paused["status"] not in {"granted", "denied"}:
-        return refuse(EXPANSION_DECISION_REQUIRED, blocker(EXPANSION_DECISION_REQUIRED))
     links = snapshot.get("magentic_checkpoints", [])
     worker_link = lambda action_id: next((item for item in links if item["pending_kind"] == "worker"
                                           and item["pending_id"] == action_id), None)
+    if paused["kind"] == "delegate" and worker_link(paused["denied_row_id"]) is None:
+        # Checked before asking for a decision that could never resume.
+        return refuse(RECONCILIATION_REQUIRED, blocker("expansion_unbound"))
+    if paused["status"] not in {"granted", "denied"}:
+        return refuse(EXPANSION_DECISION_REQUIRED, blocker(EXPANSION_DECISION_REQUIRED))
     if paused["kind"] == "delegate":
         link = worker_link(paused["denied_row_id"])
-        if link is None:
-            return refuse(RECONCILIATION_REQUIRED, blocker("expansion_unbound"))
         return {**result, "recoverable": True, "mode": "pending", "action_id": paused["denied_row_id"],
                 "checkpoint": link, "expansion": paused}
     denied = next(item for item in snapshot.get("manager_calls", []) if item["call_id"] == paused["denied_row_id"])
@@ -243,7 +246,7 @@ def _expansion_eligibility(result: dict[str, Any], envelope: dict[str, Any], sna
         # No Flow text can answer a refused manager call (E5): seal as failed.
         return {**result, "recoverable": True, "mode": "seal", "expansion": paused, "expansion_failure": denied["reason"]}
     if any(item["status"] != "completed" for item in snapshot.get("manager_calls", []) if item is not denied):
-        return refuse(CHECKPOINT_POSITION_UNRECOVERABLE, blocker(EXPANSION_DECISION_REQUIRED))
+        return refuse(CHECKPOINT_POSITION_UNRECOVERABLE, blocker(CHECKPOINT_POSITION_UNRECOVERABLE))
     actions = snapshot.get("actions", [])
     if not actions:
         # Before any worker checkpoint the child restarts on the identical

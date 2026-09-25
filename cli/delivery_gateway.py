@@ -1503,6 +1503,15 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
+            if structured_verifier and not decision.get("replayed"):
+                # Bind the denied position so a later manager pause can resume
+                # from it in answer mode; nothing was granted or sent.
+                checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
+                if checkpoint_path.is_file() and not checkpoint_path.is_symlink():
+                    with authority_guard():
+                        high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+                        ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
+                                                        high_water, str(checkpoint_path), generation=generation)
             return denied_reply(action["action_id"], decision["reason"])
         provider_action = action
         if is_verifier:
@@ -1656,6 +1665,10 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                   hook: Callable[[str], None]) -> dict[str, Any]:
     """Build, validate, write, and seal an attempt receipt under the owner fence."""
     aid = envelope["attempt_id"]
+    if envelope["execution_protocol_version"] == 8:
+        # A sealed attempt keeps no open request or unused grant.
+        with authority_guard(), ledger.send_lock():
+            ledger.close_expansions(aid, "sealed", generation=generation)
     receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
                                                edit_evidence=edit_evidence, test_evidence=test_evidence,
                                                verifier_input_sha256=verifier_input_sha256,

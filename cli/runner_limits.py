@@ -24,3 +24,10 @@ MAX_ACTIONS: int = _module.MAX_ACTIONS
 MAX_VERIFIER_CALLS: int = _module.MAX_VERIFIER_CALLS
 MAX_CONCURRENT: int = _module.MAX_CONCURRENT
 MAX_REPLANS: int = _module.MAX_REPLANS
+
+for _name in ("MAX_MANAGER_CALLS", "MAX_MANAGER_ROUNDS", "MAX_ACTIONS", "MAX_VERIFIER_CALLS", "MAX_CONCURRENT", "MAX_REPLANS"):
+    _value = globals()[_name]
+    if type(_value) is not int or _value < 1:
+        raise ImportError(f"runner limit {_name} must be a positive integer")
+if MAX_VERIFIER_CALLS > 2:
+    raise ImportError("runner verifier ceiling exceeds the ADR 0015 bound of two")

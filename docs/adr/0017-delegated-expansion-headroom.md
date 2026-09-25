@@ -103,6 +103,17 @@ started ──expandable denial──▶ auto-grant within headroom ──▶ st
    supersede/release while pending ──▶ request cancelled, unused grants lapsed
 ```
 
+## Refinements made during implementation and review
+
+- **A unit past a runner ceiling is never requested.** If a limit's next unit would pass its ceiling, the denial stays terminal, because that unit could never be granted. The same applies when a limit needs more than one unit, or when a hard predicate also fails.
+- **Ceilings on the combined limit.** Sealing bounds base + headroom by the ceilings, and it requires paid base + paid headroom ≤ delegations base + delegation headroom. `decide-expansion` can still refuse on a ceiling, but only when unused engineer grants already hold the remaining units. Automatic grants count those held units too.
+- **Every denied v8 worker proposal binds its checkpoint.** This covers hard denials as well as expansion pauses, so a later manager pause can resume in answer mode with the recorded denial. A binding is a restore position only and never a grant.
+- **The seal closes open expansions.** Sealing cancels pending requests and lapses unused grants. A sealed receipt with an open request or grant is invalid.
+- **An expired send grant is not a pause.** If a spent unit's send grant expires, that is a runtime failure: ordinary recovery seals it and the unit stays spent.
+- **Decisions queue.** A `decide` holder waits up to 10 seconds on another `decide` holder, so that the loser of a concurrent decision sees `expansion_already_decided`. A `live` or `recovery` holder is still refused at once. A stale holder name can make a decide wait out those 10 seconds and then refuse.
+- **What a receipt proves.** A receipt proves its expansion only together with the ledger's `sealed_receipt_sha256`. The seal compares the whole block with the ledger. The block carries the lineage once, not on each grant, because an attempt belongs to exactly one lineage. Predecessor totals are checked at seal time.
+- **Headroom remaining is read live.** It is computed from the ledger (`expansion_state`) and not stored on the request.
+
 ## Consequences
 
 - Replay identity depends on the pinned MAF version. A MAF-gated regression

@@ -411,6 +411,15 @@ class ExecutionLedger:
         return {name: value + (lineage if name in LINEAGE_SCOPED_LIMITS else own)[name] for name, value in base.items()}
 
     @staticmethod
+    def _outstanding_units(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
+        """Units held by approved, not yet consumed grants in each counter's scope."""
+        lineage, own = ExecutionLedger._lineage_attempts(envelope), [envelope["attempt_id"]]
+        held = {scope: {key: ExecutionLedger._granted_units(db, attempts, consumed_only=False)[key]
+                        - ExecutionLedger._granted_units(db, attempts)[key] for key in EXPANSION_LIMIT_KEYS}
+                for scope, attempts in (("lineage", lineage), ("own", own))}
+        return {name: held["lineage" if name in LINEAGE_SCOPED_LIMITS else "own"][name] for name in EXPANSION_LIMIT_KEYS}
+
+    @staticmethod
     def _headroom_remaining(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
         """Sealed headroom minus every automatic grant in the lineage; never refilled."""
         spent = ExecutionLedger._granted_units(db, ExecutionLedger._lineage_attempts(envelope),
@@ -438,7 +447,9 @@ class ExecutionLedger:
         owner = db.execute("SELECT owner_generation FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()[0]
         effective = ExecutionLedger._effective_limits(db, envelope)
         remaining = ExecutionLedger._headroom_remaining(db, envelope)
-        automatic = all(remaining[name] >= 1 and effective[name] + 1 <= EXPANSION_LIMIT_KEYS[name][1] for name in limits)
+        outstanding = ExecutionLedger._outstanding_units(db, envelope)
+        automatic = all(remaining[name] >= 1 and effective[name] + outstanding[name] + 1 <= EXPANSION_LIMIT_KEYS[name][1]
+                        for name in limits)
         now = utc_now()
         db.execute("INSERT INTO expansion_requests VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                    (request_id, lineage_id, attempt, owner, kind, row_id, canonical(sorted(limits)), 1,
@@ -700,6 +711,12 @@ class ExecutionLedger:
         with self._db() as db:
             return self._open_expansion_attempts(db, work_id)
 
+    def close_expansions(self, attempt_id: str, cause: str, *, generation: int) -> None:
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            self._close_expansions_locked(db, attempt_id, cause)
+
     def release_expansions(self, work_id: str, *, expected: list[str]) -> list[str]:
         """Close every open expansion of the released lead's started v8 attempts, in one transaction."""
         with self._db() as db:
@@ -745,11 +762,7 @@ class ExecutionLedger:
             envelope, limits = json.loads(row[0]), json.loads(request[1])
             if approve:
                 effective = self._effective_limits(db, envelope)
-                lineage = self._lineage_attempts(envelope)
-                outstanding = {name: self._granted_units(db, lineage if name in LINEAGE_SCOPED_LIMITS else [attempt_id],
-                                                         consumed_only=False)[name]
-                               - self._granted_units(db, lineage if name in LINEAGE_SCOPED_LIMITS else [attempt_id])[name]
-                               for name in limits}
+                outstanding = self._outstanding_units(db, envelope)
                 if any(effective[name] + outstanding[name] + 1 > EXPANSION_LIMIT_KEYS[name][1] for name in limits):
                     raise RecoveryRefused(EXPANSION_CEILING_EXCEEDED)
             decided_at = utc_now()
@@ -1954,10 +1967,9 @@ class ExecutionLedger:
                 raise ContractError("Magentic attempt is absent or closed")
             table, key = ("manager_calls", "call_id") if pending_kind == "manager" else ("actions", "action_id")
             proposal = db.execute(f"SELECT status,request_json FROM {table} WHERE attempt_id=? AND {key}=?", (attempt_id, pending_id)).fetchone()
-            # A denied worker proposal is bound only while it awaits an
-            # expansion decision; the link is a restore position, never a grant.
-            awaiting = (proposal is not None and proposal[0] == "denied" and pending_kind == "worker"
-                        and (self._expansion_for(db, attempt_id, "delegate", pending_id) or {}).get("status") == "pending")
+            # A denied v8 worker proposal is bound as a restore position only
+            # (an expansion pause, or an answer-mode resume); never a grant.
+            awaiting = proposal is not None and proposal[0] == "denied" and pending_kind == "worker" and attempt[1] == 8
             if proposal is None or (proposal[0] not in {"allowed", "started", "completed"} and not awaiting):
                 raise ContractError("Magentic checkpoint has no authorized proposal")
             high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]

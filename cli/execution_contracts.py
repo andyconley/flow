@@ -425,6 +425,8 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
         generations = {envelope["delivery_lead_claim"]["generation"]} | {
             item.get("generation") for item in recovery.get("recoveries", []) if isinstance(item, dict)}
         spent = dict(block["predecessor_headroom_spent"])
+        if any(spent[name] > block["headroom"][name] for name in names):
+            raise ContractError("receipt automatic expansion exceeds sealed headroom")
         for name, value in block["predecessor_lineage_grants"].items():
             effective[name] += value
         headroom = block["headroom"]
@@ -442,6 +444,9 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
                     or (request["kind"] == "delegate") != (request["denied_row_id"] in {item["action_id"] for item in receipt["actions"]})):
                 raise ContractError("receipt expansion request is invalid")
             seen.add(request["request_id"])
+            if request["status"] == "pending" or (grant or {}).get("status") == "available":
+                # Sealing closes every open request and unused grant.
+                raise ContractError("receipt keeps an open expansion request or grant")
             if grant is None:
                 if request["status"] not in {"pending", "cancelled"}:
                     raise ContractError("receipt expansion decision is missing its grant")
@@ -466,7 +471,9 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
             elif grant["authority"] != "engineer" or not isinstance(grant["actor"], str) or not grant["actor"].strip():
                 raise ContractError("receipt expansion grant authority is invalid")
             if grant["status"] == "consumed":
-                if rows[grant["consumed_by"]]["status"] == "denied":
+                row = rows[grant["consumed_by"]]
+                # A spent unit whose send grant then expired stays spent.
+                if row["status"] == "denied" and row.get("reason") != "grant_expired":
                     raise ContractError("receipt consumed expansion grant left its proposal denied")
                 backed.add(grant["consumed_by"])
                 for name in request["limits"]:

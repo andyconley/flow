@@ -81,8 +81,23 @@ class ReceiptExpansionValidationTests(ExpansionGatewayFixture):
 
     def test_receipt_rejects_expansion_granted_without_grant(self):
         def detach(receipt):
-            self.grant(receipt).update(status="available", consumed_by=None)
-        self.assertRejected(detach, "invalid")
+            self.grant(receipt).update(authority="engineer", actor="andy", status="lapsed", consumed_by=None)
+        self.assertRejected(detach, "lacks a consumed grant")
+
+    def test_receipt_rejects_an_open_request_or_unused_grant(self):
+        self.assertRejected(lambda receipt: self.grant(receipt).update(
+            authority="engineer", actor="andy", status="available", consumed_by=None), "open expansion")
+        def pending(receipt):
+            receipt["expansion"]["requests"][0].update(status="pending", grant=None)
+        self.assertRejected(pending, "open expansion")
+
+    def test_receipt_accepts_a_spent_unit_whose_send_grant_expired(self):
+        def expire(receipt):
+            row = next(item for item in receipt["actions"] if item["action_id"] == self.grant(receipt)["consumed_by"])
+            row.update(status="denied", reason="grant_expired")
+        receipt = self.tampered(expire)
+        from execution_contracts import _validate_expansion
+        self.assertEqual(_validate_expansion(self.envelope, receipt)["delegations"], 3)
 
 
 class VerifierExpansionReceiptTests(ExpansionGatewayFixture):

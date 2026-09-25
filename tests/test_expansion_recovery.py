@@ -125,11 +125,29 @@ class WorkerExpansionRecoveryTests(ExpansionRecoveryFixture):
             self.decide(self.attempt, self.request, approve=True)
         self.assertEqual(raised.exception.reason, "expansion_already_decided")
 
-    def test_denial_then_completion_within_the_charter(self):
+    def test_denial_then_the_attempt_seals_within_the_charter(self):
+        # With the retry refused, the only verdict is the earlier failing review:
+        # the attempt finishes as a sealed, valid failed receipt, not a pause.
         self.decide(self.attempt, self.request, approve=False)
         result = self.recover(self.attempt, self.resume_plan([]), worker=self.worker)
-        self.assertIn(result["status"], {"completed", "failed"})
-        self.assertNotEqual(result["status"], "expansion_paused")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(self.ledger().snapshot(self.attempt)["status"], "failed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["expansion"]["requests"][0]["status"], "denied")
+
+    # Q2: a seal closes an approved grant the run never used.
+    def test_a_failed_resume_seals_and_lapses_the_unused_grant(self):
+        self.decide(self.attempt, self.request, approve=True)
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            raise RuntimeError("the restored child failed before replaying the proposal")
+
+        result = self.recover(self.attempt, supervisor, worker=self.worker)
+        self.assertEqual(result["status"], "failed", result)
+        [request] = self.ledger().expansion_state(self.attempt)["requests"]
+        self.assertEqual((request["status"], request["grant"]["status"]), ("granted", "lapsed"))
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["expansion"]["requests"][0]["grant"]["status"], "lapsed")
 
     # AC6/M7: an undecided pause is not resumable.
     def test_a_pending_request_refuses_recovery(self):
@@ -198,6 +216,46 @@ class ManagerExpansionRecoveryTests(ExpansionRecoveryFixture):
         self.assertEqual((result["mode"], result["status"]), ("seal", "failed"))
         self.assertIn("manager_call_cap", result["reason"])
         self.assertEqual(sends, [1])
+
+    # Q1: a hard worker denial binds its position, so a later manager pause resumes from it.
+    def test_manager_pause_after_a_hard_worker_denial_resumes_in_answer_mode(self):
+        sends: list[int] = []
+        replies: list[dict] = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            self.run_manager(envelope, on_manager, (1,))
+            for sequence in (1, 2):  # the editor again after completing: producer_already_completed
+                proposal = self._proposal(envelope, "editor", sequence)
+                self.checkpoint(envelope, proposal)
+                replies.append(on_action(proposal))
+            self.run_manager(envelope, on_manager, (2,))
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def manager(message, *, envelope, workspace):
+            sends.append(message["sequence"])
+            return {"output": "Fixture facts"}
+
+        def worker(action, *, envelope, workspace):
+            (workspace / "target.py").write_text("new\n")
+            return self._result("codex", "editor-model", "Edited target")
+
+        paused = self.execute(supervisor, worker=worker, manager=manager)
+        self.assertEqual(paused["status"], "expansion_paused", paused)
+        self.assertEqual(replies[1]["reason"], "producer_already_completed")
+        self.decide(paused["attempt_id"], paused["request_id"], approve=True)
+        seen = {}
+
+        def resumed(envelope, task, on_manager, on_action, **kwargs):
+            seen["resume"] = kwargs["resume"]
+            self.run_manager(envelope, on_manager, (2,))
+            return {"attempt_id": envelope["attempt_id"]}
+
+        result = self.recover(paused["attempt_id"], resumed, worker=worker, manager=manager)
+        self.assertEqual(result["mode"], "answer")
+        self.assertEqual(seen["resume"]["result"], {"status": "denied", "action_id": replies[1]["action_id"],
+                                                    "reason": "producer_already_completed",
+                                                    "summary": "Flow denied this specialist call"})
+        self.assertEqual(sends, [1, 2])
 
     # AC6 (answer mode): after a worker checkpoint, restore from it and replay the denied call.
     def test_approved_manager_call_after_a_worker_checkpoint_resumes_in_answer_mode(self):
