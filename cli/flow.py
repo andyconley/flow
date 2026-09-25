@@ -52,9 +52,9 @@ from runstate import (  # noqa: E402
     cmd_transition as run_transition_command,
     cmd_verify as run_verify_command,
 )
-from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resolve_attempt, resume_local  # noqa: E402
+from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
-from delivery_gateway import execute_chartered_delivery, execute_delivery, recover_delivery, resume_delivery  # noqa: E402
+from delivery_gateway import execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
@@ -608,7 +608,9 @@ def main() -> int:
     run_resolve_parser.add_argument("--actor", required=True)
     run_resolve_parser.add_argument("--disposition", required=True, choices=("resolved_completed", "resolved_not_dispatched", "still_unknown"))
     run_resolve_parser.add_argument("--explanation", required=True)
-    run_resolve_parser.add_argument("--evidence-file", required=True)
+    run_resolve_parser.add_argument("--evidence-file", help="attempt-local evidence list (v5-v7; refused for v8)")
+    run_resolve_parser.add_argument("--expected-generation", type=int,
+                                    help="ledger owner generation shown by inspect-delivery (required for v8)")
     run_resolve_parser.add_argument("--json", action="store_true")
 
     run_continue_parser = run_sub.add_parser("continue-resolved-execution", help="continue one evidence-resolved third action through a fenced local MAF epoch")
@@ -1047,10 +1049,12 @@ def main() -> int:
             if args.run_target == "resume-execution":
                 result = resume_local(args.work_id, args.attempt_id)
             else:
-                result = resolve_attempt(args.work_id, args.attempt_id, args.action_id, args.actor,
-                                         args.disposition, args.explanation, args.evidence_file)
+                result = resolve_execution(args.work_id, args.attempt_id, args.action_id, args.actor,
+                                           args.disposition, args.explanation, args.evidence_file,
+                                           args.expected_generation)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
-            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"execution recovery refused: {exc}")
+            print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
+                  if args.json else f"execution recovery refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True, indent=2))
         return 0 if result.get("status") in {"replayed", "repaired", "read_only"} or args.run_target == "resolve-execution" else 1

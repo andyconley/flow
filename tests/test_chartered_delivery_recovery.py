@@ -18,7 +18,7 @@ from delivery_control import change_lead_claim  # noqa: E402
 import runstate  # noqa: E402
 from delivery_recovery import runtime_outcome  # noqa: E402
 from delivery_projection import inspect_delivery, inspect_delivery_projection  # noqa: E402
-from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery,  # noqa: E402
+from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery, resolve_execution,  # noqa: E402
                               recover_delivery, resume_delivery)
 from execution_gateway import resolve_attempt  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, digest, envelope_digest,  # noqa: E402
@@ -1069,12 +1069,17 @@ class CharteredRecoveryTests(RecoveryHarness):
 class CharteredRecoveryEntryTests(unittest.TestCase):
     """AC2: recovery runs only from the operator commands, never from a timer, expiry, or exit."""
 
-    ENTRY_POINTS = {"resume_delivery", "recover_delivery", "_resume_chartered", "claim_chartered_recovery"}
+    ENTRY_POINTS = {"resume_delivery", "recover_delivery", "_resume_chartered", "claim_chartered_recovery",
+                    "resolve_execution", "_resolve_chartered", "resolve_observed_v8"}
     ALLOWED = {
         "claim_chartered_recovery": {"cli/delivery_gateway.py:_resume_chartered"},
         "_resume_chartered": {"cli/delivery_gateway.py:resume_delivery", "cli/delivery_gateway.py:recover_delivery"},
         "resume_delivery": {"cli/delivery_gateway.py:recover_delivery", "cli/flow.py:main"},
         "recover_delivery": {"cli/flow.py:main"},
+        # Chunk 2: an operator resolution runs only from resolve-execution.
+        "resolve_observed_v8": {"cli/delivery_gateway.py:_resolve_chartered"},
+        "_resolve_chartered": {"cli/delivery_gateway.py:resolve_execution"},
+        "resolve_execution": {"cli/flow.py:main"},
     }
 
     def _references(self):
@@ -1104,7 +1109,7 @@ class CharteredRecoveryEntryTests(unittest.TestCase):
         self.assertEqual(self._references(), self.ALLOWED)
         # main is allowed as a whole, so each entry may be loaded there only once:
         # a second load (a timer or atexit hook inside main) fails here.
-        for name in ("resume_delivery", "recover_delivery"):
+        for name in ("resume_delivery", "recover_delivery", "resolve_execution"):
             self.assertEqual(self.counts[f"{name}@cli/flow.py:main"], 1, name)
 
     def test_the_cli_reaches_recovery_only_through_its_two_named_subcommands(self):
@@ -1195,8 +1200,8 @@ class CharteredRecoveryInspectionTests(RecoveryHarness):
         self.assertTrue(view["recovery"]["blockers"][0]["evidence_needed"].startswith("none; abandon"))
 
 
-class ObservedReconcileLedgerTests(RecoveryHarness):
-    """Chunk 2: a v8 action is resolved only from Flow's stored response observation."""
+class ObservedReconcileHarness(RecoveryHarness):
+    """Attempts left observed but not completed, for the chunk 2 reconcile tests."""
 
     _state = CharteredRecoveryRefusalTests._state
     _assert_refused_without_mutation = CharteredRecoveryRefusalTests._assert_refused_without_mutation
@@ -1232,6 +1237,10 @@ class ObservedReconcileLedgerTests(RecoveryHarness):
         options = {"expected_generation": self._ledger().snapshot(attempt_id)["owner_generation"], **kwargs}
         return ExecutionLedger(self.run / "execution" / "ledger.sqlite").resolve_observed_v8(
             attempt_id, action_id, "operator", "stored response observed before completion", **options)
+
+
+class ObservedReconcileLedgerTests(ObservedReconcileHarness):
+    """Chunk 2: a v8 action is resolved only from Flow's stored response observation."""
 
     def test_an_observed_started_or_unknown_action_resolves_at_the_current_generation(self):
         for role in ("producer", "verifier"):
@@ -1343,6 +1352,78 @@ class ObservedReconcileLedgerTests(RecoveryHarness):
             self._resolve(result["attempt_id"], self._action(result["attempt_id"], "producer")["action_id"])
         self.assertEqual(raised.exception.reason, "attempt_terminal")
         self.assertEqual(self._state(result["attempt_id"]), before)
+
+
+class V8ResolveRouteTests(ObservedReconcileHarness):
+    """Chunk 2 AC3 and AC12: the fenced v8 resolve-execution route."""
+
+    def _route(self, attempt_id, action_id, **overrides):
+        arguments = {"disposition": "resolved_completed", "evidence_file": None,
+                     "expected_generation": self._ledger().snapshot(attempt_id)["owner_generation"], **overrides}
+        return resolve_execution("sample", attempt_id, action_id, "operator", arguments.pop("disposition"),
+                                 "stored response observed before completion", root=self.root, **arguments)
+
+    def _refused(self, attempt_id, reason, **kwargs):
+        before = self._state(attempt_id)
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._route(attempt_id, kwargs.pop("action_id"), **kwargs)
+        self.assertEqual(raised.exception.reason, reason)
+        self.assertEqual(self._state(attempt_id), before)
+
+    def test_the_route_resolves_an_observed_action_and_refuses_each_case_without_mutation(self):
+        attempt_id = self._interrupted("verifier")
+        verifier = self._action(attempt_id, "verifier")["action_id"]
+        producer = self._action(attempt_id, "producer")["action_id"]
+        evidence = self.run / "execution" / attempt_id / "evidence.json"
+        cases = (("evidence file", "v8_evidence_file_refused", {"evidence_file": str(evidence)}),
+                 ("no expected generation", "expected_generation_required", {"expected_generation": None}),
+                 ("not dispatched", "v8_disposition_unsupported", {"disposition": "resolved_not_dispatched"}),
+                 ("still unknown", "v8_disposition_unsupported", {"disposition": "still_unknown"}),
+                 ("stale generation", "owner_generation_stale", {"expected_generation": 2}),
+                 ("completed action", "item_not_unresolved", {"action_id": producer}))
+        for label, reason, overrides in cases:
+            with self.subTest(case=label):
+                self._refused(attempt_id, reason, **{"action_id": verifier, **overrides})
+        with self.subTest(case="live run"):
+            with ExecutionLedger(self.run / "execution" / "ledger.sqlite").recovery_lock(attempt_id, holder="live"):
+                self._refused(attempt_id, "attempt_running", action_id=verifier)
+        with self.subTest(case="concurrent resolution"):
+            with ExecutionLedger(self.run / "execution" / "ledger.sqlite").recovery_lock(attempt_id, holder="recovery"):
+                self._refused(attempt_id, "recovery_in_progress", action_id=verifier)
+        resolution = self._route(attempt_id, verifier)
+        self.assertEqual((resolution["owner_generation"], resolution["replayed"]), (1, False))
+        self.assertTrue(self._route(attempt_id, verifier)["replayed"])
+        self.assertEqual([item["action_id"] for item in self._ledger().snapshot(attempt_id)["resolutions"]], [verifier])
+
+    def test_the_route_refuses_a_terminal_or_unobserved_attempt_and_a_manager_call(self):
+        with self._kill_once("observe_response"):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        self._refused(attempt_id, "evidence_insufficient", action_id=self._action(attempt_id, "producer")["action_id"])
+        shutil.rmtree(self.run / "execution")
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+        result = self._start(("editor", "verifier"), [self.PASS])
+        self._refused(result["attempt_id"], "attempt_terminal",
+                      action_id=self._action(result["attempt_id"], "producer")["action_id"])
+
+    def test_v8_resolve_refuses_an_envelope_worktree_containing_project_flow(self):
+        # An attempt prepared before the guard existed: its worktree sits inside .flow.
+        inside = self.root / ".flow" / "worktree"
+        subprocess.run(["git", "clone", "-q", str(self.worktree), str(inside)], check=True)
+        self.worktree = inside
+        with patch("delivery_gateway._refuse_project_flow_in_worktree"):
+            attempt_id = self._interrupted("verifier")
+        self._refused(attempt_id, "worktree_contains_project_flow",
+                      action_id=self._action(attempt_id, "verifier")["action_id"])
+
+    def test_v5_to_v7_resolve_execution_keeps_its_contract(self):
+        for label, kwargs, reason in (("missing evidence file", {}, "evidence_file_required"),
+                                      ("expected generation", {"evidence_file": "x", "expected_generation": 1},
+                                       "expected_generation_v8_only")):
+            with self.subTest(case=label):
+                with self.assertRaises(RecoveryRefused) as raised:
+                    resolve_execution("sample", "a" * 32, "b" * 64, "operator", "resolved_completed", "x",
+                                      root=self.root, **kwargs)
+                self.assertEqual(raised.exception.reason, reason)
 
 
 if __name__ == "__main__":

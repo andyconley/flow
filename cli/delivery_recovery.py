@@ -38,6 +38,11 @@ UNRESOLVABLE_ABANDON_ONLY = "unresolvable_abandon_only"
 EVIDENCE_INSUFFICIENT = "evidence_insufficient"
 EVIDENCE_INVALID = "evidence_invalid"
 RESOLUTION_UNBOUND = "resolution_unbound"
+V8_EVIDENCE_FILE_REFUSED = "v8_evidence_file_refused"
+EXPECTED_GENERATION_REQUIRED = "expected_generation_required"
+V8_DISPOSITION_UNSUPPORTED = "v8_disposition_unsupported"
+EVIDENCE_FILE_REQUIRED = "evidence_file_required"
+EXPECTED_GENERATION_V8_ONLY = "expected_generation_v8_only"
 
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 
