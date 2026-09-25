@@ -2,12 +2,20 @@
 
 ## Active work
 
-- `chartered-delivery-recovery-1b` accepted and archived on branch
-  `codex/chartered-delivery-recovery-1b` (not pushed). Next: push and open
-  its PR with `validation/maf-gated.log` in the body. Chunk 2 (v8 resolution
-  of `unknown` sends) follows as its own linked run.
+- `chartered-delivery-recovery-1b` is PR #29 (open, CI green); merge it first.
+- `chartered-delivery-recovery-2` accepted and archived on branch
+  `codex/chartered-delivery-recovery-2`, stacked on 1b (not pushed). Next:
+  rebase onto `main` after #29 merges, then push and open its PR with
+  `validation/maf-gated.log` in the body. Run MAF-gated tests with
+  `FLOW_MAF_PYTHON` set.
 
 ## Recently completed
+
+- `chartered-delivery-recovery-2` accepted and archived. An interrupted v8
+  attempt whose producer or verifier response Flow already stored is completed
+  with `resolve-execution --expected-generation N` then `recover-delivery-lead`,
+  with zero resends; manager calls and unobserved actions are abandon-only.
+  The full suite passed 1,465 tests with 0 skipped.
 
 - `chartered-delivery-recovery-1b` accepted and archived. A Delivery Lead
   resume or supersede now seals started v8 attempts as `superseded` behind a
