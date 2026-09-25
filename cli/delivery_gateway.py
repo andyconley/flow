@@ -22,6 +22,7 @@ from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import delivery_authority_guard
 from delivery_projection import lead_claim_active
 from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, RecoveryRefused,
+                               SIBLING_ATTEMPT_NOT_TERMINAL,
                                V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_DRIFT, build_recovery_block,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
                                runtime_outcome)
@@ -373,8 +374,15 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     job_baseline = {key: baseline[key] for key in ("kind", "diff_sha256")}
     baseline = {"regression_diff_sha256": baseline["diff_sha256"], "source_commit": source_commit,
                 "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in charter["write_paths"] if (worktree / path).is_file()}}
-    attempt_id = uuid.uuid4().hex
     execution_dir = run_dir / "execution"
+    # A successor lists every earlier v8 attempt so its spend shares the
+    # charter caps; the ledger re-checks the list inside create_attempt.
+    predecessors: list[dict[str, Any]] = []
+    if (execution_dir / "ledger.sqlite").is_file():
+        predecessors, started = ExecutionLedger(execution_dir / "ledger.sqlite", read_only=True).v8_lineage(work_id)
+        if started:
+            raise RecoveryRefused(SIBLING_ATTEMPT_NOT_TERMINAL, "an earlier attempt of this delivery is still started")
+    attempt_id = uuid.uuid4().hex
     execution_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(execution_dir, 0o700)
     attempt_dir = execution_dir / attempt_id
@@ -413,11 +421,18 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                            "max_manager_rounds": canonical_limits["max_manager_rounds"],
                            "max_paid_worker_calls": canonical_limits["max_paid_worker_calls"],
                            "max_verifier_calls": canonical_limits["max_verifier_calls"]}}
+    if predecessors:
+        # Added only when non-empty, so a first attempt stays byte-identical.
+        envelope["predecessors"] = predecessors
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
     ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
-    ledger.create_attempt(envelope)
+    # Under run_lock, so a lead change cannot seal the lineage and bump the
+    # claim between reading it and creating this attempt; a stale claim is
+    # refused here instead of leaving a started sibling that blocks successors.
+    with delivery_authority_guard(run_dir, envelope):
+        ledger.create_attempt(envelope)
     return envelope, task, attempt_dir, ledger
 
 
@@ -1103,6 +1118,8 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         receipt["verifier_inputs"] = snapshot.get("verifier_inputs", [])
         receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
         receipt["verifier_usage"] = snapshot["verifier_usage"]
+        if envelope.get("predecessors"):
+            receipt["lineage_usage"] = ledger.lineage_usage(aid)
         if snapshot.get("recoveries"):
             # A receipt on disk while the attempt is started is an unsealed
             # draft from a process that died before finish_attempt.
@@ -1188,7 +1205,10 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
              "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
              " run commands, or edit the worktree.\n"
              "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
-             " the targeted test after that edit; the full suite is an acceptance check.\n")
+             " the targeted test after that edit; the full suite is an acceptance check.\n"
+             + "".join(f"- Predecessor attempt {item['attempt_id']} ended {item['terminal_status']} under lead"
+                       f" generation {item['lead_generation']}; its evidence is not reused.\n"
+                       for item in envelope.get("predecessors", [])))
     manager_adapter = manager_adapter or _default_manager_adapter
     worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir)
     test_runner = test_runner or (partial(_run_chartered_test, job=job) if chartered else _run_targeted_test)

@@ -159,7 +159,7 @@ class CharteredFixture(unittest.TestCase):
         outputs = list(verifier_outputs)
 
         def supervisor(envelope, task, on_manager, on_action, **kwargs):
-            captured["envelope"] = envelope
+            captured["envelope"], captured["task"] = envelope, task
             for sequence, assignment_id in enumerate(plan, 1):
                 proposal = self._proposal(envelope, assignment_id, sequence)
                 checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
@@ -731,9 +731,11 @@ class CharteredPreparationTests(CharteredFixture):
         valid = {"attempt_id": "a" * 32, "terminal_status": "superseded", "receipt_sha256": None, "lead_generation": 1}
         envelope["predecessors"] = [valid]
         validate_envelope(envelope)
+        # A retry under the same lead needs no lead change (decision E4).
+        validate_envelope({**envelope, "predecessors": [{**valid, "lead_generation": 2}]})
         cases = {
             "empty list": [],
-            "current generation": [{**valid, "lead_generation": 2}],
+            "future generation": [{**valid, "lead_generation": 3}],
             "non-terminal status": [{**valid, "terminal_status": "started"}],
             "missing sealed digest": [{**valid, "terminal_status": "failed"}],
             "duplicate": [valid, valid],

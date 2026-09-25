@@ -179,6 +179,8 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
 
         retry_env = self.envelope(maximum=1)
         retry_env["attempt_id"] = "attempt-not-dispatched"
+        # A separate delivery: a same-work successor would share the lineage caps.
+        retry_env["work_id"] = "work-not-dispatched"
         self.ledger.create_attempt(retry_env)
         first = _action(retry_env, 1, retry_env["roster"][0], "Prepare verifier without send.")
         first_grant = self.ledger.decide(retry_env, first, generation=1)

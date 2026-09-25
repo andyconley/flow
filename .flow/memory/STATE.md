@@ -2,28 +2,41 @@
 
 ## Active work
 
-- None.
+- `chartered-delivery-recovery-1b` accepted and archived on branch
+  `codex/chartered-delivery-recovery-1b` (not pushed). Next: push and open
+  its PR with `validation/maf-gated.log` in the body. Chunk 2 (v8 resolution
+  of `unknown` sends) follows as its own linked run.
 
 ## Recently completed
 
-- `v7-pre-send-failure-allow-list` scout archived on branch
-  `codex/v7-pre-send-failure-allow-list`. `close_pre_send_failure` now
+- `chartered-delivery-recovery-1b` accepted and archived. A Delivery Lead
+  resume or supersede now seals started v8 attempts as `superseded` behind a
+  ledger-backed guard, and successor attempts link their predecessors and
+  share the charter caps; the seal checks `lineage_usage` against the ledger.
+  The full suite passed 1,443 tests with 0 skipped and the 11 MAF-gated tests
+  ran locally.
+
+- `chartered-delivery-recovery` chunk 1a accepted, merged as PR #26, and
+  archived. Interrupted v8 chartered attempts now recover explicitly on the
+  same attempt from the latest Flow-bound checkpoint (ADR 0016). The full
+  suite passed 1,425 tests and the 11 MAF-gated tests ran locally.
+
+- `v7-pre-send-failure-allow-list` scout archived and merged as PR #27. `close_pre_send_failure` now
   releases an unconsumed v7 grant instead of raising over the original
   pre-dispatch error. The full suite passed 1,371 tests.
 
-- `structured-verifier-contract` accepted and archived on branch
-  `codex/structured-verifier-contract`. Protocol v8 adds a Flow-evaluated,
+- `structured-verifier-contract` accepted, archived, and merged as PR #25. Protocol v8 adds a Flow-evaluated,
   evidence-bound verifier verdict with a Charter-sealed call cap of one or
   two. A contract prompt is appended to the verifier input, receipts recompute
   each evaluation, and v6 and v7 receipts keep their meaning. The full suite
-  passed 1,370 tests. Publication and merge remain pending. A controlled live
-  Ollama verifier run and v8 resume support are the main follow-ups.
+  passed 1,370 tests. v8 resume shipped in chunk 1a; a controlled live Ollama
+  verifier run remains the main follow-up.
 
 - `shaper-delivery-runtime-contracts` accepted and archived. Flow now projects
   approved Shaper authority into a supervised Magentic Delivery Lead with
   bounded Claude or Codex production, distinct Ollama verification, exact
   policy and runtime limits, and authority-linked receipts. The full suite
-  passed 1,321 tests with 1 skipped. Publication and merge remain pending.
+  passed 1,321 tests with 1 skipped. Merged as PR #24.
 
 - `role-method-differentiation-repair-3` accepted, merged, and released as
   `v0.28.0` at `6055b6b`. Architect, lead-developer, and test-engineer now use
