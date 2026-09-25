@@ -32,7 +32,8 @@ from execution_contracts import (
 )
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
-                               EXPANSION_ALREADY_DECIDED, EXPANSION_CEILING_EXCEEDED, EXPANSION_UNKNOWN_REQUEST,
+                               EXPANSION_ALREADY_DECIDED, EXPANSION_CEILING_EXCEEDED, EXPANSION_GRANT_CONSUMED,
+                               EXPANSION_UNKNOWN_REQUEST,
                                ITEM_NOT_UNRESOLVED, OWNER_GENERATION_STALE, PREDECESSOR_LINK_INVALID,
                                RECONCILIATION_REQUIRED, RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL,
                                UNRESOLVABLE_ABANDON_ONLY, V8_NO_DISPATCH_REGRANT_UNSUPPORTED,
@@ -531,6 +532,23 @@ class ExecutionLedger:
                 raise ContractError("attempt missing")
             return self._lineage_usage(db, json.loads(row[0]))
 
+    @staticmethod
+    def _expansion_requests(db: sqlite3.Connection, attempt_id: str) -> list[dict[str, Any]]:
+        requests = []
+        for values in db.execute(
+                "SELECT r.request_id,r.lineage_id,r.owner_generation,r.kind,r.denied_row_id,r.limits_json,r.amount,"
+                "r.proposal_digest,r.rationale,r.status,r.created_at,g.grant_id,g.authority,g.decision,g.actor,"
+                "g.explanation,g.owner_generation,g.decided_at,g.status,g.consumed_by FROM expansion_requests r "
+                "LEFT JOIN expansion_grants g USING(request_id) WHERE r.attempt_id=? ORDER BY r.rowid", (attempt_id,)):
+            request = dict(zip(("request_id", "lineage_id", "owner_generation", "kind", "denied_row_id", "limits",
+                                "amount", "proposal_digest", "rationale", "status", "created_at"), values[:11]))
+            request["limits"] = json.loads(request["limits"])
+            request["grant"] = None if values[11] is None else dict(zip(
+                ("grant_id", "authority", "decision", "actor", "explanation", "owner_generation", "decided_at",
+                 "status", "consumed_by"), values[11:]))
+            requests.append(request)
+        return requests
+
     def expansion_state(self, attempt_id: str) -> dict[str, Any]:
         """Effective limits, lineage headroom, and every request of one attempt, in ledger order."""
         with self._db() as db:
@@ -538,19 +556,7 @@ class ExecutionLedger:
             if row is None:
                 raise ContractError("attempt missing")
             envelope = json.loads(row[0])
-            requests = []
-            for values in db.execute(
-                    "SELECT r.request_id,r.lineage_id,r.owner_generation,r.kind,r.denied_row_id,r.limits_json,r.amount,"
-                    "r.proposal_digest,r.rationale,r.status,r.created_at,g.grant_id,g.authority,g.decision,g.actor,"
-                    "g.explanation,g.owner_generation,g.decided_at,g.status,g.consumed_by FROM expansion_requests r "
-                    "LEFT JOIN expansion_grants g USING(request_id) WHERE r.attempt_id=? ORDER BY r.rowid", (attempt_id,)):
-                request = dict(zip(("request_id", "lineage_id", "owner_generation", "kind", "denied_row_id", "limits",
-                                    "amount", "proposal_digest", "rationale", "status", "created_at"), values[:11]))
-                request["limits"] = json.loads(request["limits"])
-                request["grant"] = None if values[11] is None else dict(zip(
-                    ("grant_id", "authority", "decision", "actor", "explanation", "owner_generation", "decided_at",
-                     "status", "consumed_by"), values[11:]))
-                requests.append(request)
+            requests = self._expansion_requests(db, attempt_id)
             v8 = execution_protocol_version(envelope) == 8
             return {"effective_limits": self._effective_limits(db, envelope),
                     "headroom_remaining": self._headroom_remaining(db, envelope) if v8 else {}, "requests": requests}
@@ -763,14 +769,17 @@ class ExecutionLedger:
     def claim_chartered_recovery(self, attempt_id: str, *, expected_generation: int, expected_event_seq: int,
                                  lead_generation: int,
                                  actor: str, mode: str, checkpoint: dict[str, Any] | None,
-                                 quarantined: list[dict[str, str]]) -> dict[str, Any]:
+                                 quarantined: list[dict[str, str]],
+                                 expansion_request_id: str | None = None) -> dict[str, Any]:
         """Fence a v8 attempt for one recovery with a compare-and-swap on its owner generation.
 
         The same transaction fences former sends, releases unconsumed grants,
         records a process exit that left no interruption, and appends the
         recovery row. The caller holds the delivery authority guard.
         """
-        if not isinstance(actor, str) or not actor.strip() or len(actor) > 256 or mode not in {"answer", "pending", "seal"}:
+        if (not isinstance(actor, str) or not actor.strip() or len(actor) > 256
+                or mode not in {"answer", "pending", "seal", "restart"}
+                or (mode == "restart" and expansion_request_id is None)):
             raise ContractError("recovery claim is invalid")
         with self.send_lock():
             with self._db() as db:
@@ -802,8 +811,14 @@ class ExecutionLedger:
                     db.execute("UPDATE actions SET status='not_dispatched',reason='recovery_unconsumed_grant',grant_id=NULL WHERE action_id=?", (action_id,))
                     self._event(db, attempt_id, action_id, "recovery_grant_released", canonical({"generation": generation}))
                     released.append(action_id)
-                if not db.execute("SELECT 1 FROM attempt_interruptions WHERE attempt_id=? AND owner_generation=?",
-                                  (attempt_id, expected_generation)).fetchone():
+                if expansion_request_id is not None and db.execute(
+                        "SELECT status FROM expansion_requests WHERE request_id=? AND attempt_id=?",
+                        (expansion_request_id, attempt_id)).fetchone() not in {("granted",), ("denied",)}:
+                    raise RecoveryRefused(RECOVERY_IN_PROGRESS, "the expansion decision changed after eligibility")
+                # An expansion pause is a deliberate stop, not a process exit.
+                if expansion_request_id is None and not db.execute(
+                        "SELECT 1 FROM attempt_interruptions WHERE attempt_id=? AND owner_generation=?",
+                        (attempt_id, expected_generation)).fetchone():
                     self._record_interruption_locked(db, attempt_id, "unmarked_process_exit",
                                                      "no interruption was recorded before the process ended",
                                                      expected_generation)
@@ -864,6 +879,78 @@ class ExecutionLedger:
     def _v8_limit_reason(db: sqlite3.Connection, envelope: dict[str, Any], action: dict[str, Any], *, exclude: str) -> str:
         """The v8 ``decide`` limit checks, excluding one row (mirrors ``decide``)."""
         return ExecutionLedger._v8_action_checks(db, envelope, action, exclude=exclude)[0]
+
+    @staticmethod
+    def _consume_expansion_grant_locked(db: sqlite3.Connection, attempt_id: str, kind: str, row_id: str) -> str:
+        """Consume the one approved, unused grant of a decided request; a second use refuses."""
+        grant = db.execute("SELECT g.grant_id,g.status,g.decision,r.status FROM expansion_requests r JOIN expansion_grants g "
+                           "USING(request_id) WHERE r.attempt_id=? AND r.kind=? AND r.denied_row_id=?",
+                           (attempt_id, kind, row_id)).fetchone()
+        if grant is None or grant[2] != "approve" or grant[3] != "granted":
+            raise ContractError("replayed proposal has no approved expansion grant")
+        if grant[1] != "available":
+            raise RecoveryRefused(EXPANSION_GRANT_CONSUMED, f"grant is {grant[1]}")
+        db.execute("UPDATE expansion_grants SET status='consumed',consumed_by=? WHERE grant_id=?", (row_id, grant[0]))
+        ExecutionLedger._event(db, attempt_id, row_id, "expansion_grant_consumed", grant[0])
+        return grant[0]
+
+    def regrant_expanded_action(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int) -> dict[str, Any]:
+        """Allow a paused, denied proposal once under its approved expansion grant.
+
+        The denied row keeps its identity; its status moves to ``allowed`` with
+        reason ``expansion_granted`` and the denial stays in the events and the
+        request row. The limits are re-evaluated with the grant counted, so a
+        hard predicate still refuses and the whole transaction rolls back.
+        """
+        validate_action(envelope, action)
+        attempt_id, action_id = envelope["attempt_id"], action["action_id"]
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            stored = db.execute("SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            row = db.execute("SELECT status,request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()
+            if (stored is None or stored[0] != canonical(envelope) or stored[1] != "started" or stored[2] != 8
+                    or not self._active_recovery(db, attempt_id, generation) or self._unresolved_action(db, attempt_id)):
+                raise ContractError("action is not eligible for an expansion regrant")
+            if row is None or row[1] != canonical(action):
+                raise ContractError("action is not eligible for an expansion regrant")
+            if row[0] != "denied":
+                raise RecoveryRefused(EXPANSION_GRANT_CONSUMED, f"proposal is already {row[0]}")
+            self._consume_expansion_grant_locked(db, attempt_id, "delegate", action_id)
+            reason = self._v8_action_checks(db, envelope, action, exclude=action_id)[0]
+            if reason != "allowed":
+                raise ContractError("expanded proposal is still denied: " + reason)
+            grant = uuid.uuid4().hex
+            db.execute("UPDATE actions SET status='allowed',reason='expansion_granted',grant_id=? WHERE action_id=?", (grant, action_id))
+            self._event(db, attempt_id, action_id, "policy_allowed", "expansion_granted")
+            return {"allowed": True, "reason": "expansion_granted", "action_id": action_id, "grant_id": grant}
+
+    def reissue_expanded_manager_grant(self, call_id: str, *, generation: int) -> dict[str, Any]:
+        """Allow a paused, denied manager call once under its approved expansion grant."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT attempt_id,status,request_json FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            if row is None:
+                raise ContractError("manager call missing")
+            self._assert_owner(db, row[0], generation)
+            attempt = db.execute("SELECT status,execution_protocol_version,envelope_json FROM attempts WHERE attempt_id=?", (row[0],)).fetchone()
+            if (attempt[:2] != ("started", 8) or not self._active_recovery(db, row[0], generation)
+                    or self._unresolved_action(db, row[0])):
+                raise ContractError("manager call is not eligible for an expansion reissue")
+            if row[1] != "denied":
+                raise RecoveryRefused(EXPANSION_GRANT_CONSUMED, f"manager call is already {row[1]}")
+            self._consume_expansion_grant_locked(db, row[0], "manager_call", call_id)
+            envelope, request = json.loads(attempt[2]), json.loads(row[2])
+            effective = self._effective_limits(db, envelope)
+            prior = db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND call_id<>? "
+                               "AND status IN ('allowed','started','completed','unknown')", (row[0], call_id)).fetchone()[0]
+            if ((envelope["manager"]["provider"] in {"codex", "claude"} and prior >= effective["manager_calls"])
+                    or request["manager_round"] > effective["manager_rounds"]):
+                raise ContractError("expanded manager call is still over its limit")
+            grant = uuid.uuid4().hex
+            db.execute("UPDATE manager_calls SET status='allowed',reason='expansion_granted',grant_id=? WHERE call_id=?", (grant, call_id))
+            self._event(db, row[0], call_id, "manager_policy_allowed", "expansion_granted")
+            return {"allowed": True, "reason": "expansion_granted", "call_id": call_id, "grant_id": grant, "replayed": True}
 
     def reissue_recovered_manager_grant(self, call_id: str, *, generation: int) -> dict[str, Any]:
         """Rotate an allowed, never-sent manager grant in place under an active recovery."""
@@ -2415,6 +2502,7 @@ class ExecutionLedger:
             "WHERE attempt_id=? ORDER BY generation", (attempt_id,)).fetchall() if "attempt_recoveries" in tables else []
         return {
             "sealed_receipt_sha256": sealed,
+            "expansions": ExecutionLedger._expansion_requests(db, attempt_id) if "expansion_requests" in tables else [],
             "interruptions": [{"interruption_id": r[0], "cause": r[1], "detail": r[2], "owner_generation": r[3],
                                "ledger_seq": r[4], "recorded_at": r[5]} for r in interruptions],
             "recoveries": [{"recovery_id": r[0], "expected_generation": r[1], "generation": r[2],

@@ -27,7 +27,7 @@ from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATIO
                                RecoveryRefused,
                                SIBLING_ATTEMPT_NOT_TERMINAL,
                                V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_CONTAINS_PROJECT_FLOW, WORKTREE_DRIFT,
-                               build_recovery_block,
+                               build_recovery_block, denied_reply,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
                                runtime_outcome)
 from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
@@ -720,7 +720,11 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
         envelope = snapshot["envelope"]
         mode = eligibility["mode"]
         link = eligibility["checkpoint"]
-        outcome = runtime_outcome(snapshot) if mode == "seal" else None
+        expansion = eligibility.get("expansion")
+        if "expansion_failure" in eligibility:
+            outcome = {"failure": eligibility["expansion_failure"]}
+        else:
+            outcome = runtime_outcome(snapshot) if mode == "seal" else None
         recorded_failure = bool(outcome and outcome["failure"])
         if not recorded_failure:
             # Drift refuses before the claim, so it fences and releases nothing.
@@ -736,7 +740,7 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
                 expected_event_seq=snapshot["events"][-1]["seq"],
                 lead_generation=envelope["delivery_lead_claim"]["generation"], actor=actor, mode=mode,
                 checkpoint=({key: link[key] for key in ("pending_id", "checkpoint_id", "file_sha256")} if link else None),
-                quarantined=quarantine)
+                quarantined=quarantine, expansion_request_id=expansion["request_id"] if expansion else None)
         generation = claim["generation"]
         _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
         state = ledger.snapshot(attempt_id)
@@ -762,6 +766,16 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
                                    verifier_input_sha256=verifier_sha, generation=generation,
                                    authority_guard=authority_guard, hook=seal_hook or (lambda point: None))
             return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+        job = envelope["job_contract"]
+        if mode == "restart":
+            # A fresh start on the byte-identical envelope: Magentic replays
+            # every earlier manager call from the ledger (ADR 0017).
+            result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
+                                                manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                                supervisor=supervisor, test_runner=test_runner, python_path=python_path,
+                                                resume=None, generation=generation, recovery=evidence,
+                                                seal_hook=seal_hook)
+            return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
         row = next(item for item in state["actions"] if item["action_id"] == eligibility["action_id"])
         action = row["request"]
         checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
@@ -771,8 +785,10 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
                                   "request_id": f"flow-magentic-action-{action['sequence']}",
                                   "action_id": action["action_id"],
                                   **restore_position(envelope, state, checkpoint["metadata"]["ledger_seq"])}
-        job = envelope["job_contract"]
-        if mode == "answer":
+        if mode == "answer" and row["status"] == "denied":
+            # The engineer denied this proposal's expansion; Magentic was told so.
+            resume["result"] = denied_reply(action["action_id"], row["reason"])
+        elif mode == "answer":
             reply = _completed_reply(ledger, envelope, attempt_dir, action, row["result"],
                                      is_verifier=action["instance_id"] in job["verifier_instance_ids"],
                                      is_producer=action["instance_id"] in job["producer_instance_ids"],
@@ -1398,6 +1414,10 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             if recovery is not None and decision.get("replayed") and decision["allowed"]:
                 # A replayed, never-sent grant would expire when consumed.
                 decision = ledger.reissue_recovered_manager_grant(request["call_id"], generation=generation)
+            elif (recovery is not None and decision.get("replayed") and not decision["allowed"]
+                    and (decision.get("expansion") or {}).get("status") == "granted"):
+                # The paused call is back under its own identity: allow it once.
+                decision = ledger.reissue_expanded_manager_grant(request["call_id"], generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             observed = decision["result"].get("output")
             if isinstance(observed, str) and observed.strip():
@@ -1449,6 +1469,16 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                     and action["action_id"] in recovery.get("regrantable_action_ids", [])):
                 decision = ledger.regrant_recovered_action(envelope, action, generation=generation)
                 regranted = decision["allowed"]
+            elif (recovery is not None and decision.get("replayed") and not decision["allowed"]
+                    and (decision.get("expansion") or {}).get("status") == "granted"):
+                # The paused proposal is back under its own identity and keeps
+                # the checkpoint bound at the pause; its grant allows it once.
+                decision = ledger.regrant_expanded_action(envelope, action, generation=generation)
+                regranted = True
+        if (decision.get("replayed") and not decision["allowed"]
+                and (decision.get("expansion") or {}).get("status") == "denied"):
+            # The engineer refused this unit: Magentic hears the denial and continues.
+            return denied_reply(action["action_id"], decision["reason"])
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             return _completed_reply(ledger, envelope, attempt_dir, action, decision["result"],
                                     is_verifier=is_verifier, is_producer=is_producer,
@@ -1469,7 +1499,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
-            return {"status": "denied", "action_id": action["action_id"], "reason": decision["reason"], "summary": "Flow denied this specialist call"}
+            return denied_reply(action["action_id"], decision["reason"])
         provider_action = action
         if is_verifier:
             provider_task = _verifier_provider_task(action["task"], (attempt_dir / "repair.diff").read_text(),

@@ -332,7 +332,7 @@ def _validate_delivery_projection(envelope: dict[str, Any]) -> None:
 
 PREDECESSOR_TERMINAL_STATUSES = frozenset({"completed", "failed", "denied", "superseded"})
 RECOVERY_INTERRUPTION_CAUSES = frozenset({"transport", "reconciliation_required", "unmarked_process_exit"})
-RECOVERY_MODES = frozenset({"answer", "pending", "seal"})
+RECOVERY_MODES = frozenset({"answer", "pending", "seal", "restart"})
 RECOVERY_GRANT_REASONS = frozenset({"recovery_unconsumed_grant", "recovery_regranted"})
 RECOVERY_TRIGGER_REASONS = RECOVERY_GRANT_REASONS | {"recovery_after_dispatch"}
 
