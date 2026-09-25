@@ -2,6 +2,20 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.35.2](https://github.com/andyconley/flow/compare/v0.35.1...v0.35.2) (2026-09-25)
+
+### Bug Fixes
+
+* **verifier:** let local v8 verifiers satisfy the JSON contract ([3c47fdd](https://github.com/andyconley/flow/commit/3c47fdd1191b8b5ce5f71048100281f510be7be7))
+
+### Documentation
+
+* archive local-verifier-json-contract scout run ([b02a27f](https://github.com/andyconley/flow/commit/b02a27f810495ac94036beb0889e7d294665d1a7))
+
+### Maintenance
+
+* accept and archive two shipped runs; record the live verifier check ([862c2cb](https://github.com/andyconley/flow/commit/862c2cbaff305c859a7f3f4e81ed9e4b5970edaa))
+
 ## [0.35.1](https://github.com/andyconley/flow/compare/v0.35.0...v0.35.1) (2026-09-25)
 
 ### Documentation
