@@ -2,6 +2,60 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.35.0](https://github.com/andyconley/flow/compare/v0.34.1...v0.35.0) (2026-09-25)
+
+### Features
+
+* **cli:** route v8 resolve-execution through a fenced chartered route ([3561c8e](https://github.com/andyconley/flow/commit/3561c8e17a66103de8c4d7d656bb66ba48074390))
+* **delivery:** bind resolutions at continuation ([7e94e84](https://github.com/andyconley/flow/commit/7e94e840ca5f5f5c0a07379cb83cb5244e0bd374))
+* **delivery:** guide each blocker in inspection and point refusals to it ([3d6cec2](https://github.com/andyconley/flow/commit/3d6cec212d1e64ddc3ae0811f3cf3d46a6a44c5e))
+* **delivery:** link successor attempts and count limits across the lineage ([15e15b4](https://github.com/andyconley/flow/commit/15e15b4748df9be56e5766c917911e385d598f39))
+* **delivery:** refuse a chartered worktree that contains the project .flow ([c4a613d](https://github.com/andyconley/flow/commit/c4a613db8942907f30dce8a1ba888a9f0c357bc7))
+* **delivery:** seal superseded v8 attempts and guard lead changes on the ledger ([c67d18f](https://github.com/andyconley/flow/commit/c67d18f70259859c7c625878c2e57aa487d31f67))
+* **ledger:** refuse the no-dispatch regrant for protocol v8 ([08b35bf](https://github.com/andyconley/flow/commit/08b35bf7aa1414ff43d68c879251c593b92baf7f))
+* **ledger:** resolve a v8 action from its stored response observation ([f6b5ea9](https://github.com/andyconley/flow/commit/f6b5ea948bde5e354fa755f02e9b67fdc0a40630))
+
+### Bug Fixes
+
+* **delivery:** close the implementation review gaps ([c90d58c](https://github.com/andyconley/flow/commit/c90d58c0f1690a3314afa00e52f0834b2a7bb8bc))
+* **delivery:** close the lead-change and lineage gaps found in review ([e16e8bd](https://github.com/andyconley/flow/commit/e16e8bd00a938b7eb744d07ca91d511739e5b01f))
+* **delivery:** seal v8 receipts only when lineage usage matches the ledger ([db64c9d](https://github.com/andyconley/flow/commit/db64c9d45a850375c040884ad30d0da4d7c5cd99))
+* **ledger:** open send_lock without following symlinks ([4331765](https://github.com/andyconley/flow/commit/4331765832fca2f6e12b98fe3fa3301f98352e5d))
+* **ledger:** refuse operator resolution of a v8 attempt in resolve_unknown ([2c1f9eb](https://github.com/andyconley/flow/commit/2c1f9eb92ad27dc3c4866e00ee588fa9e2e0d304))
+
+### Documentation
+
+* **adr:** amend ADR 0016 for v8 operator reconcile ([df6808b](https://github.com/andyconley/flow/commit/df6808bea7c485d79656c922812f3c237fb41eef))
+* **adr:** narrow the ADR 0016 lead-change amendment to v8 ([34d4354](https://github.com/andyconley/flow/commit/34d4354e72f3b87484885701196d8e020e7610fa))
+* **adr:** record chunk 2 assumptions and residuals in ADR 0016 ([a54925d](https://github.com/andyconley/flow/commit/a54925d1af881c3ae0d53758cf3ccd4a47876e20))
+* choose operator-confirmed reconcile for chunk 2 ([b38989b](https://github.com/andyconley/flow/commit/b38989b479cddb74831c6c7b802f11c3fc9e1aea))
+* define chartered delivery recovery chunk 2 ([ef55eb8](https://github.com/andyconley/flow/commit/ef55eb8a883f8124fdd4457cf3d12d972c847e7d))
+* plan chartered delivery recovery chunk 2 ([87bb715](https://github.com/andyconley/flow/commit/87bb715511ed437c38eacdc61095c7e8c40b6f9f))
+* record chunk 1b acceptance review and refinement evidence ([5124920](https://github.com/andyconley/flow/commit/5124920d065162220e7218f9f544ae146669d1c1))
+* record chunk 1b validation and handoff ([2760098](https://github.com/andyconley/flow/commit/27600989037a3cf5d651109ab5e7514725f09734))
+* record chunk 2 acceptance review ([8bf46c8](https://github.com/andyconley/flow/commit/8bf46c862b931ae8d9dfa8537c74cee39af477b2))
+* record chunk 2 validation and handoff ([32ab015](https://github.com/andyconley/flow/commit/32ab015250a2ba440d068dab072eb76fd1e4f74c))
+
+### Code Refactoring
+
+* **ledger:** extract the resolution append shared by resolve_unknown ([a7f43e6](https://github.com/andyconley/flow/commit/a7f43e63cf289d70412079ba42769db01926e0c0))
+
+### Tests
+
+* **delivery:** an unknown manager call alone blocks a lead change ([abede3d](https://github.com/andyconley/flow/commit/abede3d4f6fbdec60821254414969f804eb6aaf8))
+* **delivery:** check zero resends before the recovered status ([af223c0](https://github.com/andyconley/flow/commit/af223c04f00275060606b8f92e1db30d44c0b92d))
+* **delivery:** cover the lead guard when no v8 attempt needs sealing ([d21a2d2](https://github.com/andyconley/flow/commit/d21a2d214cd6b84cda6a4995ab7c33270a845d66))
+* **delivery:** recover boundaries (a), (c), and (e) after operator reconcile ([ef60915](https://github.com/andyconley/flow/commit/ef6091515a6dac2336301b19fa42932c3f68bfbd))
+* resolve the MAF interpreter only from FLOW_MAF_PYTHON ([9155c4d](https://github.com/andyconley/flow/commit/9155c4dec7884b9e0cd5142bc5dcea2a2cd554af))
+
+### Maintenance
+
+* archive chartered delivery recovery chunk 1a ([79cbffb](https://github.com/andyconley/flow/commit/79cbffbab8c3fbffc037f1b5cc4d79f92d540177)), closes [#26](https://github.com/andyconley/flow/issues/26)
+* archive chartered delivery recovery chunk 1b ([8c79953](https://github.com/andyconley/flow/commit/8c7995358e0f80690b0a7cfa1c5b2d5de5c6c498))
+* archive chartered delivery recovery chunk 2 ([f9a7b19](https://github.com/andyconley/flow/commit/f9a7b1931ab0d174d7e2d410b236b025dcb6a935))
+* backfill seven MAF run records ([014431a](https://github.com/andyconley/flow/commit/014431a6349b292b9324be994945e3b01e325a2f))
+* open the chartered delivery recovery 1b run ([3db384d](https://github.com/andyconley/flow/commit/3db384d3db4582f33d52abd0a5ac0b92ef91a3f9))
+
 ## [0.34.1](https://github.com/andyconley/flow/compare/v0.34.0...v0.34.1) (2026-09-24)
 
 ### Bug Fixes
