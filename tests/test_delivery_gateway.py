@@ -11,13 +11,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from delivery_gateway import _default_manager_adapter, execute_delivery, resume_delivery
 from maf_supervisor import MafProtocolError, MafTransportError, _write_bounded, run_maf_delivery
 from execution_contracts import digest, envelope_digest, expected_manager_call_id, expected_replan_id
 from execution_ledger import ExecutionLedger
 
 
-MAF_PYTHON = os.environ.get("FLOW_MAF_PYTHON", "/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
+from maf_env import MAF_PYTHON, requires_maf  # noqa: E402
 
 
 def _result(provider: str, model: str, output: str) -> dict:
@@ -30,7 +31,7 @@ def _result(provider: str, model: str, output: str) -> dict:
     return value
 
 
-@unittest.skipUnless(Path(MAF_PYTHON).exists(), "pinned MAF interpreter unavailable")
+@requires_maf
 class DeliveryGatewayTests(unittest.TestCase):
     def test_manager_adapter_preserves_stock_message_context(self):
         messages = [{"role": "system", "contents": [{"type": "text", "text": "Keep the accepted roster."}]},

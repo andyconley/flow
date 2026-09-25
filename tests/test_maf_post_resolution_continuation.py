@@ -14,6 +14,7 @@ from unittest.mock import patch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "cli"))
 sys.path.insert(0, str(REPO / "tests"))
+from maf_env import MAF_AVAILABLE, MAF_PYTHON, SKIP_REASON  # noqa: E402
 
 import execution_gateway as gateway  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
@@ -36,9 +37,9 @@ def _continue_in_process(root: str, attempt_id: str, action_id: str, python_path
 
 class PostResolutionContinuationTests(ExecutionFixture):
     def _pinned_python(self) -> str:
-        executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
-        if not executable.is_file():
-            self.skipTest("optional pinned MAF environment is absent")
+        if not MAF_AVAILABLE:
+            self.skipTest(SKIP_REASON)
+        executable = Path(MAF_PYTHON)
         return str(executable)
 
     def _make_attempt(self, disposition: str):

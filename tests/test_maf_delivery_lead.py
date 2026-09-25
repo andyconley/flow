@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,10 +11,11 @@ from pathlib import Path
 from cli.execution_contracts import expected_magentic_action_id, expected_manager_call_id
 
 
-MAF_PYTHON = os.environ.get("FLOW_MAF_PYTHON", "/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from maf_env import MAF_PYTHON, requires_maf  # noqa: E402
 
 
-@unittest.skipUnless(Path(MAF_PYTHON).exists(), "pinned MAF interpreter unavailable")
+@requires_maf
 class StockDeliveryLeadTest(unittest.TestCase):
     def _exercise(self, speaker: str | list[str], protocol_version: int = 5) -> tuple[list[str], list[str], dict]:
         target_sequence = [speaker] if isinstance(speaker, str) else speaker

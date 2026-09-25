@@ -21,6 +21,7 @@ from unittest.mock import patch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "cli"))
 sys.path.insert(0, str(REPO / "tests"))
+from maf_env import MAF_AVAILABLE, MAF_PYTHON, SKIP_REASON  # noqa: E402
 
 from maf_supervisor import MafProtocolError, PINNED_MAF_CORE_VERSION, run_maf  # noqa: E402
 from test_maf_supervisor import SupervisorProtocolTests  # noqa: E402
@@ -227,9 +228,9 @@ class MultiTurnRuntimeTests(ExecutionFixture):
         self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "completed")
 
     def test_v2_receipt_seals_per_action_observer_counts(self) -> None:
-        executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
-        if not executable.is_file():
-            self.skipTest("optional pinned MAF environment is absent")
+        if not MAF_AVAILABLE:
+            self.skipTest(SKIP_REASON)
+        executable = Path(MAF_PYTHON)
         log = self.run_dir / "observer.jsonl"
 
         def fake_local(envelope, *, correlation_id):
@@ -257,9 +258,9 @@ class MultiTurnRuntimeTests(ExecutionFixture):
         self.assertEqual(inspected["missing_evidence"], [])
 
     def test_fresh_maf_continuation_after_first_and_second_committed_result(self) -> None:
-        executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
-        if not executable.is_file():
-            self.skipTest("optional pinned MAF environment is absent")
+        if not MAF_AVAILABLE:
+            self.skipTest(SKIP_REASON)
+        executable = Path(MAF_PYTHON)
         for crash_at in (1, 2):
             with self.subTest(crash_after_action=crash_at):
                 calls: list[str] = []
@@ -298,9 +299,9 @@ class MultiTurnRuntimeTests(ExecutionFixture):
                 self.assertEqual([row["reason"] for row in snapshot["replans"]], ["allowed", "allowed", "replan_cap"])
 
     def test_pinned_maf_two_results_denial_and_unknown_restart(self) -> None:
-        executable = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
-        if not executable.is_file():
-            self.skipTest("optional pinned MAF environment is absent")
+        if not MAF_AVAILABLE:
+            self.skipTest(SKIP_REASON)
+        executable = Path(MAF_PYTHON)
         calls: list[str] = []
 
         def adapter(envelope):
