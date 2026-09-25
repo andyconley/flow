@@ -86,9 +86,11 @@ a predecessor, and a predecessor still `started` refuses the successor with
 `sibling_attempt_not_terminal`. A predecessor's lead generation may equal the
 successor's, so retrying after a failed attempt needs no lead change. Paid
 worker sends and verifier sends are counted across the lineage and reported in
-the receipt's `lineage_usage`. `max_manager_calls` stays per attempt, so a
-successor has a fresh manager budget; the first verifier of a successor is not
-a retry.
+the receipt's `lineage_usage`. The seal compares `lineage_usage` with the
+ledger's own count inside its transaction and refuses a receipt that differs,
+since receipt validation alone can only bound the self-reported counts.
+`max_manager_calls` stays per attempt, so a successor has a fresh manager
+budget; the first verifier of a successor is not a retry.
 
 ## Consequences
 

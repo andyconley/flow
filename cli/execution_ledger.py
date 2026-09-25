@@ -342,6 +342,23 @@ class ExecutionLedger:
             verifier += ExecutionLedger._verifier_consumed(db, item["attempt_id"], json.loads(row[0]))
         return {"predecessor_paid_calls": paid, "predecessor_verifier_sends": verifier}
 
+    @staticmethod
+    def _assert_receipt_lineage(db: sqlite3.Connection, attempt_id: str, receipt_bytes: bytes) -> None:
+        """A sealed v8 receipt's lineage_usage must be the ledger's own count.
+
+        Receipt validation can only bound the self-reported counts; the seal
+        compares them with the ledger inside the sealing transaction.
+        """
+        envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?",
+                                         (attempt_id,)).fetchone()[0])
+        expected = ExecutionLedger._lineage_usage(db, envelope) if envelope.get("predecessors") else None
+        try:
+            receipt = json.loads(receipt_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ContractError("protocol v8 seal requires a JSON receipt") from exc
+        if not isinstance(receipt, dict) or receipt.get("lineage_usage") != expected:
+            raise ContractError("receipt lineage usage differs from the ledger")
+
     def lineage_usage(self, attempt_id: str) -> dict[str, int]:
         with self._db() as db:
             row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
@@ -1578,8 +1595,9 @@ class ExecutionLedger:
         if status not in {"completed", "failed", "denied", "unknown"}:
             raise ContractError("invalid attempt terminal status")
         receipt = Path(receipt_path) if isinstance(receipt_path, str) and receipt_path else None
-        receipt_sha256 = (hashlib.sha256(receipt.read_bytes()).hexdigest()
-                          if receipt is not None and receipt.is_file() and not receipt.is_symlink() else None)
+        receipt_bytes = (receipt.read_bytes()
+                         if receipt is not None and receipt.is_file() and not receipt.is_symlink() else None)
+        receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest() if receipt_bytes is not None else None
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
@@ -1595,8 +1613,9 @@ class ExecutionLedger:
                 if (uncertain > 0) != (status == "unknown"):
                     raise ContractError("Magentic terminal status contradicts uncertain sends")
             if row[1] == 8:
-                if receipt_sha256 is None:
+                if receipt_bytes is None:
                     raise ContractError("protocol v8 seal requires the written receipt")
+                self._assert_receipt_lineage(db, attempt_id, receipt_bytes)
                 db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
                            (status, reason, receipt_path, receipt_sha256, attempt_id))
             else:
