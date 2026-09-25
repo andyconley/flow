@@ -10,15 +10,18 @@ Progress against the adoption sequence below:
 | 2. Guarded local vertical slice | Done | Supervised local runner; the gateway is the only participant construction path |
 | 3. Multi-turn and recovery | Done | Protocol v5 resume; chartered v8 recovery from the latest bound checkpoint, with operator reconcile (ADR 0012, 0013, 0016; v0.35.0) |
 | 4. Provider adapters and usage | Done, no enforced cap | Codex, Claude, and Ollama adapters with observed usage. Call, runtime, and output bounds apply; there is no token or dollar cap. |
-| 5. Shaper approval and operational handback | Not built, except diagnostics and reconcile | See below |
+| 5. Shaper approval and operational handback | In progress: delegated expansion built (slice 1, ADR 0017) | See below |
 
 - **Shipped on the chartered path:**
   - Shaper Contract, Delivery Charter, and a fenced Delivery Lead claim sealed at `start-plan` (ADR 0014, v7).
   - A Flow-evaluated, evidence-bound verifier verdict with a Charter-sealed call cap (ADR 0015, v8).
   - As of v0.35.2, a local verifier satisfies that contract. Its system instructions are derived from the sealed role, and Ollama output is constrained by schema.
   - v8 attempts resume, and v8 attempts whose stored responses Flow already holds can be completed without a resend (`inspect-delivery`, `resolve-execution`, `recover-delivery-lead`).
-- **Step 5 is not built yet:**
-  - Delegated Shaper expansion. The contract requires `delegated_expansion: false`, and scope expansion halts for the Shaper, which in practice means Andy.
+- **Step 5, slice 1 (delegated expansion, ADR 0017):**
+  - The Shaper may seal expansion headroom for delegations, paid calls, verifier calls, manager calls, and manager rounds, bounded by the runner ceilings.
+  - A v8 limit hit within the lineage's headroom is granted automatically. Anything beyond it pauses the attempt for `flow run decide-expansion`, and `recover-delivery-lead` replays the paused proposal under the decision.
+  - Receipts list and recompute every request and grant. Replans stay unexpandable, and the optional specialist pool is deferred.
+- **Step 5, not built yet:**
   - Cancellation, and recovery of a stuck run beyond the operator reconcile route.
   - Trace correlation across Flow, MAF, and provider sessions.
   - A handback through MCP. The MCP bridge only reads state and evidence and submits a proposed charter.
@@ -27,6 +30,7 @@ Progress against the adoption sequence below:
   - The only live end-to-end job ran on v7, before the final authority corrections.
   - No live v8 chartered job has run. The local verifier was checked live only on its own call, with a trivial diff.
   - Real-world validation is deliberately deferred until step 5 is in place.
+  - Expansion is proven hermetically, including against the pinned stock Magentic runner with stub providers; it has not run live.
 
 The current chartered path is v8. Flow seals the Shaper Contract and Delivery Charter at `start-plan`, prepares an attempt, and runs stock Magentic in a supervised child. Flow authorizes each manager call and specialist action. It verifies the producer's scoped diff and runs the targeted test before a distinct Ollama verifier may run. Then it seals a receipt linked to that authority. Both v5 and v8 attempts can resume after interruption.
 
@@ -93,7 +97,7 @@ Each slice should be independently reviewable. Keep the freeze on building a Flo
 | A stub receipt once labeled work as Ollama despite no physical provider call; review corrected it to `local-stub`. | Distinguish proposed, authorized, dispatched, observed, and stubbed work in the receipt; independently observe artifacts and usage. | Evidence owner; provenance review and negative test. |
 | The 13 specialist definitions and mixed-provider handoff are only partly proven; prior live mixed work did not establish all role/artifact contracts. | Load definitions by digest, create unique instances, pass the same charter and artifact contract, and preserve producer/verifier separation. | Specialist owner; mixed-workflow integration test. |
 | MAF version and checkpoint format are external dependencies. | Pin tested versions, keep MAF objects out of Flow's domain schemas, and exercise upgrade/resume compatibility. | Runtime owner; version migration and rollback rehearsal. |
-| Shaper delegated expansion is designed but not exercised through MAF. | Represent approval as a Flow policy decision with scope, expiry and audit event; MAF waits for the decision. | Policy owner; allowed and escalated expansion tests. |
+| Shaper delegated expansion is exercised through the pinned MAF runner hermetically, not live. Replay depends on the pinned MAF version reissuing identical proposal and call identities. | Ledger requests and single-use grants under sealed headroom; an escalated request pauses the attempt and resume replays it (ADR 0017). A MAF-gated test pins replay identity. | Policy owner; `tests/test_maf_expansion.py` on every MAF pin change. |
 
 ## Evidence and decision posture
 
