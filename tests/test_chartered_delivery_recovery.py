@@ -1198,6 +1198,7 @@ class ObservedReconcileLedgerTests(RecoveryHarness):
     """Chunk 2: a v8 action is resolved only from Flow's stored response observation."""
 
     _state = CharteredRecoveryRefusalTests._state
+    _assert_refused_without_mutation = CharteredRecoveryRefusalTests._assert_refused_without_mutation
 
     def _interrupted(self, role, *, how="killed"):
         """Leave the producer (first) or verifier (second) action observed but not completed."""
@@ -1281,6 +1282,23 @@ class ObservedReconcileLedgerTests(RecoveryHarness):
                 self._resolve(attempt_id, action_id)
             self.assertEqual(raised.exception.reason, "evidence_invalid")
             self.assertEqual(self._state(attempt_id), before)
+
+    def test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain(self):
+        cases = (("another action", "action_id=?", lambda other: other),
+                 ("another attempt", "attempt_id=?", lambda other: "f" * 32),
+                 ("outside the chain", "owner_generation=?", lambda other: 5))
+        for label, column, value in cases:
+            with self.subTest(case=label):
+                shutil.rmtree(self.run / "execution", ignore_errors=True)
+                subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                attempt_id = self._interrupted("verifier")
+                action_id = self._action(attempt_id, "verifier")["action_id"]
+                other = self._action(attempt_id, "producer")["action_id"]
+                self._resolve(attempt_id, action_id)
+                with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+                    db.execute("PRAGMA foreign_keys=OFF")
+                    db.execute(f"UPDATE recovery_resolutions SET {column} WHERE action_id=?", (value(other), action_id))
+                self._assert_refused_without_mutation(attempt_id, "resolution_unbound")
 
     def test_reconcile_refuses_an_unobserved_action_and_a_terminal_attempt(self):
         with self._kill_once("observe_response"):
