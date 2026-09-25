@@ -1194,5 +1194,113 @@ class CharteredRecoveryInspectionTests(RecoveryHarness):
         self.assertTrue(view["recovery"]["blockers"][0]["evidence_needed"].startswith("none; abandon"))
 
 
+class ObservedReconcileLedgerTests(RecoveryHarness):
+    """Chunk 2: a v8 action is resolved only from Flow's stored response observation."""
+
+    _state = CharteredRecoveryRefusalTests._state
+
+    def _interrupted(self, role, *, how="killed"):
+        """Leave the producer (first) or verifier (second) action observed but not completed."""
+        target = 1 if role == "producer" else 2
+        calls = {"n": 0}
+
+        def when(ledger, *args, **kwargs):
+            calls["n"] += 1
+            return calls["n"] == target
+
+        if how == "killed":
+            with self._kill_once("complete", when=when):
+                return self._killed(("editor", "verifier"), [self.PASS])
+        original = ExecutionLedger.complete
+
+        def complete(ledger, *args, **kwargs):
+            if when(ledger):
+                raise ExecutionContractError("simulated failure after the response was observed")
+            return original(ledger, *args, **kwargs)
+
+        with patch.object(ExecutionLedger, "complete", complete):
+            result = self._start(("editor", "verifier"), [self.PASS])
+        self.assertEqual(result["reason"], "reconciliation_required", result)
+        return result["attempt_id"]
+
+    def _action(self, attempt_id, role):
+        return self._ledger().snapshot(attempt_id)["actions"][0 if role == "producer" else 1]
+
+    def _resolve(self, attempt_id, action_id, **kwargs):
+        options = {"expected_generation": self._ledger().snapshot(attempt_id)["owner_generation"], **kwargs}
+        return ExecutionLedger(self.run / "execution" / "ledger.sqlite").resolve_observed_v8(
+            attempt_id, action_id, "operator", "stored response observed before completion", **options)
+
+    def test_an_observed_started_or_unknown_action_resolves_at_the_current_generation(self):
+        for role in ("producer", "verifier"):
+            for how, status in (("killed", "started"), ("raised", "unknown")):
+                with self.subTest(role=role, status=status):
+                    shutil.rmtree(self.run / "execution", ignore_errors=True)
+                    subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                    attempt_id = self._interrupted(role, how=how)
+                    action = self._action(attempt_id, role)
+                    self.assertEqual(action["status"], status)
+                    resolution = self._resolve(attempt_id, action["action_id"])
+                    self.assertEqual((resolution["owner_generation"], resolution["replayed"]), (1, False))
+                    snapshot = self._ledger().snapshot(attempt_id)
+                    resolved = self._action(attempt_id, role)
+                    self.assertEqual((resolved["status"], resolved["reason"]), ("completed", "operator_resolved_completed"))
+                    self.assertEqual((snapshot["status"], snapshot["owner_generation"]), ("started", 1))
+                    [row] = snapshot["resolutions"]
+                    observation = next(item for item in snapshot["response_observations"]
+                                       if item["action_id"] == action["action_id"])
+                    self.assertEqual((row["action_id"], row["owner_generation"], row["evidence"]),
+                                     (action["action_id"], 1, [{"kind": "flow_response_observation",
+                                                                "path": f"ledger:response_observations/{action['action_id']}",
+                                                                "sha256": observation["result_digest"]}]))
+                    self.assertTrue(self._resolve(attempt_id, action["action_id"])["replayed"])
+                    before = self._state(attempt_id)
+                    with self.assertRaises(RecoveryRefused) as raised:
+                        ExecutionLedger(self.run / "execution" / "ledger.sqlite").resolve_observed_v8(
+                            attempt_id, action["action_id"], "operator", "a different explanation", expected_generation=1)
+                    self.assertEqual(raised.exception.reason, "item_not_unresolved")
+                    self.assertEqual(self._state(attempt_id), before)
+
+    def test_reconcile_refuses_without_mutation(self):
+        attempt_id = self._interrupted("producer")
+        action_id = self._action(attempt_id, "producer")["action_id"]
+        high_water = self._ledger().snapshot(attempt_id)["events"][-1]["seq"]
+        for label, kwargs, reason in (("stale generation", {"expected_generation": 2}, "owner_generation_stale"),
+                                      ("moved events", {"expected_event_seq": high_water - 1}, "recovery_in_progress")):
+            with self.subTest(case=label):
+                before = self._state(attempt_id)
+                with self.assertRaises(RecoveryRefused) as raised:
+                    self._resolve(attempt_id, action_id, **kwargs)
+                self.assertEqual(raised.exception.reason, reason)
+                self.assertEqual(self._state(attempt_id), before)
+        with self.subTest(case="tampered observation"):
+            with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+                db.execute("UPDATE response_observations SET result_digest=? WHERE action_id=?", ("0" * 64, action_id))
+            before = self._state(attempt_id)
+            with self.assertRaises(RecoveryRefused) as raised:
+                self._resolve(attempt_id, action_id)
+            self.assertEqual(raised.exception.reason, "evidence_invalid")
+            self.assertEqual(self._state(attempt_id), before)
+
+    def test_reconcile_refuses_an_unobserved_action_and_a_terminal_attempt(self):
+        with self._kill_once("observe_response"):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        action_id = self._action(attempt_id, "producer")["action_id"]
+        before = self._state(attempt_id)
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._resolve(attempt_id, action_id)
+        self.assertEqual(raised.exception.reason, "evidence_insufficient")
+        self.assertEqual(self._state(attempt_id), before)
+        shutil.rmtree(self.run / "execution")
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+        result = self._start(("editor", "verifier"), [self.PASS])
+        self.assertEqual(result["status"], "completed", result)
+        before = self._state(result["attempt_id"])
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._resolve(result["attempt_id"], self._action(result["attempt_id"], "producer")["action_id"])
+        self.assertEqual(raised.exception.reason, "attempt_terminal")
+        self.assertEqual(self._state(result["attempt_id"]), before)
+
+
 if __name__ == "__main__":
     unittest.main()

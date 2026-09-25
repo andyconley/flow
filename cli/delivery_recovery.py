@@ -32,6 +32,11 @@ SIBLING_ATTEMPT_NOT_TERMINAL = "sibling_attempt_not_terminal"
 PREDECESSOR_LINK_INVALID = "predecessor_link_invalid"
 V8_NO_DISPATCH_REGRANT_UNSUPPORTED = "v8_no_dispatch_regrant_unsupported"
 WORKTREE_CONTAINS_PROJECT_FLOW = "worktree_contains_project_flow"
+OWNER_GENERATION_STALE = "owner_generation_stale"
+ITEM_NOT_UNRESOLVED = "item_not_unresolved"
+UNRESOLVABLE_ABANDON_ONLY = "unresolvable_abandon_only"
+EVIDENCE_INSUFFICIENT = "evidence_insufficient"
+EVIDENCE_INVALID = "evidence_invalid"
 
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 
