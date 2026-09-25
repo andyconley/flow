@@ -433,8 +433,13 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
                                           "d" * 64, "e" * 64, generation=1)
         self.ledger.observe_response(proposal["action_id"], _result(proposal, ""), generation=1)
         self.ledger.mark_unknown(proposal["action_id"], "specialist_send_outcome_uncertain", generation=1)
-        resolved = self.ledger.resolve_unknown(env["attempt_id"], proposal["action_id"], "operator", "resolved_completed",
-                                               "observed response was durably retained",
-                                               [{"kind": "response", "path": ".flow/runs/proof.json", "sha256": "a" * 64}],
-                                               generation=1)
+        # Operator-supplied evidence never reaches a v8 ledger (chunk 2, C1).
+        with self.assertRaises(RecoveryRefused) as raised:
+            self.ledger.resolve_unknown(env["attempt_id"], proposal["action_id"], "operator", "resolved_completed",
+                                        "observed response was durably retained",
+                                        [{"kind": "response", "path": ".flow/runs/proof.json", "sha256": "a" * 64}],
+                                        generation=1)
+        self.assertEqual(raised.exception.reason, "v8_resolution_requires_chunk_2")
+        resolved = self.ledger.resolve_observed_v8(env["attempt_id"], proposal["action_id"], "operator",
+                                                   "observed response was durably retained", expected_generation=1)
         self.assertEqual(resolved["disposition"], "resolved_completed")

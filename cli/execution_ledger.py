@@ -31,7 +31,8 @@ from verifier_contracts import VerifierContractError, validate_evaluation, valid
 from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
                                ITEM_NOT_UNRESOLVED, OWNER_GENERATION_STALE, PREDECESSOR_LINK_INVALID,
                                RECONCILIATION_REQUIRED, RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL,
-                               UNRESOLVABLE_ABANDON_ONLY, V8_NO_DISPATCH_REGRANT_UNSUPPORTED, RecoveryRefused)
+                               UNRESOLVABLE_ABANDON_ONLY, V8_NO_DISPATCH_REGRANT_UNSUPPORTED,
+                               V8_RESOLUTION_REQUIRES_CHUNK_2, RecoveryRefused)
 
 
 def utc_now() -> str:
@@ -1260,6 +1261,11 @@ class ExecutionLedger:
             raise ContractError("no-dispatch resolution requires positive no-send evidence")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
+            protocol = db.execute("SELECT execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if protocol is not None and protocol[0] == 8:
+                # v8 resolves only through resolve_observed_v8, from Flow's own
+                # observation; operator evidence never reaches a v8 ledger (C1).
+                raise RecoveryRefused(V8_RESOLUTION_REQUIRES_CHUNK_2, "v8 resolves only from a stored observation")
             row = db.execute("SELECT status,attempt_id FROM actions WHERE action_id=?", (action_id,)).fetchone()
             if row is None or row[1] != attempt_id:
                 raise ContractError("resolution action does not belong to attempt")

@@ -127,9 +127,10 @@ guard and, for Codex, by its workspace sandbox; a symlink inside the worktree
 that points into `.flow` relies on the sandbox canonicalizing write paths
 (unverified). A lead that is released or needs attention while an observed v8
 action is still uncertain cannot resolve it and cannot change lead, so the only
-remedy is abandonment; this fails closed. `resolve_unknown` itself still
-accepts a v8 attempt (the structured-verifier slice relies on it); only the
-guarded route reaches it from the CLI.
+remedy is abandonment; this fails closed. `resolve_unknown` refuses a v8
+attempt at the ledger, so operator-supplied evidence never reaches a v8 ledger;
+the structured-verifier slice's operator resolution of an observed verifier now
+goes through `resolve_observed_v8`.
 
 Rejected: automatic reconcile inside the recovery claim (it complicates the
 claim transaction and completes work with no operator act), and trace-backed

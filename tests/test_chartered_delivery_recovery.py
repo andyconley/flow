@@ -1395,7 +1395,7 @@ class V8ResolveRouteTests(ObservedReconcileHarness):
         self.assertTrue(self._route(attempt_id, verifier)["replayed"])
         self.assertEqual([item["action_id"] for item in self._ledger().snapshot(attempt_id)["resolutions"]], [verifier])
 
-    def test_the_route_refuses_a_terminal_or_unobserved_attempt_and_a_manager_call(self):
+    def test_the_route_refuses_a_terminal_or_unobserved_attempt(self):
         with self._kill_once("observe_response"):
             attempt_id = self._killed(("editor", "verifier"), [self.PASS])
         self._refused(attempt_id, "evidence_insufficient", action_id=self._action(attempt_id, "producer")["action_id"])
@@ -1406,23 +1406,38 @@ class V8ResolveRouteTests(ObservedReconcileHarness):
                       action_id=self._action(result["attempt_id"], "producer")["action_id"])
 
     def test_the_route_refuses_an_intact_observation_that_fails_revalidation(self):
-        attempt_id = self._interrupted("producer")
-        action_id = self._action(attempt_id, "producer")["action_id"]
-        with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
-            stored = json.loads(db.execute("SELECT result_json FROM response_observations WHERE action_id=?",
-                                           (action_id,)).fetchone()[0])
-            forged = json.dumps({**stored, "model": "some-other-model"}, sort_keys=True, separators=(",", ":"))
-            db.execute("UPDATE response_observations SET result_json=?,result_digest=? WHERE action_id=?",
-                       (forged, hashlib.sha256(forged.encode()).hexdigest(), action_id))
-        self._refused(attempt_id, "evidence_invalid", action_id=action_id)
+        for role, change in (("producer", {"model": "some-other-model"}), ("verifier", {"schema_version": 2})):
+            with self.subTest(role=role):
+                shutil.rmtree(self.run / "execution", ignore_errors=True)
+                subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                attempt_id = self._interrupted(role)
+                action_id = self._action(attempt_id, role)["action_id"]
+                with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+                    stored = json.loads(db.execute("SELECT result_json FROM response_observations WHERE action_id=?",
+                                                   (action_id,)).fetchone()[0])
+                    forged = json.dumps({**stored, **change}, sort_keys=True, separators=(",", ":"))
+                    db.execute("UPDATE response_observations SET result_json=?,result_digest=? WHERE action_id=?",
+                               (forged, hashlib.sha256(forged.encode()).hexdigest(), action_id))
+                self._refused(attempt_id, "evidence_invalid", action_id=action_id)
 
     def test_an_unobserved_action_is_abandoned_with_release(self):
-        with self._kill_once("observe_response"):
-            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
-        self._refused(attempt_id, "evidence_insufficient", action_id=self._action(attempt_id, "producer")["action_id"])
-        changed, run, errors = change_lead_claim("sample", "release", root=self.root)
-        self.assertTrue(changed, errors)
-        self.assertEqual(run["delivery"]["owner_status"], "released")
+        for role, target in (("producer", 1), ("verifier", 2)):
+            with self.subTest(role=role):
+                self.setUp()
+                calls = {"n": 0}
+
+                def when(ledger, *args, **kwargs):
+                    calls["n"] += 1
+                    return calls["n"] == target
+
+                with self._kill_once("observe_response", when=when):
+                    attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+                self._refused(attempt_id, "evidence_insufficient", action_id=self._action(attempt_id, role)["action_id"])
+                [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
+                self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
+                changed, run, errors = change_lead_claim("sample", "release", root=self.root)
+                self.assertTrue(changed, errors)
+                self.assertEqual(run["delivery"]["owner_status"], "released")
 
     def test_v8_resolve_refuses_an_envelope_worktree_containing_project_flow(self):
         # An attempt prepared before the guard existed: its worktree sits inside .flow.
@@ -1496,25 +1511,35 @@ class BoundaryReconcileTests(ObservedReconcileHarness):
             on_manager({**request, "call_id": expected_manager_call_id(request), "messages": messages})
             return {"attempt_id": envelope["attempt_id"]}
 
-        def manager(message, *, envelope, workspace):
-            raise OSError("simulated connection reset during the manager send")
+        for status, failure in (("unknown", OSError("simulated connection reset during the manager send")),
+                                ("started", KillPoint("process died during the manager send"))):
+            with self.subTest(status=status):
+                self.setUp()
 
-        with patch("delivery_gateway.run_status", return_value=self.state), \
-             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
-             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
-            attempt_id = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
-                                                    supervisor=supervisor, manager_adapter=manager)["attempt_id"]
-        [call] = self._ledger().snapshot(attempt_id)["manager_calls"]
-        before = self._state(attempt_id)
-        with self.assertRaises(RecoveryRefused) as raised:
-            self._route(attempt_id, call["call_id"])
-        self.assertEqual(raised.exception.reason, "unresolvable_abandon_only")
-        self.assertEqual(self._state(attempt_id), before)
-        [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
-        self.assertEqual(blocker["kind"], "manager_call")
-        self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
-        changed, run, errors = change_lead_claim("sample", "release", root=self.root)
-        self.assertTrue(changed, errors)
+                def manager(message, *, envelope, workspace):
+                    raise failure
+
+                with patch("delivery_gateway.run_status", return_value=self.state), \
+                     patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+                     patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+                    try:
+                        execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                   supervisor=supervisor, manager_adapter=manager)
+                    except KillPoint:
+                        pass
+                attempt_id = next((self.run / "execution").glob("*/envelope.json")).parent.name
+                [call] = self._ledger().snapshot(attempt_id)["manager_calls"]
+                self.assertEqual(call["status"], status)
+                before = self._state(attempt_id)
+                with self.assertRaises(RecoveryRefused) as raised:
+                    self._route(attempt_id, call["call_id"])
+                self.assertEqual(raised.exception.reason, "unresolvable_abandon_only")
+                self.assertEqual(self._state(attempt_id), before)
+                [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
+                self.assertEqual(blocker["kind"], "manager_call")
+                self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
+                changed, run, errors = change_lead_claim("sample", "release", root=self.root)
+                self.assertTrue(changed, errors)
 
     def test_a_lead_change_succeeds_once_every_uncertain_action_is_resolved(self):
         for action in ("resume", "supersede"):

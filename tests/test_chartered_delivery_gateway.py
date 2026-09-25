@@ -215,16 +215,17 @@ class CharteredPreparationTests(CharteredFixture):
     def test_the_worktree_guard_compares_files_not_spellings(self):
         from delivery_gateway import _refuse_project_flow_in_worktree
 
+        cases = [("dot-dot into .flow", self.worktree / ".." / ".flow")]
         folded = Path(str(self.root).swapcase())
-        if not folded.exists():
-            self.skipTest("case-sensitive volume")
-        for label, worktree in (("case-folded root", folded), ("case-folded .flow", folded / ".flow" / "runs"),
-                                ("dot-dot into .flow", self.worktree / ".." / ".flow")):
+        if folded.exists():
+            # Only a case-insensitive volume can spell one directory two ways.
+            cases += [("case-folded root", folded), ("case-folded .flow", folded / ".flow" / "runs")]
+            _refuse_project_flow_in_worktree(self.worktree, folded)
+        for label, worktree in cases:
             with self.subTest(worktree=label):
                 with self.assertRaises(RecoveryRefused) as raised:
                     _refuse_project_flow_in_worktree(worktree, self.root)
                 self.assertEqual(raised.exception.reason, "worktree_contains_project_flow")
-        _refuse_project_flow_in_worktree(self.worktree, folded)
 
     def test_changed_effective_specialist_definition_is_outside_sealed_charter(self):
         with patch("delivery_gateway.run_status", return_value=self.state), \
