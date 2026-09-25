@@ -2,20 +2,25 @@
   "artifacts": {
     "acceptance_criteria": ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
     "orchestration_manifest": ".flow/runs/chartered-delivery-recovery-2/orchestration.json",
-    "requirements": ".flow/runs/chartered-delivery-recovery-2/requirements.md"
+    "requirements": ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+    "solution": ".flow/runs/chartered-delivery-recovery-2/solution.md"
   },
   "created_at": "2026-09-25T00:10:05Z",
-  "dispositions": {},
+  "dispositions": {
+    "risk": "owned"
+  },
   "gates": {
     "approve-definition": "2026-09-25T00:30:20Z",
-    "start-definition": "2026-09-25T00:10:05Z"
+    "approve-solution": "2026-09-25T00:41:00Z",
+    "start-definition": "2026-09-25T00:10:05Z",
+    "start-solution": "2026-09-25T00:30:27Z"
   },
-  "lane": "define",
-  "last_event": "approve-definition",
-  "phase": "definition_approved",
+  "lane": "solution",
+  "last_event": "approve-solution",
+  "phase": "solution_approved",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "definition_approved",
-  "updated_at": "2026-09-25T00:30:20Z",
+  "state": "solution_approved",
+  "updated_at": "2026-09-25T00:41:00Z",
   "work_id": "chartered-delivery-recovery-2"
 }

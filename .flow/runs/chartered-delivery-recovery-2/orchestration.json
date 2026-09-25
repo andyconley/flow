@@ -272,6 +272,57 @@
         "mode": "concurrent",
         "group": "adversarial"
       }
+    },
+    {
+      "id": "solution-verify",
+      "lane": "solution",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-delivery-recovery-2-verify"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/solution-verify.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/solution-verify.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        "docs/adr/0012-flow-owned-maf-recovery.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/research/solution-verify.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Confirm or refute the C1 collapse premise with file:line evidence"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "solution"
+      }
     }
   ],
   "shared_state": [],

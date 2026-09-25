@@ -116,3 +116,17 @@ Status: **approved by the engineer on 2026-09-24** (revised after adversarial re
 ## Approval status
 
 - Approved by the engineer on 2026-09-24.
+
+## Amendments from `flow-solution` (2026-09-24, with Option A)
+
+The premise verification (`research/solution-verify.md`) showed parts of the approved scope are empty under C1. With Option A (`solution.md`):
+
+- **Requirement 3 dropped.** No Flow-owned reply ever survives for an unresolved manager call. The manager parts of requirements 7 and 9 go with it. Manager-call blockers are "abandon only". Q5 is moot.
+- **Requirement 2's trace route dropped** (solution Option C, deferred). Requirements 2 and 6 merge: a v8 `started` or `unknown` producer or verifier action is resolved from its stored `response_observations` row, operator-confirmed through `resolve-execution` (Q3), at the current owner generation (Q4).
+- **New requirement 12, worktree guard.** Preparing a chartered delivery, and the v8 resolve route, both refuse a worktree that contains the project's `.flow/` directory, so a worker cannot write ledger or attempt evidence (this closes the A4 gap).
+- **Acceptance criteria:**
+  - AC1 (a) becomes an abandon-only test;
+  - AC4 is removed;
+  - AC5 is realized by AC1 (c)/(e) and AC3;
+  - AC8 covers action resolutions only;
+  - new AC12, worktree guard: prepare and resolve refuse a worktree that contains `.flow/`, and mutate nothing.
