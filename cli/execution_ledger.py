@@ -538,16 +538,48 @@ class ExecutionLedger:
         for values in db.execute(
                 "SELECT r.request_id,r.lineage_id,r.owner_generation,r.kind,r.denied_row_id,r.limits_json,r.amount,"
                 "r.proposal_digest,r.rationale,r.status,r.created_at,g.grant_id,g.authority,g.decision,g.actor,"
-                "g.explanation,g.owner_generation,g.decided_at,g.status,g.consumed_by FROM expansion_requests r "
+                "g.explanation,g.owner_generation,g.decided_at,g.status,g.consumed_by,g.amount FROM expansion_requests r "
                 "LEFT JOIN expansion_grants g USING(request_id) WHERE r.attempt_id=? ORDER BY r.rowid", (attempt_id,)):
             request = dict(zip(("request_id", "lineage_id", "owner_generation", "kind", "denied_row_id", "limits",
                                 "amount", "proposal_digest", "rationale", "status", "created_at"), values[:11]))
             request["limits"] = json.loads(request["limits"])
             request["grant"] = None if values[11] is None else dict(zip(
                 ("grant_id", "authority", "decision", "actor", "explanation", "owner_generation", "decided_at",
-                 "status", "consumed_by"), values[11:]))
+                 "status", "consumed_by", "amount"), values[11:]))
             requests.append(request)
         return requests
+
+    @staticmethod
+    def _expansion_receipt(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, Any] | None:
+        """The receipt's expansion block; absent when the lineage never expanded.
+
+        Predecessor totals let the pure validator recompute headroom and the
+        lineage-scoped effective limits; the seal compares the whole block with
+        the ledger, so a grant cannot be added, removed, or altered.
+        """
+        predecessors = [item["attempt_id"] for item in envelope.get("predecessors", [])]
+        zeros = {name: 0 for name in EXPANSION_LIMIT_KEYS}
+        spent = (ExecutionLedger._granted_units(db, predecessors, authority="charter_headroom", consumed_only=False)
+                 if predecessors else zeros)
+        inherited = ExecutionLedger._granted_units(db, predecessors) if predecessors else zeros
+        requests = [{"request_id": item["request_id"], "kind": item["kind"], "denied_row_id": item["denied_row_id"],
+                     "limits": item["limits"], "amount": item["amount"], "owner_generation": item["owner_generation"],
+                     "status": item["status"],
+                     "grant": None if item["grant"] is None else {key: item["grant"][key] for key in (
+                         "grant_id", "authority", "decision", "amount", "owner_generation", "status", "consumed_by", "actor")}}
+                    for item in ExecutionLedger._expansion_requests(db, envelope["attempt_id"])]
+        lineage_grants = {name: inherited[name] for name in sorted(LINEAGE_SCOPED_LIMITS)}
+        if not requests and not any(spent.values()) and not any(lineage_grants.values()):
+            return None
+        return {"lineage_id": ExecutionLedger._lineage_attempts(envelope)[0], "headroom": expansion_headroom(envelope),
+                "predecessor_headroom_spent": spent, "predecessor_lineage_grants": lineage_grants, "requests": requests}
+
+    def expansion_receipt(self, attempt_id: str) -> dict[str, Any] | None:
+        with self._db() as db:
+            row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None:
+                raise ContractError("attempt missing")
+            return self._expansion_receipt(db, json.loads(row[0]))
 
     def expansion_state(self, attempt_id: str) -> dict[str, Any]:
         """Effective limits, lineage headroom, and every request of one attempt, in ledger order."""
@@ -2078,6 +2110,9 @@ class ExecutionLedger:
                 if receipt_bytes is None:
                     raise ContractError("protocol v8 seal requires the written receipt")
                 self._assert_receipt_lineage(db, attempt_id, receipt_bytes)
+                envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0])
+                if json.loads(receipt_bytes).get("expansion") != self._expansion_receipt(db, envelope):
+                    raise ContractError("receipt expansion evidence differs from the ledger")
                 db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
                            (status, reason, receipt_path, receipt_sha256, attempt_id))
             else:

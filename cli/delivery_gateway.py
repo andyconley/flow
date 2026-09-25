@@ -1286,6 +1286,10 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         receipt["verifier_usage"] = snapshot["verifier_usage"]
         if envelope.get("predecessors"):
             receipt["lineage_usage"] = ledger.lineage_usage(aid)
+        expansion = ledger.expansion_receipt(aid)
+        if expansion is not None:
+            # Added only when the lineage expanded, so other receipts stay byte-identical.
+            receipt["expansion"] = expansion
         if snapshot.get("recoveries"):
             # A receipt on disk while the attempt is started is an unsealed
             # draft from a process that died before finish_attempt.

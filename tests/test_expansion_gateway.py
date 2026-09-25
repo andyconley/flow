@@ -25,6 +25,7 @@ class ExpansionGatewayFixture(CharteredFixture):
     # Prepare refuses a roster larger than base delegations, so the third
     # proposal (a verifier retry after a failing review) is the capped one.
     max_delegations = 2
+    max_verifier_calls: int | None = None
 
     def setUp(self):
         super().setUp()
@@ -32,6 +33,8 @@ class ExpansionGatewayFixture(CharteredFixture):
                    for role in ("lead-developer", "quality-reviewer", "test-engineer")}
         self.intent = shaper_intent(digests, limits=dict(self.limits), expansion_headroom=self.headroom,
                                     max_delegations=self.max_delegations)
+        if self.max_verifier_calls is not None:
+            self.intent["max_verifier_calls"] = self.max_verifier_calls
         (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
         self._write_delivery_authority()
 

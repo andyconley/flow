@@ -388,7 +388,99 @@ def _validate_predecessors(envelope: dict[str, Any]) -> None:
         seen.add(item["attempt_id"])
 
 
-def _validate_lineage_usage(envelope: dict[str, Any], receipt: dict[str, Any]) -> dict[str, int]:
+EXPANSION_REQUEST_STATUSES = frozenset({"pending", "granted", "denied", "cancelled"})
+EXPANSION_GRANT_STATUSES = frozenset({"available", "consumed", "lapsed", "denied"})
+
+
+def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> dict[str, int]:
+    """Recompute a v8 receipt's expansion evidence and return its effective limits (ADR 0017).
+
+    Validation replays headroom spending in ledger order, and binds every
+    grant to its request, authority, one-unit amount, lineage, and an owner
+    generation of this attempt's recovery chain. Rows allowed as
+    ``expansion_granted`` must be backed by a consumed grant.
+    """
+    limits = envelope["limits"]
+    effective = {name: limits[key] for name, (key, _) in EXPANSION_LIMIT_KEYS.items()}
+    rows = {item["action_id"]: item for item in receipt["actions"]}
+    rows.update({item["call_id"]: item for item in receipt["manager_calls"]})
+    block = receipt.get("expansion")
+    backed: set[str] = set()
+    if block is not None:
+        names = set(EXPANSION_LIMIT_KEYS)
+        counters = lambda value, keys: (isinstance(value, dict) and set(value) == keys
+                                        and all(type(item) is int and item >= 0 for item in value.values()))
+        predecessors = envelope.get("predecessors", [])
+        lineage_id = predecessors[0]["attempt_id"] if predecessors else envelope["attempt_id"]
+        if (not isinstance(block, dict)
+                or set(block) != {"lineage_id", "headroom", "predecessor_headroom_spent", "predecessor_lineage_grants", "requests"}
+                or block["lineage_id"] != lineage_id or block["headroom"] != expansion_headroom(envelope)
+                or not counters(block["predecessor_headroom_spent"], names)
+                or not counters(block["predecessor_lineage_grants"], {"paid_worker_calls", "verifier_calls"})
+                or not isinstance(block["requests"], list)
+                or (not predecessors and (any(block["predecessor_headroom_spent"].values())
+                                          or any(block["predecessor_lineage_grants"].values())))):
+            raise ContractError("receipt expansion evidence is invalid")
+        recovery = receipt.get("recovery") if isinstance(receipt.get("recovery"), dict) else {}
+        generations = {envelope["delivery_lead_claim"]["generation"]} | {
+            item.get("generation") for item in recovery.get("recoveries", []) if isinstance(item, dict)}
+        spent = dict(block["predecessor_headroom_spent"])
+        for name, value in block["predecessor_lineage_grants"].items():
+            effective[name] += value
+        headroom = block["headroom"]
+        seen: set[str] = set()
+        for request in block["requests"]:
+            grant = request.get("grant") if isinstance(request, dict) else None
+            if (not isinstance(request, dict)
+                    or set(request) != {"request_id", "kind", "denied_row_id", "limits", "amount", "owner_generation", "status", "grant"}
+                    or not isinstance(request["request_id"], str) or request["request_id"] in seen
+                    or request["kind"] not in {"delegate", "manager_call"} or request["denied_row_id"] not in rows
+                    or not isinstance(request["limits"], list) or not request["limits"]
+                    or request["limits"] != sorted(set(request["limits"])) or not set(request["limits"]) <= names
+                    or request["amount"] != 1 or request["owner_generation"] not in generations
+                    or request["status"] not in EXPANSION_REQUEST_STATUSES
+                    or (request["kind"] == "delegate") != (request["denied_row_id"] in {item["action_id"] for item in receipt["actions"]})):
+                raise ContractError("receipt expansion request is invalid")
+            seen.add(request["request_id"])
+            if grant is None:
+                if request["status"] not in {"pending", "cancelled"}:
+                    raise ContractError("receipt expansion decision is missing its grant")
+                continue
+            if (not isinstance(grant, dict)
+                    or set(grant) != {"grant_id", "authority", "decision", "amount", "owner_generation", "status", "consumed_by", "actor"}
+                    or grant["amount"] != 1 or grant["owner_generation"] not in generations
+                    or grant["status"] not in EXPANSION_GRANT_STATUSES
+                    or grant["decision"] != {"granted": "approve", "denied": "deny"}.get(request["status"])
+                    or (grant["decision"] == "deny") != (grant["status"] == "denied")
+                    or (grant["status"] == "consumed") != (grant["consumed_by"] is not None)
+                    or grant["consumed_by"] not in {None, request["denied_row_id"]}):
+                raise ContractError("receipt expansion grant is invalid")
+            if grant["authority"] == "charter_headroom":
+                # Automatic grants are consumed at once and draw sealed headroom in order.
+                if grant["status"] != "consumed" or grant["actor"] is not None:
+                    raise ContractError("receipt automatic expansion grant is invalid")
+                for name in request["limits"]:
+                    spent[name] += 1
+                    if spent[name] > headroom[name]:
+                        raise ContractError("receipt automatic expansion exceeds sealed headroom")
+            elif grant["authority"] != "engineer" or not isinstance(grant["actor"], str) or not grant["actor"].strip():
+                raise ContractError("receipt expansion grant authority is invalid")
+            if grant["status"] == "consumed":
+                if rows[grant["consumed_by"]]["status"] == "denied":
+                    raise ContractError("receipt consumed expansion grant left its proposal denied")
+                backed.add(grant["consumed_by"])
+                for name in request["limits"]:
+                    effective[name] += 1
+    for row_id, item in rows.items():
+        if item.get("reason") == "expansion_granted" and row_id not in backed:
+            raise ContractError("receipt expansion-granted proposal lacks a consumed grant")
+    if any(effective[name] > ceiling for name, (_, ceiling) in EXPANSION_LIMIT_KEYS.items()):
+        raise ContractError("receipt effective limits exceed the runner ceiling")
+    return effective
+
+
+def _validate_lineage_usage(envelope: dict[str, Any], receipt: dict[str, Any],
+                            effective: dict[str, int] | None = None) -> dict[str, int]:
     """A successor receipt reports its predecessors' sends; a first attempt reports none.
 
     The counts are the ledger's; a receipt can only be checked for shape and
@@ -404,14 +496,16 @@ def _validate_lineage_usage(envelope: dict[str, Any], receipt: dict[str, Any]) -
         raise ContractError("receipt lineage usage is invalid")
     # The lineage shares the charter caps, so the attempt's own sends plus its
     # predecessors' can never exceed them.
-    limits, job = envelope["limits"], envelope["job_contract"]
+    job = envelope["job_contract"]
+    effective = effective or {"paid_worker_calls": envelope["limits"]["max_paid_worker_calls"],
+                              "verifier_calls": envelope["limits"]["max_verifier_calls"]}
     sent = {"started", "completed", "failed", "unknown"}
     own_paid = sum(item["request"].get("provider") in {"codex", "claude"} and item["status"] in sent
                    for item in receipt["actions"])
     own_verifier = sum(item["request"].get("instance_id") in job["verifier_instance_ids"] and item["status"] in sent
                        for item in receipt["actions"])
-    if (own_paid + usage["predecessor_paid_calls"] > limits["max_paid_worker_calls"]
-            or own_verifier + usage["predecessor_verifier_sends"] > limits["max_verifier_calls"]):
+    if (own_paid + usage["predecessor_paid_calls"] > effective["paid_worker_calls"]
+            or own_verifier + usage["predecessor_verifier_sends"] > effective["verifier_calls"]):
         raise ContractError("receipt lineage usage exceeds the charter caps")
     return usage
 
@@ -933,7 +1027,8 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         if not isinstance(inputs, list) or not isinstance(evaluations, list) or not isinstance(usage, dict) or set(usage) != {
                 "maximum", "reserved", "consumed", "denied", "retry_eligible"}:
             raise ContractError("structured verifier receipt evidence is invalid")
-        if usage["maximum"] != envelope["limits"]["max_verifier_calls"] or any(
+        effective = _validate_expansion(envelope, receipt)
+        if usage["maximum"] != effective["verifier_calls"] or any(
                 type(usage[key]) is not int or usage[key] < 0 for key in ("maximum", "reserved", "consumed", "denied")) or type(usage["retry_eligible"]) is not bool:
             raise ContractError("structured verifier usage is invalid")
         action_ids = {item["action_id"] for item in receipt["actions"]}
@@ -1002,11 +1097,11 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         denied = sum(item["status"] == "denied" and item.get("reason") in {
             "verifier_call_cap", "verifier_retry_denied"} for item in verifier_actions)
         latest = evaluations[-1]["outcome"] if evaluations else None
-        lineage = _validate_lineage_usage(envelope, receipt)
-        expected_usage = {"maximum": envelope["limits"]["max_verifier_calls"],
+        lineage = _validate_lineage_usage(envelope, receipt, effective)
+        expected_usage = {"maximum": effective["verifier_calls"],
                           "reserved": reserved, "consumed": consumed, "denied": denied,
                           "retry_eligible": latest in {"valid_fail", "unusable"}
-                          and reserved + lineage["predecessor_verifier_sends"] < envelope["limits"]["max_verifier_calls"]}
+                          and reserved + lineage["predecessor_verifier_sends"] < effective["verifier_calls"]}
         if usage != expected_usage:
             raise ContractError("structured verifier usage differs from receipt facts")
         _validate_recovery_block(envelope, receipt)
