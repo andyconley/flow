@@ -459,6 +459,10 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     if predecessors:
         # Added only when non-empty, so a first attempt stays byte-identical.
         envelope["predecessors"] = predecessors
+    headroom = {name: value for name, value in canonical_limits.get("expansion_headroom", {}).items() if value}
+    if headroom:
+        # Projected from the sealed Charter only; omitted when none is sealed.
+        envelope["expansion_headroom"] = headroom
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)

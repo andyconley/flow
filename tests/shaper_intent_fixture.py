@@ -1,13 +1,18 @@
 """Reviewed structured Shaper intent fixture for delivery-boundary tests."""
 
 
-def shaper_intent(definition_digests=None):
+def shaper_intent(definition_digests=None, *, limits=None, expansion_headroom=None, max_delegations=6):
+    """Return a valid intent; ``limits`` overrides enforceable values.
+
+    The default base limits sit at the runner ceilings, so expansion tests
+    lower them with ``limits`` before sealing ``expansion_headroom``.
+    """
     definition_digests = definition_digests or {
         "lead-developer": "1" * 64,
         "quality-reviewer": "2" * 64,
         "test-engineer": "3" * 64,
     }
-    return {
+    intent = {
         "problem": "Transfer approved intent to one fenced Delivery Lead.",
         "intended_users": ["Flow maintainers and operators."],
         "outcomes": ["Seal and enforce Flow-owned delivery authority."],
@@ -41,3 +46,9 @@ def shaper_intent(definition_digests=None):
         "approval_history": [{"event": "approve-definition", "authority": "engineer"}],
         "next_lane_eligibility": ["delivery"],
     }
+    intent["delegation_matrix"]["max_delegations"] = max_delegations
+    intent["budget_safety_envelope"]["enforceable"].update(limits or {})
+    if expansion_headroom is not None:
+        intent["expansion_headroom"] = expansion_headroom
+        intent["delegation_matrix"]["delegated_expansion"] = any(expansion_headroom.values())
+    return intent

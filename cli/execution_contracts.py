@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from runner_limits import MAX_ACTIONS, MAX_CONCURRENT, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS, MAX_VERIFIER_CALLS
+
 try:
     from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
                                     provider_binding_mismatch, validate_evaluation, validate_structured_verifier_result)
@@ -105,6 +107,8 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
             _validate_delivery_projection(envelope)
         if protocol_version == STRUCTURED_VERIFIER_PROTOCOL_VERSION and "predecessors" in envelope:
             _validate_predecessors(envelope)
+        if "expansion_headroom" in envelope:
+            _validate_expansion_headroom(envelope)
         return
     shared = ("work_id", "attempt_id", "charter_digest", "charter_sources", "run_protocol_revision", "manifest_digest", "limits", "checkpoint_dir")
     legacy = ("assignment_id", "definition_digest", "instance_id", "role", "provider", "model", "task_digest", "task")
@@ -234,8 +238,8 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
             if assignment["capabilities"] != expected_capabilities:
                 raise ContractError("specialist capabilities differ from provider")
     limits = envelope["limits"]
-    expected = {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
-                "max_manager_calls": 12, "max_manager_rounds": 6}
+    expected = {"max_delegations": MAX_ACTIONS, "max_concurrent": MAX_CONCURRENT, "max_replans": MAX_REPLANS,
+                "max_manager_calls": MAX_MANAGER_CALLS, "max_manager_rounds": MAX_MANAGER_ROUNDS}
     paid_calls = limits.get("max_paid_worker_calls") if isinstance(limits, dict) else None
     if envelope["execution_protocol_version"] == DELIVERY_PROTOCOL_VERSION:
         valid_limits = (isinstance(limits, dict) and set(limits) == set(expected) | {"max_paid_worker_calls", "max_runtime_seconds"}
@@ -252,7 +256,7 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
                         and limits["max_manager_calls"] >= 1 and limits["max_manager_rounds"] >= 1
                         and type(limits["max_runtime_seconds"]) is int and 1 <= limits["max_runtime_seconds"] <= 600
                         and type(paid_calls) is int and 0 <= paid_calls <= limits["max_delegations"]
-                        and limits["max_verifier_calls"] in {1, 2})
+                        and type(limits["max_verifier_calls"]) is int and 1 <= limits["max_verifier_calls"] <= MAX_VERIFIER_CALLS)
     else:
         valid_limits = (isinstance(limits, dict) and set(limits) == set(expected) | {"max_paid_worker_calls"}
                         and all(limits[key] == value for key, value in expected.items())
@@ -331,6 +335,37 @@ RECOVERY_INTERRUPTION_CAUSES = frozenset({"transport", "reconciliation_required"
 RECOVERY_MODES = frozenset({"answer", "pending", "seal"})
 RECOVERY_GRANT_REASONS = frozenset({"recovery_unconsumed_grant", "recovery_regranted"})
 RECOVERY_TRIGGER_REASONS = RECOVERY_GRANT_REASONS | {"recovery_after_dispatch"}
+
+
+EXPANSION_LIMIT_KEYS = {
+    "delegations": ("max_delegations", MAX_ACTIONS),
+    "paid_worker_calls": ("max_paid_worker_calls", MAX_ACTIONS),
+    "verifier_calls": ("max_verifier_calls", MAX_VERIFIER_CALLS),
+    "manager_calls": ("max_manager_calls", MAX_MANAGER_CALLS),
+    "manager_rounds": ("max_manager_rounds", MAX_MANAGER_ROUNDS),
+}
+
+
+def expansion_headroom(envelope: dict[str, Any]) -> dict[str, int]:
+    """Return the sealed headroom an envelope projects; absent means none."""
+    projected = envelope.get("expansion_headroom", {})
+    return {name: projected.get(name, 0) for name in EXPANSION_LIMIT_KEYS}
+
+
+def _validate_expansion_headroom(envelope: dict[str, Any]) -> None:
+    """A v8 envelope may carry the charter's headroom; it is omitted when all zero."""
+    headroom = envelope["expansion_headroom"]
+    limits = envelope["limits"]
+    if (envelope["execution_protocol_version"] != STRUCTURED_VERIFIER_PROTOCOL_VERSION
+            or not isinstance(headroom, dict) or not headroom or not set(headroom) <= set(EXPANSION_LIMIT_KEYS)
+            or any(type(value) is not int or value < 0 for value in headroom.values()) or not any(headroom.values())):
+        raise ContractError("expansion headroom is invalid")
+    full = expansion_headroom(envelope)
+    for name, (limit, ceiling) in EXPANSION_LIMIT_KEYS.items():
+        if limits[limit] + full[name] > ceiling:
+            raise ContractError("expansion headroom exceeds the runner ceiling")
+    if limits["max_paid_worker_calls"] + full["paid_worker_calls"] > limits["max_delegations"] + full["delegations"]:
+        raise ContractError("paid-worker headroom exceeds delegation headroom")
 
 
 def _validate_predecessors(envelope: dict[str, Any]) -> None:

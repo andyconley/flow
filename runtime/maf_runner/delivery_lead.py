@@ -13,6 +13,8 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
+from runtime.maf_runner.limits import MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS
+
 PROTOCOL_VERSION = 8
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
@@ -172,11 +174,11 @@ async def _run(start: dict[str, Any]) -> None:
             elif phase == "replan_plan" and replan_sequence == 0:
                 raise PolicyAbort("replan plan arrived before revised facts")
             manager_call += 1
-            if manager_call > 12:
+            if manager_call > MAX_MANAGER_CALLS:
                 raise PolicyAbort("manager model call limit reached")
             if phase == "progress" and manager_call > 3:
                 manager_round += 1
-            if manager_round > 6:
+            if manager_round > MAX_MANAGER_ROUNDS:
                 raise PolicyAbort("manager round limit reached")
             serialized = [message.to_dict() for message in messages]
             if len(json.dumps(serialized, ensure_ascii=False).encode()) > MAX_MANAGER_MESSAGE_BYTES:
@@ -227,7 +229,7 @@ async def _run(start: dict[str, Any]) -> None:
         async def request(self, message: GroupChatRequestMessage, ctx: WorkflowContext[GroupChatResponseMessage]) -> None:
             nonlocal action_number
             action_number += 1
-            if action_number > 6:
+            if action_number > MAX_ACTIONS:
                 raise PolicyAbort("delegation limit reached")
             assignment = self.assignment
             # MAF must pause and persist the selected request before Flow may
@@ -253,7 +255,7 @@ async def _run(start: dict[str, Any]) -> None:
                 raise RuntimeError("Flow action result lacks summary")
             await ctx.send_message(GroupChatResponseMessage(message=Message(role="assistant", contents=[summary], author_name=self.id)))
 
-    manager = StandardMagenticManager(ManagerProxy(), max_reset_count=2, max_round_count=6,
+    manager = StandardMagenticManager(ManagerProxy(), max_reset_count=MAX_REPLANS, max_round_count=MAX_MANAGER_ROUNDS,
                                       progress_ledger_retry_count=1)
     workflow = MagenticBuilder(participants=[GuardedParticipant(a) for a in assignments], manager=manager,
                                enable_plan_review=False, checkpoint_storage=storage, name=workflow_name).build()
@@ -263,9 +265,9 @@ async def _run(start: dict[str, Any]) -> None:
     else:
         if not isinstance(resume, dict) or not isinstance(resume.get("checkpoint_id"), str):
             raise PolicyAbort("invalid MAF restore request")
-        if not isinstance(resume.get("manager_calls_committed"), int) or not 0 <= resume["manager_calls_committed"] <= 12:
+        if not isinstance(resume.get("manager_calls_committed"), int) or not 0 <= resume["manager_calls_committed"] <= MAX_MANAGER_CALLS:
             raise PolicyAbort("invalid manager replay position")
-        if type(resume.get("replans_committed")) is not int or not 0 <= resume["replans_committed"] <= 2:
+        if type(resume.get("replans_committed")) is not int or not 0 <= resume["replans_committed"] <= MAX_REPLANS:
             raise PolicyAbort("invalid approved replan position")
         checkpoint = await storage.load(resume["checkpoint_id"])
         orchestrator_state = checkpoint.state.get("_executor_state", {}).get("magentic_orchestrator", {})

@@ -17,6 +17,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from runner_limits import MAX_ACTIONS, MAX_MANAGER_CALLS
+
 try:  # flow.py runs siblings directly; package imports use the second path.
     from execution_contracts import validate_action, validate_replan
 except ModuleNotFoundError:  # pragma: no cover - exercised by package consumers
@@ -463,6 +465,11 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     deadline = time.monotonic() + timeout_s
     pending = bytearray()
     manager_calls = actions = 0
+    # v8 limits can grow by ledger grants, so the process guard backstops at
+    # the runner ceiling; the ledger enforces the effective limit per call.
+    expandable = protocol_version == 8
+    manager_call_bound = MAX_MANAGER_CALLS if expandable else envelope["limits"]["max_manager_calls"]
+    action_bound = MAX_ACTIONS if expandable else envelope["limits"]["max_delegations"]
     try:
         _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "resume" if resume else "start",
                                                    "envelope": envelope, "task": task, "resume": resume}, deadline)
@@ -472,7 +479,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
             if kind == "manager_request":
                 manager_calls += 1
                 if (envelope["manager"]["provider"] in {"codex", "claude"}
-                        and manager_calls > envelope["limits"]["max_manager_calls"] + 1):
+                        and manager_calls > manager_call_bound + 1):
                     raise MafProtocolError("MAF manager exceeded the bounded call protocol")
                 if message.get("attempt_id") != envelope["attempt_id"]:
                     raise MafProtocolError("MAF manager request attempt differs")
@@ -485,7 +492,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
             if kind == "propose_action":
                 if message.get("provider") in {"codex", "claude"}:
                     actions += 1
-                    if actions > envelope["limits"]["max_delegations"] + 1:
+                    if actions > action_bound + 1:
                         raise MafProtocolError("MAF proposed too many paid specialist calls")
                 if message.get("attempt_id") != envelope["attempt_id"]:
                     raise MafProtocolError("MAF action attempt differs")
