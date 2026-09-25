@@ -694,6 +694,114 @@
         "mode": "concurrent",
         "group": "implement-review"
       }
+    },
+    {
+      "id": "review-acceptance",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-delivery-recovery-2-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/review.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-2/plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery-2/HANDOFF.md",
+        ".flow/runs/chartered-delivery-recovery-2/research/implement-review.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Acceptance verdict of chunk 2 against AC1-AC12"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "review"
+      }
+    },
+    {
+      "id": "review-proof",
+      "lane": "review",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-delivery-recovery-2-review"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/review.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-2/plan.md",
+        ".flow/runs/chartered-delivery-recovery-2/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery-2/HANDOFF.md",
+        ".flow/runs/chartered-delivery-recovery-2/research/implement-review.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Acceptance verdict of chunk 2 against AC1-AC12"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "review"
+      }
     }
   ],
   "shared_state": [],
@@ -747,6 +855,8 @@
       "implementation-root"
     ],
     "evidence_collector_assignment": "implementation-root",
-    "independent": true
+    "independent": true,
+    "verifier_assignment": "review-acceptance",
+    "artifact_path": ".flow/runs/chartered-delivery-recovery-2/review.md"
   }
 }
