@@ -386,6 +386,15 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
         with self.ledger.recovery_lock("attempt", holder="recovery"):
             pass
 
+    def test_send_lock_refuses_a_symlinked_lock_path(self):
+        target = Path(self.temporary.name) / "elsewhere"
+        target.write_text("untouched")
+        self.ledger.path.with_suffix(".send.lock").symlink_to(target)
+        with self.assertRaises(OSError):
+            with self.ledger.send_lock():
+                self.fail("a symlinked send lock must not be taken")
+        self.assertEqual((target.read_text(), target.stat().st_mode & 0o777 != 0o600), ("untouched", True))
+
     def test_expired_verifier_grant_is_committed_denied_not_left_reserved(self):
         env = self.envelope(maximum=1)
         self.ledger.create_attempt(env)

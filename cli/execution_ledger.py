@@ -213,7 +213,7 @@ class ExecutionLedger:
     def send_lock(self):
         """Serialize recovery claims with the physical adapter boundary."""
         path = self.path.with_suffix(".send.lock")
-        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
             os.fchmod(fd, 0o600)
             fcntl.flock(fd, fcntl.LOCK_EX)
