@@ -432,3 +432,43 @@ archive artifact before closure, keeps a source-backed `Work Closed` section,
 and registers that artifact on the lifecycle transition. Enrichment remains
 downstream from closure, so an unexpected publication failure still cannot
 undo the archived state.
+
+### Acceptance Criteria Cannot Be Amended Honestly
+
+Status: observed 5 times, promoted from the capability-gap ledger
+
+When an acceptance criterion turns out to be literally wrong, nothing says how to narrow it without hollowing it out; the discipline of pairing every narrowing with a control has to be reinvented
+
+There is no convention for amending an acceptance criterion mid-run when it was written wrong, so the correction had to be a prose banner inside the criteria file
+
+A criterion fixed a planning-time count as a literal; the real population differed and the amendment had to be improvised at handback
+
+a mid-implementation redefinition of a core requirement had no amendment path with its own approval gate; it was recorded as a free-form note
+
+Two acceptance criteria were relaxed mid-release by maintainer ruling after live evidence contradicted their fixture expectations; the framework has no amendment record that ties the change to its evidence.
+
+### Orchestration Cannot Reference Out Of Tree Outputs
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+Agent outputs that must live outside the repository cannot be declared as manifest outputs; handback validation fails until hand-written receipts stand in for them
+
+dispatch outputs that must live outside the repository still needed hand-written in-repo receipts to satisfy the handback validator
+
+The orchestration manifest could not declare work and evidence that lived in a second, private repository, so the release-gate harness and its results sat outside the validated scope.
+
+### Mutation Checks Have No Harness
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+mutation checks are hand-rolled each run; a same-size mutant left stale bytecode live after restore, silently corrupting later results; no standard harness isolates bytecode, restores, and records which functions each round targeted
+
+Mutation checks were hand-rolled with sed and git checkout at every step; there was no reusable mutate-run-restore harness that judges by exit code.
+
+### Agent Isolation Has No Ambient Context Boundary
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+a subagent dispatched to assess material blind still inherits ambient user context; isolation checks cover the supplied corpus but nothing bounds what the agent already carries
+
+Proving a headless agent under test saw no ambient instruction files needed an ad hoc positive-control probe; there is no standard for sealing and proving agent-under-test isolation.
