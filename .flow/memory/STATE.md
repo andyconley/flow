@@ -2,12 +2,14 @@
 
 ## Active work
 
-- `release-validation-gate` is handback-ready: its release gate shipped and
-  runs on every merge to main. It needs a light acceptance review before
-  archive.
-- Seven superseded runs are blocked, not archived: the Sept 19 MAF runs,
-  `execution-provider-receipt-charter`, and `role-method-differentiation`.
-  Flow has no close-as-superseded transition.
+- Nothing in flight. Two shipped runs still need a light acceptance review
+  before archive: `release-validation-gate` (v0.22.0) and
+  `agent-expertise-advisory-mac-release` (v0.29.0).
+- Superseded runs are blocked with notes, not archived: the Sept 19 MAF runs,
+  the two superseded mixed-provider runs, `execution-provider-receipt-charter`,
+  `role-method-differentiation`, and three agent-expertise runs.
+  `agent-expertise-rag-retrieval` stays paused, because `block` is not allowed
+  from `paused`. Flow has no close-as-superseded transition.
 - Open follow-up: a controlled live Ollama run against the strict v8 verifier
   contract.
 
