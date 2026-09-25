@@ -641,8 +641,9 @@ def _recovery_gates(work_id: str, attempt_id: str, run_dir: Path) -> tuple[dict[
         delivery = None
     eligibility = recovery_eligibility(envelope, snapshot, lead_active=lead_claim_active(delivery, envelope))
     if not eligibility["recoverable"]:
-        raise RecoveryRefused(eligibility["reason"], ", ".join(f"{item['kind']} {item['id']} {item['status']}"
-                                                               for item in eligibility["blockers"]))
+        blockers = ", ".join(f"{item['kind']} {item['id']} {item['status']}" for item in eligibility["blockers"])
+        raise RecoveryRefused(eligibility["reason"],
+                              f"{blockers}; see flow run inspect-delivery {work_id} --attempt-id {attempt_id}")
     return snapshot, eligibility
 
 

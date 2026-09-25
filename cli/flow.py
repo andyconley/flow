@@ -1025,6 +1025,8 @@ def main() -> int:
                 recovery_lines = (f"recoverable (ledger view): {recovery['recoverable']} ({recovery['reason'] or recovery['mode']})\n"
                                   f"checked only by the command: {', '.join(recovery['checked_by_command'])}\n"
                                   f"blocking: {blocking}\n"
+                                  f"owner generation (--expected-generation): {attempt.get('owner_generation')}\n"
+                                  f"resolutions: {', '.join(item['action_id'] + ' ' + item['disposition'] for item in attempt.get('resolutions', [])) or 'none'}\n"
                                   f"predecessors: {len(attempt.get('predecessors', []))}\n"
                                   f"sealed receipt: {'consistent' if attempt['sealed_receipt']['consistent'] else 'INCONSISTENT'}\n")
             print(f"work: {result['work_id']}\nstate: {result['lifecycle'].get('state')}\n"

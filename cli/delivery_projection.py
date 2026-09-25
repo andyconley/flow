@@ -69,6 +69,10 @@ def inspect_delivery_projection(envelope: dict[str, Any], snapshot: dict[str, An
                          "decided_from": "ledger", "checked_by_command": list(COMMAND_ONLY_RECOVERY_CHECKS)},
             "interruptions": snapshot.get("interruptions", []),
             "recoveries": recoveries,
+            # The value an operator passes as resolve-execution --expected-generation.
+            "owner_generation": snapshot.get("owner_generation"),
+            "resolutions": [{key: item[key] for key in ("resolution_id", "action_id", "disposition", "owner_generation")}
+                            for item in snapshot.get("resolutions", [])],
             "predecessors": envelope.get("predecessors", []),
             # The ledger digest is authoritative (R2): a recovered attempt whose
             # receipt lost its recovery block is inconsistent even if the file

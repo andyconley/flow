@@ -1141,7 +1141,8 @@ class CharteredRecoveryInspectionTests(RecoveryHarness):
                          ("ledger", ["live_run_fence", "worktree_drift", "envelope_file"]))
         blocker = view["recovery"]["blockers"][0]
         self.assertEqual((blocker["kind"], blocker["status"]), ("action", "unknown"))
-        self.assertIn("resolve-execution", blocker["evidence_needed"])
+        # A verifier send that failed before any response has no stored observation.
+        self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
         self.assertEqual([item["cause"] for item in view["interruptions"]], ["reconciliation_required"])
         self.assertTrue(view["sealed_receipt"]["consistent"])
 
@@ -1299,6 +1300,30 @@ class ObservedReconcileLedgerTests(RecoveryHarness):
                     db.execute("PRAGMA foreign_keys=OFF")
                     db.execute(f"UPDATE recovery_resolutions SET {column} WHERE action_id=?", (value(other), action_id))
                 self._assert_refused_without_mutation(attempt_id, "resolution_unbound")
+
+    def test_inspect_delivery_guides_each_blocker_and_refusals_point_to_it(self):
+        attempt_id = self._interrupted("producer")
+        action_id = self._action(attempt_id, "producer")["action_id"]
+        view = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]
+        [blocker] = view["recovery"]["blockers"]
+        self.assertEqual((blocker["id"], blocker["reason"]), (action_id, "reconciliation_required"))
+        self.assertTrue(blocker["evidence_needed"].startswith("resolve-execution (stored response)"))
+        self.assertEqual((view["owner_generation"], view["resolutions"]), (1, []))
+        with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             self.assertRaises(RecoveryRefused) as raised:
+            resume_delivery("sample", attempt_id, root=self.root, supervisor=self._supervisor(("editor", "verifier")),
+                            worker_adapter=self._worker)
+        self.assertIn(f"see flow run inspect-delivery sample --attempt-id {attempt_id}", str(raised.exception))
+        resolution = self._resolve(attempt_id, action_id)
+        view = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]
+        self.assertEqual(view["resolutions"], [{"resolution_id": resolution["resolution_id"], "action_id": action_id,
+                                                "disposition": "resolved_completed", "owner_generation": 1}])
+        shutil.rmtree(self.run / "execution")
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+        with self._kill_once("observe_response"):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
+        self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
 
     def test_reconcile_refuses_an_unobserved_action_and_a_terminal_attempt(self):
         with self._kill_once("observe_response"):

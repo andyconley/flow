@@ -42,9 +42,10 @@ RESOLUTION_UNBOUND = "resolution_unbound"
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 
 EVIDENCE_NEEDED = {
-    "unknown_action": ("resolve-execution: resolved_completed with a durable observed response, or "
-                       "resolved_not_dispatched with positive_no_send evidence (chunk 2)"),
-    "unknown_manager_call": "manager-call resolution (chunk 2)",
+    # Only Flow's stored response observation can resolve an uncertain send
+    # (ADR 0012); anything else, including every manager call, is abandon-only.
+    "observed_action": "resolve-execution (stored response): resolved_completed with --expected-generation",
+    "abandon_only": "unresolvable; abandon only (release, or lifecycle block)",
     NO_RESTORABLE_CHECKPOINT: "none; abandon, or lead supersede and start a successor",
     CHECKPOINT_POSITION_UNRECOVERABLE: "none; abandon, or lead supersede and start a successor",
     LEAD_GENERATION_INACTIVE: "none; attempt fenced",
@@ -130,11 +131,19 @@ def recovery_eligibility(envelope: dict[str, Any], snapshot: dict[str, Any], *, 
         return refuse(LEAD_GENERATION_INACTIVE, [{"id": envelope["attempt_id"], "kind": "attempt",
                                                   "status": snapshot["status"], "reason": LEAD_GENERATION_INACTIVE,
                                                   "evidence_needed": EVIDENCE_NEEDED[LEAD_GENERATION_INACTIVE]}])
+    observed = {item["action_id"] for item in snapshot.get("response_observations", [])}
+    job = envelope.get("job_contract") or {}
+    reconcilable = set(job.get("producer_instance_ids", [])) | set(job.get("verifier_instance_ids", []))
+
+    def action_route(item: dict[str, Any]) -> str:
+        eligible = item["action_id"] in observed and (item.get("request") or {}).get("instance_id") in reconcilable
+        return EVIDENCE_NEEDED["observed_action" if eligible else "abandon_only"]
+
     uncertain = [{"id": item["action_id"], "kind": "action", "status": item["status"],
-                  "reason": RECONCILIATION_REQUIRED, "evidence_needed": EVIDENCE_NEEDED["unknown_action"]}
+                  "reason": RECONCILIATION_REQUIRED, "evidence_needed": action_route(item)}
                  for item in snapshot.get("actions", []) if item["status"] in {"started", "unknown"}]
     uncertain += [{"id": item["call_id"], "kind": "manager_call", "status": item["status"],
-                   "reason": RECONCILIATION_REQUIRED, "evidence_needed": EVIDENCE_NEEDED["unknown_manager_call"]}
+                   "reason": RECONCILIATION_REQUIRED, "evidence_needed": EVIDENCE_NEEDED["abandon_only"]}
                   for item in snapshot.get("manager_calls", []) if item["status"] in {"started", "unknown"}]
     if uncertain:
         return refuse(RECONCILIATION_REQUIRED, uncertain)
