@@ -2,16 +2,21 @@
 
 ## Active work
 
-- Nothing in flight. Two shipped runs still need a light acceptance review
-  before archive: `release-validation-gate` (v0.22.0) and
-  `agent-expertise-advisory-mac-release` (v0.29.0).
-- Superseded runs are blocked with notes, not archived: the Sept 19 MAF runs,
-  the two superseded mixed-provider runs, `execution-provider-receipt-charter`,
-  `role-method-differentiation`, and three agent-expertise runs.
-  `agent-expertise-rag-retrieval` stays paused, because `block` is not allowed
-  from `paused`. Flow has no close-as-superseded transition.
-- Open follow-up: a controlled live Ollama run against the strict v8 verifier
-  contract.
+- Nothing in flight. All runs are archived, blocked as superseded, or (for
+  `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
+  is a legacy record.
+- Finding (2026-09-25): a controlled live check sent Flow's exact v8
+  verifier input to local Ollama (`llama3.1:8b`, `gemma4:26b`) at the 60s
+  production cap. All four runs, a correct diff and a wrong diff per model,
+  were evaluated `unusable` / `candidate_json_invalid`:
+  - llama3.1:8b wrapped its JSON in prose and a code fence, or rewrote the
+    file instead of reviewing it;
+  - gemma4:26b gave correct verdicts but as a markdown review, apparently
+    following the quality-reviewer's output format over the JSON contract.
+
+  Flow failed closed as designed. A local verifier is not usable under the
+  strict contract until the verifier instructions and contract are reconciled,
+  or a model is shown to comply.
 
 ## Recently completed
 
