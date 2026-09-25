@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from delivery_gateway import (ContractError, _default_worker_adapter,
                               _execute_prepared_delivery, execute_chartered_delivery,
                               prepare_chartered_delivery)
+from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, validate_action, validate_envelope,
                                  validate_receipt)
@@ -199,6 +200,17 @@ class CharteredPreparationTests(CharteredFixture):
         self.assertEqual([r["capabilities"] for r in envelope["roster"]], [["read", "edit"], ["read"]])
         self.assertTrue((attempt_dir / "job-charter.snapshot.json").is_file())
         self.assertEqual(ledger.snapshot(envelope["attempt_id"])["status"], "started")
+
+    def test_v8_prepare_refuses_a_worktree_containing_project_flow(self):
+        for label, worktree in (("project root", self.root), ("inside .flow", self.run)):
+            with self.subTest(worktree=label):
+                with patch("delivery_gateway.run_status", return_value=self.state), \
+                     patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+                     patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+                    with self.assertRaises(RecoveryRefused) as raised:
+                        prepare_chartered_delivery("sample", worktree, self.commit, root=self.root)
+                self.assertEqual(raised.exception.reason, "worktree_contains_project_flow")
+                self.assertFalse((self.run / "execution").exists())
 
     def test_changed_effective_specialist_definition_is_outside_sealed_charter(self):
         with patch("delivery_gateway.run_status", return_value=self.state), \

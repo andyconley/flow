@@ -31,6 +31,7 @@ LEAD_GUARD_LEDGER_UNREADABLE = "lead_guard_ledger_unreadable"
 SIBLING_ATTEMPT_NOT_TERMINAL = "sibling_attempt_not_terminal"
 PREDECESSOR_LINK_INVALID = "predecessor_link_invalid"
 V8_NO_DISPATCH_REGRANT_UNSUPPORTED = "v8_no_dispatch_regrant_unsupported"
+WORKTREE_CONTAINS_PROJECT_FLOW = "worktree_contains_project_flow"
 
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 

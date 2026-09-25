@@ -23,7 +23,8 @@ from delivery_control import delivery_authority_guard
 from delivery_projection import lead_claim_active
 from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, RecoveryRefused,
                                SIBLING_ATTEMPT_NOT_TERMINAL,
-                               V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_DRIFT, build_recovery_block,
+                               V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_CONTAINS_PROJECT_FLOW, WORKTREE_DRIFT,
+                               build_recovery_block,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
                                runtime_outcome)
 from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
@@ -237,6 +238,18 @@ def prepare_delivery(work_id: str, worktree: Path, source_commit: str, *,
     return envelope, task, attempt_dir, ledger
 
 
+def _refuse_project_flow_in_worktree(worktree: Path, project_root: Path) -> None:
+    """Keep the run's ledger and attempt evidence out of a chartered worker's reach.
+
+    A Codex producer can write anywhere in its worktree, so a worktree that is,
+    contains, or sits inside the project ``.flow`` could forge Flow's evidence.
+    """
+    flow_dir = (project_root / ".flow").resolve()
+    resolved = Path(worktree).resolve()
+    if resolved == flow_dir or resolved in flow_dir.parents or flow_dir in resolved.parents:
+        raise RecoveryRefused(WORKTREE_CONTAINS_PROJECT_FLOW, str(resolved))
+
+
 def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *,
                                root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
     """Resolve an approved generic charter into a pinned v7 attempt before any send."""
@@ -348,6 +361,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     if raw_worktree.is_symlink():
         raise ContractError("isolated worktree path is a symlink")
     worktree = raw_worktree.resolve(strict=True)
+    _refuse_project_flow_in_worktree(worktree, project_root)
     if _git(worktree, "rev-parse", "HEAD") != source_commit or _git(worktree, "rev-parse", "--show-toplevel") != str(worktree):
         raise ContractError("isolated worktree does not match pinned source commit")
     for relative in set(charter["read_paths"] + charter["write_paths"]):
