@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.35.3](https://github.com/andyconley/flow/compare/v0.35.2...v0.35.3) (2026-09-25)
+
+### Documentation
+
+* promote project-test-command-declaration to the backlog ([ccdb7b7](https://github.com/andyconley/flow/commit/ccdb7b7246dabd18cce552dfd854bfa646febc78)), closes [#35](https://github.com/andyconley/flow/issues/35)
+
 ## [0.35.2](https://github.com/andyconley/flow/compare/v0.35.1...v0.35.2) (2026-09-25)
 
 ### Bug Fixes
