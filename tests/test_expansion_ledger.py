@@ -186,6 +186,16 @@ class ExpansionLedgerTests(unittest.TestCase):
         self.assertNotIn("expansion", again)
         self.assertEqual(self.rows("expansion_requests"), [])
 
+    # AC3/AC5: a unit past the runner ceiling can never be granted, so it is never requested.
+    def test_a_limit_at_its_runner_ceiling_stays_a_terminal_denial(self):
+        env = self.start(v8({"max_delegations": 4, "max_verifier_calls": 2}, attempt="ceiling"))
+        self.verify_once(env, self.verifier(env, 1), FAIL)
+        self.verify_once(env, self.verifier(env, 2), FAIL)
+        third = self.ledger.decide(env, self.verifier(env, 3), generation=1)
+        self.assertEqual((third["allowed"], third["reason"]), (False, "verifier_call_cap"))
+        self.assertNotIn("expansion", third)
+        self.assertEqual(self.rows("expansion_requests"), [])
+
     # AC4
     def test_replaying_a_recorded_row_returns_the_same_request_and_decision(self):
         env = self.start(v8(headroom={"delegations": 1}))

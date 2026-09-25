@@ -1031,6 +1031,17 @@ def main() -> int:
                                   f"resolutions: {', '.join(item['action_id'] + ' ' + item['disposition'] for item in attempt.get('resolutions', [])) or 'none'}\n"
                                   f"predecessors: {len(attempt.get('predecessors', []))}\n"
                                   f"sealed receipt: {'consistent' if attempt['sealed_receipt']['consistent'] else 'INCONSISTENT'}\n")
+            expansion = attempt.get("expansion")
+            if expansion is not None:
+                # Rationale is manager-authored display text: shown escaped, never interpreted.
+                recovery_lines += (
+                    "expansion headroom remaining: "
+                    + (", ".join(f"{name} {value}" for name, value in sorted(expansion["headroom_remaining"].items())) or "none") + "\n"
+                    + "expansion requests: " + (str(len(expansion["requests"])) if expansion["requests"] else "none") + "\n"
+                    + "".join(f"- {item['request_id']} {item['status']} {'+'.join(item['limits'])}"
+                              f" grant={(item['grant'] or {}).get('authority', 'none')}"
+                              f" rationale={json.dumps(item['rationale'])}\n" for item in expansion["requests"])
+                    + (f"next action: {attempt['next_action']}\n" if attempt.get("next_action") else ""))
             print(f"work: {result['work_id']}\nstate: {result['lifecycle'].get('state')}\n"
                   f"charter: v{charter.get('version', 'n/a')} {authority.get('charter_digest', 'unsealed')}\n"
                   f"logical attempt: {authority.get('logical_delivery_attempt_id', 'none')}\n"

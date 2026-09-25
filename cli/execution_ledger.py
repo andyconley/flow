@@ -491,8 +491,10 @@ class ExecutionLedger:
         ]
         failing = [check for check in checks if check[1]]
         reason = failing[0][0] if failing else "allowed"
-        # A limit that needs more than one unit is not an expansion request.
-        hard = next((name for name, _, limit, units in failing if limit is None or units != 1), None)
+        # A limit that needs more than one unit, or whose next unit would pass
+        # the runner ceiling, can never be granted: it stays a terminal denial.
+        hard = next((name for name, _, limit, units in failing
+                     if limit is None or units != 1 or effective[limit] + 1 > EXPANSION_LIMIT_KEYS[limit][1]), None)
         return reason, hard, [limit for _, _, limit, _ in failing if limit is not None]
 
     @staticmethod
@@ -542,6 +544,19 @@ class ExecutionLedger:
             v8 = execution_protocol_version(envelope) == 8
             return {"effective_limits": self._effective_limits(db, envelope),
                     "headroom_remaining": self._headroom_remaining(db, envelope) if v8 else {}, "requests": requests}
+
+    def pending_expansions(self) -> list[dict[str, Any]]:
+        """Requests awaiting an engineer decision on started attempts, oldest first."""
+        with self._db() as db:
+            try:
+                rows = db.execute("SELECT r.request_id,r.attempt_id,r.limits_json,r.owner_generation FROM expansion_requests r "
+                                  "JOIN attempts a USING(attempt_id) WHERE r.status='pending' AND a.status='started' "
+                                  "ORDER BY r.rowid").fetchall()
+            except sqlite3.OperationalError:
+                # A read-only ledger that predates expansion has no requests.
+                return []
+        return [{"request_id": request_id, "attempt_id": attempt_id, "limits": json.loads(limits),
+                 "owner_generation": generation} for request_id, attempt_id, limits, generation in rows]
 
     def lead_change_blocker(self) -> str | None:
         """Return the first uncertain action or manager call of any attempt.
@@ -1037,7 +1052,8 @@ class ExecutionLedger:
             expansion = None
             expandable = [name for name, units in (("manager_calls", call_units), ("manager_rounds", round_units)) if units]
             if (stored[2] == 8 and reason != "allowed" and hard == "allowed" and expandable
-                    and call_units in {0, 1} and round_units in {0, 1}):
+                    and call_units in {0, 1} and round_units in {0, 1}
+                    and all(effective[name] + 1 <= EXPANSION_LIMIT_KEYS[name][1] for name in expandable)):
                 expansion = self._expand_locked(
                     db, envelope, kind="manager_call", row_id=call_id, limits=expandable, proposal_digest=request["prompt_digest"],
                     rationale=f"manager {request['phase']} call {request['sequence']} in round {request['manager_round']}")
@@ -1714,7 +1730,11 @@ class ExecutionLedger:
                 raise ContractError("Magentic attempt is absent or closed")
             table, key = ("manager_calls", "call_id") if pending_kind == "manager" else ("actions", "action_id")
             proposal = db.execute(f"SELECT status,request_json FROM {table} WHERE attempt_id=? AND {key}=?", (attempt_id, pending_id)).fetchone()
-            if proposal is None or proposal[0] not in {"allowed", "started", "completed"}:
+            # A denied worker proposal is bound only while it awaits an
+            # expansion decision; the link is a restore position, never a grant.
+            awaiting = (proposal is not None and proposal[0] == "denied" and pending_kind == "worker"
+                        and (self._expansion_for(db, attempt_id, "delegate", pending_id) or {}).get("status") == "pending")
+            if proposal is None or (proposal[0] not in {"allowed", "started", "completed"} and not awaiting):
                 raise ContractError("Magentic checkpoint has no authorized proposal")
             high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
             if ledger_seq != high_water:

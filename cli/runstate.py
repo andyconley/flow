@@ -291,6 +291,22 @@ def _legacy_summary(work_id: str, root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def _with_pending_expansions(payload: dict[str, Any], work_id: str, root: Path | None) -> dict[str, Any]:
+    """Overlay expansion requests awaiting a decision; run.json is never changed."""
+    ledger_path = _run_dir(work_id, root) / "execution" / "ledger.sqlite"
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        return payload
+    from execution_ledger import ExecutionLedger  # local: the ledger is optional for plain runs
+
+    pending = ExecutionLedger(ledger_path, read_only=True).pending_expansions()
+    if not pending:
+        return payload
+    first = pending[0]
+    return {**payload, "pending_expansions": pending,
+            "next_action": f"decide expansion {first['request_id']} for attempt {first['attempt_id']} "
+                           f"(--expected-generation {first['owner_generation']})"}
+
+
 def list_runs(root: Path | None = None, include_archived: bool = False) -> list[dict[str, Any]]:
     runs_root = _runs_root(root)
     if not runs_root.exists():
@@ -302,14 +318,14 @@ def list_runs(root: Path | None = None, include_archived: bool = False) -> list[
             payload = _legacy_summary(run_dir.name, root)
         if not include_archived and payload.get("state") == STATE_ARCHIVED:
             continue
-        rows.append(payload)
+        rows.append(_with_pending_expansions(payload, run_dir.name, root))
     return rows
 
 
 def status(work_id: str, root: Path | None = None) -> dict[str, Any]:
     payload = _load_run(work_id, root)
     if payload is not None:
-        return payload
+        return _with_pending_expansions(payload, work_id, root)
     run_dir = _run_dir(work_id, root)
     if run_dir.exists():
         return _legacy_summary(work_id, root)

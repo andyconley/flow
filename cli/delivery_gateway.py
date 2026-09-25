@@ -48,6 +48,21 @@ ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
 
 
+class ExpansionPaused(Exception):
+    """A v8 proposal needs an engineer expansion decision; nothing was sent for it."""
+
+    def __init__(self, request_id: str) -> None:
+        super().__init__(f"expansion decision required: {request_id}")
+        self.request_id = request_id
+
+
+def _pending_expansion(decision: dict[str, Any]) -> str | None:
+    expansion = decision.get("expansion")
+    if not decision["allowed"] and isinstance(expansion, dict) and expansion.get("status") == "pending":
+        return expansion["request_id"]
+    return None
+
+
 def _safe_job_path(path: Any) -> str:
     if (not isinstance(path, str) or not path or Path(path).is_absolute()
             or any(part in {"", ".", ".."} for part in path.split("/"))
@@ -1352,6 +1367,11 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             observed = decision["result"].get("output")
             if isinstance(observed, str) and observed.strip():
                 return observed
+        paused = _pending_expansion(decision)
+        if paused:
+            # No text can answer a call Flow refused; the runner stops here and
+            # recovery replays this call once the engineer decides (ADR 0017).
+            raise ExpansionPaused(paused)
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic manager call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
@@ -1399,6 +1419,18 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                                     is_verifier=is_verifier, is_producer=is_producer,
                                     edit_evidence=edit_evidence, test_evidence=test_evidence,
                                     generation=generation, authority_guard=authority_guard)
+        paused = _pending_expansion(decision)
+        if paused:
+            # Bind the denied proposal's checkpoint before stopping, so a
+            # decided request can restore this exact position in pending mode.
+            with authority_guard():
+                checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
+                if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
+                    raise ContractError("Magentic pending-action checkpoint is absent")
+                high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+                ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
+                                                high_water, str(checkpoint_path), generation=generation)
+            raise ExpansionPaused(paused)
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
@@ -1491,6 +1523,14 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         outcome = (supervisor or run_maf_delivery)(envelope, task, on_manager, on_action, **runner_kwargs)
         if outcome.get("attempt_id") != aid:
             raise ContractError("Magentic finished a different attempt")
+    except ExpansionPaused as paused:
+        # Not an interruption and not a failure: the attempt stays started,
+        # the lead claim keeps its generation, and the pending request row is
+        # the durable pause marker. Nothing is in flight, so stopping the
+        # child loses nothing.
+        return {"attempt_id": aid, "status": "expansion_paused", "request_id": paused.request_id,
+                "receipt_path": None, "resume_available": False,
+                "next_action": f"decide expansion {paused.request_id}"}
     except Exception as exc:
         failure = str(exc)
         recoverable_transport_failure = isinstance(exc, MafTransportError)

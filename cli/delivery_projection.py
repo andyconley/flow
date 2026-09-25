@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -203,6 +204,15 @@ def inspect_delivery(work_id: str, attempt_id: str | None = None, *, root: Path 
             receipt_file = {"sha256": hashlib.sha256(raw_receipt).hexdigest(), "recovery_block_present": present}
         attempt = inspect_delivery_projection(envelope, snapshot, lead_active=lead_claim_active(delivery, envelope),
                                               receipt_file=receipt_file)
+        try:
+            expansion = ExecutionLedger(ledger_path, read_only=True).expansion_state(attempt_id)
+        except sqlite3.OperationalError:
+            expansion = None  # a ledger that predates expansion has no requests
+        if expansion is not None:
+            attempt["expansion"] = expansion
+            pending = [item["request_id"] for item in expansion["requests"] if item["status"] == "pending"]
+            if pending and snapshot.get("status") == "started":
+                attempt["next_action"] = f"decide expansion {pending[0]}"
     else:
         attempt = inspect_delivery_projection(envelope, snapshot)
     attempt["pending_unknowns"] = [
