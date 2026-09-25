@@ -1,0 +1,21 @@
+{
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+    "orchestration_manifest": ".flow/runs/chartered-delivery-recovery-2/orchestration.json",
+    "requirements": ".flow/runs/chartered-delivery-recovery-2/requirements.md"
+  },
+  "created_at": "2026-09-25T00:10:05Z",
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-25T00:30:20Z",
+    "start-definition": "2026-09-25T00:10:05Z"
+  },
+  "lane": "define",
+  "last_event": "approve-definition",
+  "phase": "definition_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "definition_approved",
+  "updated_at": "2026-09-25T00:30:20Z",
+  "work_id": "chartered-delivery-recovery-2"
+}

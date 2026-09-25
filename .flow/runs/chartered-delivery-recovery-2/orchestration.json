@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "work_id": "chartered-delivery-recovery-2",
+  "mode": "delegated",
+  "risk": {
+    "hard_triggers": [],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "classification": "standard",
+    "rationale": "Operator-supplied evidence decides whether an uncertain provider call is treated as completed or re-granted."
+  },
+  "assignments": [
+    {
+      "id": "definition-root",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-definition-root"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Chunk 2 requirements and acceptance criteria drafted from the parent and current code"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "definition"
+      }
+    },
+    {
+      "id": "adversarial-product",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-delivery-recovery-2-adversarial-product"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/solution.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Product challenge of the chunk 2 definition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "adversarial"
+      }
+    },
+    {
+      "id": "adversarial-requirements",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-delivery-recovery-2-adversarial-requirements"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/solution.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Requirements challenge of the chunk 2 definition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "adversarial"
+      }
+    },
+    {
+      "id": "adversarial-architecture",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-delivery-recovery-2-adversarial-architecture"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/solution.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Architecture and capability challenge of the chunk 2 definition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "adversarial"
+      }
+    },
+    {
+      "id": "adversarial-security",
+      "lane": "define",
+      "role": "security-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-security-reviewer-delivery-recovery-2-adversarial-security"
+      },
+      "brief_path": ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-2/briefs/adversarial-review.md",
+        ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-2/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/requirements.md",
+        ".flow/runs/chartered-delivery-recovery/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery/solution.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-2",
+        ".flow/runs/chartered-delivery-recovery",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-2/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Security challenge of operator evidence import and resolution"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "adversarial"
+      }
+    }
+  ],
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/chartered-delivery-recovery-2/requirements.md",
+    "status": "resolved",
+    "claims": [
+      {
+        "id": "linked-run-for-chunk-2",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-2/requirements.md"
+        ]
+      },
+      {
+        "id": "stack-on-1b",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-2/requirements.md"
+        ]
+      },
+      {
+        "id": "carried-scope",
+        "status": "recommended",
+        "disposition": "accepted",
+        "decision_owner": {
+          "kind": "human",
+          "id": "Andy Conley"
+        },
+        "evidence": [
+          ".flow/runs/chartered-delivery-recovery-2/requirements.md"
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "producer_assignments": [
+      "definition-root"
+    ],
+    "evidence_collector_assignment": "definition-root",
+    "independent": true
+  }
+}
