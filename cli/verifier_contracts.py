@@ -54,6 +54,49 @@ VERIFIER_CONTRACT_INSTRUCTION = (
     "Every text field must be non-empty. Flow treats any other output as unusable.\n"
 )
 
+# Decoding guidance for providers that support constrained output (Ollama
+# ``format``).  It cannot express byte limits; the evaluator stays the judge.
+VERIFIER_OUTPUT_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["schema_version", "decision", "summary", "findings"],
+    "properties": {
+        "schema_version": {"type": "integer", "enum": [VERIFIER_VERDICT_SCHEMA_VERSION]},
+        "decision": {"type": "string", "enum": sorted(VALID_DECISIONS)},
+        "summary": {"type": "string", "minLength": 1},
+        "findings": {"type": "array", "maxItems": MAX_FINDINGS, "items": {
+            "type": "object", "additionalProperties": False,
+            "required": ["severity", "summary", "evidence"],
+            "properties": {"severity": {"type": "string", "enum": sorted(VALID_SEVERITIES)},
+                           "summary": {"type": "string", "minLength": 1},
+                           "evidence": {"type": "string", "minLength": 1}}}},
+    },
+}
+
+VERIFIER_SYSTEM_PREAMBLE = (
+    "You are acting as Flow's read-only verifier. Apply the review judgment in the role definition below, "
+    "but your reply format is fixed by the Flow verifier output contract at the end, which overrides any "
+    "other output format.\n\n"
+)
+
+
+def verifier_instructions(role_instructions: str) -> str:
+    """Derive a verifier's system instructions from its sealed role definition.
+
+    The role's own ``## Output Format`` section is removed (fenced templates
+    inside it included) so the only reply format the provider sees is Flow's
+    contract.  Deterministic: the sealed role body fixes the result.
+    """
+    kept: list[str] = []
+    skipping = fenced = False
+    for line in role_instructions.splitlines(keepends=True):
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("## "):
+            skipping = line.rstrip() == "## Output Format"
+        if not skipping:
+            kept.append(line)
+    return VERIFIER_SYSTEM_PREAMBLE + "".join(kept).rstrip() + VERIFIER_CONTRACT_INSTRUCTION
+
 
 class VerifierContractError(ValueError):
     """A verifier candidate or Flow evaluation is invalid."""

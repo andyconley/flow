@@ -38,3 +38,27 @@ durable records. Exact evaluation replay is idempotent; changed evidence or
 output bindings are rejected. The first irreversible boundary remains the
 provider send, and unknown sends consume the verifier allowance unless Flow
 can prove they were never dispatched.
+
+## Amendment: verifier prompt and constrained decoding (2026-09-25)
+
+A live check found that local models could not satisfy the contract. The
+verifier's system message was its full role body, and that body ends in the
+role's own markdown `## Output Format`. The models followed that format and
+ignored the JSON contract appended to the task.
+
+- **Derived system instructions.** At send time, a v8 verifier gets
+  `verifier_instructions(role_body)`. That is:
+  - a preamble saying Flow's contract overrides any other output format;
+  - the sealed role body with its `## Output Format` section removed,
+    including any fenced template inside it;
+  - `VERIFIER_CONTRACT_INSTRUCTION`.
+
+  The roster keeps the sealed role body and its `definition_digest`, so the
+  Delivery Charter seal is unchanged. The derivation is deterministic code,
+  just as the contract suffix on the digested task is.
+- **Constrained decoding.** Ollama verifier calls send `VERIFIER_OUTPUT_SCHEMA`
+  as `format`. The schema only guides decoding. It cannot express byte limits
+  or the pass/fail finding rules, so `evaluate_candidate` stays the only judge
+  and the parser stays strict: no stripping of fences or prose.
+- **Thinking.** Thinking models keep their default. An empty reply is judged
+  unusable and uses the verifier allowance, which fails closed.

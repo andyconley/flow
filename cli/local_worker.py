@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from typing import Any, Callable
 
 from execution_contracts import ContractError
+from verifier_contracts import VERIFIER_OUTPUT_SCHEMA
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MAX_RESPONSE_BYTES = 131072
@@ -64,11 +65,13 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
                     or parsed.username or parsed.password or parsed.query or parsed.fragment
                     or parsed.port is None):
                 raise ContractError("Ollama endpoint override requires an explicit loopback observer")
-        body = json.dumps({"model": envelope["model"], "stream": False, "messages": [
+        request_body = {"model": envelope["model"], "stream": False, "messages": [
             {"role": "system", "content": envelope["instructions"]},
             {"role": "user", "content": envelope["task"]},
-        ], "options": {"num_predict": STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256}},
-            sort_keys=True).encode()
+        ], "options": {"num_predict": STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256}}
+        if structured_verifier:
+            request_body["format"] = VERIFIER_OUTPUT_SCHEMA
+        body = json.dumps(request_body, sort_keys=True).encode()
         request = urllib.request.Request(url, data=body, headers={
             "Content-Type": "application/json",
             "X-Flow-Correlation-Id": correlation_id or envelope["attempt_id"],

@@ -41,7 +41,7 @@ from codex_worker import call_codex
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
-from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch
+from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch, verifier_instructions
 
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
@@ -1607,7 +1607,11 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     if action["provider"] == "ollama":
         structured = (envelope["execution_protocol_version"] == 8
                       and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
-        return call_local({**assignment, "task": action.get("provider_task", action["task"]), "attempt_id": envelope["attempt_id"]},
+        # A verifier's sealed role body keeps its digest; Flow derives the sent
+        # system instructions so its own output contract is the only format.
+        instructions = verifier_instructions(assignment["instructions"]) if structured else assignment["instructions"]
+        return call_local({**assignment, "instructions": instructions,
+                           "task": action.get("provider_task", action["task"]), "attempt_id": envelope["attempt_id"]},
                           correlation_id=action["action_id"], timeout_seconds=min(60, timeout_seconds),
                           structured_verifier=structured)
     if action["provider"] == "claude":

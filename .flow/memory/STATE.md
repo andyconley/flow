@@ -2,21 +2,20 @@
 
 ## Active work
 
-- Nothing in flight. All runs are archived, blocked as superseded, or (for
+- No other work in flight. All other runs are archived, blocked as superseded, or (for
   `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
   is a legacy record.
-- Finding (2026-09-25): a controlled live check sent Flow's exact v8
-  verifier input to local Ollama (`llama3.1:8b`, `gemma4:26b`) at the 60s
-  production cap. All four runs, a correct diff and a wrong diff per model,
-  were evaluated `unusable` / `candidate_json_invalid`:
-  - llama3.1:8b wrapped its JSON in prose and a code fence, or rewrote the
-    file instead of reviewing it;
-  - gemma4:26b gave correct verdicts but as a markdown review, apparently
-    following the quality-reviewer's output format over the JSON contract.
-
-  Flow failed closed as designed. A local verifier is not usable under the
-  strict contract until the verifier instructions and contract are reconciled,
-  or a model is shown to comply.
+- `local-verifier-json-contract` (scout) is archived. The change is on
+  `codex/local-verifier-json-contract`, and its PR is open.
+  - The first live check (2026-09-25) had every local verifier reply judged
+    `unusable`. The models followed the role's markdown output format instead
+    of the JSON contract.
+  - The fix: a v8 verifier now gets derived system instructions, which are the
+    role body without its Output Format section plus Flow's contract. Ollama
+    verifier calls also send the verdict JSON schema as `format`. The parser
+    stays strict.
+  - The re-check through Flow's real dispatch path passed: gemma4:26b 6/6 and
+    llama3.1:8b 6/6, each usable and correct.
 
 ## Recently completed
 
