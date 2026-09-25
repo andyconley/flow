@@ -13,10 +13,10 @@ sys.path.insert(0, str(ROOT / "tests"))
 from maf_supervisor import MafProtocolError, run_maf_action3_continuation, run_maf_multiturn  # noqa: E402
 from test_execution import ExecutionFixture  # noqa: E402
 
-PINNED_PYTHON = Path("/private/tmp/flow-maf-runtime-spike-20260919/bin/python")
+from maf_env import MAF_PYTHON as PINNED_PYTHON, requires_maf  # noqa: E402
 
 
-@unittest.skipUnless(PINNED_PYTHON.exists(), "pinned MAF test environment is unavailable")
+@requires_maf
 class MafContinuationSupervisorTests(ExecutionFixture):
     def _pending(self):
         envelope, _, _ = self.prepare()

@@ -21,14 +21,18 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import delivery_authority_guard
 from delivery_projection import lead_claim_active
-from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, RecoveryRefused,
+from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
+                               EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
+                               OWNER_GENERATION_STALE, V8_DISPOSITION_UNSUPPORTED, V8_EVIDENCE_FILE_REFUSED,
+                               RecoveryRefused,
                                SIBLING_ATTEMPT_NOT_TERMINAL,
-                               V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_DRIFT, build_recovery_block,
+                               V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_CONTAINS_PROJECT_FLOW, WORKTREE_DRIFT,
+                               build_recovery_block,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
                                runtime_outcome)
 from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
                                 validate_shaper_contract)
-from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot
+from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot, resolve_attempt
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from claude_worker import call_claude
@@ -237,6 +241,36 @@ def prepare_delivery(work_id: str, worktree: Path, source_commit: str, *,
     return envelope, task, attempt_dir, ledger
 
 
+def _refuse_project_flow_in_worktree(worktree: Path, project_root: Path) -> None:
+    """Keep the run's ledger and attempt evidence out of a chartered worker's reach.
+
+    A Codex producer can write anywhere in its worktree, so a worktree that is,
+    contains, or sits inside the project ``.flow`` could forge Flow's evidence.
+    """
+    # Compare files, not spellings: a case-insensitive volume, a firmlink, or
+    # a bind mount can give one directory two different paths.
+    def identities(path: Path) -> set[tuple[int, int]]:
+        found = set()
+        for candidate in (path, *path.parents):
+            try:
+                info = candidate.stat()
+            except OSError:
+                continue
+            found.add((info.st_dev, info.st_ino))
+        return found
+
+    flow_dir = (project_root / ".flow").resolve()
+    resolved = Path(worktree).resolve()
+    try:
+        flow_info, tree_info = flow_dir.stat(), resolved.stat()
+    except OSError:
+        flow_info = tree_info = None
+    if (resolved == flow_dir or resolved in flow_dir.parents or flow_dir in resolved.parents
+            or (flow_info is not None and ((flow_info.st_dev, flow_info.st_ino) in identities(resolved)
+                                           or (tree_info.st_dev, tree_info.st_ino) in identities(flow_dir)))):
+        raise RecoveryRefused(WORKTREE_CONTAINS_PROJECT_FLOW, str(resolved))
+
+
 def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *,
                                root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
     """Resolve an approved generic charter into a pinned v7 attempt before any send."""
@@ -348,6 +382,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     if raw_worktree.is_symlink():
         raise ContractError("isolated worktree path is a symlink")
     worktree = raw_worktree.resolve(strict=True)
+    _refuse_project_flow_in_worktree(worktree, project_root)
     if _git(worktree, "rev-parse", "HEAD") != source_commit or _git(worktree, "rev-parse", "--show-toplevel") != str(worktree):
         raise ContractError("isolated worktree does not match pinned source commit")
     for relative in set(charter["read_paths"] + charter["write_paths"]):
@@ -627,8 +662,9 @@ def _recovery_gates(work_id: str, attempt_id: str, run_dir: Path) -> tuple[dict[
         delivery = None
     eligibility = recovery_eligibility(envelope, snapshot, lead_active=lead_claim_active(delivery, envelope))
     if not eligibility["recoverable"]:
-        raise RecoveryRefused(eligibility["reason"], ", ".join(f"{item['kind']} {item['id']} {item['status']}"
-                                                               for item in eligibility["blockers"]))
+        blockers = ", ".join(f"{item['kind']} {item['id']} {item['status']}" for item in eligibility["blockers"])
+        raise RecoveryRefused(eligibility["reason"],
+                              f"{blockers}; see flow run inspect-delivery {work_id} --attempt-id {attempt_id}")
     return snapshot, eligibility
 
 
@@ -925,6 +961,66 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                                       supervisor=supervisor, test_runner=test_runner, python_path=python_path,
                                       resume=resume, generation=generation,
                                       continuation_epoch_id=continuation_epoch_id)
+
+
+def resolve_execution(work_id: str, attempt_id: str, action_id: str, actor: str, disposition: str, explanation: str,
+                      evidence_file: str | None = None, expected_generation: int | None = None, *,
+                      root: Path | None = None) -> dict[str, Any]:
+    """Record one operator resolution: v8 through the fenced chartered route, v5-v7 unchanged."""
+    project_root = (root or repo_root()).resolve()
+    peek = _peek_snapshot(project_root / ".flow" / "runs" / work_id / "execution" / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] == 8:
+        return _resolve_chartered(work_id, attempt_id, action_id, actor, disposition, explanation,
+                                  evidence_file=evidence_file, expected_generation=expected_generation, root=project_root)
+    if evidence_file is None:
+        raise RecoveryRefused(EVIDENCE_FILE_REQUIRED)
+    if expected_generation is not None:
+        raise RecoveryRefused(EXPECTED_GENERATION_V8_ONLY)
+    return resolve_attempt(work_id, attempt_id, action_id, actor, disposition, explanation, evidence_file, root=root)
+
+
+def _resolve_chartered(work_id: str, attempt_id: str, action_id: str, actor: str, disposition: str,
+                       explanation: str, *, evidence_file: str | None, expected_generation: int | None,
+                       root: Path) -> dict[str, Any]:
+    """Resolve one v8 action from Flow's stored response observation (ADR 0016, chunk 2).
+
+    Only Flow's own observation is evidence, so an operator file is refused.
+    The route holds the recovery lock, so it refuses while a live run holds
+    the attempt, and every check before the ledger write is read-only.
+    """
+    if evidence_file is not None:
+        raise RecoveryRefused(V8_EVIDENCE_FILE_REFUSED, "v8 resolves only from Flow's stored response observation")
+    if expected_generation is None:
+        raise RecoveryRefused(EXPECTED_GENERATION_REQUIRED, "pass the owner generation shown by inspect-delivery")
+    if disposition != "resolved_completed":
+        raise RecoveryRefused(V8_DISPOSITION_UNSUPPORTED, "v8 accepts only resolved_completed")
+    run_dir = root / ".flow" / "runs" / work_id
+    ledger_path = run_dir / "execution" / "ledger.sqlite"
+    with ExecutionLedger(ledger_path, read_only=True).recovery_lock(attempt_id, holder="recovery"):
+        snapshot = _peek_snapshot(ledger_path, attempt_id)
+        attempt_dir = run_dir / "execution" / attempt_id
+        if snapshot is None or not attempt_dir.is_dir() or attempt_dir.is_symlink():
+            raise ContractError("chartered attempt is absent")
+        envelope = snapshot["envelope"]
+        envelope_path = attempt_dir / "envelope.json"
+        if (envelope["work_id"] != work_id or not envelope_path.is_file() or envelope_path.is_symlink()
+                or json.loads(envelope_path.read_text()) != envelope):
+            raise RecoveryRefused(ENVELOPE_CHANGED)
+        if snapshot["status"] != "started":
+            raise RecoveryRefused(ATTEMPT_TERMINAL)
+        try:
+            delivery = json.loads((run_dir / "run.json").read_text()).get("delivery")
+        except (OSError, json.JSONDecodeError):
+            delivery = None
+        if not lead_claim_active(delivery, envelope):
+            raise RecoveryRefused(LEAD_GENERATION_INACTIVE)
+        _refuse_project_flow_in_worktree(Path(envelope["worktree"]), root)
+        if snapshot["owner_generation"] != expected_generation:
+            raise RecoveryRefused(OWNER_GENERATION_STALE, f"owner generation is {snapshot['owner_generation']}")
+        with delivery_authority_guard(run_dir, envelope):
+            return ExecutionLedger(ledger_path).resolve_observed_v8(
+                attempt_id, action_id, actor, explanation, expected_generation=expected_generation,
+                expected_event_seq=snapshot["events"][-1]["seq"] if snapshot["events"] else 0)
 
 
 def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,

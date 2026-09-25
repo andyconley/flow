@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -386,6 +387,25 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
         with self.ledger.recovery_lock("attempt", holder="recovery"):
             pass
 
+    def test_send_lock_refuses_a_symlinked_lock_path(self):
+        target = Path(self.temporary.name) / "elsewhere"
+        target.write_text("untouched")
+        self.ledger.path.with_suffix(".send.lock").symlink_to(target)
+        with self.assertRaises(OSError):
+            with self.ledger.send_lock():
+                self.fail("a symlinked send lock must not be taken")
+        self.assertEqual((target.read_text(), target.stat().st_mode & 0o777 != 0o600), ("untouched", True))
+
+    def test_send_lock_refuses_a_hard_linked_lock_file(self):
+        target = Path(self.temporary.name) / "elsewhere"
+        target.write_text("untouched")
+        target.chmod(0o644)
+        os.link(target, self.ledger.path.with_suffix(".send.lock"))
+        with self.assertRaisesRegex(ContractError, "private regular file"):
+            with self.ledger.send_lock():
+                self.fail("a hard-linked send lock must not be taken")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+
     def test_expired_verifier_grant_is_committed_denied_not_left_reserved(self):
         env = self.envelope(maximum=1)
         self.ledger.create_attempt(env)
@@ -413,8 +433,13 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
                                           "d" * 64, "e" * 64, generation=1)
         self.ledger.observe_response(proposal["action_id"], _result(proposal, ""), generation=1)
         self.ledger.mark_unknown(proposal["action_id"], "specialist_send_outcome_uncertain", generation=1)
-        resolved = self.ledger.resolve_unknown(env["attempt_id"], proposal["action_id"], "operator", "resolved_completed",
-                                               "observed response was durably retained",
-                                               [{"kind": "response", "path": ".flow/runs/proof.json", "sha256": "a" * 64}],
-                                               generation=1)
+        # Operator-supplied evidence never reaches a v8 ledger (chunk 2, C1).
+        with self.assertRaises(RecoveryRefused) as raised:
+            self.ledger.resolve_unknown(env["attempt_id"], proposal["action_id"], "operator", "resolved_completed",
+                                        "observed response was durably retained",
+                                        [{"kind": "response", "path": ".flow/runs/proof.json", "sha256": "a" * 64}],
+                                        generation=1)
+        self.assertEqual(raised.exception.reason, "v8_resolution_requires_chunk_2")
+        resolved = self.ledger.resolve_observed_v8(env["attempt_id"], proposal["action_id"], "operator",
+                                                   "observed response was durably retained", expected_generation=1)
         self.assertEqual(resolved["disposition"], "resolved_completed")

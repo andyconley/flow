@@ -18,7 +18,8 @@ process-exit side effect. Only one recovery can own an attempt at a time.
 - **Reconcile first.** Eligibility is decided on a read-only snapshot before
   any claim. Any action or manager call in `started` or `unknown` refuses with
   `reconciliation_required`, before any claim or mutation. Uncertain calls are
-  never resent. Operator resolution of those rows is chunk 2.
+  never resent. Operator resolution of those rows is chunk 2 (the amendment
+  below).
 - **Fail closed without a bound checkpoint (R1).** Recovery requires a bound
   worker checkpoint for the attempt's highest-sequence action. Otherwise it
   refuses with `no_restorable_checkpoint`. A replay from the charter baseline
@@ -92,12 +93,57 @@ since receipt validation alone can only bound the self-reported counts.
 `max_manager_calls` stays per attempt, so a successor has a fresh manager
 budget; the first verifier of a successor is not a retry.
 
+## Amendment: v8 operator reconcile (chunk 2)
+
+`resolve-execution` accepts a `started` protocol v8 attempt only as
+`resolved_completed`, only for a producer or verifier action in `started` or
+`unknown`, and only from that action's stored `response_observations` row.
+That row exists when Flow died, or `complete` failed, after the response was
+observed. The resolving transaction re-validates the observation (against the
+envelope and action for a producer; its structured shape for a verifier, whose
+content Flow judges at evaluation) and requires the recorded send (the adapter boundary
+event, or the verifier's claimed send). The route refuses `--evidence-file`,
+requires `--expected-generation`, and holds `recovery_lock`, then `run_lock`,
+then `send_lock`, then SQLite; a live run therefore refuses it with
+`attempt_running`. It appends the resolution at the current owner generation
+without bumping it. That generation is already in the recovery chain (the
+lead claim or the latest recovery), so the chain and the receipt's generation
+checks are unchanged.
+
+Recovery treats a resolved action as unblocked only when exactly one
+resolution matches the action, this attempt, and a generation in the recovery
+chain; otherwise it refuses `resolution_unbound`. A resolved verifier is then
+evaluated like any completed, unevaluated verifier, with no resend.
+
+Manager calls and actions without a stored observation are abandon-only:
+Flow observes and completes a manager call in one step, so an unresolved one
+never has a Flow-owned reply, and ADR 0012 accepts that a lost response stays
+blocked. Inspection says so for each blocker. `regrant_not_dispatched`
+refuses v8, and preparing a v8 chartered delivery, like the resolve route,
+refuses a worktree that is, contains, or sits inside the project `.flow`.
+
+Assumptions and residuals: a worker's writes are confined by the worktree
+guard and, for Codex, by its workspace sandbox; a symlink inside the worktree
+that points into `.flow` relies on the sandbox canonicalizing write paths
+(unverified). A lead that is released or needs attention while an observed v8
+action is still uncertain cannot resolve it and cannot change lead, so the only
+remedy is abandonment; this fails closed. `resolve_unknown` refuses a v8
+attempt at the ledger, so operator-supplied evidence never reaches a v8 ledger;
+the structured-verifier slice's operator resolution of an observed verifier now
+goes through `resolve_observed_v8`.
+
+Rejected: automatic reconcile inside the recovery claim (it complicates the
+claim transaction and completes work with no operator act), and trace-backed
+resolution (the Claude producer trace carries no action-bound digest).
+Revisit when operator demand justifies automatic reconcile, or when a trace
+gains an action-bound digest.
+
 ## Consequences
 
 ADR 0013 continuation epochs stay v5-only. v5 recovery, and v6 and v7
 receipts, keep their semantics; v6 is inspection-only and v7 is not
-recoverable. `resolve-execution` refuses v8 until chunk 2 adds a guarded v8
-route. The ledger gains additive, insert-only tables and a column; older code
+recoverable. `resolve-execution` reaches v8 only through the guarded route in
+the chunk 2 amendment. The ledger gains additive, insert-only tables and a column; older code
 ignores them.
 
 Residual (R8): when a crash lands after the producer's edit but before its

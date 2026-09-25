@@ -18,7 +18,7 @@ from delivery_control import change_lead_claim  # noqa: E402
 import runstate  # noqa: E402
 from delivery_recovery import runtime_outcome  # noqa: E402
 from delivery_projection import inspect_delivery, inspect_delivery_projection  # noqa: E402
-from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery,  # noqa: E402
+from delivery_gateway import (RecoveryRefused, _resume_chartered, execute_chartered_delivery, resolve_execution,  # noqa: E402
                               recover_delivery, resume_delivery)
 from execution_gateway import resolve_attempt  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, digest, envelope_digest,  # noqa: E402
@@ -162,6 +162,16 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
         self.assertEqual(raised.exception.reason, "v8_resolution_requires_chunk_2")
         self.assertEqual(self._state(attempt_id), before)
 
+    def test_v8_no_dispatch_regrant_is_refused_without_mutation(self):
+        attempt_id = self._interrupted_after_producer()
+        snapshot = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True).snapshot(attempt_id)
+        before = self._state(attempt_id)
+        with self.assertRaises(RecoveryRefused) as raised:
+            ExecutionLedger(self.run / "execution" / "ledger.sqlite").regrant_not_dispatched(
+                snapshot["envelope"], snapshot["actions"][0]["request"], generation=snapshot["owner_generation"])
+        self.assertEqual(raised.exception.reason, "v8_no_dispatch_regrant_unsupported")
+        self.assertEqual(self._state(attempt_id), before)
+
 
 
 class LeadChangeFenceTests(CharteredFixture):
@@ -278,6 +288,34 @@ class LeadChangeFenceTests(CharteredFixture):
                 self.assertEqual(ledger.snapshot(v7_id)["actions"][0]["status"], status)
                 before = self._authority()
                 changed, _, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
+                self.assertFalse(changed)
+                self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+                self.assertEqual(self._authority(), before)
+
+    def test_an_unknown_manager_call_alone_blocks_a_lead_change(self):
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "progress 1"}]}]
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            request = {"schema_version": 1, "attempt_id": envelope["attempt_id"],
+                       "envelope_digest": envelope_digest(envelope), "sequence": 1, "phase": "facts",
+                       "manager_round": 1, "prompt_digest": digest(messages)}
+            on_manager({**request, "call_id": expected_manager_call_id(request), "messages": messages})
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def manager(message, *, envelope, workspace):
+            raise OSError("simulated connection reset during the manager send")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, manager_adapter=manager)
+        snapshot = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True).snapshot(result["attempt_id"])
+        self.assertEqual(([item["status"] for item in snapshot["manager_calls"]], snapshot["actions"]), (["unknown"], []))
+        before = self._authority()
+        for action in ("resume", "supersede"):
+            with self.subTest(action=action):
+                changed, _, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
                 self.assertFalse(changed)
                 self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
                 self.assertEqual(self._authority(), before)
@@ -636,13 +674,13 @@ class RecoveryHarness(CharteredFixture):
             return original(ledger, *args, **kwargs)
         return patch.object(ExecutionLedger, name, wrapper)
 
-    def _assert_recovered_receipt(self, result, *, mode, cause="unmarked_process_exit"):
+    def _assert_recovered_receipt(self, result, *, mode, cause="unmarked_process_exit", resolutions=()):
         receipt = self._receipt(result)
         self.assertEqual(result["mode"], mode)
         self.assertEqual([item["cause"] for item in receipt["recovery"]["interruptions"]], [cause])
         self.assertEqual([(r["expected_generation"], r["generation"], r["mode"]) for r in receipt["recovery"]["recoveries"]],
                          [(1, 2, mode)])
-        self.assertEqual(receipt["recovery"]["resolutions"], [])
+        self.assertEqual(receipt["recovery"]["resolutions"], list(resolutions))
         self.assertEqual(self._ledger().snapshot(result["attempt_id"])["sealed_receipt_sha256"],
                          hashlib.sha256(Path(result["receipt_path"]).read_bytes()).hexdigest())
         return receipt
@@ -1031,12 +1069,17 @@ class CharteredRecoveryTests(RecoveryHarness):
 class CharteredRecoveryEntryTests(unittest.TestCase):
     """AC2: recovery runs only from the operator commands, never from a timer, expiry, or exit."""
 
-    ENTRY_POINTS = {"resume_delivery", "recover_delivery", "_resume_chartered", "claim_chartered_recovery"}
+    ENTRY_POINTS = {"resume_delivery", "recover_delivery", "_resume_chartered", "claim_chartered_recovery",
+                    "resolve_execution", "_resolve_chartered", "resolve_observed_v8"}
     ALLOWED = {
         "claim_chartered_recovery": {"cli/delivery_gateway.py:_resume_chartered"},
         "_resume_chartered": {"cli/delivery_gateway.py:resume_delivery", "cli/delivery_gateway.py:recover_delivery"},
         "resume_delivery": {"cli/delivery_gateway.py:recover_delivery", "cli/flow.py:main"},
         "recover_delivery": {"cli/flow.py:main"},
+        # Chunk 2: an operator resolution runs only from resolve-execution.
+        "resolve_observed_v8": {"cli/delivery_gateway.py:_resolve_chartered"},
+        "_resolve_chartered": {"cli/delivery_gateway.py:resolve_execution"},
+        "resolve_execution": {"cli/flow.py:main"},
     }
 
     def _references(self):
@@ -1066,7 +1109,7 @@ class CharteredRecoveryEntryTests(unittest.TestCase):
         self.assertEqual(self._references(), self.ALLOWED)
         # main is allowed as a whole, so each entry may be loaded there only once:
         # a second load (a timer or atexit hook inside main) fails here.
-        for name in ("resume_delivery", "recover_delivery"):
+        for name in ("resume_delivery", "recover_delivery", "resolve_execution"):
             self.assertEqual(self.counts[f"{name}@cli/flow.py:main"], 1, name)
 
     def test_the_cli_reaches_recovery_only_through_its_two_named_subcommands(self):
@@ -1103,7 +1146,8 @@ class CharteredRecoveryInspectionTests(RecoveryHarness):
                          ("ledger", ["live_run_fence", "worktree_drift", "envelope_file"]))
         blocker = view["recovery"]["blockers"][0]
         self.assertEqual((blocker["kind"], blocker["status"]), ("action", "unknown"))
-        self.assertIn("resolve-execution", blocker["evidence_needed"])
+        # A verifier send that failed before any response has no stored observation.
+        self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
         self.assertEqual([item["cause"] for item in view["interruptions"]], ["reconciliation_required"])
         self.assertTrue(view["sealed_receipt"]["consistent"])
 
@@ -1154,6 +1198,378 @@ class CharteredRecoveryInspectionTests(RecoveryHarness):
         self.assertFalse(inspect_delivery_projection(envelope, snapshot, lead_active=False)["executable"])
         self.assertEqual(view["recovery"]["reason"], "no_restorable_checkpoint")
         self.assertTrue(view["recovery"]["blockers"][0]["evidence_needed"].startswith("none; abandon"))
+
+
+class ObservedReconcileHarness(RecoveryHarness):
+    """Attempts left observed but not completed, for the chunk 2 reconcile tests."""
+
+    _state = CharteredRecoveryRefusalTests._state
+    _assert_refused_without_mutation = CharteredRecoveryRefusalTests._assert_refused_without_mutation
+
+    def _interrupted(self, role, *, how="killed"):
+        """Leave the producer (first) or verifier (second) action observed but not completed."""
+        target = 1 if role == "producer" else 2
+        calls = {"n": 0}
+
+        def when(ledger, *args, **kwargs):
+            calls["n"] += 1
+            return calls["n"] == target
+
+        if how == "killed":
+            with self._kill_once("complete", when=when):
+                return self._killed(("editor", "verifier"), [self.PASS])
+        original = ExecutionLedger.complete
+
+        def complete(ledger, *args, **kwargs):
+            if when(ledger):
+                raise ExecutionContractError("simulated failure after the response was observed")
+            return original(ledger, *args, **kwargs)
+
+        with patch.object(ExecutionLedger, "complete", complete):
+            result = self._start(("editor", "verifier"), [self.PASS])
+        self.assertEqual(result["reason"], "reconciliation_required", result)
+        return result["attempt_id"]
+
+    def _action(self, attempt_id, role):
+        return self._ledger().snapshot(attempt_id)["actions"][0 if role == "producer" else 1]
+
+    def _resolve(self, attempt_id, action_id, **kwargs):
+        options = {"expected_generation": self._ledger().snapshot(attempt_id)["owner_generation"], **kwargs}
+        return ExecutionLedger(self.run / "execution" / "ledger.sqlite").resolve_observed_v8(
+            attempt_id, action_id, "operator", "stored response observed before completion", **options)
+
+
+class ObservedReconcileLedgerTests(ObservedReconcileHarness):
+    """Chunk 2: a v8 action is resolved only from Flow's stored response observation."""
+
+    def test_an_observed_started_or_unknown_action_resolves_at_the_current_generation(self):
+        for role in ("producer", "verifier"):
+            for how, status in (("killed", "started"), ("raised", "unknown")):
+                with self.subTest(role=role, status=status):
+                    shutil.rmtree(self.run / "execution", ignore_errors=True)
+                    subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                    attempt_id = self._interrupted(role, how=how)
+                    action = self._action(attempt_id, role)
+                    self.assertEqual(action["status"], status)
+                    resolution = self._resolve(attempt_id, action["action_id"])
+                    self.assertEqual((resolution["owner_generation"], resolution["replayed"]), (1, False))
+                    snapshot = self._ledger().snapshot(attempt_id)
+                    resolved = self._action(attempt_id, role)
+                    self.assertEqual((resolved["status"], resolved["reason"]), ("completed", "operator_resolved_completed"))
+                    self.assertEqual((snapshot["status"], snapshot["owner_generation"]), ("started", 1))
+                    [row] = snapshot["resolutions"]
+                    observation = next(item for item in snapshot["response_observations"]
+                                       if item["action_id"] == action["action_id"])
+                    self.assertEqual((row["action_id"], row["owner_generation"], row["evidence"]),
+                                     (action["action_id"], 1, [{"kind": "flow_response_observation",
+                                                                "path": f"ledger:response_observations/{action['action_id']}",
+                                                                "sha256": observation["result_digest"]}]))
+                    self.assertTrue(self._resolve(attempt_id, action["action_id"])["replayed"])
+                    before = self._state(attempt_id)
+                    with self.assertRaises(RecoveryRefused) as raised:
+                        ExecutionLedger(self.run / "execution" / "ledger.sqlite").resolve_observed_v8(
+                            attempt_id, action["action_id"], "operator", "a different explanation", expected_generation=1)
+                    self.assertEqual(raised.exception.reason, "item_not_unresolved")
+                    self.assertEqual(self._state(attempt_id), before)
+
+    def test_reconcile_refuses_without_mutation(self):
+        attempt_id = self._interrupted("producer")
+        action_id = self._action(attempt_id, "producer")["action_id"]
+        high_water = self._ledger().snapshot(attempt_id)["events"][-1]["seq"]
+        for label, kwargs, reason in (("stale generation", {"expected_generation": 2}, "owner_generation_stale"),
+                                      ("moved events", {"expected_event_seq": high_water - 1}, "recovery_in_progress")):
+            with self.subTest(case=label):
+                before = self._state(attempt_id)
+                with self.assertRaises(RecoveryRefused) as raised:
+                    self._resolve(attempt_id, action_id, **kwargs)
+                self.assertEqual(raised.exception.reason, reason)
+                self.assertEqual(self._state(attempt_id), before)
+        with self.subTest(case="tampered observation"):
+            with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+                db.execute("UPDATE response_observations SET result_digest=? WHERE action_id=?", ("0" * 64, action_id))
+            before = self._state(attempt_id)
+            with self.assertRaises(RecoveryRefused) as raised:
+                self._resolve(attempt_id, action_id)
+            self.assertEqual(raised.exception.reason, "evidence_invalid")
+            self.assertEqual(self._state(attempt_id), before)
+
+    def test_recovery_refuses_a_resolution_not_bound_to_the_action_attempt_and_chain(self):
+        cases = (("another action", "action_id=?", lambda other: other),
+                 ("another attempt", "attempt_id=?", lambda other: "f" * 32),
+                 ("outside the chain", "owner_generation=?", lambda other: 5))
+        for label, column, value in cases:
+            with self.subTest(case=label):
+                shutil.rmtree(self.run / "execution", ignore_errors=True)
+                subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                attempt_id = self._interrupted("verifier")
+                action_id = self._action(attempt_id, "verifier")["action_id"]
+                other = self._action(attempt_id, "producer")["action_id"]
+                self._resolve(attempt_id, action_id)
+                with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+                    db.execute("PRAGMA foreign_keys=OFF")
+                    db.execute(f"UPDATE recovery_resolutions SET {column} WHERE action_id=?", (value(other), action_id))
+                self._assert_refused_without_mutation(attempt_id, "resolution_unbound")
+
+    def test_inspect_delivery_guides_each_blocker_and_refusals_point_to_it(self):
+        attempt_id = self._interrupted("producer")
+        action_id = self._action(attempt_id, "producer")["action_id"]
+        view = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]
+        [blocker] = view["recovery"]["blockers"]
+        self.assertEqual((blocker["id"], blocker["reason"]), (action_id, "reconciliation_required"))
+        self.assertTrue(blocker["evidence_needed"].startswith("resolve-execution (stored response)"))
+        self.assertEqual((view["owner_generation"], view["resolutions"]), (1, []))
+        with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             self.assertRaises(RecoveryRefused) as raised:
+            resume_delivery("sample", attempt_id, root=self.root, supervisor=self._supervisor(("editor", "verifier")),
+                            worker_adapter=self._worker)
+        self.assertIn(f"see flow run inspect-delivery sample --attempt-id {attempt_id}", str(raised.exception))
+        resolution = self._resolve(attempt_id, action_id)
+        view = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]
+        self.assertEqual(view["resolutions"], [{"resolution_id": resolution["resolution_id"], "action_id": action_id,
+                                                "disposition": "resolved_completed", "owner_generation": 1}])
+        shutil.rmtree(self.run / "execution")
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+        with self._kill_once("observe_response"):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
+        self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
+
+    def test_reconcile_refuses_an_unobserved_action_and_a_terminal_attempt(self):
+        with self._kill_once("observe_response"):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        action_id = self._action(attempt_id, "producer")["action_id"]
+        before = self._state(attempt_id)
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._resolve(attempt_id, action_id)
+        self.assertEqual(raised.exception.reason, "evidence_insufficient")
+        self.assertEqual(self._state(attempt_id), before)
+        shutil.rmtree(self.run / "execution")
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+        result = self._start(("editor", "verifier"), [self.PASS])
+        self.assertEqual(result["status"], "completed", result)
+        before = self._state(result["attempt_id"])
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._resolve(result["attempt_id"], self._action(result["attempt_id"], "producer")["action_id"])
+        self.assertEqual(raised.exception.reason, "attempt_terminal")
+        self.assertEqual(self._state(result["attempt_id"]), before)
+
+
+class V8ResolveRouteTests(ObservedReconcileHarness):
+    """Chunk 2 AC3 and AC12: the fenced v8 resolve-execution route."""
+
+    def _route(self, attempt_id, action_id, **overrides):
+        arguments = {"disposition": "resolved_completed", "evidence_file": None,
+                     "expected_generation": self._ledger().snapshot(attempt_id)["owner_generation"], **overrides}
+        return resolve_execution("sample", attempt_id, action_id, "operator", arguments.pop("disposition"),
+                                 "stored response observed before completion", root=self.root, **arguments)
+
+    def _refused(self, attempt_id, reason, **kwargs):
+        before = self._state(attempt_id)
+        with self.assertRaises(RecoveryRefused) as raised:
+            self._route(attempt_id, kwargs.pop("action_id"), **kwargs)
+        self.assertEqual(raised.exception.reason, reason)
+        self.assertEqual(self._state(attempt_id), before)
+
+    def test_the_route_resolves_an_observed_action_and_refuses_each_case_without_mutation(self):
+        attempt_id = self._interrupted("verifier")
+        verifier = self._action(attempt_id, "verifier")["action_id"]
+        producer = self._action(attempt_id, "producer")["action_id"]
+        evidence = self.run / "execution" / attempt_id / "evidence.json"
+        cases = (("evidence file", "v8_evidence_file_refused", {"evidence_file": str(evidence)}),
+                 ("no expected generation", "expected_generation_required", {"expected_generation": None}),
+                 ("not dispatched", "v8_disposition_unsupported", {"disposition": "resolved_not_dispatched"}),
+                 ("still unknown", "v8_disposition_unsupported", {"disposition": "still_unknown"}),
+                 ("stale generation", "owner_generation_stale", {"expected_generation": 2}),
+                 ("completed action", "item_not_unresolved", {"action_id": producer}))
+        for label, reason, overrides in cases:
+            with self.subTest(case=label):
+                self._refused(attempt_id, reason, **{"action_id": verifier, **overrides})
+        with self.subTest(case="live run"):
+            with ExecutionLedger(self.run / "execution" / "ledger.sqlite").recovery_lock(attempt_id, holder="live"):
+                self._refused(attempt_id, "attempt_running", action_id=verifier)
+        with self.subTest(case="concurrent resolution"):
+            with ExecutionLedger(self.run / "execution" / "ledger.sqlite").recovery_lock(attempt_id, holder="recovery"):
+                self._refused(attempt_id, "recovery_in_progress", action_id=verifier)
+        resolution = self._route(attempt_id, verifier)
+        self.assertEqual((resolution["owner_generation"], resolution["replayed"]), (1, False))
+        self.assertTrue(self._route(attempt_id, verifier)["replayed"])
+        self.assertEqual([item["action_id"] for item in self._ledger().snapshot(attempt_id)["resolutions"]], [verifier])
+
+    def test_the_route_refuses_a_terminal_or_unobserved_attempt(self):
+        with self._kill_once("observe_response"):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        self._refused(attempt_id, "evidence_insufficient", action_id=self._action(attempt_id, "producer")["action_id"])
+        shutil.rmtree(self.run / "execution")
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+        result = self._start(("editor", "verifier"), [self.PASS])
+        self._refused(result["attempt_id"], "attempt_terminal",
+                      action_id=self._action(result["attempt_id"], "producer")["action_id"])
+
+    def test_the_route_refuses_an_intact_observation_that_fails_revalidation(self):
+        for role, change in (("producer", {"model": "some-other-model"}), ("verifier", {"schema_version": 2})):
+            with self.subTest(role=role):
+                shutil.rmtree(self.run / "execution", ignore_errors=True)
+                subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                attempt_id = self._interrupted(role)
+                action_id = self._action(attempt_id, role)["action_id"]
+                with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+                    stored = json.loads(db.execute("SELECT result_json FROM response_observations WHERE action_id=?",
+                                                   (action_id,)).fetchone()[0])
+                    forged = json.dumps({**stored, **change}, sort_keys=True, separators=(",", ":"))
+                    db.execute("UPDATE response_observations SET result_json=?,result_digest=? WHERE action_id=?",
+                               (forged, hashlib.sha256(forged.encode()).hexdigest(), action_id))
+                self._refused(attempt_id, "evidence_invalid", action_id=action_id)
+
+    def test_an_unobserved_action_is_abandoned_with_release(self):
+        for role, target in (("producer", 1), ("verifier", 2)):
+            with self.subTest(role=role):
+                self.setUp()
+                calls = {"n": 0}
+
+                def when(ledger, *args, **kwargs):
+                    calls["n"] += 1
+                    return calls["n"] == target
+
+                with self._kill_once("observe_response", when=when):
+                    attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+                self._refused(attempt_id, "evidence_insufficient", action_id=self._action(attempt_id, role)["action_id"])
+                [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
+                self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
+                changed, run, errors = change_lead_claim("sample", "release", root=self.root)
+                self.assertTrue(changed, errors)
+                self.assertEqual(run["delivery"]["owner_status"], "released")
+
+    def test_v8_resolve_refuses_an_envelope_worktree_containing_project_flow(self):
+        # An attempt prepared before the guard existed: its worktree sits inside .flow.
+        inside = self.root / ".flow" / "worktree"
+        subprocess.run(["git", "clone", "-q", str(self.worktree), str(inside)], check=True)
+        self.worktree = inside
+        with patch("delivery_gateway._refuse_project_flow_in_worktree"):
+            attempt_id = self._interrupted("verifier")
+        self._refused(attempt_id, "worktree_contains_project_flow",
+                      action_id=self._action(attempt_id, "verifier")["action_id"])
+
+    def test_v5_to_v7_resolve_execution_keeps_its_contract(self):
+        envelope = self._run_v8([self.PASS])[3]["envelope"]
+        v7_id = LeadChangeFenceTests._v7_started_row(self, envelope["attempt_id"])
+        for attempt_id in ("a" * 32, v7_id):
+            for label, kwargs, reason in (("missing evidence file", {}, "evidence_file_required"),
+                                          ("expected generation", {"evidence_file": "x", "expected_generation": 1},
+                                           "expected_generation_v8_only")):
+                with self.subTest(attempt="v7 ledger row" if attempt_id == v7_id else "no ledger row", case=label):
+                    with self.assertRaises(RecoveryRefused) as raised:
+                        resolve_execution("sample", attempt_id, "b" * 64, "operator", "resolved_completed", "x",
+                                          root=self.root, **kwargs)
+                    self.assertEqual(raised.exception.reason, reason)
+
+
+class BoundaryReconcileTests(ObservedReconcileHarness):
+    """Chunk 2 AC1, AC7, AC8: boundaries (a), (c), (e) through the operator sequence."""
+
+    _route = V8ResolveRouteTests._route
+
+    def _refused_recovery(self, attempt_id):
+        with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             self.assertRaises(RecoveryRefused) as raised:
+            resume_delivery("sample", attempt_id, root=self.root, supervisor=self._supervisor(("editor", "verifier")),
+                            worker_adapter=self._worker)
+        self.assertEqual(raised.exception.reason, "reconciliation_required")
+
+    def test_boundaries_c_and_e_recover_after_reconcile_with_zero_resends(self):
+        for role, sent_after in (("producer", ["verifier"]), ("verifier", [])):
+            for how, cause in (("killed", "unmarked_process_exit"), ("raised", "reconciliation_required")):
+                with self.subTest(role=role, how=how):
+                    shutil.rmtree(self.run / "execution", ignore_errors=True)
+                    subprocess.run(["git", "-C", str(self.worktree), "checkout", "-q", "--", "target.py"], check=True)
+                    self.sends, self.outputs, self.test_calls = [], [], 0
+                    attempt_id = self._interrupted(role, how=how)
+                    sends, tests = list(self.sends), self.test_calls
+                    self._refused_recovery(attempt_id)
+                    action_id = self._action(attempt_id, role)["action_id"]
+                    resolution = self._route(attempt_id, action_id)
+                    self.outputs = [self.PASS] if role == "producer" else []
+                    result = self._recover(attempt_id, ("editor", "verifier"))
+                    # The resolved action is never sent again; only later work is.
+                    # Checked first, so a resend fails here and not on a later assertion.
+                    self.assertEqual(self.sends, sends + sent_after)
+                    self.assertEqual(self.test_calls, tests + (1 if role == "producer" else 0))
+                    self.assertEqual(result["status"], "completed", result)
+                    receipt = self._assert_recovered_receipt(result, mode=result["mode"], cause=cause,
+                                                             resolutions=[resolution["resolution_id"]])
+                    resolved = next(item for item in receipt["actions"] if item["action_id"] == action_id)
+                    self.assertEqual(resolved["reason"], "operator_resolved_completed")
+                    if role == "verifier":
+                        self.assertEqual([item["outcome"] for item in receipt["verifier_evaluations"]], ["valid_pass"])
+
+    def test_boundary_a_an_unresolved_manager_call_is_abandon_only(self):
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "progress 1"}]}]
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            request = {"schema_version": 1, "attempt_id": envelope["attempt_id"],
+                       "envelope_digest": envelope_digest(envelope), "sequence": 1, "phase": "facts",
+                       "manager_round": 1, "prompt_digest": digest(messages)}
+            on_manager({**request, "call_id": expected_manager_call_id(request), "messages": messages})
+            return {"attempt_id": envelope["attempt_id"]}
+
+        for status, failure in (("unknown", OSError("simulated connection reset during the manager send")),
+                                ("started", KillPoint("process died during the manager send"))):
+            with self.subTest(status=status):
+                self.setUp()
+
+                def manager(message, *, envelope, workspace):
+                    raise failure
+
+                with patch("delivery_gateway.run_status", return_value=self.state), \
+                     patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+                     patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+                    try:
+                        execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                   supervisor=supervisor, manager_adapter=manager)
+                    except KillPoint:
+                        pass
+                attempt_id = next((self.run / "execution").glob("*/envelope.json")).parent.name
+                [call] = self._ledger().snapshot(attempt_id)["manager_calls"]
+                self.assertEqual(call["status"], status)
+                before = self._state(attempt_id)
+                with self.assertRaises(RecoveryRefused) as raised:
+                    self._route(attempt_id, call["call_id"])
+                self.assertEqual(raised.exception.reason, "unresolvable_abandon_only")
+                self.assertEqual(self._state(attempt_id), before)
+                [blocker] = inspect_delivery("sample", attempt_id, root=self.root)["attempt"]["recovery"]["blockers"]
+                self.assertEqual(blocker["kind"], "manager_call")
+                self.assertTrue(blocker["evidence_needed"].startswith("unresolvable; abandon only"))
+                changed, run, errors = change_lead_claim("sample", "release", root=self.root)
+                self.assertTrue(changed, errors)
+
+    def test_a_lead_change_succeeds_once_every_uncertain_action_is_resolved(self):
+        for action in ("resume", "supersede"):
+            with self.subTest(action=action):
+                self.setUp()
+                attempt_id = self._interrupted("verifier")
+                changed, _, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
+                self.assertFalse(changed)
+                self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+                self._route(attempt_id, self._action(attempt_id, "verifier")["action_id"])
+                changed, run, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
+                self.assertTrue(changed, errors)
+                self.assertEqual(self._ledger().snapshot(attempt_id)["status"], "superseded")
+
+    def test_receipt_validation_rejects_an_added_or_removed_resolution(self):
+        from execution_contracts import validate_receipt
+
+        attempt_id = self._interrupted("verifier")
+        self._route(attempt_id, self._action(attempt_id, "verifier")["action_id"])
+        result = self._recover(attempt_id, ("editor", "verifier"))
+        receipt = self._receipt(result)
+        envelope = self._ledger().snapshot(attempt_id)["envelope"]
+        validate_receipt(envelope, receipt)
+        for label, mutate in (("added", lambda r: r["recovery"]["resolutions"].append("0" * 32)),
+                              ("removed", lambda r: r["recovery"]["resolutions"].pop())):
+            with self.subTest(case=label):
+                forged = copy.deepcopy(receipt)
+                mutate(forged)
+                with self.assertRaises(ExecutionContractError):
+                    validate_receipt(envelope, forged)
 
 
 if __name__ == "__main__":

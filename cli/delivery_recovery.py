@@ -30,16 +30,31 @@ V8_RESOLUTION_REQUIRES_CHUNK_2 = "v8_resolution_requires_chunk_2"
 LEAD_GUARD_LEDGER_UNREADABLE = "lead_guard_ledger_unreadable"
 SIBLING_ATTEMPT_NOT_TERMINAL = "sibling_attempt_not_terminal"
 PREDECESSOR_LINK_INVALID = "predecessor_link_invalid"
+V8_NO_DISPATCH_REGRANT_UNSUPPORTED = "v8_no_dispatch_regrant_unsupported"
+WORKTREE_CONTAINS_PROJECT_FLOW = "worktree_contains_project_flow"
+OWNER_GENERATION_STALE = "owner_generation_stale"
+ITEM_NOT_UNRESOLVED = "item_not_unresolved"
+UNRESOLVABLE_ABANDON_ONLY = "unresolvable_abandon_only"
+EVIDENCE_INSUFFICIENT = "evidence_insufficient"
+EVIDENCE_INVALID = "evidence_invalid"
+RESOLUTION_UNBOUND = "resolution_unbound"
+V8_EVIDENCE_FILE_REFUSED = "v8_evidence_file_refused"
+EXPECTED_GENERATION_REQUIRED = "expected_generation_required"
+V8_DISPOSITION_UNSUPPORTED = "v8_disposition_unsupported"
+EVIDENCE_FILE_REQUIRED = "evidence_file_required"
+EXPECTED_GENERATION_V8_ONLY = "expected_generation_v8_only"
 
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 
 EVIDENCE_NEEDED = {
-    "unknown_action": ("resolve-execution: resolved_completed with a durable observed response, or "
-                       "resolved_not_dispatched with positive_no_send evidence (chunk 2)"),
-    "unknown_manager_call": "manager-call resolution (chunk 2)",
+    # Only Flow's stored response observation can resolve an uncertain send
+    # (ADR 0012); anything else, including every manager call, is abandon-only.
+    "observed_action": "resolve-execution (stored response): resolved_completed with --expected-generation",
+    "abandon_only": "unresolvable; abandon only (release, or lifecycle block)",
     NO_RESTORABLE_CHECKPOINT: "none; abandon, or lead supersede and start a successor",
     CHECKPOINT_POSITION_UNRECOVERABLE: "none; abandon, or lead supersede and start a successor",
     LEAD_GENERATION_INACTIVE: "none; attempt fenced",
+    RESOLUTION_UNBOUND: "none; the resolution is not bound to this action, attempt, and recovery chain",
 }
 
 
@@ -61,6 +76,41 @@ def runtime_outcome(snapshot: dict[str, Any]) -> dict[str, Any] | None:
     """Return the recorded runtime outcome, or None while the runtime is unfinished."""
     recorded = [item for item in snapshot.get("events", []) if item["event"] == "runtime_outcome_recorded"]
     return json.loads(recorded[-1]["detail"]) if recorded else None
+
+
+def recovery_chain(envelope: dict[str, Any], snapshot: dict[str, Any]) -> set[int]:
+    """The generations that legitimately owned the attempt: its lead claim and each recovery."""
+    current = snapshot.get("owner_generation")
+    chain = {item["generation"] for item in snapshot.get("recoveries", [])}
+    claim = envelope.get("delivery_lead_claim")
+    if isinstance(claim, dict):
+        chain.add(claim.get("generation"))
+    return {generation for generation in chain
+            if isinstance(generation, int) and isinstance(current, int) and generation <= current}
+
+
+def unbound_resolutions(envelope: dict[str, Any], snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    """Operator-resolved actions whose resolution is not bound to them, this attempt, and the chain.
+
+    The snapshot lists only this attempt's resolutions, so a resolution
+    recorded against another attempt is simply absent here (parent AC5).
+    """
+    resolved = [item for item in snapshot.get("actions", []) if (item.get("reason") or "").startswith("operator_resolved_")]
+    if not resolved:
+        return []
+    chain = recovery_chain(envelope, snapshot)
+    resolutions = snapshot.get("resolutions", [])
+    blockers = []
+    for item in resolved:
+        reason = item["reason"]
+        matching = [row for row in resolutions if row["action_id"] == item["action_id"]]
+        bound = (len(matching) == 1 and matching[0]["owner_generation"] in chain
+                 and matching[0]["disposition"] == "resolved_" + reason[len("operator_resolved_"):]
+                 and (matching[0]["disposition"] != "resolved_completed" or matching[0]["result"] == item["result"]))
+        if not bound:
+            blockers.append({"id": item["action_id"], "kind": "action", "status": item["status"],
+                             "reason": RESOLUTION_UNBOUND, "evidence_needed": EVIDENCE_NEEDED[RESOLUTION_UNBOUND]})
+    return blockers
 
 
 def recovery_eligibility(envelope: dict[str, Any], snapshot: dict[str, Any], *, lead_active: bool) -> dict[str, Any]:
@@ -86,14 +136,25 @@ def recovery_eligibility(envelope: dict[str, Any], snapshot: dict[str, Any], *, 
         return refuse(LEAD_GENERATION_INACTIVE, [{"id": envelope["attempt_id"], "kind": "attempt",
                                                   "status": snapshot["status"], "reason": LEAD_GENERATION_INACTIVE,
                                                   "evidence_needed": EVIDENCE_NEEDED[LEAD_GENERATION_INACTIVE]}])
+    observed = {item["action_id"] for item in snapshot.get("response_observations", [])}
+    job = envelope.get("job_contract") or {}
+    reconcilable = set(job.get("producer_instance_ids", [])) | set(job.get("verifier_instance_ids", []))
+
+    def action_route(item: dict[str, Any]) -> str:
+        eligible = item["action_id"] in observed and (item.get("request") or {}).get("instance_id") in reconcilable
+        return EVIDENCE_NEEDED["observed_action" if eligible else "abandon_only"]
+
     uncertain = [{"id": item["action_id"], "kind": "action", "status": item["status"],
-                  "reason": RECONCILIATION_REQUIRED, "evidence_needed": EVIDENCE_NEEDED["unknown_action"]}
+                  "reason": RECONCILIATION_REQUIRED, "evidence_needed": action_route(item)}
                  for item in snapshot.get("actions", []) if item["status"] in {"started", "unknown"}]
     uncertain += [{"id": item["call_id"], "kind": "manager_call", "status": item["status"],
-                   "reason": RECONCILIATION_REQUIRED, "evidence_needed": EVIDENCE_NEEDED["unknown_manager_call"]}
+                   "reason": RECONCILIATION_REQUIRED, "evidence_needed": EVIDENCE_NEEDED["abandon_only"]}
                   for item in snapshot.get("manager_calls", []) if item["status"] in {"started", "unknown"}]
     if uncertain:
         return refuse(RECONCILIATION_REQUIRED, uncertain)
+    unbound = unbound_resolutions(envelope, snapshot)
+    if unbound:
+        return refuse(RESOLUTION_UNBOUND, unbound)
     if runtime_outcome(snapshot) is not None:
         return {**result, "recoverable": True, "mode": "seal"}
     actions = snapshot.get("actions", [])

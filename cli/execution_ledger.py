@@ -28,8 +28,11 @@ from execution_contracts import (
     RECOVERY_INTERRUPTION_CAUSES,
 )
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
-from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, PREDECESSOR_LINK_INVALID, RECONCILIATION_REQUIRED,
-                               RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL, RecoveryRefused)
+from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
+                               ITEM_NOT_UNRESOLVED, OWNER_GENERATION_STALE, PREDECESSOR_LINK_INVALID,
+                               RECONCILIATION_REQUIRED, RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL,
+                               UNRESOLVABLE_ABANDON_ONLY, V8_NO_DISPATCH_REGRANT_UNSUPPORTED,
+                               V8_RESOLUTION_REQUIRES_CHUNK_2, RecoveryRefused)
 
 
 def utc_now() -> str:
@@ -213,8 +216,11 @@ class ExecutionLedger:
     def send_lock(self):
         """Serialize recovery claims with the physical adapter boundary."""
         path = self.path.with_suffix(".send.lock")
-        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ContractError("send lock must be a private regular file")
             os.fchmod(fd, 0o600)
             fcntl.flock(fd, fcntl.LOCK_EX)
             yield
@@ -1255,6 +1261,11 @@ class ExecutionLedger:
             raise ContractError("no-dispatch resolution requires positive no-send evidence")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
+            protocol = db.execute("SELECT execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if protocol is not None and protocol[0] == 8:
+                # v8 resolves only through resolve_observed_v8, from Flow's own
+                # observation; operator evidence never reaches a v8 ledger (C1).
+                raise RecoveryRefused(V8_RESOLUTION_REQUIRES_CHUNK_2, "v8 resolves only from a stored observation")
             row = db.execute("SELECT status,attempt_id FROM actions WHERE action_id=?", (action_id,)).fetchone()
             if row is None or row[1] != attempt_id:
                 raise ContractError("resolution action does not belong to attempt")
@@ -1295,16 +1306,108 @@ class ExecutionLedger:
                 crossed = db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,)).fetchone()
                 if crossed:
                     raise ContractError("no-dispatch resolution conflicts with dispatch evidence")
-            result_json = None
-            if disposition == "resolved_completed":
-                result_json = db.execute("SELECT result_json FROM response_observations WHERE action_id=?", (action_id,)).fetchone()[0]
-                db.execute("UPDATE actions SET status='completed',result_json=?,reason='operator_resolved_completed' WHERE action_id=?", (result_json, action_id))
-            elif disposition == "resolved_not_dispatched":
-                db.execute("UPDATE actions SET status='not_dispatched',reason='operator_resolved_not_dispatched',grant_id=NULL WHERE action_id=?", (action_id,))
-            resolution_id = uuid.uuid4().hex
-            db.execute("INSERT INTO recovery_resolutions VALUES(?,?,?,?,?,?,?,?,?,?,?)", (resolution_id, attempt_id, action_id, actor, disposition, explanation, canonical(evidence), result_json, record_digest, utc_now(), generation or 0))
-            self._event(db, attempt_id, action_id, "operator_resolution", canonical({"resolution_id": resolution_id, "disposition": disposition, "evidence_digest": hashlib.sha256(canonical(evidence).encode()).hexdigest()}))
+            resolution_id, result_json = self._append_resolution_locked(
+                db, attempt_id, action_id, actor, disposition, explanation, evidence, record_digest, generation or 0)
             return {"resolution_id": resolution_id, **resolved, "result": json.loads(result_json) if result_json else None, "replayed": False}
+
+    def resolve_observed_v8(self, attempt_id: str, action_id: str, actor: str, explanation: str, *,
+                            expected_generation: int, expected_event_seq: int | None = None) -> dict[str, Any]:
+        """Resolve one v8 producer or verifier action from its stored response observation.
+
+        The action is left ``started`` or ``unknown`` when Flow died, or
+        ``complete`` failed, after the response was observed. Only Flow's own
+        validated observation counts (ADR 0012). The resolution is appended at
+        the current owner generation, which is already in the recovery chain,
+        so no generation is bumped (ADR 0016, chunk 2).
+        """
+        disposition = "resolved_completed"
+        if not isinstance(actor, str) or not actor.strip() or len(actor.encode()) > 256:
+            raise ContractError("recovery actor is invalid")
+        with self.send_lock(), self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            attempt = db.execute("SELECT envelope_json,status,recovery_version,owner_generation,execution_protocol_version "
+                                 "FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if attempt is None or attempt[4] != 8 or attempt[2] != 2:
+                raise ContractError("observation-backed reconcile requires a protocol v8 attempt")
+            if attempt[1] != "started":
+                raise RecoveryRefused(ATTEMPT_TERMINAL)
+            if attempt[3] != expected_generation:
+                raise RecoveryRefused(OWNER_GENERATION_STALE, f"owner generation is {attempt[3]}")
+            if expected_event_seq is not None:
+                high_water = db.execute("SELECT COALESCE(MAX(seq),0) FROM events WHERE attempt_id=?", (attempt_id,)).fetchone()[0]
+                if high_water != expected_event_seq:
+                    raise RecoveryRefused(RECOVERY_IN_PROGRESS, "attempt changed after it was inspected")
+            envelope = json.loads(attempt[0])
+            row = db.execute("SELECT status,request_json,attempt_id FROM actions WHERE action_id=?", (action_id,)).fetchone()
+            if row is None or row[2] != attempt_id:
+                if db.execute("SELECT 1 FROM manager_calls WHERE call_id=? AND attempt_id=?", (action_id, attempt_id)).fetchone():
+                    # Flow observes and completes a manager call in one step, so
+                    # an unresolved one never has a Flow-owned reply.
+                    raise RecoveryRefused(UNRESOLVABLE_ABANDON_ONLY, "a manager call has no Flow-owned reply")
+                raise ContractError("resolution action does not belong to attempt")
+            request = json.loads(row[1])
+            job = envelope["job_contract"]
+            is_verifier = request.get("instance_id") in job["verifier_instance_ids"]
+            is_producer = request.get("instance_id") in job["producer_instance_ids"]
+            observed = db.execute("SELECT result_json,result_digest FROM response_observations WHERE action_id=?", (action_id,)).fetchone()
+            evidence = ([{"kind": "flow_response_observation", "path": f"ledger:response_observations/{action_id}",
+                          "sha256": observed[1]}] if observed is not None else None)
+            prior = db.execute("SELECT resolution_id,resolution_digest,owner_generation FROM recovery_resolutions WHERE action_id=?",
+                               (action_id,)).fetchone()
+            record_digest = None
+            if evidence is not None:
+                validate_recovery_resolution(disposition, explanation, evidence)
+                record_digest = hashlib.sha256(canonical({
+                    "attempt_id": attempt_id, "action_id": action_id, "actor": actor, "disposition": disposition,
+                    "explanation": explanation, "evidence": evidence}).encode()).hexdigest()
+            if prior is not None:
+                if record_digest is not None and prior[1] == record_digest:
+                    return {"resolution_id": prior[0], "attempt_id": attempt_id, "action_id": action_id,
+                            "disposition": disposition, "owner_generation": prior[2], "replayed": True}
+                raise RecoveryRefused(ITEM_NOT_UNRESOLVED, "the action already has a different resolution")
+            if row[0] not in {"started", "unknown"}:
+                raise RecoveryRefused(ITEM_NOT_UNRESOLVED, f"the action is {row[0]}")
+            if not (is_producer or is_verifier):
+                raise RecoveryRefused(UNRESOLVABLE_ABANDON_ONLY, "only producer and verifier actions are reconcilable")
+            if observed is None:
+                raise RecoveryRefused(EVIDENCE_INSUFFICIENT, "no stored response observation; abandon only")
+            try:
+                if hashlib.sha256(observed[0].encode()).hexdigest() != observed[1]:
+                    raise ContractError("durable response observation digest mismatch")
+                result = json.loads(observed[0])
+                if is_verifier:
+                    validate_structured_verifier_result(result)
+                else:
+                    validate_result(envelope, result, action=request)
+            except (ContractError, VerifierContractError, ValueError) as exc:
+                raise RecoveryRefused(EVIDENCE_INVALID, str(exc)) from exc
+            if is_verifier:
+                claimed = db.execute("SELECT send_claimed_at FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone()
+                dispatched = claimed is not None and claimed[0] is not None
+            else:
+                dispatched = db.execute("SELECT 1 FROM events WHERE action_id=? AND event='adapter_send_started'",
+                                        (action_id,)).fetchone() is not None
+            if not dispatched:
+                raise RecoveryRefused(EVIDENCE_INVALID, "a response was observed without a recorded send")
+            resolution_id, _ = self._append_resolution_locked(
+                db, attempt_id, action_id, actor, disposition, explanation, evidence, record_digest, expected_generation)
+            return {"resolution_id": resolution_id, "attempt_id": attempt_id, "action_id": action_id,
+                    "disposition": disposition, "owner_generation": expected_generation, "replayed": False}
+
+    def _append_resolution_locked(self, db: sqlite3.Connection, attempt_id: str, action_id: str, actor: str,
+                                  disposition: str, explanation: str, evidence: list[dict[str, Any]],
+                                  record_digest: str, generation: int) -> tuple[str, str | None]:
+        """Apply one operator resolution inside the caller's transaction; history is only appended."""
+        result_json = None
+        if disposition == "resolved_completed":
+            result_json = db.execute("SELECT result_json FROM response_observations WHERE action_id=?", (action_id,)).fetchone()[0]
+            db.execute("UPDATE actions SET status='completed',result_json=?,reason='operator_resolved_completed' WHERE action_id=?", (result_json, action_id))
+        elif disposition == "resolved_not_dispatched":
+            db.execute("UPDATE actions SET status='not_dispatched',reason='operator_resolved_not_dispatched',grant_id=NULL WHERE action_id=?", (action_id,))
+        resolution_id = uuid.uuid4().hex
+        db.execute("INSERT INTO recovery_resolutions VALUES(?,?,?,?,?,?,?,?,?,?,?)", (resolution_id, attempt_id, action_id, actor, disposition, explanation, canonical(evidence), result_json, record_digest, utc_now(), generation))
+        self._event(db, attempt_id, action_id, "operator_resolution", canonical({"resolution_id": resolution_id, "disposition": disposition, "evidence_digest": hashlib.sha256(canonical(evidence).encode()).hexdigest()}))
+        return resolution_id, result_json
 
     def regrant_not_dispatched(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int) -> dict[str, Any]:
         """Re-evaluate one proven-unsent logical action under the same identity."""
@@ -1312,6 +1415,11 @@ class ExecutionLedger:
         attempt_id, action_id = envelope["attempt_id"], action["action_id"]
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
+            protocol = db.execute("SELECT execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if protocol is not None and protocol[0] == 8:
+                # v8 re-grants unconsumed grants during recovery, and a claimed
+                # send is never proven unsent (ADR 0012), so this path is v5 only.
+                raise RecoveryRefused(V8_NO_DISPATCH_REGRANT_UNSUPPORTED)
             self._assert_owner(db, attempt_id, generation)
             stored = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             row = db.execute("SELECT status,request_json FROM actions WHERE action_id=?", (action_id,)).fetchone()
