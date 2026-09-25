@@ -292,6 +292,34 @@ class LeadChangeFenceTests(CharteredFixture):
                 self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
                 self.assertEqual(self._authority(), before)
 
+    def test_an_unknown_manager_call_alone_blocks_a_lead_change(self):
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "progress 1"}]}]
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            request = {"schema_version": 1, "attempt_id": envelope["attempt_id"],
+                       "envelope_digest": envelope_digest(envelope), "sequence": 1, "phase": "facts",
+                       "manager_round": 1, "prompt_digest": digest(messages)}
+            on_manager({**request, "call_id": expected_manager_call_id(request), "messages": messages})
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def manager(message, *, envelope, workspace):
+            raise OSError("simulated connection reset during the manager send")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, manager_adapter=manager)
+        snapshot = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True).snapshot(result["attempt_id"])
+        self.assertEqual(([item["status"] for item in snapshot["manager_calls"]], snapshot["actions"]), (["unknown"], []))
+        before = self._authority()
+        for action in ("resume", "supersede"):
+            with self.subTest(action=action):
+                changed, _, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
+                self.assertFalse(changed)
+                self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+                self.assertEqual(self._authority(), before)
+
     def test_the_seal_refuses_attempts_that_were_not_probed(self):
         attempt_id = self._killed_before_bind()
         ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
