@@ -9,7 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
-from contextlib import nullcontext, suppress
+from contextlib import ExitStack, nullcontext, suppress
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
@@ -19,9 +19,9 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
-from delivery_control import delivery_authority_guard
+from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
-from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
+from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
                                EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
                                OWNER_GENERATION_STALE, V8_DISPOSITION_UNSUPPORTED, V8_EVIDENCE_FILE_REFUSED,
                                RecoveryRefused,
@@ -1040,6 +1040,41 @@ def _resolve_chartered(work_id: str, attempt_id: str, action_id: str, actor: str
             return ExecutionLedger(ledger_path).resolve_observed_v8(
                 attempt_id, action_id, actor, explanation, expected_generation=expected_generation,
                 expected_event_seq=snapshot["events"][-1]["seq"] if snapshot["events"] else 0)
+
+
+def decide_expansion(work_id: str, attempt_id: str, request_id: str, *, approve: bool, expected_generation: int,
+                     actor: str, explanation: str, root: Path | None = None) -> dict[str, Any]:
+    """Approve or deny one pending expansion request of a paused v8 attempt (ADR 0017).
+
+    Locks follow ADR 0016: the attempt's recovery fence (so no live run or
+    recovery owns it), the run authority guard (so the lead claim is the one
+    the attempt runs under), the send lock, then SQLite. Resuming is a
+    separate, explicit ``recover-delivery-lead``.
+    """
+    project_root = (root or repo_root()).resolve()
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    run_dir = project_root / ".flow" / "runs" / work_id
+    ledger_path = run_dir / "execution" / "ledger.sqlite"
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        raise ContractError("delivery execution ledger is absent")
+    ledger = ExecutionLedger(ledger_path)
+    envelope = ledger.snapshot(attempt_id)["envelope"]
+    if envelope.get("execution_protocol_version") != 8 or envelope.get("work_id") != work_id:
+        raise ContractError("expansion decisions require a protocol v8 attempt of this run")
+    with ExitStack() as fences:
+        try:
+            fences.enter_context(ledger.recovery_lock(attempt_id, holder="decide"))
+        except RecoveryRefused as exc:
+            raise RecoveryRefused(ATTEMPT_NOT_PAUSED, f"the attempt fence is held ({exc.reason})") from None
+        try:
+            fences.enter_context(delivery_authority_guard(run_dir, envelope))
+        except DeliveryControlError as exc:
+            raise RecoveryRefused(LEAD_GENERATION_INACTIVE, str(exc)) from None
+        fences.enter_context(ledger.send_lock())
+        return ledger.decide_expansion(attempt_id, request_id, approve=approve, expected_generation=expected_generation,
+                                       actor=actor, explanation=explanation)
 
 
 def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,

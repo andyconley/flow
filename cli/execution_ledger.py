@@ -8,6 +8,7 @@ import fcntl
 import os
 import sqlite3
 import stat
+import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -30,7 +31,8 @@ from execution_contracts import (
     expansion_headroom,
 )
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
-from delivery_recovery import (ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
+from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
+                               EXPANSION_ALREADY_DECIDED, EXPANSION_CEILING_EXCEEDED, EXPANSION_UNKNOWN_REQUEST,
                                ITEM_NOT_UNRESOLVED, OWNER_GENERATION_STALE, PREDECESSOR_LINK_INVALID,
                                RECONCILIATION_REQUIRED, RECOVERY_IN_PROGRESS, SIBLING_ATTEMPT_NOT_TERMINAL,
                                UNRESOLVABLE_ABANDON_ONLY, V8_NO_DISPATCH_REGRANT_UNSUPPORTED,
@@ -259,20 +261,28 @@ class ExecutionLedger:
         a second owner refuses at once with a stable reason. It is the
         outermost lock: recovery_lock, run_lock, send_lock, then SQLite.
         """
-        if holder not in {"live", "recovery"} or not attempt_id or any(
+        if holder not in {"live", "recovery", "decide"} or not attempt_id or any(
                 not (char.isalnum() or char in "-_") for char in attempt_id):
             raise ContractError("recovery lock request is invalid")
         path = self.path.parent / f"recovery-{attempt_id}.lock"
         fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
             os.fchmod(fd, 0o600)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                # The holder names itself right after locking; an unnamed
-                # holder is a live run that has not written its name yet.
-                current = os.pread(fd, 16, 0).decode(errors="ignore")
-                raise RecoveryRefused(RECOVERY_IN_PROGRESS if current == "recovery" else ATTEMPT_RUNNING) from None
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    # The holder names itself right after locking; an unnamed
+                    # holder is a live run that has not written its name yet.
+                    current = os.pread(fd, 16, 0).decode(errors="ignore")
+                    # One expansion decision briefly queues behind another, so
+                    # the loser sees the winner's decision; nothing else waits.
+                    if holder == "decide" and current == "decide" and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                        continue
+                    raise RecoveryRefused(RECOVERY_IN_PROGRESS if current in {"recovery", "decide"} else ATTEMPT_RUNNING) from None
             os.ftruncate(fd, 0)
             os.pwrite(fd, holder.encode(), 0)
             try:
@@ -611,6 +621,7 @@ class ExecutionLedger:
                         db.execute("UPDATE actions SET status='not_dispatched',reason='superseded_unconsumed_grant',"
                                    "grant_id=NULL WHERE action_id=?", (action_id,))
                         self._event(db, attempt_id, action_id, "superseded_grant_released", "")
+                    self._close_expansions_locked(db, attempt_id, action)
                     reason = canonical({"action": action, "lead_generation": lead_generation,
                                         "successor_generation": successor_generation})
                     # Bumping the owner generation fences every grant, manager
@@ -622,6 +633,100 @@ class ExecutionLedger:
                     self._event(db, attempt_id, None, "attempt_superseded", reason)
                     sealed.append(attempt_id)
                 return sealed
+
+    @staticmethod
+    def _close_expansions_locked(db: sqlite3.Connection, attempt_id: str, cause: str) -> None:
+        """A lead change or release cancels pending requests and lapses unused grants."""
+        for (request_id,) in db.execute("SELECT request_id FROM expansion_requests WHERE attempt_id=? AND status='pending'",
+                                        (attempt_id,)).fetchall():
+            db.execute("UPDATE expansion_requests SET status='cancelled' WHERE request_id=?", (request_id,))
+            ExecutionLedger._event(db, attempt_id, None, "expansion_cancelled", canonical({"request_id": request_id, "cause": cause}))
+        for (grant_id,) in db.execute("SELECT grant_id FROM expansion_grants WHERE attempt_id=? AND status='available'",
+                                      (attempt_id,)).fetchall():
+            db.execute("UPDATE expansion_grants SET status='lapsed' WHERE grant_id=?", (grant_id,))
+            ExecutionLedger._event(db, attempt_id, None, "expansion_grant_lapsed", canonical({"grant_id": grant_id, "cause": cause}))
+
+    @staticmethod
+    def _open_expansion_attempts(db: sqlite3.Connection, work_id: str) -> list[str]:
+        try:
+            return [row[0] for row in db.execute(
+                "SELECT attempt_id FROM attempts a WHERE work_id=? AND status='started' AND execution_protocol_version=8 "
+                "AND (EXISTS(SELECT 1 FROM expansion_requests r WHERE r.attempt_id=a.attempt_id AND r.status='pending') "
+                "OR EXISTS(SELECT 1 FROM expansion_grants g WHERE g.attempt_id=a.attempt_id AND g.status='available')) "
+                "ORDER BY rowid", (work_id,))]
+        except sqlite3.OperationalError:
+            return []  # a read-only ledger that predates expansion has none
+
+    def open_expansion_attempts(self, work_id: str) -> list[str]:
+        """Started v8 attempts with a pending request or an unused grant."""
+        with self._db() as db:
+            return self._open_expansion_attempts(db, work_id)
+
+    def release_expansions(self, work_id: str, *, expected: list[str]) -> list[str]:
+        """Close every open expansion of the released lead's started v8 attempts, in one transaction."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            started = self._open_expansion_attempts(db, work_id)
+            if started != list(expected):
+                raise RecoveryRefused(RECOVERY_IN_PROGRESS, "attempts changed during the lead release")
+            for attempt_id in started:
+                self._close_expansions_locked(db, attempt_id, "release")
+            return started
+
+    def decide_expansion(self, attempt_id: str, request_id: str, *, approve: bool, expected_generation: int,
+                         actor: str, explanation: str) -> dict[str, Any]:
+        """Record the engineer's decision on one pending request of a truly paused attempt.
+
+        The caller holds the attempt's recovery lock, the run lock, and the send
+        lock (ADR 0016 order); this is the SQLite step. Refusals change nothing.
+        A manual grant never draws sealed headroom, and never passes a ceiling.
+        """
+        if type(approve) is not bool or type(expected_generation) is not int:
+            raise ContractError("expansion decision is invalid")
+        for value, limit in ((actor, 256), (explanation, 2048)):
+            if not isinstance(value, str) or not value.strip() or len(value) > limit:
+                raise ContractError("expansion decision actor or explanation is invalid")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT envelope_json,status,owner_generation,execution_protocol_version FROM attempts "
+                             "WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[3] != 8:
+                raise ContractError("expansion decisions require a protocol v8 attempt")
+            if row[1] != "started":
+                raise RecoveryRefused(ATTEMPT_TERMINAL)
+            if row[2] != expected_generation:
+                raise RecoveryRefused(OWNER_GENERATION_STALE, f"current owner generation is {row[2]}")
+            request = db.execute("SELECT status,limits_json,lineage_id FROM expansion_requests WHERE request_id=? AND attempt_id=?",
+                                 (request_id, attempt_id)).fetchone()
+            if request is None:
+                raise RecoveryRefused(EXPANSION_UNKNOWN_REQUEST)
+            if request[0] != "pending":
+                raise RecoveryRefused(EXPANSION_ALREADY_DECIDED, f"request is {request[0]}")
+            if self._unresolved_action(db, attempt_id):
+                raise RecoveryRefused(ATTEMPT_NOT_PAUSED, "an action or manager call is started or unknown")
+            envelope, limits = json.loads(row[0]), json.loads(request[1])
+            if approve:
+                effective = self._effective_limits(db, envelope)
+                lineage = self._lineage_attempts(envelope)
+                outstanding = {name: self._granted_units(db, lineage if name in LINEAGE_SCOPED_LIMITS else [attempt_id],
+                                                         consumed_only=False)[name]
+                               - self._granted_units(db, lineage if name in LINEAGE_SCOPED_LIMITS else [attempt_id])[name]
+                               for name in limits}
+                if any(effective[name] + outstanding[name] + 1 > EXPANSION_LIMIT_KEYS[name][1] for name in limits):
+                    raise RecoveryRefused(EXPANSION_CEILING_EXCEEDED)
+            decided_at = utc_now()
+            grant_id = "expg-" + request_id[4:]
+            decision = "approve" if approve else "deny"
+            db.execute("INSERT INTO expansion_grants VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                       (grant_id, request_id, request[2], attempt_id, "engineer", decision, request[1], 1,
+                        actor.strip(), explanation.strip(), expected_generation, decided_at,
+                        "available" if approve else "denied", None))
+            db.execute("UPDATE expansion_requests SET status=? WHERE request_id=?", ("granted" if approve else "denied", request_id))
+            self._event(db, attempt_id, None, "expansion_decided",
+                        canonical({"request_id": request_id, "decision": decision, "actor": actor.strip()}))
+            return {"status": "granted" if approve else "denied", "request_id": request_id, "grant_id": grant_id,
+                    "attempt_id": attempt_id, "limits": limits, "owner_generation": expected_generation,
+                    "decided_at": decided_at, "next_action": f"flow run recover-delivery-lead {envelope['work_id']} {attempt_id}"}
 
     def claim_recovery(self, attempt_id: str, actor: str = "flow-recovery") -> int:
         with self.send_lock():

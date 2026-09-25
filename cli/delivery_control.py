@@ -258,7 +258,7 @@ def change_lead_claim(
         if not previous_claim.is_file():
             return False, current, ["current Delivery Lead claim is unavailable"]
         with ExitStack() as fences:
-            if action in {"resume", "supersede"}:
+            if action in {"resume", "supersede", "release"}:
                 refusal = _fence_and_seal_attempts(run_dir, work_id, fences, action=action,
                                                    lead_generation=generation, successor_generation=next_generation)
                 if refusal:
@@ -294,15 +294,24 @@ def _fence_and_seal_attempts(run_dir: Path, work_id: str, fences: ExitStack, *, 
     unreadable = (sqlite3.Error, OSError, LookupError, TypeError, ValueError)
     try:
         reader = ExecutionLedger(ledger_path, read_only=True)
-        if reader.lead_change_blocker():
-            return "reconciliation_required: an uncertain send blocks the Delivery Lead successor"
-        attempts = reader.started_v8_attempts(work_id, max_lead_generation=lead_generation)
+        if action == "release":
+            # Release stays the way to abandon uncertain work, so it is never
+            # blocked by it; it touches only attempts with open expansions.
+            attempts = reader.open_expansion_attempts(work_id)
+        else:
+            if reader.lead_change_blocker():
+                return "reconciliation_required: an uncertain send blocks the Delivery Lead successor"
+            attempts = reader.started_v8_attempts(work_id, max_lead_generation=lead_generation)
     except unreadable:
         return LEAD_GUARD_LEDGER_UNREADABLE
     try:
         for attempt_id in attempts:
             fences.enter_context(reader.recovery_lock(attempt_id, holder="recovery"))
-        if attempts:
+        if attempts and action == "release":
+            # A release keeps the attempts started but ends their pending
+            # expansion decisions; the fences make it exclude a decide.
+            ExecutionLedger(ledger_path).release_expansions(work_id, expected=attempts)
+        elif attempts:
             ExecutionLedger(ledger_path).seal_superseded_attempts(
                 work_id, lead_generation=lead_generation, successor_generation=successor_generation,
                 action=action, expected=attempts)

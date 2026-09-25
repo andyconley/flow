@@ -43,6 +43,13 @@ EXPECTED_GENERATION_REQUIRED = "expected_generation_required"
 V8_DISPOSITION_UNSUPPORTED = "v8_disposition_unsupported"
 EVIDENCE_FILE_REQUIRED = "evidence_file_required"
 EXPECTED_GENERATION_V8_ONLY = "expected_generation_v8_only"
+# Expansion decisions and resume (ADR 0017).
+ATTEMPT_NOT_PAUSED = "attempt_not_paused"
+EXPANSION_UNKNOWN_REQUEST = "expansion_unknown_request"
+EXPANSION_ALREADY_DECIDED = "expansion_already_decided"
+EXPANSION_CEILING_EXCEEDED = "expansion_ceiling_exceeded"
+EXPANSION_DECISION_REQUIRED = "expansion_decision_required"
+EXPANSION_GRANT_CONSUMED = "expansion_grant_consumed"
 
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 
