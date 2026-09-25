@@ -1052,7 +1052,7 @@ def main() -> int:
                 result = resolve_execution(args.work_id, args.attempt_id, args.action_id, args.actor,
                                            args.disposition, args.explanation, args.evidence_file,
                                            args.expected_generation)
-        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+        except (ContractError, OSError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
                   if args.json else f"execution recovery refused: {exc}")
             return 2

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -394,6 +395,16 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
             with self.ledger.send_lock():
                 self.fail("a symlinked send lock must not be taken")
         self.assertEqual((target.read_text(), target.stat().st_mode & 0o777 != 0o600), ("untouched", True))
+
+    def test_send_lock_refuses_a_hard_linked_lock_file(self):
+        target = Path(self.temporary.name) / "elsewhere"
+        target.write_text("untouched")
+        target.chmod(0o644)
+        os.link(target, self.ledger.path.with_suffix(".send.lock"))
+        with self.assertRaisesRegex(ContractError, "private regular file"):
+            with self.ledger.send_lock():
+                self.fail("a hard-linked send lock must not be taken")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
 
     def test_expired_verifier_grant_is_committed_denied_not_left_reserved(self):
         env = self.envelope(maximum=1)

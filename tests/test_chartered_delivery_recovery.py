@@ -1405,6 +1405,25 @@ class V8ResolveRouteTests(ObservedReconcileHarness):
         self._refused(result["attempt_id"], "attempt_terminal",
                       action_id=self._action(result["attempt_id"], "producer")["action_id"])
 
+    def test_the_route_refuses_an_intact_observation_that_fails_revalidation(self):
+        attempt_id = self._interrupted("producer")
+        action_id = self._action(attempt_id, "producer")["action_id"]
+        with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+            stored = json.loads(db.execute("SELECT result_json FROM response_observations WHERE action_id=?",
+                                           (action_id,)).fetchone()[0])
+            forged = json.dumps({**stored, "model": "some-other-model"}, sort_keys=True, separators=(",", ":"))
+            db.execute("UPDATE response_observations SET result_json=?,result_digest=? WHERE action_id=?",
+                       (forged, hashlib.sha256(forged.encode()).hexdigest(), action_id))
+        self._refused(attempt_id, "evidence_invalid", action_id=action_id)
+
+    def test_an_unobserved_action_is_abandoned_with_release(self):
+        with self._kill_once("observe_response"):
+            attempt_id = self._killed(("editor", "verifier"), [self.PASS])
+        self._refused(attempt_id, "evidence_insufficient", action_id=self._action(attempt_id, "producer")["action_id"])
+        changed, run, errors = change_lead_claim("sample", "release", root=self.root)
+        self.assertTrue(changed, errors)
+        self.assertEqual(run["delivery"]["owner_status"], "released")
+
     def test_v8_resolve_refuses_an_envelope_worktree_containing_project_flow(self):
         # An attempt prepared before the guard existed: its worktree sits inside .flow.
         inside = self.root / ".flow" / "worktree"
@@ -1416,14 +1435,17 @@ class V8ResolveRouteTests(ObservedReconcileHarness):
                       action_id=self._action(attempt_id, "verifier")["action_id"])
 
     def test_v5_to_v7_resolve_execution_keeps_its_contract(self):
-        for label, kwargs, reason in (("missing evidence file", {}, "evidence_file_required"),
-                                      ("expected generation", {"evidence_file": "x", "expected_generation": 1},
-                                       "expected_generation_v8_only")):
-            with self.subTest(case=label):
-                with self.assertRaises(RecoveryRefused) as raised:
-                    resolve_execution("sample", "a" * 32, "b" * 64, "operator", "resolved_completed", "x",
-                                      root=self.root, **kwargs)
-                self.assertEqual(raised.exception.reason, reason)
+        envelope = self._run_v8([self.PASS])[3]["envelope"]
+        v7_id = LeadChangeFenceTests._v7_started_row(self, envelope["attempt_id"])
+        for attempt_id in ("a" * 32, v7_id):
+            for label, kwargs, reason in (("missing evidence file", {}, "evidence_file_required"),
+                                          ("expected generation", {"evidence_file": "x", "expected_generation": 1},
+                                           "expected_generation_v8_only")):
+                with self.subTest(attempt="v7 ledger row" if attempt_id == v7_id else "no ledger row", case=label):
+                    with self.assertRaises(RecoveryRefused) as raised:
+                        resolve_execution("sample", attempt_id, "b" * 64, "operator", "resolved_completed", "x",
+                                          root=self.root, **kwargs)
+                    self.assertEqual(raised.exception.reason, reason)
 
 
 class BoundaryReconcileTests(ObservedReconcileHarness):
@@ -1495,14 +1517,17 @@ class BoundaryReconcileTests(ObservedReconcileHarness):
         self.assertTrue(changed, errors)
 
     def test_a_lead_change_succeeds_once_every_uncertain_action_is_resolved(self):
-        attempt_id = self._interrupted("verifier")
-        changed, _, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
-        self.assertFalse(changed)
-        self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
-        self._route(attempt_id, self._action(attempt_id, "verifier")["action_id"])
-        changed, run, errors = change_lead_claim("sample", "resume", root=self.root, owner="replacement")
-        self.assertTrue(changed, errors)
-        self.assertEqual(self._ledger().snapshot(attempt_id)["status"], "superseded")
+        for action in ("resume", "supersede"):
+            with self.subTest(action=action):
+                self.setUp()
+                attempt_id = self._interrupted("verifier")
+                changed, _, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
+                self.assertFalse(changed)
+                self.assertTrue(errors[0].startswith("reconciliation_required"), errors)
+                self._route(attempt_id, self._action(attempt_id, "verifier")["action_id"])
+                changed, run, errors = change_lead_claim("sample", action, root=self.root, owner="replacement")
+                self.assertTrue(changed, errors)
+                self.assertEqual(self._ledger().snapshot(attempt_id)["status"], "superseded")
 
     def test_receipt_validation_rejects_an_added_or_removed_resolution(self):
         from execution_contracts import validate_receipt

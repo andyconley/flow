@@ -247,9 +247,27 @@ def _refuse_project_flow_in_worktree(worktree: Path, project_root: Path) -> None
     A Codex producer can write anywhere in its worktree, so a worktree that is,
     contains, or sits inside the project ``.flow`` could forge Flow's evidence.
     """
+    # Compare files, not spellings: a case-insensitive volume, a firmlink, or
+    # a bind mount can give one directory two different paths.
+    def identities(path: Path) -> set[tuple[int, int]]:
+        found = set()
+        for candidate in (path, *path.parents):
+            try:
+                info = candidate.stat()
+            except OSError:
+                continue
+            found.add((info.st_dev, info.st_ino))
+        return found
+
     flow_dir = (project_root / ".flow").resolve()
     resolved = Path(worktree).resolve()
-    if resolved == flow_dir or resolved in flow_dir.parents or flow_dir in resolved.parents:
+    try:
+        flow_info, tree_info = flow_dir.stat(), resolved.stat()
+    except OSError:
+        flow_info = tree_info = None
+    if (resolved == flow_dir or resolved in flow_dir.parents or flow_dir in resolved.parents
+            or (flow_info is not None and ((flow_info.st_dev, flow_info.st_ino) in identities(resolved)
+                                           or (tree_info.st_dev, tree_info.st_ino) in identities(flow_dir)))):
         raise RecoveryRefused(WORKTREE_CONTAINS_PROJECT_FLOW, str(resolved))
 
 
