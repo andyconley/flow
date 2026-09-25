@@ -1,0 +1,22 @@
+{
+  "artifacts": {
+    "scout_summary": ".flow/runs/local-verifier-json-contract/scout-summary.md"
+  },
+  "created_at": "2026-09-25T20:11:00Z",
+  "dispositions": {
+    "archive_enrichment": "1",
+    "capability_gaps": "recorded",
+    "memory": "updated"
+  },
+  "gates": {
+    "archive-scout": "2026-09-25T20:11:00Z"
+  },
+  "lane": "scout",
+  "last_event": "archive-scout",
+  "phase": "archived",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "archived",
+  "updated_at": "2026-09-25T20:11:00Z",
+  "work_id": "local-verifier-json-contract"
+}
