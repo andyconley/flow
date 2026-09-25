@@ -1,0 +1,24 @@
+# Implementation Handoff: chunk 2
+
+- **Branch:** `codex/chartered-delivery-recovery-2`, stacked on `codex/chartered-delivery-recovery-1b` (PR #29). Worktree: `/Users/andyconley/.codex/worktrees/delivery-recovery/flow`. Rebase onto `main` once #29 merges and before this PR opens.
+- **Read first:**
+  - `requirements.md`, including its amendments; `acceptance-criteria.md`;
+  - `solution.md` (Option A);
+  - `plan.md` (P1–P4, contracts, and the commit sequence);
+  - `validation-plan.md`;
+  - `research/plan-architecture.md` and `research/solution-verify.md`;
+  - `docs/adr/0012-flow-owned-maf-recovery.md` and `docs/adr/0016-chartered-v8-recovery.md`.
+- **Commits:** the 12 code and doc commits in `plan.md`, then the evidence. Conventional Commits, with the full suite green after each.
+- **Rules:**
+  - Only Flow-owned evidence is used (C1).
+  - Resolution happens at the current owner generation, with no bump.
+  - Every refusal mutates nothing.
+  - v5–v7 behavior is unchanged, apart from the text of the missing-`--evidence-file` error.
+  - Lock order: `recovery_lock`, `run_lock`, `send_lock`, then SQLite.
+  - There is no schema change.
+- **Test runner:** `python3.12`. Set `FLOW_MAF_PYTHON` to an interpreter built from `runtime/maf_runner/requirements.txt`.
+- **Done when:**
+  - every AC in `acceptance-criteria.md` (with its amendments) passes;
+  - M1–M4 are recorded in `validation-results.md`;
+  - the full suite has 0 skipped;
+  - `HANDOFF.md` is written.

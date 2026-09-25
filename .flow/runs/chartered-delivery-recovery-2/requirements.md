@@ -45,7 +45,7 @@ Status: **approved by the engineer on 2026-09-24** (revised after adversarial re
      - the evidence is insufficient.
    - **Unchanged.** v5–v7 resolution behaves exactly as today.
 2. **Resolution from Flow-owned evidence (C1).** An `unknown` or `started` action may be resolved as `resolved_completed` only from a Flow-owned durable response observation, or a Flow-captured provider trace, that validates against the original envelope and action. A verifier response is then evaluated under the v8 contract, bound to the exact evidence.
-3. **Manager-call resolution.**
+3. **Manager-call resolution.** *(Dropped in `flow-solution`; see Amendments. The text below is kept for the record and is not live scope.)*
    - A `started` or `unknown` manager call can be resolved as `resolved_completed` from Flow-owned evidence.
    - The resolution goes in a new, append-only record bound to the call id, the attempt id, and the owner generation, with a unique key.
    - Recording the observation and the resolution is atomic, so a crash never leaves a completed call without a resolution.
@@ -70,7 +70,7 @@ Status: **approved by the engineer on 2026-09-24** (revised after adversarial re
 ## Success criteria
 
 - A v8 attempt blocked only by rows for which Flow holds a durable response can be resolved and continued with `resolve-execution` followed by `recover-delivery-lead`, with zero resends.
-- Zero duplicate provider sends across the v5–v8 suite. The mutation checks in AC12 hold.
+- Zero duplicate provider sends across the v5–v8 suite. The mutation checks in AC11 hold.
 - An operator can tell from `inspect-delivery` alone, for each blocker, whether it is resolvable and how, or whether abandonment is the only remedy.
 
 ## Non-goals
@@ -129,4 +129,4 @@ The premise verification (`research/solution-verify.md`) showed parts of the app
   - AC4 is removed;
   - AC5 is realized by AC1 (c)/(e) and AC3;
   - AC8 covers action resolutions only;
-  - new AC12, worktree guard: prepare and resolve refuse a worktree that contains `.flow/`, and mutate nothing.
+  - new AC12, worktree guard: prepare and resolve refuse a worktree that contains `.flow/`, and mutate nothing. `acceptance-criteria.md` is rewritten to match, with AC1–AC12 numbered for this run.
