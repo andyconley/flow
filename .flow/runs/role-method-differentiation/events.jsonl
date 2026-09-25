@@ -5,3 +5,4 @@
 {"artifacts": {}, "at": "2026-09-09T18:00:21Z", "dispositions": {}, "event": "start-implementation", "from": "plan_approved", "to": "implementing"}
 {"artifacts": {"handback": ".flow/runs/role-method-differentiation/HANDOFF.md", "implementation_evidence": ".flow/runs/role-method-differentiation/validation-results.md"}, "at": "2026-09-10T01:35:14Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "note": "Mechanically valid; strict behavioral acceptance failed and requires a definition decision.", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-10T01:37:42Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
+{"artifacts": {}, "at": "2026-09-25T02:57:40Z", "dispositions": {}, "event": "block", "from": "reviewing", "note": "superseded by role-method-differentiation-repair-3, accepted and released as v0.28.0; closed without its own review", "to": "blocked"}

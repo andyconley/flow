@@ -14,17 +14,21 @@
   "gates": {
     "approve-definition": "2026-09-19T20:34:03Z",
     "approve-plan": "2026-09-19T20:36:26Z",
+    "block": "2026-09-25T02:57:39Z",
     "mark-handback-ready": "2026-09-19T20:47:24Z",
     "start-definition": "2026-09-19T20:32:40Z",
     "start-implementation": "2026-09-19T20:36:26Z",
     "start-plan": "2026-09-19T20:36:26Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "phase": "handback_ready",
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "superseded: closed without its own review; the MAF delivery work shipped under the later archived runs (maf-magentic-delivery-lead, maf-restart-reconciliation, maf-multiturn-recovery, maf-post-resolution-continuation)",
+  "phase": "blocked",
   "protocol_revision": 2,
+  "return_lane": "implement",
+  "return_state": "handback_ready",
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-19T20:47:24Z",
+  "state": "blocked",
+  "updated_at": "2026-09-25T02:57:39Z",
   "work_id": "maf-magentic-interruption"
 }
