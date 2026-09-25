@@ -6,7 +6,7 @@
   `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
   is a legacy record.
 - `local-verifier-json-contract` (scout) is archived. The change is on
-  `codex/local-verifier-json-contract`, and its PR is open.
+  `codex/local-verifier-json-contract`, merged as PR #35 and released in v0.35.2.
   - The first live check (2026-09-25) had every local verifier reply judged
     `unusable`. The models followed the role's markdown output format instead
     of the JSON contract.
