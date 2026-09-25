@@ -171,6 +171,167 @@
         "mode": "concurrent",
         "group": "implement-review"
       }
+    },
+    {
+      "lane": "review",
+      "brief_path": ".flow/runs/chartered-delivery-recovery-1b/briefs/review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-1b/briefs/review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-1b/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-1b/plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery-1b/HANDOFF.md",
+        ".flow/runs/chartered-delivery-recovery-1b/research/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/research/implement-review-security.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-1b",
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-1b/review.md",
+        "format": "markdown"
+      },
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "review"
+      },
+      "id": "review-acceptance",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-delivery-recovery-1b-review"
+      },
+      "success_criteria": [
+        "Acceptance verdict of chunk 1b against AC1-AC6 and E1-E5"
+      ]
+    },
+    {
+      "lane": "review",
+      "brief_path": ".flow/runs/chartered-delivery-recovery-1b/briefs/review.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-1b/briefs/review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-1b/requirements.md",
+        ".flow/runs/chartered-delivery-recovery-1b/plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-plan.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery-1b/HANDOFF.md",
+        ".flow/runs/chartered-delivery-recovery-1b/research/implement-review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/research/implement-review-security.md",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-1b",
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-1b/review.md",
+        "format": "markdown"
+      },
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "review"
+      },
+      "id": "review-proof",
+      "role": "test-engineer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-test-engineer-delivery-recovery-1b-review"
+      },
+      "success_criteria": [
+        "Validation-fit verdict of chunk 1b proof against AC1-AC6"
+      ]
+    },
+    {
+      "lane": "review",
+      "brief_path": ".flow/runs/chartered-delivery-recovery-1b/briefs/review-recheck.md",
+      "input_evidence": [
+        ".flow/runs/chartered-delivery-recovery-1b/briefs/review-recheck.md",
+        ".flow/runs/chartered-delivery-recovery-1b/review.md",
+        ".flow/runs/chartered-delivery-recovery-1b/acceptance-criteria.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation-results.md",
+        ".flow/runs/chartered-delivery-recovery-1b/validation/mutations.log",
+        "docs/adr/0016-chartered-v8-recovery.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/chartered-delivery-recovery-1b",
+        ".flow/runs/chartered-delivery-recovery",
+        "cli",
+        "docs",
+        "runtime",
+        "tests"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/chartered-delivery-recovery-1b/review.md",
+        "format": "markdown"
+      },
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "review-recheck"
+      },
+      "id": "review-recheck",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-quality-reviewer-delivery-recovery-1b-recheck"
+      },
+      "success_criteria": [
+        "Independent recheck that the refinement-round fixes close review.md I1-I3, S1, S2 without regressions"
+      ]
     }
   ],
   "shared_state": [],
@@ -245,6 +406,8 @@
       "implementation-root"
     ],
     "evidence_collector_assignment": "implementation-root",
-    "independent": true
+    "independent": true,
+    "verifier_assignment": "review-recheck",
+    "artifact_path": ".flow/runs/chartered-delivery-recovery-1b/review.md"
   }
 }

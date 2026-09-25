@@ -7,25 +7,27 @@
     "orchestration_manifest": ".flow/runs/chartered-delivery-recovery-1b/orchestration.json",
     "plan": ".flow/runs/chartered-delivery-recovery-1b/plan.md",
     "requirements": ".flow/runs/chartered-delivery-recovery-1b/requirements.md",
+    "review": ".flow/runs/chartered-delivery-recovery-1b/review.md",
     "validation_plan": ".flow/runs/chartered-delivery-recovery-1b/validation-plan.md"
   },
   "created_at": "2026-09-24T02:27:33Z",
   "dispositions": {},
   "gates": {
+    "accept-review": "2026-09-24T23:47:20Z",
     "approve-definition": "2026-09-24T02:28:03Z",
     "approve-plan": "2026-09-24T02:28:09Z",
     "mark-handback-ready": "2026-09-24T02:52:23Z",
     "start-definition": "2026-09-24T02:27:33Z",
     "start-implementation": "2026-09-24T02:28:09Z",
-    "start-plan": "2026-09-24T02:28:09Z"
+    "start-plan": "2026-09-24T02:28:09Z",
+    "start-review": "2026-09-24T23:11:13Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "next_action": "next: /flow-review chartered-delivery-recovery-1b",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-24T02:52:23Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-24T23:47:20Z",
   "work_id": "chartered-delivery-recovery-1b"
 }

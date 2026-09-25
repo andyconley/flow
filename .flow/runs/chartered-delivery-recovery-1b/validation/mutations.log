@@ -24,4 +24,31 @@ FAILED (failures=2)
 == M4: seal ignores the probed set
 FAIL: test_the_seal_refuses_attempts_that_were_not_probed (tests.test_chartered_delivery_recovery.LeadChangeFenceTests.test_the_seal_refuses_attempts_that_were_not_probed)
 FAILED (failures=1)
-== restored: cli/execution_contracts.py:0 cli/execution_ledger.py:0 
+== restored: cli/execution_contracts.py:0 cli/execution_ledger.py:0
+
+== acceptance-review round (review.md I1, I3, S1); ledger restored from a byte copy after each (cmp identical)
+== note: the earlier M1a repeat named test_an_unknown_v7_...; e16e8bd renamed it. The M1a entry below supersedes it.
+== M1a: pre-check only (lead_change_blocker returns None), against the final uncertain-v7 test
+FAIL: test_an_uncertain_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal (tests.test_chartered_delivery_recovery.LeadChangeFenceTests.test_an_uncertain_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal) (status='started')
+AssertionError: True is not false
+FAIL: test_an_uncertain_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal (tests.test_chartered_delivery_recovery.LeadChangeFenceTests.test_an_uncertain_v7_send_blocks_a_lead_change_with_no_v8_attempt_to_seal) (status='unknown')
+AssertionError: True is not false
+Ran 1 test in 0.284s
+FAILED (failures=2)
+== M5: the seal skips the ledger lineage comparison
+FAIL: test_the_seal_refuses_understated_lineage_usage_that_receipt_validation_accepts (tests.test_chartered_delivery_recovery.SuccessorLineageTamperTests.test_the_seal_refuses_understated_lineage_usage_that_receipt_validation_accepts)
+AssertionError: ContractError not raised
+Ran 1 test in 0.459s
+FAILED (failures=1)
+== M6: the regrant limit rule ignores the lineage
+FAIL: test_successor_paid_and_verifier_limits_count_predecessor_sends (tests.test_chartered_delivery_recovery.SuccessorLineageTests.test_successor_paid_and_verifier_limits_count_predecessor_sends)
+AssertionError: 'allowed' != 'verifier_call_cap'
+Ran 1 test in 0.457s
+FAILED (failures=1)
+== restored: cli/execution_ledger.py identical to the pre-mutation copy
+== M6b: the regrant limit rule ignores only the paid lineage term
+FAIL: test_successor_paid_and_verifier_limits_count_predecessor_sends (tests.test_chartered_delivery_recovery.SuccessorLineageTests.test_successor_paid_and_verifier_limits_count_predecessor_sends)
+AssertionError: 'allowed' != 'paid_call_cap'
+Ran 1 test in 0.736s
+FAILED (failures=1)
+== restored: cli/execution_ledger.py identical to the pre-mutation copy

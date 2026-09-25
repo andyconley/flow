@@ -41,3 +41,16 @@ Quality and security implementation reviews ran read-only and concurrently: `res
 
 - Live providers: none, by plan.
 - A dedicated test for an `unknown` manager call as the guard trigger, and for the lineage count on the recovery regrant path (accepted residual).
+
+## Acceptance-review refinement round (2026-09-24)
+
+Re-validated on the working tree above `2760098` after the `review.md` I1, I2, I3, S1, S2, and S6 fixes.
+
+- **Full suite:** `python3.12 -m unittest discover -s tests` → **1443 tests OK, 0 skipped** (`validation/full-suite.log`, replaced). The one new test is the I1 seal test.
+- **MAF-gated:** `tests.test_maf_delivery_lead` → **11 OK, 0 skipped** (`validation/maf-gated.log`, replaced). The original pinned interpreter under `/private/tmp` was gone, so it was rebuilt from `runtime/maf_runner/requirements.txt` (`agent-framework-core==1.19.0`, `agent-framework-orchestrations==1.2.0`) and linked at `/private/tmp/flow-maf-runtime-spike-20260919`. Three MAF test files hardcode that path and ignore `FLOW_MAF_PYTHON`, so without the link 17 tests skip.
+- **Mutation checks** (appended to `validation/mutations.log`):
+  - **M1a**, re-run against the final `test_an_uncertain_v7_send_blocks_…`: the `started` and `unknown` subtests both **fail**.
+  - **M5**, the seal skips the ledger lineage comparison: `test_the_seal_refuses_understated_lineage_usage_that_receipt_validation_accepts` **fails**.
+  - **M6**, the regrant limit rule ignores the lineage: `test_successor_paid_and_verifier_limits_count_predecessor_sends` **fails** at the regrant check (`'allowed' != 'verifier_call_cap'`).
+- **`git diff --check`:** see the review record. `mutations.log` trailing whitespace was stripped.
+- **Residuals now closed:** the regrant-path lineage count (S1). **Still open:** an `unknown` manager call as the guard trigger, carried to chunk 2.
