@@ -2,6 +2,17 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.35.1](https://github.com/andyconley/flow/compare/v0.35.0...v0.35.1) (2026-09-25)
+
+### Documentation
+
+* **backlog:** promote four capability gaps from the workbreakdown Slice A run ([2a3325e](https://github.com/andyconley/flow/commit/2a3325ea72a77da5757fa85137475314355ebf61))
+
+### Maintenance
+
+* archive two accepted runs, block six superseded ones ([6a65d08](https://github.com/andyconley/flow/commit/6a65d081c7d406d550c23f8b5dd4b0c51bfd4af9)), closes [#21](https://github.com/andyconley/flow/issues/21)
+* block seven superseded runs and refresh current state ([146edbe](https://github.com/andyconley/flow/commit/146edbe9905b1d47d9f99c377ca5a0cd58702e68))
+
 ## [0.35.0](https://github.com/andyconley/flow/compare/v0.34.1...v0.35.0) (2026-09-25)
 
 ### Features
