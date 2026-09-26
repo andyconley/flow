@@ -1290,6 +1290,10 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         if expansion is not None:
             # Added only when the lineage expanded, so other receipts stay byte-identical.
             receipt["expansion"] = expansion
+        manager_progress = ledger.manager_progress_receipt(aid)
+        if manager_progress is not None:
+            # Added only when a progress reply was repaired or retried (ADR 0018).
+            receipt["manager_progress"] = manager_progress
         if snapshot.get("recoveries"):
             # A receipt on disk while the attempt is started is an unsealed
             # draft from a process that died before finish_attempt.
