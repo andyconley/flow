@@ -2,6 +2,26 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.36.1](https://github.com/andyconley/flow/compare/v0.36.0...v0.36.1) (2026-09-26)
+
+### Bug Fixes
+
+* **cli:** let Claude edit turns stream past 1 MiB ([ab00060](https://github.com/andyconley/flow/commit/ab00060f6b8bbaef97e39dbc438713c7cb43ce29))
+* **run:** drop dangling symlink from v8-live-validation evidence ([1037beb](https://github.com/andyconley/flow/commit/1037bebe18ac3dc199f6f0bb1d28e5ad4ae80745))
+* **scripts:** escape pipes in generated help tables ([3e44cf1](https://github.com/andyconley/flow/commit/3e44cf10347b07c60f25c5818b29eee87d462e5f))
+
+### Documentation
+
+* **backlog:** promote three repeated capability gaps ([cdeb3d7](https://github.com/andyconley/flow/commit/cdeb3d79db449ec6494df323b8a14c7d5f540fed))
+* **run:** accept v8-live-validation review ([b896cca](https://github.com/andyconley/flow/commit/b896cca9a27320b5ade794bbb8285482525f0c3f))
+* **run:** archive edit-worker-stream-cap scout ([98dc483](https://github.com/andyconley/flow/commit/98dc483a5c018eee34194a1368cf574f8b6e3f74))
+* **run:** archive v8-live-validation ([507c2dd](https://github.com/andyconley/flow/commit/507c2dd9586e685369ee426fdf47d74e74172e2b))
+* **run:** define v8-live-validation ([9ad995b](https://github.com/andyconley/flow/commit/9ad995bbbcf59b53a3d41c794fa5fa331ea687cc))
+* **run:** plan v8-live-validation ([5d02493](https://github.com/andyconley/flow/commit/5d0249340d7408d88d1c90d738aa241b245ab10d))
+* **run:** record v8-live-validation assignment outputs and handback ([e591e55](https://github.com/andyconley/flow/commit/e591e55c8946c5efb494a39b3334cd29b68b7159))
+* **run:** record v8-live-validation attempt 1 findings ([56062d2](https://github.com/andyconley/flow/commit/56062d260c9e984b14c109982769c029a6ce4956))
+* **run:** record v8-live-validation preparation evidence ([c1c4517](https://github.com/andyconley/flow/commit/c1c451797e05a906e00b9d5e437bd1b47108eb7a))
+
 ## [0.36.0](https://github.com/andyconley/flow/compare/v0.35.3...v0.36.0) (2026-09-26)
 
 ### Features
