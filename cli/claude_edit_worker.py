@@ -22,7 +22,7 @@ MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
 MAX_RESULT_BYTES = 8192
 MAX_TRACE_BYTES = 1024 * 1024
-MAX_EVENT_BYTES = 1024 * 1024
+MAX_EVENT_BYTES = 16 * 1024 * 1024
 
 
 class ClaudeEditError(RuntimeError):
@@ -112,7 +112,7 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
         argv.extend(["--debug-file", str(trace_path)])
         fd = os.open(event_path, flags, 0o600)
         os.close(fd)
-        argv.extend(["--verbose", "--include-partial-messages"])
+        argv.extend(["--verbose"])
     env = {key: os.environ[key] for key in CLAUDE_ENV_KEYS if key in os.environ}
     deadline = time.monotonic() + timeout_seconds
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -130,12 +130,10 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
         selector.register(process.stdout, selectors.EVENT_READ)
         try:
             while selector.get_map():
-                if trace_path is not None and trace_path.stat().st_size > MAX_TRACE_BYTES:
-                    raise ClaudeEditError("Claude diagnostic trace exceeded limit")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise ClaudeEditError("Claude edit timed out")
-                ready = selector.select(min(remaining, 1.0) if trace_path is not None else remaining)
+                ready = selector.select(remaining)
                 if not ready:
                     continue
                 for key, _ in ready:
