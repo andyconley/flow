@@ -1,0 +1,24 @@
+== ollama list
+gemma4:26b               5571076f3d70    17 GB     5 months ago    
+== warm gemma4:26b
+real 8.97
+user 0.00
+sys 0.00
+response: OK. load_ms: 7988
+== claude auth
+loggedIn True claude.ai
+== installed flow
+## [0.36.0](https://github.com/andyconley/flow/compare/v0.35.3...v0.36.0) (2026-09-26)
+/Users/andyconley/.flow/source/cli/runner_limits.py
+== digests (installed)
+tech-writer 9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe
+quality-reviewer 1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718
+== MAF interpreter
+agent_framework import ok
+== job charter sha256
+358eac06b69a1221b43a0fe2af0860cdbdcd4a55e838c5ba2265d424903a515c  .flow/runs/v8-live-validation/job-charter.json
+== orchestration
+orchestration valid: v8-live-validation (dispatch)
+== worktree
+c864241ab064faf706ab14f09fe7ca9c28daf3c0
+status:[]

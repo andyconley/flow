@@ -1,0 +1,26 @@
+job commit: c864241ab064faf706ab14f09fe7ca9c28daf3c0
+status: []
+test_cli_reference_has_a_decide_expansion_section (test_decide_expansion_docs.DecideExpansionDocsTest.test_cli_reference_has_a_decide_expansion_section) ... FAIL
+test_generated_help_tables_are_in_sync (test_decide_expansion_docs.DecideExpansionDocsTest.test_generated_help_tables_are_in_sync) ... ok
+test_help_source_documents_the_real_invocation (test_decide_expansion_docs.DecideExpansionDocsTest.test_help_source_documents_the_real_invocation) ... FAIL
+
+======================================================================
+FAIL: test_cli_reference_has_a_decide_expansion_section (test_decide_expansion_docs.DecideExpansionDocsTest.test_cli_reference_has_a_decide_expansion_section)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/andyconley/src/flow-v8-live-job/tests/test_decide_expansion_docs.py", line 61, in test_cli_reference_has_a_decide_expansion_section
+    self.assertIsNotNone(match, "add a ### `flow run decide-expansion ...` section (module docstring, rule 3)")
+AssertionError: unexpectedly None : add a ### `flow run decide-expansion ...` section (module docstring, rule 3)
+
+======================================================================
+FAIL: test_help_source_documents_the_real_invocation (test_decide_expansion_docs.DecideExpansionDocsTest.test_help_source_documents_the_real_invocation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/andyconley/src/flow-v8-live-job/tests/test_decide_expansion_docs.py", line 52, in test_help_source_documents_the_real_invocation
+    self.assertEqual(len(entries), 1, "add exactly one [[help.cli_commands]] entry for decide-expansion (see module docstring, rule 1)")
+AssertionError: 0 != 1 : add exactly one [[help.cli_commands]] entry for decide-expansion (see module docstring, rule 1)
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.027s
+
+FAILED (failures=2)
