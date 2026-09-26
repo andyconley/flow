@@ -7,22 +7,58 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+    "handoff": ".flow/runs/v8-live-validation-2/implementation-handoff.md",
     "orchestration_manifest": ".flow/runs/v8-live-validation-2/orchestration.json",
+    "plan": ".flow/runs/v8-live-validation-2/plan.md",
     "requirements": ".flow/runs/v8-live-validation-2/requirements.md",
-    "shaper_intent": ".flow/runs/v8-live-validation-2/shaper-intent.json"
+    "shaper_intent": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+    "validation_plan": ".flow/runs/v8-live-validation-2/validation-plan.md"
   },
   "created_at": "2026-09-26T15:49:15Z",
+  "delivery": {
+    "charter_digest": "dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+    "charter_id": "delivery-100706f1d8836f4092f0",
+    "delivery_artifact_dir": "delivery/dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+    "handoff_digest": "74b80f1bed82ef3be585a2e2ee1dad9f9728c0b2c82085187ba1cfb47e70ee93",
+    "lead_claim_digest": "66c9fbe3006328b880b13697394eb315018679c138fcaa2b54867f62d36cc4ac",
+    "lead_claim_path": "delivery/dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-dcba681b6df39f48ec31",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "63e720934349380de9e13940198afee547e26d85a31a15a634be1ec06dfedfd7",
+    "shaper_contract_id": "shaper-12201b37d83a84ed9907",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+        "sha256": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/v8-live-validation-2/orchestration.json",
+        "sha256": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d"
+      },
+      "requirements": {
+        "path": ".flow/runs/v8-live-validation-2/requirements.md",
+        "sha256": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+        "sha256": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+      }
+    }
+  },
   "dispositions": {},
   "gates": {
     "approve-definition": "2026-09-26T16:50:51Z",
-    "start-definition": "2026-09-26T15:49:15Z"
+    "approve-plan": "2026-09-26T18:49:42Z",
+    "start-definition": "2026-09-26T15:49:15Z",
+    "start-plan": "2026-09-26T17:25:03Z"
   },
-  "lane": "define",
-  "last_event": "approve-definition",
-  "phase": "definition_approved",
+  "lane": "plan",
+  "last_event": "approve-plan",
+  "phase": "plan_approved",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "definition_approved",
-  "updated_at": "2026-09-26T16:50:51Z",
+  "state": "plan_approved",
+  "updated_at": "2026-09-26T18:49:42Z",
   "work_id": "v8-live-validation-2"
 }
