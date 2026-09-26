@@ -1507,8 +1507,10 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                 # Bind the denied position so a later manager pause can resume
                 # from it in answer mode; nothing was granted or sent.
                 checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
+                # Best effort: a restore position must never turn a harmless
+                # denial into a failed attempt; without it, recovery refuses.
                 if checkpoint_path.is_file() and not checkpoint_path.is_symlink():
-                    with authority_guard():
+                    with suppress(ContractError), authority_guard():
                         high_water = ledger.snapshot(aid)["events"][-1]["seq"]
                         ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
                                                         high_water, str(checkpoint_path), generation=generation)

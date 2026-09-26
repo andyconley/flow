@@ -414,9 +414,11 @@ class ExecutionLedger:
     def _outstanding_units(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
         """Units held by approved, not yet consumed grants in each counter's scope."""
         lineage, own = ExecutionLedger._lineage_attempts(envelope), [envelope["attempt_id"]]
-        held = {scope: {key: ExecutionLedger._granted_units(db, attempts, consumed_only=False)[key]
-                        - ExecutionLedger._granted_units(db, attempts)[key] for key in EXPANSION_LIMIT_KEYS}
-                for scope, attempts in (("lineage", lineage), ("own", own))}
+        held = {}
+        for scope, attempts in (("lineage", lineage), ("own", own)):
+            approved = ExecutionLedger._granted_units(db, attempts, consumed_only=False)
+            consumed = ExecutionLedger._granted_units(db, attempts)
+            held[scope] = {key: approved[key] - consumed[key] for key in EXPANSION_LIMIT_KEYS}
         return {name: held["lineage" if name in LINEAGE_SCOPED_LIMITS else "own"][name] for name in EXPANSION_LIMIT_KEYS}
 
     @staticmethod
@@ -759,6 +761,13 @@ class ExecutionLedger:
                 raise RecoveryRefused(EXPANSION_ALREADY_DECIDED, f"request is {request[0]}")
             if self._unresolved_action(db, attempt_id):
                 raise RecoveryRefused(ATTEMPT_NOT_PAUSED, "an action or manager call is started or unknown")
+            kind, row_id = db.execute("SELECT kind,denied_row_id FROM expansion_requests WHERE request_id=?",
+                                      (request_id,)).fetchone()
+            if kind == "delegate" and not db.execute(
+                    "SELECT 1 FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind='worker' AND pending_id=?",
+                    (attempt_id, row_id)).fetchone():
+                # A decision on a pause with no restore position could never resume.
+                raise RecoveryRefused(RECONCILIATION_REQUIRED, "the paused proposal's checkpoint was never bound")
             envelope, limits = json.loads(row[0]), json.loads(request[1])
             if approve:
                 effective = self._effective_limits(db, envelope)

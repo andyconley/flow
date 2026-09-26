@@ -81,6 +81,12 @@ class DecideExpansionTests(ExpansionGatewayFixture):
             db.execute("UPDATE actions SET status='unknown' WHERE attempt_id=? AND sequence=1", (self.attempt,))
         self.assertRefusedUnchanged("attempt_not_paused")
 
+    def test_a_pause_without_a_restore_position_is_refused(self):
+        with sqlite3.connect(self.ledger().path) as db:
+            db.execute("DELETE FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_id=("
+                       "SELECT denied_row_id FROM expansion_requests WHERE request_id=?)", (self.attempt, self.request))
+        self.assertRefusedUnchanged("reconciliation_required")
+
     def test_an_inactive_lead_claim_is_refused(self):
         changed, _, errors = change_lead_claim("sample", "attention", root=self.root)
         self.assertTrue(changed, errors)
