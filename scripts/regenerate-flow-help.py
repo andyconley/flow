@@ -47,11 +47,21 @@ def read_toml(path: Path) -> dict:
     return tomllib.loads(path.read_text())
 
 
+def escape_cell(text: str) -> str:
+    """Escape `|` so it stays inside its cell.
+
+    A raw pipe ends a GitHub table cell even inside backticks, so an
+    invocation such as `all|claude|codex` would otherwise split its row.
+    GitHub renders `\\|` as a literal pipe in both places.
+    """
+    return text.replace("|", "\\|")
+
+
 def render_table(rows: list[tuple[str, str]], headers: tuple[str, str]) -> str:
     h1, h2 = headers
     lines = [f"| {h1} | {h2} |", "|---|---|"]
     for col1, col2 in rows:
-        lines.append(f"| {col1} | {col2} |")
+        lines.append(f"| {escape_cell(col1)} | {escape_cell(col2)} |")
     return "\n".join(lines)
 
 

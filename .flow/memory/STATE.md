@@ -19,6 +19,15 @@
 
 ## Recently completed
 
+- `edit-worker-stream-cap` (scout) archived 2026-09-26 on
+  `codex/edit-worker-stream-cap`, not yet pushed.
+  - Fixes D1: the Claude edit worker's cap rises to 16 MiB, partial messages
+    are dropped, and the debug trace is truncated rather than aborting.
+  - Fixes D2: the help generator escapes `|`.
+  - Promotes three gaps to the backlog.
+  - Full suite: 1,543 tests OK, 0 skipped. Next: PR, release v0.36.1, then
+    `v8-live-validation-2`.
+
 - `shaper-expansion-approval` (MAF adoption step 5, slice 1) accepted and archived
   2026-09-26 on `codex/step5-shaper-approval-design` (one PR). v8 delegated
   expansion (ADR 0017):
