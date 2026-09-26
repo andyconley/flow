@@ -31,8 +31,9 @@ A progress reply is repaired, or retried within a bound, and both cases are reco
   A reply that parses after this is **repaired**, with no extra call.
 - **Canonical hand-off.**
   - The runner validates the object (speaker on the roster, completion decision, bounded task and rationale), then hands MAF `json.dumps(object)`.
-  - Where MAF can be imported, it confirms that `_extract_json(canonical)` gives back the same object. MAF's fence rule applies even inside strings, so this can fail.
-  - That check means MAF always parses exactly what Flow validated. The progress reply never enters MAF's chat history, and Flow's recorded `output_sha256` stays the digest of the raw provider text.
+  - The shared parser itself re-extracts the canonical text with its copy of MAF's rules. If that doesn't give back the same object, the reply is unparsable, for the runner and for Flow's evidence alike. This happens because MAF's fence rule applies even inside strings, and re-serializing can turn escaped backticks into a literal fence.
+  - Where MAF can be imported, the runner also checks `_extract_json(canonical)` directly, as a parity guard.
+  - Together these mean MAF always parses exactly what Flow validated. The progress reply never enters MAF's chat history, and Flow's recorded `output_sha256` stays the digest of the raw provider text.
 - **Then a bounded retry.**
   - For an **unparsable** reply, the runner hands MAF a sentinel with no `{`. MAF's loop then retries, with `progress_ledger_retry_count=3`.
   - Each retry is a new Flow-gated manager call. MAF resends the same messages, so it has the same prompt digest, but the next sequence gives it a new call id.
@@ -47,7 +48,7 @@ A progress reply is repaired, or retried within a bound, and both cases are reco
 - **Evidence.**
   - A v8 receipt gains a `manager_progress` block, `{"repaired": [call ids], "unparsable": [call ids]}`. It is recomputed from the completed manager-call rows (request phase and response text), and is absent when both lists are empty.
   - The seal compares it with the ledger. `validate_receipt` recomputes it from the receipt's own manager calls, and rejects a tampered block, an empty block, or a block on a protocol version below 8.
-  - A missing block is only caught at seal time, because receipts sealed before this ADR carry none.
+  - A missing block is only caught at seal time, because receipts sealed before this ADR carry none. So a standalone `validate_receipt` of a post-ADR receipt with the block stripped passes. The seal comparison, and `sealed_receipt_sha256` for a sealed file, are what protect it.
   - The ledger also records `manager_progress_repaired` or `manager_progress_unparsable` in the observation's transaction. These events are diagnostic only.
 
 ## Consequences
