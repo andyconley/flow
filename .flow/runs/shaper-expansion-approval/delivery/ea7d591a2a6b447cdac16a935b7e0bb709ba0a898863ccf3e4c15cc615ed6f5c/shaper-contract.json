@@ -1,0 +1,744 @@
+{
+  "acceptance_criteria": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "AC1-AC12 in .flow/runs/shaper-expansion-approval/acceptance-criteria.md."
+    }
+  ],
+  "allowed_specialists": [
+    {
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1,
+      "role": "lead-developer"
+    },
+    {
+      "capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 2,
+      "role": "test-engineer"
+    },
+    {
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1,
+      "role": "quality-reviewer"
+    }
+  ],
+  "amendment_lineage": [],
+  "approval_event": "approve-definition",
+  "approval_history": [
+    {
+      "at": "2026-09-25",
+      "authority": "engineer",
+      "event": "approve-definition"
+    }
+  ],
+  "approval_matrix": {
+    "acceptance": "Flow_gate",
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant"
+  },
+  "approved_sources": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+      "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/shaper-expansion-approval/orchestration.json",
+      "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45"
+    },
+    "requirements": {
+      "path": ".flow/runs/shaper-expansion-approval/requirements.md",
+      "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/shaper-expansion-approval/shaper-intent.json",
+      "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd"
+    },
+    "solution": {
+      "path": ".flow/runs/shaper-expansion-approval/solution.md",
+      "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25"
+    }
+  },
+  "assumptions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "A Flow-reissued pending action bound to a grant is accepted by the resumed Magentic run (to verify in solutioning)."
+    }
+  ],
+  "boundaries": {
+    "artifact_root": ".flow/runs/shaper-expansion-approval",
+    "worktree_policy": "Flow-bound"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 3,
+      "max_manager_calls": 12,
+      "max_manager_rounds": 6,
+      "max_paid_worker_calls": 6,
+      "max_replans": 2,
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "retries": 1,
+      "runtime_seconds": 300,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ]
+    },
+    "observations": [
+      "provider_usage_when_available"
+    ]
+  },
+  "constraints": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "No model or provider output grants authority or sets an amount."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Nothing is sent for a paused proposal until a grant exists."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "ADR 0016 lock order and generation fencing hold."
+    }
+  ],
+  "decision_owners": [],
+  "delegation_matrix": {
+    "delegated_expansion": false,
+    "max_delegations": 6
+  },
+  "digest": "ca0451ccebf547e7ff885fb08869608e37b7c2f85cd30f14f6f3b8fb766bba58",
+  "exclusions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Replan expansion."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Optional specialist pool."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Model recommendations."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Cancellation, diagnostics, MCP decisions."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Token or dollar caps."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Live provider runs."
+    }
+  ],
+  "intended_users": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Andy, as Shaper and sole Flow operator."
+    }
+  ],
+  "kind": "shaper_contract",
+  "max_verifier_calls": 2,
+  "next_lane_eligibility": [
+    "solution"
+  ],
+  "open_decisions": [],
+  "outcomes": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Expandable limit denials pause the attempt and record a Flow-computed expansion request."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Requests within sealed charter headroom are auto-approved deterministically; others await an engineer CLI decision."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "The attempt resumes with the grant (Flow re-issues the paused proposal) or with the denial reported."
+    }
+  ],
+  "problem": {
+    "provenance": [
+      {
+        "claim_status": "approved",
+        "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+        "source": "acceptance_criteria"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+        "source": "orchestration_manifest"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+        "source": "requirements"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+        "source": "shaper_intent"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+        "source": "solution"
+      }
+    ],
+    "value": "A chartered v8 Delivery Lead that hits a charter limit is denied outright; nobody is asked and nothing records what it wanted."
+  },
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "ungranted-provider-dispatch"
+  ],
+  "risks": [
+    {
+      "owner": "Flow",
+      "risk": "Resume mechanics for a deliberate pause may need runner changes",
+      "status": "owned"
+    },
+    {
+      "owner": "Flow",
+      "risk": "Headroom could be over-spent through replay or concurrency",
+      "status": "owned"
+    }
+  ],
+  "run_id": "shaper-expansion-approval",
+  "schema_version": 1,
+  "scope": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Protocol-v8 expansion request, pause, decision, and resume for delegation, paid-call, manager-call, manager-round, and verifier-call limits."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Lineage-scoped sealed headroom validated against runner ceilings."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+          "source": "shaper_intent"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+          "source": "solution"
+        }
+      ],
+      "value": "Receipt evidence for every request and decision."
+    }
+  ],
+  "shaper_contract_id": "shaper-1c3e06fdaa1415c48c18",
+  "source_evidence": [
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+      "sha256": "451033800e44bd1b73d607b3826aab4d23a4c37ecfee2727b8e6eb04fe02e9d5",
+      "source": "acceptance_criteria"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-expansion-approval/orchestration.json",
+      "sha256": "9c4c96954a12a988495c40a217d0a653c3f6a97d49dd213d67dfeb8aa78e3c45",
+      "source": "orchestration_manifest"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-expansion-approval/requirements.md",
+      "sha256": "2816fb436e5f14a2d2eb0670257178c57cf6a97525fc358496207a9389d1694b",
+      "source": "requirements"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-expansion-approval/shaper-intent.json",
+      "sha256": "291e962c5285e7465975076bbcb0b898187399c6baf3afbc2636ba720caf8bfd",
+      "source": "shaper_intent"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-expansion-approval/solution.md",
+      "sha256": "bd41ddb66fb0b437e6e7b5f0bb7324133a002f7830052fbe43ecdaf472eb1a25",
+      "source": "solution"
+    }
+  ],
+  "status": "approved",
+  "version": 2
+}

@@ -54,7 +54,7 @@ from runstate import (  # noqa: E402
 )
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
-from delivery_gateway import execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
+from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
@@ -585,6 +585,21 @@ def main() -> int:
     run_delivery_recover.add_argument("--project-root", type=Path)
     run_delivery_recover.add_argument("--json", action="store_true")
 
+    run_decide_expansion = run_sub.add_parser(
+        "decide-expansion", help="approve or deny one pending v8 expansion request; resume with recover-delivery-lead")
+    run_decide_expansion.add_argument("work_id")
+    run_decide_expansion.add_argument("attempt_id")
+    run_decide_expansion.add_argument("request_id")
+    decision_group = run_decide_expansion.add_mutually_exclusive_group(required=True)
+    decision_group.add_argument("--approve", action="store_true", help="grant exactly the requested unit per limit")
+    decision_group.add_argument("--deny", action="store_true", help="refuse the request; the manager is told on resume")
+    run_decide_expansion.add_argument("--expected-generation", type=int, required=True,
+                                      help="ledger owner generation shown by inspect-delivery")
+    run_decide_expansion.add_argument("--actor", required=True, help="declared decider, recorded as attribution")
+    run_decide_expansion.add_argument("--explanation", required=True)
+    run_decide_expansion.add_argument("--project-root", type=Path)
+    run_decide_expansion.add_argument("--json", action="store_true")
+
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
@@ -996,6 +1011,19 @@ def main() -> int:
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "decide-expansion":
+        import json
+        try:
+            result = decide_expansion(args.work_id, args.attempt_id, args.request_id, approve=args.approve,
+                                      expected_generation=args.expected_generation, actor=args.actor,
+                                      explanation=args.explanation, root=args.project_root)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError, OSError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
+                  if args.json else f"expansion decision refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"request: {result['request_id']}\nstatus: {result['status']}\nnext action: {result['next_action']}")
+        return 0
     if args.command == "run" and args.run_target == "inspect-execution":
         import json
         try:
@@ -1031,6 +1059,17 @@ def main() -> int:
                                   f"resolutions: {', '.join(item['action_id'] + ' ' + item['disposition'] for item in attempt.get('resolutions', [])) or 'none'}\n"
                                   f"predecessors: {len(attempt.get('predecessors', []))}\n"
                                   f"sealed receipt: {'consistent' if attempt['sealed_receipt']['consistent'] else 'INCONSISTENT'}\n")
+            expansion = attempt.get("expansion")
+            if expansion is not None:
+                # Rationale is manager-authored display text: shown escaped, never interpreted.
+                recovery_lines += (
+                    "expansion headroom remaining: "
+                    + (", ".join(f"{name} {value}" for name, value in sorted(expansion["headroom_remaining"].items())) or "none") + "\n"
+                    + "expansion requests: " + (str(len(expansion["requests"])) if expansion["requests"] else "none") + "\n"
+                    + "".join(f"- {item['request_id']} {item['status']} {'+'.join(item['limits'])}"
+                              f" grant={(item['grant'] or {}).get('authority', 'none')}"
+                              f" rationale={json.dumps(item['rationale'])}\n" for item in expansion["requests"])
+                    + (f"next action: {attempt['next_action']}\n" if attempt.get("next_action") else ""))
             print(f"work: {result['work_id']}\nstate: {result['lifecycle'].get('state')}\n"
                   f"charter: v{charter.get('version', 'n/a')} {authority.get('charter_digest', 'unsealed')}\n"
                   f"logical attempt: {authority.get('logical_delivery_attempt_id', 'none')}\n"

@@ -9,7 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
-from contextlib import nullcontext, suppress
+from contextlib import ExitStack, nullcontext, suppress
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
@@ -19,15 +19,15 @@ from execution_contracts import (ContractError, canonical, digest, envelope_dige
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
-from delivery_control import delivery_authority_guard
+from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
-from delivery_recovery import (ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
+from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
                                EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
                                OWNER_GENERATION_STALE, V8_DISPOSITION_UNSUPPORTED, V8_EVIDENCE_FILE_REFUSED,
                                RecoveryRefused,
                                SIBLING_ATTEMPT_NOT_TERMINAL,
                                V6_INSPECTION_ONLY, V7_NOT_RECOVERABLE, WORKTREE_CONTAINS_PROJECT_FLOW, WORKTREE_DRIFT,
-                               build_recovery_block,
+                               build_recovery_block, denied_reply,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
                                runtime_outcome)
 from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
@@ -46,6 +46,21 @@ from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
+
+
+class ExpansionPaused(Exception):
+    """A v8 proposal needs an engineer expansion decision; nothing was sent for it."""
+
+    def __init__(self, request_id: str) -> None:
+        super().__init__(f"expansion decision required: {request_id}")
+        self.request_id = request_id
+
+
+def _pending_expansion(decision: dict[str, Any]) -> str | None:
+    expansion = decision.get("expansion")
+    if not decision["allowed"] and isinstance(expansion, dict) and expansion.get("status") == "pending":
+        return expansion["request_id"]
+    return None
 
 
 def _safe_job_path(path: Any) -> str:
@@ -459,6 +474,10 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     if predecessors:
         # Added only when non-empty, so a first attempt stays byte-identical.
         envelope["predecessors"] = predecessors
+    headroom = {name: value for name, value in canonical_limits.get("expansion_headroom", {}).items() if value}
+    if headroom:
+        # Projected from the sealed Charter only; omitted when none is sealed.
+        envelope["expansion_headroom"] = headroom
     envelope_digest(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
@@ -701,7 +720,11 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
         envelope = snapshot["envelope"]
         mode = eligibility["mode"]
         link = eligibility["checkpoint"]
-        outcome = runtime_outcome(snapshot) if mode == "seal" else None
+        expansion = eligibility.get("expansion")
+        if "expansion_failure" in eligibility:
+            outcome = {"failure": eligibility["expansion_failure"]}
+        else:
+            outcome = runtime_outcome(snapshot) if mode == "seal" else None
         recorded_failure = bool(outcome and outcome["failure"])
         if not recorded_failure:
             # Drift refuses before the claim, so it fences and releases nothing.
@@ -717,7 +740,7 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
                 expected_event_seq=snapshot["events"][-1]["seq"],
                 lead_generation=envelope["delivery_lead_claim"]["generation"], actor=actor, mode=mode,
                 checkpoint=({key: link[key] for key in ("pending_id", "checkpoint_id", "file_sha256")} if link else None),
-                quarantined=quarantine)
+                quarantined=quarantine, expansion_request_id=expansion["request_id"] if expansion else None)
         generation = claim["generation"]
         _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
         state = ledger.snapshot(attempt_id)
@@ -743,6 +766,16 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
                                    verifier_input_sha256=verifier_sha, generation=generation,
                                    authority_guard=authority_guard, hook=seal_hook or (lambda point: None))
             return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+        job = envelope["job_contract"]
+        if mode == "restart":
+            # A fresh start on the byte-identical envelope: Magentic replays
+            # every earlier manager call from the ledger (ADR 0017).
+            result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
+                                                manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                                supervisor=supervisor, test_runner=test_runner, python_path=python_path,
+                                                resume=None, generation=generation, recovery=evidence,
+                                                seal_hook=seal_hook)
+            return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
         row = next(item for item in state["actions"] if item["action_id"] == eligibility["action_id"])
         action = row["request"]
         checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
@@ -752,8 +785,10 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
                                   "request_id": f"flow-magentic-action-{action['sequence']}",
                                   "action_id": action["action_id"],
                                   **restore_position(envelope, state, checkpoint["metadata"]["ledger_seq"])}
-        job = envelope["job_contract"]
-        if mode == "answer":
+        if mode == "answer" and row["status"] == "denied":
+            # The engineer denied this proposal's expansion; Magentic was told so.
+            resume["result"] = denied_reply(action["action_id"], row["reason"])
+        elif mode == "answer":
             reply = _completed_reply(ledger, envelope, attempt_dir, action, row["result"],
                                      is_verifier=action["instance_id"] in job["verifier_instance_ids"],
                                      is_producer=action["instance_id"] in job["producer_instance_ids"],
@@ -1023,6 +1058,41 @@ def _resolve_chartered(work_id: str, attempt_id: str, action_id: str, actor: str
                 expected_event_seq=snapshot["events"][-1]["seq"] if snapshot["events"] else 0)
 
 
+def decide_expansion(work_id: str, attempt_id: str, request_id: str, *, approve: bool, expected_generation: int,
+                     actor: str, explanation: str, root: Path | None = None) -> dict[str, Any]:
+    """Approve or deny one pending expansion request of a paused v8 attempt (ADR 0017).
+
+    Locks follow ADR 0016: the attempt's recovery fence (so no live run or
+    recovery owns it), the run authority guard (so the lead claim is the one
+    the attempt runs under), the send lock, then SQLite. Resuming is a
+    separate, explicit ``recover-delivery-lead``.
+    """
+    project_root = (root or repo_root()).resolve()
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    run_dir = project_root / ".flow" / "runs" / work_id
+    ledger_path = run_dir / "execution" / "ledger.sqlite"
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        raise ContractError("delivery execution ledger is absent")
+    ledger = ExecutionLedger(ledger_path)
+    envelope = ledger.snapshot(attempt_id)["envelope"]
+    if envelope.get("execution_protocol_version") != 8 or envelope.get("work_id") != work_id:
+        raise ContractError("expansion decisions require a protocol v8 attempt of this run")
+    with ExitStack() as fences:
+        try:
+            fences.enter_context(ledger.recovery_lock(attempt_id, holder="decide"))
+        except RecoveryRefused as exc:
+            raise RecoveryRefused(ATTEMPT_NOT_PAUSED, f"the attempt fence is held ({exc.reason})") from None
+        try:
+            fences.enter_context(delivery_authority_guard(run_dir, envelope))
+        except DeliveryControlError as exc:
+            raise RecoveryRefused(LEAD_GENERATION_INACTIVE, str(exc)) from None
+        fences.enter_context(ledger.send_lock())
+        return ledger.decide_expansion(attempt_id, request_id, approve=approve, expected_generation=expected_generation,
+                                       actor=actor, explanation=explanation)
+
+
 def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                      actor: str = "codex-assisted-recovery", python_path: str | None = None,
                      manager_adapter: Callable[..., dict[str, Any]] | None = None,
@@ -1216,6 +1286,10 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         receipt["verifier_usage"] = snapshot["verifier_usage"]
         if envelope.get("predecessors"):
             receipt["lineage_usage"] = ledger.lineage_usage(aid)
+        expansion = ledger.expansion_receipt(aid)
+        if expansion is not None:
+            # Added only when the lineage expanded, so other receipts stay byte-identical.
+            receipt["expansion"] = expansion
         if snapshot.get("recoveries"):
             # A receipt on disk while the attempt is started is an unsealed
             # draft from a process that died before finish_attempt.
@@ -1344,10 +1418,19 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             if recovery is not None and decision.get("replayed") and decision["allowed"]:
                 # A replayed, never-sent grant would expire when consumed.
                 decision = ledger.reissue_recovered_manager_grant(request["call_id"], generation=generation)
+            elif (recovery is not None and decision.get("replayed") and not decision["allowed"]
+                    and (decision.get("expansion") or {}).get("status") == "granted"):
+                # The paused call is back under its own identity: allow it once.
+                decision = ledger.reissue_expanded_manager_grant(request["call_id"], generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             observed = decision["result"].get("output")
             if isinstance(observed, str) and observed.strip():
                 return observed
+        paused = _pending_expansion(decision)
+        if paused:
+            # No text can answer a call Flow refused; the runner stops here and
+            # recovery replays this call once the engineer decides (ADR 0017).
+            raise ExpansionPaused(paused)
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic manager call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
@@ -1390,15 +1473,48 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                     and action["action_id"] in recovery.get("regrantable_action_ids", [])):
                 decision = ledger.regrant_recovered_action(envelope, action, generation=generation)
                 regranted = decision["allowed"]
+            elif (recovery is not None and decision.get("replayed") and not decision["allowed"]
+                    and (decision.get("expansion") or {}).get("status") == "granted"):
+                # The paused proposal is back under its own identity and keeps
+                # the checkpoint bound at the pause; its grant allows it once.
+                decision = ledger.regrant_expanded_action(envelope, action, generation=generation)
+                regranted = True
+        if (decision.get("replayed") and not decision["allowed"]
+                and (decision.get("expansion") or {}).get("status") == "denied"):
+            # The engineer refused this unit: Magentic hears the denial and continues.
+            return denied_reply(action["action_id"], decision["reason"])
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             return _completed_reply(ledger, envelope, attempt_dir, action, decision["result"],
                                     is_verifier=is_verifier, is_producer=is_producer,
                                     edit_evidence=edit_evidence, test_evidence=test_evidence,
                                     generation=generation, authority_guard=authority_guard)
+        paused = _pending_expansion(decision)
+        if paused:
+            # Bind the denied proposal's checkpoint before stopping, so a
+            # decided request can restore this exact position in pending mode.
+            with authority_guard():
+                checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
+                if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
+                    raise ContractError("Magentic pending-action checkpoint is absent")
+                high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+                ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
+                                                high_water, str(checkpoint_path), generation=generation)
+            raise ExpansionPaused(paused)
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
-            return {"status": "denied", "action_id": action["action_id"], "reason": decision["reason"], "summary": "Flow denied this specialist call"}
+            if structured_verifier and not decision.get("replayed"):
+                # Bind the denied position so a later manager pause can resume
+                # from it in answer mode; nothing was granted or sent.
+                checkpoint_path = attempt_dir / "checkpoints" / f"{action['checkpoint_id']}.json"
+                # Best effort: a restore position must never turn a harmless
+                # denial into a failed attempt; without it, recovery refuses.
+                if checkpoint_path.is_file() and not checkpoint_path.is_symlink():
+                    with suppress(ContractError), authority_guard():
+                        high_water = ledger.snapshot(aid)["events"][-1]["seq"]
+                        ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
+                                                        high_water, str(checkpoint_path), generation=generation)
+            return denied_reply(action["action_id"], decision["reason"])
         provider_action = action
         if is_verifier:
             provider_task = _verifier_provider_task(action["task"], (attempt_dir / "repair.diff").read_text(),
@@ -1487,6 +1603,14 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         outcome = (supervisor or run_maf_delivery)(envelope, task, on_manager, on_action, **runner_kwargs)
         if outcome.get("attempt_id") != aid:
             raise ContractError("Magentic finished a different attempt")
+    except ExpansionPaused as paused:
+        # Not an interruption and not a failure: the attempt stays started,
+        # the lead claim keeps its generation, and the pending request row is
+        # the durable pause marker. Nothing is in flight, so stopping the
+        # child loses nothing.
+        return {"attempt_id": aid, "status": "expansion_paused", "request_id": paused.request_id,
+                "receipt_path": None, "resume_available": False,
+                "next_action": f"decide expansion {paused.request_id}"}
     except Exception as exc:
         failure = str(exc)
         recoverable_transport_failure = isinstance(exc, MafTransportError)
@@ -1543,6 +1667,10 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                   hook: Callable[[str], None]) -> dict[str, Any]:
     """Build, validate, write, and seal an attempt receipt under the owner fence."""
     aid = envelope["attempt_id"]
+    if envelope["execution_protocol_version"] == 8:
+        # A sealed attempt keeps no open request or unused grant.
+        with authority_guard(), ledger.send_lock():
+            ledger.close_expansions(aid, "sealed", generation=generation)
     receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
                                                edit_evidence=edit_evidence, test_evidence=test_evidence,
                                                verifier_input_sha256=verifier_input_sha256,

@@ -1,0 +1,407 @@
+{
+ "schema_version": 1,
+ "work_id": "shaper-expansion-approval",
+ "mode": "delegated",
+ "risk": {
+  "hard_triggers": [],
+  "aggravating_factors": [
+   "concurrency_or_cross_system_coordination"
+  ],
+  "classification": "standard",
+  "rationale": "Pre-approved headroom lets Flow grant additional provider calls without a per-request human decision."
+ },
+ "assignments": [
+  {
+   "id": "definition-root",
+   "lane": "define",
+   "role": "solution-architect",
+   "provider": {
+    "kind": "agent",
+    "id": "claude-code-definition-root"
+   },
+   "brief_path": ".flow/runs/shaper-expansion-approval/requirements.md",
+   "input_evidence": [
+    ".flow/runs/shaper-expansion-approval/requirements.md"
+   ],
+   "read_scopes": [
+    ".flow/runs/shaper-expansion-approval",
+    ".flow/runs/shaper-delivery-runtime-contracts",
+    "cli",
+    "docs",
+    "runtime",
+    "tests"
+   ],
+   "write_scopes": [
+    ".flow/runs/shaper-expansion-approval"
+   ],
+   "read_only": false,
+   "required_capabilities": [
+    {
+     "name": "filesystem-read",
+     "status": "confirmed"
+    }
+   ],
+   "output": {
+    "path": ".flow/runs/shaper-expansion-approval/requirements.md",
+    "format": "markdown"
+   },
+   "success_criteria": [
+    "Slice 1 requirements and acceptance criteria drafted from engineer decisions D1-D7 and current code"
+   ],
+   "claim_statuses": [
+    "observed",
+    "inferred",
+    "recommended",
+    "unverified"
+   ],
+   "coordination": {
+    "mode": "serialized",
+    "group": "run-authoring"
+   }
+  },
+  {
+   "id": "adversarial-product",
+   "lane": "define",
+   "role": "product-manager",
+   "provider": {
+    "kind": "agent",
+    "id": "flow-product-manager-delivery-recovery-2-adversarial-product"
+   },
+   "brief_path": ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+   "input_evidence": [
+    ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+    ".flow/runs/shaper-expansion-approval/requirements.md",
+    ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+    "docs/adr/0016-chartered-v8-recovery.md"
+   ],
+   "read_scopes": [
+    ".flow/runs/shaper-expansion-approval",
+    ".flow/runs/shaper-delivery-runtime-contracts",
+    "cli",
+    "docs",
+    "runtime",
+    "tests"
+   ],
+   "write_scopes": [],
+   "read_only": true,
+   "required_capabilities": [
+    {
+     "name": "filesystem-read",
+     "status": "confirmed"
+    }
+   ],
+   "output": {
+    "path": ".flow/runs/shaper-expansion-approval/adversarial-review.md",
+    "format": "markdown"
+   },
+   "success_criteria": [
+    "Product challenge of the chunk 2 definition"
+   ],
+   "claim_statuses": [
+    "observed",
+    "inferred",
+    "recommended",
+    "unverified"
+   ],
+   "coordination": {
+    "mode": "concurrent",
+    "group": "adversarial"
+   }
+  },
+  {
+   "id": "adversarial-requirements",
+   "lane": "define",
+   "role": "business-analyst",
+   "provider": {
+    "kind": "agent",
+    "id": "flow-business-analyst-delivery-recovery-2-adversarial-requirements"
+   },
+   "brief_path": ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+   "input_evidence": [
+    ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+    ".flow/runs/shaper-expansion-approval/requirements.md",
+    ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+    "docs/adr/0016-chartered-v8-recovery.md"
+   ],
+   "read_scopes": [
+    ".flow/runs/shaper-expansion-approval",
+    ".flow/runs/shaper-delivery-runtime-contracts",
+    "cli",
+    "docs",
+    "runtime",
+    "tests"
+   ],
+   "write_scopes": [],
+   "read_only": true,
+   "required_capabilities": [
+    {
+     "name": "filesystem-read",
+     "status": "confirmed"
+    }
+   ],
+   "output": {
+    "path": ".flow/runs/shaper-expansion-approval/adversarial-review.md",
+    "format": "markdown"
+   },
+   "success_criteria": [
+    "Requirements challenge of the chunk 2 definition"
+   ],
+   "claim_statuses": [
+    "observed",
+    "inferred",
+    "recommended",
+    "unverified"
+   ],
+   "coordination": {
+    "mode": "concurrent",
+    "group": "adversarial"
+   }
+  },
+  {
+   "id": "adversarial-architecture",
+   "lane": "define",
+   "role": "solution-architect",
+   "provider": {
+    "kind": "agent",
+    "id": "flow-solution-architect-delivery-recovery-2-adversarial-architecture"
+   },
+   "brief_path": ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+   "input_evidence": [
+    ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+    ".flow/runs/shaper-expansion-approval/requirements.md",
+    ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+    "docs/adr/0016-chartered-v8-recovery.md"
+   ],
+   "read_scopes": [
+    ".flow/runs/shaper-expansion-approval",
+    ".flow/runs/shaper-delivery-runtime-contracts",
+    "cli",
+    "docs",
+    "runtime",
+    "tests"
+   ],
+   "write_scopes": [],
+   "read_only": true,
+   "required_capabilities": [
+    {
+     "name": "filesystem-read",
+     "status": "confirmed"
+    }
+   ],
+   "output": {
+    "path": ".flow/runs/shaper-expansion-approval/adversarial-review.md",
+    "format": "markdown"
+   },
+   "success_criteria": [
+    "Architecture and capability challenge of the chunk 2 definition"
+   ],
+   "claim_statuses": [
+    "observed",
+    "inferred",
+    "recommended",
+    "unverified"
+   ],
+   "coordination": {
+    "mode": "concurrent",
+    "group": "adversarial"
+   }
+  },
+  {
+   "id": "adversarial-security",
+   "lane": "define",
+   "role": "security-reviewer",
+   "provider": {
+    "kind": "agent",
+    "id": "flow-security-reviewer-delivery-recovery-2-adversarial-security"
+   },
+   "brief_path": ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+   "input_evidence": [
+    ".flow/runs/shaper-expansion-approval/briefs/adversarial-review.md",
+    ".flow/runs/shaper-expansion-approval/requirements.md",
+    ".flow/runs/shaper-expansion-approval/acceptance-criteria.md",
+    "docs/adr/0016-chartered-v8-recovery.md"
+   ],
+   "read_scopes": [
+    ".flow/runs/shaper-expansion-approval",
+    ".flow/runs/shaper-delivery-runtime-contracts",
+    "cli",
+    "docs",
+    "runtime",
+    "tests"
+   ],
+   "write_scopes": [],
+   "read_only": true,
+   "required_capabilities": [
+    {
+     "name": "filesystem-read",
+     "status": "confirmed"
+    }
+   ],
+   "output": {
+    "path": ".flow/runs/shaper-expansion-approval/adversarial-review.md",
+    "format": "markdown"
+   },
+   "success_criteria": [
+    "Security challenge of operator evidence import and resolution"
+   ],
+   "claim_statuses": [
+    "observed",
+    "inferred",
+    "recommended",
+    "unverified"
+   ],
+   "coordination": {
+    "mode": "concurrent",
+    "group": "adversarial"
+   }
+  }
+ ],
+ "shared_state": [],
+ "reconciliation": {
+  "artifact_path": ".flow/runs/shaper-expansion-approval/requirements.md",
+  "status": "resolved",
+  "claims": [
+   {
+    "id": "d1-rules-first-approval",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/requirements.md"
+    ]
+   },
+   {
+    "id": "d2-expandable-limits",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/requirements.md"
+    ]
+   },
+   {
+    "id": "d3-stop-and-resume",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/requirements.md"
+    ]
+   },
+   {
+    "id": "d4-cli-only",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/requirements.md"
+    ]
+   },
+   {
+    "id": "d5-attempt-scoped-grants",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/requirements.md"
+    ]
+   },
+   {
+    "id": "d6-denial-resumes",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/requirements.md"
+    ]
+   },
+   {
+    "id": "d7-sealed-zero-default-headroom",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/requirements.md"
+    ]
+   },
+   {
+    "id": "e1-drop-replans",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/adversarial-review.md"
+    ]
+   },
+   {
+    "id": "e2-defer-specialist-pool",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/adversarial-review.md"
+    ]
+   },
+   {
+    "id": "e3-lineage-scoped-headroom",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/adversarial-review.md"
+    ]
+   },
+   {
+    "id": "e4-runner-ceiling-validation",
+    "status": "recommended",
+    "disposition": "accepted",
+    "decision_owner": {
+     "kind": "human",
+     "id": "Andy Conley"
+    },
+    "evidence": [
+     ".flow/runs/shaper-expansion-approval/adversarial-review.md"
+    ]
+   }
+  ]
+ },
+ "verification": {
+  "producer_assignments": [
+   "definition-root"
+  ],
+  "evidence_collector_assignment": "definition-root",
+  "independent": true,
+  "verifier_assignment": "adversarial-architecture",
+  "artifact_path": ".flow/runs/shaper-expansion-approval/adversarial-review.md"
+ }
+}

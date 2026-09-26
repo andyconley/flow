@@ -43,6 +43,13 @@ EXPECTED_GENERATION_REQUIRED = "expected_generation_required"
 V8_DISPOSITION_UNSUPPORTED = "v8_disposition_unsupported"
 EVIDENCE_FILE_REQUIRED = "evidence_file_required"
 EXPECTED_GENERATION_V8_ONLY = "expected_generation_v8_only"
+# Expansion decisions and resume (ADR 0017).
+ATTEMPT_NOT_PAUSED = "attempt_not_paused"
+EXPANSION_UNKNOWN_REQUEST = "expansion_unknown_request"
+EXPANSION_ALREADY_DECIDED = "expansion_already_decided"
+EXPANSION_CEILING_EXCEEDED = "expansion_ceiling_exceeded"
+EXPANSION_DECISION_REQUIRED = "expansion_decision_required"
+EXPANSION_GRANT_CONSUMED = "expansion_grant_consumed"
 
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 
@@ -55,6 +62,8 @@ EVIDENCE_NEEDED = {
     CHECKPOINT_POSITION_UNRECOVERABLE: "none; abandon, or lead supersede and start a successor",
     LEAD_GENERATION_INACTIVE: "none; attempt fenced",
     RESOLUTION_UNBOUND: "none; the resolution is not bound to this action, attempt, and recovery chain",
+    EXPANSION_DECISION_REQUIRED: "flow run decide-expansion --approve|--deny with --expected-generation",
+    "expansion_unbound": "none; the paused proposal's checkpoint was never bound; abandon or supersede",
 }
 
 
@@ -113,6 +122,34 @@ def unbound_resolutions(envelope: dict[str, Any], snapshot: dict[str, Any]) -> l
     return blockers
 
 
+def paused_expansion(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    """The request that paused the attempt, if the attempt still stands at its denied row.
+
+    Any progress after a resume adds later rows, so an older request no longer
+    matches and ordinary recovery rules apply again.
+    """
+    expansions = snapshot.get("expansions", [])
+    if not expansions:
+        return None
+    request = expansions[-1]
+    rows = (snapshot.get("actions", []) if request["kind"] == "delegate" else snapshot.get("manager_calls", []))
+    if not rows:
+        return None
+    order = (lambda item: item["request"]["sequence"]) if request["kind"] == "delegate" else (lambda item: item["sequence"])
+    latest = max(rows, key=order)
+    row_id = latest["action_id"] if request["kind"] == "delegate" else latest["call_id"]
+    # A row whose send grant expired after its unit was spent is a runtime
+    # failure, not a pause; ordinary recovery seals it.
+    if row_id != request["denied_row_id"] or latest["status"] != "denied" or latest["reason"] == "grant_expired":
+        return None
+    return request
+
+
+def denied_reply(action_id: str, reason: str) -> dict[str, Any]:
+    """The answer Magentic receives for a Flow-denied specialist call."""
+    return {"status": "denied", "action_id": action_id, "reason": reason, "summary": "Flow denied this specialist call"}
+
+
 def recovery_eligibility(envelope: dict[str, Any], snapshot: dict[str, Any], *, lead_active: bool) -> dict[str, Any]:
     """Decide on a read-only snapshot whether and how an attempt may be recovered."""
     result: dict[str, Any] = {"recoverable": False, "reason": None, "mode": None, "action_id": None,
@@ -158,6 +195,9 @@ def recovery_eligibility(envelope: dict[str, Any], snapshot: dict[str, Any], *, 
     if runtime_outcome(snapshot) is not None:
         return {**result, "recoverable": True, "mode": "seal"}
     actions = snapshot.get("actions", [])
+    paused = paused_expansion(snapshot)
+    if paused is not None:
+        return _expansion_eligibility(result, envelope, snapshot, paused)
     if not actions:
         return refuse(NO_RESTORABLE_CHECKPOINT, [{"id": envelope["attempt_id"], "kind": "attempt", "status": "started",
                                                   "reason": NO_RESTORABLE_CHECKPOINT,
@@ -181,6 +221,50 @@ def recovery_eligibility(envelope: dict[str, Any], snapshot: dict[str, Any], *, 
     else:
         return refuse(CHECKPOINT_POSITION_UNRECOVERABLE, position_blocker(CHECKPOINT_POSITION_UNRECOVERABLE))
     return {**result, "recoverable": True, "mode": mode, "action_id": latest["action_id"], "checkpoint": link}
+
+
+def _expansion_eligibility(result: dict[str, Any], envelope: dict[str, Any], snapshot: dict[str, Any],
+                           paused: dict[str, Any]) -> dict[str, Any]:
+    """Resume an expansion pause by replaying the paused proposal (ADR 0017)."""
+    blocker = lambda reason: [{"id": paused["request_id"], "kind": "expansion_request", "status": paused["status"],
+                               "reason": reason, "evidence_needed": EVIDENCE_NEEDED[reason]}]
+    refuse = lambda reason, blockers: {**result, "reason": reason, "blockers": blockers, "expansion": paused}
+    links = snapshot.get("magentic_checkpoints", [])
+    worker_link = lambda action_id: next((item for item in links if item["pending_kind"] == "worker"
+                                          and item["pending_id"] == action_id), None)
+    if paused["kind"] == "delegate" and worker_link(paused["denied_row_id"]) is None:
+        # Checked before asking for a decision that could never resume.
+        return refuse(RECONCILIATION_REQUIRED, blocker("expansion_unbound"))
+    if paused["status"] not in {"granted", "denied"}:
+        return refuse(EXPANSION_DECISION_REQUIRED, blocker(EXPANSION_DECISION_REQUIRED))
+    if paused["kind"] == "delegate":
+        link = worker_link(paused["denied_row_id"])
+        return {**result, "recoverable": True, "mode": "pending", "action_id": paused["denied_row_id"],
+                "checkpoint": link, "expansion": paused}
+    denied = next(item for item in snapshot.get("manager_calls", []) if item["call_id"] == paused["denied_row_id"])
+    if paused["status"] == "denied":
+        # No Flow text can answer a refused manager call (E5): seal as failed.
+        return {**result, "recoverable": True, "mode": "seal", "expansion": paused, "expansion_failure": denied["reason"]}
+    if any(item["status"] != "completed" for item in snapshot.get("manager_calls", []) if item is not denied):
+        return refuse(CHECKPOINT_POSITION_UNRECOVERABLE, blocker(CHECKPOINT_POSITION_UNRECOVERABLE))
+    actions = snapshot.get("actions", [])
+    if not actions:
+        # Before any worker checkpoint the child restarts on the identical
+        # envelope; every earlier manager call replays from the ledger.
+        return {**result, "recoverable": True, "mode": "restart", "expansion": paused}
+    latest = max(actions, key=lambda item: item["request"]["sequence"])
+    link = worker_link(latest["action_id"])
+    position = [{"id": latest["action_id"], "kind": "action", "status": latest["status"]}]
+    if link is None:
+        return refuse(NO_RESTORABLE_CHECKPOINT, [{**position[0], "reason": NO_RESTORABLE_CHECKPOINT,
+                                                  "evidence_needed": EVIDENCE_NEEDED[NO_RESTORABLE_CHECKPOINT]}])
+    if latest["status"] != "completed" and latest["status"] != "denied":
+        return refuse(CHECKPOINT_POSITION_UNRECOVERABLE, [{**position[0], "reason": CHECKPOINT_POSITION_UNRECOVERABLE,
+                                                           "evidence_needed": EVIDENCE_NEEDED[CHECKPOINT_POSITION_UNRECOVERABLE]}])
+    # A completed action, or one whose expansion was denied, is answered from
+    # the ledger; the denied manager call then replays under its grant.
+    return {**result, "recoverable": True, "mode": "answer", "action_id": latest["action_id"], "checkpoint": link,
+            "expansion": paused}
 
 
 def rebuild_chartered_evidence_plan(envelope: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:

@@ -1,0 +1,74 @@
+# Acceptance Criteria: Shaper expansion approval (slice 1)
+
+All criteria are proven hermetically, with deterministic tests and stub providers. There is no live provider run in this slice.
+
+- **AC1, headroom sealed.**
+  - Shaper intent with headroom for the expandable limits produces a Shaper Contract and Delivery Charter that seal it. Omitting it seals zero.
+  - Sealing refuses:
+    - a negative value;
+    - an unknown or non-expandable limit (including replans and concurrency);
+    - verifier headroom that would take the total above 2;
+    - any base + headroom above a runner ceiling: 12 manager calls, 6 manager rounds, 6 actions.
+- **AC2, request recorded and attempt paused.** For each expandable denial (`delegation_cap`, `paid_call_cap`, `verifier_call_cap`, `manager_call_cap`, `manager_round_cap`) on a v8 attempt:
+  - Flow records one request keyed on the denied row;
+  - its amount is exactly one unit, and its "headroom remaining" reflects the automatic grants already recorded in the lineage;
+  - the attempt pauses on the expansion-pause path, not as interrupted and not as failed;
+  - nothing is sent for the paused proposal;
+  - the lead claim stays active at the same generation;
+  - `flow run status`, `flow run list` and `inspect-delivery` show the pending request.
+- **AC3, hard denials stay hard.** None of the following creates an expansion request; each produces its existing denial:
+  - `provider_denied`, `specialist_denied`, `concurrency_cap`, `verifier_retry_denied`, `producer_already_completed`;
+  - a write-scope violation;
+  - a prohibited capability;
+  - a v8 replan refusal.
+- **AC4, automatic approval.**
+  - A request within the lineage's remaining headroom is approved with no operator input, under headroom authority, and draws the headroom down.
+  - Once headroom is used up, the next request escalates.
+  - Recording the same denied row again returns the same request and decision.
+  - A crash between recording and approving draws headroom once.
+- **AC5, escalated decision.**
+  - The CLI command approves or denies a pending request, given the expected generation, actor and explanation.
+  - A manual grant doesn't reduce headroom.
+  - It refuses, with nothing changed:
+    - a stale generation;
+    - an unknown or already-decided request;
+    - an attempt that is not truly paused (an action or manager call `started` or `unknown`, the recovery lock held, or a live supervisor);
+    - a grant that would go above a runner ceiling or the verifier ceiling of 2.
+- **AC6, resume after approval.**
+  - After an approval, the resumed attempt runs the paused proposal as a Flow-reissued pending action under the grant, without Magentic proposing it again.
+  - The denied row is marked superseded, not rewritten.
+  - No completed action is sent again.
+  - The effective limit equals base plus grants.
+  - One grant cannot allow two proposals.
+- **AC7, resume after denial.**
+  - After a denial, the resumed attempt reports the denial to the manager and can still finish within the charter.
+  - The denied request can't be decided again.
+  - A later proposal of the same kind creates a new request that escalates.
+- **AC8, lineage scope.**
+  - A grant raises only its own limit within its lineage.
+  - A superseding attempt inherits the lineage's grants and remaining headroom. Headroom is not refilled.
+  - Superseding or releasing a lead with a pending request records it as cancelled.
+- **AC9, receipt integrity.**
+  - Receipts list every request and decision.
+  - Validation rejects:
+    - a grant that was added, removed or altered;
+    - an automatic approval beyond the headroom left at that point in the order;
+    - a grant under the wrong authority;
+    - a grant larger than its request;
+    - a grant tied to another lineage or generation.
+- **AC10, atomicity.**
+  - Decide, supersede and release check request state in one `BEGIN IMMEDIATE`, and keep the ADR 0016 lock order.
+  - Of two concurrent decisions, exactly one wins, and the other is refused with `expansion_already_decided`.
+  - A decision racing a supersede leaves exactly one outcome.
+  - A manager-supplied amount or field in the rationale is ignored.
+- **AC11, other protocols unchanged.** v5–v7 attempts behave as before, and their existing tests pass unchanged.
+- **AC12, proof.**
+  - The full suite passes with 0 failures and 0 skipped, with `FLOW_MAF_PYTHON` set.
+  - Mutation checks show that each of these, removed, makes a test fail:
+    - the headroom bound;
+    - pausing before send;
+    - the generation fence;
+    - the truly-paused guard on decisions;
+    - single consumption of a grant;
+    - receipt recomputation;
+    - the expansion-pause recovery mode.
