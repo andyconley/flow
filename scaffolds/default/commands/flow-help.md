@@ -112,7 +112,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
 | `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
 | `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
-| `flow runtime smoke [--target all|claude|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
+| `flow runtime smoke [--target all\|claude\|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |
 | `flow model resolve --runtime <runtime> --profile <profile> [--json]` | Resolve an agent-selected session profile without changing runtime configuration |
 <!-- generated:cli-commands-table:end -->
