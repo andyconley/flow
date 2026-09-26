@@ -2,6 +2,34 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.36.0](https://github.com/andyconley/flow/compare/v0.35.3...v0.36.0) (2026-09-26)
+
+### Features
+
+* **cli:** add flow run decide-expansion ([0bcff10](https://github.com/andyconley/flow/commit/0bcff10784636e455d40247ad2e8ba5f8b0a9c26))
+* **contracts:** seal delegated expansion headroom in the charter ([2b9e045](https://github.com/andyconley/flow/commit/2b9e0458d7d5cc8a499e0f532bfc45d98d3e95b1))
+* **gateway:** pause chartered delivery on escalated expansion ([cb0c237](https://github.com/andyconley/flow/commit/cb0c23786dd552271613e3843c337dab8c002428))
+* **ledger:** record expansion requests and grant within headroom ([d414ca5](https://github.com/andyconley/flow/commit/d414ca5edf9ba2f52fb1fa021b6867ade18678a5))
+* **receipts:** record and verify expansion requests and grants ([ceb060e](https://github.com/andyconley/flow/commit/ceb060e8353ff924de1a89338bc059ea18396054))
+* **recovery:** resume expansion pauses by replaying under the grant ([ea42d4e](https://github.com/andyconley/flow/commit/ea42d4e55bd88c4209ec5d53bf9ac226578a8bdb))
+
+### Bug Fixes
+
+* **expansion:** close review gaps in pause recovery and sealing ([31ac27b](https://github.com/andyconley/flow/commit/31ac27b34a8d1d2856a6157018e1973136d59fb8))
+* **expansion:** harden decisions and denial binding from acceptance review ([1d5ec46](https://github.com/andyconley/flow/commit/1d5ec46076320fa1128835647a3783067f541682))
+
+### Documentation
+
+* refresh MAF adoption status through v0.35.2 ([b8cae87](https://github.com/andyconley/flow/commit/b8cae87a75e89119c049d936a2ca902e6d92f4f7))
+* **run:** accept shaper-expansion-approval review ([79a716d](https://github.com/andyconley/flow/commit/79a716d1bcf490bcbfce098bf0c870a981581b18))
+* **run:** archive shaper-expansion-approval ([ce1e11f](https://github.com/andyconley/flow/commit/ce1e11fd37db87aa9fd746405f801b588366c5a8))
+* **run:** define, solution, and plan shaper-expansion-approval ([a33454d](https://github.com/andyconley/flow/commit/a33454dd510756f5ed610dd806ea5a35d19a8b1e))
+* **run:** record shaper-expansion-approval implementation evidence ([4c417a4](https://github.com/andyconley/flow/commit/4c417a44831b5d5bd4f17a5c4dfbc6063b3f8404))
+
+### Tests
+
+* **maf:** prove expansion replay end to end ([9ab48c5](https://github.com/andyconley/flow/commit/9ab48c5607d5af1662163a3009b3d4b6509e3b91))
+
 ## [0.35.3](https://github.com/andyconley/flow/compare/v0.35.2...v0.35.3) (2026-09-25)
 
 ### Documentation
