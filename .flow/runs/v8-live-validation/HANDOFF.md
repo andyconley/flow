@@ -12,8 +12,8 @@ The first live v8 chartered job ran through sealed authority, the Claude manager
 
 ## Next actions
 
-1. **A fix run** for D1 (edit-worker stream cap) and D2 (help generator pipe escaping).
-2. **`v8-live-validation-2`,** which reuses this definition, job test and runbook after the fix is released.
+1. **A fix run.** D1: split the edit worker's read cap from its log cap, parse the stream line by line, fix the trace abort too, and test a stream over 1 MiB. D2: escape pipes in the help generator.
+2. **`v8-live-validation-2`,** which reuses the definition and runbook. The job test and baseline must be redone for escaped pipes.
 3. **Framework gaps to record at archive:**
    - there is no CLI for lead release or supersede;
    - the job charter isn't covered by sealed digests;

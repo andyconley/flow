@@ -1,0 +1,202 @@
+{
+  "attempt": {
+    "attempt_id": "f628faa99c6e4e0e8d18de37a1572370",
+    "contracts": {
+      "delivery_charter_digest": "7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed",
+      "delivery_lead_claim_digest": "c2939bad0d5ad3e3a5f4825613319b79f43b954859b36d77ef9e1b74a582f916",
+      "handoff_digest": "788a36047facd5dce51a1185bd7f296e694e5f3305a4686e1fc08c56d7ab1e57",
+      "shaper_contract_digest": "2f2ca8a996b77819caabe61c62bf0b7544b5d7113c0209870e8192269da7a8e6"
+    },
+    "delivery_lead": {
+      "active": false,
+      "current_generation": 1,
+      "generation": 1,
+      "id": "delivery-lead"
+    },
+    "executable": false,
+    "execution_protocol_version": 8,
+    "expansion": {
+      "effective_limits": {
+        "delegations": 2,
+        "manager_calls": 4,
+        "manager_rounds": 6,
+        "paid_worker_calls": 1,
+        "verifier_calls": 1
+      },
+      "headroom_remaining": {
+        "delegations": 1,
+        "manager_calls": 1,
+        "manager_rounds": 0,
+        "paid_worker_calls": 0,
+        "verifier_calls": 1
+      },
+      "requests": []
+    },
+    "interruptions": [
+      {
+        "cause": "reconciliation_required",
+        "detail": "Claude edit output exceeds limit",
+        "interruption_id": "e3b43bffb0804350b4a9b58c79a90e91",
+        "ledger_seq": 15,
+        "owner_generation": 1,
+        "recorded_at": "2026-09-26T12:37:48.603759+00:00"
+      }
+    ],
+    "owner_generation": 1,
+    "pending_approvals": [],
+    "pending_unknowns": [
+      "c972a99fd20ad9b54f5c839a338783a8431448c4c0e4dd5c0c31e06885a695c3"
+    ],
+    "predecessors": [],
+    "provider_choices": [
+      {
+        "eligible_candidates": [
+          {
+            "assignment_id": "docs-editor",
+            "definition_digest": "9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe",
+            "instance_id": "docs-editor",
+            "model": "sonnet",
+            "provider": "claude",
+            "role": "tech-writer"
+          }
+        ],
+        "rationale": {
+          "facts": [
+            "approved producer identity",
+            "task selected by Magentic progress decision"
+          ],
+          "manager_reason": "The docs-editor must make the actual file edits before any review can occur."
+        },
+        "rejection_reasons": {},
+        "selected_candidate": "docs-editor"
+      }
+    ],
+    "recoveries": [],
+    "recovery": {
+      "blockers": [
+        {
+          "evidence_needed": "none; attempt fenced",
+          "id": "f628faa99c6e4e0e8d18de37a1572370",
+          "kind": "attempt",
+          "reason": "lead_generation_inactive",
+          "status": "started"
+        }
+      ],
+      "checked_by_command": [
+        "live_run_fence",
+        "worktree_drift",
+        "envelope_file"
+      ],
+      "decided_from": "ledger",
+      "mode": null,
+      "reason": "lead_generation_inactive",
+      "recoverable": false
+    },
+    "resolutions": [],
+    "resumable": false,
+    "sealed_receipt": {
+      "consistent": true,
+      "file_sha256": null,
+      "ledger_sha256": null,
+      "matches": false,
+      "recovery_block_present": null,
+      "recovery_block_required": false
+    },
+    "status": "started",
+    "verifier_evaluations": [],
+    "verifier_usage": {
+      "consumed": 0,
+      "denied": 0,
+      "maximum": 1,
+      "reserved": 0,
+      "retry_eligible": false
+    },
+    "work_id": "v8-live-validation"
+  },
+  "compatibility_diagnostics": [],
+  "contracts": {
+    "charter": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation/acceptance-criteria.md",
+          "sha256": "5673cf09258dae3f5bf74b7dbeedcf2c074adf706bd3732eed13ce7eecb533a0"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation/orchestration.json",
+          "sha256": "e0aef5a3c7a6976c540dd2417399a345789a2417e7d41d5848d6d772074b7cc8"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation/requirements.md",
+          "sha256": "050af61aa57f44a8c917bdd1d5c57ad8a423de8b94eb60c858ad1510dab7e335"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation/shaper-intent.json",
+          "sha256": "652b3ae8d21bf10babb25ec37b76dc785385010be3167c6f9071685568d72cdb"
+        }
+      },
+      "digest": "7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed",
+      "id": "delivery-5b6e3bf117fdd0bd6eb3",
+      "version": 3
+    },
+    "shaper": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation/acceptance-criteria.md",
+          "sha256": "5673cf09258dae3f5bf74b7dbeedcf2c074adf706bd3732eed13ce7eecb533a0"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation/orchestration.json",
+          "sha256": "e0aef5a3c7a6976c540dd2417399a345789a2417e7d41d5848d6d772074b7cc8"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation/requirements.md",
+          "sha256": "050af61aa57f44a8c917bdd1d5c57ad8a423de8b94eb60c858ad1510dab7e335"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation/shaper-intent.json",
+          "sha256": "652b3ae8d21bf10babb25ec37b76dc785385010be3167c6f9071685568d72cdb"
+        }
+      },
+      "digest": "2f2ca8a996b77819caabe61c62bf0b7544b5d7113c0209870e8192269da7a8e6",
+      "id": "shaper-e980c3d1d3d36ae9e9d2",
+      "version": 3
+    }
+  },
+  "delivery_authority": {
+    "charter_digest": "7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed",
+    "charter_id": "delivery-5b6e3bf117fdd0bd6eb3",
+    "delivery_artifact_dir": "delivery/7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed",
+    "handoff_digest": "788a36047facd5dce51a1185bd7f296e694e5f3305a4686e1fc08c56d7ab1e57",
+    "lead_claim_digest": "1e9c1cc3bde89326233979eeefc91b2a2c5bf2be0eec2cdbcbb324901dcbd03e",
+    "lead_claim_path": "delivery/7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed/lead-claim-g1-released.json",
+    "logical_delivery_attempt_id": "logical-7a2e250b9d1f20e7d9bb",
+    "owner_generation": 1,
+    "owner_status": "released",
+    "shaper_contract_digest": "2f2ca8a996b77819caabe61c62bf0b7544b5d7113c0209870e8192269da7a8e6",
+    "shaper_contract_id": "shaper-e980c3d1d3d36ae9e9d2",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/v8-live-validation/acceptance-criteria.md",
+        "sha256": "5673cf09258dae3f5bf74b7dbeedcf2c074adf706bd3732eed13ce7eecb533a0"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/v8-live-validation/orchestration.json",
+        "sha256": "e0aef5a3c7a6976c540dd2417399a345789a2417e7d41d5848d6d772074b7cc8"
+      },
+      "requirements": {
+        "path": ".flow/runs/v8-live-validation/requirements.md",
+        "sha256": "050af61aa57f44a8c917bdd1d5c57ad8a423de8b94eb60c858ad1510dab7e335"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/v8-live-validation/shaper-intent.json",
+        "sha256": "652b3ae8d21bf10babb25ec37b76dc785385010be3167c6f9071685568d72cdb"
+      }
+    }
+  },
+  "lifecycle": {
+    "phase": "reviewing",
+    "state": "reviewing",
+    "updated_at": "2026-09-26T13:00:10Z"
+  },
+  "work_id": "v8-live-validation"
+}

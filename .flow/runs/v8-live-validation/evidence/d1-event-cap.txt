@@ -1,0 +1,9 @@
+== D1: event log size vs cap
+1048576 .flow/runs/v8-live-validation/execution/f628faa99c6e4e0e8d18de37a1572370/claude-implementer.events.ndjson
+25:MAX_EVENT_BYTES = 1024 * 1024
+160:                            raise ClaudeEditError("Claude edit output exceeds limit")
+== launch-1 detail
+Claude edit output exceeds limit
+== event stream analysis
+event types: {'system': 51, 'stream_event': 981, 'assistant': 42, 'user': 26, 'rate_limit_event': 2, 'truncated_line_at_cap': 1}
+events over 50 KB: [('user', 51996), ('user', 62323), ('user', 143866), ('user', 99154)]

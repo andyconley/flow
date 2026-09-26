@@ -1,0 +1,18 @@
+== targeted test against the partial producer diff
+test_cli_reference_has_a_decide_expansion_section (test_decide_expansion_docs.DecideExpansionDocsTest.test_cli_reference_has_a_decide_expansion_section) ... ok
+test_generated_help_tables_are_in_sync (test_decide_expansion_docs.DecideExpansionDocsTest.test_generated_help_tables_are_in_sync) ... FAIL
+test_help_source_documents_the_real_invocation (test_decide_expansion_docs.DecideExpansionDocsTest.test_help_source_documents_the_real_invocation) ... ok
+FAILED (failures=1)
+== regenerate --check
+--- scaffolds/default/commands/flow-help.md (on disk)
++++ scaffolds/default/commands/flow-help.md (regenerated)
+@@ -108,7 +108,7 @@
+ | `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Run an approved charter-selected specialist roster through Flow-gated Magentic |
+ | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
+ | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
+-| `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny one pending v8 expansion request of a paused attempt; resume with recover-delivery-lead |
++| `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny one pending v8 expansion request of a paused attempt; resume with recover-delivery-lead |
+ | `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |
+ | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
+ | `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
+--- README.md (on disk)

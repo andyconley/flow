@@ -1,0 +1,19 @@
+# Commands run, verbatim (2026-09-26)
+
+## Launch gate
+Andy's decision in the session: "Go" (2026-09-26, after the preflight summary). No paid call was made before it.
+
+## Launch 1 (from ~/src/flow)
+flow run validate-orchestration v8-live-validation --stage dispatch
+export FLOW_MAF_PYTHON=~/.flow/venvs/maf/bin/python
+/usr/bin/time -p flow run execute-chartered-job v8-live-validation --worktree ~/src/flow-v8-live-job --source-commit c864241ab064faf706ab14f09fe7ca9c28daf3c0 --project-root ~/src/flow --json
+
+## Inspection
+flow run inspect-delivery v8-live-validation --attempt-id f628faa99c6e4e0e8d18de37a1572370 --json
+
+## Release (a departure from the plan's supersede route, because supersede is blocked by the unknown send; run from ~/.flow/source/cli)
+python3.12 -c "
+from pathlib import Path
+from delivery_control import change_lead_claim
+ok, run, errors = change_lead_claim('v8-live-validation', 'release', root=Path('/Users/andyconley/src/flow'), expected_generation=1)
+print('ok', ok, 'errors', errors, 'owner', run.get('delivery',{}).get('owner_status'), run.get('delivery',{}).get('owner_generation'))"
