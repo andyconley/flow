@@ -1,0 +1,5 @@
+attempt f628faa99c6e4e0e8d18de37a1572370  2026-09-26T12:35:31.789342+00:00 .. 2026-09-26T12:37:48.603953+00:00
+ 1 manager   36e18bc0c2bc  2026-09-26T12:35:31.927087+00:00    21.033s  manager_response_observed
+ 2 manager   a2761190e7c7  2026-09-26T12:35:52.967467+00:00     9.159s  manager_response_observed
+ 3 manager   2e18abc955b7  2026-09-26T12:36:02.134446+00:00     12.21s  manager_response_observed
+ 4 producer  c972a99fd20a  2026-09-26T12:36:14.366426+00:00    94.228s  worker_unknown

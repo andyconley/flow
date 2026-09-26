@@ -1,0 +1,11 @@
+== job commit
+d6d771f2eccdcdd4a0ab43b9691b8cf8f92823a2
+       0
+== baseline test (charter argv)
+FAIL: test_cli_reference_has_a_decide_expansion_section (test_decide_expansion_docs.DecideExpansionDocsTest.test_cli_reference_has_a_decide_expansion_
+  File "/Users/andyconley/src/flow-v8-live-job-2/tests/test_decide_expansion_docs.py", line 61, in test_cli_reference_has_a_decide_expansion_section
+FAIL: test_help_source_documents_the_real_invocation (test_decide_expansion_docs.DecideExpansionDocsTest.test_help_source_documents_the_real_invocatio
+  File "/Users/andyconley/src/flow-v8-live-job-2/tests/test_decide_expansion_docs.py", line 52, in test_help_source_documents_the_real_invocation
+Ran 3 tests in 0.028s
+FAILED (failures=2)
+exit=1
