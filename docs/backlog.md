@@ -486,3 +486,39 @@ The project test command and interpreter had to be restated by hand in every rev
 The project test command, its interpreter variable, and a fail-closed exit check had to be scripted by hand; a piped run once masked a failing suite
 
 No declared project test command with fail-closed failure and skip detection; the suite runner was scripted by hand again
+
+### Maf Runtime Interpreter Preflight
+
+Status: observed 4 times, promoted from the capability-gap ledger
+
+Flow lacks a preflight that selects or validates the configured MAF interpreter before creating an execution attempt.
+
+MAF-gated merge-gate tests need a hand-supplied pinned interpreter; CI has no MAF job
+
+The optional pinned runtime interpreter for gated tests vanished with temporary storage and had to be rebuilt by hand; no preflight or rebuild command exists
+
+No preflight or managed install for the MAF runtime interpreter; a durable venv was built and import-checked by hand before live launch
+
+### Reviewer Role Command Execution
+
+Status: observed 5 times, promoted from the capability-gap ledger
+
+Read-only review roles cannot run commands, so briefs that ask them to execute test suites cannot be fulfilled
+
+Read-only reviewers could not run suites or mutation checks; the coordinator ran them
+
+Review role agents cannot run test suites, mutation checks, or diff checks, so the orchestrator ran them and reviewers relied on logs
+
+Review role agents could not run git diff, tests, or mutation checks, so reviews read files at HEAD and relied on the orchestrator's logs
+
+Reviewer roles cannot run tests or mutation checks, so acceptance reviews verify proof by reading only
+
+### Orchestration Manifest Assignment Command
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+Adding review and recheck assignments to a run's orchestration manifest required hand-editing JSON; no command appends a validated assignment
+
+Every lane's role assignments were added to the orchestration manifest by hand-editing JSON, including fixing a serialization overlap
+
+Plan and implement reviewer dispatches cannot be added to the orchestration manifest once it is sealed into delivery authority
