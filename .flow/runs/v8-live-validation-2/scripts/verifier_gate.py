@@ -5,7 +5,8 @@ Usage (installed CLI's interpreter, from ~/src/flow):
 
 System prompt: verifier_instructions(quality-reviewer effective body).
 User prompt: _verifier_provider_task(charter task, diff, sha, structured=True).
-Options match Flow (format schema, num_predict, no num_ctx), plus keep_alive -1
+Options match Flow (think false since v0.36.2, format schema, num_predict,
+no num_ctx), plus keep_alive -1
 so the gate does not reset the warm model's unload timer (plan review F2).
 Exit 0 on go (within the limit and a schema-valid reply), 1 on no-go.
 """
@@ -28,7 +29,7 @@ def main(argv: list[str]) -> int:
     diff = Path(argv[0]).read_text()
     task = json.loads(Path(argv[1]).read_text())["task"]
     limit = float(argv[argv.index("--limit") + 1]) if "--limit" in argv else 30.0
-    body = {"model": "gemma4:26b", "stream": False, "keep_alive": -1,
+    body = {"model": "gemma4:26b", "stream": False, "think": False, "keep_alive": -1,
             "format": VERIFIER_OUTPUT_SCHEMA,
             "options": {"num_predict": STRUCTURED_VERIFIER_NUM_PREDICT},
             "messages": [

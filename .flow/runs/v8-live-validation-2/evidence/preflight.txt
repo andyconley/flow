@@ -31,3 +31,24 @@ porcelain lines:        0
 /Users/andyconley/src/flow-v8-live-job-2/.flow
 == note
 worktree .flow is the tracked copy checked out from main, not the project .flow; _refuse_project_flow_in_worktree compares (st_dev, st_ino) identities, so it is allowed (same as v8-live-validation's worktree)
+== re-run after D3 fix, 2026-09-26T20:10:32Z
+== flow version
+current: v0.36.2
+== digests (installed)
+tech-writer 9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe
+quality-reviewer 1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718
+== warm (keep_alive -1)
+total_s 9.58
+== claude auth
+  "loggedIn": true,
+== MAF interpreter
+agent_framework import ok
+== job charter sha256
+fef217325168cf4fbe378f605a006d4315bbebb98af106cd7e9c8ce943fdf798  .flow/runs/v8-live-validation-2/job-charter.json
+== orchestration
+orchestration valid: v8-live-validation-2 (dispatch)
+== worktree
+d6d771f2eccdcdd4a0ab43b9691b8cf8f92823a2
+porcelain lines:        0
+NAME          ID              SIZE     PROCESSOR    CONTEXT    UNTIL   
+gemma4:26b    5571076f3d70    17 GB    100% GPU     32768      Forever    

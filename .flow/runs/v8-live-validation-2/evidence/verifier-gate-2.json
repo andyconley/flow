@@ -1,0 +1,22 @@
+{
+  "seconds": 4.89,
+  "limit": 30.0,
+  "schema_json": true,
+  "verdict": "go",
+  "prompt_chars": 13162,
+  "eval_count": 126,
+  "prompt_eval_count": 3300,
+  "load_duration_s": 0.23,
+  "reply": {
+    "schema_version": 1,
+    "decision": "pass",
+    "summary": "The documentation update for the `flow run decide-expansion` command is correct and follows all specified formatting requirements, including the specific escaping rules for generated tables.",
+    "findings": [
+      {
+        "severity": "non_blocking",
+        "summary": "Consistent use of escaped pipes in generated outputs",
+        "evidence": "In README.md and flow-help.md, the pipe inside the parentheses is correctly escaped as `\\|` to satisfy the generator requirements, while scafolds/default/flow.toml retains the raw `|`."
+      }
+    ]
+  }
+}
