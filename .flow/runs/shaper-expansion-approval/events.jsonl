@@ -8,3 +8,4 @@
 {"artifacts": {"handback": ".flow/runs/shaper-expansion-approval/HANDOFF.md", "implementation_evidence": ".flow/runs/shaper-expansion-approval/validation-results.md"}, "at": "2026-09-25T23:40:35Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-26T02:28:04Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
 {"artifacts": {"review": ".flow/runs/shaper-expansion-approval/review.md"}, "at": "2026-09-26T08:20:10Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}
+{"artifacts": {"archive": ".flow/runs/shaper-expansion-approval/archive.md"}, "at": "2026-09-26T08:22:38Z", "dispositions": {"archive_enrichment": "1", "capability_gaps": "recorded", "memory": "updated"}, "event": "archive", "from": "review_accepted", "to": "archived"}

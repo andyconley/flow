@@ -19,6 +19,19 @@
 
 ## Recently completed
 
+- `shaper-expansion-approval` (MAF adoption step 5, slice 1) accepted and archived
+  2026-09-26 on `codex/step5-shaper-approval-design` (one PR). v8 delegated
+  expansion (ADR 0017):
+  - the Shaper seals headroom for five limits, bounded by the runner ceilings;
+  - requests within headroom are granted automatically, and anything beyond
+    pauses for `flow run decide-expansion`;
+  - `recover-delivery-lead` replays the paused proposal under the decision.
+
+  The full suite passed 1,538 tests with 0 skipped; there were 5 MAF-gated
+  end-to-end cases and 10 mutation checks. Nothing has run live yet.
+  Next: real-world validation runs, then the rest of step 5 (cancellation,
+  trace correlation, MCP handback, token cap).
+
 - v8 chartered delivery recovery merged and released as v0.35.0 (PRs #26,
   #29, #30).
 
