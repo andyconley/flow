@@ -996,7 +996,6 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                              "replans", "checkpoints", "evidence"), kind="Magentic receipt", max_bytes=512 * 1024)
     if receipt["execution_protocol_version"] != execution_protocol_version(envelope) or receipt["status"] not in {"completed", "failed", "denied", "unknown"}:
         raise ContractError("Magentic receipt status or protocol is invalid")
-    _validate_manager_progress(receipt)
     for field in ("work_id", "attempt_id", "charter_digest", "manifest_digest"):
         if receipt[field] != envelope[field]:
             raise ContractError(f"Magentic receipt {field} link mismatch")
@@ -1051,6 +1050,8 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         seen_calls.add(request["call_id"])
         if item["status"] == "completed" and not isinstance(item.get("result"), dict):
             raise ContractError("Magentic completed manager call lacks observed result")
+    # After the manager calls themselves are validated, so recomputation reads sound entries.
+    _validate_manager_progress(receipt)
     seen_actions: set[str] = set()
     for item in receipt["actions"]:
         if not isinstance(item, dict) or not isinstance(item.get("request"), dict):

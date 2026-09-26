@@ -78,7 +78,9 @@ def _loads(candidate: str) -> dict[str, Any] | None:
     for attempt in (candidate, candidate.replace("True", "true").replace("False", "false").replace("None", "null")):
         try:
             value = json.loads(attempt)
-        except ValueError:
+        except (ValueError, RecursionError):
+            # A deeply nested reply fits the size cap but not the decoder's stack;
+            # it is unparsable, never an exception that could strand a paid call.
             continue
         if isinstance(value, dict):
             return value
@@ -104,7 +106,10 @@ def parse_progress(text: str) -> ProgressParse:
             repaired = value is not None
     if value is None or not well_shaped(value):
         return ProgressParse(None, False, None)
-    canonical = json.dumps(value, ensure_ascii=False)
+    try:
+        canonical = json.dumps(value, ensure_ascii=False)
+    except (ValueError, RecursionError):
+        return ProgressParse(None, False, None)
     # MAF re-extracts the canonical text with the same rules. Re-serializing can
     # turn an escaped fence inside a string into a literal one that MAF would
     # extract instead, so the round trip must give back the same object.
