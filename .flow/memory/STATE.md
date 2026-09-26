@@ -19,6 +19,19 @@
 
 ## Recently completed
 
+- `manager-progress-retry` accepted and archived 2026-09-26 on
+  `codex/manager-progress-retry`, not yet pushed.
+  - Fixes D4 (ADR 0018): a malformed manager progress reply is repaired
+    (invalid escapes only) or retried up to twice as counted manager calls
+    (not rounds). The 3rd unparsable reply aborts with no replan, and v8
+    receipts carry a `manager_progress` block.
+  - Fixes D5: recovery replaying a headroom-granted manager call no longer
+    fails.
+  - Full suite: 1,562 tests OK, 0 skipped; 11 of 11 mutation checks caught.
+  - Next: PR, release v0.37.0, reinstall, then `v8-live-validation-2`
+    attempt 2 (reset the worktree to `d6d771f2`, re-run preflight, approve the
+    producer's paid-call expansion).
+
 - `ollama-verifier-think` (scout) archived 2026-09-26 on
   `codex/ollama-verifier-think`.
   - Fixes D3: Flow's Ollama calls now send `"think": false`. Without it,

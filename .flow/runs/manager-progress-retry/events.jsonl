@@ -6,3 +6,4 @@
 {"artifacts": {"handback": ".flow/runs/manager-progress-retry/HANDOFF.md", "implementation_evidence": ".flow/runs/manager-progress-retry/validation-results.md"}, "at": "2026-09-26T22:22:13Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-26T22:29:16Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
 {"artifacts": {"review": ".flow/runs/manager-progress-retry/review.md"}, "at": "2026-09-26T22:36:09Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}
+{"artifacts": {"archive": ".flow/runs/manager-progress-retry/archive.md"}, "at": "2026-09-26T22:37:21Z", "dispositions": {"archive_enrichment": "1", "capability_gaps": "recorded", "memory": "updated"}, "event": "archive", "from": "review_accepted", "to": "archived"}
