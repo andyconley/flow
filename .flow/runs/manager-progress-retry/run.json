@@ -1,0 +1,65 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "0c1bd8a6b6171807c6bff2fec04b322b6b5b93983991487edf277868261cbd79",
+    "orchestration_manifest": "1ef4f10337468a1db495ea8447c186980f1b65883e7afaa0a4940b53b7257194",
+    "requirements": "2388ad12d525d82ec7d5eaae52dee4609dfe0039e97fb7959931be086b58c3ed",
+    "shaper_intent": "a1436cd1870a5324e0cb98fd1e84005b5eb652c4ed9c061fcca90e4028d92416"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/manager-progress-retry/acceptance-criteria.md",
+    "handoff": ".flow/runs/manager-progress-retry/implementation-handoff.md",
+    "orchestration_manifest": ".flow/runs/manager-progress-retry/orchestration.json",
+    "plan": ".flow/runs/manager-progress-retry/plan.md",
+    "requirements": ".flow/runs/manager-progress-retry/requirements.md",
+    "shaper_intent": ".flow/runs/manager-progress-retry/shaper-intent.json",
+    "validation_plan": ".flow/runs/manager-progress-retry/validation-plan.md"
+  },
+  "created_at": "2026-09-26T21:55:21Z",
+  "delivery": {
+    "charter_digest": "077bced2782158d37c4e47ac348d7875b4eb4472f1c208230720f03990050b1b",
+    "charter_id": "delivery-a5d536318206b133d55a",
+    "delivery_artifact_dir": "delivery/077bced2782158d37c4e47ac348d7875b4eb4472f1c208230720f03990050b1b",
+    "handoff_digest": "c197ea8d4c3322d687ba58ac5e64bdab382e98263110421bda269801fafcd79e",
+    "lead_claim_digest": "35b1161ec6f16a0fbc5cb2105b5cdfbbe8c75d45b199d1a2a5d6a0d4788cca00",
+    "lead_claim_path": "delivery/077bced2782158d37c4e47ac348d7875b4eb4472f1c208230720f03990050b1b/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-077bced2782158d37c4e",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "8eab9ba7295f1f11962cfc1ff8727336bc90053b17db8bbae0b32a39777dde47",
+    "shaper_contract_id": "shaper-48fa417b0078ae46d439",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/manager-progress-retry/acceptance-criteria.md",
+        "sha256": "0c1bd8a6b6171807c6bff2fec04b322b6b5b93983991487edf277868261cbd79"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/manager-progress-retry/orchestration.json",
+        "sha256": "1ef4f10337468a1db495ea8447c186980f1b65883e7afaa0a4940b53b7257194"
+      },
+      "requirements": {
+        "path": ".flow/runs/manager-progress-retry/requirements.md",
+        "sha256": "2388ad12d525d82ec7d5eaae52dee4609dfe0039e97fb7959931be086b58c3ed"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/manager-progress-retry/shaper-intent.json",
+        "sha256": "a1436cd1870a5324e0cb98fd1e84005b5eb652c4ed9c061fcca90e4028d92416"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-26T22:03:00Z",
+    "approve-plan": "2026-09-26T22:03:00Z",
+    "start-definition": "2026-09-26T21:55:21Z",
+    "start-implementation": "2026-09-26T22:03:00Z",
+    "start-plan": "2026-09-26T22:03:00Z"
+  },
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "implementing",
+  "updated_at": "2026-09-26T22:03:00Z",
+  "work_id": "manager-progress-retry"
+}
