@@ -1419,8 +1419,11 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                 # A replayed, never-sent grant would expire when consumed.
                 decision = ledger.reissue_recovered_manager_grant(request["call_id"], generation=generation)
             elif (recovery is not None and decision.get("replayed") and not decision["allowed"]
+                    and decision.get("result") is None
                     and (decision.get("expansion") or {}).get("status") == "granted"):
                 # The paused call is back under its own identity: allow it once.
+                # A replayed call that already completed (for example one granted
+                # from charter headroom) keeps its recorded answer instead.
                 decision = ledger.reissue_expanded_manager_grant(request["call_id"], generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             observed = decision["result"].get("output")

@@ -179,3 +179,25 @@ if __name__ == "__main__":
     import unittest
 
     unittest.main()
+
+
+@requires_maf
+class AutomaticGrantThenEscalationReplayTests(MafExpansionFixture):
+    # D5 regression, the live validation path: base 4 manager calls plus 1 headroom.
+    # Call 5 is granted from headroom; call 6 (final) escalates. Recovery replays
+    # call 5 from the ledger instead of trying to regrant it.
+    limits = {"max_concurrent": 1, "max_paid_worker_calls": 1, "max_manager_calls": 4}
+    headroom = {"manager_calls": 1}
+
+    def test_recovery_replays_a_headroom_granted_call_and_completes(self):
+        paused = self.run_live()
+        self.assertEqual(paused["status"], "expansion_paused", paused)
+        first = self.ledger().snapshot(paused["attempt_id"])["manager_calls"]
+        self.assertEqual([item["status"] for item in first][-2:], ["completed", "denied"])
+        self.decide(paused, approve=True)
+        result = self.recover(paused["attempt_id"])
+        self.assertEqual((result["mode"], result["status"]), ("answer", "completed"), result)
+        sent = [call_id for _, _, call_id in self.manager_sends]
+        self.assertEqual(sent.count(first[4]["call_id"]), 1, "the headroom-granted call is not resent")
+        self.assertEqual(sent.count(first[5]["call_id"]), 1)
+        self.assert_calls_unique(paused["attempt_id"])
