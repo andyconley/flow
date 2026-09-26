@@ -1,0 +1,57 @@
+# Acceptance Criteria: v8 live validation
+
+- **AC1, authority sealed.**
+  - `start-plan` seals a v3 Shaper Contract and Delivery Charter carrying the R1 limits and headroom, with `delegated_expansion: true`.
+  - `inspect-delivery` shows the charter digest and the headroom.
+- **AC2, live preparation.**
+  - `execute-chartered-job` prepares a protocol v8 attempt against the isolated worktree pinned to the job commit.
+  - The envelope projects the non-zero headroom.
+  - The roster has exactly `docs-editor` (Claude) and `local-verifier` (Ollama `gemma4:26b`), and the manager is Claude.
+- **AC3, real providers.** Every provider call in the receipt is a physical call with Flow-observed evidence:
+  - Claude CLI completed turns, for the manager and the producer;
+  - Ollama local HTTP responses, for the verifier.
+
+  No `local-stub` evidence appears.
+- **AC4, automatic grant observed.**
+  - At least one expansion request is granted under `charter_headroom` authority with no operator input. The expected one is manager call 5.
+  - The attempt continues without pausing.
+- **AC5, escalation observed and decided.**
+  - At least one request escalates, and the attempt stops as `expansion_paused`, with nothing sent for the paused call.
+  - `flow run status` shows the decision as the next action.
+  - Andy decides it with `flow run decide-expansion … --expected-generation N`.
+- **AC6, resume replays identically.**
+  - `recover-delivery-lead` resumes the attempt.
+  - The paused `call_id` (or action id) is identical after resume.
+  - Completed manager calls replay from the ledger, with no second send.
+  - Completed actions are not re-sent.
+  - Observed paid-call counts match the ledger.
+- **AC7, sealed valid receipt.**
+  - The final attempt seals a receipt.
+  - `validate_receipt` passes, and the ledger's `sealed_receipt_sha256` matches the file.
+  - The receipt's `expansion` block lists every request and decision.
+- **AC8, verdict.** Every attempt ends in exactly one of these outcomes, recorded with its evidence:
+  - **`completed`** (the target): Flow observed the diff and a passing targeted test, then a valid pass from the verifier.
+  - **`failed` by legitimate verifier judgment:** meets AC8.
+  - **Flow defect:** fails AC8. It is recorded under R7 and fixed in its own run.
+  - **Environmental failure (B1, B3):** Ollama is down, Claude authentication expired, a network error, or a timeout hit. It is not a Flow defect.
+    - A v8 transport loss records an interruption. After the environment is fixed, `recover-delivery-lead` resumes the same attempt, and that does not use up an attempt.
+    - An attempt that is superseded or abandoned does count against the two.
+  - **No receipt (B2):** a v8 attempt never seals as unknown. An interrupted or paused attempt with no receipt is recorded (its state, blockers and `inspect-delivery` output) and is either resumed or counted as an attempt when it is superseded.
+- **AC9, evidence preserved.** `validation-results.md` records, for each attempt:
+  - the commands run;
+  - the `inspect-delivery` snapshots before and after each decision;
+  - the receipt path and digest;
+  - the expansion state;
+  - replay-identity observations;
+  - provider usage and timings;
+  - verifier-retry evidence, when a retry happens (B4): the first evaluation, the automatic grant for the retry, and the second evaluation;
+  - the job charter's sha256 (A7);
+  - the targeted test failing at the job commit before the run (A8);
+  - the preflight results (P1, A4, A5);
+  - a verdict for each AC.
+- **AC10, attempt discipline.**
+  - AC1–AC9 apply to each attempt (B5).
+  - At most two live attempts.
+  - A second attempt is a supersede successor with retuned limits, and records why it was needed.
+  - No provider behavior is staged.
+- **AC11, the documentation change.** If the job completes, the produced diff touches only the four approved files, and the targeted test passes in the worktree. A human-readable review of the diff is recorded before any merge.

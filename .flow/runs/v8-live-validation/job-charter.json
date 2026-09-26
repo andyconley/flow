@@ -1,0 +1,41 @@
+{
+  "task": "Document the `flow run decide-expansion` CLI command in Flow. Its actual syntax is `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]`. Add this invocation to [[help.cli_commands]] in scaffolds/default/flow.toml and keep the generated command tables in scaffolds/default/commands/flow-help.md and README.md in sync with it. Add a concise docs/cli-reference.md section explaining that it approves or denies one pending v8 expansion request of a paused attempt, lists its refusals (stale generation, unknown or already decided request, attempt not truly paused, inactive lead, grant past a runner ceiling), and that the attempt then resumes with `flow run recover-delivery-lead`. Edit only the four approved files. The targeted test checks the documented flags and table sync, so use only flags shown in the actual syntax. This change must then be independently reviewed, read-only, by the local-verifier specialist before the job is complete. Return a short summary.",
+  "read_paths": [
+    "scaffolds/default/flow.toml",
+    "scaffolds/default/commands/flow-help.md",
+    "README.md",
+    "docs/cli-reference.md",
+    "scripts/regenerate-flow-help.py",
+    "tests/test_decide_expansion_docs.py",
+    "cli/flow.py"
+  ],
+  "write_paths": [
+    "scaffolds/default/flow.toml",
+    "scaffolds/default/commands/flow-help.md",
+    "README.md",
+    "docs/cli-reference.md"
+  ],
+  "test": {
+    "argv": [
+      "/opt/homebrew/bin/python3.12",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-p",
+      "test_decide_expansion_docs.py"
+    ],
+    "timeout_seconds": 180
+  },
+  "producer_instance_ids": [
+    "docs-editor"
+  ],
+  "verifier_instance_ids": [
+    "local-verifier"
+  ],
+  "baseline": {
+    "kind": "clean",
+    "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

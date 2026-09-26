@@ -1,0 +1,115 @@
+{
+  "problem": "Every v8 chartered path is proven only with stub providers; one live job must exercise the full stack and delegated expansion.",
+  "intended_users": [
+    "Andy, Flow's sole operator."
+  ],
+  "outcomes": [
+    "Document flow run decide-expansion through a live v8 chartered job that exercises an automatic grant, an escalated decision, and a resume, ending in a sealed valid receipt."
+  ],
+  "scope": [
+    "Edit scaffolds/default/flow.toml, scaffolds/default/commands/flow-help.md, README.md, and docs/cli-reference.md to document flow run decide-expansion so the targeted test passes."
+  ],
+  "exclusions": [
+    "No Flow code changes.",
+    "No files outside the four documentation paths.",
+    "No staged provider behavior."
+  ],
+  "constraints": [
+    "Flow grants every provider dispatch.",
+    "The producer edits only the four approved documentation files.",
+    "The verifier is read-only."
+  ],
+  "assumptions": [
+    "The targeted test encodes the documentation contract for decide-expansion."
+  ],
+  "acceptance_criteria": [
+    "decide-expansion is documented with its real flags in the help source, the synchronized generated tables, and the CLI reference, and the targeted test passes."
+  ],
+  "risks": [
+    {
+      "risk": "live provider behavior diverges from hermetic tests",
+      "owner": "Andy",
+      "status": "owned"
+    }
+  ],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {
+      "role": "tech-writer",
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe",
+      "maximum_instances": 1
+    },
+    {
+      "role": "quality-reviewer",
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1
+    }
+  ],
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "ungranted-provider-dispatch"
+  ],
+  "delegation_matrix": {
+    "max_delegations": 2,
+    "delegated_expansion": true
+  },
+  "approval_matrix": {
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant",
+    "acceptance": "Flow_gate"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 1,
+      "max_replans": 0,
+      "runtime_seconds": 600,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "retries": 0,
+      "max_manager_calls": 4,
+      "max_manager_rounds": 6,
+      "max_paid_worker_calls": 1
+    },
+    "observations": [
+      "provider_usage_when_available"
+    ]
+  },
+  "max_verifier_calls": 1,
+  "expansion_headroom": {
+    "manager_calls": 1,
+    "delegations": 1,
+    "verifier_calls": 1
+  },
+  "boundaries": {
+    "artifact_root": ".flow/runs/v8-live-validation",
+    "worktree_policy": "Flow-bound"
+  },
+  "amendment_lineage": [],
+  "approval_history": [
+    {
+      "event": "approve-definition",
+      "authority": "engineer"
+    }
+  ],
+  "next_lane_eligibility": [
+    "delivery"
+  ]
+}
