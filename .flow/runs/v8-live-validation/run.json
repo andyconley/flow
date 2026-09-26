@@ -7,6 +7,7 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/v8-live-validation/acceptance-criteria.md",
+    "archive": ".flow/runs/v8-live-validation/archive.md",
     "handback": ".flow/runs/v8-live-validation/HANDOFF.md",
     "handoff": ".flow/runs/v8-live-validation/implementation-handoff.md",
     "implementation_evidence": ".flow/runs/v8-live-validation/validation-results.md",
@@ -49,23 +50,28 @@
       }
     }
   },
-  "dispositions": {},
+  "dispositions": {
+    "archive_enrichment": "1",
+    "capability_gaps": "recorded",
+    "memory": "updated"
+  },
   "gates": {
     "accept-review": "2026-09-26T13:03:17Z",
     "approve-definition": "2026-09-26T12:18:49Z",
     "approve-plan": "2026-09-26T12:32:14Z",
+    "archive": "2026-09-26T14:04:05Z",
     "mark-handback-ready": "2026-09-26T12:58:02Z",
     "start-definition": "2026-09-26T09:21:11Z",
     "start-implementation": "2026-09-26T12:32:41Z",
     "start-plan": "2026-09-26T12:23:35Z",
     "start-review": "2026-09-26T13:00:10Z"
   },
-  "lane": "review",
-  "last_event": "accept-review",
-  "phase": "review_accepted",
+  "lane": "archive",
+  "last_event": "archive",
+  "phase": "archived",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "review_accepted",
-  "updated_at": "2026-09-26T13:03:17Z",
+  "state": "archived",
+  "updated_at": "2026-09-26T14:04:05Z",
   "work_id": "v8-live-validation"
 }

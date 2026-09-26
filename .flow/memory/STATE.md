@@ -19,6 +19,18 @@
 
 ## Recently completed
 
+- `v8-live-validation` archived 2026-09-26 as "validation found defects" (branch
+  `codex/v8-live-validation`, run artifacts only; not pushed).
+  - The first live v8 chartered job (v0.36.0, real Claude) proved sealed
+    authority, preparation, 3 gated manager calls and a granted edit.
+  - It was interrupted at 137 s by D1: the Claude edit worker's 1 MiB
+    `MAX_EVENT_BYTES` cap is shared by the stdout read limit and the event log.
+  - The expansion chain was not reached.
+  - D2: the help generator emits raw `|` in table cells.
+  - Next: a fix run for D1 (`fix(cli)`) and D2 (`fix(scripts)`), release, then
+    `v8-live-validation-2` with a new job test, baseline and charter sha. The
+    worktree `~/src/flow-v8-live-job` can then be removed.
+
 - `shaper-expansion-approval` (MAF adoption step 5, slice 1) accepted and archived
   2026-09-26 on `codex/step5-shaper-approval-design` (one PR). v8 delegated
   expansion (ADR 0017):
@@ -28,8 +40,8 @@
   - `recover-delivery-lead` replays the paused proposal under the decision.
 
   The full suite passed 1,538 tests with 0 skipped; there were 5 MAF-gated
-  end-to-end cases and 10 mutation checks. Nothing has run live yet.
-  Next: real-world validation runs, then the rest of step 5 (cancellation,
+  end-to-end cases and 10 mutation checks. The first live run found defects (see
+  `v8-live-validation`). Next: the fix run and a second validation run, then the rest of step 5 (cancellation,
   trace correlation, MCP handback, token cap).
 
 - v8 chartered delivery recovery merged and released as v0.35.0 (PRs #26,
