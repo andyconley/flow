@@ -19,14 +19,23 @@
 
 ## Recently completed
 
-- `edit-worker-stream-cap` (scout) archived 2026-09-26 on
-  `codex/edit-worker-stream-cap`, not yet pushed.
+- `edit-worker-stream-cap` (scout) archived 2026-09-26 and merged as PR #38.
   - Fixes D1: the Claude edit worker's cap rises to 16 MiB, partial messages
     are dropped, and the debug trace is truncated rather than aborting.
   - Fixes D2: the help generator escapes `|`.
   - Promotes three gaps to the backlog.
-  - Full suite: 1,543 tests OK, 0 skipped. Next: PR, release v0.36.1, then
-    `v8-live-validation-2`.
+  - Full suite: 1,543 tests OK, 0 skipped. Next: release v0.36.1, then
+    `v8-live-validation-2`, whose job test must expect escaped `\|` rows.
+- `v8-live-validation` archived 2026-09-26 as "validation found defects"
+  (run artifacts only; merged as PR #39).
+  - The first live v8 chartered job (v0.36.0, real Claude) proved sealed
+    authority, preparation, 3 gated manager calls and a granted edit.
+  - It was interrupted at 137 s by D1 (the edit worker's 1 MiB stream cap).
+  - The expansion chain was not reached.
+  - D2: the help generator emitted raw `|` in table cells.
+  - Both are fixed by `edit-worker-stream-cap`. The worktree
+    `~/src/flow-v8-live-job` can be removed once `v8-live-validation-2`
+    creates its own.
 
 - `shaper-expansion-approval` (MAF adoption step 5, slice 1) accepted and archived
   2026-09-26 on `codex/step5-shaper-approval-design` (one PR). v8 delegated
@@ -37,8 +46,8 @@
   - `recover-delivery-lead` replays the paused proposal under the decision.
 
   The full suite passed 1,538 tests with 0 skipped; there were 5 MAF-gated
-  end-to-end cases and 10 mutation checks. Nothing has run live yet.
-  Next: real-world validation runs, then the rest of step 5 (cancellation,
+  end-to-end cases and 10 mutation checks. The first live run found defects (see
+  `v8-live-validation`). Next: the fix run and a second validation run, then the rest of step 5 (cancellation,
   trace correlation, MCP handback, token cap).
 
 - v8 chartered delivery recovery merged and released as v0.35.0 (PRs #26,

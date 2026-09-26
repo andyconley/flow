@@ -1,0 +1,1 @@
+{"attempt_id": "f628faa99c6e4e0e8d18de37a1572370", "blocking": ["c972a99fd20ad9b54f5c839a338783a8431448c4c0e4dd5c0c31e06885a695c3"], "detail": "Claude edit output exceeds limit", "interruption_id": "e3b43bffb0804350b4a9b58c79a90e91", "reason": "reconciliation_required", "receipt_path": null, "resume_available": false, "status": "interrupted"}
