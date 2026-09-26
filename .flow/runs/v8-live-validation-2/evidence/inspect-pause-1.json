@@ -1,0 +1,216 @@
+{
+  "attempt": {
+    "attempt_id": "0fa5602418374dfca3cfcf6f4c6c93d6",
+    "contracts": {
+      "delivery_charter_digest": "dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+      "delivery_lead_claim_digest": "66c9fbe3006328b880b13697394eb315018679c138fcaa2b54867f62d36cc4ac",
+      "handoff_digest": "74b80f1bed82ef3be585a2e2ee1dad9f9728c0b2c82085187ba1cfb47e70ee93",
+      "shaper_contract_digest": "63e720934349380de9e13940198afee547e26d85a31a15a634be1ec06dfedfd7"
+    },
+    "delivery_lead": {
+      "active": true,
+      "current_generation": 1,
+      "generation": 1,
+      "id": "delivery-lead"
+    },
+    "executable": true,
+    "execution_protocol_version": 8,
+    "expansion": {
+      "effective_limits": {
+        "delegations": 2,
+        "manager_calls": 4,
+        "manager_rounds": 6,
+        "paid_worker_calls": 1,
+        "verifier_calls": 1
+      },
+      "headroom_remaining": {
+        "delegations": 1,
+        "manager_calls": 1,
+        "manager_rounds": 0,
+        "paid_worker_calls": 0,
+        "verifier_calls": 1
+      },
+      "requests": [
+        {
+          "amount": 1,
+          "created_at": "2026-09-26T22:47:55.994172+00:00",
+          "denied_row_id": "1009dd3c83c457668d74bcd5eb810992e9cef604d5ccdd8388a31e2f88f96f61",
+          "grant": null,
+          "kind": "delegate",
+          "limits": [
+            "paid_worker_calls"
+          ],
+          "lineage_id": "22ab86c3559e4fd89e47cb9e59ebece2",
+          "owner_generation": 1,
+          "proposal_digest": "b1219cdf9c98d55f75b064035ab815a9f3c18315048eaae9570f9c926177c27b",
+          "rationale": "The docs-editor must first inspect the schema/format of flow.toml, flow-help.md, README.md, and the generator script before making any edits.",
+          "request_id": "exp-34a859d239514e0313c99e86",
+          "status": "pending"
+        }
+      ]
+    },
+    "interruptions": [],
+    "next_action": "decide expansion exp-34a859d239514e0313c99e86",
+    "owner_generation": 1,
+    "pending_approvals": [],
+    "pending_unknowns": [],
+    "predecessors": [
+      {
+        "attempt_id": "22ab86c3559e4fd89e47cb9e59ebece2",
+        "lead_generation": 1,
+        "receipt_sha256": "c5f13fdb144a855bd49c7892b067a0b61acb3eb995f3998bdcef630232313e23",
+        "terminal_status": "failed"
+      }
+    ],
+    "provider_choices": [
+      {
+        "eligible_candidates": [
+          {
+            "assignment_id": "docs-editor",
+            "definition_digest": "9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe",
+            "instance_id": "docs-editor",
+            "model": "sonnet",
+            "provider": "claude",
+            "role": "tech-writer"
+          }
+        ],
+        "rationale": {
+          "facts": [
+            "approved producer identity",
+            "task selected by Magentic progress decision"
+          ],
+          "manager_reason": "The docs-editor must first inspect the schema/format of flow.toml, flow-help.md, README.md, and the generator script before making any edits."
+        },
+        "rejection_reasons": {},
+        "selected_candidate": "docs-editor"
+      }
+    ],
+    "recoveries": [],
+    "recovery": {
+      "blockers": [
+        {
+          "evidence_needed": "flow run decide-expansion --approve|--deny with --expected-generation",
+          "id": "exp-34a859d239514e0313c99e86",
+          "kind": "expansion_request",
+          "reason": "expansion_decision_required",
+          "status": "pending"
+        }
+      ],
+      "checked_by_command": [
+        "live_run_fence",
+        "worktree_drift",
+        "envelope_file"
+      ],
+      "decided_from": "ledger",
+      "mode": null,
+      "reason": "expansion_decision_required",
+      "recoverable": false
+    },
+    "resolutions": [],
+    "resumable": false,
+    "sealed_receipt": {
+      "consistent": true,
+      "file_sha256": null,
+      "ledger_sha256": null,
+      "matches": false,
+      "recovery_block_present": null,
+      "recovery_block_required": false
+    },
+    "status": "started",
+    "verifier_evaluations": [],
+    "verifier_usage": {
+      "consumed": 0,
+      "denied": 0,
+      "maximum": 1,
+      "reserved": 0,
+      "retry_eligible": false
+    },
+    "work_id": "v8-live-validation-2"
+  },
+  "compatibility_diagnostics": [],
+  "contracts": {
+    "charter": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+          "sha256": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation-2/orchestration.json",
+          "sha256": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation-2/requirements.md",
+          "sha256": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+          "sha256": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+        }
+      },
+      "digest": "dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+      "id": "delivery-100706f1d8836f4092f0",
+      "version": 3
+    },
+    "shaper": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+          "sha256": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation-2/orchestration.json",
+          "sha256": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation-2/requirements.md",
+          "sha256": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+          "sha256": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+        }
+      },
+      "digest": "63e720934349380de9e13940198afee547e26d85a31a15a634be1ec06dfedfd7",
+      "id": "shaper-12201b37d83a84ed9907",
+      "version": 3
+    }
+  },
+  "delivery_authority": {
+    "charter_digest": "dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+    "charter_id": "delivery-100706f1d8836f4092f0",
+    "delivery_artifact_dir": "delivery/dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+    "handoff_digest": "74b80f1bed82ef3be585a2e2ee1dad9f9728c0b2c82085187ba1cfb47e70ee93",
+    "lead_claim_digest": "66c9fbe3006328b880b13697394eb315018679c138fcaa2b54867f62d36cc4ac",
+    "lead_claim_path": "delivery/dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-dcba681b6df39f48ec31",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "63e720934349380de9e13940198afee547e26d85a31a15a634be1ec06dfedfd7",
+    "shaper_contract_id": "shaper-12201b37d83a84ed9907",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+        "sha256": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/v8-live-validation-2/orchestration.json",
+        "sha256": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d"
+      },
+      "requirements": {
+        "path": ".flow/runs/v8-live-validation-2/requirements.md",
+        "sha256": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+        "sha256": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+      }
+    }
+  },
+  "lifecycle": {
+    "phase": "implementing",
+    "state": "implementing",
+    "updated_at": "2026-09-26T19:27:19Z"
+  },
+  "work_id": "v8-live-validation-2"
+}
