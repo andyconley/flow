@@ -7,7 +7,9 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/v8-live-validation/acceptance-criteria.md",
+    "handback": ".flow/runs/v8-live-validation/HANDOFF.md",
     "handoff": ".flow/runs/v8-live-validation/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/v8-live-validation/validation-results.md",
     "orchestration_manifest": ".flow/runs/v8-live-validation/orchestration.json",
     "plan": ".flow/runs/v8-live-validation/plan.md",
     "requirements": ".flow/runs/v8-live-validation/requirements.md",
@@ -50,16 +52,17 @@
   "gates": {
     "approve-definition": "2026-09-26T12:18:49Z",
     "approve-plan": "2026-09-26T12:32:14Z",
+    "mark-handback-ready": "2026-09-26T12:58:02Z",
     "start-definition": "2026-09-26T09:21:11Z",
     "start-implementation": "2026-09-26T12:32:41Z",
     "start-plan": "2026-09-26T12:23:35Z"
   },
   "lane": "implement",
-  "last_event": "start-implementation",
-  "phase": "implementing",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-26T12:57:07Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-26T12:58:02Z",
   "work_id": "v8-live-validation"
 }
