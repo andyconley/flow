@@ -14,6 +14,7 @@
     "orchestration_manifest": ".flow/runs/shaper-expansion-approval/orchestration.json",
     "plan": ".flow/runs/shaper-expansion-approval/plan.md",
     "requirements": ".flow/runs/shaper-expansion-approval/requirements.md",
+    "review": ".flow/runs/shaper-expansion-approval/review.md",
     "shaper_intent": ".flow/runs/shaper-expansion-approval/shaper-intent.json",
     "solution": ".flow/runs/shaper-expansion-approval/solution.md",
     "validation_plan": ".flow/runs/shaper-expansion-approval/validation-plan.md"
@@ -58,6 +59,7 @@
     "risk": "owned"
   },
   "gates": {
+    "accept-review": "2026-09-26T08:20:10Z",
     "approve-definition": "2026-09-25T22:04:16Z",
     "approve-plan": "2026-09-25T22:32:41Z",
     "approve-solution": "2026-09-25T22:13:40Z",
@@ -65,14 +67,15 @@
     "start-definition": "2026-09-25T21:44:54Z",
     "start-implementation": "2026-09-25T22:33:13Z",
     "start-plan": "2026-09-25T22:14:44Z",
+    "start-review": "2026-09-26T02:28:04Z",
     "start-solution": "2026-09-25T22:05:56Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-25T23:40:35Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-26T08:20:10Z",
   "work_id": "shaper-expansion-approval"
 }

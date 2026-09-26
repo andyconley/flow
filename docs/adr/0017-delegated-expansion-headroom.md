@@ -114,6 +114,7 @@ started ──expandable denial──▶ auto-grant within headroom ──▶ st
 - **An expired send grant is not a pause.** If a spent unit's send grant expires, that is a runtime failure: ordinary recovery seals it and the unit stays spent.
 - **Decisions queue.** A `decide` holder waits up to 10 seconds on another `decide` holder, so that the loser of a concurrent decision sees `expansion_already_decided`. A `live` or `recovery` holder is still refused at once. A stale holder name can make a decide wait out those 10 seconds and then refuse.
 - **What a receipt proves.** A receipt proves its expansion only together with the ledger's `sealed_receipt_sha256`. The seal compares the whole block with the ledger. The block carries the lineage once, not on each grant, because an attempt belongs to exactly one lineage. Predecessor totals are checked at seal time.
+- **Request evidence (engineer-accepted, 2026-09-26).** A request records its limits, amount, proposal digest and rationale. It does not record diff or test evidence digests, or a snapshot of headroom remaining: nothing authorises from those fields, and the ledger and receipts already carry the evidence.
 - **Headroom remaining is read live.** It is computed from the ledger (`expansion_state`) and not stored on the request.
 
 ## Consequences
