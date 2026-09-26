@@ -1,0 +1,28 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c",
+    "orchestration_manifest": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d",
+    "requirements": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b",
+    "shaper_intent": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+    "orchestration_manifest": ".flow/runs/v8-live-validation-2/orchestration.json",
+    "requirements": ".flow/runs/v8-live-validation-2/requirements.md",
+    "shaper_intent": ".flow/runs/v8-live-validation-2/shaper-intent.json"
+  },
+  "created_at": "2026-09-26T15:49:15Z",
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-26T16:50:51Z",
+    "start-definition": "2026-09-26T15:49:15Z"
+  },
+  "lane": "define",
+  "last_event": "approve-definition",
+  "phase": "definition_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "definition_approved",
+  "updated_at": "2026-09-26T16:50:51Z",
+  "work_id": "v8-live-validation-2"
+}
