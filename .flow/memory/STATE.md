@@ -19,6 +19,19 @@
 
 ## Recently completed
 
+- `ollama-verifier-think` (scout) archived 2026-09-26 on
+  `codex/ollama-verifier-think`.
+  - Fixes D3: Flow's Ollama calls now send `"think": false`. Without it,
+    gemma4's hidden reasoning used the whole 1,024-token budget on a real
+    diff, so the verifier's reply content came back empty.
+  - Found by `v8-live-validation-2` at its preflight verifier gate, before any
+    paid call. That run is paused at `implementing` (launch gate) on
+    `codex/v8-live-validation-2`, with its worktree at
+    `~/src/flow-v8-live-job-2` (job commit `d6d771f2`).
+  - Full suite: 1,544 tests OK, 0 skipped. Next: PR, release v0.36.2,
+    reinstall, update the run's `verifier_gate.py` to send `think` false,
+    re-run the gate, then the launch gate.
+
 - `edit-worker-stream-cap` (scout) archived 2026-09-26 and merged as PR #38.
   - Fixes D1: the Claude edit worker's cap rises to 16 MiB, partial messages
     are dropped, and the debug trace is truncated rather than aborting.
