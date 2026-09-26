@@ -2,6 +2,30 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.37.0](https://github.com/andyconley/flow/compare/v0.36.2...v0.37.0) (2026-09-26)
+
+### Features
+
+* **cli:** record manager progress repairs in the ledger and receipt ([40249cb](https://github.com/andyconley/flow/commit/40249cbab780d52fafc4c2a16ccdb522f3c019c9))
+* **runtime:** add shared manager progress parser ([5c3a4f1](https://github.com/andyconley/flow/commit/5c3a4f1723226c8c9574085c3b5b0435cd3429bf))
+
+### Bug Fixes
+
+* **cli:** replay headroom-granted manager calls during recovery ([0ff2387](https://github.com/andyconley/flow/commit/0ff2387df04b5ac6073264c8f07843cc13bdf953))
+* **runtime:** keep the runner and Flow on one progress decision ([b377351](https://github.com/andyconley/flow/commit/b377351c7d36e4b371f540391d805583557525cb))
+* **runtime:** repair or retry malformed manager progress ([0dddf5f](https://github.com/andyconley/flow/commit/0dddf5f09e417d7f9c7642e9dc7b0d88aca2c4ba))
+* **runtime:** treat a too-deep progress reply as unparsable ([54c271a](https://github.com/andyconley/flow/commit/54c271a49db97c132feffdf2091f7ba8548a2418))
+
+### Documentation
+
+* **adr:** note the shared round-trip check and seal-time block absence ([81531e0](https://github.com/andyconley/flow/commit/81531e009ddea37e2169ae4fd1eac1880e3bd8fc))
+* **adr:** record manager progress repair and bounded retry ([454b34d](https://github.com/andyconley/flow/commit/454b34de9cb6bc98694710f9fe24728d53769cf8))
+* **backlog:** promote two repeated capability gaps ([aaf8195](https://github.com/andyconley/flow/commit/aaf81959fd8a7bb5b28a6e96e037d95be4eb44a5))
+* **run:** accept manager-progress-retry review ([529b1dd](https://github.com/andyconley/flow/commit/529b1dd7a8a9cb9f470ef2fe7a79d52fd5b66ead))
+* **run:** archive manager-progress-retry ([085cb3a](https://github.com/andyconley/flow/commit/085cb3a08067acad8c40a8309b6e4c1f6fd2be44))
+* **run:** define and plan manager-progress-retry ([7d0330e](https://github.com/andyconley/flow/commit/7d0330e50a70b839600fd6541fad819704035214))
+* **run:** record manager-progress-retry validation and handback ([954fbe4](https://github.com/andyconley/flow/commit/954fbe4a3f066c41c20f4d1424d5f23d6e383900))
+
 ## [0.36.2](https://github.com/andyconley/flow/compare/v0.36.1...v0.36.2) (2026-09-26)
 
 ### Bug Fixes
