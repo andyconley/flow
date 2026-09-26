@@ -42,3 +42,11 @@
 
 - **Validated against:** the change itself, with hermetic and MAF-gated tests on the pinned MAF (core 1.19.0, orchestrations 1.2.0). There were no live provider calls. The live proof is `v8-live-validation-2` attempt 2, after release.
 - **Reviews:** architect (plan, A1–A7), quality and test (implementation). All dispositions are in `adversarial-review.md` and `implementation-review.md`.
+
+## Addendum: acceptance review refinements (commit `54c271a`)
+
+- **`RecursionError`:** a reply nested too deeply is now unparsable, so it can no longer strand a completed paid call as `unknown`. The mutation check (dropping the guard) was caught.
+- **Validator order:** the receipt validator recomputes `manager_progress` only after the manager-call entries are validated.
+- **Test:** the repair test now asserts that the valid case isn't repaired.
+- **Full suite after these changes:** **1,562 tests OK, 0 skipped**, with `FLOW_MAF_PYTHON`.
+- **AC4 is recorded as partly met.** A retry denied at the runner ceiling isn't tested specifically (see `review.md` R2).
