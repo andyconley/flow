@@ -230,7 +230,7 @@ async def _run(start: dict[str, Any]) -> None:
                 _validate_progress(progress, set(roster))
                 response_text = parsed.canonical
                 selected_task = progress["instruction_or_question"]["answer"]
-                selected_reason = progress["next_speaker"]["reason"]
+                selected_reason = progress["next_speaker"].get("reason")
                 if not isinstance(selected_task, str) or not selected_task.strip() or not isinstance(selected_reason, str) or not selected_reason.strip():
                     raise PolicyAbort("manager progress lacks a bounded task and rationale")
                 if len(selected_task.encode()) > MAX_TASK_BYTES or len(selected_reason.encode()) > MAX_TASK_BYTES:

@@ -76,9 +76,9 @@ class RetryPastBaseIsGrantedFromHeadroomTests(SpoilingManagerFixture):
                              ("empty", {"repaired": [], "unparsable": []}), ("null", None)):
             with self.subTest(label), self.assertRaises(ContractError):
                 execution_contracts.validate_receipt(envelope, {**receipt, "manager_progress": block})
-        with self.assertRaises(ContractError):
-            execution_contracts.validate_receipt(envelope, {**receipt, "manager_progress": receipt["manager_progress"],
-                                                            "execution_protocol_version": 7})
+        # The protocol guard itself, not the earlier envelope-protocol check.
+        with self.assertRaisesRegex(ContractError, "requires protocol v8"):
+            execution_contracts._validate_manager_progress({**receipt, "execution_protocol_version": 7})
 
 
 @requires_maf

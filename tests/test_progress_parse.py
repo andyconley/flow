@@ -41,6 +41,9 @@ def corpus() -> dict[str, str]:
         "valid_escapes": good.replace("Review the diff.", 'q \\" s \\\\ n \\n u \\u00e9 /\\/'),
         "fenced_object_in_instruction": json.dumps(ledger(instruction_or_question={
             "reason": "r", "answer": "Check ```{\"a\": 1}``` in the table."})),
+        # Escaped backticks become a literal fence once re-serialized.
+        "escaped_fence_in_string": good.replace("Review the diff.",
+                                                "See \\u0060\\u0060\\u0060{\\\"a\\\": 1}\\u0060\\u0060\\u0060 here"),
         "garbage": "I think the local-verifier should go next.",
         "unbalanced": good[:-1],
         "missing_item": json.dumps({key: value for key, value in ledger().items() if key != "is_in_loop"}),
@@ -77,12 +80,24 @@ class ProgressParseTests(unittest.TestCase):
                 self.assertTrue(parsed.repaired or name == "escaped_backslash_then_backtick")
                 self.assertEqual(parsed.value["instruction_or_question"]["answer"], expected)
 
+    def test_repair_keeps_valid_pairs_in_a_reply_that_needs_repair(self) -> None:
+        # The scan only runs on a broken reply, so its valid pairs need their own case.
+        text = json.dumps(ledger()).replace("Review the diff.", "@@").replace(
+            '"@@"', '"path C:\\\\dir, quote \\" and tab \\t, then \\` bad"')
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(text)
+        parsed = parse_progress(text)
+        self.assertTrue(parsed.repaired)
+        self.assertEqual(parsed.value["instruction_or_question"]["answer"],
+                         'path C:\\dir, quote " and tab \t, then \\` bad')
+
     def test_classification(self) -> None:
         expected = {
             "valid": "parsed", "fenced": "parsed", "wrapped": "parsed", "python_literals": "parsed",
             "invalid_escape": "repaired", "valid_escapes": "parsed",
             # MAF's fence rule wins even inside a string, so this is retried, as MAF would.
             "fenced_object_in_instruction": "unparsable", "garbage": "unparsable", "unbalanced": "unparsable",
+            "escaped_fence_in_string": "unparsable",
             "missing_item": "unparsable", "non_object_item": "unparsable",
             # The first balanced object is the ledger, as for MAF.
             "item_without_answer": "unparsable", "list_top_level": "parsed",

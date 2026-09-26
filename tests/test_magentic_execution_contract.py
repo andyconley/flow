@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
@@ -218,6 +219,28 @@ class MagenticContractTests(unittest.TestCase):
                 other = {"another": "choice"}
                 ledger.observe_manager_response(request["call_id"], {**response, "output": other, "output_sha256": digest(other)}, generation=1)
             self.assertEqual(ledger.snapshot(env["attempt_id"])["manager_calls"][0]["result"], response)
+
+    def test_progress_diagnostic_event_commits_with_the_observation(self) -> None:
+        # ADR 0018: the manager_progress event shares the observation's transaction,
+        # so a failure while classifying leaves neither write behind.
+        env = envelope()
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = ExecutionLedger(Path(temporary) / "ledger.sqlite")
+            ledger.create_attempt(env)
+            request = manager_call(env, 1, phase="progress")
+            grant = ledger.decide_manager_call(env, request, generation=1)
+            self.assertTrue(ledger.consume_manager_grant(request["call_id"], grant["grant_id"], generation=1))
+            output = "not JSON"
+            response = {"status": "completed", "output": output, "output_sha256": digest(output)}
+            with patch("execution_ledger.classify_progress", side_effect=RuntimeError("classifier down")):
+                with self.assertRaisesRegex(RuntimeError, "classifier down"):
+                    ledger.observe_manager_response(request["call_id"], response, generation=1)
+            snapshot = ledger.snapshot(env["attempt_id"])
+            self.assertEqual(snapshot["manager_calls"][0]["status"], "started")
+            self.assertNotIn("manager_response_observed", [item["event"] for item in snapshot["events"]])
+            ledger.observe_manager_response(request["call_id"], response, generation=1)
+            events = [item["event"] for item in ledger.snapshot(env["attempt_id"])["events"]]
+            self.assertEqual(events[-2:], ["manager_response_observed", "manager_progress_unparsable"])
 
     def test_worker_checkpoint_binds_pending_maf_request_and_file_digest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

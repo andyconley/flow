@@ -79,6 +79,14 @@ class StockDeliveryLeadTest(unittest.TestCase):
                         spoil = script.pop(0) if script else "ok"
                         if spoil == "bad":
                             answer = "not JSON"
+                        elif spoil == "shape":
+                            value = json.loads(answer)
+                            del value["is_in_loop"]
+                            answer = json.dumps(value)
+                        elif spoil == "noreason":
+                            value = json.loads(answer)
+                            del value["next_speaker"]["reason"]
+                            answer = json.dumps(value)
                         elif spoil == "escape":
                             answer = answer.replace('"Analyze the fixture"', '"Analyze the `fixture` table row \\`| a |\\`"')
                     else:
@@ -179,6 +187,23 @@ class StockDeliveryLeadTest(unittest.TestCase):
         self.assertEqual(progress[0]["manager_round"], progress[1]["manager_round"])
         self.assertEqual(progress[0]["prompt_digest"], progress[1]["prompt_digest"])
         self.assertNotEqual(progress[0]["call_id"], progress[1]["call_id"])
+
+    def test_progress_missing_a_ledger_item_is_retried_like_unparsable(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=8,
+                                                   progress_script=["shape"])
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "progress", "final"])
+        self.assertEqual(actions, ["test-engineer-1"])
+        progress = [item for item in self.last_manager_requests if item["phase"] == "progress"]
+        self.assertEqual(progress[0]["manager_round"], progress[1]["manager_round"])
+
+    def test_progress_without_a_speaker_reason_aborts_without_retry_or_replan(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=8,
+                                                   progress_script=["noreason"])
+        self.assertEqual(phases, ["facts", "plan", "progress"])
+        self.assertEqual(actions, [])
+        self.assertEqual(terminal["type"], "error")
+        self.assertIn("lacks a bounded task and rationale", terminal["message"])
+        self.assertEqual(self.last_replan_requests, [])
 
     def test_invalid_escape_progress_is_repaired_without_an_extra_call(self):
         phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=8,

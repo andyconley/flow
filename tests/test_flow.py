@@ -3505,6 +3505,7 @@ class FlowCliTests(FlowCliHarness):
                 "project",
                 "render",
                 "runner_limits",
+                "runner_progress",
                 "runstate",
                 "runtime_smoke",
                 "session_lookup",

@@ -104,7 +104,16 @@ def parse_progress(text: str) -> ProgressParse:
             repaired = value is not None
     if value is None or not well_shaped(value):
         return ProgressParse(None, False, None)
-    return ProgressParse(value, repaired, json.dumps(value, ensure_ascii=False))
+    canonical = json.dumps(value, ensure_ascii=False)
+    # MAF re-extracts the canonical text with the same rules. Re-serializing can
+    # turn an escaped fence inside a string into a literal one that MAF would
+    # extract instead, so the round trip must give back the same object.
+    try:
+        if _loads(extract_candidate(canonical)) != value:
+            return ProgressParse(None, False, None)
+    except ValueError:
+        return ProgressParse(None, False, None)
+    return ProgressParse(value, repaired, canonical)
 
 
 def classify(text: str) -> str:

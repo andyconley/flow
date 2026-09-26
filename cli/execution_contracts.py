@@ -962,6 +962,8 @@ def manager_progress_block(manager_calls: list[dict[str, Any]]) -> dict[str, lis
     """
     block: dict[str, list[str]] = {"repaired": [], "unparsable": []}
     for call in manager_calls:
+        if not isinstance(call, dict):
+            raise ContractError("manager call entry is invalid")
         result = call.get("result")
         if (call.get("status") != "completed" or not isinstance(call.get("request"), dict)
                 or call["request"].get("phase") != "progress" or not isinstance(result, dict)
