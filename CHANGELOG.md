@@ -2,6 +2,16 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.36.2](https://github.com/andyconley/flow/compare/v0.36.1...v0.36.2) (2026-09-26)
+
+### Bug Fixes
+
+* **cli:** disable model thinking on Ollama verifier calls ([f8e8c18](https://github.com/andyconley/flow/commit/f8e8c18d1a136df7a60fbec2daa49e6f4b89826c))
+
+### Documentation
+
+* **run:** archive ollama-verifier-think scout ([66c0d3a](https://github.com/andyconley/flow/commit/66c0d3a4cbde755b05e81c643d0249ba8c60df6f))
+
 ## [0.36.1](https://github.com/andyconley/flow/compare/v0.36.0...v0.36.1) (2026-09-26)
 
 ### Bug Fixes
