@@ -1,0 +1,3 @@
+2026-09-26T20:40:44Z Andy: Go (launch gate, attempt 1)
+flow run execute-chartered-job v8-live-validation-2 --worktree ~/src/flow-v8-live-job-2 --source-commit d6d771f2eccdcdd4a0ab43b9691b8cf8f92823a2 --project-root ~/src/flow --json
+rc=1 wall=158s
