@@ -8,3 +8,7 @@ rc=1 wall=37s
 flow run decide-expansion v8-live-validation-2 0fa5602418374dfca3cfcf6f4c6c93d6 exp-34a859d239514e0313c99e86 --approve --expected-generation 1 --actor andy --explanation "Approved" --project-root ~/src/flow --json
 flow run recover-delivery-lead v8-live-validation-2 0fa5602418374dfca3cfcf6f4c6c93d6 --project-root ~/src/flow --json
 rc=1 wall=21s
+2026-09-26T23:24:00Z plan step 16 (cleanup of first run's worktree; plan's SHA was mistyped, resolved from the worktree HEAD):
+git tag archive/v8-live-validation-job c864241ab064faf706ab14f09fe7ca9c28daf3c0
+git worktree remove --force ~/src/flow-v8-live-job
+git branch -D job/decide-expansion-docs
