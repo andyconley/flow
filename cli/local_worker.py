@@ -65,7 +65,10 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
                     or parsed.username or parsed.password or parsed.query or parsed.fragment
                     or parsed.port is None):
                 raise ContractError("Ollama endpoint override requires an explicit loopback observer")
-        request_body = {"model": envelope["model"], "stream": False, "messages": [
+        # "think": false keeps a reasoning model's hidden trace from spending
+        # the num_predict budget: gemma4 otherwise returns empty content for a
+        # real diff. Models without a thinking mode accept and ignore it.
+        request_body = {"model": envelope["model"], "stream": False, "think": False, "messages": [
             {"role": "system", "content": envelope["instructions"]},
             {"role": "user", "content": envelope["task"]},
         ], "options": {"num_predict": STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256}}
