@@ -14,12 +14,15 @@ from pathlib import Path
 from typing import Any
 
 from runtime.maf_runner.limits import MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS
+from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
 MAX_MANAGER_MESSAGE_BYTES = 48000
+# One progress step gets its first reply plus two retries (ADR 0018).
+PROGRESS_ATTEMPTS = 3
 
 
 class PolicyAbort(BaseException):
@@ -68,20 +71,23 @@ def _phase(prompt: str) -> str:
     raise RuntimeError("unrecognized stock manager phase")
 
 
-def _validate_progress(text: str, roster: set[str]) -> None:
+def _validate_progress(value: dict[str, Any], roster: set[str]) -> None:
     """Reject invalid speakers before MAF can fall back to the first worker."""
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise PolicyAbort("manager progress is not valid JSON") from exc
-    speaker = value.get("next_speaker") if isinstance(value, dict) else None
-    selected = speaker.get("answer") if isinstance(speaker, dict) else None
-    satisfied = value.get("is_request_satisfied") if isinstance(value, dict) else None
-    complete = satisfied.get("answer") if isinstance(satisfied, dict) else None
+    selected = value["next_speaker"].get("answer")
+    complete = value["is_request_satisfied"].get("answer")
     if not isinstance(selected, str) or selected not in roster:
         raise PolicyAbort("manager selected an unlisted specialist")
     if not isinstance(complete, bool):
         raise PolicyAbort("manager progress lacks completion decision")
+
+
+def _maf_reads_canonical(canonical: str, value: dict[str, Any]) -> bool:
+    """MAF must parse Flow's canonical text back to the object Flow validated."""
+    from agent_framework_orchestrations._magentic import _extract_json
+    try:
+        return _extract_json(canonical) == value
+    except Exception:
+        return False
 
 
 async def _run(start: dict[str, Any]) -> None:
@@ -128,6 +134,8 @@ async def _run(start: dict[str, Any]) -> None:
     previous_action_id: str | None = None
     selected_task = ""
     selected_reason = ""
+    # Consecutive unparsable progress replies in the current progress step.
+    unparsable_streak = 0
     job = envelope.get("job_contract") if protocol_version in {7, 8} else None
 
     def provider_choice(assignment: dict[str, Any]) -> dict[str, Any]:
@@ -164,7 +172,7 @@ async def _run(start: dict[str, Any]) -> None:
             return object()
 
         async def run(self, messages: list[Message], *, session: object | None = None) -> AgentResponse:
-            nonlocal manager_call, manager_round, replan_sequence, selected_task, selected_reason
+            nonlocal manager_call, manager_round, replan_sequence, selected_task, selected_reason, unparsable_streak
             if not messages or not isinstance(messages[-1].text, str):
                 raise RuntimeError("stock manager sent invalid messages")
             prompt = messages[-1].text
@@ -176,7 +184,9 @@ async def _run(start: dict[str, Any]) -> None:
             manager_call += 1
             if manager_call > MAX_MANAGER_CALLS:
                 raise PolicyAbort("manager model call limit reached")
-            if phase == "progress" and manager_call > 3:
+            # A retry of an unparsable progress reply is a new manager call but
+            # not a new round: MAF's own round count does not move either.
+            if phase == "progress" and manager_call > 3 and unparsable_streak == 0:
                 manager_round += 1
             if manager_round > MAX_MANAGER_ROUNDS:
                 raise PolicyAbort("manager round limit reached")
@@ -206,8 +216,19 @@ async def _run(start: dict[str, Any]) -> None:
                 raise PolicyAbort("invalid Flow manager response")
             response_text = reply["text"]
             if phase == "progress":
-                _validate_progress(response_text, set(roster))
-                progress = json.loads(response_text)
+                parsed = parse_progress(response_text)
+                if parsed.value is None or not _maf_reads_canonical(parsed.canonical, parsed.value):
+                    unparsable_streak += 1
+                    if unparsable_streak >= PROGRESS_ATTEMPTS:
+                        # A BaseException: MAF would otherwise catch its own
+                        # exhausted-retry error and replan (ADR 0018).
+                        raise PolicyAbort(f"manager progress unparsable after {PROGRESS_ATTEMPTS} attempts")
+                    # MAF cannot parse the sentinel, so its loop retries.
+                    return AgentResponse(messages=[Message(role="assistant", contents=[UNPARSABLE_SENTINEL])])
+                unparsable_streak = 0
+                progress = parsed.value
+                _validate_progress(progress, set(roster))
+                response_text = parsed.canonical
                 selected_task = progress["instruction_or_question"]["answer"]
                 selected_reason = progress["next_speaker"]["reason"]
                 if not isinstance(selected_task, str) or not selected_task.strip() or not isinstance(selected_reason, str) or not selected_reason.strip():
@@ -256,7 +277,7 @@ async def _run(start: dict[str, Any]) -> None:
             await ctx.send_message(GroupChatResponseMessage(message=Message(role="assistant", contents=[summary], author_name=self.id)))
 
     manager = StandardMagenticManager(ManagerProxy(), max_reset_count=MAX_REPLANS, max_round_count=MAX_MANAGER_ROUNDS,
-                                      progress_ledger_retry_count=1)
+                                      progress_ledger_retry_count=PROGRESS_ATTEMPTS)
     workflow = MagenticBuilder(participants=[GuardedParticipant(a) for a in assignments], manager=manager,
                                enable_plan_review=False, checkpoint_storage=storage, name=workflow_name).build()
     resume = start.get("resume") if start.get("type") == "resume" else None
@@ -301,6 +322,9 @@ async def _run(start: dict[str, Any]) -> None:
             raise PolicyAbort("restore action identity or result differs")
         manager_call = resume["manager_calls_committed"]
         manager_round = saved["manager_turn"]
+        # A pending-action checkpoint exists only after a progress reply
+        # parsed, so no retry is in flight at a restore point.
+        unparsable_streak = 0
         replan_sequence = resume["replans_committed"]
         action_number = saved["sequence"]
         if mode == "answer":
