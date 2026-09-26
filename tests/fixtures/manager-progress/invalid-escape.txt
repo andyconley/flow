@@ -1,0 +1,22 @@
+{
+  "is_request_satisfied": {
+    "reason": "docs-editor has reported edits to all four files including flow.toml, both generated tables, and a new cli-reference.md section, and claims a targeted test pass with a diff hash. However, this has not yet been independently reviewed by local-verifier as explicitly required by the task ('This change must then be independently reviewed, read-only, by the local-verifier specialist before the job is complete'). Also, docs-editor's own summary is not fully trustworthy since it admitted it cannot run git diff/status directly, yet later pasted what appears to be verified diff output - this needs a fresh, independent read-only check against the task requirements (raw vs escaped pipes, exact flag list, refusal list completeness, four-file-only scope).",
+    "answer": false
+  },
+  "is_in_loop": {
+    "reason": "No repeated identical requests or responses yet; this is the first handoff to local-verifier after docs-editor's initial edit report, so this is forward movement rather than a loop.",
+    "answer": false
+  },
+  "is_progress_being_made": {
+    "reason": "docs-editor produced concrete edits to all four target files with literal content shown, moving the task from planning to a reviewable state.",
+    "answer": true
+  },
+  "next_speaker": {
+    "reason": "The task explicitly requires independent, read-only review by local-verifier before completion, and that step has not yet occurred.",
+    "answer": "local-verifier"
+  },
+  "instruction_or_question": {
+    "reason": "local-verifier is read-only and can only analyze supplied task text, so it needs the exact content docs-editor reported in order to check compliance against the requirements.",
+    "answer": "Please independently review (read-only, based only on the text supplied here) the following reported changes for correctness against these requirements: (1) scaffolds/default/flow.toml must have a new [[help.cli_commands]] entry with invocation exactly `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` using the RAW unescaped `|`; (2) the corresponding rows added to scaffolds/default/commands/flow-help.md and README.md must be identical to each other and must escape every `|` as `\\|`, i.e. contain `(--approve \\| --deny)`, with every other character matching the flow.toml invocation exactly; (3) docs/cli-reference.md must have a new concise section for `flow run decide-expansion` stating it approves or denies one pending v8 expansion request of a paused attempt, listing refusal cases (stale generation, unknown or already decided request, attempt not truly paused, inactive lead, grant past a runner ceiling), and stating the attempt resumes via `flow run recover-delivery-lead`; (4) only these four files should have been modified, and only the flags shown in the given syntax should appear anywhere in the new documentation (no invented flags). Here is docs-editor's reported diff/content to check: the flow.toml entry (invocation and summary lines), the README.md/flow-help.md table row `| \`flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \\| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]\` | Approve or deny one pending v8 expansion request of a paused attempt; resume with \`flow run recover-delivery-lead\` |`, and the docs/cli-reference.md section header `### \`flow run decide-expansion <work-id> <attempt-id> <request-id>\`` plus its described content (what it does, refusal cases, resume pointer). Flag any deviation from these requirements, any missing refusal case, any flag not present in the original syntax, or any inconsistency between the flow.toml invocation and the two table rows."
+  }
+}

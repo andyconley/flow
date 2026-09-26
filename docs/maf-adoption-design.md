@@ -21,6 +21,7 @@ Progress against the adoption sequence below:
   - The Shaper may seal expansion headroom for delegations, paid calls, verifier calls, manager calls, and manager rounds, bounded by the runner ceilings.
   - A v8 limit hit within the lineage's headroom is granted automatically. Anything beyond it pauses the attempt for `flow run decide-expansion`, and `recover-delivery-lead` replays the paused proposal under the decision.
   - Receipts list and recompute every request and grant. Replans stay unexpandable, and the optional specialist pool is deferred.
+- **Manager progress repair and retry (ADR 0018):** a malformed Magentic progress reply is repaired (invalid JSON escapes only) or retried as up to two extra Flow-gated manager calls, which count against the limits but not as rounds. The third unparsable reply fails the attempt without a replan, and receipts carry a recomputed `manager_progress` block.
 - **Step 5, not built yet:**
   - Cancellation, and recovery of a stuck run beyond the operator reconcile route.
   - Trace correlation across Flow, MAF, and provider sessions.

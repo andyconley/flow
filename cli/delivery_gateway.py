@@ -1290,6 +1290,10 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         if expansion is not None:
             # Added only when the lineage expanded, so other receipts stay byte-identical.
             receipt["expansion"] = expansion
+        manager_progress = ledger.manager_progress_receipt(aid)
+        if manager_progress is not None:
+            # Added only when a progress reply was repaired or retried (ADR 0018).
+            receipt["manager_progress"] = manager_progress
         if snapshot.get("recoveries"):
             # A receipt on disk while the attempt is started is an unsealed
             # draft from a process that died before finish_attempt.
@@ -1419,8 +1423,11 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                 # A replayed, never-sent grant would expire when consumed.
                 decision = ledger.reissue_recovered_manager_grant(request["call_id"], generation=generation)
             elif (recovery is not None and decision.get("replayed") and not decision["allowed"]
+                    and decision.get("result") is None
                     and (decision.get("expansion") or {}).get("status") == "granted"):
                 # The paused call is back under its own identity: allow it once.
+                # A replayed call that already completed (for example one granted
+                # from charter headroom) keeps its recorded answer instead.
                 decision = ledger.reissue_expanded_manager_grant(request["call_id"], generation=generation)
         if decision.get("replayed") and isinstance(decision.get("result"), dict):
             observed = decision["result"].get("output")

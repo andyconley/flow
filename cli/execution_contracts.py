@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from runner_limits import MAX_ACTIONS, MAX_CONCURRENT, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS, MAX_VERIFIER_CALLS
+from runner_progress import classify as classify_progress
 
 try:
     from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
@@ -953,6 +954,42 @@ def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
         seen_actions.add(action["action_id"])
 
 
+def manager_progress_block(manager_calls: list[dict[str, Any]]) -> dict[str, list[str]] | None:
+    """Repaired and unparsable progress replies among completed manager calls (ADR 0018).
+
+    Recomputed from each call's recorded request phase and response text, so a
+    receipt cannot claim a different history than its own manager calls show.
+    """
+    block: dict[str, list[str]] = {"repaired": [], "unparsable": []}
+    for call in manager_calls:
+        if not isinstance(call, dict):
+            raise ContractError("manager call entry is invalid")
+        result = call.get("result")
+        if (call.get("status") != "completed" or not isinstance(call.get("request"), dict)
+                or call["request"].get("phase") != "progress" or not isinstance(result, dict)
+                or not isinstance(result.get("output"), str)):
+            continue
+        kind = classify_progress(result["output"])
+        if kind in block:
+            block[kind].append(call["call_id"])
+    return block if block["repaired"] or block["unparsable"] else None
+
+
+def _validate_manager_progress(receipt: dict[str, Any]) -> None:
+    """A present block must be v8, non-empty and match its own manager calls.
+
+    Absence is checked against the ledger when the attempt seals; receipts
+    sealed before ADR 0018 carry no block.
+    """
+    if "manager_progress" not in receipt:
+        return
+    if receipt["execution_protocol_version"] != 8:
+        raise ContractError("manager_progress evidence requires protocol v8")
+    block = receipt["manager_progress"]
+    if block is None or block != manager_progress_block(receipt["manager_calls"]):
+        raise ContractError("manager_progress evidence differs from the receipt's manager calls")
+
+
 def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
     require_fields(receipt, ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest",
                              "status", "execution_protocol_version", "roster", "manager_calls", "actions",
@@ -1013,6 +1050,8 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         seen_calls.add(request["call_id"])
         if item["status"] == "completed" and not isinstance(item.get("result"), dict):
             raise ContractError("Magentic completed manager call lacks observed result")
+    # After the manager calls themselves are validated, so recomputation reads sound entries.
+    _validate_manager_progress(receipt)
     seen_actions: set[str] = set()
     for item in receipt["actions"]:
         if not isinstance(item, dict) or not isinstance(item.get("request"), dict):
