@@ -1,0 +1,387 @@
+{
+  "schema_version": 1,
+  "work_id": "v8-live-validation",
+  "mode": "delegated",
+  "risk": {
+    "classification": "high",
+    "hard_triggers": [
+      "security_or_privacy_boundary"
+    ],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "rationale": "Live paid provider dispatch and repository mutation cross permission boundaries, and delegated expansion grants extra provider calls without a per-request decision."
+  },
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/v8-live-validation/reconciliation.md",
+    "status": "resolved",
+    "claims": []
+  },
+  "verification": {
+    "artifact_path": ".flow/runs/v8-live-validation/verification.md",
+    "evidence_collector_assignment": "definition-root",
+    "independent": true,
+    "producer_assignments": [
+      "definition-root",
+      "docs-editor"
+    ],
+    "verifier_assignment": "adversarial-architecture"
+  },
+  "assignments": [
+    {
+      "id": "definition-root",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-definition-root"
+      },
+      "brief_path": ".flow/runs/v8-live-validation/requirements.md",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/v8-live-validation",
+        "cli",
+        "docs",
+        "runtime",
+        "tests",
+        "scaffolds/default",
+        "README.md",
+        ".flow/runs/maf-charter-job-launcher",
+        ".flow/runs/shaper-expansion-approval"
+      ],
+      "write_scopes": [
+        ".flow/runs/v8-live-validation"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/v8-live-validation/requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Live validation requirements, acceptance criteria, Shaper intent, and job charter drafted from engineer decisions"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "run-authoring"
+      }
+    },
+    {
+      "id": "adversarial-product",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-v8-live-adversarial-product"
+      },
+      "brief_path": ".flow/runs/v8-live-validation/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation/briefs/adversarial-review.md",
+        ".flow/runs/v8-live-validation/requirements.md",
+        ".flow/runs/v8-live-validation/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation/shaper-intent.json"
+      ],
+      "read_scopes": [
+        ".flow/runs/v8-live-validation",
+        "cli",
+        "docs",
+        "runtime",
+        "tests",
+        "scaffolds/default",
+        "README.md"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/v8-live-validation/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Adversarial findings with evidence and a recommended disposition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "adversarial-requirements",
+      "lane": "define",
+      "role": "business-analyst",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-business-analyst-v8-live-adversarial-requirements"
+      },
+      "brief_path": ".flow/runs/v8-live-validation/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation/briefs/adversarial-review.md",
+        ".flow/runs/v8-live-validation/requirements.md",
+        ".flow/runs/v8-live-validation/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation/shaper-intent.json"
+      ],
+      "read_scopes": [
+        ".flow/runs/v8-live-validation",
+        "cli",
+        "docs",
+        "runtime",
+        "tests",
+        "scaffolds/default",
+        "README.md"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/v8-live-validation/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Adversarial findings with evidence and a recommended disposition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "adversarial-architecture",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-v8-live-adversarial-architecture"
+      },
+      "brief_path": ".flow/runs/v8-live-validation/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation/briefs/adversarial-review.md",
+        ".flow/runs/v8-live-validation/requirements.md",
+        ".flow/runs/v8-live-validation/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation/shaper-intent.json"
+      ],
+      "read_scopes": [
+        ".flow/runs/v8-live-validation",
+        "cli",
+        "docs",
+        "runtime",
+        "tests",
+        "scaffolds/default",
+        "README.md"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/v8-live-validation/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Adversarial findings with evidence and a recommended disposition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "magentic-manager",
+      "lane": "implement",
+      "role": "delivery-lead",
+      "provider": {
+        "kind": "agent",
+        "id": "magentic-manager"
+      },
+      "brief_path": ".flow/runs/v8-live-validation/job-charter.json",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation/requirements.md",
+        ".flow/runs/v8-live-validation/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation/job-charter.json"
+      ],
+      "read_scopes": [
+        "scaffolds/default",
+        "README.md",
+        "docs",
+        "scripts",
+        "tests",
+        "cli",
+        ".flow"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/v8-live-validation/execution/magentic-manager.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Deliver one bounded response under Flow policy"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "chartered-live-job"
+      },
+      "execution": {
+        "provider": "claude",
+        "model": "sonnet",
+        "timeout_seconds": 120,
+        "max_output_chars": 4096
+      }
+    },
+    {
+      "id": "docs-editor",
+      "lane": "implement",
+      "role": "tech-writer",
+      "provider": {
+        "kind": "agent",
+        "id": "docs-editor"
+      },
+      "brief_path": ".flow/runs/v8-live-validation/job-charter.json",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation/requirements.md",
+        ".flow/runs/v8-live-validation/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation/job-charter.json"
+      ],
+      "read_scopes": [
+        "scaffolds/default",
+        "README.md",
+        "docs",
+        "scripts",
+        "tests",
+        "cli"
+      ],
+      "write_scopes": [
+        "scaffolds/default/flow.toml",
+        "scaffolds/default/commands/flow-help.md",
+        "README.md",
+        "docs/cli-reference.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": "README.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Deliver one bounded response under Flow policy"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "chartered-live-job"
+      },
+      "execution": {
+        "provider": "claude",
+        "model": "sonnet",
+        "timeout_seconds": 300,
+        "max_output_chars": 4096
+      }
+    },
+    {
+      "id": "local-verifier",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "local-verifier"
+      },
+      "brief_path": ".flow/runs/v8-live-validation/job-charter.json",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation/requirements.md",
+        ".flow/runs/v8-live-validation/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation/job-charter.json"
+      ],
+      "read_scopes": [
+        "scaffolds/default",
+        "README.md",
+        "docs",
+        "scripts",
+        "tests",
+        "cli"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/v8-live-validation/execution/local-verifier.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Deliver one bounded response under Flow policy"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "chartered-live-job"
+      },
+      "execution": {
+        "provider": "ollama",
+        "model": "gemma4:26b",
+        "timeout_seconds": 120,
+        "max_output_chars": 4096
+      }
+    }
+  ]
+}

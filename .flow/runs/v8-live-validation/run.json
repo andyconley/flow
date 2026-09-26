@@ -20,11 +20,11 @@
     "charter_id": "delivery-5b6e3bf117fdd0bd6eb3",
     "delivery_artifact_dir": "delivery/7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed",
     "handoff_digest": "788a36047facd5dce51a1185bd7f296e694e5f3305a4686e1fc08c56d7ab1e57",
-    "lead_claim_digest": "c2939bad0d5ad3e3a5f4825613319b79f43b954859b36d77ef9e1b74a582f916",
-    "lead_claim_path": "delivery/7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed/lead-claim.json",
+    "lead_claim_digest": "1e9c1cc3bde89326233979eeefc91b2a2c5bf2be0eec2cdbcbb324901dcbd03e",
+    "lead_claim_path": "delivery/7a2e250b9d1f20e7d9bb1fae971498a295cbb35d79a5973ad7ad0cfe018b81ed/lead-claim-g1-released.json",
     "logical_delivery_attempt_id": "logical-7a2e250b9d1f20e7d9bb",
     "owner_generation": 1,
-    "owner_status": "active",
+    "owner_status": "released",
     "shaper_contract_digest": "2f2ca8a996b77819caabe61c62bf0b7544b5d7113c0209870e8192269da7a8e6",
     "shaper_contract_id": "shaper-e980c3d1d3d36ae9e9d2",
     "source_digests": {
@@ -60,6 +60,6 @@
   "protocol_revision": 2,
   "schema_version": 1,
   "state": "implementing",
-  "updated_at": "2026-09-26T12:32:41Z",
+  "updated_at": "2026-09-26T12:57:07Z",
   "work_id": "v8-live-validation"
 }
