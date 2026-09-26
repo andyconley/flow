@@ -52,3 +52,22 @@ d6d771f2eccdcdd4a0ab43b9691b8cf8f92823a2
 porcelain lines:        0
 NAME          ID              SIZE     PROCESSOR    CONTEXT    UNTIL   
 gemma4:26b    5571076f3d70    17 GB    100% GPU     32768      Forever    
+== attempt 2 preflight, 2026-09-26T22:46:16Z
+== worktree reset: 4 files restored to d6d771f2 (attempt-1 diff saved, sha256 f62cfcf9…)
+== flow version
+current: v0.37.0
+== digests
+tech-writer 9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe
+quality-reviewer 1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718
+== warm
+total_s 0.72
+== claude auth
+  "loggedIn": true,
+== MAF
+ok
+== charter sha256
+fef217325168cf4fbe378f605a006d4315bbebb98af106cd7e9c8ce943fdf798  .flow/runs/v8-live-validation-2/job-charter.json
+== orchestration
+orchestration valid: v8-live-validation-2 (dispatch)
+== baseline test
+FAILED (failures=2)
