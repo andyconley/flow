@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "work_id": "producer-turn-contract",
+  "mode": "delegated",
+  "risk": {
+    "classification": "standard",
+    "hard_triggers": [],
+    "aggravating_factors": [],
+    "rationale": "Guidance text and failure-reason wording inside existing fail-closed checks; no new authority or provider surface."
+  },
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/producer-turn-contract/reconciliation.md",
+    "status": "resolved",
+    "claims": []
+  },
+  "verification": {
+    "artifact_path": ".flow/runs/producer-turn-contract/adversarial-review.md",
+    "evidence_collector_assignment": "definition-root",
+    "independent": true,
+    "producer_assignments": [
+      "definition-root"
+    ],
+    "verifier_assignment": "adversarial-architecture"
+  },
+  "assignments": [
+    {
+      "id": "definition-root",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-definition-root"
+      },
+      "brief_path": ".flow/runs/producer-turn-contract/requirements.md",
+      "input_evidence": [
+        ".flow/runs/producer-turn-contract/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/producer-turn-contract",
+        "cli",
+        "runtime",
+        "tests",
+        "docs",
+        ".flow/runs/v8-live-validation-2"
+      ],
+      "write_scopes": [
+        ".flow/runs/producer-turn-contract"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/producer-turn-contract/requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Compact definition and plan drafted from engineer decisions"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "run-authoring"
+      }
+    },
+    {
+      "id": "adversarial-architecture",
+      "lane": "define",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-architect-producer-turn-contract-review"
+      },
+      "brief_path": ".flow/runs/producer-turn-contract/requirements.md",
+      "input_evidence": [
+        ".flow/runs/producer-turn-contract/requirements.md",
+        ".flow/runs/producer-turn-contract/acceptance-criteria.md",
+        ".flow/runs/producer-turn-contract/plan.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/producer-turn-contract",
+        "cli",
+        "runtime",
+        "tests",
+        "docs",
+        ".flow/runs/v8-live-validation-2"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/producer-turn-contract/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Architecture and capability challenge of the chunk 2 definition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "definition-review"
+      }
+    }
+  ]
+}

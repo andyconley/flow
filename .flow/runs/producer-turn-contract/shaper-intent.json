@@ -1,0 +1,30 @@
+{
+  "problem": "A chartered job's manager is not told the approved editor gets exactly one call, so it can spend that call on an inspect-only step; and a no-edit outcome is misreported as a scope violation.",
+  "intended_users": ["Andy, Flow's sole operator."],
+  "outcomes": ["Flow-supplied manager facts state the editor's one-call contract, and the chartered edit check reports no-edit, out-of-scope and no-observed-change distinctly."],
+  "scope": ["The chartered facts block and _verify_chartered_edit in cli/delivery_gateway.py, tests, and one doc sentence."],
+  "exclusions": ["Enforcement beyond guidance.", "Charter or template changes.", "Legacy facts or _verify_edit changes.", "A new protocol version.", "Live provider runs."],
+  "constraints": ["Ledger limits and the edit check stay fail-closed.", "No backwards-compatibility work."],
+  "assumptions": ["The facts text is appended at runtime and is not sealed."],
+  "acceptance_criteria": ["AC1-AC6 in .flow/runs/producer-turn-contract/acceptance-criteria.md."],
+  "risks": [{"risk": "the manager ignores the guidance", "owner": "Andy", "status": "owned"}],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {"role": "lead-developer", "capabilities": ["scoped-edit"], "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80", "maximum_instances": 1},
+    {"role": "test-engineer", "capabilities": ["bounded-verification"], "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f", "maximum_instances": 1},
+    {"role": "quality-reviewer", "capabilities": ["read-only-review"], "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718", "maximum_instances": 1}
+  ],
+  "prohibited_capabilities": ["silent-charter-amendment", "ungranted-provider-dispatch"],
+  "delegation_matrix": {"max_delegations": 3, "delegated_expansion": false},
+  "approval_matrix": {"charter_amendment": "shaper_or_engineer", "provider_dispatch": "Flow_grant", "acceptance": "Flow_gate"},
+  "budget_safety_envelope": {
+    "enforceable": {"max_concurrent": 1, "max_replans": 0, "runtime_seconds": 300, "tools": ["read", "edit", "test"], "paths": ["charter-scoped"], "outputs": ["diff", "test", "receipt"], "retries": 0, "max_manager_calls": 6, "max_manager_rounds": 3, "max_paid_worker_calls": 1},
+    "observations": ["provider_usage_when_available"]
+  },
+  "max_verifier_calls": 1,
+  "boundaries": {"artifact_root": ".flow/runs/producer-turn-contract", "worktree_policy": "Flow-bound"},
+  "amendment_lineage": [],
+  "approval_history": [{"event": "approve-definition", "authority": "engineer"}],
+  "next_lane_eligibility": ["delivery"]
+}
