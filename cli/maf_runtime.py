@@ -191,6 +191,12 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(stage, target)
         stage = None  # ownership moved
+        # The interpreter's absolute path participates in its identity, so
+        # prove it again after the staged directory receives its immutable
+        # address.  Staging-path identity must never become the pointer.
+        checked = probe(python_path=str(target / "bin" / "python"), source_root=root)
+        if checked["state"] != READY:
+            raise MafRuntimeUnready(checked)
         pointer_path(home).parent.mkdir(parents=True, exist_ok=True)
         temp = pointer_path(home).with_suffix(".tmp")
         temp.write_text(json.dumps({"schema_version": 1, "interpreter": str(target / "bin" / "python"), "identity": checked["identity"], "installed_at": int(time.time())}, sort_keys=True) + "\n")
