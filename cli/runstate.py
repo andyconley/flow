@@ -581,15 +581,16 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
         events = _load_events(work_id, root)
     except ValueError as exc:
         return False, [str(exc)], payload
-    if not events:
+    lifecycle_events = [event for event in events if not str(event.get("event", "")).startswith("delivery-lead-")]
+    if not lifecycle_events:
         ok = False
         messages.append("events: missing transition history")
-    elif events[-1].get("to") != payload.get("state"):
+    elif lifecycle_events[-1].get("to") != payload.get("state"):
         ok = False
         messages.append(
-            f"state/history mismatch: run.json={payload.get('state')} events.jsonl={events[-1].get('to')}"
+            f"state/history mismatch: run.json={payload.get('state')} events.jsonl={lifecycle_events[-1].get('to')}"
         )
-    if payload.get("last_event") and events and events[-1].get("event") != payload.get("last_event"):
+    if payload.get("last_event") and lifecycle_events and lifecycle_events[-1].get("event") != payload.get("last_event"):
         ok = False
         messages.append("last_event does not match latest history event")
     if ok:
