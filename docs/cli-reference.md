@@ -191,7 +191,7 @@ flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) \
   --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]
 ```
 
-`--expected-generation` must match the attempt's current ledger owner generation (`.attempt.owner_generation` in `flow run inspect-delivery --json`, not the Delivery Lead generation); a mismatch is refused as a stale generation rather than applied against the wrong epoch. The command also refuses when the request is unknown or already decided, when the attempt is not truly paused (an action or manager call is still started or unknown), when the owning lead's generation is no longer active, or, for an approval, when granted headroom would put the attempt past a runner ceiling. A refusal changes nothing. A decision does not itself resume the attempt — resume it with `flow run recover-delivery-lead`.
+`--expected-generation` must match the attempt's current ledger owner generation (`.attempt.owner_generation` in `flow run inspect-delivery --json`, not the Delivery Lead generation); a mismatch is refused as a stale generation rather than applied against the wrong epoch. The command also refuses when the request is unknown or already decided, when the attempt is not truly paused (an action or manager call is still started or unknown, or a live run or recovery holds the attempt), when the owning lead's generation is no longer active, or, for an approval, when one more unit would exceed a runner ceiling. A refusal changes nothing. A decision does not itself resume the attempt — resume it with `flow run recover-delivery-lead`.
 
 ### `flow run resume-execution <work-id> <attempt-id>`
 
