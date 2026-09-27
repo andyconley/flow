@@ -1115,7 +1115,8 @@ class ExecutionFactsTests(unittest.TestCase):
         for version in (6, 7, 8):
             with self.subTest(version=version):
                 facts = _execution_facts({"execution_protocol_version": version}, {"baseline": {"kind": "clean"}}, "a" * 40)
-                for phrase in ("one call in total", "refuses any second editor call", '"do not edit yet"'):
+                for phrase in ("one call in total", "refuses any second editor call", "complete edit in the same turn",
+                               '"do not edit yet"'):
                     self.assertIn(phrase, facts)
                 self.assertLessEqual(len(facts.encode()), 1500)
 
