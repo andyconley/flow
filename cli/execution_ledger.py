@@ -196,6 +196,10 @@ class ExecutionLedger:
                 actor TEXT, explanation TEXT, owner_generation INTEGER NOT NULL, decided_at TEXT NOT NULL,
                 status TEXT NOT NULL, consumed_by TEXT
             );
+            CREATE TABLE IF NOT EXISTS runtime_startup_successors (
+                predecessor_attempt_id TEXT PRIMARY KEY REFERENCES attempts(attempt_id),
+                successor_attempt_id TEXT UNIQUE, claimed_at TEXT NOT NULL
+            );
             """)
             # SQLite's CREATE TABLE IF NOT EXISTS cannot evolve first-slice
             # databases. These columns make existing records explicitly v1 and
@@ -402,6 +406,29 @@ class ExecutionLedger:
         """Terminal v8 predecessors of ``work_id`` in creation order, and any still-started v8 attempts."""
         with self._db() as db:
             return self._v8_lineage_locked(db, work_id)
+
+    def claim_runtime_startup_successor(self, predecessor_attempt_id: str) -> None:
+        """Fence a sealed zero-send predecessor to one successor request."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                db.execute("INSERT INTO runtime_startup_successors(predecessor_attempt_id,successor_attempt_id,claimed_at) VALUES(?,?,?)",
+                           (predecessor_attempt_id, None, utc_now()))
+            except sqlite3.IntegrityError as exc:
+                raise ContractError("runtime-startup predecessor already has a successor") from exc
+
+    def release_runtime_startup_successor(self, predecessor_attempt_id: str) -> None:
+        with self._db() as db:
+            db.execute("DELETE FROM runtime_startup_successors WHERE predecessor_attempt_id=? AND successor_attempt_id IS NULL",
+                       (predecessor_attempt_id,))
+
+    def bind_runtime_startup_successor(self, predecessor_attempt_id: str, successor_attempt_id: str) -> None:
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            changed = db.execute("UPDATE runtime_startup_successors SET successor_attempt_id=? WHERE predecessor_attempt_id=? AND successor_attempt_id IS NULL",
+                                 (successor_attempt_id, predecessor_attempt_id)).rowcount
+            if changed != 1:
+                raise ContractError("runtime-startup successor claim is absent or already bound")
 
     @staticmethod
     def _lineage_usage(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:

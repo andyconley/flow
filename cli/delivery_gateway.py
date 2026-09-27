@@ -647,7 +647,17 @@ def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, sourc
         raise ContractError("runtime-startup predecessor receipt is invalid") from exc
     if not isinstance(receipt, dict) or receipt.get("attempt_id") != attempt_id or receipt.get("envelope_digest") != envelope_digest(snapshot["envelope"]):
         raise ContractError("runtime-startup predecessor receipt identity differs from ledger")
-    return execute_chartered_delivery(work_id, worktree, source_commit, root=project_root)
+    # Claim inside the ledger before preparing a new attempt: concurrent
+    # recovery commands cannot both turn one sealed failure into successors.
+    writable = ExecutionLedger(ledger_path)
+    writable.claim_runtime_startup_successor(attempt_id)
+    try:
+        result = execute_chartered_delivery(work_id, worktree, source_commit, root=project_root)
+    except Exception:
+        writable.release_runtime_startup_successor(attempt_id)
+        raise
+    writable.bind_runtime_startup_successor(attempt_id, result["attempt_id"])
+    return result
 
 
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
