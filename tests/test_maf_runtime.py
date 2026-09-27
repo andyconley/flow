@@ -34,9 +34,10 @@ class MafRuntimeProbeTests(unittest.TestCase):
             result = probe(python_path=os.sys.executable, home=Path(temp))
         self.assertIn(result["state"], {"package_missing", "runner_import_failed"})
 
-    @unittest.skipUnless(Path("/private/tmp/flow-maf-wheelhouse").is_dir(), "local locked wheelhouse unavailable")
     def test_clean_release_managed_wheelhouse_runtime_reaches_initialized_child_without_override(self):
         """Release proof: install the locked wheels, then run a real child pre-provider."""
+        self.assertTrue(Path("/private/tmp/flow-maf-wheelhouse").is_dir(),
+                        "release-managed MAF wheelhouse is required for this acceptance oracle")
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {
             "FLOW_MAF_WHEELHOUSE": "/private/tmp/flow-maf-wheelhouse",
             "FLOW_MAF_PYTHON": "",

@@ -419,6 +419,35 @@ class ExecutionLedger:
             except sqlite3.IntegrityError as exc:
                 raise ContractError("runtime-startup predecessor already has a successor") from exc
 
+    def reconcile_runtime_startup_successor(self, predecessor_attempt_id: str) -> str | None:
+        """Repair a crash between successor creation and claim binding.
+
+        The predecessor claim is never simply discarded: under one immediate
+        transaction we either bind the sole successor whose sealed envelope
+        names it, return an already bound successor, or prove no successor row
+        exists and reopen only the empty claim.
+        """
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT successor_attempt_id FROM runtime_startup_successors WHERE predecessor_attempt_id=?",
+                             (predecessor_attempt_id,)).fetchone()
+            if row is None:
+                return None
+            if row[0]:
+                return row[0]
+            candidates = db.execute(
+                "SELECT attempt_id FROM attempts WHERE json_extract(envelope_json,'$.predecessors[0].attempt_id')=?",
+                (predecessor_attempt_id,)).fetchall()
+            if len(candidates) == 1:
+                db.execute("UPDATE runtime_startup_successors SET successor_attempt_id=? WHERE predecessor_attempt_id=?",
+                           (candidates[0][0], predecessor_attempt_id))
+                return candidates[0][0]
+            if len(candidates) > 1:
+                raise ContractError("runtime-startup claim has multiple successor candidates")
+            db.execute("DELETE FROM runtime_startup_successors WHERE predecessor_attempt_id=? AND successor_attempt_id IS NULL",
+                       (predecessor_attempt_id,))
+            return None
+
     def release_runtime_startup_successor(self, predecessor_attempt_id: str) -> None:
         with self._db() as db:
             db.execute("DELETE FROM runtime_startup_successors WHERE predecessor_attempt_id=? AND successor_attempt_id IS NULL",

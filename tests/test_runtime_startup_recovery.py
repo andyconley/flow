@@ -41,6 +41,7 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
         with patch("delivery_gateway.ExecutionLedger") as ledger, patch("delivery_gateway.envelope_digest", return_value="b" * 64), \
              patch("delivery_gateway.execute_chartered_delivery", return_value={"attempt_id": "next", "status": "completed"}) as execute:
             ledger.return_value.snapshot.return_value = self._snapshot()
+            ledger.return_value.reconcile_runtime_startup_successor.return_value = None
             result = recover_runtime_startup("sample", "old", Path(self.tmp.name), "commit", root=Path(self.tmp.name))
         self.assertEqual(result["attempt_id"], "next")
         execute.assert_called_once()
@@ -49,6 +50,7 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
         with patch("delivery_gateway.ExecutionLedger") as ledger, patch("delivery_gateway.envelope_digest", return_value="b" * 64), \
              patch("delivery_gateway.execute_chartered_delivery") as execute:
             ledger.return_value.snapshot.return_value = self._snapshot(actions=[{"status": "unknown"}])
+            ledger.return_value.reconcile_runtime_startup_successor.return_value = None
             with self.assertRaisesRegex(ContractError, "observed or uncertain"):
                 recover_runtime_startup("sample", "old", Path(self.tmp.name), "commit", root=Path(self.tmp.name))
         execute.assert_not_called()
@@ -57,6 +59,7 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
         with patch("delivery_gateway.ExecutionLedger") as ledger, patch("delivery_gateway.execute_chartered_delivery") as execute:
             ledger.return_value.snapshot.return_value = self._snapshot(
                 failure_class=None, reason="ordinary runtime validation failed")
+            ledger.return_value.reconcile_runtime_startup_successor.return_value = None
             with self.assertRaisesRegex(ContractError, "not a MAF runtime-startup"):
                 recover_runtime_startup("sample", "old", Path(self.tmp.name), "commit", root=Path(self.tmp.name))
         execute.assert_not_called()

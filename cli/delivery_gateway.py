@@ -652,6 +652,9 @@ def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, sourc
     # Claim inside the ledger before preparing a new attempt: concurrent
     # recovery commands cannot both turn one sealed failure into successors.
     writable = ExecutionLedger(ledger_path)
+    prior_successor = writable.reconcile_runtime_startup_successor(attempt_id)
+    if prior_successor is not None:
+        return {"attempt_id": prior_successor, "status": "reconciled", "predecessor_attempt_id": attempt_id}
     writable.claim_runtime_startup_successor(attempt_id)
     try:
         result = execute_chartered_delivery(work_id, worktree, source_commit, root=project_root)
