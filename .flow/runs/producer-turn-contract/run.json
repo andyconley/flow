@@ -13,6 +13,7 @@
     "orchestration_manifest": ".flow/runs/producer-turn-contract/orchestration.json",
     "plan": ".flow/runs/producer-turn-contract/plan.md",
     "requirements": ".flow/runs/producer-turn-contract/requirements.md",
+    "review": ".flow/runs/producer-turn-contract/review.md",
     "shaper_intent": ".flow/runs/producer-turn-contract/shaper-intent.json",
     "validation_plan": ".flow/runs/producer-turn-contract/validation-plan.md"
   },
@@ -50,19 +51,21 @@
   },
   "dispositions": {},
   "gates": {
+    "accept-review": "2026-09-27T04:10:44Z",
     "approve-definition": "2026-09-27T03:43:21Z",
     "approve-plan": "2026-09-27T03:47:56Z",
     "mark-handback-ready": "2026-09-27T03:56:23Z",
     "start-definition": "2026-09-27T03:42:51Z",
     "start-implementation": "2026-09-27T03:48:57Z",
-    "start-plan": "2026-09-27T03:43:21Z"
+    "start-plan": "2026-09-27T03:43:21Z",
+    "start-review": "2026-09-27T04:06:09Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-27T03:56:23Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-27T04:10:44Z",
   "work_id": "producer-turn-contract"
 }

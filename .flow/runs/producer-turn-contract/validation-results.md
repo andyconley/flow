@@ -5,7 +5,8 @@ Validated against the change itself, in the `~/src/flow` checkout on branch `cod
 ## Automated
 
 - **Full suite:** `python3.12 -m unittest discover -s tests` with `FLOW_MAF_PYTHON=~/.flow/venvs/maf/bin/python` (`scratchpad/suite-main.sh`, which fails on any skip). Result: **Ran 1571 tests, OK, 0 skipped**, rc=0. The baseline on main was 1,562, so this adds 9 tests.
-  - The suite ran with the code at `fdb112b`. Commit `46dbe23` changed one assertion in a test that already passed, adding a phrase. After it, `tests.test_chartered_delivery_gateway` was rerun: 49 OK.
+  - **Acceptance-lane rerun at `46dbe23` (HEAD code): Ran 1571 tests, OK, 0 skipped**, rc=0. This closes the gap below.
+  - The first run was with the code at `fdb112b`. Commit `46dbe23` changed one assertion in a test that already passed, adding a phrase. After it, `tests.test_chartered_delivery_gateway` was rerun: 49 OK.
 - **New tests** (`tests/test_chartered_delivery_gateway.py`):
 
   | AC | Test |
