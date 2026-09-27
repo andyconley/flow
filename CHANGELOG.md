@@ -2,6 +2,30 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.38.0](https://github.com/andyconley/flow/compare/v0.37.1...v0.38.0) (2026-09-27)
+
+### Features
+
+* **delivery:** abandon stuck attempts and add the lead CLI and stuck scan ([1632044](https://github.com/andyconley/flow/commit/1632044c57954f0af07c11528713d90e8d0f5b1c))
+* **delivery:** cancel a live attempt cooperatively ([1050db2](https://github.com/andyconley/flow/commit/1050db2c2efedecd04eaa4a76b4c479a96b43f87))
+* **delivery:** record process identity for every dispatching parent ([0973be1](https://github.com/andyconley/flow/commit/0973be1a8546591581326e91af3ab751f57de001))
+* **ledger:** seal cancelled and abandoned attempts with their uncertainty ([5bf826b](https://github.com/andyconley/flow/commit/5bf826bd9e30a6290f052d2a639e1eb18897b6a3))
+
+### Bug Fixes
+
+* **delivery:** harden cancel and abandon after review ([b066309](https://github.com/andyconley/flow/commit/b0663091b3cd29ae01eaaae4738a54fb6acfa9ac))
+* **delivery:** keep reaping safe under EPERM and foreign owners after acceptance review ([a16fea4](https://github.com/andyconley/flow/commit/a16fea4e2887378432880ac6fd0f811b1fd05df7))
+
+### Documentation
+
+* **delivery:** record ADR 0019 and step 5 cancellation ([ac3aa4c](https://github.com/andyconley/flow/commit/ac3aa4cdb49a6a3e79a5046076fbffbd10b2e063))
+* **run:** abandon the stuck v8-live-validation attempt ([84b4d8d](https://github.com/andyconley/flow/commit/84b4d8d1b7549c5f6bbc669a9ab821590a7aa973))
+* **run:** accept step5-cancellation review ([a5f9fba](https://github.com/andyconley/flow/commit/a5f9fba7d3be38967b1802df00c06f5d1d82a8a8))
+* **run:** approve step5-cancellation plan ([62a4d5f](https://github.com/andyconley/flow/commit/62a4d5f5975ed843de74f5fda60370b0fd4569d8))
+* **run:** define step5-cancellation ([661b294](https://github.com/andyconley/flow/commit/661b294a3abc2decfbfef835150c232450ff7e86))
+* **run:** record step5-cancellation acceptance review ([70e5974](https://github.com/andyconley/flow/commit/70e5974500ee0e9f2b24c0d7bcbe632e39b6d5e5))
+* **run:** record step5-cancellation implementation evidence and handback ([0d3787f](https://github.com/andyconley/flow/commit/0d3787f45fa31f4869836e58bbfd362e0e0752d8))
+
 ## [0.37.1](https://github.com/andyconley/flow/compare/v0.37.0...v0.37.1) (2026-09-27)
 
 ### Bug Fixes
