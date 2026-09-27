@@ -55,14 +55,15 @@
     "mark-handback-ready": "2026-09-27T20:22:37Z",
     "start-definition": "2026-09-27T19:33:06Z",
     "start-implementation": "2026-09-27T19:56:01Z",
-    "start-plan": "2026-09-27T19:43:50Z"
+    "start-plan": "2026-09-27T19:43:50Z",
+    "start-review": "2026-09-27T20:39:51Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "start-review",
+  "phase": "reviewing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-27T20:22:37Z",
+  "state": "reviewing",
+  "updated_at": "2026-09-27T20:39:51Z",
   "work_id": "v8-live-validation-3"
 }

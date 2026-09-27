@@ -68,7 +68,10 @@
    "completed"
   ]
  ],
- "local_stub_anywhere": false,
+ "local_stub_in_receipt": false,
+ "local_stub_in_ledger_events": false,
+ "local_stub_files": [],
+ "attempt_files_scanned": 31,
  "expansion_requests": [
   [
    "exp-22aefb883c503fe256a50dae",
@@ -107,7 +110,28 @@
  "D1_stream_event_records": 0,
  "D1_terminal_result_event": true,
  "D1_limit_errors": [],
- "D7_checkpoints_with_facts_line": "6/6",
+ "D7_checkpoints_with_facts_line": {
+  "live": "6/6",
+  "quarantined": "7/7"
+ },
+ "AC5_AC6_escalated_call_identity": [
+  {
+   "request_id": "exp-bff0f24876dbf0eece027971",
+   "denied_row_id": "6780598ce5e5e64fbe6ef1b62aa0e8b170b0f3423f5ff6daa99857b5acd374a8",
+   "completed_once": true,
+   "paused_at": "2026-09-27T20:12:25.266024+00:00",
+   "decided_at": "2026-09-27T20:15:35.413767+00:00",
+   "manager_sends_before_pause": 5,
+   "manager_sends_between_pause_and_decision": 0,
+   "manager_sends_after_decision": 1
+  }
+ ],
+ "AC4_auto_grant_consumed_by": [
+  [
+   "e0fc77f5250765603cbe31dafdcb4493f40f9315ef58536b22f2c590eefa29d6",
+   "e0fc77f5250765603cbe31dafdcb4493f40f9315ef58536b22f2c590eefa29d6"
+  ]
+ ],
  "D3_verifier_evaluations": [
   [
    "valid_pass",
