@@ -585,6 +585,10 @@ invocation = "flow run inspect-delivery WORK_ID [--attempt-id ID]"
 summary = "Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch"
 
 [[help.cli_commands]]
+invocation = "flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]"
+summary = "Approve or deny a pending v8 expansion request for a paused attempt"
+
+[[help.cli_commands]]
 invocation = "flow run stuck [--json]"
 summary = "List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only)"
 

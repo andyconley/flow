@@ -182,6 +182,17 @@ Read the current Flow-owned Shaper-to-Delivery authority and, when present, one 
 
 The JSON view reports lifecycle state, the sealed charter and owner generation, protocol compatibility diagnostics, and the v7 attempt's current execution and resume eligibility. Historical v6 envelopes remain readable evidence but always report `executable: false` and `resumable: false`; create a new sealed Delivery Charter for new work.
 
+### `flow run decide-expansion <work-id> <attempt-id> <request-id>`
+
+Approve or deny one pending v8 expansion request of a paused attempt.
+
+```sh
+flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) \
+  --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]
+```
+
+`--expected-generation` must match the attempt's current ledger owner generation (`.attempt.owner_generation` in `flow run inspect-delivery --json`, not the Delivery Lead generation); a mismatch is refused as a stale generation rather than applied against the wrong epoch. The command also refuses when the request is unknown or already decided, when the attempt is not truly paused (an action or manager call is still started or unknown), when the owning lead's generation is no longer active, or, for an approval, when granted headroom would put the attempt past a runner ceiling. A refusal changes nothing. A decision does not itself resume the attempt — resume it with `flow run recover-delivery-lead`.
+
 ### `flow run resume-execution <work-id> <attempt-id>`
 
 Fence the previous parent and reopen the same attempt. An uncertain dispatch returns `reconciliation_required` without a provider send. The v1 path can replay one committed result through a bound MAF checkpoint. For v2, a completed first or second action can be replayed through its verified pending checkpoint in a fresh MAF process; Flow reuses committed results and decisions and authorizes only the next logical action. A missing, changed, or incompatible checkpoint halts as a runtime protocol gap. A matching receipt written before the ledger's terminal update is repaired without dispatch. An unresolved third action always halts pending reconciliation. This command never allocates a replacement attempt.
