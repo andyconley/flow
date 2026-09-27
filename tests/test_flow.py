@@ -1311,6 +1311,7 @@ class FlowCliTests(FlowCliHarness):
 
     def test_runtime_smoke_checks_generated_surfaces(self) -> None:
         fake_home = self.use_fake_home()
+        self._offline_maf_python()
         self.assert_ok(self.run_flow("sync", "claude", "--user"))
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
@@ -2594,12 +2595,14 @@ class FlowCliTests(FlowCliHarness):
         (temp_repo / "FUTURE_FILE.md").write_text("Pretend-future top-level file.\n")
 
         fake_home = self._new_fake_home()
+        env = _clean_env(fake_home)
+        env["FLOW_MAF_PYTHON"] = str(self._offline_maf_python())
         result = subprocess.run(
             ["bash", str(temp_repo / "install-flow.sh"), "--release"],
             cwd=str(temp_repo),
             text=True,
             capture_output=True,
-            env=_clean_env(fake_home),
+            env=env,
         )
         self.assertEqual(
             result.returncode,
@@ -2990,6 +2993,7 @@ class FlowCliTests(FlowCliHarness):
 
         env = _clean_env(fake_home)
         env["FLOW_REPO_URL"] = f"file://{remote}"
+        env["FLOW_MAF_PYTHON"] = str(self._offline_maf_python())
 
         result = subprocess.run(
             ["bash", str(BOOTSTRAP_INSTALL_SCRIPT)],
@@ -3529,6 +3533,7 @@ class FlowCliTests(FlowCliHarness):
                 "legacy_delivery",
                 "lifecycle",
                 "local_worker",
+                "maf_runtime",
                 "maf_supervisor",
                 "migrate",
                 "model_advice",
