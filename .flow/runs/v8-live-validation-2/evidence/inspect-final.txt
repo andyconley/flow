@@ -1,0 +1,22 @@
+work: v8-live-validation-2
+state: reviewing
+charter: v3 dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60
+logical attempt: logical-dcba681b6df39f48ec31
+owner: generation 1 (active)
+attempt: 0fa5602418374dfca3cfcf6f4c6c93d6
+executable: False
+resumable: False
+pending unknowns: 0
+pending approvals: 0
+provider choices: 1
+recoverable (ledger view): False (attempt_terminal)
+checked only by the command: live_run_fence, worktree_drift, envelope_file
+blocking: none
+owner generation (--expected-generation): 2
+resolutions: none
+predecessors: 1
+sealed receipt: consistent
+expansion headroom remaining: delegations 1, manager_calls 1, manager_rounds 0, paid_worker_calls 0, verifier_calls 1
+expansion requests: 1
+- exp-34a859d239514e0313c99e86 granted paid_worker_calls grant=engineer rationale="The docs-editor must first inspect the schema/format of flow.toml, flow-help.md, README.md, and the generator script before making any edits."
+compatibility diagnostics: 0

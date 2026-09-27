@@ -1,7 +1,7 @@
 # Handoff: v8-live-validation-2
 
 - **Status:** ready for review.
-- **Outcome:** validation found defects (R7). Both attempts are used and neither completed.
+- **Outcome:** validation found defects (R7). Both attempts are used and neither completed. Attempt 1 hit D4, and attempt 2 hit D7 plus D6.
 
 ## What happened
 
@@ -22,7 +22,8 @@
 
 1. **A fix run.**
    - **D6:** report "produced no observed change" when the editor changed nothing, not "outside the approved job scope".
-   - **Tell the manager the producer contract.** It should know that each producer gets exactly one turn, which must make the complete edit. This is either Flow-supplied manager guidance in the envelope or task, or a charter-authoring rule. Decide which in `flow-plan`.
+   - **D7: tell the manager the producer contract.** It should know that each producer gets exactly one turn, which must make the complete edit. This is either Flow-supplied manager guidance in the facts Flow adds to the task (`cli/delivery_gateway.py:1371-1381`), or a charter-authoring rule. Decide which in `flow-plan`.
+   - **Optional: warn at the decision gate.** Warn when an expansion grant for a single-turn producer carries an inspect-only rationale.
 2. **`v8-live-validation-3`,** with a new work id. It still needs to prove live the automatic grant (AC4), manager-call replay, the verifier, and a completed receipt.
 3. **Cleanup.**
    - Merge this branch's run records.

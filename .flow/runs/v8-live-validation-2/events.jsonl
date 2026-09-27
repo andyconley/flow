@@ -4,3 +4,5 @@
 {"artifacts": {"handoff": ".flow/runs/v8-live-validation-2/implementation-handoff.md", "plan": ".flow/runs/v8-live-validation-2/plan.md", "validation_plan": ".flow/runs/v8-live-validation-2/validation-plan.md"}, "at": "2026-09-26T18:49:42Z", "dispositions": {}, "event": "approve-plan", "from": "planning", "to": "plan_approved"}
 {"artifacts": {}, "at": "2026-09-26T19:27:19Z", "dispositions": {}, "event": "start-implementation", "from": "plan_approved", "to": "implementing"}
 {"artifacts": {"handback": ".flow/runs/v8-live-validation-2/HANDOFF.md", "implementation_evidence": ".flow/runs/v8-live-validation-2/validation-results.md"}, "at": "2026-09-26T23:24:06Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
+{"artifacts": {}, "at": "2026-09-27T00:08:23Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
+{"artifacts": {"review": ".flow/runs/v8-live-validation-2/review.md"}, "at": "2026-09-27T00:11:39Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}

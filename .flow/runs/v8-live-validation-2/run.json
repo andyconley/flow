@@ -13,6 +13,7 @@
     "orchestration_manifest": ".flow/runs/v8-live-validation-2/orchestration.json",
     "plan": ".flow/runs/v8-live-validation-2/plan.md",
     "requirements": ".flow/runs/v8-live-validation-2/requirements.md",
+    "review": ".flow/runs/v8-live-validation-2/review.md",
     "shaper_intent": ".flow/runs/v8-live-validation-2/shaper-intent.json",
     "validation_plan": ".flow/runs/v8-live-validation-2/validation-plan.md"
   },
@@ -50,19 +51,21 @@
   },
   "dispositions": {},
   "gates": {
+    "accept-review": "2026-09-27T00:11:39Z",
     "approve-definition": "2026-09-26T16:50:51Z",
     "approve-plan": "2026-09-26T18:49:42Z",
     "mark-handback-ready": "2026-09-26T23:24:06Z",
     "start-definition": "2026-09-26T15:49:15Z",
     "start-implementation": "2026-09-26T19:27:19Z",
-    "start-plan": "2026-09-26T17:25:03Z"
+    "start-plan": "2026-09-26T17:25:03Z",
+    "start-review": "2026-09-27T00:08:23Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-26T23:24:06Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-27T00:11:39Z",
   "work_id": "v8-live-validation-2"
 }
