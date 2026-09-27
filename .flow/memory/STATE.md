@@ -19,6 +19,19 @@
 
 ## Recently completed
 
+- `v8-live-validation-2` archived 2026-09-26 as "validation found defects"
+  (branch `codex/v8-live-validation-2`, run records only; not pushed).
+  - Found D3, D4 and D5, each fixed in its own run (v0.36.2, v0.37.0).
+  - Attempt 2 proved the live escalation, decision, resume and receipt chain,
+    then failed on D7: the manager is not told that each producer gets exactly
+    one turn, and it delegated "Do not edit any files yet". D6 (a misleading
+    "outside scope" reason when nothing changed) is also open.
+  - Next: a fix run for D6 and D7, then `v8-live-validation-3` with a new work
+    id (still to prove live: auto grant, manager-call replay, verifier,
+    completed job). Job worktree `~/src/flow-v8-live-job-2` can be reused
+    after a reset; the first run's worktree is removed (tag
+    `archive/v8-live-validation-job`).
+
 - `edit-worker-stream-cap` (scout) archived 2026-09-26 and merged as PR #38.
   - Fixes D1: the Claude edit worker's cap rises to 16 MiB, partial messages
     are dropped, and the debug trace is truncated rather than aborting.
