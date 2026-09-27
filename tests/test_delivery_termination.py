@@ -19,6 +19,7 @@ import os  # noqa: E402
 import subprocess  # noqa: E402
 import tempfile  # noqa: E402
 import threading  # noqa: E402
+import time  # noqa: E402
 import fcntl  # noqa: E402
 
 import flow  # noqa: E402
@@ -32,6 +33,7 @@ from execution_ledger import ExecutionLedger  # noqa: E402
 from tests.test_chartered_delivery_gateway import CharteredFixture, KillPoint  # noqa: E402
 from tests.test_expansion_gateway import ExpansionGatewayFixture  # noqa: E402
 from tests.test_expansion_ledger import v8 as expansion_envelope  # noqa: E402
+from tests.test_process_identity import _one_microsecond_earlier  # noqa: E402
 
 
 class TerminationFixture(CharteredFixture):
@@ -596,8 +598,7 @@ class AbandonRefusalTests(AbandonFixture):
             scope.register(mismatched.pid, "test")
         groups = attempt_dir / "control-g6.groups.jsonl"
         entry = json.loads(groups.read_text())
-        entry["leader_start"] = entry["leader_start"].rsplit(".", 1)[0][:-1] + "0.000000" \
-            if entry["leader_start"].startswith("darwin:") else "linux:x:1"
+        entry["leader_start"] = _one_microsecond_earlier(entry["leader_start"])
         groups.write_text(json.dumps(entry) + "\n")
         orphan_leader.stdin.write("exit\n")
         orphan_leader.stdin.close()
@@ -747,3 +748,72 @@ class DiagnosticsTests(AbandonFixture):
              contextlib.redirect_stdout(out):
             self.assertEqual(flow.main(), 0)
         self.assertEqual(out.getvalue().count("  next: flow run "), 3)
+
+
+class ReviewFixTests(AbandonFixture):
+    """Review findings: lost directories, lock order, drafts, verifier rows, lock traps."""
+
+    def test_a_lost_attempt_directory_is_recreated_and_abandoned(self):
+        attempt_id = self.unknown_editor_send()
+        import shutil
+        shutil.rmtree(self.attempt_dir(attempt_id))
+        result = self.abandon(attempt_id)
+        self.assertEqual(result["status"], "abandoned")
+        receipt = self.receipt(attempt_id)
+        self.assertEqual(receipt["evidence_damage"], [{"kind": "baseline_missing"}])
+        self.assertEqual(oct(self.attempt_dir(attempt_id).stat().st_mode & 0o777), "0o700")
+        successor, sends, _, _ = self._run_v8([self.PASS])
+        self.assertEqual((successor["status"], sends), ("completed", ["editor", "verifier"]))
+
+    def test_abandon_refuses_at_once_while_a_live_parent_holds_the_run_lock(self):
+        from delivery_control import run_lock
+        attempt_id = self.unknown_editor_send()
+        started = time.monotonic()
+        with self.ledger().recovery_lock(attempt_id, holder="live"), run_lock(self.run):
+            with self.assertRaises(RecoveryRefused) as raised:
+                self.abandon(attempt_id)
+        self.assertEqual(raised.exception.reason, "attempt_running")
+        self.assertLess(time.monotonic() - started, 5, "abandon must not wait behind a guarded send")
+
+    def test_a_refused_seal_leaves_the_earlier_draft_untouched(self):
+        attempt_id = self.unknown_editor_send()
+        draft = b'{"draft": "from a process that died"}\n'
+        (self.attempt_dir(attempt_id) / "receipt.json").write_bytes(draft)
+        envelope = self.ledger(read_only=True).snapshot(attempt_id)["envelope"]
+        honest = terminal_receipt_renderer(envelope, self.attempt_dir(attempt_id), status="abandoned", actor="andy",
+                                           explanation="stopped by the test", cause="reconciliation_required")
+
+        def forged(snapshot, blocks):
+            receipt = json.loads(honest(snapshot, blocks))
+            receipt["actions"] = []
+            return json.dumps(receipt).encode()
+
+        with self.assertRaisesRegex(ContractError, "rows differ"):
+            self.seal(attempt_id, "abandoned", render=forged)
+        self.assertEqual((self.attempt_dir(attempt_id) / "receipt.json").read_bytes(), draft)
+
+    def test_an_unknown_verifier_send_is_abandoned_with_a_valid_receipt(self):
+        def worker(action, *, envelope, workspace):
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            raise OSError("simulated connection reset during the verifier send")
+
+        with patch("delivery_gateway._run_chartered_test",
+                   side_effect=lambda worktree, job, **_: {"command": job["test"]["argv"], "status": "passed",
+                                                           "output_sha256": "0" * 64}):
+            result = self.execute(self._plan_supervisor(("editor", "verifier")), worker)
+        self.assertEqual(result["reason"], "reconciliation_required")
+        self.abandon(result["attempt_id"])
+        _, receipt = self.assert_abandoned(result["attempt_id"], cause="reconciliation_required", unknown=1)
+        self.assertEqual(receipt["verifier_usage"]["consumed"], 1)
+
+    def test_a_fifo_at_the_lock_path_never_hangs_the_probe(self):
+        envelope, _, _, ledger = self.prepare()
+        lock_path = self.run / "execution" / f"recovery-{envelope['attempt_id']}.lock"
+        os.mkfifo(lock_path)
+        self.assertEqual(ledger.probe_recovery_lock(envelope["attempt_id"]), "held")
+        self.assertEqual([item["lock"] for item in stuck_attempts(self.root)], ["held"])
+        with self.assertRaises(ContractError):
+            with ledger.recovery_lock(envelope["attempt_id"], holder="live"):
+                pass

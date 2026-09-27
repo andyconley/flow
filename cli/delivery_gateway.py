@@ -651,7 +651,9 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
         if process.poll() is None:
             with suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
+            # An escaped grandchild could hold the pipes open; never wait on it forever.
+            with suppress(subprocess.TimeoutExpired):
+                process.communicate(timeout=10)
     output = (stdout + stderr)[-8192:]
     if process.returncode:
         raise ContractError("targeted chartered test failed: " + output[-512:])
@@ -833,7 +835,7 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
             except Exception as exc:
                 # A cancel can land before the run starts, in the evidence
                 # rebuild's targeted test: seal or interrupt the same way.
-                if controller is not None and controller.requested:
+                if controller is not None and controller.requested and controller.armed:
                     return delivery_termination.stop_on_cancel(envelope, attempt_dir, ledger, generation=generation,
                                                                detail=str(exc))
                 raise
@@ -1386,7 +1388,7 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     """Run one prepared attempt; a live v8 run holds the attempt's recovery fence throughout."""
     if envelope["execution_protocol_version"] == 8 and kwargs.get("recovery") is None:
         with ledger.recovery_lock(envelope["attempt_id"], holder="live"), \
-                delivery_cancel.parent_scope(attempt_dir, kwargs.get("generation", 1),
+                delivery_cancel.parent_scope(attempt_dir, kwargs["generation"],
                                              attempt_id=envelope["attempt_id"]):
             return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
     return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
@@ -1496,6 +1498,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             raise ContractError("Magentic manager call denied: " + decision["reason"])
         with authority_guard(), ledger.send_lock():
             ledger.assert_owner(aid, generation)
+            stop_if_cancelled()  # before the grant is used, so an unsent call stays unsent
             if not ledger.consume_manager_grant(request["call_id"], decision["grant_id"], generation=generation):
                 raise ContractError("Magentic manager grant was already consumed")
             try:
@@ -1591,6 +1594,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                     high_water = ledger.snapshot(aid)["events"][-1]["seq"]
                     ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
                                                     high_water, str(checkpoint_path), generation=generation)
+                stop_if_cancelled()  # before the grant is used; the except below releases it
                 if not (structured_verifier and is_verifier) and not ledger.consume_grant(
                         action["action_id"], decision["grant_id"], generation=generation):
                     raise ContractError("Magentic specialist grant was already consumed")
@@ -1603,6 +1607,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             response_completed = False
             verifier_binding: dict[str, Any] | None = None
             if structured_verifier and is_verifier:
+                stop_if_cancelled()  # the verifier grant is still unused here, so the seal releases it
                 # Input binding, grant use, and send claim are one ledger
                 # transaction. If it refuses, nothing was sent: release an
                 # untouched grant rather than leaving it reserved.

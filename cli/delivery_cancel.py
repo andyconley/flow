@@ -3,7 +3,8 @@
 SIGTERM only sets a flag. It raises ``DeliveryCancelled`` at most once, and
 only while the parent is inside an ``interruptible()`` wait (a provider
 subprocess, the MAF child pipe, the Ollama request, the targeted test), never
-around ledger or file writes. Everywhere else the parent checks the flag at
+around ledger writes or Flow's own evidence files (a provider's streamed trace
+output is the only file written inside one, and it is diagnostic only). Everywhere else the parent checks the flag at
 its next authorization boundary. Sealing happens in ordinary code after the
 stack has unwound.
 """

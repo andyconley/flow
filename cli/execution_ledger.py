@@ -269,8 +269,10 @@ class ExecutionLedger:
                 not (char.isalnum() or char in "-_") for char in attempt_id):
             raise ContractError("recovery lock request is invalid")
         path = self.path.parent / f"recovery-{attempt_id}.lock"
-        fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise ContractError("recovery lock must be a regular file")
             os.fchmod(fd, 0o600)
             started = time.monotonic()
             deadline = started + 10
@@ -312,10 +314,14 @@ class ExecutionLedger:
             raise ContractError("recovery lock request is invalid")
         path = self.path.parent / f"recovery-{attempt_id}.lock"
         try:
-            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
         except FileNotFoundError:
             return "absent"
+        except OSError:
+            return "held"  # a symlink or other trap is never read as free
         try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                return "held"
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
@@ -782,19 +788,8 @@ class ExecutionLedger:
                       "expansion": self._expansion_receipt(db, envelope),
                       "manager_progress": self._manager_progress_receipt(db, attempt_id)}
             receipt_bytes = build_receipt(snapshot, blocks)
-            if receipt_path.is_symlink() or receipt_path.parent.is_symlink():
-                raise ContractError("terminal receipt path is unsafe")
-            temporary = receipt_path.with_name(f".{receipt_path.name}.{uuid.uuid4().hex}")
-            fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
-            try:
-                with os.fdopen(fd, "wb") as handle:
-                    handle.write(receipt_bytes)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                os.replace(temporary, receipt_path)
-            finally:
-                if temporary.exists():
-                    temporary.unlink()
+            # Every comparison runs on the bytes before anything is written, so
+            # a refused seal leaves any earlier draft exactly as it was.
             try:
                 receipt = json.loads(receipt_bytes)
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -813,6 +808,19 @@ class ExecutionLedger:
                 raise ContractError("receipt expansion evidence differs from the ledger")
             if receipt.get("manager_progress") != blocks["manager_progress"]:
                 raise ContractError("receipt manager_progress evidence differs from the ledger")
+            if receipt_path.is_symlink() or receipt_path.parent.is_symlink():
+                raise ContractError("terminal receipt path is unsafe")
+            temporary = receipt_path.with_name(f".{receipt_path.name}.{uuid.uuid4().hex}")
+            fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(receipt_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, receipt_path)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
             reason = canonical({"actor": actor, "cause": cause, "owner_generation": expected_generation})
             db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=?,"
                        "owner_generation=owner_generation+1,owner_actor=? WHERE attempt_id=?",

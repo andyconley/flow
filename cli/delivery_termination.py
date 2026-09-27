@@ -33,8 +33,22 @@ TRACE_FILES = ("claude-implementer.debug.log", "claude-implementer.events.ndjson
 TRACE_FIELDS = {"claude-implementer.debug.log": "diagnostic_trace", "claude-implementer.events.ndjson": "event_trace"}
 
 
-def _regular_file(path: Path) -> bool:
-    return path.is_file() and not path.is_symlink()
+def _file_digest(path: Path) -> tuple[str, int] | None:
+    """Digest and size of a regular file, streamed: no symlink, no FIFO, no unbounded read."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        digest, size = hashlib.sha256(), 0
+        while chunk := os.read(fd, 1024 * 1024):
+            digest.update(chunk)
+            size += len(chunk)
+        return digest.hexdigest(), size
+    finally:
+        os.close(fd)
 
 
 def build_terminal_receipt(envelope: dict[str, Any], attempt_dir: Path, snapshot: dict[str, Any],
@@ -47,10 +61,10 @@ def build_terminal_receipt(envelope: dict[str, Any], attempt_dir: Path, snapshot
     refusing, so a damaged attempt can still be sealed.
     """
     damage: list[dict[str, Any]] = []
-    baseline_path = attempt_dir / "baseline.json"
+    raw_baseline = process_identity.read_bounded(attempt_dir / "baseline.json")
     try:
-        baseline = json.loads(baseline_path.read_text()) if _regular_file(baseline_path) else None
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        baseline = json.loads(raw_baseline) if raw_baseline is not None else None
+    except (UnicodeDecodeError, json.JSONDecodeError):
         baseline = None
     if not isinstance(baseline, dict):
         baseline = None
@@ -59,17 +73,16 @@ def build_terminal_receipt(envelope: dict[str, Any], attempt_dir: Path, snapshot
                                 "allowed_paths": envelope["allowed_paths"], "baseline": baseline,
                                 "edit": None, "tests": None, "verifier_input_sha256": None}
     for name in TRACE_FILES:
-        path = attempt_dir / name
-        if not _regular_file(path):
+        found = _file_digest(attempt_dir / name)
+        if found is None:
             continue
-        data = path.read_bytes()
-        record = {"path": name, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
-        if len(data) > MAX_SEALED_TRACE_BYTES:
+        record = {"path": name, "sha256": found[0], "bytes": found[1]}
+        if found[1] > MAX_SEALED_TRACE_BYTES:
             damage.append({"kind": "trace_oversized", **record})
         else:
             evidence[TRACE_FIELDS[name]] = record
-    draft = attempt_dir / "receipt.json"
-    replaced = hashlib.sha256(draft.read_bytes()).hexdigest() if _regular_file(draft) else None
+    draft = _file_digest(attempt_dir / "receipt.json")
+    replaced = draft[0] if draft is not None else None
     if replaced is not None:
         damage.append({"kind": "draft_receipt_replaced", "sha256": replaced})
     receipt: dict[str, Any] = {
@@ -111,20 +124,29 @@ def terminal_receipt_renderer(envelope: dict[str, Any], attempt_dir: Path, *, st
     return render
 
 
-def _attempt_paths(root: Path | None, work_id: str, attempt_id: str) -> tuple[Path, Path, Path]:
+def _attempt_paths(root: Path | None, work_id: str, attempt_id: str, *,
+                   create: bool = False) -> tuple[Path, Path, Path]:
     project_root = (root or repo_root()).resolve()
     if (not isinstance(work_id, str) or not work_id or any(part in {"", ".", ".."} for part in work_id.split("/"))
             or "/" in work_id or not isinstance(attempt_id, str) or not attempt_id
             or any(char not in "0123456789abcdef" for char in attempt_id)):
         raise ContractError("work id or attempt id is invalid")
-    run_dir = project_root / ".flow" / "runs" / work_id
+    runs_dir = project_root / ".flow" / "runs"
+    run_dir = runs_dir / work_id
     execution_dir = run_dir / "execution"
     ledger_path = execution_dir / "ledger.sqlite"
-    if ledger_path.is_symlink() or not ledger_path.is_file() or execution_dir.is_symlink():
+    if (any(path.is_symlink() for path in (project_root / ".flow", runs_dir, run_dir, execution_dir))
+            or ledger_path.is_symlink() or not ledger_path.is_file()):
         raise RecoveryRefused(LEAD_GUARD_LEDGER_UNREADABLE, "the delivery ledger is absent or unsafe")
     attempt_dir = execution_dir / attempt_id
+    if create and not os.path.lexists(attempt_dir):
+        # A lost attempt directory must not dead-end the work id: abandon
+        # seals into a fresh private one and records the missing evidence.
+        attempt_dir.mkdir(mode=0o700)
     if attempt_dir.is_symlink() or not attempt_dir.is_dir():
         raise RecoveryRefused(ATTEMPT_DIR_UNSAFE, "the attempt directory is absent or a symlink")
+    if not attempt_dir.resolve().is_relative_to(runs_dir.resolve()):
+        raise RecoveryRefused(ATTEMPT_DIR_UNSAFE, "the attempt directory is outside the runs directory")
     return run_dir, attempt_dir, ledger_path
 
 
@@ -165,9 +187,26 @@ def abandon_delivery(work_id: str, attempt_id: str, *, actor: str, explanation: 
     """
     if type(expected_generation) is not int:
         raise ContractError("expected generation is required")
-    run_dir, attempt_dir, ledger_path = _attempt_paths(root, work_id, attempt_id)
+    try:
+        run_dir, attempt_dir, ledger_path = _attempt_paths(root, work_id, attempt_id)
+    except RecoveryRefused as exc:
+        project_root = (root or repo_root()).resolve()
+        execution_dir = project_root / ".flow" / "runs" / work_id / "execution"
+        if exc.reason != ATTEMPT_DIR_UNSAFE or os.path.lexists(execution_dir / attempt_id):
+            raise
+        # Only a started attempt of this run gets its lost directory recreated.
+        try:
+            probe = _read_snapshot(execution_dir / "ledger.sqlite", attempt_id)
+        except (RecoveryRefused, ContractError):
+            raise exc from None
+        if probe["envelope"]["work_id"] != work_id:
+            raise exc from None
+        _check_started(probe, expected_generation)
+        run_dir, attempt_dir, ledger_path = _attempt_paths(root, work_id, attempt_id, create=True)
     ledger = ExecutionLedger(ledger_path)
-    with run_lock(run_dir), ledger.recovery_lock(attempt_id, holder="recovery"):
+    # The attempt's own fence first and without waiting (a live parent holds
+    # the run lock through a whole send), then the run lock: the ADR 0016 order.
+    with ledger.recovery_lock(attempt_id, holder="recovery"), run_lock(run_dir):
         snapshot = _read_snapshot(ledger_path, attempt_id)
         if snapshot["envelope"]["work_id"] != work_id:
             raise ContractError("attempt belongs to another run")
@@ -193,7 +232,7 @@ def control_view(attempt_dir: Path, ledger: ExecutionLedger, attempt_id: str) ->
             "records": [{"owner_generation": item["owner_generation"], "pid": item.get("pid"),
                          "closed": item["closed"], "verdict": process_identity.parent_live(item),
                          "groups": [{"pgid": group["pgid"], "kind": group["kind"],
-                                     "alive": process_identity.group_alive(group)} for group in item["groups"]]}
+                                     "alive": process_identity.group_alive(group, item)} for group in item["groups"]]}
                         for item in found]}
 
 
@@ -246,7 +285,12 @@ def stuck_attempts(root: Path | None = None) -> list[dict[str, Any]]:
             continue
         for snapshot in snapshots:
             attempt_dir = run_dir / "execution" / snapshot["attempt_id"]
-            control = control_view(attempt_dir, ledger, snapshot["attempt_id"])
+            try:
+                control = control_view(attempt_dir, ledger, snapshot["attempt_id"])
+            except (OSError, ContractError, ValueError) as exc:
+                found.append({"work_id": snapshot["work_id"], "attempt_id": snapshot["attempt_id"],
+                              "error": f"control records unreadable: {exc}"})
+                continue
             active = lead_claim_active(delivery, snapshot["envelope"])
             rows = snapshot["actions"] + snapshot["manager_calls"]
             found.append({
@@ -274,12 +318,11 @@ class LockDeadline(Exception):
 @contextmanager
 def _polled_flock(path: Path, deadline: float, *, private: bool = False) -> Iterator[None]:
     """Take one flock without ever blocking indefinitely: poll until ``deadline``."""
-    fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
-        if private:
-            info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-                raise ContractError("send lock must be a private regular file")
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or (private and info.st_nlink != 1):
+            raise ContractError(f"{path.name} must be a private regular file")
         while True:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -306,12 +349,10 @@ def parent_fences(attempt_dir: Path, ledger: ExecutionLedger, deadline: float) -
 
 def valid_cancel_request(attempt_dir: Path, attempt_id: str, generation: int) -> dict[str, Any] | None:
     """The cancel request for exactly this attempt and owner generation, or None."""
-    path = attempt_dir / CANCEL_REQUEST
-    if path.is_symlink() or not path.is_file():
-        return None
+    raw = process_identity.read_bounded(attempt_dir / CANCEL_REQUEST, 64 * 1024)
     try:
-        request = json.loads(path.read_text())
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        request = json.loads(raw) if raw is not None else None
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     text = lambda value, limit: isinstance(value, str) and value.strip() and len(value) <= limit
     if (not isinstance(request, dict) or request.get("schema_version") != 1 or request.get("attempt_id") != attempt_id
@@ -380,8 +421,12 @@ def stop_on_cancel(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
             "interruption_id": interruption["interruption_id"], "detail": refusal, "reaped": reaped}
 
 
-def _signal_parent(record: dict[str, Any]) -> None:
-    """Re-check the parent's identity immediately before signalling it (via a pidfd where the OS has one)."""
+def _signal_parent(record: dict[str, Any], closed: Path) -> None:
+    """Re-check the parent's identity immediately before signalling it (via a pidfd where the OS has one).
+
+    The parent marks its record closed before it restores the default SIGTERM
+    action, so a closed record means the handler may already be gone.
+    """
     pid = record["pid"]
     pidfd = None
     if hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"):
@@ -392,6 +437,8 @@ def _signal_parent(record: dict[str, Any]) -> None:
     try:
         if process_identity.start_time(pid) != record["start_time"]:
             raise RecoveryRefused(PROCESS_IDENTITY_MISMATCH, "the parent pid was reused before it was signalled")
+        if os.path.lexists(closed):
+            raise RecoveryRefused(ATTEMPT_NOT_LIVE, "the parent finished before it was signalled")
         if pidfd is not None:
             signal.pidfd_send_signal(pidfd, signal.SIGTERM)
         else:
@@ -424,7 +471,8 @@ def cancel_delivery(work_id: str, attempt_id: str, *, actor: str, explanation: s
         raise RecoveryRefused(ATTEMPT_NOT_LIVE, "no process recorded itself as this generation's parent")
     verdict = process_identity.parent_live(record)
     if verdict == "foreign":
-        raise RecoveryRefused(FOREIGN_MACHINE, f"the parent ran on {record.get('host')}")
+        host = "".join(char for char in str(record.get("host")) if char.isprintable())[:64]
+        raise RecoveryRefused(FOREIGN_MACHINE, f"the parent ran on {host}")
     if verdict == "mismatch":
         raise RecoveryRefused(PROCESS_IDENTITY_MISMATCH, "the recorded pid now belongs to another process")
     if verdict != "live":
@@ -435,29 +483,34 @@ def cancel_delivery(work_id: str, attempt_id: str, *, actor: str, explanation: s
                "actor": actor.strip(), "explanation": explanation.strip(), "nonce": uuid.uuid4().hex,
                "requested_at": utc_now()}
     _write_cancel_request(attempt_dir, request)
-    try:
-        _signal_parent(record)
-    except RecoveryRefused:
-        with contextlib_suppress(OSError):
-            (attempt_dir / CANCEL_REQUEST).unlink()
-        raise
-    reader = ExecutionLedger(ledger_path, read_only=True)
     closed = attempt_dir / f"control-g{expected_generation}.closed"
-    deadline = time.monotonic() + wait_seconds
-    while True:
-        # Liveness first, status second: a parent that sealed and exited in
-        # between is then read as finished, not as stopped without a seal.
-        parent_gone = process_identity.parent_live({**record, "closed": closed.exists()}) != "live"
-        current = reader.snapshot(attempt_id)
-        if current["status"] == "cancelled":
-            return {"status": "cancelled", "work_id": work_id, "attempt_id": attempt_id,
-                    "receipt_path": current["receipt_path"], "owner_generation": current["owner_generation"]}
-        if current["status"] != "started":
-            return {"status": ATTEMPT_FINISHED, "work_id": work_id, "attempt_id": attempt_id,
-                    "terminal_status": current["status"], "receipt_path": current["receipt_path"]}
-        if parent_gone:
-            raise RecoveryRefused(CANCEL_TIMEOUT, "the parent stopped without sealing; the attempt stays started "
-                                                  "(see its interruption in inspect-delivery)")
-        if time.monotonic() >= deadline:
-            raise RecoveryRefused(CANCEL_TIMEOUT, f"no terminal status within {wait_seconds:g} s; the attempt stays started")
-        time.sleep(0.1)
+    finished = False
+    try:
+        _signal_parent(record, closed)
+        reader = ExecutionLedger(ledger_path, read_only=True)
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            # Liveness first, status second: a parent that sealed and exited in
+            # between is then read as finished, not as stopped without a seal.
+            parent_gone = process_identity.parent_live({**record, "closed": closed.exists()}) != "live"
+            current = reader.snapshot(attempt_id)
+            if current["status"] == "cancelled":
+                finished = True
+                return {"status": "cancelled", "work_id": work_id, "attempt_id": attempt_id,
+                        "receipt_path": current["receipt_path"], "owner_generation": current["owner_generation"]}
+            if current["status"] != "started":
+                finished = True
+                return {"status": ATTEMPT_FINISHED, "work_id": work_id, "attempt_id": attempt_id,
+                        "terminal_status": current["status"], "receipt_path": current["receipt_path"]}
+            if parent_gone:
+                raise RecoveryRefused(CANCEL_TIMEOUT, "the parent stopped without sealing; the attempt stays started "
+                                                      "(see its interruption in inspect-delivery)")
+            if time.monotonic() >= deadline:
+                raise RecoveryRefused(CANCEL_TIMEOUT, f"no terminal status within {wait_seconds:g} s; "
+                                                      "the attempt stays started")
+            time.sleep(0.1)
+    finally:
+        if not finished:
+            # A request that did not end in a seal must not cancel a later SIGTERM.
+            with contextlib_suppress(OSError):
+                (attempt_dir / CANCEL_REQUEST).unlink()

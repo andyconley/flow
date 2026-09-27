@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import hashlib
 import json
 import os
 import re
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -26,6 +28,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 GROUP_KINDS = frozenset({"maf", "provider", "test"})
+MAX_RECORD_BYTES = 1024 * 1024
 _CONTROL_NAME = re.compile(r"^control-g([1-9][0-9]{0,8})\.json$")
 
 
@@ -123,15 +126,20 @@ def machine_id() -> str:
             output = ""
         found = re.search(r'"IOPlatformUUID"\s*=\s*"([0-9A-Fa-f-]{36})"', output)
         if found:
-            return "darwin:" + found.group(1).upper()
+            return _hashed("darwin", found.group(1).upper())
     for candidate in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
         try:
             value = Path(candidate).read_text().strip()
         except OSError:
             continue
         if re.fullmatch(r"[0-9a-f]{32}", value):
-            return "linux:" + value
-    return "host:" + socket.gethostname()
+            return _hashed("linux", value)
+    return _hashed("host", socket.gethostname())
+
+
+def _hashed(kind: str, value: str) -> str:
+    """Records compare machine ids for equality only, so only a digest is stored."""
+    return f"{kind}:" + hashlib.sha256(f"flow-machine:{value}".encode()).hexdigest()
 
 
 def pid_alive(pid: int) -> bool:
@@ -191,7 +199,7 @@ class ControlScope:
             os.fsync(handle.fileno())
 
     def close(self) -> None:
-        if not self.closed_path.exists():
+        if not os.path.lexists(self.closed_path):
             _write_new(self.closed_path, (json.dumps({"closed_at": _now()}) + "\n").encode())
 
 
@@ -227,12 +235,35 @@ def register_group(pgid: int, kind: str) -> None:
         scope.register(pgid, kind)
 
 
-def _read_json(path: Path) -> Any:
-    if path.is_symlink() or not path.is_file():
+def read_bounded(path: Path, limit: int = MAX_RECORD_BYTES) -> bytes | None:
+    """A regular file's bytes, or None: never follows a symlink, never blocks on a FIFO, never reads past ``limit``."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
         return None
     try:
-        return json.loads(path.read_text())
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+            return None
+        chunks, size = [], 0
+        while size <= limit:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        return b"".join(chunks) if size <= limit else None
+    finally:
+        os.close(fd)
+
+
+def _read_json(path: Path) -> Any:
+    data = read_bounded(path)
+    if data is None:
+        return None
+    try:
+        return json.loads(data)
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return None
 
 
@@ -249,8 +280,9 @@ def records(attempt_dir: Path) -> list[dict[str, Any]]:
             continue
         groups: list[dict[str, Any]] = []
         groups_path = attempt_dir / f"control-g{match.group(1)}.groups.jsonl"
-        if groups_path.is_file() and not groups_path.is_symlink():
-            for line in groups_path.read_text(errors="replace").splitlines():
+        data = read_bounded(groups_path)
+        if data is not None:
+            for line in data.decode(errors="replace").splitlines():
                 try:
                     item = json.loads(line)
                 except json.JSONDecodeError:
@@ -274,16 +306,37 @@ def parent_live(record: dict[str, Any]) -> str:
     current_start = start_time(pid)
     if current_start is None:
         return "dead"
-    return "live" if current_start == record.get("start_time") else "mismatch"
+    if current_start != record.get("start_time"):
+        return "mismatch"
+    # A record is only identity evidence: never name init, Flow itself, its
+    # caller, or another user's process as a parent to signal.
+    if pid in {1, os.getpid(), os.getppid()} or _uid(pid) != os.getuid():
+        return "mismatch"
+    return "live"
 
 
-def group_alive(group: dict[str, Any]) -> bool:
+def _uid(pid: int) -> int | None:
+    try:
+        owner = subprocess.run(["ps", "-o", "uid=", "-p", str(pid)], capture_output=True, text=True,
+                               timeout=10, check=False).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return int(owner) if owner.isdigit() else None
+
+
+def _within_record(group: dict[str, Any], record: dict[str, Any] | None) -> bool:
+    """A recorded group's leader must have started no earlier than the parent that recorded it."""
+    return record is None or started_at_or_after(group.get("leader_start"), record.get("start_time"))
+
+
+def group_alive(group: dict[str, Any], record: dict[str, Any] | None = None) -> bool:
     """Whether a recorded group still has its original leader or a member that started after it."""
     leader = group.get("pgid")
-    if type(leader) is not int or leader <= 1:
+    if type(leader) is not int or leader <= 1 or not _within_record(group, record):
         return False
-    if start_time(leader) is not None:
-        return start_time(leader) == group.get("leader_start")
+    current = start_time(leader)
+    if current is not None:
+        return current == group.get("leader_start")
     return bool(_members(leader, group.get("leader_start")))
 
 
@@ -319,7 +372,8 @@ def reap(attempt_dir: Path) -> list[dict[str, Any]]:
         for group in record["groups"]:
             pgid, leader_start = group["pgid"], group.get("leader_start")
             entry = {"owner_generation": record["owner_generation"], "pgid": pgid, "kind": group["kind"]}
-            if pgid == own_group or pgid <= 1 or _start_key(leader_start) is None:
+            if (pgid == own_group or pgid <= 1 or _start_key(leader_start) is None
+                    or not _within_record(group, record)):
                 report.append({**entry, "action": "skipped_unverifiable"})
                 continue
             current_start = start_time(pgid)

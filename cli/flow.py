@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -1100,7 +1101,7 @@ def main() -> int:
         try:
             result = cancel_delivery(args.work_id, args.attempt_id, actor=args.actor, explanation=args.explanation,
                                      expected_generation=args.expected_generation, root=args.project_root)
-        except (ContractError, OSError, ValueError, RuntimeError) as exc:
+        except (ContractError, OSError, ValueError, RuntimeError, sqlite3.Error) as exc:
             return _refusal(exc, as_json=args.json)
         if args.json:
             print(json.dumps(result, sort_keys=True))
@@ -1115,7 +1116,7 @@ def main() -> int:
         try:
             result = abandon_delivery(args.work_id, args.attempt_id, actor=args.actor, explanation=args.explanation,
                                       expected_generation=args.expected_generation, root=args.project_root)
-        except (ContractError, OSError, ValueError, RuntimeError) as exc:
+        except (ContractError, OSError, ValueError, RuntimeError, sqlite3.Error) as exc:
             return _refusal(exc, as_json=args.json)
         print(json.dumps(result, sort_keys=True) if args.json else
               f"attempt: {result['attempt_id']}\nstatus: {result['status']}\ncause: {result['cause']}\n"

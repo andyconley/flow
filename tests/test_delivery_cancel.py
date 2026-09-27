@@ -317,6 +317,25 @@ class CancelRefusalTests(CancelFixture):
         with self.subTest(reason="closed record"):
             self._assert_refused("attempt_not_live", attempt_dir, parent)
 
+    def test_a_record_naming_flow_itself_is_never_signalled(self):
+        _, attempt_dir, parent = self._parent()
+        record_path = attempt_dir / "control-g1.json"
+        record = json.loads(record_path.read_text())
+        record.update(pid=os.getpid(), start_time=process_identity.start_time(os.getpid()))
+        record_path.write_text(json.dumps(record))
+        self._assert_refused("process_identity_mismatch", attempt_dir, parent)
+
+    def test_a_cancel_that_does_not_seal_leaves_no_request_behind(self):
+        # The recorded parent dies on SIGTERM without sealing: cancel_timeout,
+        # and the request is removed so a later stray SIGTERM is not a cancel.
+        _, attempt_dir, parent = self._parent()
+        with self.assertRaises(RecoveryRefused) as raised:
+            self.cancel(wait=10)
+        self.assertEqual(raised.exception.reason, "cancel_timeout")
+        parent.wait(timeout=10)
+        self.assertFalse((attempt_dir / CANCEL_REQUEST).exists())
+        self.assertEqual(self.ledger().snapshot(attempt_dir.name)["status"], "started")
+
     def test_a_terminal_attempt_refuses(self):
         attempt_id, attempt_dir, parent = self._parent()
         with sqlite3_connect(self.run / "execution" / "ledger.sqlite") as db:

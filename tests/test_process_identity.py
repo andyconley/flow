@@ -46,6 +46,16 @@ def _stop(process):
             stream.close()
 
 
+def _one_microsecond_earlier(value):
+    """A start time that is not the leader's but still after the recording parent's."""
+    if value.startswith("darwin:"):
+        seconds, micros = value[len("darwin:"):].split(".")
+        total = int(seconds) * 1_000_000 + int(micros) - 1
+        return f"darwin:{total // 1_000_000}.{total % 1_000_000:06d}"
+    prefix, ticks = value.rsplit(":", 1)
+    return f"{prefix}:{int(ticks) - 1}"
+
+
 class StartTimeTests(unittest.TestCase):
     def test_start_time_reads_self_and_a_child_and_none_for_a_dead_pid(self):
         own = process_identity.start_time(os.getpid())
@@ -104,7 +114,8 @@ class ControlRecordTests(unittest.TestCase):
                 with process_identity.control_scope(self.attempt_dir, 4, attempt_id="a1"):
                     pass
             [record] = process_identity.records(self.attempt_dir)
-            self.assertEqual(process_identity.parent_live(record), "live")
+            # Flow never names its own process as a parent to signal.
+            self.assertEqual(process_identity.parent_live(record), "mismatch")
         self.assertIsNone(process_identity.current())
         process_identity.register_group(child.pid, "provider")  # outside a scope: no-op
         [record] = process_identity.records(self.attempt_dir)
@@ -124,15 +135,21 @@ class ControlRecordTests(unittest.TestCase):
     def test_liveness_verdicts(self):
         dead = subprocess.Popen([sys.executable, "-c", "pass"])
         dead.wait()
-        base = {"pid": os.getpid(), "start_time": process_identity.start_time(os.getpid()),
+        parent = _sleeper()
+        self.addCleanup(_stop, parent)
+        base = {"pid": parent.pid, "start_time": process_identity.start_time(parent.pid),
                 "machine_id": process_identity.machine_id(), "closed": False}
+        own = {**base, "pid": os.getpid(), "start_time": process_identity.start_time(os.getpid())}
         cases = {"live": base, "closed": {**base, "closed": True},
                  "dead": {**base, "pid": dead.pid, "start_time": "darwin:1.000000"},
                  "mismatch": {**base, "start_time": "darwin:1.000000"},
-                 "foreign": {**base, "machine_id": "darwin:00000000-0000-0000-0000-000000000000"}}
+                 "foreign": {**base, "machine_id": "darwin:" + "0" * 64},
+                 "own process": own,
+                 "init": {**base, "pid": 1, "start_time": process_identity.start_time(1)}}
+        expected = {"own process": "mismatch", "init": "mismatch"}
         for verdict, record in cases.items():
             with self.subTest(verdict=verdict):
-                self.assertEqual(process_identity.parent_live(record), verdict)
+                self.assertEqual(process_identity.parent_live(record), expected.get(verdict, verdict))
 
     def test_a_symlinked_attempt_directory_is_refused(self):
         link = self.attempt_dir.parent / "link"
@@ -187,11 +204,22 @@ class ReapTests(ControlRecordTests):
         self._record(1, [(leader.pid, "test")])
         groups = self.attempt_dir / "control-g1.groups.jsonl"
         entry = json.loads(groups.read_text())
-        entry["leader_start"] = "darwin:1.000000" if entry["leader_start"].startswith("darwin:") else "linux:x:1"
+        entry["leader_start"] = _one_microsecond_earlier(entry["leader_start"])
         groups.write_text(json.dumps(entry) + "\n")
         report = process_identity.reap(self.attempt_dir)
         self.assertEqual(report[0]["action"], "skipped_identity_mismatch")
         self.assertIsNone(leader.poll(), "a mismatched leader must not be signalled")
+
+    def test_a_group_older_than_its_recording_parent_is_never_signalled(self):
+        # A tampered record naming a process that predates the parent (here the
+        # shell that started this test run) is reported, never killed.
+        elder = os.getppid()
+        self._record(1, [(elder, "provider")])
+        report = process_identity.reap(self.attempt_dir)
+        self.assertEqual(report[0]["action"], "skipped_unverifiable")
+        self.assertTrue(process_identity.pid_alive(elder))
+        [record] = process_identity.records(self.attempt_dir)
+        self.assertFalse(process_identity.group_alive(record["groups"][0], record))
 
     def test_every_generation_is_considered(self):
         first, second = _sleeper(), _sleeper()

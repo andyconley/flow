@@ -49,7 +49,12 @@ The lead-change blocker and the superseded seal skip exactly `{cancelled, abando
   - a machine id;
   - whether cancel is supported.
 - Flow's own adapters register each process group they start (the MAF child, each provider call, the targeted test) with the leader's start time. The targeted test now runs in its own session, and the MAF launcher kills its whole group on exit. Injected test adapters are unchanged.
-- **Limits.** The record is identity evidence only and grants no authority. Every destructive use re-checks the live process first. Processes Flow neither started nor recorded are out of scope, and so is Ollama server-side generation: the client socket closes, and nothing more is claimed. The Linux reader is parser-tested only.
+- **Limits.** The record is identity evidence only and grants no authority. Every destructive use re-checks the live process first. Flow also refuses to signal:
+  - pid 1, itself or its own caller;
+  - another user's process;
+  - a group whose leader started before the parent that recorded it, since a tampered record could otherwise name an older process.
+
+  The machine id is stored only as a digest. Processes Flow neither started nor recorded are out of scope, and so is Ollama server-side generation: the client socket closes, and nothing more is claimed. The Linux reader is parser-tested only.
 
 ### Cooperative cancel
 
@@ -62,18 +67,26 @@ The lead-change blocker and the superseded seal skip exactly `{cancelled, abando
 
   The seal polls the run lock and the send lock against a 30 s deadline instead of using the authority guard, so it works whatever the lead status is.
 - **Anything else records an interruption.** A bare SIGTERM, a request for another generation, a missed deadline or a moved generation records a `cancel_signal` interruption, and the attempt stays `started`.
-- **Disarm.** Once the runtime outcome is recorded, the flag no longer raises, so a late cancel finds the normal `completed` or `failed` receipt.
+- **Disarm.** Once the runtime outcome is recorded, the flag no longer raises, so a late cancel finds the normal `completed` or `failed` receipt. The recovery path honours disarm too.
+- **A cancel that doesn't seal leaves no request behind.** On a refusal, a timeout, or a parent that exits without sealing, the request is removed. So a later stray SIGTERM is not a cancel.
+- **Residual windows.**
+  - The parent marks its record closed before restoring the default SIGTERM action, and the command checks the closed marker again right before signalling. On macOS, which has no pidfd, a parent that finishes in the microseconds between that check and the signal can still be terminated after it has sealed.
+  - If the ledger generation itself has moved at seal time, no interruption can be recorded under the parent's stale fence. The next recovery claim records `unmarked_process_exit` instead.
+  - `cancel-delivery` relies on the recorded identity, not the lock probe, which only corroborates `stuck` and `inspect-delivery`.
 
 ### Abandon, the lead CLI and the stuck scan
 
 - `flow run abandon-delivery` applies to a `started` v8 attempt no live process holds. Under the run lock it claims the attempt's recovery lock without waiting, and refuses by holder: `attempt_running` for a live run, `recovery_in_progress` for a recovery or decision. It then reaps every generation's recorded groups:
   - a leader alive with its recorded start time: the whole group is killed;
-  - a leader that has exited: only this user's members that started after it are killed;
+  - a leader that has exited: only this user's members that started at or after it are killed. Once every member has died, the pgid can be reused. A later, unrelated group under that pgid, owned by the same user and started later, would then have its members killed. R4 accepts that risk;
   - anything else is reported and never signalled.
 
   Then it seals `abandoned`. The cause comes from the ledger: a pending expansion, otherwise the latest interruption. It works whatever the lead status is and never changes the lead claim.
+  - It takes the recovery lock (without waiting) before the run lock, so a live parent that holds the run lock through a guarded send is refused at once.
+  - A lost attempt directory is recreated as a private directory, and the seal records the missing evidence.
+  - After a hard parent death, a row the parent never marked `unknown` stays `started` in the receipt. It is just as uncertain, and lineage counts it as spent.
 - `flow run delivery-lead` exposes `attention`, `release`, `resume` and `supersede` under the lead generation, with stable refusal codes.
-- `flow run stuck` lists every `started` v8 attempt in the project, with liveness, lead status, uncertain counts, any open expansion, and one next command. `inspect-delivery` shows the same next command, the attempt status apart from the expansion status, the stopper and cause, `evidence_damage`, and each control record with its groups' liveness. Liveness comes from the control record; a lock probe that never creates or writes the lock file only corroborates it, and a live acquisition outlasts that probe.
+- `flow run stuck` lists every `started` v8 attempt in the project, with liveness, lead status, uncertain counts, any open expansion, and one next command. There is a fifth answer besides `cancel-delivery`, `abandon-delivery`, `decide-expansion` and `recover-delivery-lead`: when a recovery or decision holds the fence with no live dispatching parent, the next command is `inspect-delivery`, because acting now would race it. `inspect-delivery` shows the same next command, the attempt status apart from the expansion status, the stopper and cause, `evidence_damage`, and each control record with its groups' liveness. Liveness comes from the control record; a lock probe that never creates or writes the lock file only corroborates it, and a live acquisition outlasts that probe.
 
 ### Actors
 
