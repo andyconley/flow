@@ -585,3 +585,11 @@ Status: open, from the `step5-cancellation` acceptance review (ADR 0019)
   - A terminal receipt's `evidence.edit` could carry the `repair.diff` digest.
 - **Linux validation.** The `/proc` start-time reader and pidfd signalling are
   parser-tested only.
+
+### Handback Orchestration Producer Inventory
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+Implementation handback does not require the orchestration manifest to declare producer and evidence-collector assignments, so the gap surfaces only at the acceptance gate
+
+Writable definition-lane assignments missing from the manifest's producer list were caught only at the acceptance gate, after the manifest was sealed, so closing it required amending a sealed artifact by hand

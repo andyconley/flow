@@ -2,13 +2,6 @@
 
 ## Active work
 
-- `step5-cancellation` is in review on `codex/step5-cancellation`, not pushed.
-  It adds cancel and abandon for chartered v8 attempts (ADR 0019).
-  - The acceptance review found nothing Critical. Its fixes are committed on the
-    branch; see `review.md`.
-  - `accept-review` is blocked on the acceptance orchestration gate. The
-    manifest lists no research assignments as producers, and amending that
-    sealed manifest needs Andy's decision.
 - No other work in flight. All other runs are archived, blocked as superseded, or (for
   `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
   is a legacy record.
@@ -25,6 +18,20 @@
     llama3.1:8b 6/6, each usable and correct.
 
 ## Recently completed
+
+- `step5-cancellation` accepted and archived 2026-09-27; PR #45, released
+  as v0.38.0 (installed and synced). ADR 0019.
+  - **Terminal statuses:** new receipt-backed `cancelled` and `abandoned`.
+  - **New commands:** `flow run cancel-delivery`, `abandon-delivery`,
+    `delivery-lead` and `stuck`.
+  - **First real use:** the stuck `v8-live-validation` attempt `f628faa9`
+    is sealed `abandoned`, and `flow run stuck` is now empty.
+  - **Follow-ups:** in the backlog under "Delivery Termination Follow-Ups".
+    The remaining step 5 slices are trace correlation, receipt
+    verification, MCP handback and the token cap.
+  - **Next:** `v8-live-validation-3`, with a new work id. It is paid and needs
+    Andy's go. Reset `~/src/flow-v8-live-job-2` to `d6d771f2` first. A
+    successor after a cancel or abandon needs a clean worktree.
 
 - `producer-turn-contract` accepted and archived 2026-09-27 on
   `codex/producer-turn-contract`; PR #44.
