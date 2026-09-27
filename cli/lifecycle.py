@@ -135,10 +135,23 @@ def write_install_config(install: dict) -> None:
     for key, value in flow_section.items():
         lines.append(f'{key} = "{value}"')
     lines.extend(["", "[install]"])
-    # Stable key order keeps diffs readable.
-    for key in ("mode", "version", "remote", "source_target", "installed_at"):
+    # Preserve structured activation evidence. Do not serialize integers and
+    # booleans as quoted strings: a bridge revision must round-trip as an int.
+    def toml_scalar(value: object) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        raise ValueError("install configuration values must be TOML scalars")
+
+    preferred = ("mode", "version", "remote", "source_target", "installed_at",
+                 "maf_runtime_activation_revision", "maf_runtime_activation_state",
+                 "maf_runtime_activation_attempted_at", "maf_runtime_activation_detail")
+    for key in (*preferred, *sorted(key for key in install if key not in preferred)):
         if key in install:
-            lines.append(f'{key} = "{install[key]}"')
+            lines.append(f"{key} = {toml_scalar(install[key])}")
     lines.append("")
     FLOW_CONFIG.write_text("\n".join(lines))
 
@@ -531,6 +544,12 @@ def _restore_after_maf_failure(config_bytes: bytes | None) -> None:
 
 def _finish_maf_transaction(config_bytes: bytes | None) -> bool:
     if _provision_maf_runtime():
+        config = read_install_config()
+        config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                       "maf_runtime_activation_state": "succeeded",
+                       "maf_runtime_activation_attempted_at": _now_utc_iso()})
+        config.pop("maf_runtime_activation_detail", None)
+        write_install_config(config)
         _remove_path(_stage_path("old"))
         return True
     _restore_after_maf_failure(config_bytes)
@@ -560,7 +579,7 @@ def _provision_maf_runtime() -> bool:
     return True
 
 
-def activate_managed_maf_runtime() -> bool:
+def activate_managed_maf_runtime() -> dict[str, object]:
     """Complete the first-upgrade bridge once an older updater activates us.
 
     Older ``flow update`` code cannot call a hook it does not contain. The new
@@ -569,13 +588,32 @@ def activate_managed_maf_runtime() -> bool:
     never changes the selected source/config pair.
     """
     config = read_install_config()
-    if config.get("maf_runtime_activation") == MAF_RUNTIME_ACTIVATION_REVISION:
-        return True
+    if (config.get("maf_runtime_activation_revision") == MAF_RUNTIME_ACTIVATION_REVISION
+            and config.get("maf_runtime_activation_state") in {"succeeded", "failed"}):
+        return {"attempted": False, "state": config["maf_runtime_activation_state"]}
     if not _provision_maf_runtime():
-        return False
-    config["maf_runtime_activation"] = MAF_RUNTIME_ACTIVATION_REVISION
+        config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                       "maf_runtime_activation_state": "failed",
+                       "maf_runtime_activation_attempted_at": _now_utc_iso(),
+                       "maf_runtime_activation_detail": "provisioning failed; run flow runtime install-maf to repair"})
+        write_install_config(config)
+        return {"attempted": True, "state": "failed"}
+    config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                   "maf_runtime_activation_state": "succeeded",
+                   "maf_runtime_activation_attempted_at": _now_utc_iso()})
+    config.pop("maf_runtime_activation_detail", None)
     write_install_config(config)
-    return True
+    return {"attempted": True, "state": "succeeded"}
+
+
+def record_managed_maf_runtime_repair() -> None:
+    """Record an explicit ``runtime install-maf`` repair without re-provisioning."""
+    config = read_install_config()
+    config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                   "maf_runtime_activation_state": "succeeded",
+                   "maf_runtime_activation_attempted_at": _now_utc_iso()})
+    config.pop("maf_runtime_activation_detail", None)
+    write_install_config(config)
 
 
 def install_command(release: bool, develop_path: str | None) -> int:

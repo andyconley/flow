@@ -36,7 +36,8 @@ from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from expertise_commands import register as register_expertise, dispatch as dispatch_expertise  # noqa: E402
 from gaps import cmd_add, cmd_list, cmd_promote  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
-from lifecycle import install_command, update_command  # noqa: E402
+from lifecycle import (activate_managed_maf_runtime, install_command,
+                       record_managed_maf_runtime_repair, update_command)  # noqa: E402
 from model_advice import context_command as model_context_command  # noqa: E402
 from model_advice import resolve_command as model_resolve_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
@@ -926,6 +927,19 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    # A v0.38 updater can activate this source but cannot invoke a hook it did
+    # not ship. On the first later operational command, do one transactional
+    # activation attempt. Help, read-only checks, and explicit repair stay
+    # side-effect free; a recorded failure is never retried implicitly.
+    bridge_command = ((args.command == "bootstrap")
+                      or (args.command == "setup" and args.setup_target == "machine")
+                      or (args.command == "runtime" and args.runtime_target == "smoke"))
+    if bridge_command:
+        bridge = activate_managed_maf_runtime()
+        if bridge["attempted"]:
+            print("MAF runtime post-activation: " + str(bridge["state"]) +
+                  ("; run `flow runtime install-maf` to repair." if bridge["state"] == "failed" else ""))
+
     if args.command == "setup" and args.setup_target == "machine":
         return setup_machine()
     if args.command == "setup" and args.setup_target == "project":
@@ -1296,6 +1310,7 @@ def main() -> int:
         except MafRuntimeUnready as exc:
             print(json.dumps(exc.diagnostic, sort_keys=True) if args.json else str(exc))
             return 1
+        record_managed_maf_runtime_repair()
         print(json.dumps(result, sort_keys=True) if args.json else "MAF runtime installed and verified")
         return 0
     if args.command == "model" and args.model_target == "context":

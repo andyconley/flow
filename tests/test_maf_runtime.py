@@ -86,9 +86,35 @@ class MafLifecycleTransactionTests(unittest.TestCase):
         with patch.object(lifecycle, "read_install_config", return_value=config), \
              patch.object(lifecycle, "_provision_maf_runtime", return_value=True) as provisioned, \
              patch.object(lifecycle, "write_install_config") as written:
-            self.assertTrue(lifecycle.activate_managed_maf_runtime())
+            self.assertEqual(lifecycle.activate_managed_maf_runtime(), {"attempted": True, "state": "succeeded"})
         provisioned.assert_called_once()
-        written.assert_called_once_with({"mode": "release", "version": "v0.38.0", "maf_runtime_activation": 1})
+        written.assert_called_once()
+        stamped = written.call_args.args[0]
+        self.assertEqual(stamped["maf_runtime_activation_revision"], 1)
+        self.assertEqual(stamped["maf_runtime_activation_state"], "succeeded")
+
+    def test_failed_bridge_is_recorded_once_and_explicit_repair_is_separate(self):
+        config = {"mode": "release", "version": "v0.38.0"}
+        with patch.object(lifecycle, "read_install_config", side_effect=[config, config]), \
+             patch.object(lifecycle, "_provision_maf_runtime", return_value=False) as provisioned, \
+             patch.object(lifecycle, "write_install_config") as written:
+            self.assertEqual(lifecycle.activate_managed_maf_runtime(), {"attempted": True, "state": "failed"})
+            # Simulate the persisted state read by a later command: it must not retry.
+            config.update(written.call_args.args[0])
+            self.assertEqual(lifecycle.activate_managed_maf_runtime(), {"attempted": False, "state": "failed"})
+        provisioned.assert_called_once()
+
+    def test_install_config_round_trips_structured_activation_marker(self):
+        with tempfile.TemporaryDirectory() as raw:
+            config_path = Path(raw) / "config.toml"
+            marker = {"mode": "release", "maf_runtime_activation_revision": 1,
+                      "maf_runtime_activation_state": "failed", "maf_runtime_activation_detail": 'needs "repair"'}
+            with patch.object(lifecycle, "FLOW_CONFIG", config_path):
+                lifecycle.write_install_config(marker)
+                restored = lifecycle.read_install_config()
+            self.assertEqual(restored["maf_runtime_activation_revision"], 1)
+            self.assertEqual(restored["maf_runtime_activation_state"], "failed")
+            self.assertEqual(restored["maf_runtime_activation_detail"], 'needs "repair"')
 
     def test_develop_conversion_restores_source_config_and_runtime_pointer_when_provision_fails(self):
         with tempfile.TemporaryDirectory() as raw:

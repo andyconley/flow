@@ -160,6 +160,11 @@ MAF is optional: ordinary Flow commands do not import it. Delivery commands use
 the selected managed runtime under `~/.flow/runtimes/maf/`; provision or repair
 it with `flow runtime install-maf`. The command stages and probes a
 digest-addressed environment before atomically selecting it. `FLOW_MAF_PYTHON`
+is an execution override, not a managed-pointer installer. When a v0.38-era
+updater activates a newer Flow source, it cannot call code it did not ship.
+The first later operational runtime command performs one recorded, transactional
+activation attempt; failure retains the old runtime pointer and is not retried
+implicitly. Run `flow runtime install-maf` for the explicit repair path.
 is an explicit, validated compatibility override for a pinned interpreter; it
 must pass the same credential-free package, runner, and protocol probe and is
 never an implicit fallback. See `runtime/maf_runner/requirements.lock` for the
