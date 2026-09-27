@@ -226,8 +226,8 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
 | `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
 | `flow runtime smoke [--target all\|claude\|codex\|maf] [--json]` | Check generated runtime surfaces and strict optional MAF readiness |
-| `flow runtime readiness [--json]` | Check whether chartered Delivery can start without creating an attempt |
-| `flow runtime install-maf [--json]` | Stage, prove, and atomically select Flow's managed pinned MAF environment |
+| `flow runtime readiness [--json]` | Check strict MAF Delivery readiness without creating an attempt |
+| `flow runtime install-maf [--json]` | Stage, prove, and select Flow's managed pinned MAF runtime |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |
 | `flow model resolve --runtime <runtime> --profile <profile> [--json]` | Resolve an agent-selected session profile without changing runtime configuration |
 <!-- generated:cli-commands-table:end -->

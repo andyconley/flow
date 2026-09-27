@@ -172,6 +172,12 @@ The run must be revision 2 and `implementing`, with a valid dispatch-stage `orch
 
 Direct Claude and Codex edits are Flow-gated: only specialists the charter names as producers may hold edit capability, and their write scope must equal the charter's declared `write_paths`. Ollama performs read-only verification only — an Ollama-backed specialist must be read-only, and every declared verifier must be an independent read-only specialist disjoint from the producers. Native subagents are disabled; the roster runs only the Flow-approved specialists bound in the orchestration manifest.
 
+The gateway checks the managed MAF interpreter after read-only authority and worktree validation, before it creates an attempt. An unavailable runtime returns `maf_runtime_unready` without consuming execution authority. Use `flow runtime install-maf` to repair it; `FLOW_MAF_PYTHON` is an explicit validated override and never silently falls back.
+
+### `flow run recover-runtime-startup <work-id> <attempt-id>`
+
+Create a fresh linked successor only after a sealed v8 MAF startup failure with no manager, worker, verifier, observed, or uncertain send. The original receipt remains immutable. The successor performs normal authority, clean-worktree, and MAF readiness checks; it is not a replay of the predecessor.
+
 ### `flow run inspect-execution <work-id> <attempt-id>`
 
 Read the original envelope, action, ordered ledger events, source snapshot checks, checkpoint link, receipt, and missing evidence without creating a new attempt or calling a provider. Use `--json` for structured output. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that Ollama did not receive the request.
@@ -276,12 +282,12 @@ configure delegated agents.
 
 ### `flow runtime smoke`
 
-Check generated Claude and Codex runtime adapter surfaces and list the manual
-runtime smoke evidence still required.
+Check generated Claude and Codex runtime adapter surfaces, or strict MAF
+Delivery readiness with `--target maf`.
 
 Flags:
 
-- `--target all|claude|codex` — runtime target to check (default: all)
+- `--target all|claude|codex|maf` — runtime target to check (default: all)
 - `--json` — emit JSON
 
 Static checks prove local generated files only:
