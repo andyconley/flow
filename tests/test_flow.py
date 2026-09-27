@@ -1326,7 +1326,10 @@ class FlowCliTests(FlowCliHarness):
 
     def test_runtime_smoke_checks_generated_surfaces(self) -> None:
         fake_home = self.use_fake_home()
-        self._offline_maf_python()
+        # Smoke is deliberately diagnostic-only. Provision the real locked
+        # managed runtime explicitly before asking the all-target report to
+        # require MAF readiness.
+        self.assert_ok(self.run_flow("runtime", "install-maf"))
         self.assert_ok(self.run_flow("sync", "claude", "--user"))
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
