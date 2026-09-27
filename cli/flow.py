@@ -1105,7 +1105,7 @@ def main() -> int:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"runtime startup recovery refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"successor attempt: {result['attempt_id']}")
-        return 0 if result["status"] == "completed" else 1
+        return 0 if result["status"] in {"completed", "reconciled"} else 1
     if args.command == "run" and args.run_target == "resume-delivery-lead":
         import json
         try:

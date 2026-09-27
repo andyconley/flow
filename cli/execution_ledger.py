@@ -436,7 +436,8 @@ class ExecutionLedger:
             if row[0]:
                 return row[0]
             candidates = db.execute(
-                "SELECT attempt_id FROM attempts WHERE json_extract(envelope_json,'$.predecessors[0].attempt_id')=?",
+                "SELECT DISTINCT attempts.attempt_id FROM attempts, json_each(attempts.envelope_json,'$.predecessors') "
+                "WHERE json_extract(json_each.value,'$.attempt_id')=?",
                 (predecessor_attempt_id,)).fetchall()
             if len(candidates) == 1:
                 db.execute("UPDATE runtime_startup_successors SET successor_attempt_id=? WHERE predecessor_attempt_id=?",

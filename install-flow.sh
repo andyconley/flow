@@ -280,9 +280,18 @@ fi
 # verified runtime for the chartered lane. `install-maf` stages and probes its
 # environment before atomically changing the runtime pointer, so an existing
 # known-good selection remains intact if this step fails.
-if ! "${BIN_DIR}/flow" runtime install-maf; then
-  rollback_install
-  err "managed MAF runtime could not be provisioned; prior Flow source, config, and runtime selection were restored"
+set +e
+maf_install_output="$("${BIN_DIR}/flow" runtime install-maf 2>&1)"
+maf_install_status=$?
+set -e
+printf '%s\n' "${maf_install_output}"
+if [[ ${maf_install_status} -ne 0 ]]; then
+  if [[ "${maf_install_output}" == *"unsupported_runtime"* ]]; then
+    echo "warning: managed MAF runtime is unsupported on this host; base Flow installed without Delivery readiness"
+  else
+    rollback_install
+    err "managed MAF runtime could not be provisioned; prior Flow source, config, and runtime selection were restored"
+  fi
 fi
 
 rm -rf "${SOURCE_BACKUP}" "${CONFIG_BACKUP}"
