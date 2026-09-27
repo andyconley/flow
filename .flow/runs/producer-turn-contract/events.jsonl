@@ -6,3 +6,4 @@
 {"artifacts": {"handback": ".flow/runs/producer-turn-contract/HANDOFF.md", "implementation_evidence": ".flow/runs/producer-turn-contract/validation-results.md"}, "at": "2026-09-27T03:56:23Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
 {"artifacts": {}, "at": "2026-09-27T04:06:09Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
 {"artifacts": {"review": ".flow/runs/producer-turn-contract/review.md"}, "at": "2026-09-27T04:10:44Z", "dispositions": {}, "event": "accept-review", "from": "reviewing", "to": "review_accepted"}
+{"artifacts": {"archive": ".flow/runs/producer-turn-contract/archive.md"}, "at": "2026-09-27T05:00:24Z", "dispositions": {"archive_enrichment": "1", "capability_gaps": "recorded", "memory": "updated"}, "event": "archive", "from": "review_accepted", "to": "archived"}

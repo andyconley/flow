@@ -19,8 +19,20 @@
 
 ## Recently completed
 
-- `manager-progress-retry` accepted and archived 2026-09-26 on
-  `codex/manager-progress-retry`, not yet pushed.
+- `producer-turn-contract` accepted and archived 2026-09-27 on
+  `codex/producer-turn-contract`, not yet pushed.
+  - Fixes D7: the chartered manager facts now state that the approved
+    editors get one call in total, which must make the complete edit. This is
+    guidance only; enforcement is unchanged.
+  - Fixes D6: a chartered editor turn with no edit now fails as "editor made
+    no edit ..." rather than as a scope violation.
+  - Full suite: 1,571 OK, 0 skipped; 4 of 4 mutation checks caught.
+  - Next: PR (PR #43 for `v8-live-validation-2` is open separately), release,
+    reinstall, then `v8-live-validation-3` with a new work id (reset
+    `~/src/flow-v8-live-job-2` to `d6d771f2`).
+
+- `manager-progress-retry` accepted and archived 2026-09-26; merged as
+  PR #42 and released in v0.37.0.
   - Fixes D4 (ADR 0018): a malformed manager progress reply is repaired
     (invalid escapes only) or retried up to twice as counted manager calls
     (not rounds). The 3rd unparsable reply aborts with no replan, and v8
