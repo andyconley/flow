@@ -53,7 +53,12 @@
         ".flow/runs/step5-cancellation/acceptance-criteria.md",
         ".flow/runs/step5-cancellation/intake.md",
         ".flow/runs/step5-cancellation/reconciliation.md",
-        ".flow/runs/step5-cancellation/definition-dispositions.md"
+        ".flow/runs/step5-cancellation/definition-dispositions.md",
+        ".flow/runs/step5-cancellation/plan.md",
+        ".flow/runs/step5-cancellation/implementation-handoff.md",
+        ".flow/runs/step5-cancellation/validation-plan.md",
+        ".flow/runs/step5-cancellation/plan-dispositions.md",
+        ".flow/runs/step5-cancellation/research/spikes.md"
       ],
       "read_only": false,
       "required_capabilities": [
@@ -326,6 +331,57 @@
       "coordination": {
         "mode": "serialized",
         "group": "definition-review-product"
+      }
+    },
+    {
+      "id": "plan-review",
+      "lane": "plan",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-architect-step5-cancellation-plan-review"
+      },
+      "brief_path": ".flow/runs/step5-cancellation/intake.md",
+      "input_evidence": [
+        ".flow/runs/step5-cancellation/plan.md",
+        ".flow/runs/step5-cancellation/implementation-handoff.md",
+        ".flow/runs/step5-cancellation/validation-plan.md",
+        ".flow/runs/step5-cancellation/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/step5-cancellation",
+        "cli",
+        "runtime",
+        "tests",
+        "docs",
+        ".flow/runs/chartered-delivery-recovery-1b",
+        ".flow/runs/v8-live-validation-2",
+        ".flow/runs/shaper-expansion-approval"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/step5-cancellation/plan-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Adversarial review of the implementation plan"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "plan-review"
       }
     }
   ]

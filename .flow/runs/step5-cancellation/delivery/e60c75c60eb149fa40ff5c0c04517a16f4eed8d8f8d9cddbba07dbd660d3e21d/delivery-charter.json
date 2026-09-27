@@ -1,0 +1,622 @@
+{
+  "acceptance_criteria": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "AC1-AC12 in .flow/runs/step5-cancellation/acceptance-criteria.md."
+    }
+  ],
+  "accepted_risks": [
+    {
+      "owner": "Andy",
+      "risk": "process identity checks misfire on macOS",
+      "status": "owned"
+    },
+    {
+      "owner": "Andy",
+      "risk": "cancel races the normal seal",
+      "status": "owned"
+    }
+  ],
+  "amendment_lineage": [],
+  "approval_matrix": {
+    "acceptance": "Flow_gate",
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant"
+  },
+  "approved_sources": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/step5-cancellation/acceptance-criteria.md",
+      "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/step5-cancellation/orchestration.json",
+      "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd"
+    },
+    "requirements": {
+      "path": ".flow/runs/step5-cancellation/requirements.md",
+      "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/step5-cancellation/shaper-intent.json",
+      "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6"
+    }
+  },
+  "approver": {
+    "event": "approve-definition",
+    "identity": "engineer"
+  },
+  "boundaries": {
+    "artifact_root": ".flow/runs/step5-cancellation",
+    "worktree_policy": "Flow-bound"
+  },
+  "charter_id": "delivery-7b316e2d345b1919efbc",
+  "charter_version": 3,
+  "compatibility_version": 7,
+  "constraints": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "The ledger and existing fences stay authoritative."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Uncertain rows are never resent or reclassified without evidence."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "No backwards-compatibility work."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Hermetic tests only."
+    }
+  ],
+  "delivery_attempt_policy": {
+    "one_active_lead": true,
+    "resume_or_supersede": "explicit"
+  },
+  "digest": "e60c75c60eb149fa40ff5c0c04517a16f4eed8d8f8d9cddbba07dbd660d3e21d",
+  "eligible_specialists": {
+    "lead-developer": {
+      "approved_capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "edit",
+        "read"
+      ]
+    },
+    "quality-reviewer": {
+      "approved_capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "read"
+      ]
+    },
+    "test-engineer": {
+      "approved_capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "read"
+      ]
+    }
+  },
+  "escalation_stop_cancellation": {
+    "cancellation": "Flow_only",
+    "scope_expansion": "halt_for_shaper"
+  },
+  "exclusions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Protocols 5-7."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Charter-sealed automatic cancel."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "MCP ingress."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Actor authentication."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "resolve-execution changes."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Runtime-cap behaviour change."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Cross-machine cancel."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Non-POSIX."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Ollama server-side generation."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "SIGINT semantics."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Live provider runs."
+    }
+  ],
+  "handback": [
+    "receipt",
+    "diff",
+    "test",
+    "verifier_evidence"
+  ],
+  "kind": "delivery_charter",
+  "limits": {
+    "concurrency": 1,
+    "delegations": 3,
+    "expansion_headroom": {
+      "delegations": 0,
+      "manager_calls": 0,
+      "manager_rounds": 0,
+      "paid_worker_calls": 0,
+      "verifier_calls": 0
+    },
+    "max_manager_calls": 6,
+    "max_manager_rounds": 3,
+    "max_paid_worker_calls": 1,
+    "max_verifier_calls": 1,
+    "outputs": [
+      "diff",
+      "test",
+      "receipt"
+    ],
+    "paths": [
+      "charter-scoped"
+    ],
+    "replans": 0,
+    "retries": 0,
+    "runtime_seconds": 300,
+    "tools": [
+      "read",
+      "edit",
+      "test"
+    ]
+  },
+  "outcomes": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Cancel a live v8 attempt, abandon a stuck one, find stuck attempts, and continue the same work id with a successor, keeping uncertainty honest and never resending."
+    }
+  ],
+  "producer_verifier_rules": {
+    "distinct_identities": true,
+    "verifier_read_only": true
+  },
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "ungranted-provider-dispatch"
+  ],
+  "provider_capabilities": {
+    "claude": {
+      "binding": "capability"
+    },
+    "codex": {
+      "binding": "capability"
+    },
+    "ollama": {
+      "binding": "verifier"
+    }
+  },
+  "recovery": {
+    "takeover": "explicit_resume_or_supersede",
+    "unknown_action_blocks_successor": true
+  },
+  "run_id": "step5-cancellation",
+  "schema_version": 1,
+  "scope": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Process identity record, cooperative cancel in the parent, cancel-delivery, abandon-delivery, cancelled/abandoned receipt seals, uncertainty scoping, successor lineage, delivery-lead CLI, inspect-delivery and flow run stuck, ADR 0019."
+    }
+  ],
+  "shaper_contract": {
+    "digest": "0108cffe6663c8353ee1023fe06ee0ac8ada085c68ecba131babd12dd147fe47",
+    "id": "shaper-b79691f95f9ee3515b81",
+    "version": 3
+  },
+  "validation": {
+    "flow_observed_diff_and_test_before_verifier": true
+  }
+}

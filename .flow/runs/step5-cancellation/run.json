@@ -7,22 +7,58 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/step5-cancellation/acceptance-criteria.md",
+    "handoff": ".flow/runs/step5-cancellation/implementation-handoff.md",
     "orchestration_manifest": ".flow/runs/step5-cancellation/orchestration.json",
+    "plan": ".flow/runs/step5-cancellation/plan.md",
     "requirements": ".flow/runs/step5-cancellation/requirements.md",
-    "shaper_intent": ".flow/runs/step5-cancellation/shaper-intent.json"
+    "shaper_intent": ".flow/runs/step5-cancellation/shaper-intent.json",
+    "validation_plan": ".flow/runs/step5-cancellation/validation-plan.md"
   },
   "created_at": "2026-09-27T05:16:10Z",
+  "delivery": {
+    "charter_digest": "e60c75c60eb149fa40ff5c0c04517a16f4eed8d8f8d9cddbba07dbd660d3e21d",
+    "charter_id": "delivery-7b316e2d345b1919efbc",
+    "delivery_artifact_dir": "delivery/e60c75c60eb149fa40ff5c0c04517a16f4eed8d8f8d9cddbba07dbd660d3e21d",
+    "handoff_digest": "941fac50300b9557602aeeb4110c881f27d4d9212bd2106da5282b350320d62e",
+    "lead_claim_digest": "2d4e8048fdf1cf1a15a1ddcafbcdd81ce45a5028d743c02c19ff320685ad9db9",
+    "lead_claim_path": "delivery/e60c75c60eb149fa40ff5c0c04517a16f4eed8d8f8d9cddbba07dbd660d3e21d/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-e60c75c60eb149fa40ff",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "0108cffe6663c8353ee1023fe06ee0ac8ada085c68ecba131babd12dd147fe47",
+    "shaper_contract_id": "shaper-b79691f95f9ee3515b81",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/step5-cancellation/acceptance-criteria.md",
+        "sha256": "35cb0c54378f1e03df309328ddf01604b71152999d2abd7be0a6eb11ed0b6b4e"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/step5-cancellation/orchestration.json",
+        "sha256": "b84dbe4fd1436a51880360aaf696686d2065e6af87928f1345cc6f5a2e7f0bbd"
+      },
+      "requirements": {
+        "path": ".flow/runs/step5-cancellation/requirements.md",
+        "sha256": "f62c86932f954dca27211b1fd8fb0e2d53a9a1f88b49289de284979891fb9063"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/step5-cancellation/shaper-intent.json",
+        "sha256": "23e80b88059fdb97850e8f46a46233828b39871e14298e930887cc55bf1e07a6"
+      }
+    }
+  },
   "dispositions": {},
   "gates": {
     "approve-definition": "2026-09-27T15:33:15Z",
-    "start-definition": "2026-09-27T05:16:10Z"
+    "approve-plan": "2026-09-27T15:59:40Z",
+    "start-definition": "2026-09-27T05:16:10Z",
+    "start-plan": "2026-09-27T15:33:33Z"
   },
-  "lane": "define",
-  "last_event": "approve-definition",
-  "phase": "definition_approved",
+  "lane": "plan",
+  "last_event": "approve-plan",
+  "phase": "plan_approved",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "definition_approved",
-  "updated_at": "2026-09-27T15:33:15Z",
+  "state": "plan_approved",
+  "updated_at": "2026-09-27T15:59:40Z",
   "work_id": "step5-cancellation"
 }
