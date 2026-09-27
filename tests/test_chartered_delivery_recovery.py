@@ -600,7 +600,7 @@ class RecoveryHarness(CharteredFixture):
         test_patch.start()
         self.addCleanup(test_patch.stop)
 
-    def _fake_test(self, worktree, job):
+    def _fake_test(self, worktree, job, **kwargs):
         # A new digest on every call, like the real timing-bearing output.
         self.test_calls += 1
         return {"command": job["test"]["argv"], "status": "passed",
@@ -812,7 +812,7 @@ class CharteredRecoveryTests(RecoveryHarness):
                 self.test_calls = 0
 
     def test_seal_mode_after_a_failed_test_seals_failed_without_rerunning_it(self):
-        def failing(worktree, job):
+        def failing(worktree, job, **kwargs):
             self.test_calls += 1
             raise ExecutionContractError("targeted chartered test failed: boom")
 

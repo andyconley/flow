@@ -14,7 +14,7 @@ import selectors
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 MAX_PROMPT_BYTES = 32768
 MAX_EVENT_BYTES = 262144
@@ -70,7 +70,8 @@ def _parse_events(raw: bytes, expected_model: str, *, max_output_bytes: int = MA
 def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                timeout_seconds: int, codex_bin: str = "codex",
                sandbox: str = "workspace-write", max_prompt_bytes: int | None = None,
-               max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
+               max_output_bytes: int = MAX_OUTPUT_BYTES,
+               on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Run one Codex turn; fail closed on timeout, malformed or incomplete output.
 
     The caller must create and approve the isolated workspace before dispatch.
@@ -111,6 +112,9 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
     assert process.stdin is not None and process.stdout is not None
     deadline = time.monotonic() + timeout_seconds
     try:
+        if on_process_group is not None:
+            # Recorded before any byte is sent, so a stuck turn can be reaped.
+            on_process_group(process.pid, "provider")
         chunks: list[bytes] = []
         size = written = 0
         selector = selectors.DefaultSelector()

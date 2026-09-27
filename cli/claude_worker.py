@@ -15,7 +15,7 @@ import selectors
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
@@ -111,7 +111,8 @@ def build_prompt(instructions: str, task: str) -> bytes:
 def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
                 timeout_seconds: int, claude_bin: str = "claude",
                 prompt_override: str | None = None,
-                max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
+                max_output_bytes: int = MAX_OUTPUT_BYTES,
+                on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Run one Claude Code turn; fail closed on timeout, malformed or incomplete output.
 
     The caller must create and approve the isolated workspace before dispatch.
@@ -153,6 +154,8 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
     if process.stdin is None or process.stdout is None or process.stderr is None:
         raise ClaudeWorkerError("Claude process pipes unavailable")
     try:
+        if on_process_group is not None:
+            on_process_group(process.pid, "provider")
         chunks: list[bytes] = []
         stderr_chunks: list[bytes] = []
         size = 0

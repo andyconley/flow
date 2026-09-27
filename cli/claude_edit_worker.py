@@ -14,7 +14,7 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from claude_worker import CLAUDE_ENV_KEYS, _normalized_usage
 
@@ -75,7 +75,8 @@ def _stream_result(raw: bytes, model: str) -> dict[str, Any]:
 
 def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: str,
                      timeout_seconds: int, claude_bin: str = "claude",
-                     trace_path: Path | None = None) -> dict[str, Any]:
+                     trace_path: Path | None = None,
+                     on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Allow only Claude file tools; caller must verify every resulting edit."""
     raw_workspace = Path(workspace)
     if raw_workspace.is_symlink():
@@ -121,6 +122,8 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
     if process.stdin is None or process.stdout is None:
         raise ClaudeEditError("Claude process pipes unavailable")
     try:
+        if on_process_group is not None:
+            on_process_group(process.pid, "provider")
         chunks: list[bytes] = []
         size = written = 0
         event_file = event_path.open("ab") if event_path is not None else None

@@ -3503,6 +3503,7 @@ class FlowCliTests(FlowCliHarness):
                 "overlay",
                 "paths",
                 "plugin_usage",
+                "process_identity",
                 "project",
                 "render",
                 "runner_limits",

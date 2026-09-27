@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import select
+import signal
 import subprocess
 import sys
 import time
@@ -446,7 +447,8 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                      on_manager: Callable[[dict[str, Any]], str],
                      on_action: Callable[[dict[str, Any]], dict[str, Any]], *,
                      timeout_s: float = 900, python_path: str | None = None,
-                     resume: dict[str, Any] | None = None) -> dict[str, Any]:
+                     resume: dict[str, Any] | None = None,
+                     on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Run credentialless stock Magentic behind Flow's two guarded callbacks."""
     protocol_version = envelope.get("execution_protocol_version")
     if protocol_version not in {5, 6, 7, 8} or not isinstance(task, str) or not task.strip():
@@ -471,6 +473,8 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     manager_call_bound = MAX_MANAGER_CALLS if expandable else envelope["limits"]["max_manager_calls"]
     action_bound = MAX_ACTIONS if expandable else envelope["limits"]["max_delegations"]
     try:
+        if on_process_group is not None:
+            on_process_group(process.pid, "maf")
         _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "resume" if resume else "start",
                                                    "envelope": envelope, "task": task, "resume": resume}, deadline)
         while True:
@@ -516,7 +520,11 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
             raise MafProtocolError("MAF delivery child sent an unexpected message")
     finally:
         if process.poll() is None:
-            process.kill()
+            # The whole group: a runtime subprocess must not outlive the child.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             process.wait(timeout=5)
         process.stdin.close()
         process.stdout.close()
