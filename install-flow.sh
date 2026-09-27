@@ -140,9 +140,28 @@ done
 resolve_python
 
 mkdir -p "${FLOW_HOME}" "${BIN_DIR}"
-# Remove the legacy framework→source rename target and any prior install at the
-# current path. Works for both symlinks (develop) and directories (release).
-rm -rf "${FLOW_HOME}/framework" "${SOURCE_DIR}"
+# Keep the active installation intact until the optional managed runtime has
+# been staged and proven.  This matters most on a package-index outage: Flow
+# itself remains usable and the runtime pointer is independently atomic.
+SOURCE_BACKUP="${FLOW_HOME}/source.rollback.$$"
+CONFIG_BACKUP="${FLOW_HOME}/config.rollback.$$"
+had_source=0
+had_config=0
+if [[ -e "${SOURCE_DIR}" || -L "${SOURCE_DIR}" ]]; then
+  mv "${SOURCE_DIR}" "${SOURCE_BACKUP}"
+  had_source=1
+fi
+if [[ -f "${CONFIG_FILE}" ]]; then
+  cp -p "${CONFIG_FILE}" "${CONFIG_BACKUP}"
+  had_config=1
+fi
+rm -rf "${FLOW_HOME}/framework"
+
+rollback_install() {
+  rm -rf "${SOURCE_DIR}"
+  if [[ ${had_source} -eq 1 ]]; then mv "${SOURCE_BACKUP}" "${SOURCE_DIR}"; fi
+  if [[ ${had_config} -eq 1 ]]; then mv "${CONFIG_BACKUP}" "${CONFIG_FILE}"; else rm -f "${CONFIG_FILE}"; fi
+}
 
 installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -256,8 +275,11 @@ fi
 # environment before atomically changing the runtime pointer, so an existing
 # known-good selection remains intact if this step fails.
 if ! "${BIN_DIR}/flow" runtime install-maf; then
-  err "flow installed, but the managed MAF runtime could not be provisioned; previous runtime selection was preserved"
+  rollback_install
+  err "managed MAF runtime could not be provisioned; prior Flow source, config, and runtime selection were restored"
 fi
+
+rm -rf "${SOURCE_BACKUP}" "${CONFIG_BACKUP}"
 
 "${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/archive_preflight.py" || true
 

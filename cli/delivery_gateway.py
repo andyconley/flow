@@ -634,8 +634,19 @@ def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, sourc
             item.get("status") in sent for item in snapshot.get("manager_calls", [])):
         raise ContractError("runtime-startup predecessor has observed or uncertain sends")
     receipt_path = Path(str(snapshot.get("receipt_path") or ""))
-    if not receipt_path.is_file() or receipt_path.is_symlink() or not snapshot.get("sealed_receipt_sha256"):
+    expected_receipt = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id / "receipt.json"
+    if (receipt_path.resolve(strict=False) != expected_receipt.resolve(strict=False) or not receipt_path.is_file() or receipt_path.is_symlink()
+            or not snapshot.get("sealed_receipt_sha256")):
         raise ContractError("runtime-startup predecessor receipt is not sealed")
+    receipt_bytes = receipt_path.read_bytes()
+    if hashlib.sha256(receipt_bytes).hexdigest() != snapshot["sealed_receipt_sha256"]:
+        raise ContractError("runtime-startup predecessor receipt digest differs from ledger")
+    try:
+        receipt = json.loads(receipt_bytes)
+    except (TypeError, ValueError) as exc:
+        raise ContractError("runtime-startup predecessor receipt is invalid") from exc
+    if not isinstance(receipt, dict) or receipt.get("attempt_id") != attempt_id or receipt.get("envelope_digest") != envelope_digest(snapshot["envelope"]):
+        raise ContractError("runtime-startup predecessor receipt identity differs from ledger")
     return execute_chartered_delivery(work_id, worktree, source_commit, root=project_root)
 
 

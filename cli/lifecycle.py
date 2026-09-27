@@ -476,7 +476,7 @@ def _validate_staging(staging: Path) -> str | None:
     return None
 
 
-def _swap_source_with_staging(staging: Path) -> str | None:
+def _swap_source_with_staging(staging: Path, *, keep_old: bool = False) -> str | None:
     """Atomically swap ~/.flow/source/ with staging. Returns None on success or an error string.
 
     Strategy: rename current source aside, then rename staging into place. On a
@@ -505,11 +505,31 @@ def _swap_source_with_staging(staging: Path) -> str | None:
                     f"previous install at {old_dir}; staging at {staging}"
                 )
         return f"rename failed: {err}"
-    if moved_existing:
+    if moved_existing and not keep_old:
         # The renamed-aside entry may have been a symlink (develop→release case) — use
         # the symlink-aware helper so it actually gets cleaned up rather than silently leaked.
         _remove_path(old_dir)
     return None
+
+
+def _restore_after_maf_failure(config_bytes: bytes | None) -> None:
+    """Restore the source/config selection retained by a transactional swap."""
+    old_dir = _stage_path("old")
+    if old_dir.exists() or old_dir.is_symlink():
+        _remove_path(SOURCE_DIR)
+        os.rename(old_dir, SOURCE_DIR)
+    if config_bytes is None:
+        _remove_path(FLOW_CONFIG)
+    else:
+        FLOW_CONFIG.write_bytes(config_bytes)
+
+
+def _finish_maf_transaction(config_bytes: bytes | None) -> bool:
+    if _provision_maf_runtime():
+        _remove_path(_stage_path("old"))
+        return True
+    _restore_after_maf_failure(config_bytes)
+    return False
 
 
 def _print_resync_hint(prefix: str = "") -> None:
@@ -593,7 +613,8 @@ def _convert_to_release() -> int:
         print(invalid)
         return 1
 
-    swap_err = _swap_source_with_staging(staging)
+    prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
+    swap_err = _swap_source_with_staging(staging, keep_old=True)
     if swap_err:
         print(swap_err)
         return 1
@@ -608,7 +629,7 @@ def _convert_to_release() -> int:
     )
     print(f"converted to release mode (version: {version})")
     print(f"clone preserved at: {clone}")
-    return 0 if _provision_maf_runtime() else 1
+    return 0 if _finish_maf_transaction(prior_config) else 1
 
 
 def _convert_to_develop(clone: Path) -> int:
@@ -862,7 +883,8 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
             print(invalid)
             return 1
 
-        swap_err = _swap_source_with_staging(staging)
+        prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
+        swap_err = _swap_source_with_staging(staging, keep_old=True)
         if swap_err:
             print(swap_err)
             return 1
@@ -875,4 +897,4 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
     write_install_config(new_install)
 
     print(f"updated to {tag}")
-    return 0 if _provision_maf_runtime() else 1
+    return 0 if _finish_maf_transaction(prior_config) else 1

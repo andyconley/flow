@@ -471,6 +471,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     deadline = time.monotonic() + timeout_s
     pending = bytearray()
     manager_calls = actions = 0
+    runtime_ready_seen = False
     # v8 limits can grow by ledger grants, so the process guard backstops at
     # the runner ceiling; the ledger enforces the effective limit per call.
     expandable = protocol_version == 8
@@ -488,9 +489,14 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                 message = _read_message(process.stdout.fileno(), deadline, pending, protocol_version)
             kind = message["type"]
             if kind == "runtime_ready":
-                if runtime is None or message.get("runtime_digest") != runtime.get("runtime_digest"):
+                if runtime_ready_seen:
+                    raise MafProtocolError("MAF child sent duplicate runtime readiness")
+                if runtime is None or message.get("runtime") != runtime:
                     raise MafProtocolError("MAF child runtime identity differs from the sealed envelope")
+                runtime_ready_seen = True
                 continue
+            if not runtime_ready_seen:
+                raise MafProtocolError("MAF child acted before proving runtime identity")
             if kind == "manager_request":
                 manager_calls += 1
                 if (envelope["manager"]["provider"] in {"codex", "claude"}

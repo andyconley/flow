@@ -8,6 +8,7 @@ process has neither provider credentials nor permission to dispatch work.
 import asyncio
 import hashlib
 import json
+import os
 import sys
 from importlib.metadata import version
 from pathlib import Path
@@ -32,6 +33,19 @@ class PolicyAbort(BaseException):
 def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                                      allow_nan=False).encode()).hexdigest()
+
+
+def _runtime_identity() -> dict[str, Any]:
+    """Compute, rather than echo, the interpreter identity Flow sealed."""
+    root = Path(__file__).resolve().parents[2]
+    lock = root / "runtime" / "maf_runner" / "requirements.txt"
+    packages = {"agent-framework-core": version("agent-framework-core"),
+                "agent-framework-orchestrations": version("agent-framework-orchestrations")}
+    identity = {"schema_version": 1, "interpreter": str(Path(sys.executable).resolve()),
+                "python": list(sys.version_info[:3]), "packages": packages,
+                "lock_digest": hashlib.sha256(lock.read_bytes()).hexdigest(), "protocols": [5, 6, 7, 8]}
+    identity["runtime_digest"] = _digest(identity)
+    return identity
 
 
 def _write(value: dict[str, Any]) -> None:
@@ -102,7 +116,8 @@ async def _run(start: dict[str, Any]) -> None:
         # This is intentionally before the first manager callback. The parent
         # compares it to its sealed envelope before permitting any provider
         # route, so a swapped interpreter cannot silently become a send.
-        _write({"protocol_version": protocol_version, "type": "runtime_ready", "runtime_digest": runtime["runtime_digest"]})
+        computed_runtime = _runtime_identity()
+        _write({"protocol_version": protocol_version, "type": "runtime_ready", "runtime": computed_runtime})
     # The readiness record must cross the Flow boundary before any optional
     # package imports or manager construction. A full managed-runtime probe
     # already validates these imports; this ordering gives release gating a
