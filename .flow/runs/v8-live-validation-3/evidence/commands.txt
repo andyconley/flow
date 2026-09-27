@@ -1,0 +1,6 @@
+2026-09-27T20:10:17Z launch-1: flow run execute-chartered-job v8-live-validation-3 --worktree ~/src/flow-v8-live-job-2 --source-commit d6d771f2eccdcdd4a0ab43b9691b8cf8f92823a2 --project-root ~/src/flow --json (Andy: go)
+  rc=1 wall=128s
+2026-09-27T20:15:35Z decide-1: flow run decide-expansion v8-live-validation-3 def92b2b2bdb4fe0a40c426edba56bd7 exp-bff0f24876dbf0eece027971 --approve --expected-generation 1 --actor andy --explanation 'approved' (Andy: "approved")
+  rc=0
+2026-09-27T20:15:42Z recover-1: flow run recover-delivery-lead v8-live-validation-3 def92b2b2bdb4fe0a40c426edba56bd7 --project-root ~/src/flow --json
+  rc=0 wall=7s

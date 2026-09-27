@@ -1,0 +1,28 @@
+work: v8-live-validation-3
+state: implementing
+charter: v3 756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98
+logical attempt: logical-756f650390a4f3cf0a8a
+owner: generation 1 (active)
+attempt: def92b2b2bdb4fe0a40c426edba56bd7
+executable: False
+resumable: False
+pending unknowns: 0
+pending approvals: 0
+provider choices: 2
+recoverable (ledger view): False (attempt_terminal)
+checked only by the command: live_run_fence, worktree_drift, envelope_file
+blocking: none
+owner generation (--expected-generation): 2
+resolutions: none
+predecessors: 0
+sealed receipt: consistent
+expansion headroom remaining: delegations 1, manager_calls 0, manager_rounds 0, paid_worker_calls 1, verifier_calls 1
+expansion requests: 2
+- exp-22aefb883c503fe256a50dae granted manager_calls grant=charter_headroom rationale="manager progress call 5 in round 3"
+- exp-bff0f24876dbf0eece027971 granted manager_calls grant=engineer rationale="manager final call 6 in round 3"
+attempt status: completed
+expansion status: closed
+control: parent closed, lock free, 0 of 10 recorded groups alive
+uncertain rows: none
+next command: none (terminal)
+compatibility diagnostics: 0

@@ -1,0 +1,19 @@
+== diff stat
+ README.md                               |  1 +
+ docs/cli-reference.md                   | 11 +++++++++++
+ scaffolds/default/commands/flow-help.md |  1 +
+ scaffolds/default/flow.toml             |  4 ++++
+ 4 files changed, 17 insertions(+)
+== targeted test
+Ran 3 tests in 0.031s
+
+OK
+== regenerate --check
+scaffolds/default/commands/flow-help.md is up to date.
+README.md is up to date.
+== test_flow.py
+claude sync wrote managed files:
+- removed: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmp7uhz9wbk/repo/.claude/ok.md
+ignoring managed path outside the root: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpbbo7bgu_/victim.txt
+Ran 730 tests in 93.382s
+OK

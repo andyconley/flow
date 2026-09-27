@@ -1,0 +1,117 @@
+{
+ "validate_receipt": "pass",
+ "status": "completed",
+ "sealed_sha_matches": true,
+ "receipt_sha256": "0ec8bf30493ce9de95348931899d7f59ae48da58108b2b29f07ca39ff47cd459",
+ "envelope_expansion_headroom": {
+  "delegations": 1,
+  "manager_calls": 1,
+  "paid_worker_calls": 1,
+  "verifier_calls": 1
+ },
+ "roster": [
+  [
+   "docs-editor",
+   "claude",
+   "sonnet"
+  ],
+  [
+   "local-verifier",
+   "ollama",
+   "gemma4:26b"
+  ]
+ ],
+ "predecessors": [],
+ "actions": [
+  {
+   "action": "32b18d51cebc",
+   "status": "completed",
+   "provider": "claude",
+   "evidence_level": "flow_observed_claude_cli_completed_turn"
+  },
+  {
+   "action": "6966b734d742",
+   "status": "completed",
+   "provider": "ollama",
+   "evidence_level": "flow_observed_local_http_response"
+  }
+ ],
+ "manager_calls": [
+  [
+   "1b50f1e7bb54",
+   1,
+   "completed"
+  ],
+  [
+   "5113d022de56",
+   2,
+   "completed"
+  ],
+  [
+   "2dace5af77e2",
+   3,
+   "completed"
+  ],
+  [
+   "de3c7f247c40",
+   4,
+   "completed"
+  ],
+  [
+   "e0fc77f52507",
+   5,
+   "completed"
+  ],
+  [
+   "6780598ce5e5",
+   6,
+   "completed"
+  ]
+ ],
+ "local_stub_anywhere": false,
+ "expansion_requests": [
+  [
+   "exp-22aefb883c503fe256a50dae",
+   "manager_call",
+   "granted",
+   "charter_headroom"
+  ],
+  [
+   "exp-bff0f24876dbf0eece027971",
+   "manager_call",
+   "granted",
+   "engineer"
+  ]
+ ],
+ "manager_sequences_contiguous": true,
+ "manager_send_started": 6,
+ "manager_response_observed": 6,
+ "adapter_send_started": {
+  "32b18d51cebc": 1,
+  "6966b734d742": 1
+ },
+ "manager_progress": {
+  "repaired": [
+   "de3c7f247c4078ba745e95c9d901ce145a7647d65fd8f62202d0e26ddc5ed0e0"
+  ],
+  "unparsable": []
+ },
+ "recovery_mode": [
+  [
+   "answer",
+   null
+  ]
+ ],
+ "D1_event_log_bytes": 558305,
+ "D1_event_log_vs_1MiB": 0.532,
+ "D1_stream_event_records": 0,
+ "D1_terminal_result_event": true,
+ "D1_limit_errors": [],
+ "D7_checkpoints_with_facts_line": "6/6",
+ "D3_verifier_evaluations": [
+  [
+   "valid_pass",
+   "accepted_pass"
+  ]
+ ]
+}

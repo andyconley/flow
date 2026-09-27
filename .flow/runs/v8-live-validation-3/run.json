@@ -7,9 +7,14 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+    "handback": ".flow/runs/v8-live-validation-3/HANDOFF.md",
+    "handoff": ".flow/runs/v8-live-validation-3/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/v8-live-validation-3/validation-results.md",
     "orchestration_manifest": ".flow/runs/v8-live-validation-3/orchestration.json",
+    "plan": ".flow/runs/v8-live-validation-3/plan.md",
     "requirements": ".flow/runs/v8-live-validation-3/requirements.md",
-    "shaper_intent": ".flow/runs/v8-live-validation-3/shaper-intent.json"
+    "shaper_intent": ".flow/runs/v8-live-validation-3/shaper-intent.json",
+    "validation_plan": ".flow/runs/v8-live-validation-3/validation-plan.md"
   },
   "created_at": "2026-09-27T19:33:06Z",
   "delivery": {
@@ -46,15 +51,18 @@
   "dispositions": {},
   "gates": {
     "approve-definition": "2026-09-27T19:43:33Z",
+    "approve-plan": "2026-09-27T19:56:00Z",
+    "mark-handback-ready": "2026-09-27T20:22:37Z",
     "start-definition": "2026-09-27T19:33:06Z",
+    "start-implementation": "2026-09-27T19:56:01Z",
     "start-plan": "2026-09-27T19:43:50Z"
   },
-  "lane": "plan",
-  "last_event": "start-plan",
-  "phase": "planning",
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "planning",
-  "updated_at": "2026-09-27T19:43:50Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-27T20:22:37Z",
   "work_id": "v8-live-validation-3"
 }

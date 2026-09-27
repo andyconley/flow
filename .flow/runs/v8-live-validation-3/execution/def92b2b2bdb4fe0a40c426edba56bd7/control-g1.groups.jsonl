@@ -1,0 +1,8 @@
+{"at": "2026-09-27T20:10:17.631288+00:00", "kind": "maf", "leader_start": "darwin:1790539817.630274", "pgid": 21678}
+{"at": "2026-09-27T20:10:17.774861+00:00", "kind": "provider", "leader_start": "darwin:1790539817.773505", "pgid": 21679}
+{"at": "2026-09-27T20:10:42.121829+00:00", "kind": "provider", "leader_start": "darwin:1790539842.119927", "pgid": 21758}
+{"at": "2026-09-27T20:10:52.093132+00:00", "kind": "provider", "leader_start": "darwin:1790539852.090295", "pgid": 21782}
+{"at": "2026-09-27T20:11:07.549636+00:00", "kind": "provider", "leader_start": "darwin:1790539867.547769", "pgid": 21838}
+{"at": "2026-09-27T20:11:54.794172+00:00", "kind": "test", "leader_start": "darwin:1790539914.793062", "pgid": 21949}
+{"at": "2026-09-27T20:11:54.907088+00:00", "kind": "provider", "leader_start": "darwin:1790539914.905967", "pgid": 21954}
+{"at": "2026-09-27T20:12:17.647137+00:00", "kind": "provider", "leader_start": "darwin:1790539937.645787", "pgid": 22033}

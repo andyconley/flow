@@ -1,0 +1,22 @@
+{
+  "seconds": 4.95,
+  "limit": 30.0,
+  "schema_json": true,
+  "verdict": "go",
+  "prompt_chars": 13691,
+  "eval_count": 115,
+  "prompt_eval_count": 3418,
+  "load_duration_s": 0.23,
+  "reply": {
+    "schema_version": 1,
+    "decision": "pass",
+    "summary": "The documentation update for `flow run decide-expansion` is correct, complete, and adheres to all formatting constraints regarding table escaping and configuration raw values.",
+    "findings": [
+      {
+        "severity": "non_blocking",
+        "summary": "Consistent usage of escaping in generated files",
+        "evidence": "The diff correctly uses `\\|` in README.md and flow-help.md while preserving the raw `|` in flow.toml, matching the requirements for the regeneration script."
+      }
+    ]
+  }
+}
