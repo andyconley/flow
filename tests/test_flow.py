@@ -2662,6 +2662,23 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("brew install python@3.12", combined)
         self.assertFalse((fake_home / ".flow" / "source").exists())
 
+    def test_unsupported_managed_maf_host_keeps_base_install_and_readiness_is_strict(self) -> None:
+        fake_home = self._new_fake_home()
+        base = self.repo / "unsupported-maf-python"
+        base.write_text("#!/bin/sh\ncase \"$2\" in\n  *sys.platform*) echo 'linux|x86_64|3|12' ;;\n  *) echo '3.12.0' ;;\nesac\n")
+        base.chmod(0o755)
+        env = _clean_env(fake_home)
+        env["FLOW_MAF_BASE_PYTHON"] = str(base)
+        result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
+                                text=True, capture_output=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("managed MAF runtime is unsupported", result.stdout)
+        self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
+        readiness = subprocess.run([sys.executable, str(FLOW_CLI), "runtime", "readiness"], cwd=self.repo,
+                                  text=True, capture_output=True, env=env)
+        self.assertNotEqual(readiness.returncode, 0)
+        self.assertIn("not_installed", readiness.stdout)
+
     def test_install_flow_sh_uses_versioned_python_when_python3_is_too_old(self) -> None:
         fake_home = self._new_fake_home()
         fake_bin = self._make_fake_python_bin(include_compatible=True)

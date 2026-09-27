@@ -8,12 +8,15 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+import io
+import contextlib
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from delivery_gateway import ContractError, recover_runtime_startup
 from execution_ledger import ExecutionLedger
+import flow
 
 
 class RuntimeStartupRecoveryTests(unittest.TestCase):
@@ -82,6 +85,14 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
         self.assertEqual(ledger.reconcile_runtime_startup_successor("old"), "next")
         with self.assertRaisesRegex(ContractError, "already has a successor"):
             ledger.claim_runtime_startup_successor("old")
+
+    def test_reconciled_successor_command_exits_zero(self):
+        argv = ["flow", "run", "recover-runtime-startup", "sample", "old", "--worktree", self.tmp.name,
+                "--source-commit", "deadbeef"]
+        with patch.object(sys, "argv", argv), patch.object(flow, "recover_runtime_startup",
+                return_value={"attempt_id": "next", "status": "reconciled", "predecessor_attempt_id": "old"}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(flow.main(), 0)
 
 
 if __name__ == "__main__":
