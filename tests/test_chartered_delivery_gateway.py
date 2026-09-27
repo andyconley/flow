@@ -390,6 +390,10 @@ class CharteredPreparationTests(CharteredFixture):
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["execution_protocol_version"], 8)
 
+    def test_manager_task_carries_the_single_editor_call_fact(self):
+        _, _, _, captured = self._run_v8(['{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}'])
+        self.assertIn("Flow refuses any second editor call", captured["task"])
+
     def test_editor_without_an_edit_fails_with_a_no_edit_reason(self):
         def supervisor(envelope, task, on_manager, on_action, **kwargs):
             proposal = self._proposal(envelope, "editor", 1)
@@ -1106,6 +1110,14 @@ class CharteredEditVerificationTests(CharteredFixture):
 
 class ExecutionFactsTests(unittest.TestCase):
     """The facts block Flow appends to the manager task."""
+
+    def test_chartered_facts_state_the_single_editor_call(self):
+        for version in (6, 7, 8):
+            with self.subTest(version=version):
+                facts = _execution_facts({"execution_protocol_version": version}, {"baseline": {"kind": "clean"}}, "a" * 40)
+                for phrase in ("one call in total", "refuses any second editor call", '"do not edit yet"'):
+                    self.assertIn(phrase, facts)
+                self.assertLessEqual(len(facts.encode()), 1500)
 
     def test_protocol_5_facts_are_unchanged(self):
         envelope = {"execution_protocol_version": 5,

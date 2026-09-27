@@ -33,7 +33,7 @@ Progress against the adoption sequence below:
   - Real-world validation is deliberately deferred until step 5 is in place.
   - Expansion is proven hermetically, including against the pinned stock Magentic runner with stub providers; it has not run live.
 
-The current chartered path is v8. Flow seals the Shaper Contract and Delivery Charter at `start-plan`, prepares an attempt, and runs stock Magentic in a supervised child. Flow authorizes each manager call and specialist action. It verifies the producer's scoped diff and runs the targeted test before a distinct Ollama verifier may run. Then it seals a receipt linked to that authority. Both v5 and v8 attempts can resume after interruption.
+The current chartered path is v8. Flow seals the Shaper Contract and Delivery Charter at `start-plan`, prepares an attempt, and runs stock Magentic in a supervised child. Flow authorizes each manager call and specialist action. It verifies the producer's scoped diff and runs the targeted test before a distinct Ollama verifier may run. Then it seals a receipt linked to that authority. The manager's Flow-verified facts state that the approved editors get one call in total, so that call must make the complete edit. Both v5 and v8 attempts can resume after interruption.
 
 ## Target boundary
 

@@ -1341,6 +1341,10 @@ def _execution_facts(envelope: dict[str, Any], job: dict[str, Any] | None, sourc
             " run commands, or edit the worktree.\n"
             "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
             " the targeted test after that edit; the full suite is an acceptance check.\n"
+            + ("- The approved editors get one call in total; Flow refuses any second editor call. That call must"
+               " read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or"
+               " \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails"
+               " the attempt.\n" if chartered else "")
             + "".join(f"- Predecessor attempt {item['attempt_id']} ended {item['terminal_status']} under lead"
                       f" generation {item['lead_generation']}; its evidence is not reused.\n"
                       for item in envelope.get("predecessors", [])))
