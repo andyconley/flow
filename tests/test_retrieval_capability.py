@@ -17,6 +17,7 @@ CLI = ROOT / "cli"
 sys.path.insert(0, str(CLI))
 import archive_preflight as preflight
 import diagnostics
+from tests.maf_env import managed_wheelhouse
 
 
 class _NoFtsConnection:
@@ -38,7 +39,7 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.home = Path(self.temporary.name) / "home"
         self.home.mkdir()
         self.receipt = self.home / ".flow" / "retrieval-capabilities.json"
-        self.wheelhouse = Path("/private/tmp/flow-maf-wheelhouse")
+        self.wheelhouse = managed_wheelhouse()
         self.assertTrue(self.wheelhouse.is_dir(), "managed runtime wheelhouse is required")
 
     def test_injected_fts5_failure_keeps_plain_sqlite_usable_and_names_runtime(self):

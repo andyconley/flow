@@ -12,6 +12,7 @@ import unittest.mock
 import venv
 from pathlib import Path
 from tests.shaper_intent_fixture import shaper_intent
+from tests.maf_env import managed_wheelhouse
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -64,8 +65,8 @@ def _clean_env(home: Path | None = None) -> dict[str, str]:
         env["HOME"] = str(home)
     # Installer/lifecycle tests exercise the same digest-addressed managed
     # environment as release, without network or an override escape hatch.
-    if Path("/private/tmp/flow-maf-wheelhouse").is_dir():
-        env["FLOW_MAF_WHEELHOUSE"] = "/private/tmp/flow-maf-wheelhouse"
+    if managed_wheelhouse().is_dir():
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
     return env
 
 
@@ -777,7 +778,7 @@ class FlowCliTests(FlowCliHarness):
         if self._fake_home is None:
             self._new_fake_home()
         env = _clean_env(self._fake_home)
-        env["FLOW_MAF_WHEELHOUSE"] = "/private/tmp/flow-maf-wheelhouse"
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), *args],
             cwd=str(REPO_ROOT),
@@ -2614,7 +2615,7 @@ class FlowCliTests(FlowCliHarness):
 
         fake_home = self._new_fake_home()
         env = _clean_env(fake_home)
-        env["FLOW_MAF_WHEELHOUSE"] = "/private/tmp/flow-maf-wheelhouse"
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
         result = subprocess.run(
             ["bash", str(temp_repo / "install-flow.sh"), "--release"],
             cwd=str(temp_repo),
@@ -2688,7 +2689,7 @@ class FlowCliTests(FlowCliHarness):
         env = _clean_env(fake_home)
         env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
         env["FLOW_PYTHON_CANDIDATES"] = f"{fake_bin / 'python3'}:{fake_bin / f'python{sys.version_info.major}.{sys.version_info.minor}'}"
-        env["FLOW_MAF_WHEELHOUSE"] = "/private/tmp/flow-maf-wheelhouse"
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
 
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), "--release"],
@@ -3028,7 +3029,7 @@ class FlowCliTests(FlowCliHarness):
 
         env = _clean_env(fake_home)
         env["FLOW_REPO_URL"] = f"file://{remote}"
-        env["FLOW_MAF_WHEELHOUSE"] = "/private/tmp/flow-maf-wheelhouse"
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
 
         result = subprocess.run(
             ["bash", str(BOOTSTRAP_INSTALL_SCRIPT)],

@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from maf_runtime import probe, provision, runtime_root
+from tests.maf_env import managed_wheelhouse
 import lifecycle
 
 
@@ -59,10 +60,10 @@ class MafRuntimeProbeTests(unittest.TestCase):
 
     def test_clean_release_managed_wheelhouse_runtime_reaches_initialized_child_without_override(self):
         """Release proof: install the locked wheels, then run a real child pre-provider."""
-        self.assertTrue(Path("/private/tmp/flow-maf-wheelhouse").is_dir(),
+        self.assertTrue(managed_wheelhouse().is_dir(),
                         "release-managed MAF wheelhouse is required for this acceptance oracle")
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {
-            "FLOW_MAF_WHEELHOUSE": "/private/tmp/flow-maf-wheelhouse",
+            "FLOW_MAF_WHEELHOUSE": str(managed_wheelhouse()),
             "FLOW_MAF_PYTHON": "",
         }, clear=False):
             home = Path(temp)
@@ -89,10 +90,10 @@ class MafRuntimeProbeTests(unittest.TestCase):
             child.stdout.close()
             child.stderr.close()
 
-    @unittest.skipUnless(Path("/private/tmp/flow-maf-wheelhouse").is_dir(), "local locked wheelhouse unavailable")
+    @unittest.skipUnless(managed_wheelhouse().is_dir(), "local locked wheelhouse unavailable")
     def test_invalid_digest_target_is_quarantined_before_rebuild(self):
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {
-            "FLOW_MAF_WHEELHOUSE": "/private/tmp/flow-maf-wheelhouse",
+            "FLOW_MAF_WHEELHOUSE": str(managed_wheelhouse()),
         }, clear=False):
             home = Path(temp)
             first = provision(home=home, base_python=sys.executable)

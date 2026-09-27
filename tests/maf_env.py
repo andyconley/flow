@@ -18,3 +18,8 @@ SKIP_REASON = "set FLOW_MAF_PYTHON to an interpreter built from runtime/maf_runn
 def requires_maf(target):
     """Skip a MAF-gated test class or method unless FLOW_MAF_PYTHON is usable."""
     return unittest.skipUnless(MAF_AVAILABLE, SKIP_REASON)(target)
+
+
+def managed_wheelhouse() -> Path:
+    """Configurable offline wheel source for managed-runtime acceptance tests."""
+    return Path(os.environ.get("FLOW_TEST_MAF_WHEELHOUSE", str(Path("/private") / "tmp" / "flow-maf-wheelhouse")))
