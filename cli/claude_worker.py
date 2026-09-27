@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from delivery_cancel import interruptible
+
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
 MAX_OUTPUT_BYTES = 4096
@@ -156,60 +158,61 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
     try:
         if on_process_group is not None:
             on_process_group(process.pid, "provider")
-        chunks: list[bytes] = []
-        stderr_chunks: list[bytes] = []
-        size = 0
-        stderr_size = 0
-        written = 0
-        selector = selectors.DefaultSelector()
-        os.set_blocking(process.stdin.fileno(), False)
-        selector.register(process.stdin, selectors.EVENT_WRITE)
-        selector.register(process.stdout, selectors.EVENT_READ)
-        selector.register(process.stderr, selectors.EVENT_READ)
-        try:
-            while selector.get_map():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise ClaudeWorkerError("Claude turn timed out")
-                ready = selector.select(remaining)
-                if not ready:
-                    raise ClaudeWorkerError("Claude turn timed out")
-                for key, _ in ready:
-                    if key.fileobj is process.stdin:
-                        count = os.write(process.stdin.fileno(), prompt_bytes[written:])
-                        written += count
-                        if written == len(prompt_bytes):
-                            selector.unregister(process.stdin)
-                            process.stdin.close()
-                    elif key.fileobj is process.stdout:
-                        chunk = os.read(process.stdout.fileno(), min(8192, MAX_STDOUT_BYTES + 1 - size))
-                        if not chunk:
-                            selector.unregister(process.stdout)
-                            continue
-                        chunks.append(chunk)
-                        size += len(chunk)
-                        if size > MAX_STDOUT_BYTES:
-                            raise ClaudeWorkerError("Claude output stream exceeds limit")
-                    else:
-                        chunk = os.read(process.stderr.fileno(), min(8192, MAX_STDERR_BYTES + 1 - stderr_size))
-                        if not chunk:
-                            selector.unregister(process.stderr)
-                            continue
-                        stderr_chunks.append(chunk)
-                        stderr_size += len(chunk)
-                        if stderr_size > MAX_STDERR_BYTES:
-                            raise ClaudeWorkerError("Claude error stream exceeds limit")
-        finally:
-            selector.close()
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise ClaudeWorkerError("Claude turn timed out")
-        exit_code = process.wait(timeout=remaining)
-        if exit_code != 0:
-            category = _failure_category(b"".join(chunks), b"".join(stderr_chunks))
-            raise ClaudeWorkerError(f"Claude exited without a successful turn (status {exit_code}; category {category})")
-        return {**_parse_result(b"".join(chunks), model, max_output_bytes=max_output_bytes),
-                "input_sha256": hashlib.sha256(prompt_bytes).hexdigest()}
+        with interruptible():  # a cancel breaks this wait once; the finally below kills the group
+            chunks: list[bytes] = []
+            stderr_chunks: list[bytes] = []
+            size = 0
+            stderr_size = 0
+            written = 0
+            selector = selectors.DefaultSelector()
+            os.set_blocking(process.stdin.fileno(), False)
+            selector.register(process.stdin, selectors.EVENT_WRITE)
+            selector.register(process.stdout, selectors.EVENT_READ)
+            selector.register(process.stderr, selectors.EVENT_READ)
+            try:
+                while selector.get_map():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ClaudeWorkerError("Claude turn timed out")
+                    ready = selector.select(remaining)
+                    if not ready:
+                        raise ClaudeWorkerError("Claude turn timed out")
+                    for key, _ in ready:
+                        if key.fileobj is process.stdin:
+                            count = os.write(process.stdin.fileno(), prompt_bytes[written:])
+                            written += count
+                            if written == len(prompt_bytes):
+                                selector.unregister(process.stdin)
+                                process.stdin.close()
+                        elif key.fileobj is process.stdout:
+                            chunk = os.read(process.stdout.fileno(), min(8192, MAX_STDOUT_BYTES + 1 - size))
+                            if not chunk:
+                                selector.unregister(process.stdout)
+                                continue
+                            chunks.append(chunk)
+                            size += len(chunk)
+                            if size > MAX_STDOUT_BYTES:
+                                raise ClaudeWorkerError("Claude output stream exceeds limit")
+                        else:
+                            chunk = os.read(process.stderr.fileno(), min(8192, MAX_STDERR_BYTES + 1 - stderr_size))
+                            if not chunk:
+                                selector.unregister(process.stderr)
+                                continue
+                            stderr_chunks.append(chunk)
+                            stderr_size += len(chunk)
+                            if stderr_size > MAX_STDERR_BYTES:
+                                raise ClaudeWorkerError("Claude error stream exceeds limit")
+            finally:
+                selector.close()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ClaudeWorkerError("Claude turn timed out")
+            exit_code = process.wait(timeout=remaining)
+            if exit_code != 0:
+                category = _failure_category(b"".join(chunks), b"".join(stderr_chunks))
+                raise ClaudeWorkerError(f"Claude exited without a successful turn (status {exit_code}; category {category})")
+            return {**_parse_result(b"".join(chunks), model, max_output_bytes=max_output_bytes),
+                    "input_sha256": hashlib.sha256(prompt_bytes).hexdigest()}
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
         raise ClaudeWorkerError("Claude turn outcome uncertain") from exc
     finally:

@@ -56,7 +56,7 @@ from execution_gateway import continue_resolved_local, execute_local, execute_mu
 from claude_gateway import execute_claude  # noqa: E402
 from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
-from delivery_termination import abandon_delivery, stuck_attempts  # noqa: E402
+from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
 from delivery_control import change_lead_claim  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
@@ -635,6 +635,17 @@ def main() -> int:
     run_decide_expansion.add_argument("--project-root", type=Path)
     run_decide_expansion.add_argument("--json", action="store_true")
 
+    run_cancel = run_sub.add_parser(
+        "cancel-delivery", help="ask a live v8 parent to stop; it seals the attempt cancelled")
+    run_cancel.add_argument("work_id")
+    run_cancel.add_argument("attempt_id")
+    run_cancel.add_argument("--actor", required=True, help="declared operator or Shaper, recorded as attribution only")
+    run_cancel.add_argument("--explanation", required=True)
+    run_cancel.add_argument("--expected-generation", type=int, required=True,
+                            help="attempt owner generation shown by inspect-delivery or stuck")
+    run_cancel.add_argument("--project-root", type=Path)
+    run_cancel.add_argument("--json", action="store_true")
+
     run_abandon = run_sub.add_parser(
         "abandon-delivery", help="seal a stuck v8 attempt as abandoned after reaping its recorded processes")
     run_abandon.add_argument("work_id")
@@ -1084,6 +1095,21 @@ def main() -> int:
         print(json.dumps(result, sort_keys=True) if args.json else
               f"request: {result['request_id']}\nstatus: {result['status']}\nnext action: {result['next_action']}")
         return 0
+    if args.command == "run" and args.run_target == "cancel-delivery":
+        import json
+        try:
+            result = cancel_delivery(args.work_id, args.attempt_id, actor=args.actor, explanation=args.explanation,
+                                     expected_generation=args.expected_generation, root=args.project_root)
+        except (ContractError, OSError, ValueError, RuntimeError) as exc:
+            return _refusal(exc, as_json=args.json)
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+        elif result["status"] == "cancelled":
+            print(f"attempt: {result['attempt_id']}\nstatus: cancelled\nreceipt: {result['receipt_path']}")
+        else:
+            print(f"attempt: {result['attempt_id']}\nstatus: attempt_finished ({result['terminal_status']})\n"
+                  f"receipt: {result['receipt_path']}")
+        return 0 if result["status"] == "cancelled" else 1
     if args.command == "run" and args.run_target == "abandon-delivery":
         import json
         try:

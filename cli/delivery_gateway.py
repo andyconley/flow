@@ -22,7 +22,8 @@ from execution_contracts import (TERMINAL_UNCERTAIN_STATUSES, ContractError, can
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
-import delivery_termination  # noqa: F401  (the cancelled seal, ADR 0019)
+import delivery_termination
+import delivery_cancel
 import process_identity
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
                                EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
@@ -642,7 +643,8 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
         if on_process_group is not None:
             on_process_group(process.pid, "test")
         try:
-            stdout, stderr = process.communicate(timeout=test["timeout_seconds"])
+            with delivery_cancel.interruptible():  # test timeouts reach 3600 s
+                stdout, stderr = process.communicate(timeout=test["timeout_seconds"])
         except subprocess.TimeoutExpired as exc:
             raise ContractError("targeted chartered test timed out") from exc
     finally:
@@ -761,72 +763,80 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
         generation = claim["generation"]
         # The recovering parent dispatches, so it records its own identity for
         # cancel and reaping; seal mode starts no process (ADR 0019).
-        with (process_identity.control_scope(attempt_dir, generation, attempt_id=attempt_id)
-              if mode != "seal" else nullcontext()):
-            _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
-            state = ledger.snapshot(attempt_id)
+        with (delivery_cancel.parent_scope(attempt_dir, generation, attempt_id=attempt_id)
+              if mode != "seal" else nullcontext()) as controller:
             try:
-                # Seal mode only records what the run already decided, so it never
-                # runs the test: a bound digest is reused, otherwise tests are absent.
-                evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner,
-                                                       run_test=mode != "seal")
-            except (RecoveryRefused, ContractError):
-                if not recorded_failure:
-                    raise
-                evidence = {"edit_evidence": None, "test_evidence": None}
-            # Only grants a recovery released (this claim or an earlier one that
-            # died before its regrant) may be re-granted.
-            evidence["regrantable_action_ids"] = [item["action_id"] for item in state["actions"]
-                                                  if item["reason"] == "recovery_unconsumed_grant"]
-            if mode == "seal":
-                inputs = state.get("verifier_inputs", [])
-                verifier_sha = (hashlib.sha256(inputs[-1]["input"]["provider_task"].encode()).hexdigest()
-                                if inputs and evidence["edit_evidence"] else None)
-                result = _seal_attempt(envelope, attempt_dir, ledger, state, failure=outcome["failure"],
-                                       edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
-                                       verifier_input_sha256=verifier_sha, generation=generation,
-                                       authority_guard=authority_guard, hook=seal_hook or (lambda point: None))
-                return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
-            job = envelope["job_contract"]
-            if mode == "restart":
-                # A fresh start on the byte-identical envelope: Magentic replays
-                # every earlier manager call from the ledger (ADR 0017).
+                _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
+                state = ledger.snapshot(attempt_id)
+                try:
+                    # Seal mode only records what the run already decided, so it never
+                    # runs the test: a bound digest is reused, otherwise tests are absent.
+                    evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner,
+                                                           run_test=mode != "seal")
+                except (RecoveryRefused, ContractError):
+                    if not recorded_failure:
+                        raise
+                    evidence = {"edit_evidence": None, "test_evidence": None}
+                # Only grants a recovery released (this claim or an earlier one that
+                # died before its regrant) may be re-granted.
+                evidence["regrantable_action_ids"] = [item["action_id"] for item in state["actions"]
+                                                      if item["reason"] == "recovery_unconsumed_grant"]
+                if mode == "seal":
+                    inputs = state.get("verifier_inputs", [])
+                    verifier_sha = (hashlib.sha256(inputs[-1]["input"]["provider_task"].encode()).hexdigest()
+                                    if inputs and evidence["edit_evidence"] else None)
+                    result = _seal_attempt(envelope, attempt_dir, ledger, state, failure=outcome["failure"],
+                                           edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
+                                           verifier_input_sha256=verifier_sha, generation=generation,
+                                           authority_guard=authority_guard, hook=seal_hook or (lambda point: None))
+                    return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+                job = envelope["job_contract"]
+                if mode == "restart":
+                    # A fresh start on the byte-identical envelope: Magentic replays
+                    # every earlier manager call from the ledger (ADR 0017).
+                    result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
+                                                        manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                                        supervisor=supervisor, test_runner=test_runner, python_path=python_path,
+                                                        resume=None, generation=generation, recovery=evidence,
+                                                        seal_hook=seal_hook)
+                    return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+                row = next(item for item in state["actions"] if item["action_id"] == eligibility["action_id"])
+                action = row["request"]
+                checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
+                if checkpoint["metadata"]["checkpoint_id"] != action["checkpoint_id"]:
+                    raise ContractError("Magentic restore checkpoint differs from worker action")
+                resume: dict[str, Any] = {"checkpoint_id": action["checkpoint_id"],
+                                          "request_id": f"flow-magentic-action-{action['sequence']}",
+                                          "action_id": action["action_id"],
+                                          **restore_position(envelope, state, checkpoint["metadata"]["ledger_seq"])}
+                if mode == "answer" and row["status"] == "denied":
+                    # The engineer denied this proposal's expansion; Magentic was told so.
+                    resume["result"] = denied_reply(action["action_id"], row["reason"])
+                elif mode == "answer":
+                    reply = _completed_reply(ledger, envelope, attempt_dir, action, row["result"],
+                                             is_verifier=action["instance_id"] in job["verifier_instance_ids"],
+                                             is_producer=action["instance_id"] in job["producer_instance_ids"],
+                                             edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
+                                             generation=generation, authority_guard=authority_guard)
+                    reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
+                    if not reply_path.exists():
+                        _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
+                    resume["result"] = reply
+                else:
+                    resume["kind"] = "pending"
                 result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
                                                     manager_adapter=manager_adapter, worker_adapter=worker_adapter,
                                                     supervisor=supervisor, test_runner=test_runner, python_path=python_path,
-                                                    resume=None, generation=generation, recovery=evidence,
+                                                    resume=resume, generation=generation, recovery=evidence,
                                                     seal_hook=seal_hook)
                 return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
-            row = next(item for item in state["actions"] if item["action_id"] == eligibility["action_id"])
-            action = row["request"]
-            checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
-            if checkpoint["metadata"]["checkpoint_id"] != action["checkpoint_id"]:
-                raise ContractError("Magentic restore checkpoint differs from worker action")
-            resume: dict[str, Any] = {"checkpoint_id": action["checkpoint_id"],
-                                      "request_id": f"flow-magentic-action-{action['sequence']}",
-                                      "action_id": action["action_id"],
-                                      **restore_position(envelope, state, checkpoint["metadata"]["ledger_seq"])}
-            if mode == "answer" and row["status"] == "denied":
-                # The engineer denied this proposal's expansion; Magentic was told so.
-                resume["result"] = denied_reply(action["action_id"], row["reason"])
-            elif mode == "answer":
-                reply = _completed_reply(ledger, envelope, attempt_dir, action, row["result"],
-                                         is_verifier=action["instance_id"] in job["verifier_instance_ids"],
-                                         is_producer=action["instance_id"] in job["producer_instance_ids"],
-                                         edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
-                                         generation=generation, authority_guard=authority_guard)
-                reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
-                if not reply_path.exists():
-                    _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
-                resume["result"] = reply
-            else:
-                resume["kind"] = "pending"
-            result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
-                                                manager_adapter=manager_adapter, worker_adapter=worker_adapter,
-                                                supervisor=supervisor, test_runner=test_runner, python_path=python_path,
-                                                resume=resume, generation=generation, recovery=evidence,
-                                                seal_hook=seal_hook)
-            return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+            except Exception as exc:
+                # A cancel can land before the run starts, in the evidence
+                # rebuild's targeted test: seal or interrupt the same way.
+                if controller is not None and controller.requested:
+                    return delivery_termination.stop_on_cancel(envelope, attempt_dir, ledger, generation=generation,
+                                                               detail=str(exc))
+                raise
 
 
 def _check_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, Any], attempt_dir: Path) -> None:
@@ -1376,8 +1386,8 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
     """Run one prepared attempt; a live v8 run holds the attempt's recovery fence throughout."""
     if envelope["execution_protocol_version"] == 8 and kwargs.get("recovery") is None:
         with ledger.recovery_lock(envelope["attempt_id"], holder="live"), \
-                process_identity.control_scope(attempt_dir, kwargs.get("generation", 1),
-                                               attempt_id=envelope["attempt_id"]):
+                delivery_cancel.parent_scope(attempt_dir, kwargs.get("generation", 1),
+                                             attempt_id=envelope["attempt_id"]):
             return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
     return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
 
@@ -1420,6 +1430,9 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     # the parent's control record (ADR 0019). Injected adapters are unchanged.
     scope = process_identity.current() if structured_verifier else None
     register = scope.register if scope is not None else None
+    # SIGTERM only sets a flag (ADR 0019); every authorization checks it first.
+    controller = delivery_cancel.current() if structured_verifier else None
+    stop_if_cancelled = controller.check if controller is not None else (lambda: None)
     manager_adapter = manager_adapter or partial(_default_manager_adapter, on_process_group=register)
     worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir, on_process_group=register)
     test_runner = test_runner or (partial(_run_chartered_test, job=job, on_process_group=register) if chartered
@@ -1445,6 +1458,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
     def on_manager(message: dict[str, Any]) -> str:
+        stop_if_cancelled()
         request = _normalized_manager_request(envelope, message)
         if request["phase"] == "replan_facts":
             replan = {"schema_version": 1, "kind": "replan", "attempt_id": aid,
@@ -1503,6 +1517,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
 
     def on_action(message: dict[str, Any]) -> dict[str, Any]:
         nonlocal edit_evidence, test_evidence, verifier_input_sha256
+        stop_if_cancelled()
         action = _normalized_action(envelope, message)
         is_verifier = action["instance_id"] in job["verifier_instance_ids"] if chartered else action["assignment_id"] == "local-verifier"
         is_producer = action["instance_id"] in job["producer_instance_ids"] if chartered else action["assignment_id"] == "claude-implementer"
@@ -1641,6 +1656,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
         return reply
 
+    paused_request: str | None = None
     try:
         runner_kwargs = {"python_path": python_path, "timeout_s": envelope["limits"].get("max_runtime_seconds", 900)}
         if resume is not None:
@@ -1651,16 +1667,23 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         if outcome.get("attempt_id") != aid:
             raise ContractError("Magentic finished a different attempt")
     except ExpansionPaused as paused:
+        paused_request = paused.request_id
+    except Exception as exc:
+        failure = str(exc)
+        recoverable_transport_failure = isinstance(exc, MafTransportError)
+    if controller is not None and controller.requested:
+        # Keyed on the flag, not the exception: the stack has unwound, every
+        # in-flight send is already unknown, and nothing new is authorized.
+        return delivery_termination.stop_on_cancel(envelope, attempt_dir, ledger, generation=generation,
+                                                   detail=failure or "cancel requested")
+    if paused_request is not None:
         # Not an interruption and not a failure: the attempt stays started,
         # the lead claim keeps its generation, and the pending request row is
         # the durable pause marker. Nothing is in flight, so stopping the
         # child loses nothing.
-        return {"attempt_id": aid, "status": "expansion_paused", "request_id": paused.request_id,
+        return {"attempt_id": aid, "status": "expansion_paused", "request_id": paused_request,
                 "receipt_path": None, "resume_available": False,
-                "next_action": f"decide expansion {paused.request_id}"}
-    except Exception as exc:
-        failure = str(exc)
-        recoverable_transport_failure = isinstance(exc, MafTransportError)
+                "next_action": f"decide expansion {paused_request}"}
     snapshot = ledger.snapshot(aid)
     actions = snapshot["actions"]
     manager_calls = snapshot.get("manager_calls", [])
@@ -1687,6 +1710,9 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         with authority_guard(), ledger.send_lock():
             ledger.record_runtime_outcome(aid, failure=failure, transport=recoverable_transport_failure,
                                           generation=generation)
+        if controller is not None:
+            # Committed to sealing: a cancel that arrives now finds the normal receipt.
+            controller.disarm()
         hook("after-runtime-outcome")
     if not continuation_epoch_id:
         return _seal_attempt(envelope, attempt_dir, ledger, snapshot, failure=failure,

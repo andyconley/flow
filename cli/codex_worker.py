@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from delivery_cancel import interruptible
+
 MAX_PROMPT_BYTES = 32768
 MAX_EVENT_BYTES = 262144
 MAX_OUTPUT_BYTES = 4096
@@ -115,44 +117,45 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
         if on_process_group is not None:
             # Recorded before any byte is sent, so a stuck turn can be reaped.
             on_process_group(process.pid, "provider")
-        chunks: list[bytes] = []
-        size = written = 0
-        selector = selectors.DefaultSelector()
-        try:
-            os.set_blocking(process.stdin.fileno(), False)
-            selector.register(process.stdin, selectors.EVENT_WRITE)
-            selector.register(process.stdout, selectors.EVENT_READ)
-            while selector.get_map():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise CodexWorkerError("Codex turn timed out")
-                ready = selector.select(remaining)
-                if not ready:
-                    raise CodexWorkerError("Codex turn timed out")
-                for key, _ in ready:
-                    if key.fileobj is process.stdin:
-                        count = os.write(process.stdin.fileno(), prompt_bytes[written:])
-                        written += count
-                        if written == len(prompt_bytes):
-                            selector.unregister(process.stdin)
-                            process.stdin.close()
-                    else:
-                        chunk = os.read(process.stdout.fileno(), min(8192, MAX_EVENT_BYTES + 1 - size))
-                        if not chunk:
-                            selector.unregister(process.stdout)
-                            continue
-                        chunks.append(chunk)
-                        size += len(chunk)
-                        if size > MAX_EVENT_BYTES:
-                            raise CodexWorkerError("Codex event stream exceeds limit")
-        finally:
-            selector.close()
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise CodexWorkerError("Codex turn timed out")
-        if process.wait(timeout=remaining) != 0:
-            raise CodexWorkerError("Codex exited without a successful turn")
-        return _parse_events(b"".join(chunks), model, max_output_bytes=max_output_bytes)
+        with interruptible():  # a cancel breaks this wait once; the finally below kills the group
+            chunks: list[bytes] = []
+            size = written = 0
+            selector = selectors.DefaultSelector()
+            try:
+                os.set_blocking(process.stdin.fileno(), False)
+                selector.register(process.stdin, selectors.EVENT_WRITE)
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while selector.get_map():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise CodexWorkerError("Codex turn timed out")
+                    ready = selector.select(remaining)
+                    if not ready:
+                        raise CodexWorkerError("Codex turn timed out")
+                    for key, _ in ready:
+                        if key.fileobj is process.stdin:
+                            count = os.write(process.stdin.fileno(), prompt_bytes[written:])
+                            written += count
+                            if written == len(prompt_bytes):
+                                selector.unregister(process.stdin)
+                                process.stdin.close()
+                        else:
+                            chunk = os.read(process.stdout.fileno(), min(8192, MAX_EVENT_BYTES + 1 - size))
+                            if not chunk:
+                                selector.unregister(process.stdout)
+                                continue
+                            chunks.append(chunk)
+                            size += len(chunk)
+                            if size > MAX_EVENT_BYTES:
+                                raise CodexWorkerError("Codex event stream exceeds limit")
+            finally:
+                selector.close()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CodexWorkerError("Codex turn timed out")
+            if process.wait(timeout=remaining) != 0:
+                raise CodexWorkerError("Codex exited without a successful turn")
+            return _parse_events(b"".join(chunks), model, max_output_bytes=max_output_bytes)
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
         raise CodexWorkerError("Codex turn outcome uncertain") from exc
     finally:

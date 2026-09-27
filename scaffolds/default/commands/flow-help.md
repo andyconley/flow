@@ -109,6 +109,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
 | `flow run stuck [--json]` | List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only) |
+| `flow run cancel-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Ask a live v8 parent to stop; it kills its recorded processes and seals the attempt cancelled, or reports attempt_finished |
 | `flow run abandon-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Reap a stuck v8 attempt's recorded processes and seal it abandoned, keeping every uncertain send uncertain |
 | `flow run delivery-lead WORK_ID attention\|release\|resume\|supersede --expected-generation N [--owner ID]` | Change the Delivery Lead claim under its lead generation; refusals print a stable code |
 | `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |

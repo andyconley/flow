@@ -10,6 +10,7 @@ import urllib.request
 from urllib.parse import urlsplit
 from typing import Any, Callable
 
+from delivery_cancel import interruptible
 from execution_contracts import ContractError
 from verifier_contracts import VERIFIER_OUTPUT_SCHEMA
 
@@ -81,7 +82,8 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
         })
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
         try:
-            with opener.open(request, timeout=timeout_seconds) as response:
+            # A cancel breaks the request once; the client socket closes as it unwinds.
+            with interruptible(), opener.open(request, timeout=timeout_seconds) as response:
                 if response.status != 200:
                     raise RuntimeError(f"Ollama HTTP {response.status}")
                 raw = response.read(MAX_RESPONSE_BYTES + 1)

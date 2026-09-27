@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
+import os
+import signal
 import sqlite3
+import stat
+import time
+import uuid
+from contextlib import contextmanager, suppress as contextlib_suppress
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import process_identity
 from claude_edit_worker import MAX_TRACE_BYTES
 from delivery_control import run_lock
 from delivery_projection import lead_claim_active
-from delivery_recovery import (ATTEMPT_DIR_UNSAFE, ATTEMPT_NOT_STARTED, LEAD_GUARD_LEDGER_UNREADABLE,
-                               OWNER_GENERATION_STALE, RecoveryRefused, build_recovery_block, recovery_eligibility)
+from delivery_recovery import (ATTEMPT_DIR_UNSAFE, ATTEMPT_FINISHED, ATTEMPT_NOT_LIVE, ATTEMPT_NOT_STARTED,
+                               CANCEL_TIMEOUT, CANCEL_UNSUPPORTED, FOREIGN_MACHINE, LEAD_GUARD_LEDGER_UNREADABLE,
+                               OWNER_GENERATION_STALE, PROCESS_IDENTITY_MISMATCH, RecoveryRefused,
+                               build_recovery_block, recovery_eligibility)
 from execution_contracts import ContractError, canonical, envelope_digest, validate_receipt
 from execution_ledger import ExecutionLedger, utc_now
 from fsutil import repo_root
@@ -251,3 +260,204 @@ def stuck_attempts(root: Path | None = None) -> list[dict[str, Any]]:
                                         if item.get("status") == "pending"), None),
                 "next_command": next_command(snapshot["work_id"], snapshot, control, lead_active=active)})
     return found
+
+
+CANCEL_REQUEST = "cancel-request.json"
+SEAL_DEADLINE_SECONDS = 30
+CANCEL_WAIT_SECONDS = 45
+
+
+class LockDeadline(Exception):
+    """A fence could not be taken before the shutdown deadline."""
+
+
+@contextmanager
+def _polled_flock(path: Path, deadline: float, *, private: bool = False) -> Iterator[None]:
+    """Take one flock without ever blocking indefinitely: poll until ``deadline``."""
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        if private:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ContractError("send lock must be a private regular file")
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise LockDeadline(path.name) from None
+                time.sleep(0.02)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def parent_fences(attempt_dir: Path, ledger: ExecutionLedger, deadline: float) -> Iterator[None]:
+    """The run lock then the send lock, polled; the caller already holds the recovery lock (ADR 0016 order)."""
+    with _polled_flock(attempt_dir.parents[1] / ".delivery.lock", deadline), \
+            _polled_flock(ledger.path.with_suffix(".send.lock"), deadline, private=True):
+        yield
+
+
+def valid_cancel_request(attempt_dir: Path, attempt_id: str, generation: int) -> dict[str, Any] | None:
+    """The cancel request for exactly this attempt and owner generation, or None."""
+    path = attempt_dir / CANCEL_REQUEST
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        request = json.loads(path.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    text = lambda value, limit: isinstance(value, str) and value.strip() and len(value) <= limit
+    if (not isinstance(request, dict) or request.get("schema_version") != 1 or request.get("attempt_id") != attempt_id
+            or request.get("owner_generation") != generation or not text(request.get("actor"), 256)
+            or not text(request.get("explanation"), 2048) or not isinstance(request.get("nonce"), str)
+            or len(request["nonce"]) != 32):
+        return None
+    return request
+
+
+def _write_cancel_request(attempt_dir: Path, request: dict[str, Any]) -> None:
+    path = attempt_dir / CANCEL_REQUEST
+    if path.is_symlink():
+        raise RecoveryRefused(ATTEMPT_DIR_UNSAFE, "the cancel request path is a symlink")
+    temporary = attempt_dir / f".{CANCEL_REQUEST}.{uuid.uuid4().hex}"
+    fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(canonical(request) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def stop_on_cancel(envelope: dict[str, Any], attempt_dir: Path, ledger: ExecutionLedger, *, generation: int,
+                   detail: str) -> dict[str, Any]:
+    """What a live parent does once SIGTERM was requested, after its stack unwound.
+
+    Every recorded group is killed first. With a valid cancel request for this
+    attempt and generation the attempt seals ``cancelled``; otherwise (a bare
+    SIGTERM, a stale request, a missed fence deadline or a moved generation)
+    it records a ``cancel_signal`` interruption and stays started, so abandon
+    or recovery can finish it. Fences are polled, never waited on, and the
+    lead claim is not consulted (the seal must work under any lead status).
+    """
+    aid = envelope["attempt_id"]
+    reaped = process_identity.reap(attempt_dir)
+    deadline = time.monotonic() + SEAL_DEADLINE_SECONDS
+    request = valid_cancel_request(attempt_dir, aid, generation)
+    refusal = "no valid cancel request for this attempt and generation"
+    if request is not None:
+        try:
+            with parent_fences(attempt_dir, ledger, deadline):
+                sealed = ledger.seal_terminal_uncertain(
+                    aid, "cancelled", expected_generation=generation, actor=request["actor"],
+                    explanation=request["explanation"], cause="cancel_request",
+                    receipt_path=attempt_dir / "receipt.json",
+                    build_receipt=terminal_receipt_renderer(envelope, attempt_dir, status="cancelled",
+                                                            actor=request["actor"], explanation=request["explanation"],
+                                                            cause="cancel_request"))
+            return {**sealed, "reason": "cancel_request", "reaped": reaped}
+        except (LockDeadline, ContractError) as exc:
+            refusal = f"cancelled seal refused: {exc}"
+    try:
+        with parent_fences(attempt_dir, ledger, deadline):
+            interruption = ledger.record_interruption(aid, "cancel_signal", f"{refusal}; {detail}"[:512],
+                                                      generation=generation)
+    except (LockDeadline, ContractError) as exc:
+        # The claim records the process exit instead when recovery starts.
+        return {"attempt_id": aid, "status": "interrupted", "reason": "cancel_signal", "receipt_path": None,
+                "detail": f"{refusal}; interruption not recorded: {exc}"[:512], "reaped": reaped}
+    return {"attempt_id": aid, "status": "interrupted", "reason": "cancel_signal", "receipt_path": None,
+            "interruption_id": interruption["interruption_id"], "detail": refusal, "reaped": reaped}
+
+
+def _signal_parent(record: dict[str, Any]) -> None:
+    """Re-check the parent's identity immediately before signalling it (via a pidfd where the OS has one)."""
+    pid = record["pid"]
+    pidfd = None
+    if hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"):
+        try:
+            pidfd = os.pidfd_open(pid)
+        except OSError:
+            raise RecoveryRefused(ATTEMPT_NOT_LIVE, "the parent exited before it was signalled") from None
+    try:
+        if process_identity.start_time(pid) != record["start_time"]:
+            raise RecoveryRefused(PROCESS_IDENTITY_MISMATCH, "the parent pid was reused before it was signalled")
+        if pidfd is not None:
+            signal.pidfd_send_signal(pidfd, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        raise RecoveryRefused(ATTEMPT_NOT_LIVE, "the parent exited before it was signalled") from None
+    finally:
+        if pidfd is not None:
+            os.close(pidfd)
+
+
+def cancel_delivery(work_id: str, attempt_id: str, *, actor: str, explanation: str, expected_generation: int,
+                    root: Path | None = None, wait_seconds: float = CANCEL_WAIT_SECONDS) -> dict[str, Any]:
+    """Ask a live v8 parent to stop: verify it, write the request, SIGTERM it, and wait for its seal.
+
+    Takes no lock (the parent holds them all). Its generation check reads a
+    snapshot and is advisory; the parent re-checks it when it seals.
+    """
+    for value, limit in ((actor, 256), (explanation, 2048)):
+        if not isinstance(value, str) or not value.strip() or len(value) > limit:
+            raise ContractError("cancel actor or explanation is invalid")
+    if type(expected_generation) is not int:
+        raise ContractError("expected generation is required")
+    run_dir, attempt_dir, ledger_path = _attempt_paths(root, work_id, attempt_id)
+    snapshot = _read_snapshot(ledger_path, attempt_id)
+    _check_started(snapshot, expected_generation)
+    record = next((item for item in process_identity.records(attempt_dir)
+                   if item["owner_generation"] == expected_generation), None)
+    if record is None:
+        raise RecoveryRefused(ATTEMPT_NOT_LIVE, "no process recorded itself as this generation's parent")
+    verdict = process_identity.parent_live(record)
+    if verdict == "foreign":
+        raise RecoveryRefused(FOREIGN_MACHINE, f"the parent ran on {record.get('host')}")
+    if verdict == "mismatch":
+        raise RecoveryRefused(PROCESS_IDENTITY_MISMATCH, "the recorded pid now belongs to another process")
+    if verdict != "live":
+        raise RecoveryRefused(ATTEMPT_NOT_LIVE, f"the recorded parent is {verdict}")
+    if not record.get("cancel_supported"):
+        raise RecoveryRefused(CANCEL_UNSUPPORTED, "the parent could not install its cancel handler")
+    request = {"schema_version": 1, "attempt_id": attempt_id, "owner_generation": expected_generation,
+               "actor": actor.strip(), "explanation": explanation.strip(), "nonce": uuid.uuid4().hex,
+               "requested_at": utc_now()}
+    _write_cancel_request(attempt_dir, request)
+    try:
+        _signal_parent(record)
+    except RecoveryRefused:
+        with contextlib_suppress(OSError):
+            (attempt_dir / CANCEL_REQUEST).unlink()
+        raise
+    reader = ExecutionLedger(ledger_path, read_only=True)
+    closed = attempt_dir / f"control-g{expected_generation}.closed"
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        # Liveness first, status second: a parent that sealed and exited in
+        # between is then read as finished, not as stopped without a seal.
+        parent_gone = process_identity.parent_live({**record, "closed": closed.exists()}) != "live"
+        current = reader.snapshot(attempt_id)
+        if current["status"] == "cancelled":
+            return {"status": "cancelled", "work_id": work_id, "attempt_id": attempt_id,
+                    "receipt_path": current["receipt_path"], "owner_generation": current["owner_generation"]}
+        if current["status"] != "started":
+            return {"status": ATTEMPT_FINISHED, "work_id": work_id, "attempt_id": attempt_id,
+                    "terminal_status": current["status"], "receipt_path": current["receipt_path"]}
+        if parent_gone:
+            raise RecoveryRefused(CANCEL_TIMEOUT, "the parent stopped without sealing; the attempt stays started "
+                                                  "(see its interruption in inspect-delivery)")
+        if time.monotonic() >= deadline:
+            raise RecoveryRefused(CANCEL_TIMEOUT, f"no terminal status within {wait_seconds:g} s; the attempt stays started")
+        time.sleep(0.1)

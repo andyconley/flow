@@ -3462,6 +3462,7 @@ class FlowCliTests(FlowCliHarness):
                 "codex_collector",
                 "codex_worker",
                 "cost",
+                "delivery_cancel",
                 "delivery_contracts",
                 "delivery_control",
                 "delivery_gateway",

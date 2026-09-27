@@ -340,7 +340,9 @@ EVIDENCE_DAMAGE_KEYS = {
     "trace_oversized": {"kind", "path", "sha256", "bytes"},
     "draft_receipt_replaced": {"kind", "sha256"},
 }
-RECOVERY_INTERRUPTION_CAUSES = frozenset({"transport", "reconciliation_required", "unmarked_process_exit"})
+# cancel_signal: SIGTERM reached the parent without a valid cancel request (ADR 0019).
+RECOVERY_INTERRUPTION_CAUSES = frozenset({"transport", "reconciliation_required", "unmarked_process_exit",
+                                          "cancel_signal"})
 RECOVERY_MODES = frozenset({"answer", "pending", "seal", "restart"})
 RECOVERY_GRANT_REASONS = frozenset({"recovery_unconsumed_grant", "recovery_regranted"})
 RECOVERY_TRIGGER_REASONS = RECOVERY_GRANT_REASONS | {"recovery_after_dispatch"}

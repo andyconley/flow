@@ -237,7 +237,7 @@ class GatewayControlRecordTests(CharteredFixture):
         attempt_dir = self.run / "execution" / result["attempt_id"]
         [record] = process_identity.records(attempt_dir)
         self.assertEqual((record["owner_generation"], record["pid"], record["closed"], record["cancel_supported"]),
-                         (1, os.getpid(), True, False))
+                         (1, os.getpid(), True, True))  # the handler installs on the main thread
         self.assertEqual([item["kind"] for item in record["groups"]], ["test"],
                          "the default targeted test runs in its own recorded group")
         self.assertIsNone(process_identity.current())
