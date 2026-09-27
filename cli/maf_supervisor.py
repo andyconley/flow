@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import select
+import signal
 import subprocess
 import sys
 import time
@@ -20,8 +21,10 @@ from typing import Any
 from runner_limits import MAX_ACTIONS, MAX_MANAGER_CALLS
 
 try:  # flow.py runs siblings directly; package imports use the second path.
+    from delivery_cancel import interruptible
     from execution_contracts import validate_action, validate_replan
 except ModuleNotFoundError:  # pragma: no cover - exercised by package consumers
+    from cli.delivery_cancel import interruptible
     from cli.execution_contracts import validate_action, validate_replan
 
 
@@ -446,7 +449,8 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                      on_manager: Callable[[dict[str, Any]], str],
                      on_action: Callable[[dict[str, Any]], dict[str, Any]], *,
                      timeout_s: float = 900, python_path: str | None = None,
-                     resume: dict[str, Any] | None = None) -> dict[str, Any]:
+                     resume: dict[str, Any] | None = None,
+                     on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Run credentialless stock Magentic behind Flow's two guarded callbacks."""
     protocol_version = envelope.get("execution_protocol_version")
     if protocol_version not in {5, 6, 7, 8} or not isinstance(task, str) or not task.strip():
@@ -471,10 +475,15 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     manager_call_bound = MAX_MANAGER_CALLS if expandable else envelope["limits"]["max_manager_calls"]
     action_bound = MAX_ACTIONS if expandable else envelope["limits"]["max_delegations"]
     try:
-        _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "resume" if resume else "start",
-                                                   "envelope": envelope, "task": task, "resume": resume}, deadline)
+        if on_process_group is not None:
+            on_process_group(process.pid, "maf")
+        with interruptible():
+            _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "resume" if resume else "start",
+                                                       "envelope": envelope, "task": task, "resume": resume}, deadline)
         while True:
-            message = _read_message(process.stdout.fileno(), deadline, pending, protocol_version)
+            # The waits on the child are where a cancel breaks in; callbacks are not.
+            with interruptible():
+                message = _read_message(process.stdout.fileno(), deadline, pending, protocol_version)
             kind = message["type"]
             if kind == "manager_request":
                 manager_calls += 1
@@ -486,8 +495,9 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                 text = on_manager(message)
                 if not isinstance(text, str) or not text.strip() or len(text.encode()) > MAX_LINE_BYTES // 2:
                     raise MafProtocolError("Flow manager callback returned invalid text")
-                _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "manager_response",
-                                                           "call_id": message.get("call_id"), "text": text}, deadline)
+                with interruptible():
+                    _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "manager_response",
+                                                               "call_id": message.get("call_id"), "text": text}, deadline)
                 continue
             if kind == "propose_action":
                 if message.get("provider") in {"codex", "claude"}:
@@ -499,8 +509,9 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                 result = on_action(message)
                 if not isinstance(result, dict):
                     raise MafProtocolError("Flow action callback returned invalid result")
-                _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "action_result",
-                                                           "action_id": result.get("action_id", message.get("action_id")), "result": result}, deadline)
+                with interruptible():
+                    _write_bounded(process.stdin.fileno(), {"protocol_version": protocol_version, "type": "action_result",
+                                                               "action_id": result.get("action_id", message.get("action_id")), "result": result}, deadline)
                 continue
             if kind == "workflow_finished":
                 if message.get("attempt_id") != envelope["attempt_id"]:
@@ -516,7 +527,11 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
             raise MafProtocolError("MAF delivery child sent an unexpected message")
     finally:
         if process.poll() is None:
-            process.kill()
+            # The whole group: a runtime subprocess must not outlive the child.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             process.wait(timeout=5)
         process.stdin.close()
         process.stdout.close()

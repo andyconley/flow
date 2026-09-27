@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -14,13 +15,16 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from execution_contracts import (ContractError, canonical, digest, envelope_digest,
+from execution_contracts import (TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical, digest, envelope_digest,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
+import delivery_termination
+import delivery_cancel
+import process_identity
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
                                EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
                                OWNER_GENERATION_STALE, V8_DISPOSITION_UNSUPPORTED, V8_EVIDENCE_FILE_REFUSED,
@@ -629,16 +633,29 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
             "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in changed}}
 
 
-def _run_chartered_test(worktree: Path, job: dict[str, Any]) -> dict[str, Any]:
+def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
+                        on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
+    """Run the charter's targeted test in its own process group, killed whole on timeout."""
     test = _job_test(job["test"])
+    process = subprocess.Popen(test["argv"], cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, start_new_session=True)
     try:
-        completed = subprocess.run(test["argv"], cwd=worktree, capture_output=True, text=True,
-                                   timeout=test["timeout_seconds"], check=False,
-                                   env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
-    except subprocess.TimeoutExpired as exc:
-        raise ContractError("targeted chartered test timed out") from exc
-    output = (completed.stdout + completed.stderr)[-8192:]
-    if completed.returncode:
+        if on_process_group is not None:
+            on_process_group(process.pid, "test")
+        try:
+            with delivery_cancel.interruptible():  # test timeouts reach 3600 s
+                stdout, stderr = process.communicate(timeout=test["timeout_seconds"])
+        except subprocess.TimeoutExpired as exc:
+            raise ContractError("targeted chartered test timed out") from exc
+    finally:
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            # An escaped grandchild could hold the pipes open; never wait on it forever.
+            with suppress(subprocess.TimeoutExpired):
+                process.communicate(timeout=10)
+    output = (stdout + stderr)[-8192:]
+    if process.returncode:
         raise ContractError("targeted chartered test failed: " + output[-512:])
     return {"command": test["argv"], "status": "passed", "output_sha256": hashlib.sha256(output.encode()).hexdigest()}
 
@@ -674,7 +691,9 @@ def _recovery_gates(work_id: str, attempt_id: str, run_dir: Path) -> tuple[dict[
             or json.loads(envelope_path.read_text()) != envelope):
         raise RecoveryRefused(ENVELOPE_CHANGED)
     if snapshot["status"] != "started":
-        if snapshot.get("recoveries"):
+        # A cancelled or abandoned attempt is never replayed, even after a
+        # recovery: a person stopped it and its receipt is final (ADR 0019).
+        if snapshot.get("recoveries") and snapshot["status"] not in TERMINAL_UNCERTAIN_STATUSES:
             return snapshot, None
         raise RecoveryRefused(ATTEMPT_TERMINAL)
     try:
@@ -744,70 +763,82 @@ def _resume_chartered(work_id: str, attempt_id: str, *, root: Path,
                 checkpoint=({key: link[key] for key in ("pending_id", "checkpoint_id", "file_sha256")} if link else None),
                 quarantined=quarantine, expansion_request_id=expansion["request_id"] if expansion else None)
         generation = claim["generation"]
-        _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
-        state = ledger.snapshot(attempt_id)
-        try:
-            # Seal mode only records what the run already decided, so it never
-            # runs the test: a bound digest is reused, otherwise tests are absent.
-            evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner,
-                                                   run_test=mode != "seal")
-        except (RecoveryRefused, ContractError):
-            if not recorded_failure:
+        # The recovering parent dispatches, so it records its own identity for
+        # cancel and reaping; seal mode starts no process (ADR 0019).
+        with (delivery_cancel.parent_scope(attempt_dir, generation, attempt_id=attempt_id)
+              if mode != "seal" else nullcontext()) as controller:
+            try:
+                _quarantine_checkpoints(envelope, attempt_dir, quarantine, claim["recovery_id"])
+                state = ledger.snapshot(attempt_id)
+                try:
+                    # Seal mode only records what the run already decided, so it never
+                    # runs the test: a bound digest is reused, otherwise tests are absent.
+                    evidence = _rebuild_chartered_evidence(envelope, state, attempt_dir, test_runner,
+                                                           run_test=mode != "seal")
+                except (RecoveryRefused, ContractError):
+                    if not recorded_failure:
+                        raise
+                    evidence = {"edit_evidence": None, "test_evidence": None}
+                # Only grants a recovery released (this claim or an earlier one that
+                # died before its regrant) may be re-granted.
+                evidence["regrantable_action_ids"] = [item["action_id"] for item in state["actions"]
+                                                      if item["reason"] == "recovery_unconsumed_grant"]
+                if mode == "seal":
+                    inputs = state.get("verifier_inputs", [])
+                    verifier_sha = (hashlib.sha256(inputs[-1]["input"]["provider_task"].encode()).hexdigest()
+                                    if inputs and evidence["edit_evidence"] else None)
+                    result = _seal_attempt(envelope, attempt_dir, ledger, state, failure=outcome["failure"],
+                                           edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
+                                           verifier_input_sha256=verifier_sha, generation=generation,
+                                           authority_guard=authority_guard, hook=seal_hook or (lambda point: None))
+                    return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+                job = envelope["job_contract"]
+                if mode == "restart":
+                    # A fresh start on the byte-identical envelope: Magentic replays
+                    # every earlier manager call from the ledger (ADR 0017).
+                    result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
+                                                        manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                                        supervisor=supervisor, test_runner=test_runner, python_path=python_path,
+                                                        resume=None, generation=generation, recovery=evidence,
+                                                        seal_hook=seal_hook)
+                    return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+                row = next(item for item in state["actions"] if item["action_id"] == eligibility["action_id"])
+                action = row["request"]
+                checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
+                if checkpoint["metadata"]["checkpoint_id"] != action["checkpoint_id"]:
+                    raise ContractError("Magentic restore checkpoint differs from worker action")
+                resume: dict[str, Any] = {"checkpoint_id": action["checkpoint_id"],
+                                          "request_id": f"flow-magentic-action-{action['sequence']}",
+                                          "action_id": action["action_id"],
+                                          **restore_position(envelope, state, checkpoint["metadata"]["ledger_seq"])}
+                if mode == "answer" and row["status"] == "denied":
+                    # The engineer denied this proposal's expansion; Magentic was told so.
+                    resume["result"] = denied_reply(action["action_id"], row["reason"])
+                elif mode == "answer":
+                    reply = _completed_reply(ledger, envelope, attempt_dir, action, row["result"],
+                                             is_verifier=action["instance_id"] in job["verifier_instance_ids"],
+                                             is_producer=action["instance_id"] in job["producer_instance_ids"],
+                                             edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
+                                             generation=generation, authority_guard=authority_guard)
+                    reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
+                    if not reply_path.exists():
+                        _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
+                    resume["result"] = reply
+                else:
+                    resume["kind"] = "pending"
+                result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
+                                                    manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                                    supervisor=supervisor, test_runner=test_runner, python_path=python_path,
+                                                    resume=resume, generation=generation, recovery=evidence,
+                                                    seal_hook=seal_hook)
+                return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
+            except Exception as exc:
+                # A cancel can land before the run starts, in the evidence
+                # rebuild's targeted test: seal or interrupt the same way.
+                if controller is not None and controller.requested and controller.armed:
+                    return delivery_termination.stop_on_cancel(envelope, attempt_dir, ledger, generation=generation,
+                                                               detail=str(exc))
                 raise
-            evidence = {"edit_evidence": None, "test_evidence": None}
-        # Only grants a recovery released (this claim or an earlier one that
-        # died before its regrant) may be re-granted.
-        evidence["regrantable_action_ids"] = [item["action_id"] for item in state["actions"]
-                                              if item["reason"] == "recovery_unconsumed_grant"]
-        if mode == "seal":
-            inputs = state.get("verifier_inputs", [])
-            verifier_sha = (hashlib.sha256(inputs[-1]["input"]["provider_task"].encode()).hexdigest()
-                            if inputs and evidence["edit_evidence"] else None)
-            result = _seal_attempt(envelope, attempt_dir, ledger, state, failure=outcome["failure"],
-                                   edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
-                                   verifier_input_sha256=verifier_sha, generation=generation,
-                                   authority_guard=authority_guard, hook=seal_hook or (lambda point: None))
-            return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
-        job = envelope["job_contract"]
-        if mode == "restart":
-            # A fresh start on the byte-identical envelope: Magentic replays
-            # every earlier manager call from the ledger (ADR 0017).
-            result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
-                                                manager_adapter=manager_adapter, worker_adapter=worker_adapter,
-                                                supervisor=supervisor, test_runner=test_runner, python_path=python_path,
-                                                resume=None, generation=generation, recovery=evidence,
-                                                seal_hook=seal_hook)
-            return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
-        row = next(item for item in state["actions"] if item["action_id"] == eligibility["action_id"])
-        action = row["request"]
-        checkpoint = ledger.read_magentic_checkpoint(attempt_id, "worker", action["action_id"])
-        if checkpoint["metadata"]["checkpoint_id"] != action["checkpoint_id"]:
-            raise ContractError("Magentic restore checkpoint differs from worker action")
-        resume: dict[str, Any] = {"checkpoint_id": action["checkpoint_id"],
-                                  "request_id": f"flow-magentic-action-{action['sequence']}",
-                                  "action_id": action["action_id"],
-                                  **restore_position(envelope, state, checkpoint["metadata"]["ledger_seq"])}
-        if mode == "answer" and row["status"] == "denied":
-            # The engineer denied this proposal's expansion; Magentic was told so.
-            resume["result"] = denied_reply(action["action_id"], row["reason"])
-        elif mode == "answer":
-            reply = _completed_reply(ledger, envelope, attempt_dir, action, row["result"],
-                                     is_verifier=action["instance_id"] in job["verifier_instance_ids"],
-                                     is_producer=action["instance_id"] in job["producer_instance_ids"],
-                                     edit_evidence=evidence["edit_evidence"], test_evidence=evidence["test_evidence"],
-                                     generation=generation, authority_guard=authority_guard)
-            reply_path = attempt_dir / f"action-{action['action_id']}.result.json"
-            if not reply_path.exists():
-                _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
-            resume["result"] = reply
-        else:
-            resume["kind"] = "pending"
-        result = _execute_prepared_delivery(envelope, job["task"], attempt_dir, ledger,
-                                            manager_adapter=manager_adapter, worker_adapter=worker_adapter,
-                                            supervisor=supervisor, test_runner=test_runner, python_path=python_path,
-                                            resume=resume, generation=generation, recovery=evidence,
-                                            seal_hook=seal_hook)
-        return {**result, "recovery_id": claim["recovery_id"], "mode": mode}
 
 
 def _check_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, Any], attempt_dir: Path) -> None:
@@ -892,7 +923,9 @@ def _rebuild_chartered_evidence(envelope: dict[str, Any], snapshot: dict[str, An
     elif not run_test:
         tests = None
     else:
-        tests = (test_runner or partial(_run_chartered_test, job=job))(worktree)
+        scope = process_identity.current()
+        tests = (test_runner or partial(_run_chartered_test, job=job,
+                                        on_process_group=scope.register if scope else None))(worktree)
         try:
             unchanged = _verify_chartered_edit(worktree, baseline, attempt_dir, job) == edit
         except ContractError:
@@ -1354,7 +1387,9 @@ def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir:
                                ledger: ExecutionLedger, **kwargs: Any) -> dict[str, Any]:
     """Run one prepared attempt; a live v8 run holds the attempt's recovery fence throughout."""
     if envelope["execution_protocol_version"] == 8 and kwargs.get("recovery") is None:
-        with ledger.recovery_lock(envelope["attempt_id"], holder="live"):
+        with ledger.recovery_lock(envelope["attempt_id"], holder="live"), \
+                delivery_cancel.parent_scope(attempt_dir, kwargs["generation"],
+                                             attempt_id=envelope["attempt_id"]):
             return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
     return _run_prepared_delivery(envelope, task, attempt_dir, ledger, **kwargs)
 
@@ -1393,9 +1428,17 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     authority_guard = (lambda: delivery_authority_guard(attempt_dir.parents[1], envelope)) if delivery_protocol else nullcontext
     job = envelope.get("job_contract") if chartered else None
     task += _execution_facts(envelope, job, source_commit)
-    manager_adapter = manager_adapter or _default_manager_adapter
-    worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir)
-    test_runner = test_runner or (partial(_run_chartered_test, job=job) if chartered else _run_targeted_test)
+    # Only Flow's own adapters start processes; each registers its group with
+    # the parent's control record (ADR 0019). Injected adapters are unchanged.
+    scope = process_identity.current() if structured_verifier else None
+    register = scope.register if scope is not None else None
+    # SIGTERM only sets a flag (ADR 0019); every authorization checks it first.
+    controller = delivery_cancel.current() if structured_verifier else None
+    stop_if_cancelled = controller.check if controller is not None else (lambda: None)
+    manager_adapter = manager_adapter or partial(_default_manager_adapter, on_process_group=register)
+    worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir, on_process_group=register)
+    test_runner = test_runner or (partial(_run_chartered_test, job=job, on_process_group=register) if chartered
+                                  else _run_targeted_test)
     verify_edit = (partial(_verify_chartered_edit, job=job) if chartered else _verify_edit)
     edit_evidence: dict[str, Any] | None = None
     test_evidence: dict[str, Any] | None = None
@@ -1417,6 +1460,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
     def on_manager(message: dict[str, Any]) -> str:
+        stop_if_cancelled()
         request = _normalized_manager_request(envelope, message)
         if request["phase"] == "replan_facts":
             replan = {"schema_version": 1, "kind": "replan", "attempt_id": aid,
@@ -1454,6 +1498,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             raise ContractError("Magentic manager call denied: " + decision["reason"])
         with authority_guard(), ledger.send_lock():
             ledger.assert_owner(aid, generation)
+            stop_if_cancelled()  # before the grant is used, so an unsent call stays unsent
             if not ledger.consume_manager_grant(request["call_id"], decision["grant_id"], generation=generation):
                 raise ContractError("Magentic manager grant was already consumed")
             try:
@@ -1475,6 +1520,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
 
     def on_action(message: dict[str, Any]) -> dict[str, Any]:
         nonlocal edit_evidence, test_evidence, verifier_input_sha256
+        stop_if_cancelled()
         action = _normalized_action(envelope, message)
         is_verifier = action["instance_id"] in job["verifier_instance_ids"] if chartered else action["assignment_id"] == "local-verifier"
         is_producer = action["instance_id"] in job["producer_instance_ids"] if chartered else action["assignment_id"] == "claude-implementer"
@@ -1548,6 +1594,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                     high_water = ledger.snapshot(aid)["events"][-1]["seq"]
                     ledger.bind_magentic_checkpoint(aid, action["checkpoint_id"], "worker", action["action_id"],
                                                     high_water, str(checkpoint_path), generation=generation)
+                stop_if_cancelled()  # before the grant is used; the except below releases it
                 if not (structured_verifier and is_verifier) and not ledger.consume_grant(
                         action["action_id"], decision["grant_id"], generation=generation):
                     raise ContractError("Magentic specialist grant was already consumed")
@@ -1560,6 +1607,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             response_completed = False
             verifier_binding: dict[str, Any] | None = None
             if structured_verifier and is_verifier:
+                stop_if_cancelled()  # the verifier grant is still unused here, so the seal releases it
                 # Input binding, grant use, and send claim are one ledger
                 # transaction. If it refuses, nothing was sent: release an
                 # untouched grant rather than leaving it reserved.
@@ -1613,24 +1661,34 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             _write_snapshot(reply_path, (canonical(reply) + "\n").encode())
         return reply
 
+    paused_request: str | None = None
     try:
         runner_kwargs = {"python_path": python_path, "timeout_s": envelope["limits"].get("max_runtime_seconds", 900)}
         if resume is not None:
             runner_kwargs["resume"] = resume
+        if supervisor is None and register is not None:
+            runner_kwargs["on_process_group"] = register
         outcome = (supervisor or run_maf_delivery)(envelope, task, on_manager, on_action, **runner_kwargs)
         if outcome.get("attempt_id") != aid:
             raise ContractError("Magentic finished a different attempt")
     except ExpansionPaused as paused:
+        paused_request = paused.request_id
+    except Exception as exc:
+        failure = str(exc)
+        recoverable_transport_failure = isinstance(exc, MafTransportError)
+    if controller is not None and controller.requested:
+        # Keyed on the flag, not the exception: the stack has unwound, every
+        # in-flight send is already unknown, and nothing new is authorized.
+        return delivery_termination.stop_on_cancel(envelope, attempt_dir, ledger, generation=generation,
+                                                   detail=failure or "cancel requested")
+    if paused_request is not None:
         # Not an interruption and not a failure: the attempt stays started,
         # the lead claim keeps its generation, and the pending request row is
         # the durable pause marker. Nothing is in flight, so stopping the
         # child loses nothing.
-        return {"attempt_id": aid, "status": "expansion_paused", "request_id": paused.request_id,
+        return {"attempt_id": aid, "status": "expansion_paused", "request_id": paused_request,
                 "receipt_path": None, "resume_available": False,
-                "next_action": f"decide expansion {paused.request_id}"}
-    except Exception as exc:
-        failure = str(exc)
-        recoverable_transport_failure = isinstance(exc, MafTransportError)
+                "next_action": f"decide expansion {paused_request}"}
     snapshot = ledger.snapshot(aid)
     actions = snapshot["actions"]
     manager_calls = snapshot.get("manager_calls", [])
@@ -1657,6 +1715,9 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         with authority_guard(), ledger.send_lock():
             ledger.record_runtime_outcome(aid, failure=failure, transport=recoverable_transport_failure,
                                           generation=generation)
+        if controller is not None:
+            # Committed to sealing: a cancel that arrives now finds the normal receipt.
+            controller.disarm()
         hook("after-runtime-outcome")
     if not continuation_epoch_id:
         return _seal_attempt(envelope, attempt_dir, ledger, snapshot, failure=failure,
@@ -1704,7 +1765,8 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
             "evidence": receipt["evidence"]}
 
 
-def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any], workspace: Path) -> dict[str, Any]:
+def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
+                             on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     turns = []
     for item in message["messages"]:
         contents = item.get("contents") if isinstance(item, dict) else None
@@ -1723,12 +1785,12 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
         result = call_claude(instructions="stock Magentic manager", task="model response",
                              prompt_override=prompt, workspace=workspace,
                              model=envelope["manager"]["model"], timeout_seconds=timeout_seconds,
-                             max_output_bytes=32768)
+                             max_output_bytes=32768, on_process_group=on_process_group)
     elif envelope["manager"]["provider"] == "codex":
         result = call_codex(instructions="Respond to the stock Magentic manager request only. Return the requested response text without editing files.",
                             task=prompt, workspace=workspace, model=envelope["manager"]["model"],
                             timeout_seconds=timeout_seconds, sandbox="read-only",
-                            max_prompt_bytes=32768, max_output_bytes=32768)
+                            max_prompt_bytes=32768, max_output_bytes=32768, on_process_group=on_process_group)
     else:
         raise ContractError("approved manager provider has no adapter")
     output = result["output"]
@@ -1746,7 +1808,8 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
 
 
 def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
-                            trace_dir: Path | None = None) -> dict[str, Any]:
+                            trace_dir: Path | None = None,
+                            on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
     timeout_seconds = min(300, envelope.get("limits", {}).get("max_runtime_seconds", 300))
     if action["provider"] == "ollama":
@@ -1762,8 +1825,10 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     if action["provider"] == "claude":
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
                                 workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,
-                                trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None)
+                                trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None,
+                                on_process_group=on_process_group)
     if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7, 8}:
         return call_codex(instructions=assignment["instructions"], task=action["task"],
-                          workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds)
+                          workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,
+                          on_process_group=on_process_group)
     raise ContractError("selected specialist provider has no approved adapter")

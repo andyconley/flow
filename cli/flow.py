@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +57,8 @@ from execution_gateway import continue_resolved_local, execute_local, execute_mu
 from claude_gateway import execute_claude  # noqa: E402
 from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
+from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
+from delivery_control import change_lead_claim  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
@@ -67,6 +70,39 @@ from setup import (  # noqa: E402
     setup_user,
 )
 from sync import sync_target  # noqa: E402
+
+
+def _refusal(exc: Exception, *, as_json: bool) -> int:
+    """Print a stable ``refused: <code>: <detail>`` line and exit 2."""
+    import json
+    code = getattr(exc, "reason", None) or "refused"
+    detail = getattr(exc, "detail", None) or str(exc)
+    print(json.dumps({"status": "refused", "code": code, "reason": str(exc)}) if as_json else f"refused: {code}: {detail}")
+    return 2
+
+
+LEAD_REFUSAL_CODES = {
+    "run not found": "run_not_found",
+    "delivery authority is not sealed": "delivery_authority_unsealed",
+    "delivery owner generation is invalid": "lead_generation_invalid",
+    "stale delivery owner generation": "lead_generation_stale",
+    "only an active Delivery Lead can require attention": "lead_status_invalid",
+    "only an active or attention-required Delivery Lead can release": "lead_status_invalid",
+    "Delivery Lead cannot be resumed or superseded from its current status": "lead_status_invalid",
+    "resume or supersede requires an explicit owner identity": "owner_required",
+    "current Delivery Lead claim path is invalid": "lead_claim_invalid",
+    "current Delivery Lead claim is unavailable": "lead_claim_invalid",
+}
+
+
+def _lead_refusal(message: str) -> tuple[str, str]:
+    """A stable code for a ``change_lead_claim`` refusal, which reports prose or ``code[: detail]``."""
+    if message in LEAD_REFUSAL_CODES:
+        return LEAD_REFUSAL_CODES[message], message
+    code, _, detail = message.partition(":")
+    if code and all(char.islower() or char == "_" for char in code):
+        return code, detail.strip() or code
+    return "lead_change_refused", message
 
 
 def main() -> int:
@@ -600,6 +636,42 @@ def main() -> int:
     run_decide_expansion.add_argument("--project-root", type=Path)
     run_decide_expansion.add_argument("--json", action="store_true")
 
+    run_cancel = run_sub.add_parser(
+        "cancel-delivery", help="ask a live v8 parent to stop; it seals the attempt cancelled")
+    run_cancel.add_argument("work_id")
+    run_cancel.add_argument("attempt_id")
+    run_cancel.add_argument("--actor", required=True, help="declared operator or Shaper, recorded as attribution only")
+    run_cancel.add_argument("--explanation", required=True)
+    run_cancel.add_argument("--expected-generation", type=int, required=True,
+                            help="attempt owner generation shown by inspect-delivery or stuck")
+    run_cancel.add_argument("--project-root", type=Path)
+    run_cancel.add_argument("--json", action="store_true")
+
+    run_abandon = run_sub.add_parser(
+        "abandon-delivery", help="seal a stuck v8 attempt as abandoned after reaping its recorded processes")
+    run_abandon.add_argument("work_id")
+    run_abandon.add_argument("attempt_id")
+    run_abandon.add_argument("--actor", required=True, help="declared operator or Shaper, recorded as attribution only")
+    run_abandon.add_argument("--explanation", required=True)
+    run_abandon.add_argument("--expected-generation", type=int, required=True,
+                             help="attempt owner generation shown by inspect-delivery or stuck")
+    run_abandon.add_argument("--project-root", type=Path)
+    run_abandon.add_argument("--json", action="store_true")
+
+    run_delivery_lead = run_sub.add_parser(
+        "delivery-lead", help="change the Delivery Lead claim: attention, release, resume, or supersede")
+    run_delivery_lead.add_argument("work_id")
+    run_delivery_lead.add_argument("action", choices=("attention", "release", "resume", "supersede"))
+    run_delivery_lead.add_argument("--expected-generation", type=int, required=True,
+                                   help="lead generation shown by inspect-delivery (owner: generation N)")
+    run_delivery_lead.add_argument("--owner", help="new lead identity; required for resume and supersede")
+    run_delivery_lead.add_argument("--project-root", type=Path)
+    run_delivery_lead.add_argument("--json", action="store_true")
+
+    run_stuck = run_sub.add_parser("stuck", help="list every started v8 attempt with its single next command (read-only)")
+    run_stuck.add_argument("--project-root", type=Path)
+    run_stuck.add_argument("--json", action="store_true")
+
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
@@ -1024,6 +1096,68 @@ def main() -> int:
         print(json.dumps(result, sort_keys=True) if args.json else
               f"request: {result['request_id']}\nstatus: {result['status']}\nnext action: {result['next_action']}")
         return 0
+    if args.command == "run" and args.run_target == "cancel-delivery":
+        import json
+        try:
+            result = cancel_delivery(args.work_id, args.attempt_id, actor=args.actor, explanation=args.explanation,
+                                     expected_generation=args.expected_generation, root=args.project_root)
+        except (ContractError, OSError, ValueError, RuntimeError, sqlite3.Error) as exc:
+            return _refusal(exc, as_json=args.json)
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+        elif result["status"] == "cancelled":
+            print(f"attempt: {result['attempt_id']}\nstatus: cancelled\nreceipt: {result['receipt_path']}")
+        else:
+            print(f"attempt: {result['attempt_id']}\nstatus: attempt_finished ({result['terminal_status']})\n"
+                  f"receipt: {result['receipt_path']}")
+        return 0 if result["status"] == "cancelled" else 1
+    if args.command == "run" and args.run_target == "abandon-delivery":
+        import json
+        try:
+            result = abandon_delivery(args.work_id, args.attempt_id, actor=args.actor, explanation=args.explanation,
+                                      expected_generation=args.expected_generation, root=args.project_root)
+        except (ContractError, OSError, ValueError, RuntimeError, sqlite3.Error) as exc:
+            return _refusal(exc, as_json=args.json)
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"attempt: {result['attempt_id']}\nstatus: {result['status']}\ncause: {result['cause']}\n"
+              f"receipt: {result['receipt_path']}\nowner generation: {result['owner_generation']}\n"
+              f"reaped: {', '.join(item['kind'] + ' ' + str(item['pgid']) + ' ' + item['action'] for item in result['reaped']) or 'none'}")
+        return 0
+    if args.command == "run" and args.run_target == "delivery-lead":
+        import json
+        from fsutil import repo_root
+        changed, run, errors = change_lead_claim(args.work_id, args.action, root=(args.project_root or repo_root()),
+                                                 owner=args.owner, expected_generation=args.expected_generation)
+        if not changed:
+            code, detail = _lead_refusal(errors[0] if errors else "lead change refused")
+            print(json.dumps({"status": "refused", "code": code, "reason": detail}) if args.json
+                  else f"refused: {code}: {detail}")
+            return 2
+        delivery = run["delivery"]
+        view = {"status": "changed", "action": args.action, "owner_status": delivery["owner_status"],
+                "owner_generation": delivery["owner_generation"]}
+        print(json.dumps(view, sort_keys=True) if args.json else
+              f"lead: {view['owner_status']}\ngeneration: {view['owner_generation']}")
+        return 0
+    if args.command == "run" and args.run_target == "stuck":
+        import json
+        found = stuck_attempts(args.project_root)
+        if args.json:
+            print(json.dumps({"attempts": found}, sort_keys=True, indent=2))
+        elif not found:
+            print("no started v8 attempts")
+        else:
+            for item in found:
+                if item.get("error"):
+                    print(f"{item['work_id']}: {item['error']}")
+                    continue
+                print(f"{item['work_id']} {item['attempt_id']}\n"
+                      f"  live: {item['live']} ({item['parent']}, lock {item['lock']})\n"
+                      f"  lead: {item['lead_status']}\n"
+                      f"  uncertain: {item['uncertain']['started']} started, {item['uncertain']['unknown']} unknown\n"
+                      f"  open expansion: {item['open_expansion'] or 'none'}\n"
+                      f"  next: {item['next_command']}")
+        return 0
     if args.command == "run" and args.run_target == "inspect-execution":
         import json
         try:
@@ -1070,6 +1204,20 @@ def main() -> int:
                               f" grant={(item['grant'] or {}).get('authority', 'none')}"
                               f" rationale={json.dumps(item['rationale'])}\n" for item in expansion["requests"])
                     + (f"next action: {attempt['next_action']}\n" if attempt.get("next_action") else ""))
+            if "attempt_status" in attempt:
+                control = attempt["control"]
+                groups = [group for record in control["records"] for group in record["groups"]]
+                termination = attempt.get("termination") or {}
+                recovery_lines += (
+                    f"attempt status: {attempt['attempt_status']}\n"
+                    f"expansion status: {attempt['expansion_status']}\n"
+                    + (f"stopped by: {termination.get('actor')} (cause {termination.get('cause')})\n" if termination else "")
+                    + (f"evidence damage: {', '.join(item['kind'] for item in attempt['evidence_damage']) or 'none'}\n"
+                       if attempt.get("evidence_damage") is not None else "")
+                    + f"control: parent {control['parent']}, lock {control['lock']}, "
+                    f"{sum(group['alive'] for group in groups)} of {len(groups)} recorded groups alive\n"
+                    + f"uncertain rows: {', '.join(attempt.get('pending_unknowns', [])) or 'none'}\n"
+                    + f"next command: {attempt['next_command'] or 'none (terminal)'}\n")
             print(f"work: {result['work_id']}\nstate: {result['lifecycle'].get('state')}\n"
                   f"charter: v{charter.get('version', 'n/a')} {authority.get('charter_digest', 'unsealed')}\n"
                   f"logical attempt: {authority.get('logical_delivery_attempt_id', 'none')}\n"

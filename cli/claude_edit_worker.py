@@ -14,9 +14,10 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from claude_worker import CLAUDE_ENV_KEYS, _normalized_usage
+from delivery_cancel import interruptible
 
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
@@ -75,7 +76,8 @@ def _stream_result(raw: bytes, model: str) -> dict[str, Any]:
 
 def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: str,
                      timeout_seconds: int, claude_bin: str = "claude",
-                     trace_path: Path | None = None) -> dict[str, Any]:
+                     trace_path: Path | None = None,
+                     on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Allow only Claude file tools; caller must verify every resulting edit."""
     raw_workspace = Path(workspace)
     if raw_workspace.is_symlink():
@@ -121,53 +123,56 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
     if process.stdin is None or process.stdout is None:
         raise ClaudeEditError("Claude process pipes unavailable")
     try:
-        chunks: list[bytes] = []
-        size = written = 0
-        event_file = event_path.open("ab") if event_path is not None else None
-        selector = selectors.DefaultSelector()
-        os.set_blocking(process.stdin.fileno(), False)
-        selector.register(process.stdin, selectors.EVENT_WRITE)
-        selector.register(process.stdout, selectors.EVENT_READ)
-        try:
-            while selector.get_map():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise ClaudeEditError("Claude edit timed out")
-                ready = selector.select(remaining)
-                if not ready:
-                    continue
-                for key, _ in ready:
-                    if key.fileobj is process.stdin:
-                        count = os.write(process.stdin.fileno(), prompt[written:])
-                        written += count
-                        if written == len(prompt):
-                            selector.unregister(process.stdin)
-                            process.stdin.close()
-                    else:
-                        limit = MAX_EVENT_BYTES if event_path is not None else MAX_STDOUT_BYTES
-                        chunk = os.read(process.stdout.fileno(), min(8192, limit + 1 - size))
-                        if not chunk:
-                            selector.unregister(process.stdout)
-                            continue
-                        chunks.append(chunk)
-                        size += len(chunk)
-                        if event_file is not None:
-                            event_file.write(chunk[:max(0, MAX_EVENT_BYTES - event_file.tell())])
-                            event_file.flush()
-                        if size > limit:
-                            raise ClaudeEditError("Claude edit output exceeds limit")
-        finally:
-            selector.close()
-            if event_file is not None:
-                event_file.close()
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise ClaudeEditError("Claude edit timed out")
-        if process.wait(timeout=remaining) != 0:
-            raise ClaudeEditError("Claude exited without a successful edit turn")
-        result = (_stream_result if event_path is not None else _result)(b"".join(chunks), model)
-        return {**result,
-                "input_sha256": hashlib.sha256(prompt).hexdigest()}
+        if on_process_group is not None:
+            on_process_group(process.pid, "provider")
+        with interruptible():  # a cancel breaks this wait once; the finally below kills the group
+            chunks: list[bytes] = []
+            size = written = 0
+            event_file = event_path.open("ab") if event_path is not None else None
+            selector = selectors.DefaultSelector()
+            os.set_blocking(process.stdin.fileno(), False)
+            selector.register(process.stdin, selectors.EVENT_WRITE)
+            selector.register(process.stdout, selectors.EVENT_READ)
+            try:
+                while selector.get_map():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ClaudeEditError("Claude edit timed out")
+                    ready = selector.select(remaining)
+                    if not ready:
+                        continue
+                    for key, _ in ready:
+                        if key.fileobj is process.stdin:
+                            count = os.write(process.stdin.fileno(), prompt[written:])
+                            written += count
+                            if written == len(prompt):
+                                selector.unregister(process.stdin)
+                                process.stdin.close()
+                        else:
+                            limit = MAX_EVENT_BYTES if event_path is not None else MAX_STDOUT_BYTES
+                            chunk = os.read(process.stdout.fileno(), min(8192, limit + 1 - size))
+                            if not chunk:
+                                selector.unregister(process.stdout)
+                                continue
+                            chunks.append(chunk)
+                            size += len(chunk)
+                            if event_file is not None:
+                                event_file.write(chunk[:max(0, MAX_EVENT_BYTES - event_file.tell())])
+                                event_file.flush()
+                            if size > limit:
+                                raise ClaudeEditError("Claude edit output exceeds limit")
+            finally:
+                selector.close()
+                if event_file is not None:
+                    event_file.close()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ClaudeEditError("Claude edit timed out")
+            if process.wait(timeout=remaining) != 0:
+                raise ClaudeEditError("Claude exited without a successful edit turn")
+            result = (_stream_result if event_path is not None else _result)(b"".join(chunks), model)
+            return {**result,
+                    "input_sha256": hashlib.sha256(prompt).hexdigest()}
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
         raise ClaudeEditError("Claude edit outcome uncertain") from exc
     finally:

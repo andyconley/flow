@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from delivery_recovery import recovery_eligibility
-from execution_contracts import (ContractError, DELIVERY_PROTOCOL_VERSION,
-                                 STRUCTURED_VERIFIER_PROTOCOL_VERSION, validate_envelope)
+from execution_contracts import (ContractError, DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION,
+                                 TERMINAL_UNCERTAIN_STATUSES, validate_envelope)
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
 from legacy_delivery import inspect_legacy_delivery
@@ -208,11 +208,29 @@ def inspect_delivery(work_id: str, attempt_id: str | None = None, *, root: Path 
             expansion = ExecutionLedger(ledger_path, read_only=True).expansion_state(attempt_id)
         except sqlite3.OperationalError:
             expansion = None  # a ledger that predates expansion has no requests
+        pending = []
         if expansion is not None:
             attempt["expansion"] = expansion
             pending = [item["request_id"] for item in expansion["requests"] if item["status"] == "pending"]
             if pending and snapshot.get("status") == "started":
                 attempt["next_action"] = f"decide expansion {pending[0]}"
+        # The attempt's own status, never inferred from its expansion (ADR 0019).
+        from delivery_termination import control_view, next_command  # lazy: it imports this module
+        attempt["attempt_status"] = snapshot.get("status")
+        attempt["expansion_status"] = ("pending" if pending else "closed" if (expansion or {}).get("requests")
+                                       else "none")
+        attempt["control"] = control_view(attempt_dir, ExecutionLedger(ledger_path, read_only=True), attempt_id)
+        attempt["next_command"] = next_command(work_id, snapshot, attempt["control"],
+                                               lead_active=lead_claim_active(delivery, envelope))
+        if snapshot.get("status") in TERMINAL_UNCERTAIN_STATUSES:
+            try:
+                attempt["termination"] = json.loads(snapshot.get("reason") or "{}")
+            except json.JSONDecodeError:
+                attempt["termination"] = None
+            sealed = None
+            if receipt_file is not None and receipt_file["sha256"] == snapshot.get("sealed_receipt_sha256"):
+                sealed = json.loads(raw_receipt)
+            attempt["evidence_damage"] = sealed.get("evidence_damage") if isinstance(sealed, dict) else None
     else:
         attempt = inspect_delivery_projection(envelope, snapshot)
     attempt["pending_unknowns"] = [

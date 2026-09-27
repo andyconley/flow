@@ -1,0 +1,134 @@
+{
+  "problem": "An operator cannot stop a live v8 delivery attempt or recover a stuck one without Python; an attempt with an unknown send and no stored response makes its work id unrecoverable.",
+  "intended_users": [
+    "Andy, Flow's sole operator.",
+    "The Shaper, acting through the same CLI with attribution-only identity."
+  ],
+  "outcomes": [
+    "Cancel a live v8 attempt, abandon a stuck one, find stuck attempts, and continue the same work id with a successor, keeping uncertainty honest and never resending."
+  ],
+  "scope": [
+    "Process identity record, cooperative cancel in the parent, cancel-delivery, abandon-delivery, cancelled/abandoned receipt seals, uncertainty scoping, successor lineage, delivery-lead CLI, inspect-delivery and flow run stuck, ADR 0019."
+  ],
+  "exclusions": [
+    "Protocols 5-7.",
+    "Charter-sealed automatic cancel.",
+    "MCP ingress.",
+    "Actor authentication.",
+    "resolve-execution changes.",
+    "Runtime-cap behaviour change.",
+    "Cross-machine cancel.",
+    "Non-POSIX.",
+    "Ollama server-side generation.",
+    "SIGINT semantics.",
+    "Live provider runs."
+  ],
+  "constraints": [
+    "The ledger and existing fences stay authoritative.",
+    "Uncertain rows are never resent or reclassified without evidence.",
+    "No backwards-compatibility work.",
+    "Hermetic tests only."
+  ],
+  "assumptions": [
+    "The parent holds recovery_lock for the whole v8 attempt.",
+    "Provider and supervisor waits retry on EINTR, so interruption must be explicit."
+  ],
+  "acceptance_criteria": [
+    "AC1-AC12 in .flow/runs/step5-cancellation/acceptance-criteria.md."
+  ],
+  "risks": [
+    {
+      "risk": "process identity checks misfire on macOS",
+      "owner": "Andy",
+      "status": "owned"
+    },
+    {
+      "risk": "cancel races the normal seal",
+      "owner": "Andy",
+      "status": "owned"
+    }
+  ],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {
+      "role": "lead-developer",
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1
+    },
+    {
+      "role": "test-engineer",
+      "capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 1
+    },
+    {
+      "role": "quality-reviewer",
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1
+    }
+  ],
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "ungranted-provider-dispatch"
+  ],
+  "delegation_matrix": {
+    "max_delegations": 3,
+    "delegated_expansion": false
+  },
+  "approval_matrix": {
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant",
+    "acceptance": "Flow_gate"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 1,
+      "max_replans": 0,
+      "runtime_seconds": 300,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "retries": 0,
+      "max_manager_calls": 6,
+      "max_manager_rounds": 3,
+      "max_paid_worker_calls": 1
+    },
+    "observations": [
+      "provider_usage_when_available"
+    ]
+  },
+  "max_verifier_calls": 1,
+  "boundaries": {
+    "artifact_root": ".flow/runs/step5-cancellation",
+    "worktree_policy": "Flow-bound"
+  },
+  "amendment_lineage": [],
+  "approval_history": [
+    {
+      "event": "approve-definition",
+      "authority": "engineer"
+    }
+  ],
+  "next_lane_eligibility": [
+    "delivery"
+  ]
+}

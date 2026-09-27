@@ -2,6 +2,13 @@
 
 ## Active work
 
+- `step5-cancellation` is in review on `codex/step5-cancellation`, not pushed.
+  It adds cancel and abandon for chartered v8 attempts (ADR 0019).
+  - The acceptance review found nothing Critical. Its fixes are committed on the
+    branch; see `review.md`.
+  - `accept-review` is blocked on the acceptance orchestration gate. The
+    manifest lists no research assignments as producers, and amending that
+    sealed manifest needs Andy's decision.
 - No other work in flight. All other runs are archived, blocked as superseded, or (for
   `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
   is a legacy record.
@@ -27,7 +34,7 @@
   - Fixes D6: a chartered editor turn with no edit now fails as "editor made
     no edit ..." rather than as a scope violation.
   - Full suite: 1,571 OK, 0 skipped; 4 of 4 mutation checks caught.
-  - Next: release, reinstall, then `v8-live-validation-3` with a new work id (reset
+  - Released as v0.37.1 and installed (release mode). Next: `v8-live-validation-3` with a new work id, after `step5-cancellation` (reset
     `~/src/flow-v8-live-job-2` to `d6d771f2`).
 
 - `v8-live-validation-2` archived 2026-09-26 as "validation found defects"
