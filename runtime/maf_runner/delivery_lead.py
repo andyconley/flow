@@ -46,6 +46,12 @@ def _runtime_identity() -> dict[str, Any]:
              "opentelemetry-api", "pydantic", "pydantic-core", "python-dotenv", "pyyaml",
              "typing-inspection", "typing-extensions")
     packages = {name: version(name) for name in names}
+    records = {}
+    for name in names:
+        import importlib.metadata as metadata
+        distribution = metadata.distribution(name)
+        record = distribution.locate_file(distribution._path.name + "/RECORD")
+        records[name] = {"record": hashlib.sha256(record.read_bytes()).hexdigest(), "bad": []}
     protocols = SUPPORTED_PROTOCOLS
     identity = {"schema_version": 2, "interpreter": str(Path(sys.executable).resolve()),
                 "python": list(sys.version_info[:3]), "packages": packages,
@@ -53,6 +59,7 @@ def _runtime_identity() -> dict[str, Any]:
                 "runner_digest": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "protocols": protocols,
                 "protocol_digest": _digest(protocols), "machine": platform.machine(),
                 "implementation": platform.python_implementation(), "soabi": sysconfig.get_config_var("SOABI")}
+    identity["record_digest"] = _digest(records)
     identity["runtime_digest"] = _digest(identity)
     return identity
 

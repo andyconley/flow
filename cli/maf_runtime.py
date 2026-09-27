@@ -139,14 +139,26 @@ def _load_pointer(home: Path | None = None) -> dict[str, Any] | None:
 def _probe_command() -> str:
     # Kept as a single, data-only probe: no MAF workflow, adapter or network
     # import is permitted before the gateway creates an attempt.
+    integrity = (
+        "import base64,csv,hashlib,importlib.metadata as md,json\n"
+        "records={}\n"
+        "for name in " + repr(sorted(RESOLVED_PACKAGES)) + ":\n"
+        " d=md.distribution(name); record=d.locate_file(d._path.name + '/RECORD'); bad=[]\n"
+        " with open(record,newline='') as f:\n"
+        "  for path,hashed,size in csv.reader(f):\n"
+        "   if hashed:\n"
+        "    algorithm,encoded=hashed.split('=',1); actual=hashlib.new(algorithm,d.locate_file(path).read_bytes()).digest(); expected=base64.urlsafe_b64decode(encoded + '='*(-len(encoded)%4))\n"
+        "    if actual != expected: bad.append(path)\n"
+        " records[name]={'record':hashlib.sha256(record.read_bytes()).hexdigest(),'bad':bad}\n"
+    )
     return (
         "import json,sys,platform,sysconfig; from agent_framework import AgentResponse,Executor,FileCheckpointStorage,Message,WorkflowContext,handler,response_handler; "
         "from agent_framework_orchestrations import GroupChatParticipantMessage,GroupChatRequestMessage,GroupChatResponseMessage,MagenticBuilder,StandardMagenticManager; "
         "from importlib.metadata import version; "
-        "from runtime.maf_runner import delivery_lead; "
+        "from runtime.maf_runner import delivery_lead; exec(" + repr(integrity) + "); "
         "print(json.dumps({'executable':sys.executable,'python':list(sys.version_info[:3]),"
         "'packages':{n:version(n) for n in " + repr(sorted(RESOLVED_PACKAGES)) + "},"
-        "'protocols':delivery_lead.SUPPORTED_PROTOCOLS,'machine':platform.machine(),'implementation':platform.python_implementation(),'soabi':sysconfig.get_config_var('SOABI')}))"
+        "'protocols':delivery_lead.SUPPORTED_PROTOCOLS,'machine':platform.machine(),'implementation':platform.python_implementation(),'soabi':sysconfig.get_config_var('SOABI'),'records':records}))"
     )
 
 
@@ -192,12 +204,16 @@ def probe(*, python_path: str | None = None, home: Path | None = None,
         return _result("version_mismatch", source=source, remedy="run `flow runtime install-maf`", detail=json.dumps(packages, sort_keys=True))
     if observed.get("protocols") != SUPPORTED_PROTOCOLS:
         return _result("protocol_incompatible", source=source, remedy="install a Flow-compatible MAF runtime")
+    records = observed.get("records")
+    if not isinstance(records, dict) or any(not isinstance(item, dict) or item.get("bad") or not item.get("record")
+                                            for item in records.values()):
+        return _result("identity_mismatch", source=source, remedy="run `flow runtime install-maf`", detail="installed package RECORD integrity failed")
     identity = {"schema_version": 2, "interpreter": str(binary.resolve()), "python": observed["python"],
                 "platform": sys.platform, "packages": packages, "lock_digest": lock_digest(root),
                 "runner_digest": runner_digest(root), "protocols": observed["protocols"],
                 "protocol_digest": hashlib.sha256(json.dumps(observed["protocols"], separators=(",", ":")).encode()).hexdigest(),
                 "machine": observed.get("machine"), "implementation": observed.get("implementation"),
-                "soabi": observed.get("soabi")}
+                "soabi": observed.get("soabi"), "record_digest": hashlib.sha256(json.dumps(records, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
     identity["runtime_digest"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if pointer and isinstance(pointer.get("identity"), dict) and pointer["identity"].get("lock_digest") != identity["lock_digest"]:
         return _result("lock_mismatch", source=source, remedy="run `flow runtime install-maf`", identity=identity)

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import venv
 from pathlib import Path
 from unittest.mock import patch
 
@@ -33,6 +34,28 @@ class MafRuntimeProbeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             result = probe(python_path=os.sys.executable, home=Path(temp))
         self.assertIn(result["state"], {"package_missing", "runner_import_failed"})
+
+    def test_full_metadata_but_missing_runner_symbols_is_refused_without_managed_pointer(self):
+        """Top-level imports and metadata cannot stand in for runner surfaces."""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            environment = root / "broken"
+            venv.EnvBuilder(with_pip=False).create(environment)
+            interpreter = environment / "bin" / "python"
+            site = Path(subprocess.check_output([str(interpreter), "-c", "import site; print(site.getsitepackages()[0])"], text=True).strip())
+            from maf_runtime import RESOLVED_PACKAGES
+            for package, version in RESOLVED_PACKAGES.items():
+                info = site / (package.replace("-", "_") + ".dist-info")
+                info.mkdir()
+                (info / "METADATA").write_text(f"Name: {package}\nVersion: {version}\n")
+            for module in ("agent_framework", "agent_framework_orchestrations"):
+                package = site / module
+                package.mkdir()
+                (package / "__init__.py").write_text("# deliberately missing delivery symbols\n")
+            home = root / "home"
+            result = probe(python_path=str(interpreter), home=home)
+            self.assertIn(result["state"], {"package_missing", "runner_import_failed"})
+            self.assertFalse((home / "runtimes" / "maf" / "current.json").exists())
 
     def test_clean_release_managed_wheelhouse_runtime_reaches_initialized_child_without_override(self):
         """Release proof: install the locked wheels, then run a real child pre-provider."""
