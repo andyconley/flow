@@ -1330,6 +1330,20 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
     return receipt, terminal, reason
 
 
+def _execution_facts(envelope: dict[str, Any], job: dict[str, Any] | None, source_commit: str) -> str:
+    chartered = envelope["execution_protocol_version"] in {6, 7, 8}
+    return ("\n\nFlow-verified execution facts:\n"
+            "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
+            + (("- The approved baseline is " + job["baseline"]["kind"] + ".\n") if chartered else "- The approved regression test is already present and failed before this job's first provider send. Do not ask a specialist to create or rerun that prerequisite.\n")
+            + "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
+            " run commands, or edit the worktree.\n"
+            "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
+            " the targeted test after that edit; the full suite is an acceptance check.\n"
+            + "".join(f"- Predecessor attempt {item['attempt_id']} ended {item['terminal_status']} under lead"
+                      f" generation {item['lead_generation']}; its evidence is not reused.\n"
+                      for item in envelope.get("predecessors", [])))
+
+
 def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
                                ledger: ExecutionLedger, **kwargs: Any) -> dict[str, Any]:
     """Run one prepared attempt; a live v8 run holds the attempt's recovery fence throughout."""
@@ -1372,17 +1386,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     structured_verifier = envelope["execution_protocol_version"] == 8
     authority_guard = (lambda: delivery_authority_guard(attempt_dir.parents[1], envelope)) if delivery_protocol else nullcontext
     job = envelope.get("job_contract") if chartered else None
-    task += ("\n\nFlow-verified execution facts:\n"
-             "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
-             + (("- The approved baseline is " + job["baseline"]["kind"] + ".\n") if chartered else "- The approved regression test is already present and failed before this job's first provider send. Do not ask a specialist to create or rerun that prerequisite.\n")
-             +
-             "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
-             " run commands, or edit the worktree.\n"
-             "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
-             " the targeted test after that edit; the full suite is an acceptance check.\n"
-             + "".join(f"- Predecessor attempt {item['attempt_id']} ended {item['terminal_status']} under lead"
-                       f" generation {item['lead_generation']}; its evidence is not reused.\n"
-                       for item in envelope.get("predecessors", [])))
+    task += _execution_facts(envelope, job, source_commit)
     manager_adapter = manager_adapter or _default_manager_adapter
     worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir)
     test_runner = test_runner or (partial(_run_chartered_test, job=job) if chartered else _run_targeted_test)

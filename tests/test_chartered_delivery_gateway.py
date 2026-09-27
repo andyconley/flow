@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from delivery_gateway import (ContractError, _default_worker_adapter,
-                              _execute_prepared_delivery, execute_chartered_delivery,
-                              prepare_chartered_delivery)
+from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts,
+                              _execute_prepared_delivery, _verify_chartered_edit,
+                              execute_chartered_delivery, prepare_chartered_delivery)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, validate_action, validate_envelope,
@@ -1047,6 +1047,24 @@ class CharteredPreparationTests(CharteredFixture):
             with self.assertRaisesRegex(ContractError, "roster expands"):
                 execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
                                           worker_adapter=lambda *args, **kwargs: self.fail("must not send"))
+
+
+class ExecutionFactsTests(unittest.TestCase):
+    """The facts block Flow appends to the manager task."""
+
+    def test_protocol_5_facts_are_unchanged(self):
+        envelope = {"execution_protocol_version": 5,
+                    "predecessors": [{"attempt_id": "a1", "terminal_status": "failed", "lead_generation": 2}]}
+        self.assertEqual(_execution_facts(envelope, None, "abc123"),
+                         "\n\nFlow-verified execution facts:\n"
+                         "- The isolated worktree is pinned to source commit abc123.\n"
+                         "- The approved regression test is already present and failed before this job's first provider send."
+                         " Do not ask a specialist to create or rerun that prerequisite.\n"
+                         "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read"
+                         " files, run commands, or edit the worktree.\n"
+                         "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs the"
+                         " targeted test after that edit; the full suite is an acceptance check.\n"
+                         "- Predecessor attempt a1 ended failed under lead generation 2; its evidence is not reused.\n")
 
 
 class ProviderRouteTests(unittest.TestCase):
