@@ -2,6 +2,39 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.37.1](https://github.com/andyconley/flow/compare/v0.37.0...v0.37.1) (2026-09-27)
+
+### Bug Fixes
+
+* **delivery:** report a chartered no-edit outcome distinctly ([91e567b](https://github.com/andyconley/flow/commit/91e567bea9ab6b7d34a87bb15612d82665ca516e))
+* **delivery:** tell the manager the editor gets one call ([fdb112b](https://github.com/andyconley/flow/commit/fdb112bb5bedf7b4ec35ed9d35cd6efeb1afeb23))
+
+### Documentation
+
+* **backlog:** promote two repeated capability gaps ([8d38312](https://github.com/andyconley/flow/commit/8d38312e8c6b20e5e167ad50d65dcb177bffd842))
+* **run:** accept producer-turn-contract review ([bd0e9e0](https://github.com/andyconley/flow/commit/bd0e9e00230ff185ecb223d0d974570f1ca6dbc6))
+* **run:** accept v8-live-validation-2 review ([444bf6a](https://github.com/andyconley/flow/commit/444bf6a552bd294384d142814a34b58a6fcb314d))
+* **run:** archive producer-turn-contract ([94f2910](https://github.com/andyconley/flow/commit/94f291071ab1a1b15ef23c33ec794661c921c81e))
+* **run:** archive v8-live-validation-2 ([35f6df4](https://github.com/andyconley/flow/commit/35f6df4d4b4d71e019d2da721c6b9d0c70173742))
+* **run:** attempt 2 preflight for v8-live-validation-2 on v0.37.0 ([dace757](https://github.com/andyconley/flow/commit/dace75786d0dc3725c5cb37799da42e8f55f04f9))
+* **run:** define and plan producer-turn-contract ([fd4954b](https://github.com/andyconley/flow/commit/fd4954b640ff738f8712ff16150e4509c4abe0e3))
+* **run:** define v8-live-validation-2 ([e21ec89](https://github.com/andyconley/flow/commit/e21ec895b54ec42734da4c86342052549c473bf0))
+* **run:** plan v8-live-validation-2 ([0ccba86](https://github.com/andyconley/flow/commit/0ccba869fd7afdef1b744fac6c143b0a0eca5dbb))
+* **run:** re-run v8-live-validation-2 preflight on v0.36.2 ([eb1dfa2](https://github.com/andyconley/flow/commit/eb1dfa2536e8bc95b8937d6faf7a63549974fe8a))
+* **run:** record producer-turn-contract implementation evidence ([39f66c7](https://github.com/andyconley/flow/commit/39f66c7fe4298fd272201cd89cb883a59ffb960e))
+* **run:** record v8-live-validation-2 attempt 1 ([4156071](https://github.com/andyconley/flow/commit/415607120d8534c26e48ad38e7ed93f76ee0a9af))
+* **run:** record v8-live-validation-2 attempt 2 ([81181cc](https://github.com/andyconley/flow/commit/81181cc2182b5caaed5692f4fe5f753b3046bc76))
+* **run:** record v8-live-validation-2 preparation and D3 finding ([4d51c18](https://github.com/andyconley/flow/commit/4d51c183dd392c138f31da5bdec7b87d8a31bfd8))
+* **run:** record v8-live-validation-2 results and handback ([8847642](https://github.com/andyconley/flow/commit/8847642ba1316ca497e1c0b8de2b055bfd833fa3))
+
+### Code Refactoring
+
+* **delivery:** extract the execution facts builder ([29c9c6a](https://github.com/andyconley/flow/commit/29c9c6a7b86caa7fd166b14e827ed6ffbbd046f0))
+
+### Tests
+
+* **delivery:** pin the complete-edit phrase in the one-call fact ([46dbe23](https://github.com/andyconley/flow/commit/46dbe23b6ce1fcfd55ccbcf5204142870c50d955))
+
 ## [0.37.0](https://github.com/andyconley/flow/compare/v0.36.2...v0.37.0) (2026-09-26)
 
 ### Features
