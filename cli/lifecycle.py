@@ -653,20 +653,22 @@ def _convert_to_develop(clone: Path) -> int:
 
     print(f"converting -> develop, symlink target: {clone}")
 
-    # Replace the existing source — directory or symlink — with a symlink to the clone.
-    if SOURCE_DIR.is_symlink() or SOURCE_DIR.is_file():
-        try:
-            SOURCE_DIR.unlink()
-        except OSError as err:
-            print(f"could not remove existing source link: {err}")
-            return 1
-    elif SOURCE_DIR.is_dir():
-        shutil.rmtree(SOURCE_DIR, ignore_errors=True)
-
+    # Treat conversion just like release/update: keep the old source and
+    # config until the optional delivery runtime is proved.  A failed
+    # provision must never leave a user on a new source/config pair with an
+    # unusable runtime pointer.
+    prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
+    staging = _stage_path("new")
+    _remove_path(staging)
     try:
-        os.symlink(str(clone), str(SOURCE_DIR))
+        os.symlink(str(clone), str(staging))
     except OSError as err:
-        print(f"could not create symlink: {err}")
+        print(f"could not stage develop source link: {err}")
+        return 1
+    swap_err = _swap_source_with_staging(staging, keep_old=True)
+    if swap_err:
+        _remove_path(staging)
+        print(swap_err)
         return 1
 
     write_install_config(
@@ -677,7 +679,7 @@ def _convert_to_develop(clone: Path) -> int:
         }
     )
     print(f"converted to develop mode (source: {clone})")
-    return 0 if _provision_maf_runtime() else 1
+    return 0 if _finish_maf_transaction(prior_config) else 1
 
 
 def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False) -> int:

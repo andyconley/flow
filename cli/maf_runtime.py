@@ -90,7 +90,7 @@ def _probe_command() -> str:
     # Kept as a single, data-only probe: no MAF workflow, adapter or network
     # import is permitted before the gateway creates an attempt.
     return (
-        "import json,sys; from importlib.metadata import version; "
+        "import json,sys; import agent_framework,agent_framework_orchestrations; from importlib.metadata import version; "
         "from runtime.maf_runner import delivery_lead; "
         "print(json.dumps({'executable':sys.executable,'python':list(sys.version_info[:3]),"
         "'packages':{n:version(n) for n in " + repr(sorted(RESOLVED_PACKAGES)) + "},"

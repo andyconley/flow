@@ -107,6 +107,14 @@ def _maf_reads_canonical(canonical: str, value: dict[str, Any]) -> bool:
 
 
 async def _run(start: dict[str, Any]) -> None:
+    # Prove that the real runner surface imports before asserting readiness.
+    # The parent still receives no manager/action callback until it validates
+    # the computed identity below.
+    from agent_framework import AgentResponse, Executor, FileCheckpointStorage, Message, WorkflowContext, handler, response_handler
+    from agent_framework_orchestrations import (
+        GroupChatParticipantMessage, GroupChatRequestMessage, GroupChatResponseMessage,
+        MagenticBuilder, StandardMagenticManager,
+    )
     envelope = start.get("envelope")
     protocol_version = _active_protocol_version
     if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != protocol_version:
@@ -120,15 +128,6 @@ async def _run(start: dict[str, Any]) -> None:
         # route, so a swapped interpreter cannot silently become a send.
         computed_runtime = _runtime_identity()
         _write({"protocol_version": protocol_version, "type": "runtime_ready", "runtime": computed_runtime})
-    # The readiness record must cross the Flow boundary before any optional
-    # package imports or manager construction. A full managed-runtime probe
-    # already validates these imports; this ordering gives release gating a
-    # hermetic real-child protocol handshake with no provider adapter path.
-    from agent_framework import AgentResponse, Executor, FileCheckpointStorage, Message, WorkflowContext, handler, response_handler
-    from agent_framework_orchestrations import (
-        GroupChatParticipantMessage, GroupChatRequestMessage, GroupChatResponseMessage,
-        MagenticBuilder, StandardMagenticManager,
-    )
     attempt_id = envelope.get("attempt_id")
     task = start.get("task")
     assignments = envelope.get("roster")

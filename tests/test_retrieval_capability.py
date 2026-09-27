@@ -55,6 +55,10 @@ class RetrievalCapabilityTests(unittest.TestCase):
             metadata = site_packages / (package.replace("-", "_") + ".dist-info")
             metadata.mkdir()
             (metadata / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {package}\nVersion: {version}\n")
+        for module in ("agent_framework", "agent_framework_orchestrations"):
+            package_dir = site_packages / module
+            package_dir.mkdir()
+            (package_dir / "__init__.py").write_text("# local runtime-fixture import proof\n")
 
     def test_injected_fts5_failure_keeps_plain_sqlite_usable_and_names_runtime(self):
         with sqlite3.connect(":memory:") as database:
