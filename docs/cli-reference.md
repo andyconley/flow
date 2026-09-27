@@ -156,7 +156,18 @@ flow run execute-local WORK_ID --assignment ASSIGNMENT_ID \
 
 The run must be revision 2 and `implementing`, with a valid `orchestration.json`. The selected `test-engineer` assignment must declare `execution.provider = "ollama"` and a local `execution.model`. The task file must live inside that run and is limited to 4096 bytes. The command returns an attempt ID, status, receipt path, and reason. An interrupted physical call is `unknown` and is never retried automatically. A failed start or denial receives a no-dispatch receipt. Paid providers are disabled.
 
-MAF is optional: ordinary Flow commands do not import it. For this first slice, install the pinned runner requirements in a separate Python environment and set `FLOW_MAF_PYTHON` to that environment's Python executable before calling `execute-local`. See `runtime/maf_runner/requirements.txt`. A configured local Ollama server and model are required for a physical worker call. The receipt and ledger live under `.flow/runs/WORK_ID/execution/`; a receipt reports observed facts and does not itself approve lifecycle handback.
+MAF is optional: ordinary Flow commands do not import it. Delivery commands use
+the selected managed runtime under `~/.flow/runtimes/maf/`; provision or repair
+it with `flow runtime install-maf`. The command stages and probes a
+digest-addressed environment before atomically selecting it. `FLOW_MAF_PYTHON`
+is an explicit, validated compatibility override for a pinned interpreter; it
+must pass the same credential-free package, runner, and protocol probe and is
+never an implicit fallback. See `runtime/maf_runner/requirements.lock` for the
+resolved inventory and `runtime/maf_runner/requirements.txt` for the source
+requirements. A configured local Ollama server and model are required for a
+physical worker call. The receipt and ledger live under
+`.flow/runs/WORK_ID/execution/`; a receipt reports observed facts and does not
+itself approve lifecycle handback.
 
 For the bounded multi-turn exercise, add `--multi-turn`. Flow then records three ordered action positions and three separate replan decisions. The first two replans may be allowed; the third is denied by the two-replan cap and ends that MAF phase. Flow checks the denial state before starting an independent action-3 phase in the same attempt. `--interrupt-after-third-send` is an exercise-only fault point: it marks the third action `unknown` immediately after Flow records `adapter_send_started`, before calling Ollama. The first two actions still make physical Ollama calls. This flag does not prove that Ollama received the third request. Inspect the v2 receipt and checkpoint positions for the evidence actually recorded. For a disposable loopback arrival observer, set `FLOW_OLLAMA_OBSERVER=1`, `FLOW_OLLAMA_URL=http://127.0.0.1:PORT/api/chat`, and `FLOW_OLLAMA_OBSERVER_LOG` to its owner-only JSONL file inside the run. The receipt seals a per-action arrival table; without an observer it labels endpoint arrival evidence unavailable.
 
@@ -173,6 +184,14 @@ The run must be revision 2 and `implementing`, with a valid dispatch-stage `orch
 Direct Claude and Codex edits are Flow-gated: only specialists the charter names as producers may hold edit capability, and their write scope must equal the charter's declared `write_paths`. Ollama performs read-only verification only — an Ollama-backed specialist must be read-only, and every declared verifier must be an independent read-only specialist disjoint from the producers. Native subagents are disabled; the roster runs only the Flow-approved specialists bound in the orchestration manifest.
 
 The gateway checks the managed MAF interpreter after read-only authority and worktree validation, before it creates an attempt. An unavailable runtime returns `maf_runtime_unready` without consuming execution authority. Use `flow runtime install-maf` to repair it; `FLOW_MAF_PYTHON` is an explicit validated override and never silently falls back.
+
+Use `flow runtime readiness --json` for the strict pre-attempt check. A healthy
+result reports the selected interpreter, package/runner identity, protocol
+compatibility, and the runtime digest. A failed result is diagnostic only: no
+execution directory, attempt, grant, receipt, or provider process is created.
+`flow doctor` reports the same missing optional runtime as a warning because
+base Flow remains usable without MAF. `flow runtime smoke --target maf` is the
+strict release/readiness check; `flow runtime smoke --target all` includes it.
 
 ### `flow run recover-runtime-startup <work-id> <attempt-id>`
 
