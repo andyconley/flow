@@ -1,0 +1,597 @@
+{
+  "acceptance_criteria": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "AC1-AC15 in .flow/runs/maf-runtime-readiness/acceptance-criteria.md"
+    }
+  ],
+  "allowed_specialists": [
+    {
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1,
+      "role": "lead-developer"
+    },
+    {
+      "capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 1,
+      "role": "test-engineer"
+    },
+    {
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1,
+      "role": "quality-reviewer"
+    }
+  ],
+  "amendment_lineage": [
+    {
+      "prior_work_id": "maf-runtime-readiness",
+      "reason": "start-plan rejected an invalid zero manager-call envelope; no dispatch"
+    }
+  ],
+  "approval_event": "approve-definition",
+  "approval_history": [
+    {
+      "authority": "engineer",
+      "event": "approve-definition"
+    }
+  ],
+  "approval_matrix": {
+    "acceptance": "Flow_gate",
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant"
+  },
+  "approved_sources": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/maf-runtime-readiness-2/acceptance-criteria.md",
+      "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/maf-runtime-readiness-2/orchestration.json",
+      "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0"
+    },
+    "requirements": {
+      "path": ".flow/runs/maf-runtime-readiness-2/requirements.md",
+      "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/maf-runtime-readiness-2/shaper-intent.json",
+      "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38"
+    }
+  },
+  "assumptions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Python virtual environments remain supported"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Pinned MAF packages support selected platforms"
+    }
+  ],
+  "boundaries": {
+    "artifact_root": ".flow/runs/maf-runtime-readiness-2",
+    "worktree_policy": "Flow-bound"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 1,
+      "max_manager_calls": 1,
+      "max_manager_rounds": 1,
+      "max_paid_worker_calls": 1,
+      "max_replans": 1,
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "retries": 0,
+      "runtime_seconds": 1800,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ]
+    },
+    "observations": [
+      "manual-bootstrap-agent-usage"
+    ]
+  },
+  "constraints": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow retains authority"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "ordinary Flow does not import MAF"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "historical evidence remains immutable"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "bootstrap implementation uses manual Flow coordination and does not dispatch through MAF"
+    }
+  ],
+  "decision_owners": [],
+  "delegation_matrix": {
+    "delegated_expansion": false,
+    "max_delegations": 4
+  },
+  "digest": "ef0e237c2aa8ed4bed5f281a75e4a786f1c9afe7746022989c90b5578e28caa1",
+  "exclusions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Live provider calls in CI"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "MAF replacement"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "automatic retry after observed or unknown sends"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "old environment garbage collection"
+    }
+  ],
+  "expansion_headroom": {
+    "delegations": 0,
+    "manager_calls": 0,
+    "manager_rounds": 0,
+    "paid_worker_calls": 0,
+    "verifier_calls": 0
+  },
+  "intended_users": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow operators"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow maintainers"
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Chartered Delivery users"
+    }
+  ],
+  "kind": "shaper_contract",
+  "max_verifier_calls": 1,
+  "next_lane_eligibility": [
+    "manual_flow_implementation"
+  ],
+  "open_decisions": [],
+  "outcomes": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "A managed MAF runtime is proven before attempt creation and zero-send startup failures recover through immutable successors."
+    }
+  ],
+  "problem": {
+    "provenance": [
+      {
+        "claim_status": "approved",
+        "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+        "source": "acceptance_criteria"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+        "source": "orchestration_manifest"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+        "source": "requirements"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+        "source": "shaper_intent"
+      }
+    ],
+    "value": "Flow persists chartered attempts before proving its optional MAF runtime can start, and install/diagnostics do not own that runtime."
+  },
+  "prohibited_capabilities": [
+    "maf-provider-dispatch-during-bootstrap",
+    "unprobed-runtime-selection",
+    "post-dispatch-automatic-retry",
+    "historical-receipt-rewrite"
+  ],
+  "risks": [
+    {
+      "owner": "Andy Conley",
+      "risk": "Installer and evidence changes cross consequential boundaries",
+      "status": "owned"
+    }
+  ],
+  "run_id": "maf-runtime-readiness-2",
+  "schema_version": 1,
+  "scope": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Adopt the full approved scope in .flow/runs/maf-runtime-readiness/requirements.md"
+    }
+  ],
+  "shaper_contract_id": "shaper-57f7fabb330c96a4bdc3",
+  "source_evidence": [
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/maf-runtime-readiness-2/acceptance-criteria.md",
+      "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+      "source": "acceptance_criteria"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/maf-runtime-readiness-2/orchestration.json",
+      "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+      "source": "orchestration_manifest"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/maf-runtime-readiness-2/requirements.md",
+      "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+      "source": "requirements"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/maf-runtime-readiness-2/shaper-intent.json",
+      "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38",
+      "source": "shaper_intent"
+    }
+  ],
+  "status": "approved",
+  "version": 3
+}

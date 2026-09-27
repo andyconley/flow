@@ -1,0 +1,70 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
+    "orchestration_manifest": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+    "requirements": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
+    "shaper_intent": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/maf-runtime-readiness-2/acceptance-criteria.md",
+    "handback": ".flow/runs/maf-runtime-readiness-2/HANDOFF.md",
+    "handoff": ".flow/runs/maf-runtime-readiness-2/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/maf-runtime-readiness-2/validation-results.md",
+    "orchestration_manifest": ".flow/runs/maf-runtime-readiness-2/orchestration.json",
+    "plan": ".flow/runs/maf-runtime-readiness-2/plan.md",
+    "prior_failure": ".flow/runs/maf-runtime-readiness/run.json",
+    "reconciliation": ".flow/runs/maf-runtime-readiness-2/reconciliation.md",
+    "requirements": ".flow/runs/maf-runtime-readiness-2/requirements.md",
+    "shaper_intent": ".flow/runs/maf-runtime-readiness-2/shaper-intent.json",
+    "validation_plan": ".flow/runs/maf-runtime-readiness-2/validation-plan.md"
+  },
+  "created_at": "2026-09-27T20:41:25Z",
+  "delivery": {
+    "charter_digest": "37b6c64b03cc50a9073d3218867650c3c12f4bb564a8f6eb5822c28aa41e548c",
+    "charter_id": "delivery-ce556aea2de2824004cd",
+    "delivery_artifact_dir": "delivery/37b6c64b03cc50a9073d3218867650c3c12f4bb564a8f6eb5822c28aa41e548c",
+    "handoff_digest": "5df7e65751f0db7437cf228e3822f55dc47fded8618192749ee8c7ddbe7d96f2",
+    "lead_claim_digest": "6b4726cbc3be916cd744119c51d1671b08c0e63e254fa8a9cb99443be193b38d",
+    "lead_claim_path": "delivery/37b6c64b03cc50a9073d3218867650c3c12f4bb564a8f6eb5822c28aa41e548c/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-37b6c64b03cc50a9073d",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "ef0e237c2aa8ed4bed5f281a75e4a786f1c9afe7746022989c90b5578e28caa1",
+    "shaper_contract_id": "shaper-57f7fabb330c96a4bdc3",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/maf-runtime-readiness-2/acceptance-criteria.md",
+        "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/maf-runtime-readiness-2/orchestration.json",
+        "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0"
+      },
+      "requirements": {
+        "path": ".flow/runs/maf-runtime-readiness-2/requirements.md",
+        "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/maf-runtime-readiness-2/shaper-intent.json",
+        "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-27T20:42:29Z",
+    "approve-plan": "2026-09-27T20:42:29Z",
+    "mark-handback-ready": "2026-09-27T22:55:52Z",
+    "start-definition": "2026-09-27T20:41:25Z",
+    "start-implementation": "2026-09-27T20:43:18Z",
+    "start-plan": "2026-09-27T20:42:29Z"
+  },
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "handback_ready",
+  "updated_at": "2026-09-27T22:55:52Z",
+  "work_id": "maf-runtime-readiness-2"
+}
