@@ -1,0 +1,28 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "001dd5eb2fa9d840d0bdc1ed868a9ba37e1d054568e49017825cd8e689fc9161",
+    "orchestration_manifest": "caa501bfc4d7c7dd1cac7a2cd50ff1ed7eaca31c18f9d97f136e752aa3e50f7b",
+    "requirements": "5741775dd64c24fe464f74e0e69009471e55f8eac013cd420b0bb224c4e1a0b3",
+    "shaper_intent": "cb2f5151b8dabb7f44472dd8b97ea10ae2ea4d27a40c8fe33cb03c4018278f10"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/step5-operational-handback/acceptance-criteria.md",
+    "orchestration_manifest": ".flow/runs/step5-operational-handback/orchestration.json",
+    "requirements": ".flow/runs/step5-operational-handback/requirements.md",
+    "shaper_intent": ".flow/runs/step5-operational-handback/shaper-intent.json"
+  },
+  "created_at": "2026-09-27T20:57:04Z",
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-27T21:44:38Z",
+    "start-definition": "2026-09-27T20:57:04Z"
+  },
+  "lane": "define",
+  "last_event": "approve-definition",
+  "phase": "definition_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "definition_approved",
+  "updated_at": "2026-09-27T21:44:38Z",
+  "work_id": "step5-operational-handback"
+}

@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "work_id": "step5-operational-handback",
+  "mode": "delegated",
+  "risk": {
+    "classification": "standard",
+    "hard_triggers": [],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "rationale": "Adds a sealed token budget enforced at grant time, new receipt blocks, full-row seal comparison and read-only trace and verification commands under existing fences. No production or external shared mutation; the ledger stays authoritative."
+  },
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/step5-operational-handback/reconciliation.md",
+    "status": "resolved",
+    "claims": []
+  },
+  "verification": {
+    "artifact_path": ".flow/runs/step5-operational-handback/adversarial-review.md",
+    "evidence_collector_assignment": "definition-root",
+    "independent": true,
+    "producer_assignments": [
+      "definition-root",
+      "research-current-state"
+    ],
+    "verifier_assignment": "adversarial-architecture"
+  },
+  "assignments": [
+    {
+      "id": "definition-root",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-definition-root"
+      },
+      "brief_path": ".flow/runs/step5-operational-handback/intake.md",
+      "input_evidence": [
+        ".flow/runs/step5-operational-handback/intake.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/step5-operational-handback",
+        "cli",
+        "runtime",
+        "tests",
+        "docs",
+        ".flow/runs/step5-cancellation",
+        ".flow/runs/v8-live-validation-2",
+        ".flow/runs/shaper-expansion-approval"
+      ],
+      "write_scopes": [
+        ".flow/runs/step5-operational-handback/requirements.md",
+        ".flow/runs/step5-operational-handback/acceptance-criteria.md",
+        ".flow/runs/step5-operational-handback/intake.md",
+        ".flow/runs/step5-operational-handback/shaper-intent.json",
+        ".flow/runs/step5-operational-handback/orchestration.json",
+        ".flow/runs/step5-operational-handback/reconciliation.md",
+        ".flow/runs/step5-operational-handback/definition-dispositions.md",
+        ".flow/runs/step5-operational-handback/plan.md",
+        ".flow/runs/step5-operational-handback/implementation-handoff.md",
+        ".flow/runs/step5-operational-handback/validation-plan.md",
+        ".flow/runs/step5-operational-handback/plan-dispositions.md",
+        ".flow/runs/step5-operational-handback/research/spikes.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/step5-operational-handback/requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Definition drafted from engineer decisions and research notes"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "run-authoring"
+      }
+    },
+    {
+      "id": "research-current-state",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-step5-operational-handback-research-current-state"
+      },
+      "brief_path": ".flow/runs/step5-operational-handback/intake.md",
+      "input_evidence": [
+        ".flow/runs/step5-operational-handback/intake.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/step5-operational-handback",
+        "cli",
+        "runtime",
+        "tests",
+        "docs",
+        ".flow/runs/step5-cancellation",
+        ".flow/runs/v8-live-validation-2",
+        ".flow/runs/shaper-expansion-approval"
+      ],
+      "write_scopes": [
+        ".flow/runs/step5-operational-handback/research/current-state.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/step5-operational-handback/research/current-state.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Maps trace identifiers, token usage and receipt checks in the current code"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "research"
+      }
+    },
+    {
+      "id": "adversarial-architecture",
+      "lane": "define",
+      "role": "architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-architect-step5-operational-handback-adversarial-architecture"
+      },
+      "brief_path": ".flow/runs/step5-operational-handback/intake.md",
+      "input_evidence": [
+        ".flow/runs/step5-operational-handback/requirements.md",
+        ".flow/runs/step5-operational-handback/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/step5-operational-handback",
+        "cli",
+        "runtime",
+        "tests",
+        "docs",
+        ".flow/runs/step5-cancellation",
+        ".flow/runs/v8-live-validation-2",
+        ".flow/runs/shaper-expansion-approval"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/step5-operational-handback/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Architecture and capability challenge of the definition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "adversarial-product",
+      "lane": "define",
+      "role": "product-manager",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-product-manager-step5-operational-handback-review"
+      },
+      "brief_path": ".flow/runs/step5-operational-handback/intake.md",
+      "input_evidence": [
+        ".flow/runs/step5-operational-handback/requirements.md",
+        ".flow/runs/step5-operational-handback/acceptance-criteria.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/step5-operational-handback",
+        "cli",
+        "runtime",
+        "tests",
+        "docs",
+        ".flow/runs/step5-cancellation",
+        ".flow/runs/v8-live-validation-2",
+        ".flow/runs/shaper-expansion-approval"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/step5-operational-handback/adversarial-product.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Product scope and value challenge of the definition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "definition-review-product"
+      }
+    }
+  ]
+}
