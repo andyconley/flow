@@ -7,7 +7,9 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/step5-cancellation/acceptance-criteria.md",
+    "handback": ".flow/runs/step5-cancellation/HANDOFF.md",
     "handoff": ".flow/runs/step5-cancellation/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/step5-cancellation/validation-results.md",
     "orchestration_manifest": ".flow/runs/step5-cancellation/orchestration.json",
     "plan": ".flow/runs/step5-cancellation/plan.md",
     "requirements": ".flow/runs/step5-cancellation/requirements.md",
@@ -50,15 +52,17 @@
   "gates": {
     "approve-definition": "2026-09-27T15:33:15Z",
     "approve-plan": "2026-09-27T15:59:40Z",
+    "mark-handback-ready": "2026-09-27T17:32:34Z",
     "start-definition": "2026-09-27T05:16:10Z",
+    "start-implementation": "2026-09-27T16:12:50Z",
     "start-plan": "2026-09-27T15:33:33Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-27T15:59:40Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-27T17:32:34Z",
   "work_id": "step5-cancellation"
 }
