@@ -390,6 +390,24 @@ class CharteredPreparationTests(CharteredFixture):
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["execution_protocol_version"], 8)
 
+    def test_editor_without_an_edit_fails_with_a_no_edit_reason(self):
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            proposal = self._proposal(envelope, "editor", 1)
+            checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+            checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                              "workflow_name": "flow-magentic-delivery-v8",
+                                              "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+            on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root, supervisor=supervisor,
+                                                worker_adapter=lambda action, **kwargs: self._result("codex", "editor-model", "Inspected only"))
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual((result["status"], receipt["status"]), ("failed", "failed"))
+        self.assertEqual(receipt["failure_detail"], result["reason"])
+        self.assertEqual(result["reason"], "editor made no edit to the worktree")
+
     def test_v7_gateway_seals_producer_verifier_receipt_after_flow_observes_edit_and_test(self):
         calls = []
         captured = {}
@@ -1047,6 +1065,43 @@ class CharteredPreparationTests(CharteredFixture):
             with self.assertRaisesRegex(ContractError, "roster expands"):
                 execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
                                           worker_adapter=lambda *args, **kwargs: self.fail("must not send"))
+
+
+class CharteredEditVerificationTests(CharteredFixture):
+    """Flow's post-editor worktree check names why an edit was refused."""
+
+    def _verify(self, files):
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+        baseline = {"source_commit": self.commit, "files": files}
+        return _verify_chartered_edit(self.worktree, baseline, attempt_dir, {"write_paths": ["target.py"]}, record=False)
+
+    def _sha(self, text):
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    def test_clean_baseline_without_an_edit_names_no_edit(self):
+        with self.assertRaisesRegex(ContractError, "^editor made no edit to the worktree$"):
+            self._verify({"target.py": self._sha("old\n")})
+
+    def test_out_of_scope_file_names_scope(self):
+        (self.worktree / "other.py").write_text("x\n")
+        with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
+            self._verify({"target.py": self._sha("old\n")})
+
+    def test_deleted_allowed_file_names_scope(self):
+        (self.worktree / "target.py").unlink()
+        with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
+            self._verify({"target.py": self._sha("old\n")})
+
+    def test_declared_regression_without_an_edit_names_the_baseline(self):
+        (self.worktree / "target.py").write_text("regressed\n")
+        with self.assertRaisesRegex(ContractError,
+                                    "^editor made no edit: the allowed paths still match the pinned baseline$"):
+            self._verify({"target.py": self._sha("regressed\n")})
+
+    def test_declared_regression_with_an_edit_passes(self):
+        (self.worktree / "target.py").write_text("fixed\n")
+        self.assertEqual(self._verify({"target.py": self._sha("regressed\n")})["changed_files"], ["target.py"])
 
 
 class ExecutionFactsTests(unittest.TestCase):

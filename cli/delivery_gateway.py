@@ -606,10 +606,12 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     allowed = set(job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
     changed = [line[3:] for line in status]
-    if not changed or any(line[:2] not in {" M", "M ", "??"} or path not in allowed for line, path in zip(status, changed)):
+    if not changed:
+        raise ContractError("editor made no edit to the worktree")
+    if any(line[:2] not in {" M", "M ", "??"} or path not in allowed for line, path in zip(status, changed)):
         raise ContractError("editor changed files outside the approved job scope")
     if not any((worktree / path).is_file() and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path) for path in changed):
-        raise ContractError("editor produced no observed change")
+        raise ContractError("editor made no edit: the allowed paths still match the pinned baseline")
     diff = _git(worktree, "diff", "HEAD", "--", *job["write_paths"]).encode()
     for path in changed:
         if path not in baseline["files"]:
