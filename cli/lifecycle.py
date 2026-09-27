@@ -59,6 +59,7 @@ from paths import (
 )
 from setup import _ensure_usage_store
 from sync import sync_target
+from maf_runtime import MafRuntimeUnready, provision as provision_maf_runtime
 
 
 def _now_utc_iso() -> str:
@@ -519,6 +520,21 @@ def _print_resync_hint(prefix: str = "") -> None:
     print("  flow sync codex --user")
 
 
+def _provision_maf_runtime() -> bool:
+    """Keep the optional Delivery runtime separate from source swapping.
+
+    Provision itself never overwrites the previous pointer until its staged
+    interpreter probes cleanly, so source conversion/update cannot turn a
+    working runtime selection into an ambient-Python fallback.
+    """
+    try:
+        provision_maf_runtime()
+    except MafRuntimeUnready as exc:
+        print(f"managed MAF runtime provisioning failed: {exc}")
+        return False
+    return True
+
+
 def install_command(release: bool, develop_path: str | None) -> int:
     if release and develop_path is not None:
         print("--release and --develop are mutually exclusive")
@@ -592,7 +608,7 @@ def _convert_to_release() -> int:
     )
     print(f"converted to release mode (version: {version})")
     print(f"clone preserved at: {clone}")
-    return 0
+    return 0 if _provision_maf_runtime() else 1
 
 
 def _convert_to_develop(clone: Path) -> int:
@@ -640,7 +656,7 @@ def _convert_to_develop(clone: Path) -> int:
         }
     )
     print(f"converted to develop mode (source: {clone})")
-    return 0
+    return 0 if _provision_maf_runtime() else 1
 
 
 def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False) -> int:
@@ -859,4 +875,4 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
     write_install_config(new_install)
 
     print(f"updated to {tag}")
-    return 0
+    return 0 if _provision_maf_runtime() else 1

@@ -251,6 +251,14 @@ if ! "${BIN_DIR}/flow" --help >/dev/null 2>&1; then
   exit 1
 fi
 
+# Delivery is optional after installation, but a successful install owns a
+# verified runtime for the chartered lane. `install-maf` stages and probes its
+# environment before atomically changing the runtime pointer, so an existing
+# known-good selection remains intact if this step fails.
+if ! "${BIN_DIR}/flow" runtime install-maf; then
+  err "flow installed, but the managed MAF runtime could not be provisioned; previous runtime selection was preserved"
+fi
+
 "${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/archive_preflight.py" || true
 
 echo "Installed flow (${MODE} mode)."
