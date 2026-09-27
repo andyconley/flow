@@ -38,9 +38,11 @@ def _digest(value: Any) -> str:
 def _runtime_identity() -> dict[str, Any]:
     """Compute, rather than echo, the interpreter identity Flow sealed."""
     root = Path(__file__).resolve().parents[2]
-    lock = root / "runtime" / "maf_runner" / "requirements.txt"
-    packages = {"agent-framework-core": version("agent-framework-core"),
-                "agent-framework-orchestrations": version("agent-framework-orchestrations")}
+    lock = root / "runtime" / "maf_runner" / "requirements.lock"
+    names = ("agent-framework-core", "agent-framework-orchestrations", "annotated-types", "msgspec",
+             "opentelemetry-api", "pydantic", "pydantic-core", "python-dotenv", "pyyaml",
+             "typing-inspection", "typing-extensions")
+    packages = {name: version(name) for name in names}
     identity = {"schema_version": 1, "interpreter": str(Path(sys.executable).resolve()),
                 "python": list(sys.version_info[:3]), "packages": packages,
                 "lock_digest": hashlib.sha256(lock.read_bytes()).hexdigest(), "protocols": [5, 6, 7, 8]}

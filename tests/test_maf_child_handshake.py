@@ -8,8 +8,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from tests.maf_env import MAF_PYTHON, requires_maf
-from cli.maf_runtime import probe
+from maf_runtime import probe
 
 
 class MafChildHandshakeTests(unittest.TestCase):

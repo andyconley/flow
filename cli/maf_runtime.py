@@ -26,6 +26,12 @@ PINNED_PACKAGES = {
     "agent-framework-core": "1.19.0",
     "agent-framework-orchestrations": "1.2.0",
 }
+RESOLVED_PACKAGES = {
+    "agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0",
+    "annotated-types": "0.8.0", "msgspec": "0.21.1", "opentelemetry-api": "1.45.0",
+    "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
+    "pyyaml": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
+}
 SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 READY = "ready"
 UNREADY_STATES = {
@@ -50,7 +56,7 @@ def _source_root() -> Path:
 
 
 def lock_digest(source_root: Path | None = None) -> str:
-    path = (source_root or _source_root()) / "runtime" / "maf_runner" / "requirements.txt"
+    path = (source_root or _source_root()) / "runtime" / "maf_runner" / "requirements.lock"
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -87,8 +93,7 @@ def _probe_command() -> str:
         "import json,sys; from importlib.metadata import version; "
         "from runtime.maf_runner import delivery_lead; "
         "print(json.dumps({'executable':sys.executable,'python':list(sys.version_info[:3]),"
-        "'packages':{'agent-framework-core':version('agent-framework-core'),"
-        "'agent-framework-orchestrations':version('agent-framework-orchestrations')},"
+        "'packages':{n:version(n) for n in " + repr(sorted(RESOLVED_PACKAGES)) + "},"
         "'protocols':[5,6,7,8]}))"
     )
 
@@ -131,7 +136,7 @@ def probe(*, python_path: str | None = None, home: Path | None = None,
     packages = observed.get("packages") if isinstance(observed, dict) else None
     if not isinstance(packages, dict):
         return _result("runner_import_failed", source=source, remedy="run `flow runtime install-maf`")
-    if any(packages.get(name) != wanted for name, wanted in PINNED_PACKAGES.items()):
+    if any(packages.get(name) != wanted for name, wanted in RESOLVED_PACKAGES.items()):
         return _result("version_mismatch", source=source, remedy="run `flow runtime install-maf`", detail=json.dumps(packages, sort_keys=True))
     if observed.get("protocols") != SUPPORTED_PROTOCOLS:
         return _result("protocol_incompatible", source=source, remedy="install a Flow-compatible MAF runtime")
@@ -184,7 +189,7 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
     try:
         venv.EnvBuilder(with_pip=True, clear=True).create(stage)
         interpreter = stage / "bin" / "python"
-        install = subprocess.run([str(interpreter), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(root / "runtime" / "maf_runner" / "requirements.txt")], capture_output=True, text=True, timeout=300, check=False)
+        install = subprocess.run([str(interpreter), "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", "-r", str(root / "runtime" / "maf_runner" / "requirements.lock")], capture_output=True, text=True, timeout=300, check=False)
         if install.returncode:
             raise MafRuntimeUnready(_result("package_missing", source="installer", remedy="check package installation", detail=install.stderr[-512:]))
         checked = probe(python_path=str(interpreter), source_root=root)
