@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from delivery_gateway import ContractError, recover_runtime_startup
+from execution_ledger import ExecutionLedger
 
 
 class RuntimeStartupRecoveryTests(unittest.TestCase):
@@ -63,6 +65,23 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ContractError, "not a MAF runtime-startup"):
                 recover_runtime_startup("sample", "old", Path(self.tmp.name), "commit", root=Path(self.tmp.name))
         execute.assert_not_called()
+
+    def test_reconcile_finds_predecessor_at_later_lineage_position_and_is_idempotent(self):
+        path = Path(self.tmp.name) / "lineage.sqlite"
+        ledger = ExecutionLedger(path)
+        # Initialize a stranded claim, then emulate a crash after an envelope
+        # with this predecessor in its second lineage position was persisted.
+        with sqlite3.connect(path) as db:
+            db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,execution_protocol_version) VALUES(?,?,?,?,?,?)",
+                       ("old", "sample", json.dumps({"attempt_id": "old"}), "failed", "", 8))
+        ledger.claim_runtime_startup_successor("old")
+        with sqlite3.connect(path) as db:
+            db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,execution_protocol_version) VALUES(?,?,?,?,?,?)",
+                       ("next", "sample", json.dumps({"attempt_id": "next", "predecessors": [{"attempt_id": "earlier"}, {"attempt_id": "old"}]}), "started", "", 8))
+        self.assertEqual(ledger.reconcile_runtime_startup_successor("old"), "next")
+        self.assertEqual(ledger.reconcile_runtime_startup_successor("old"), "next")
+        with self.assertRaisesRegex(ContractError, "already has a successor"):
+            ledger.claim_runtime_startup_successor("old")
 
 
 if __name__ == "__main__":
