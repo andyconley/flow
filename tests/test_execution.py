@@ -313,8 +313,40 @@ class ExecutionContractTests(ExecutionFixture):
         proxy = next(handler for handler in handlers if isinstance(handler, local_worker.urllib.request.ProxyHandler))
         redirect = next(handler for handler in handlers if isinstance(handler, local_worker._NoRedirect))
         self.assertEqual(proxy.proxies, {})
+        self.assertIs(json.loads(opener.request.data)["think"], False)
         with self.assertRaisesRegex(RuntimeError, "redirect refused"):
             redirect.redirect_request(opener.request, None, 302, "Found", {}, "http://elsewhere.invalid")
+
+    def test_structured_verifier_request_disables_thinking(self) -> None:
+        envelope, _, _ = self.prepare()
+        envelope = {**envelope, "provider": "ollama", "model": "fixture-model"}
+        answer = json.dumps({"schema_version": 1, "decision": "pass", "summary": "ok", "findings": []})
+
+        class Response:
+            status = 200
+
+            def read(self, _size):
+                return json.dumps({"model": "fixture-model", "message": {"content": answer}}).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        class Opener:
+            def open(self, request, timeout):
+                self.request = request
+                return Response()
+
+        opener = Opener()
+        with patch.object(local_worker.urllib.request, "build_opener", return_value=opener):
+            result = call_local(envelope, structured_verifier=True)
+        body = json.loads(opener.request.data)
+        self.assertIs(body["think"], False)
+        self.assertEqual(body["format"], local_worker.VERIFIER_OUTPUT_SCHEMA)
+        self.assertEqual(body["options"]["num_predict"], local_worker.STRUCTURED_VERIFIER_NUM_PREDICT)
+        self.assertEqual(result["output"], answer)
 
     def test_observer_override_is_explicit_and_loopback_only(self) -> None:
         envelope, _, _ = self.prepare()

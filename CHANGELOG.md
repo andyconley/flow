@@ -2,6 +2,60 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.37.0](https://github.com/andyconley/flow/compare/v0.36.2...v0.37.0) (2026-09-26)
+
+### Features
+
+* **cli:** record manager progress repairs in the ledger and receipt ([40249cb](https://github.com/andyconley/flow/commit/40249cbab780d52fafc4c2a16ccdb522f3c019c9))
+* **runtime:** add shared manager progress parser ([5c3a4f1](https://github.com/andyconley/flow/commit/5c3a4f1723226c8c9574085c3b5b0435cd3429bf))
+
+### Bug Fixes
+
+* **cli:** replay headroom-granted manager calls during recovery ([0ff2387](https://github.com/andyconley/flow/commit/0ff2387df04b5ac6073264c8f07843cc13bdf953))
+* **runtime:** keep the runner and Flow on one progress decision ([b377351](https://github.com/andyconley/flow/commit/b377351c7d36e4b371f540391d805583557525cb))
+* **runtime:** repair or retry malformed manager progress ([0dddf5f](https://github.com/andyconley/flow/commit/0dddf5f09e417d7f9c7642e9dc7b0d88aca2c4ba))
+* **runtime:** treat a too-deep progress reply as unparsable ([54c271a](https://github.com/andyconley/flow/commit/54c271a49db97c132feffdf2091f7ba8548a2418))
+
+### Documentation
+
+* **adr:** note the shared round-trip check and seal-time block absence ([81531e0](https://github.com/andyconley/flow/commit/81531e009ddea37e2169ae4fd1eac1880e3bd8fc))
+* **adr:** record manager progress repair and bounded retry ([454b34d](https://github.com/andyconley/flow/commit/454b34de9cb6bc98694710f9fe24728d53769cf8))
+* **backlog:** promote two repeated capability gaps ([aaf8195](https://github.com/andyconley/flow/commit/aaf81959fd8a7bb5b28a6e96e037d95be4eb44a5))
+* **run:** accept manager-progress-retry review ([529b1dd](https://github.com/andyconley/flow/commit/529b1dd7a8a9cb9f470ef2fe7a79d52fd5b66ead))
+* **run:** archive manager-progress-retry ([085cb3a](https://github.com/andyconley/flow/commit/085cb3a08067acad8c40a8309b6e4c1f6fd2be44))
+* **run:** define and plan manager-progress-retry ([7d0330e](https://github.com/andyconley/flow/commit/7d0330e50a70b839600fd6541fad819704035214))
+* **run:** record manager-progress-retry validation and handback ([954fbe4](https://github.com/andyconley/flow/commit/954fbe4a3f066c41c20f4d1424d5f23d6e383900))
+
+## [0.36.2](https://github.com/andyconley/flow/compare/v0.36.1...v0.36.2) (2026-09-26)
+
+### Bug Fixes
+
+* **cli:** disable model thinking on Ollama verifier calls ([f8e8c18](https://github.com/andyconley/flow/commit/f8e8c18d1a136df7a60fbec2daa49e6f4b89826c))
+
+### Documentation
+
+* **run:** archive ollama-verifier-think scout ([66c0d3a](https://github.com/andyconley/flow/commit/66c0d3a4cbde755b05e81c643d0249ba8c60df6f))
+
+## [0.36.1](https://github.com/andyconley/flow/compare/v0.36.0...v0.36.1) (2026-09-26)
+
+### Bug Fixes
+
+* **cli:** let Claude edit turns stream past 1 MiB ([ab00060](https://github.com/andyconley/flow/commit/ab00060f6b8bbaef97e39dbc438713c7cb43ce29))
+* **run:** drop dangling symlink from v8-live-validation evidence ([1037beb](https://github.com/andyconley/flow/commit/1037bebe18ac3dc199f6f0bb1d28e5ad4ae80745))
+* **scripts:** escape pipes in generated help tables ([3e44cf1](https://github.com/andyconley/flow/commit/3e44cf10347b07c60f25c5818b29eee87d462e5f))
+
+### Documentation
+
+* **backlog:** promote three repeated capability gaps ([cdeb3d7](https://github.com/andyconley/flow/commit/cdeb3d79db449ec6494df323b8a14c7d5f540fed))
+* **run:** accept v8-live-validation review ([b896cca](https://github.com/andyconley/flow/commit/b896cca9a27320b5ade794bbb8285482525f0c3f))
+* **run:** archive edit-worker-stream-cap scout ([98dc483](https://github.com/andyconley/flow/commit/98dc483a5c018eee34194a1368cf574f8b6e3f74))
+* **run:** archive v8-live-validation ([507c2dd](https://github.com/andyconley/flow/commit/507c2dd9586e685369ee426fdf47d74e74172e2b))
+* **run:** define v8-live-validation ([9ad995b](https://github.com/andyconley/flow/commit/9ad995bbbcf59b53a3d41c794fa5fa331ea687cc))
+* **run:** plan v8-live-validation ([5d02493](https://github.com/andyconley/flow/commit/5d0249340d7408d88d1c90d738aa241b245ab10d))
+* **run:** record v8-live-validation assignment outputs and handback ([e591e55](https://github.com/andyconley/flow/commit/e591e55c8946c5efb494a39b3334cd29b68b7159))
+* **run:** record v8-live-validation attempt 1 findings ([56062d2](https://github.com/andyconley/flow/commit/56062d260c9e984b14c109982769c029a6ce4956))
+* **run:** record v8-live-validation preparation evidence ([c1c4517](https://github.com/andyconley/flow/commit/c1c451797e05a906e00b9d5e437bd1b47108eb7a))
+
 ## [0.36.0](https://github.com/andyconley/flow/compare/v0.35.3...v0.36.0) (2026-09-26)
 
 ### Features

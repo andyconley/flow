@@ -523,6 +523,22 @@ Every lane's role assignments were added to the orchestration manifest by hand-e
 
 Plan and implement reviewer dispatches cannot be added to the orchestration manifest once it is sealed into delivery authority
 
+### Plan Entry Without Definition
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+A new run cannot enter the plan gate without an approved definition, so bug-shaped planning that the plan command allows has no lifecycle gate and must fall back to scout closure
+
+Bug-shaped work cannot enter planning without an approved definition, so a compact definition with a hand-built intent and manifest had to be written first
+
+### Mutation Check Harness
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+No framework command runs declared mutation checks (break, run named test, confirm failure, restore) and records the results
+
+No harness for mutation checks; ten mutate-test-restore cycles were scripted by hand, and a git restore once discarded uncommitted work
+
 ### Local Verifier Realistic Load Check
 
 Status: observed 2 times, promoted from the capability-gap ledger

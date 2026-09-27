@@ -20,7 +20,7 @@
 ## Recently completed
 
 - `v8-live-validation-2` archived 2026-09-26 as "validation found defects"
-  (branch `codex/v8-live-validation-2`, run records only; not pushed).
+  (branch `codex/v8-live-validation-2`, run records only).
   - Found D3, D4 and D5, each fixed in its own run (v0.36.2, v0.37.0).
   - Attempt 2 proved the live escalation, decision, resume and receipt chain,
     then failed on D7: the manager is not told that each producer gets exactly
@@ -31,6 +31,13 @@
     completed job). Job worktree `~/src/flow-v8-live-job-2` can be reused
     after a reset; the first run's worktree is removed (tag
     `archive/v8-live-validation-job`).
+
+- `manager-progress-retry` archived 2026-09-26 and released as v0.37.0
+  (PR #42). Fixes D4 (ADR 0018: manager progress repair and bounded retry)
+  and D5 (recovery replaying a headroom-granted manager call).
+
+- `ollama-verifier-think` (scout) archived 2026-09-26 and released as v0.36.2
+  (PR #41). Fixes D3: Flow's Ollama calls send `"think": false`.
 
 - `edit-worker-stream-cap` (scout) archived 2026-09-26 and merged as PR #38.
   - Fixes D1: the Claude edit worker's cap rises to 16 MiB, partial messages

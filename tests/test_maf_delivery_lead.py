@@ -17,7 +17,11 @@ from maf_env import MAF_PYTHON, requires_maf  # noqa: E402
 
 @requires_maf
 class StockDeliveryLeadTest(unittest.TestCase):
-    def _exercise(self, speaker: str | list[str], protocol_version: int = 5) -> tuple[list[str], list[str], dict]:
+    def _exercise(self, speaker: str | list[str], protocol_version: int = 5,
+                  progress_script: list[str] | None = None) -> tuple[list[str], list[str], dict]:
+        """``progress_script`` spoils successive progress replies: ``bad`` (no JSON object) or
+        ``escape`` (an invalid JSON escape); ``ok`` or an exhausted script sends the valid reply."""
+        script = list(progress_script or [])
         target_sequence = [speaker] if isinstance(speaker, str) else speaker
         control = speaker if isinstance(speaker, str) else "<sequence>"
         roster = [
@@ -45,6 +49,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             phases: list[str] = []
             selected: list[str] = []
             replan_requests: list[dict] = []
+            manager_requests: list[dict] = []
             terminal = {}
             for _ in range(24):
                 line = child.stdout.readline()
@@ -54,6 +59,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
                 if kind == "manager_request":
                     self.assertEqual(event["call_id"], expected_manager_call_id(event))
                     phases.append(event["phase"])
+                    manager_requests.append(event)
                     phase = event["phase"]
                     if phase.startswith("replan_"):
                         replan_requests.append(event)
@@ -70,6 +76,19 @@ class StockDeliveryLeadTest(unittest.TestCase):
                         })
                         if control == "<malformed>":
                             answer = "not JSON"
+                        spoil = script.pop(0) if script else "ok"
+                        if spoil == "bad":
+                            answer = "not JSON"
+                        elif spoil == "shape":
+                            value = json.loads(answer)
+                            del value["is_in_loop"]
+                            answer = json.dumps(value)
+                        elif spoil == "noreason":
+                            value = json.loads(answer)
+                            del value["next_speaker"]["reason"]
+                            answer = json.dumps(value)
+                        elif spoil == "escape":
+                            answer = answer.replace('"Analyze the fixture"', '"Analyze the `fixture` table row \\`| a |\\`"')
                     else:
                         answer = {"facts": "Fixture facts", "plan": "- Select a specialist",
                                   "replan_facts": "Updated fixture facts", "replan_plan": "- Revised plan",
@@ -102,6 +121,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             assert child.stderr
             child.stderr.close()
             self.last_replan_requests = replan_requests
+            self.last_manager_requests = manager_requests
             return phases, selected, terminal
 
     def test_stock_manager_routes_to_selected_worker(self):
@@ -148,11 +168,49 @@ class StockDeliveryLeadTest(unittest.TestCase):
         self.assertEqual(terminal["type"], "error")
         self.assertIn("unlisted specialist", terminal["message"])
 
-    def test_malformed_progress_aborts_without_retry_or_worker(self):
+    def test_unparsable_progress_retries_twice_then_aborts_without_replan_or_worker(self):
         phases, actions, terminal = self._exercise("<malformed>")
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "progress"])
+        self.assertEqual(actions, [])
+        self.assertEqual(terminal["type"], "error")
+        self.assertIn("manager progress unparsable after 3 attempts", terminal["message"])
+        self.assertEqual(self.last_replan_requests, [])
+
+    def test_one_unparsable_progress_is_retried_as_a_call_not_a_round(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=8,
+                                                   progress_script=["bad"])
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "progress", "final"])
+        self.assertEqual(actions, ["test-engineer-1"])
+        self.assertEqual(terminal["type"], "workflow_finished")
+        progress = [item for item in self.last_manager_requests if item["phase"] == "progress"]
+        self.assertEqual([item["sequence"] for item in progress], [3, 4, 5])
+        self.assertEqual(progress[0]["manager_round"], progress[1]["manager_round"])
+        self.assertEqual(progress[0]["prompt_digest"], progress[1]["prompt_digest"])
+        self.assertNotEqual(progress[0]["call_id"], progress[1]["call_id"])
+
+    def test_progress_missing_a_ledger_item_is_retried_like_unparsable(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=8,
+                                                   progress_script=["shape"])
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "progress", "final"])
+        self.assertEqual(actions, ["test-engineer-1"])
+        progress = [item for item in self.last_manager_requests if item["phase"] == "progress"]
+        self.assertEqual(progress[0]["manager_round"], progress[1]["manager_round"])
+
+    def test_progress_without_a_speaker_reason_aborts_without_retry_or_replan(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=8,
+                                                   progress_script=["noreason"])
         self.assertEqual(phases, ["facts", "plan", "progress"])
         self.assertEqual(actions, [])
         self.assertEqual(terminal["type"], "error")
+        self.assertIn("lacks a bounded task and rationale", terminal["message"])
+        self.assertEqual(self.last_replan_requests, [])
+
+    def test_invalid_escape_progress_is_repaired_without_an_extra_call(self):
+        phases, actions, terminal = self._exercise("test-engineer-1", protocol_version=8,
+                                                   progress_script=["escape"])
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "final"])
+        self.assertEqual(actions, ["test-engineer-1"])
+        self.assertEqual(terminal["type"], "workflow_finished")
 
     def test_replan_facts_and_plan_share_flow_identity(self):
         phases, actions, terminal = self._exercise("<replan>")

@@ -29,7 +29,9 @@ from execution_contracts import (
     RECOVERY_INTERRUPTION_CAUSES,
     EXPANSION_LIMIT_KEYS,
     expansion_headroom,
+    manager_progress_block,
 )
+from runner_progress import classify as classify_progress
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
                                EXPANSION_ALREADY_DECIDED, EXPANSION_CEILING_EXCEEDED, EXPANSION_GRANT_CONSUMED,
@@ -586,6 +588,17 @@ class ExecutionLedger:
             return None
         return {"lineage_id": ExecutionLedger._lineage_attempts(envelope)[0], "headroom": expansion_headroom(envelope),
                 "predecessor_headroom_spent": spent, "predecessor_lineage_grants": lineage_grants, "requests": requests}
+
+    @staticmethod
+    def _manager_progress_receipt(db: sqlite3.Connection, attempt_id: str) -> dict[str, list[str]] | None:
+        rows = db.execute("SELECT call_id,request_json,status,result_json FROM manager_calls WHERE attempt_id=? ORDER BY sequence",
+                          (attempt_id,)).fetchall()
+        return manager_progress_block([{"call_id": r[0], "request": json.loads(r[1]), "status": r[2],
+                                        "result": json.loads(r[3]) if r[3] else None} for r in rows])
+
+    def manager_progress_receipt(self, attempt_id: str) -> dict[str, list[str]] | None:
+        with self._db() as db:
+            return self._manager_progress_receipt(db, attempt_id)
 
     def expansion_receipt(self, attempt_id: str) -> dict[str, Any] | None:
         with self._db() as db:
@@ -1341,7 +1354,7 @@ class ExecutionLedger:
             raise ContractError("manager response is invalid")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT attempt_id,status,result_json FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            row = db.execute("SELECT attempt_id,status,result_json,request_json FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
             if row is None:
                 raise ContractError("manager call missing")
             self._assert_owner(db, row[0], generation)
@@ -1353,6 +1366,11 @@ class ExecutionLedger:
                 raise ContractError("manager call was not sent")
             db.execute("UPDATE manager_calls SET status='completed',result_json=?,observed_at=? WHERE call_id=?", (encoded, utc_now(), call_id))
             self._event(db, row[0], call_id, "manager_response_observed", response["output_sha256"])
+            if json.loads(row[3]).get("phase") == "progress" and isinstance(output, str):
+                # Diagnostic only; the receipt block is recomputed from the rows (ADR 0018).
+                kind = classify_progress(output)
+                if kind in {"repaired", "unparsable"}:
+                    self._event(db, row[0], call_id, "manager_progress_" + kind, kind)
 
     def mark_manager_unknown(self, call_id: str, reason: str, *, generation: int) -> None:
         with self._db() as db:
@@ -2134,6 +2152,8 @@ class ExecutionLedger:
                 envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0])
                 if json.loads(receipt_bytes).get("expansion") != self._expansion_receipt(db, envelope):
                     raise ContractError("receipt expansion evidence differs from the ledger")
+                if json.loads(receipt_bytes).get("manager_progress") != self._manager_progress_receipt(db, attempt_id):
+                    raise ContractError("receipt manager_progress evidence differs from the ledger")
                 db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
                            (status, reason, receipt_path, receipt_sha256, attempt_id))
             else:
