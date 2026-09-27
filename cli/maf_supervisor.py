@@ -457,7 +457,9 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
         raise MafProtocolError("delivery requires a v5, v6, v7, or v8 envelope and task")
     if not callable(on_manager) or not callable(on_action) or not 0 < timeout_s <= 900:
         raise MafProtocolError("delivery callbacks or timeout are invalid")
-    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    runtime = envelope.get("maf_runtime")
+    bound = runtime.get("interpreter") if isinstance(runtime, dict) else None
+    executable = python_path or bound or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
     root = Path(__file__).resolve().parents[1]
     process = subprocess.Popen(
         [executable, "-m", "runtime.maf_runner.delivery_lead"],
@@ -485,6 +487,10 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
             with interruptible():
                 message = _read_message(process.stdout.fileno(), deadline, pending, protocol_version)
             kind = message["type"]
+            if kind == "runtime_ready":
+                if runtime is None or message.get("runtime_digest") != runtime.get("runtime_digest"):
+                    raise MafProtocolError("MAF child runtime identity differs from the sealed envelope")
+                continue
             if kind == "manager_request":
                 manager_calls += 1
                 if (envelope["manager"]["provider"] in {"codex", "claude"}

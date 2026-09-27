@@ -22,6 +22,7 @@ from execution_contracts import (ContractError as ExecutionContractError, envelo
 from delivery_contracts import build_delivery_charter, build_shaper_contract, digest as delivery_digest
 from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
+from maf_runtime import MafRuntimeUnready
 from tests.shaper_intent_fixture import shaper_intent
 from execution_ledger import ExecutionLedger
 from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier_digest, evaluate_candidate
@@ -38,6 +39,13 @@ class CharteredFixture(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        self.runtime_patch = patch("delivery_gateway.require_ready", return_value={
+            "schema_version": 1, "interpreter": "/test/maf-python", "python": [3, 12, 0],
+            "packages": {"agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0"},
+            "lock_digest": "a" * 64, "protocols": [5, 6, 7, 8], "runtime_digest": "b" * 64,
+        })
+        self.runtime_patch.start()
+        self.addCleanup(self.runtime_patch.stop)
         self.root = Path(self.tmp.name)
         self.run = self.root / ".flow" / "runs" / "sample"
         self.run.mkdir(parents=True)
@@ -193,6 +201,13 @@ class CharteredFixture(unittest.TestCase):
 
 
 class CharteredPreparationTests(CharteredFixture):
+    def test_unready_runtime_refuses_before_any_attempt_side_effect(self):
+        diagnostic = {"state": "package_missing", "source": "managed", "remedy": "repair"}
+        with patch("delivery_gateway.require_ready", side_effect=MafRuntimeUnready(diagnostic)):
+            with self.assertRaises(MafRuntimeUnready):
+                self.prepare()
+        self.assertFalse((self.run / "execution").exists())
+
     def test_clean_job_pins_roster_and_contract(self):
         envelope, task, attempt_dir, ledger = self.prepare()
         self.assertEqual(envelope["execution_protocol_version"], 8)

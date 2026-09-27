@@ -101,6 +101,14 @@ async def _run(start: dict[str, Any]) -> None:
     protocol_version = _active_protocol_version
     if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != protocol_version:
         raise RuntimeError("Delivery Lead envelope and transport protocol differ")
+    runtime = envelope.get("maf_runtime")
+    if runtime is not None:
+        if not isinstance(runtime, dict) or not isinstance(runtime.get("runtime_digest"), str):
+            raise RuntimeError("Delivery Lead runtime identity is invalid")
+        # This is intentionally before the first manager callback. The parent
+        # compares it to its sealed envelope before permitting any provider
+        # route, so a swapped interpreter cannot silently become a send.
+        _write({"protocol_version": protocol_version, "type": "runtime_ready", "runtime_digest": runtime["runtime_digest"]})
     attempt_id = envelope.get("attempt_id")
     task = start.get("task")
     assignments = envelope.get("roster")

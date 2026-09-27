@@ -603,11 +603,21 @@ def doctor(as_json: bool = False, check: bool = False) -> int:
         "retrieval.fts5", STATUS_OK if retrieval_capability["state"] == "available" else STATUS_WARNING,
         "info", "capability", "FTS5 retrieval " + retrieval_capability["state"],
         detail=str(retrieval_capability["runtime"]), next_action=retrieval_capability["remedy"]))
+    from maf_runtime import probe as maf_probe
+    maf = maf_probe()
+    diagnostics.append(diagnostic(
+        "delivery.maf_runtime", STATUS_OK if maf["state"] == "ready" else STATUS_WARNING,
+        SEVERITY_INFO if maf["state"] == "ready" else SEVERITY_WARNING,
+        maf["state"], "MAF Delivery runtime is ready" if maf["state"] == "ready" else "MAF Delivery runtime is unavailable; base Flow remains available",
+        next_action=None if maf["state"] == "ready" else maf["remedy"]))
     if as_json:
         print_json(support_payload("doctor", root, diagnostics, install=read_install_config(), retrieval_capability=retrieval_capability, archive_coverage=archive_coverage))
         return exit_code(diagnostics, check=check, fail_on_warnings=True)
 
     print("retrieval FTS5:    " + retrieval_capability["state"])
+    print("MAF delivery:      " + maf["state"])
+    if maf["state"] != "ready":
+        print("  " + maf["remedy"])
     if retrieval_capability["state"] != "available":
         print("  " + retrieval_capability["remedy"])
     print("archive coverage: " + json.dumps(archive_coverage, sort_keys=True))

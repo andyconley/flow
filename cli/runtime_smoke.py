@@ -24,7 +24,7 @@ from sync import (
 )
 
 
-TARGETS = ("claude", "codex")
+TARGETS = ("claude", "codex", "maf")
 C_LITE_COMMAND_NEEDLES = {
     "flow-define": "flow run transition <work-id> start-definition",
     "flow-solution": "flow run transition <work-id> start-solution",
@@ -222,7 +222,7 @@ def smoke_payload(target: str = "all", root: Path = HOME) -> dict[str, Any]:
         raise ValueError(f"unsupported target: {target}")
     manifest_path, manifest = merge_user_overlay(SCAFFOLD_DIR)
     targets = TARGETS if target == "all" else (target,)
-    results = [_check_target(root, manifest_path, manifest, item) for item in targets]
+    results = [_maf_target() if item == "maf" else _check_target(root, manifest_path, manifest, item) for item in targets]
     failed = sum(1 for result in results for row in result["static"] if row["status"] == "failed")
     manual_required = sum(1 for result in results for row in result["manual"] if row["status"] == "manual_required")
     return {
@@ -231,6 +231,13 @@ def smoke_payload(target: str = "all", root: Path = HOME) -> dict[str, Any]:
         "manual_required": manual_required,
         "targets": results,
     }
+
+
+def _maf_target() -> dict[str, Any]:
+    from maf_runtime import probe
+    result = probe()
+    status = "passed" if result["state"] == "ready" else "failed"
+    return {"target": "maf", "static": [_check("MAF delivery runtime", status, result["state"] + ": " + result["remedy"])], "manual": []}
 
 
 def _render_target(result: dict[str, Any]) -> list[str]:

@@ -43,6 +43,7 @@ from claude_worker import call_claude
 from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
 from maf_supervisor import MafTransportError, run_maf_delivery
+from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import status as run_status
 from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch, verifier_instructions
@@ -428,6 +429,10 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     job_baseline = {key: baseline[key] for key in ("kind", "diff_sha256")}
     baseline = {"regression_diff_sha256": baseline["diff_sha256"], "source_commit": source_commit,
                 "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in charter["write_paths"] if (worktree / path).is_file()}}
+    # This is the pre-attempt fence. All authority and worktree proof above is
+    # read-only. No execution directory, ledger row, receipt, process, or
+    # provider callback exists until the optional runtime is healthy.
+    runtime_identity = require_ready()
     execution_dir = run_dir / "execution"
     # A successor lists every earlier v8 attempt so its spend shares the
     # charter caps; the ledger re-checks the list inside create_attempt.
@@ -467,6 +472,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "handoff_digest": delivery["handoff_digest"],
                 "delivery_lead_claim_digest": delivery["lead_claim_digest"],
                 "delivery_lead_claim": {"lead_id": authority["claim"]["owner"], "generation": delivery["owner_generation"]},
+                "maf_runtime": runtime_identity,
                 "limits": {"max_delegations": canonical_limits["delegations"],
                            "max_concurrent": canonical_limits["concurrency"],
                            "max_replans": canonical_limits["replans"],
@@ -1339,6 +1345,8 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
     if delivery_protocol:
         receipt.update({field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest",
                                                               "handoff_digest", "delivery_lead_claim_digest", "delivery_lead_claim")})
+    if "maf_runtime" in envelope:
+        receipt["maf_runtime"] = envelope["maf_runtime"]
     trace_path = attempt_dir / "claude-implementer.debug.log"
     if trace_path.is_file() and not trace_path.is_symlink():
         trace_size = trace_path.stat().st_size

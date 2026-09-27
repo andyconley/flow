@@ -61,6 +61,7 @@ from delivery_termination import abandon_delivery, cancel_delivery, stuck_attemp
 from delivery_control import change_lead_claim  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
+from maf_runtime import MafRuntimeUnready, probe as maf_probe, provision as maf_provision  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
 from project import cmd_audit  # noqa: E402
 from setup import (  # noqa: E402
@@ -727,11 +728,13 @@ def main() -> int:
     )
     runtime_smoke_parser.add_argument(
         "--target",
-        choices=("all", "claude", "codex"),
+        choices=("all", "claude", "codex", "maf"),
         default="all",
         help="runtime target to check (default: all)",
     )
     runtime_smoke_parser.add_argument("--json", action="store_true", help="emit JSON")
+    runtime_sub.add_parser("readiness", help="check strict MAF Delivery readiness").add_argument("--json", action="store_true")
+    runtime_sub.add_parser("install-maf", help="stage and select the managed pinned MAF runtime").add_argument("--json", action="store_true")
 
     model_parser = sub.add_parser(
         "model",
@@ -1058,6 +1061,10 @@ def main() -> int:
         import json
         try:
             result = execute_chartered_delivery(args.work_id, args.worktree, args.source_commit, root=args.project_root)
+        except MafRuntimeUnready as exc:
+            payload = {"status": "refused", "reason": "maf_runtime_unready", "diagnostic": exc.diagnostic}
+            print(json.dumps(payload, sort_keys=True) if args.json else f"chartered execution refused: maf_runtime_unready: {exc}")
+            return 2
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"chartered execution refused: {exc}")
             return 2
@@ -1256,6 +1263,20 @@ def main() -> int:
         return 0 if result["status"] == "completed" else 1
     if args.command == "runtime" and args.runtime_target == "smoke":
         return runtime_smoke_command(args)
+    if args.command == "runtime" and args.runtime_target == "readiness":
+        import json
+        result = maf_probe()
+        print(json.dumps(result, sort_keys=True) if args.json else f"MAF Delivery readiness: {result['state']}\n{result['remedy']}")
+        return 0 if result["state"] == "ready" else 1
+    if args.command == "runtime" and args.runtime_target == "install-maf":
+        import json
+        try:
+            result = maf_provision()
+        except MafRuntimeUnready as exc:
+            print(json.dumps(exc.diagnostic, sort_keys=True) if args.json else str(exc))
+            return 1
+        print(json.dumps(result, sort_keys=True) if args.json else "MAF runtime installed and verified")
+        return 0
     if args.command == "model" and args.model_target == "context":
         return model_context_command(args)
     if args.command == "model" and args.model_target == "resolve":
