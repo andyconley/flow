@@ -198,7 +198,12 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
     try:
         venv.EnvBuilder(with_pip=True, clear=True).create(stage)
         interpreter = stage / "bin" / "python"
-        install = subprocess.run([str(interpreter), "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", "-r", str(root / "runtime" / "maf_runner" / "requirements.lock")], capture_output=True, text=True, timeout=300, check=False)
+        command = [str(interpreter), "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", "--require-hashes"]
+        wheelhouse = os.environ.get("FLOW_MAF_WHEELHOUSE")
+        if wheelhouse:
+            command.extend(["--no-index", "--find-links", wheelhouse])
+        command.extend(["-r", str(root / "runtime" / "maf_runner" / "requirements.lock")])
+        install = subprocess.run(command, capture_output=True, text=True, timeout=300, check=False)
         if install.returncode:
             raise MafRuntimeUnready(_result("package_missing", source="installer", remedy="check package installation", detail=install.stderr[-512:]))
         checked = probe(python_path=str(interpreter), source_root=root)
