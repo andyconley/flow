@@ -19,6 +19,17 @@
 
 ## Recently completed
 
+- `producer-turn-contract` accepted and archived 2026-09-27 on
+  `codex/producer-turn-contract`; PR #44.
+  - Fixes D7: the chartered manager facts now state that the approved
+    editors get one call in total, which must make the complete edit. This is
+    guidance only; enforcement is unchanged.
+  - Fixes D6: a chartered editor turn with no edit now fails as "editor made
+    no edit ..." rather than as a scope violation.
+  - Full suite: 1,571 OK, 0 skipped; 4 of 4 mutation checks caught.
+  - Next: release, reinstall, then `v8-live-validation-3` with a new work id (reset
+    `~/src/flow-v8-live-job-2` to `d6d771f2`).
+
 - `v8-live-validation-2` archived 2026-09-26 as "validation found defects"
   (branch `codex/v8-live-validation-2`, run records only).
   - Found D3, D4 and D5, each fixed in its own run (v0.36.2, v0.37.0).
@@ -26,7 +37,7 @@
     then failed on D7: the manager is not told that each producer gets exactly
     one turn, and it delegated "Do not edit any files yet". D6 (a misleading
     "outside scope" reason when nothing changed) is also open.
-  - Next: a fix run for D6 and D7, then `v8-live-validation-3` with a new work
+  - D6 and D7 are fixed by `producer-turn-contract`. Next: `v8-live-validation-3` with a new work
     id (still to prove live: auto grant, manager-call replay, verifier,
     completed job). Job worktree `~/src/flow-v8-live-job-2` can be reused
     after a reset; the first run's worktree is removed (tag

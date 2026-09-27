@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from delivery_gateway import (ContractError, _default_worker_adapter,
-                              _execute_prepared_delivery, execute_chartered_delivery,
-                              prepare_chartered_delivery)
+from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts,
+                              _execute_prepared_delivery, _verify_chartered_edit,
+                              execute_chartered_delivery, prepare_chartered_delivery)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, validate_action, validate_envelope,
@@ -389,6 +389,28 @@ class CharteredPreparationTests(CharteredFixture):
         self.assertEqual(result["status"], "failed")
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["execution_protocol_version"], 8)
+
+    def test_manager_task_carries_the_single_editor_call_fact(self):
+        _, _, _, captured = self._run_v8(['{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}'])
+        self.assertIn("Flow refuses any second editor call", captured["task"])
+
+    def test_editor_without_an_edit_fails_with_a_no_edit_reason(self):
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            proposal = self._proposal(envelope, "editor", 1)
+            checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+            checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                              "workflow_name": "flow-magentic-delivery-v8",
+                                              "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+            on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root, supervisor=supervisor,
+                                                worker_adapter=lambda action, **kwargs: self._result("codex", "editor-model", "Inspected only"))
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual((result["status"], receipt["status"]), ("failed", "failed"))
+        self.assertEqual(receipt["failure_detail"], result["reason"])
+        self.assertEqual(result["reason"], "editor made no edit to the worktree")
 
     def test_v7_gateway_seals_producer_verifier_receipt_after_flow_observes_edit_and_test(self):
         calls = []
@@ -1047,6 +1069,70 @@ class CharteredPreparationTests(CharteredFixture):
             with self.assertRaisesRegex(ContractError, "roster expands"):
                 execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
                                           worker_adapter=lambda *args, **kwargs: self.fail("must not send"))
+
+
+class CharteredEditVerificationTests(CharteredFixture):
+    """Flow's post-editor worktree check names why an edit was refused."""
+
+    def _verify(self, files):
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+        baseline = {"source_commit": self.commit, "files": files}
+        return _verify_chartered_edit(self.worktree, baseline, attempt_dir, {"write_paths": ["target.py"]}, record=False)
+
+    def _sha(self, text):
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    def test_clean_baseline_without_an_edit_names_no_edit(self):
+        with self.assertRaisesRegex(ContractError, "^editor made no edit to the worktree$"):
+            self._verify({"target.py": self._sha("old\n")})
+
+    def test_out_of_scope_file_names_scope(self):
+        (self.worktree / "other.py").write_text("x\n")
+        with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
+            self._verify({"target.py": self._sha("old\n")})
+
+    def test_deleted_allowed_file_names_scope(self):
+        (self.worktree / "target.py").unlink()
+        with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
+            self._verify({"target.py": self._sha("old\n")})
+
+    def test_declared_regression_without_an_edit_names_the_baseline(self):
+        (self.worktree / "target.py").write_text("regressed\n")
+        with self.assertRaisesRegex(ContractError,
+                                    "^editor made no edit: the allowed paths still match the pinned baseline$"):
+            self._verify({"target.py": self._sha("regressed\n")})
+
+    def test_declared_regression_with_an_edit_passes(self):
+        (self.worktree / "target.py").write_text("fixed\n")
+        self.assertEqual(self._verify({"target.py": self._sha("regressed\n")})["changed_files"], ["target.py"])
+
+
+class ExecutionFactsTests(unittest.TestCase):
+    """The facts block Flow appends to the manager task."""
+
+    def test_chartered_facts_state_the_single_editor_call(self):
+        for version in (6, 7, 8):
+            with self.subTest(version=version):
+                facts = _execution_facts({"execution_protocol_version": version}, {"baseline": {"kind": "clean"}}, "a" * 40)
+                for phrase in ("one call in total", "refuses any second editor call", "complete edit in the same turn",
+                               '"do not edit yet"'):
+                    self.assertIn(phrase, facts)
+                self.assertLessEqual(len(facts.encode()), 1500)
+
+    def test_protocol_5_facts_are_unchanged(self):
+        envelope = {"execution_protocol_version": 5,
+                    "predecessors": [{"attempt_id": "a1", "terminal_status": "failed", "lead_generation": 2}]}
+        self.assertEqual(_execution_facts(envelope, None, "abc123"),
+                         "\n\nFlow-verified execution facts:\n"
+                         "- The isolated worktree is pinned to source commit abc123.\n"
+                         "- The approved regression test is already present and failed before this job's first provider send."
+                         " Do not ask a specialist to create or rerun that prerequisite.\n"
+                         "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read"
+                         " files, run commands, or edit the worktree.\n"
+                         "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs the"
+                         " targeted test after that edit; the full suite is an acceptance check.\n"
+                         "- Predecessor attempt a1 ended failed under lead generation 2; its evidence is not reused.\n")
 
 
 class ProviderRouteTests(unittest.TestCase):

@@ -606,10 +606,12 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     allowed = set(job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
     changed = [line[3:] for line in status]
-    if not changed or any(line[:2] not in {" M", "M ", "??"} or path not in allowed for line, path in zip(status, changed)):
+    if not changed:
+        raise ContractError("editor made no edit to the worktree")
+    if any(line[:2] not in {" M", "M ", "??"} or path not in allowed for line, path in zip(status, changed)):
         raise ContractError("editor changed files outside the approved job scope")
     if not any((worktree / path).is_file() and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path) for path in changed):
-        raise ContractError("editor produced no observed change")
+        raise ContractError("editor made no edit: the allowed paths still match the pinned baseline")
     diff = _git(worktree, "diff", "HEAD", "--", *job["write_paths"]).encode()
     for path in changed:
         if path not in baseline["files"]:
@@ -1330,6 +1332,24 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
     return receipt, terminal, reason
 
 
+def _execution_facts(envelope: dict[str, Any], job: dict[str, Any] | None, source_commit: str) -> str:
+    chartered = envelope["execution_protocol_version"] in {6, 7, 8}
+    return ("\n\nFlow-verified execution facts:\n"
+            "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
+            + (("- The approved baseline is " + job["baseline"]["kind"] + ".\n") if chartered else "- The approved regression test is already present and failed before this job's first provider send. Do not ask a specialist to create or rerun that prerequisite.\n")
+            + "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
+            " run commands, or edit the worktree.\n"
+            "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
+            " the targeted test after that edit; the full suite is an acceptance check.\n"
+            + ("- The approved editors get one call in total; Flow refuses any second editor call. That call must"
+               " read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or"
+               " \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails"
+               " the attempt.\n" if chartered else "")
+            + "".join(f"- Predecessor attempt {item['attempt_id']} ended {item['terminal_status']} under lead"
+                      f" generation {item['lead_generation']}; its evidence is not reused.\n"
+                      for item in envelope.get("predecessors", [])))
+
+
 def _execute_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Path,
                                ledger: ExecutionLedger, **kwargs: Any) -> dict[str, Any]:
     """Run one prepared attempt; a live v8 run holds the attempt's recovery fence throughout."""
@@ -1372,17 +1392,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     structured_verifier = envelope["execution_protocol_version"] == 8
     authority_guard = (lambda: delivery_authority_guard(attempt_dir.parents[1], envelope)) if delivery_protocol else nullcontext
     job = envelope.get("job_contract") if chartered else None
-    task += ("\n\nFlow-verified execution facts:\n"
-             "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
-             + (("- The approved baseline is " + job["baseline"]["kind"] + ".\n") if chartered else "- The approved regression test is already present and failed before this job's first provider send. Do not ask a specialist to create or rerun that prerequisite.\n")
-             +
-             "- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files,"
-             " run commands, or edit the worktree.\n"
-             "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
-             " the targeted test after that edit; the full suite is an acceptance check.\n"
-             + "".join(f"- Predecessor attempt {item['attempt_id']} ended {item['terminal_status']} under lead"
-                       f" generation {item['lead_generation']}; its evidence is not reused.\n"
-                       for item in envelope.get("predecessors", [])))
+    task += _execution_facts(envelope, job, source_commit)
     manager_adapter = manager_adapter or _default_manager_adapter
     worker_adapter = worker_adapter or partial(_default_worker_adapter, trace_dir=attempt_dir)
     test_runner = test_runner or (partial(_run_chartered_test, job=job) if chartered else _run_targeted_test)

@@ -1,0 +1,29 @@
+{
+  "delivery_charter_digest": "da7451c54080607668e93a9d73415faf8eff38c562bcaa2a4a0821ccb2c8677e",
+  "delivery_charter_id": "delivery-ed292511f679c6562cff",
+  "digest": "57674369ee6af2de1198fe5da44f8386c1a7a06d8edd91a6952903640023dc34",
+  "kind": "definition_to_delivery_handoff",
+  "run_id": "producer-turn-contract",
+  "schema_version": 1,
+  "shaper_contract_digest": "5a7dbd9cbf45695fd9e42a4678c49bd71e9dd4d22a49f1466d95e33156c19602",
+  "shaper_contract_id": "shaper-5b862393cce148e3ff07",
+  "source_digests": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/producer-turn-contract/acceptance-criteria.md",
+      "sha256": "f69b584932acfe5367a58b5ba8e0233fe0cfbfd653d167d3e2a304b9d7f8a127"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/producer-turn-contract/orchestration.json",
+      "sha256": "1314ae62f92da2022b3912cdccebc5ebe5dc8e54a4cfcfa666604d2ffb091782"
+    },
+    "requirements": {
+      "path": ".flow/runs/producer-turn-contract/requirements.md",
+      "sha256": "986f7f3449e16be8958c4957f036311d87eb02c62be79bb65117e19122eae579"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/producer-turn-contract/shaper-intent.json",
+      "sha256": "684516776c5868cde2d89d357922a78e9f3b78dad8b67bc0eec099b6a9b446a1"
+    }
+  },
+  "transition": "start-plan"
+}
