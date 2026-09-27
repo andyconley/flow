@@ -61,6 +61,11 @@ from setup import _ensure_usage_store
 from sync import sync_target
 from maf_runtime import MafRuntimeUnready, provision as provision_maf_runtime
 
+# This constant is deliberately carried in every release source tree. An
+# updater from the preceding release only has to activate that tree; the first
+# invocation of its new CLI can then complete the bounded runtime bridge.
+MAF_RUNTIME_ACTIVATION_REVISION = 1
+
 
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -552,6 +557,24 @@ def _provision_maf_runtime() -> bool:
     except MafRuntimeUnready as exc:
         print(f"managed MAF runtime provisioning failed: {exc}")
         return False
+    return True
+
+
+def activate_managed_maf_runtime() -> bool:
+    """Complete the first-upgrade bridge once an older updater activates us.
+
+    Older ``flow update`` code cannot call a hook it does not contain. The new
+    source therefore carries this revision and self-activates on its first CLI
+    invocation. Failure is retained as an explicit install-config marker and
+    never changes the selected source/config pair.
+    """
+    config = read_install_config()
+    if config.get("maf_runtime_activation") == MAF_RUNTIME_ACTIVATION_REVISION:
+        return True
+    if not _provision_maf_runtime():
+        return False
+    config["maf_runtime_activation"] = MAF_RUNTIME_ACTIVATION_REVISION
+    write_install_config(config)
     return True
 
 

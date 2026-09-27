@@ -78,7 +78,8 @@ class ExecutionLedger:
                 recovery_version INTEGER NOT NULL DEFAULT 1,
                 owner_generation INTEGER NOT NULL DEFAULT 0,
                 owner_actor TEXT,
-                execution_protocol_version INTEGER NOT NULL DEFAULT 1
+                execution_protocol_version INTEGER NOT NULL DEFAULT 1,
+                failure_class TEXT
             );
             CREATE TABLE IF NOT EXISTS actions (
                 action_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
@@ -211,6 +212,7 @@ class ExecutionLedger:
                 ("owner_actor", "TEXT"),
                 ("execution_protocol_version", "INTEGER NOT NULL DEFAULT 1"),
                 ("sealed_receipt_sha256", "TEXT"),
+                ("failure_class", "TEXT"),
             ):
                 if name not in columns:
                     db.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
@@ -2283,7 +2285,8 @@ class ExecutionLedger:
             self._event(db, attempt_id, None, "checkpoint_bound", canonical({"checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq, "format_version": format_version}))
             return {**record, "bound_at": bound_at, "replayed": False}
 
-    def finish_attempt(self, attempt_id: str, status: str, reason: str, receipt_path: str, *, generation: int | None = None) -> None:
+    def finish_attempt(self, attempt_id: str, status: str, reason: str, receipt_path: str, *,
+                       generation: int | None = None, failure_class: str | None = None) -> None:
         if status not in {"completed", "failed", "denied", "unknown"}:
             raise ContractError("invalid attempt terminal status")
         receipt = Path(receipt_path) if isinstance(receipt_path, str) and receipt_path else None
@@ -2313,10 +2316,11 @@ class ExecutionLedger:
                     raise ContractError("receipt expansion evidence differs from the ledger")
                 if json.loads(receipt_bytes).get("manager_progress") != self._manager_progress_receipt(db, attempt_id):
                     raise ContractError("receipt manager_progress evidence differs from the ledger")
-                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
-                           (status, reason, receipt_path, receipt_sha256, attempt_id))
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=?,failure_class=? WHERE attempt_id=?",
+                           (status, reason, receipt_path, receipt_sha256, failure_class, attempt_id))
             else:
-                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,failure_class=? WHERE attempt_id=?",
+                           (status, reason, receipt_path, failure_class, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
 
     @staticmethod
@@ -2686,7 +2690,8 @@ class ExecutionLedger:
         attempt_columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
         recovery_columns = {"recovery_version", "owner_generation", "owner_actor"}.issubset(attempt_columns)
         protocol_column = "execution_protocol_version" in attempt_columns
-        attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "") + (",execution_protocol_version" if protocol_column else "")
+        failure_column = "failure_class" in attempt_columns
+        attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "") + (",execution_protocol_version" if protocol_column else "") + (",failure_class" if failure_column else "")
         a = db.execute(f"SELECT {attempt_select} FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
         if not a:
             raise ContractError("attempt missing")
@@ -2713,6 +2718,7 @@ class ExecutionLedger:
         snapshot = {"attempt_id": a[0], "work_id": a[1], "envelope": envelope, "status": a[3], "reason": a[4], "receipt_path": a[5],
                 "recovery_version": a[6] if recovery_columns else 1, "owner_generation": a[7] if recovery_columns else 0, "owner_actor": a[8] if recovery_columns else None,
                 "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
+                "failure_class": a[(10 if recovery_columns else 7) if protocol_column else (9 if recovery_columns else 6)] if failure_column else None,
                 "actions": [{"action_id": r[0], "request": json.loads(r[1]), "status": r[2], "reason": r[3], "grant_id": r[4], "result": json.loads(r[5]) if r[5] else None} for r in actions],
                 "replans": [{"replan_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "proposal_digest": r[3], "status": r[4], "reason": r[5]} for r in replans],
                 "manager_calls": [{"call_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "status": r[3], "reason": r[4], "grant_id": r[5], "result": json.loads(r[6]) if r[6] else None, "observed_at": r[7]} for r in manager_calls],

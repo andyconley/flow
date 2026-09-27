@@ -42,7 +42,7 @@ from local_worker import call_local
 from claude_worker import call_claude
 from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
-from maf_supervisor import MafTransportError, run_maf_delivery
+from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, run_maf_delivery
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import status as run_status
@@ -626,8 +626,7 @@ def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, sourc
         raise ContractError("runtime-startup predecessor is incompatible")
     if snapshot.get("status") != "failed":
         raise ContractError("runtime-startup predecessor is not a terminal failure")
-    reason = str(snapshot.get("reason") or "").lower()
-    if "maf" not in reason and "runtime" not in reason and "agent_framework" not in reason:
+    if snapshot.get("failure_class") != "maf_runtime_startup":
         raise ContractError("terminal failure is not a MAF runtime-startup failure")
     sent = {"started", "completed", "failed", "unknown"}
     if any(item.get("status") in sent for item in snapshot.get("actions", [])) or any(
@@ -645,7 +644,10 @@ def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, sourc
         receipt = json.loads(receipt_bytes)
     except (TypeError, ValueError) as exc:
         raise ContractError("runtime-startup predecessor receipt is invalid") from exc
-    if not isinstance(receipt, dict) or receipt.get("attempt_id") != attempt_id or receipt.get("envelope_digest") != envelope_digest(snapshot["envelope"]):
+    if (not isinstance(receipt, dict) or receipt.get("attempt_id") != attempt_id
+            or receipt.get("envelope_digest") != envelope_digest(snapshot["envelope"])
+            or receipt.get("status") != "failed" or receipt.get("reason") != snapshot.get("reason")
+            or receipt.get("failure_class") != snapshot.get("failure_class")):
         raise ContractError("runtime-startup predecessor receipt identity differs from ledger")
     # Claim inside the ledger before preparing a new attempt: concurrent
     # recovery commands cannot both turn one sealed failure into successors.
@@ -1502,6 +1504,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     edit_evidence: dict[str, Any] | None = None
     test_evidence: dict[str, Any] | None = None
     failure = ""
+    failure_exception: Exception | None = None
     recoverable_transport_failure = False
     verifier_input_sha256: str | None = None
     initial_snapshot = ledger.snapshot(aid)
@@ -1734,6 +1737,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         paused_request = paused.request_id
     except Exception as exc:
         failure = str(exc)
+        failure_exception = exc
         recoverable_transport_failure = isinstance(exc, MafTransportError)
     if controller is not None and controller.requested:
         # Keyed on the flag, not the exception: the stack has unwound, every
@@ -1779,7 +1783,9 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             controller.disarm()
         hook("after-runtime-outcome")
     if not continuation_epoch_id:
-        return _seal_attempt(envelope, attempt_dir, ledger, snapshot, failure=failure,
+        failure_class = ("maf_runtime_startup" if failure and not actions and not manager_calls
+                         and isinstance(failure_exception, (MafProtocolError, MafChildError)) else None)
+        return _seal_attempt(envelope, attempt_dir, ledger, snapshot, failure=failure, failure_class=failure_class,
                              edit_evidence=edit_evidence, test_evidence=test_evidence,
                              verifier_input_sha256=verifier_input_sha256, generation=generation,
                              authority_guard=authority_guard, hook=hook)
@@ -1799,7 +1805,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
 
 
 def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: ExecutionLedger, snapshot: dict[str, Any], *,
-                  failure: str, edit_evidence: dict[str, Any] | None, test_evidence: dict[str, Any] | None,
+                  failure: str, failure_class: str | None = None, edit_evidence: dict[str, Any] | None, test_evidence: dict[str, Any] | None,
                   verifier_input_sha256: str | None, generation: int, authority_guard: Callable[[], Any],
                   hook: Callable[[str], None]) -> dict[str, Any]:
     """Build, validate, write, and seal an attempt receipt under the owner fence."""
@@ -1812,6 +1818,8 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                                                edit_evidence=edit_evidence, test_evidence=test_evidence,
                                                verifier_input_sha256=verifier_input_sha256,
                                                continuation_epoch_id=None)
+    if failure_class is not None:
+        receipt["failure_class"] = failure_class
     validate_receipt(envelope, receipt)
     hook("after-receipt-draft")
     receipt_path = attempt_dir / "receipt.json"
@@ -1819,7 +1827,8 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
         ledger.assert_owner(aid, generation)
         write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
         hook("before-finish-attempt")
-        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation,
+                              failure_class=failure_class)
     return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
             "evidence": receipt["evidence"]}
 

@@ -19,9 +19,12 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
         receipt = Path(self.tmp.name) / ".flow" / "runs" / "sample" / "execution" / "old" / "receipt.json"
         receipt.parent.mkdir(parents=True, exist_ok=True)
         envelope = {"attempt_id": "old"}
-        receipt.write_text(json.dumps({"attempt_id": "old", "envelope_digest": "b" * 64}) + "\n")
+        receipt.write_text(json.dumps({"attempt_id": "old", "envelope_digest": "b" * 64,
+                                       "status": "failed", "reason": "MAF delivery child failed: missing agent_framework",
+                                       "failure_class": "maf_runtime_startup"}) + "\n")
         value = {"work_id": "sample", "execution_protocol_version": 8, "status": "failed",
                  "reason": "MAF delivery child failed: missing agent_framework", "actions": [], "manager_calls": [],
+                 "failure_class": "maf_runtime_startup",
                  "receipt_path": str(receipt), "sealed_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
                  "envelope": envelope}
         value.update(changes)
@@ -47,6 +50,14 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
              patch("delivery_gateway.execute_chartered_delivery") as execute:
             ledger.return_value.snapshot.return_value = self._snapshot(actions=[{"status": "unknown"}])
             with self.assertRaisesRegex(ContractError, "observed or uncertain"):
+                recover_runtime_startup("sample", "old", Path(self.tmp.name), "commit", root=Path(self.tmp.name))
+        execute.assert_not_called()
+
+    def test_substring_runtime_reason_is_not_recovery_eligible(self):
+        with patch("delivery_gateway.ExecutionLedger") as ledger, patch("delivery_gateway.execute_chartered_delivery") as execute:
+            ledger.return_value.snapshot.return_value = self._snapshot(
+                failure_class=None, reason="ordinary runtime validation failed")
+            with self.assertRaisesRegex(ContractError, "not a MAF runtime-startup"):
                 recover_runtime_startup("sample", "old", Path(self.tmp.name), "commit", root=Path(self.tmp.name))
         execute.assert_not_called()
 

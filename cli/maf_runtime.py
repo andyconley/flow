@@ -12,11 +12,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import fcntl
 import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import venv
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +74,46 @@ def runtime_root(home: Path | None = None) -> Path:
 
 def pointer_path(home: Path | None = None) -> Path:
     return runtime_root(home) / "current.json"
+
+
+@contextmanager
+def _provision_lock(home: Path):
+    """Serialize pointer and digest-directory changes across Flow processes."""
+    root = runtime_root(home)
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / ".provision.lock"
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        stat = os.fstat(fd)
+        if stat.st_uid != os.getuid() or stat.st_mode & 0o077:
+            raise MafRuntimeUnready(_result("identity_mismatch", source="installer",
+                                            remedy="repair the managed MAF runtime lock"))
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
+def _write_pointer(home: Path, interpreter: str, identity: dict[str, Any]) -> None:
+    path = pointer_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        fd = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as handle:
+            json.dump({"schema_version": 1, "interpreter": interpreter, "identity": identity,
+                       "installed_at": int(time.time())}, handle, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, path)
+    finally:
+        if temp.exists():
+            temp.unlink()
 
 
 def _result(state: str, *, source: str, remedy: str, detail: str = "", identity: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -182,20 +225,25 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
         raise MafRuntimeUnready(_result("interpreter_missing", source="installer", remedy="select a usable Python interpreter", detail=str(exc))) from exc
     key = hashlib.sha256(f"{lock_digest(root)}:{Path(base).resolve()}:{version_out}:{sys.platform}".encode()).hexdigest()
     target = runtime_root(home) / key
-    current = _load_pointer(home)
-    if target.is_dir():
+    # All target validation, staging and pointer changes occur while holding a
+    # user-owned advisory lock. A second installer therefore observes either a
+    # complete verified target or waits; it never races a shared current.tmp.
+    with _provision_lock(home):
+      if target.is_dir() and not target.is_symlink():
         candidate = str(target / "bin" / "python")
-        # A temporary pointer lets probe enforce the exact immutable identity.
         identity_probe = probe(python_path=candidate, source_root=root)
         if identity_probe["state"] == READY:
-            pointer_path(home).parent.mkdir(parents=True, exist_ok=True)
-            temp = pointer_path(home).with_suffix(".tmp")
-            temp.write_text(json.dumps({"schema_version": 1, "interpreter": candidate, "identity": identity_probe["identity"], "installed_at": int(time.time())}, sort_keys=True) + "\n")
-            os.replace(temp, pointer_path(home))
+            _write_pointer(home, candidate, identity_probe["identity"])
             return identity_probe
-    runtime_root(home).parent.mkdir(parents=True, exist_ok=True)
-    stage: Path | None = Path(tempfile.mkdtemp(prefix="maf-stage-", dir=runtime_root(home).parent))
-    try:
+        # A digest directory that does not prove is not reusable. Preserve it
+        # for operator inspection, then build a fresh immutable replacement.
+        quarantine = target.with_name(f"{target.name}.invalid-{uuid.uuid4().hex}")
+        os.replace(target, quarantine)
+      elif target.exists() or target.is_symlink():
+        quarantine = target.with_name(f"{target.name}.invalid-{uuid.uuid4().hex}")
+        os.replace(target, quarantine)
+      stage: Path | None = Path(tempfile.mkdtemp(prefix="maf-stage-", dir=runtime_root(home)))
+      try:
         venv.EnvBuilder(with_pip=True, clear=True).create(stage)
         interpreter = stage / "bin" / "python"
         command = [str(interpreter), "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", "--require-hashes"]
@@ -218,12 +266,9 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
         checked = probe(python_path=str(target / "bin" / "python"), source_root=root)
         if checked["state"] != READY:
             raise MafRuntimeUnready(checked)
-        pointer_path(home).parent.mkdir(parents=True, exist_ok=True)
-        temp = pointer_path(home).with_suffix(".tmp")
-        temp.write_text(json.dumps({"schema_version": 1, "interpreter": str(target / "bin" / "python"), "identity": checked["identity"], "installed_at": int(time.time())}, sort_keys=True) + "\n")
-        os.replace(temp, pointer_path(home))
+        _write_pointer(home, str(target / "bin" / "python"), checked["identity"])
         return checked
-    finally:
-        if stage is not None and stage.exists():
-            import shutil
-            shutil.rmtree(stage, ignore_errors=True)
+      finally:
+          if stage is not None and stage.exists():
+              import shutil
+              shutil.rmtree(stage, ignore_errors=True)
