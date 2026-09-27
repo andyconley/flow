@@ -1,0 +1,245 @@
+{
+  "attempt": {
+    "attempt_id": "0fa5602418374dfca3cfcf6f4c6c93d6",
+    "contracts": {
+      "delivery_charter_digest": "dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+      "delivery_lead_claim_digest": "66c9fbe3006328b880b13697394eb315018679c138fcaa2b54867f62d36cc4ac",
+      "handoff_digest": "74b80f1bed82ef3be585a2e2ee1dad9f9728c0b2c82085187ba1cfb47e70ee93",
+      "shaper_contract_digest": "63e720934349380de9e13940198afee547e26d85a31a15a634be1ec06dfedfd7"
+    },
+    "delivery_lead": {
+      "active": false,
+      "current_generation": 2,
+      "generation": 1,
+      "id": "delivery-lead"
+    },
+    "executable": false,
+    "execution_protocol_version": 8,
+    "expansion": {
+      "effective_limits": {
+        "delegations": 2,
+        "manager_calls": 4,
+        "manager_rounds": 6,
+        "paid_worker_calls": 2,
+        "verifier_calls": 1
+      },
+      "headroom_remaining": {
+        "delegations": 1,
+        "manager_calls": 1,
+        "manager_rounds": 0,
+        "paid_worker_calls": 0,
+        "verifier_calls": 1
+      },
+      "requests": [
+        {
+          "amount": 1,
+          "created_at": "2026-09-26T22:47:55.994172+00:00",
+          "denied_row_id": "1009dd3c83c457668d74bcd5eb810992e9cef604d5ccdd8388a31e2f88f96f61",
+          "grant": {
+            "actor": "andy",
+            "amount": 1,
+            "authority": "engineer",
+            "consumed_by": "1009dd3c83c457668d74bcd5eb810992e9cef604d5ccdd8388a31e2f88f96f61",
+            "decided_at": "2026-09-26T23:00:35.571720+00:00",
+            "decision": "approve",
+            "explanation": "Approved",
+            "grant_id": "expg-34a859d239514e0313c99e86",
+            "owner_generation": 1,
+            "status": "consumed"
+          },
+          "kind": "delegate",
+          "limits": [
+            "paid_worker_calls"
+          ],
+          "lineage_id": "22ab86c3559e4fd89e47cb9e59ebece2",
+          "owner_generation": 1,
+          "proposal_digest": "b1219cdf9c98d55f75b064035ab815a9f3c18315048eaae9570f9c926177c27b",
+          "rationale": "The docs-editor must first inspect the schema/format of flow.toml, flow-help.md, README.md, and the generator script before making any edits.",
+          "request_id": "exp-34a859d239514e0313c99e86",
+          "status": "granted"
+        }
+      ]
+    },
+    "interruptions": [],
+    "owner_generation": 2,
+    "pending_approvals": [],
+    "pending_unknowns": [],
+    "predecessors": [
+      {
+        "attempt_id": "22ab86c3559e4fd89e47cb9e59ebece2",
+        "lead_generation": 1,
+        "receipt_sha256": "c5f13fdb144a855bd49c7892b067a0b61acb3eb995f3998bdcef630232313e23",
+        "terminal_status": "failed"
+      }
+    ],
+    "provider_choices": [
+      {
+        "eligible_candidates": [
+          {
+            "assignment_id": "docs-editor",
+            "definition_digest": "9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe",
+            "instance_id": "docs-editor",
+            "model": "sonnet",
+            "provider": "claude",
+            "role": "tech-writer"
+          }
+        ],
+        "rationale": {
+          "facts": [
+            "approved producer identity",
+            "task selected by Magentic progress decision"
+          ],
+          "manager_reason": "The docs-editor must first inspect the schema/format of flow.toml, flow-help.md, README.md, and the generator script before making any edits."
+        },
+        "rejection_reasons": {},
+        "selected_candidate": "docs-editor"
+      }
+    ],
+    "recoveries": [
+      {
+        "actor": "codex-assisted-recovery",
+        "checkpoint": {
+          "checkpoint_id": "5b0ac407-cd34-4ce4-a4f0-564c8dccb9a4",
+          "file_sha256": "91d19315607ef59408fbb3bb7e227818a8f4d514e811ec715ec95502f33d744a",
+          "pending_id": "1009dd3c83c457668d74bcd5eb810992e9cef604d5ccdd8388a31e2f88f96f61"
+        },
+        "claimed_at": "2026-09-26T23:00:43.759500+00:00",
+        "expected_generation": 1,
+        "generation": 2,
+        "interruption_ids": [],
+        "lead_generation": 1,
+        "mode": "pending",
+        "quarantined": [
+          {
+            "name": "709560e5-c041-473d-a39e-128738385ee4.json",
+            "sha256": "166a5112cf3a580b7ae564adfd9c0c2855ffb0ee1a64f71d05cc84a8039fa789"
+          },
+          {
+            "name": "8d6196be-73d6-4543-9b40-14914f16d1e6.json",
+            "sha256": "af4d6027cf0ccbd093d26da04d739b703dd5ecf80882c8786d35fe1b34cc5b21"
+          }
+        ],
+        "recovery_id": "8142f2a84ada45989ee30fcfd46e08d7",
+        "released_action_ids": []
+      }
+    ],
+    "recovery": {
+      "blockers": [],
+      "checked_by_command": [
+        "live_run_fence",
+        "worktree_drift",
+        "envelope_file"
+      ],
+      "decided_from": "ledger",
+      "mode": null,
+      "reason": "attempt_terminal",
+      "recoverable": false
+    },
+    "resolutions": [],
+    "resumable": false,
+    "sealed_receipt": {
+      "consistent": true,
+      "file_sha256": "ea4c703c339a41b5f75d89cf7bb65cf70c81434b6e113232d4df7623d1eddf42",
+      "ledger_sha256": "ea4c703c339a41b5f75d89cf7bb65cf70c81434b6e113232d4df7623d1eddf42",
+      "matches": true,
+      "recovery_block_present": true,
+      "recovery_block_required": true
+    },
+    "status": "failed",
+    "verifier_evaluations": [],
+    "verifier_usage": {
+      "consumed": 0,
+      "denied": 0,
+      "maximum": 1,
+      "reserved": 0,
+      "retry_eligible": false
+    },
+    "work_id": "v8-live-validation-2"
+  },
+  "compatibility_diagnostics": [],
+  "contracts": {
+    "charter": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+          "sha256": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation-2/orchestration.json",
+          "sha256": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation-2/requirements.md",
+          "sha256": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+          "sha256": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+        }
+      },
+      "digest": "dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+      "id": "delivery-100706f1d8836f4092f0",
+      "version": 3
+    },
+    "shaper": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+          "sha256": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation-2/orchestration.json",
+          "sha256": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation-2/requirements.md",
+          "sha256": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+          "sha256": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+        }
+      },
+      "digest": "63e720934349380de9e13940198afee547e26d85a31a15a634be1ec06dfedfd7",
+      "id": "shaper-12201b37d83a84ed9907",
+      "version": 3
+    }
+  },
+  "delivery_authority": {
+    "charter_digest": "dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+    "charter_id": "delivery-100706f1d8836f4092f0",
+    "delivery_artifact_dir": "delivery/dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60",
+    "handoff_digest": "74b80f1bed82ef3be585a2e2ee1dad9f9728c0b2c82085187ba1cfb47e70ee93",
+    "lead_claim_digest": "66c9fbe3006328b880b13697394eb315018679c138fcaa2b54867f62d36cc4ac",
+    "lead_claim_path": "delivery/dcba681b6df39f48ec3126f36a45b05062334edd34650a8b132b837354bb7f60/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-dcba681b6df39f48ec31",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "63e720934349380de9e13940198afee547e26d85a31a15a634be1ec06dfedfd7",
+    "shaper_contract_id": "shaper-12201b37d83a84ed9907",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/v8-live-validation-2/acceptance-criteria.md",
+        "sha256": "ab31ea0111498b6e1cdaa7ab01f22bdcf44128e1f21aa852ac9c0964d8a4c09c"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/v8-live-validation-2/orchestration.json",
+        "sha256": "caf3894472a26a9fd47335ee28a87287659241b0389daa2a2b0f8c67ff21de9d"
+      },
+      "requirements": {
+        "path": ".flow/runs/v8-live-validation-2/requirements.md",
+        "sha256": "b8d4f666b519241e463a259fd6a2657af1393df2962e26dd5c8506f75e80d98b"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/v8-live-validation-2/shaper-intent.json",
+        "sha256": "941ded4d68679250ad908879eba85496e9898b6ea0357448600d6cba955d4545"
+      }
+    }
+  },
+  "lifecycle": {
+    "phase": "reviewing",
+    "state": "reviewing",
+    "updated_at": "2026-09-27T00:08:23Z"
+  },
+  "work_id": "v8-live-validation-2"
+}

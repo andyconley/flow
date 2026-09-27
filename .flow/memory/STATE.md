@@ -20,42 +20,35 @@
 ## Recently completed
 
 - `producer-turn-contract` accepted and archived 2026-09-27 on
-  `codex/producer-turn-contract`, not yet pushed.
+  `codex/producer-turn-contract`; PR #44.
   - Fixes D7: the chartered manager facts now state that the approved
     editors get one call in total, which must make the complete edit. This is
     guidance only; enforcement is unchanged.
   - Fixes D6: a chartered editor turn with no edit now fails as "editor made
     no edit ..." rather than as a scope violation.
   - Full suite: 1,571 OK, 0 skipped; 4 of 4 mutation checks caught.
-  - Next: PR (PR #43 for `v8-live-validation-2` is open separately), release,
-    reinstall, then `v8-live-validation-3` with a new work id (reset
+  - Next: release, reinstall, then `v8-live-validation-3` with a new work id (reset
     `~/src/flow-v8-live-job-2` to `d6d771f2`).
 
-- `manager-progress-retry` accepted and archived 2026-09-26; merged as
-  PR #42 and released in v0.37.0.
-  - Fixes D4 (ADR 0018): a malformed manager progress reply is repaired
-    (invalid escapes only) or retried up to twice as counted manager calls
-    (not rounds). The 3rd unparsable reply aborts with no replan, and v8
-    receipts carry a `manager_progress` block.
-  - Fixes D5: recovery replaying a headroom-granted manager call no longer
-    fails.
-  - Full suite: 1,562 tests OK, 0 skipped; 11 of 11 mutation checks caught.
-  - Next: PR, release v0.37.0, reinstall, then `v8-live-validation-2`
-    attempt 2 (reset the worktree to `d6d771f2`, re-run preflight, approve the
-    producer's paid-call expansion).
+- `v8-live-validation-2` archived 2026-09-26 as "validation found defects"
+  (branch `codex/v8-live-validation-2`, run records only).
+  - Found D3, D4 and D5, each fixed in its own run (v0.36.2, v0.37.0).
+  - Attempt 2 proved the live escalation, decision, resume and receipt chain,
+    then failed on D7: the manager is not told that each producer gets exactly
+    one turn, and it delegated "Do not edit any files yet". D6 (a misleading
+    "outside scope" reason when nothing changed) is also open.
+  - D6 and D7 are fixed by `producer-turn-contract`. Next: `v8-live-validation-3` with a new work
+    id (still to prove live: auto grant, manager-call replay, verifier,
+    completed job). Job worktree `~/src/flow-v8-live-job-2` can be reused
+    after a reset; the first run's worktree is removed (tag
+    `archive/v8-live-validation-job`).
 
-- `ollama-verifier-think` (scout) archived 2026-09-26 on
-  `codex/ollama-verifier-think`.
-  - Fixes D3: Flow's Ollama calls now send `"think": false`. Without it,
-    gemma4's hidden reasoning used the whole 1,024-token budget on a real
-    diff, so the verifier's reply content came back empty.
-  - Found by `v8-live-validation-2` at its preflight verifier gate, before any
-    paid call. That run is paused at `implementing` (launch gate) on
-    `codex/v8-live-validation-2`, with its worktree at
-    `~/src/flow-v8-live-job-2` (job commit `d6d771f2`).
-  - Full suite: 1,544 tests OK, 0 skipped. Next: PR, release v0.36.2,
-    reinstall, update the run's `verifier_gate.py` to send `think` false,
-    re-run the gate, then the launch gate.
+- `manager-progress-retry` archived 2026-09-26 and released as v0.37.0
+  (PR #42). Fixes D4 (ADR 0018: manager progress repair and bounded retry)
+  and D5 (recovery replaying a headroom-granted manager call).
+
+- `ollama-verifier-think` (scout) archived 2026-09-26 and released as v0.36.2
+  (PR #41). Fixes D3: Flow's Ollama calls send `"think": false`.
 
 - `edit-worker-stream-cap` (scout) archived 2026-09-26 and merged as PR #38.
   - Fixes D1: the Claude edit worker's cap rises to 16 MiB, partial messages

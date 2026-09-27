@@ -1,0 +1,16 @@
+{
+  "seconds": 3.13,
+  "limit": 30.0,
+  "schema_json": true,
+  "verdict": "go",
+  "prompt_chars": 13162,
+  "eval_count": 140,
+  "prompt_eval_count": 3300,
+  "load_duration_s": 0.23,
+  "reply": {
+    "schema_version": 1,
+    "decision": "pass",
+    "summary": "The documentation update for `flow run decide-expansion` is correctly implemented across all four targeted files. The command syntax, including the complex flag groups, is accurately represented in the configuration (`flow.toml`), the reference guide (`docs/cli-reference.md`), and the generated help tables (`README.md`, `scaffolds/default/commands/flow-help.md`). Crucially, the implementation correctly handles the escaping requirement for the pipe character (`|` to `\\|`) in Markdown tables while maintaining the raw syntax in the source configuration, as specified.",
+    "findings": []
+  }
+}

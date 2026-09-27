@@ -1,0 +1,8 @@
+validate_receipt: ok
+receipt sha256 matches ledger: True
+receipt status: failed | reason: MAF delivery child failed: manager progress is not valid JSON
+protocol: 8 | headroom: None
+roster: [('docs-editor', 'claude', 'sonnet'), ('local-verifier', 'ollama', 'gemma4:26b')]
+manager: {'model': 'sonnet', 'provider': 'claude'}
+action: None completed flow_observed_claude_cli_completed_turn physical: True usage: {'cache_creation_input_tokens': 79226, 'cache_read_input_tokens': 1375610, 'input_tokens': 46, 'output_tokens': 8576}
+expansions: []

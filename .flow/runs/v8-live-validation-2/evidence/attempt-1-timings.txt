@@ -1,0 +1,6 @@
+attempt 22ab86c3559e4fd89e47cb9e59ebece2  2026-09-26T20:40:44.888376+00:00 .. 2026-09-26T20:43:22.090940+00:00
+ 1 manager   24640029cac1  2026-09-26T20:40:45.031808+00:00    31.439s  manager_response_observed
+ 2 manager   2b922cf0d66a  2026-09-26T20:41:16.476765+00:00      8.13s  manager_response_observed
+ 3 manager   9cc7780c3ae7  2026-09-26T20:41:24.612718+00:00    12.299s  manager_response_observed
+ 4 producer  55e1c15aa474  2026-09-26T20:41:36.928799+00:00    89.526s  response_observed
+ 5 manager   3b8fed687b79  2026-09-26T20:43:06.641137+00:00    15.428s  manager_response_observed
