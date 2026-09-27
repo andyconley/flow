@@ -84,6 +84,13 @@ class FlowCliHarness(unittest.TestCase):
         self.repo = Path(self._tempdir.name)
         (self.repo / ".git").mkdir()
         self._fake_home: Path | None = None
+        # Every CLI subprocess gets an isolated HOME, even tests that do not
+        # exercise installation. A project overlay must never inherit or
+        # mutate the developer's real machine installation.
+        self._sandbox_home = self.repo / "sandbox_home"
+        self._sandbox_home.mkdir()
+        (self._sandbox_home / ".flow").mkdir()
+        (self._sandbox_home / ".flow" / "source").symlink_to(REPO_ROOT)
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
@@ -94,7 +101,7 @@ class FlowCliHarness(unittest.TestCase):
             cwd=self.repo,
             text=True,
             capture_output=True,
-            env=_clean_env(self._fake_home),
+            env=_clean_env(self._fake_home or self._sandbox_home),
         )
 
     def run_flow_with_input(self, stdin: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -104,7 +111,7 @@ class FlowCliHarness(unittest.TestCase):
             text=True,
             input=stdin,
             capture_output=True,
-            env=_clean_env(self._fake_home),
+            env=_clean_env(self._fake_home or self._sandbox_home),
         )
 
     def assert_ok(self, result: subprocess.CompletedProcess[str]) -> None:
