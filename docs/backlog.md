@@ -522,3 +522,19 @@ Adding review and recheck assignments to a run's orchestration manifest required
 Every lane's role assignments were added to the orchestration manifest by hand-editing JSON, including fixing a serialization overlap
 
 Plan and implement reviewer dispatches cannot be added to the orchestration manifest once it is sealed into delivery authority
+
+### Local Verifier Realistic Load Check
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+Live acceptance checks for the local verifier used inputs far smaller than a real job's diff, so a reasoning model exhausting its output budget went unnoticed until a live run's preflight
+
+No built-in preflight exercises the local verifier with a realistic diff-sized request; a gate script had to be written by hand
+
+### Handback Unreached Assignment Outputs
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+The handback gate requires output files for every manifest assignment, including ones a halted run never reached, forcing placeholder outputs
+
+The handback gate again required output files for manifest assignments a run never reached
