@@ -13,6 +13,7 @@
     "orchestration_manifest": ".flow/runs/v8-live-validation-3/orchestration.json",
     "plan": ".flow/runs/v8-live-validation-3/plan.md",
     "requirements": ".flow/runs/v8-live-validation-3/requirements.md",
+    "review": ".flow/runs/v8-live-validation-3/review.md",
     "shaper_intent": ".flow/runs/v8-live-validation-3/shaper-intent.json",
     "validation_plan": ".flow/runs/v8-live-validation-3/validation-plan.md"
   },
@@ -50,6 +51,7 @@
   },
   "dispositions": {},
   "gates": {
+    "accept-review": "2026-09-27T20:47:12Z",
     "approve-definition": "2026-09-27T19:43:33Z",
     "approve-plan": "2026-09-27T19:56:00Z",
     "mark-handback-ready": "2026-09-27T20:22:37Z",
@@ -59,11 +61,11 @@
     "start-review": "2026-09-27T20:39:51Z"
   },
   "lane": "review",
-  "last_event": "start-review",
-  "phase": "reviewing",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "reviewing",
-  "updated_at": "2026-09-27T20:39:51Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-27T20:47:12Z",
   "work_id": "v8-live-validation-3"
 }
