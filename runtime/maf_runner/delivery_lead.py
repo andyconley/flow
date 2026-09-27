@@ -9,7 +9,9 @@ import asyncio
 import hashlib
 import json
 import os
+import platform
 import sys
+import sysconfig
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -44,10 +46,13 @@ def _runtime_identity() -> dict[str, Any]:
              "opentelemetry-api", "pydantic", "pydantic-core", "python-dotenv", "pyyaml",
              "typing-inspection", "typing-extensions")
     packages = {name: version(name) for name in names}
+    protocols = SUPPORTED_PROTOCOLS
     identity = {"schema_version": 2, "interpreter": str(Path(sys.executable).resolve()),
                 "python": list(sys.version_info[:3]), "packages": packages,
                 "platform": sys.platform, "lock_digest": hashlib.sha256(lock.read_bytes()).hexdigest(),
-                "runner_digest": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "protocols": SUPPORTED_PROTOCOLS}
+                "runner_digest": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "protocols": protocols,
+                "protocol_digest": _digest(protocols), "machine": platform.machine(),
+                "implementation": platform.python_implementation(), "soabi": sysconfig.get_config_var("SOABI")}
     identity["runtime_digest"] = _digest(identity)
     return identity
 

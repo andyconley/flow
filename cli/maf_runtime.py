@@ -13,6 +13,8 @@ import hashlib
 import json
 import os
 import fcntl
+import platform
+import sysconfig
 import subprocess
 import sys
 import tempfile
@@ -40,7 +42,7 @@ READY = "ready"
 UNREADY_STATES = {
     "not_installed", "interpreter_missing", "identity_mismatch", "lock_mismatch",
     "package_missing", "version_mismatch", "runner_import_failed",
-    "protocol_incompatible", "probe_timeout",
+    "protocol_incompatible", "probe_timeout", "unsupported_runtime",
 }
 
 
@@ -138,11 +140,13 @@ def _probe_command() -> str:
     # Kept as a single, data-only probe: no MAF workflow, adapter or network
     # import is permitted before the gateway creates an attempt.
     return (
-        "import json,sys; import agent_framework,agent_framework_orchestrations; from importlib.metadata import version; "
+        "import json,sys,platform,sysconfig; from agent_framework import AgentResponse,Executor,FileCheckpointStorage,Message,WorkflowContext,handler,response_handler; "
+        "from agent_framework_orchestrations import GroupChatParticipantMessage,GroupChatRequestMessage,GroupChatResponseMessage,MagenticBuilder,StandardMagenticManager; "
+        "from importlib.metadata import version; "
         "from runtime.maf_runner import delivery_lead; "
         "print(json.dumps({'executable':sys.executable,'python':list(sys.version_info[:3]),"
         "'packages':{n:version(n) for n in " + repr(sorted(RESOLVED_PACKAGES)) + "},"
-        "'protocols':delivery_lead.SUPPORTED_PROTOCOLS}))"
+        "'protocols':delivery_lead.SUPPORTED_PROTOCOLS,'machine':platform.machine(),'implementation':platform.python_implementation(),'soabi':sysconfig.get_config_var('SOABI')}))"
     )
 
 
@@ -190,7 +194,10 @@ def probe(*, python_path: str | None = None, home: Path | None = None,
         return _result("protocol_incompatible", source=source, remedy="install a Flow-compatible MAF runtime")
     identity = {"schema_version": 2, "interpreter": str(binary.resolve()), "python": observed["python"],
                 "platform": sys.platform, "packages": packages, "lock_digest": lock_digest(root),
-                "runner_digest": runner_digest(root), "protocols": observed["protocols"]}
+                "runner_digest": runner_digest(root), "protocols": observed["protocols"],
+                "protocol_digest": hashlib.sha256(json.dumps(observed["protocols"], separators=(",", ":")).encode()).hexdigest(),
+                "machine": observed.get("machine"), "implementation": observed.get("implementation"),
+                "soabi": observed.get("soabi")}
     identity["runtime_digest"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if pointer and isinstance(pointer.get("identity"), dict) and pointer["identity"].get("lock_digest") != identity["lock_digest"]:
         return _result("lock_mismatch", source=source, remedy="run `flow runtime install-maf`", identity=identity)
@@ -223,7 +230,15 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
         version_out = subprocess.run([base, "-c", "import sys; print('.'.join(map(str,sys.version_info[:3])))"], capture_output=True, text=True, timeout=10, check=True).stdout.strip()
     except (OSError, subprocess.SubprocessError) as exc:
         raise MafRuntimeUnready(_result("interpreter_missing", source="installer", remedy="select a usable Python interpreter", detail=str(exc))) from exc
-    key = hashlib.sha256(f"{lock_digest(root)}:{Path(base).resolve()}:{version_out}:{sys.platform}".encode()).hexdigest()
+    host = subprocess.run([base, "-c", "import platform,sys; print('|'.join((sys.platform,platform.machine(),str(sys.version_info.major),str(sys.version_info.minor))))"], capture_output=True, text=True, timeout=10, check=True).stdout.strip()
+    if host != "darwin|arm64|3|12":
+        raise MafRuntimeUnready(_result("unsupported_runtime", source="installer",
+                                        remedy="managed MAF wheels currently require macOS arm64 with CPython 3.12", detail=host))
+    # The address includes every compatibility input that may change runner
+    # behavior; a code/protocol/ABI change always receives a fresh target.
+    base_tags = subprocess.run([base, "-c", "import platform,sysconfig; print('|'.join((platform.machine(),platform.python_implementation(),str(sysconfig.get_config_var('SOABI') or ''))))"], capture_output=True, text=True, timeout=10, check=True).stdout.strip()
+    protocol_digest = hashlib.sha256(json.dumps(SUPPORTED_PROTOCOLS, separators=(",", ":")).encode()).hexdigest()
+    key = hashlib.sha256(f"{lock_digest(root)}:{runner_digest(root)}:{protocol_digest}:{Path(base).resolve()}:{version_out}:{sys.platform}:{base_tags}".encode()).hexdigest()
     target = runtime_root(home) / key
     # All target validation, staging and pointer changes occur while holding a
     # user-owned advisory lock. A second installer therefore observes either a

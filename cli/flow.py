@@ -933,7 +933,7 @@ def main() -> int:
     # side-effect free; a recorded failure is never retried implicitly.
     bridge_command = ((args.command == "bootstrap")
                       or (args.command == "setup" and args.setup_target == "machine")
-                      or (args.command == "runtime" and args.runtime_target == "smoke"))
+                      or (args.command == "run" and args.run_target == "execute-chartered-job"))
     if bridge_command:
         bridge = activate_managed_maf_runtime()
         if bridge["attempted"]:
