@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
+import venv
 from pathlib import Path
 from tests.shaper_intent_fixture import shaper_intent
 
@@ -61,6 +62,9 @@ def _clean_env(home: Path | None = None) -> dict[str, str]:
     env["NO_COLOR"] = "1"
     if home is not None:
         env["HOME"] = str(home)
+        fixture = home / "maf-fixture" / "bin" / "python"
+        if fixture.is_file():
+            env["FLOW_MAF_PYTHON"] = str(fixture)
     return env
 
 
@@ -727,15 +731,44 @@ class FlowCliTests(FlowCliHarness):
         self._fake_home = fake_home
         return fake_home
 
+    def _offline_maf_python(self) -> Path:
+        """Build the local, no-network interpreter injected into install tests.
+
+        Installer tests assert Flow's source/config transaction.  They do not
+        exercise package resolution (covered by the managed-runtime tests),
+        so the supplied interpreter carries the resolved distribution metadata
+        and lets the installer test its documented reuse path hermetically.
+        """
+        assert self._fake_home is not None
+        environment = self._fake_home / "maf-fixture"
+        interpreter = environment / "bin" / "python"
+        if interpreter.exists():
+            return interpreter
+        venv.EnvBuilder(with_pip=False).create(environment)
+        site_packages = Path(subprocess.check_output(
+            [str(interpreter), "-c", "import site; print(site.getsitepackages()[0])"], text=True).strip())
+        for package, version in {
+            "agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0",
+            "annotated-types": "0.8.0", "msgspec": "0.21.1", "opentelemetry-api": "1.45.0",
+            "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
+            "PyYAML": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
+        }.items():
+            metadata = site_packages / (package.replace("-", "_") + ".dist-info")
+            metadata.mkdir()
+            (metadata / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {package}\nVersion: {version}\n")
+        return interpreter
+
     def _run_install_sh(self, *args: str) -> subprocess.CompletedProcess[str]:
         if self._fake_home is None:
             self._new_fake_home()
+        env = _clean_env(self._fake_home)
+        env["FLOW_MAF_PYTHON"] = str(self._offline_maf_python())
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), *args],
             cwd=str(REPO_ROOT),
             text=True,
             capture_output=True,
-            env=_clean_env(self._fake_home),
+            env=env,
         )
         return result
 
@@ -2617,6 +2650,7 @@ class FlowCliTests(FlowCliHarness):
         env = _clean_env(fake_home)
         env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
         env["FLOW_PYTHON_CANDIDATES"] = f"{fake_bin / 'python3'}:{fake_bin / f'python{sys.version_info.major}.{sys.version_info.minor}'}"
+        env["FLOW_MAF_PYTHON"] = str(self._offline_maf_python())
 
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), "--release"],
