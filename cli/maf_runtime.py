@@ -60,6 +60,11 @@ def lock_digest(source_root: Path | None = None) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def runner_digest(source_root: Path | None = None) -> str:
+    root = source_root or _source_root()
+    return hashlib.sha256((root / "runtime" / "maf_runner" / "delivery_lead.py").read_bytes()).hexdigest()
+
+
 def runtime_root(home: Path | None = None) -> Path:
     return (home or FLOW_HOME) / "runtimes" / "maf"
 
@@ -94,7 +99,7 @@ def _probe_command() -> str:
         "from runtime.maf_runner import delivery_lead; "
         "print(json.dumps({'executable':sys.executable,'python':list(sys.version_info[:3]),"
         "'packages':{n:version(n) for n in " + repr(sorted(RESOLVED_PACKAGES)) + "},"
-        "'protocols':[5,6,7,8]}))"
+        "'protocols':delivery_lead.SUPPORTED_PROTOCOLS}))"
     )
 
 
@@ -140,8 +145,9 @@ def probe(*, python_path: str | None = None, home: Path | None = None,
         return _result("version_mismatch", source=source, remedy="run `flow runtime install-maf`", detail=json.dumps(packages, sort_keys=True))
     if observed.get("protocols") != SUPPORTED_PROTOCOLS:
         return _result("protocol_incompatible", source=source, remedy="install a Flow-compatible MAF runtime")
-    identity = {"schema_version": 1, "interpreter": str(binary.resolve()), "python": observed["python"],
-                "packages": packages, "lock_digest": lock_digest(root), "protocols": SUPPORTED_PROTOCOLS}
+    identity = {"schema_version": 2, "interpreter": str(binary.resolve()), "python": observed["python"],
+                "platform": sys.platform, "packages": packages, "lock_digest": lock_digest(root),
+                "runner_digest": runner_digest(root), "protocols": observed["protocols"]}
     identity["runtime_digest"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if pointer and isinstance(pointer.get("identity"), dict) and pointer["identity"].get("lock_digest") != identity["lock_digest"]:
         return _result("lock_mismatch", source=source, remedy="run `flow runtime install-maf`", identity=identity)
@@ -166,22 +172,9 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
     """
     root = source_root or _source_root()
     home = home or FLOW_HOME
-    # An explicitly selected interpreter is a verified reusable runtime, not
-    # an ambient fallback.  This supports offline installs where an operator
-    # has already built the locked environment, while the default path below
-    # remains the staged managed-environment provisioning transaction.
-    supplied = os.environ.get("FLOW_MAF_PYTHON")
-    if supplied:
-        checked = probe(python_path=supplied, source_root=root)
-        if checked["state"] != READY:
-            raise MafRuntimeUnready(checked)
-        pointer_path(home).parent.mkdir(parents=True, exist_ok=True)
-        temp = pointer_path(home).with_suffix(".tmp")
-        temp.write_text(json.dumps({"schema_version": 1, "interpreter": checked["identity"]["interpreter"],
-                                    "identity": checked["identity"], "installed_at": int(time.time())},
-                                   sort_keys=True) + "\n")
-        os.replace(temp, pointer_path(home))
-        return checked
+    # FLOW_MAF_PYTHON is an execution/readiness override only.  It must never
+    # become the managed pointer: provisioning always produces a digest-
+    # addressed environment beneath FLOW_HOME.
     base = base_python or os.environ.get("FLOW_MAF_BASE_PYTHON") or sys.executable
     try:
         version_out = subprocess.run([base, "-c", "import sys; print('.'.join(map(str,sys.version_info[:3])))"], capture_output=True, text=True, timeout=10, check=True).stdout.strip()

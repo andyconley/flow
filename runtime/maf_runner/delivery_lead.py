@@ -18,6 +18,7 @@ from runtime.maf_runner.limits import MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGE
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
+SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
@@ -43,9 +44,10 @@ def _runtime_identity() -> dict[str, Any]:
              "opentelemetry-api", "pydantic", "pydantic-core", "python-dotenv", "pyyaml",
              "typing-inspection", "typing-extensions")
     packages = {name: version(name) for name in names}
-    identity = {"schema_version": 1, "interpreter": str(Path(sys.executable).resolve()),
+    identity = {"schema_version": 2, "interpreter": str(Path(sys.executable).resolve()),
                 "python": list(sys.version_info[:3]), "packages": packages,
-                "lock_digest": hashlib.sha256(lock.read_bytes()).hexdigest(), "protocols": [5, 6, 7, 8]}
+                "platform": sys.platform, "lock_digest": hashlib.sha256(lock.read_bytes()).hexdigest(),
+                "runner_digest": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "protocols": SUPPORTED_PROTOCOLS}
     identity["runtime_digest"] = _digest(identity)
     return identity
 
