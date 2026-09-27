@@ -155,6 +155,10 @@ async def _run(start: dict[str, Any]) -> None:
         "agent_framework_orchestrations._magentic:MagenticProgressLedger",
         "agent_framework_orchestrations._magentic:MagenticProgressLedgerItem",
     ])
+    # A credential-free construction milestone.  Flow will not permit a
+    # manager/action callback until this proves the runner's storage surface
+    # is usable under the sealed interpreter.
+    _write({"protocol_version": protocol_version, "type": "runtime_initialized"})
     workflow_name = f"flow-magentic-delivery-v{protocol_version}"
     manager_call = 0
     manager_round = 1

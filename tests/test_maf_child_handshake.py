@@ -23,11 +23,12 @@ class MafChildHandshakeTests(unittest.TestCase):
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             assert child.stdin and child.stdout
             envelope = {"execution_protocol_version": 8, "attempt_id": "handshake", "checkpoint_dir": checkpoint,
-                        "maf_runtime": identity}
+                        "maf_runtime": identity, "roster": [{"instance_id": "handshake-worker"}]}
             child.stdin.write(json.dumps({"protocol_version": 8, "type": "start", "envelope": envelope, "task": "never dispatch"}) + "\n")
             child.stdin.flush()
             first = json.loads(child.stdout.readline())
             self.assertEqual(first, {"protocol_version": 8, "type": "runtime_ready", "runtime": identity})
+            self.assertEqual(json.loads(child.stdout.readline()), {"protocol_version": 8, "type": "runtime_initialized"})
             child.kill()
             child.wait(timeout=5)
             child.stdin.close()

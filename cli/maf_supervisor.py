@@ -472,6 +472,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     pending = bytearray()
     manager_calls = actions = 0
     runtime_ready_seen = False
+    runtime_initialized_seen = False
     # v8 limits can grow by ledger grants, so the process guard backstops at
     # the runner ceiling; the ledger enforces the effective limit per call.
     expandable = protocol_version == 8
@@ -495,7 +496,12 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
                     raise MafProtocolError("MAF child runtime identity differs from the sealed envelope")
                 runtime_ready_seen = True
                 continue
-            if not runtime_ready_seen:
+            if kind == "runtime_initialized":
+                if not runtime_ready_seen or runtime_initialized_seen:
+                    raise MafProtocolError("MAF child runtime initialization is invalid")
+                runtime_initialized_seen = True
+                continue
+            if not runtime_ready_seen or not runtime_initialized_seen:
                 raise MafProtocolError("MAF child acted before proving runtime identity")
             if kind == "manager_request":
                 manager_calls += 1
