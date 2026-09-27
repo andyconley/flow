@@ -587,6 +587,16 @@ def activate_managed_maf_runtime() -> dict[str, object]:
     invocation. Failure is retained as an explicit install-config marker and
     never changes the selected source/config pair.
     """
+    # Never turn a project overlay or inferred legacy source into a machine
+    # mutation. The bridge belongs only to an explicit machine installation.
+    if not FLOW_CONFIG.is_file():
+        return {"attempted": False, "state": "unmanaged"}
+    try:
+        raw = read_toml(FLOW_CONFIG)
+    except Exception:
+        raw = {}
+    if not isinstance(raw.get("install"), dict) or not raw["install"].get("mode"):
+        return {"attempted": False, "state": "unmanaged"}
     config = read_install_config()
     if (config.get("maf_runtime_activation_revision") == MAF_RUNTIME_ACTIVATION_REVISION
             and config.get("maf_runtime_activation_state") in {"succeeded", "failed"}):

@@ -938,7 +938,8 @@ def main() -> int:
         bridge = activate_managed_maf_runtime()
         if bridge["attempted"]:
             print("MAF runtime post-activation: " + str(bridge["state"]) +
-                  ("; run `flow runtime install-maf` to repair." if bridge["state"] == "failed" else ""))
+                  ("; run `flow runtime install-maf` to repair." if bridge["state"] == "failed" else ""),
+                  file=sys.stderr)
 
     if args.command == "setup" and args.setup_target == "machine":
         return setup_machine()
