@@ -7,6 +7,7 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/step5-cancellation/acceptance-criteria.md",
+    "archive": ".flow/runs/step5-cancellation/archive.md",
     "handback": ".flow/runs/step5-cancellation/HANDOFF.md",
     "handoff": ".flow/runs/step5-cancellation/implementation-handoff.md",
     "implementation_evidence": ".flow/runs/step5-cancellation/validation-results.md",
@@ -49,23 +50,28 @@
       }
     }
   },
-  "dispositions": {},
+  "dispositions": {
+    "archive_enrichment": "1",
+    "capability_gaps": "recorded",
+    "memory": "updated"
+  },
   "gates": {
     "accept-review": "2026-09-27T19:18:16Z",
     "approve-definition": "2026-09-27T15:33:15Z",
     "approve-plan": "2026-09-27T15:59:40Z",
+    "archive": "2026-09-27T19:27:53Z",
     "mark-handback-ready": "2026-09-27T17:32:34Z",
     "start-definition": "2026-09-27T05:16:10Z",
     "start-implementation": "2026-09-27T16:12:50Z",
     "start-plan": "2026-09-27T15:33:33Z",
     "start-review": "2026-09-27T18:44:20Z"
   },
-  "lane": "review",
-  "last_event": "accept-review",
-  "phase": "review_accepted",
+  "lane": "archive",
+  "last_event": "archive",
+  "phase": "archived",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "review_accepted",
-  "updated_at": "2026-09-27T19:18:16Z",
+  "state": "archived",
+  "updated_at": "2026-09-27T19:27:53Z",
   "work_id": "step5-cancellation"
 }
