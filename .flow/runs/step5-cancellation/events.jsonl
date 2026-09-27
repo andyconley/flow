@@ -4,3 +4,4 @@
 {"artifacts": {"handoff": ".flow/runs/step5-cancellation/implementation-handoff.md", "plan": ".flow/runs/step5-cancellation/plan.md", "validation_plan": ".flow/runs/step5-cancellation/validation-plan.md"}, "at": "2026-09-27T15:59:40Z", "dispositions": {}, "event": "approve-plan", "from": "planning", "to": "plan_approved"}
 {"artifacts": {}, "at": "2026-09-27T16:12:50Z", "dispositions": {}, "event": "start-implementation", "from": "plan_approved", "to": "implementing"}
 {"artifacts": {"handback": ".flow/runs/step5-cancellation/HANDOFF.md", "implementation_evidence": ".flow/runs/step5-cancellation/validation-results.md"}, "at": "2026-09-27T17:32:34Z", "dispositions": {}, "event": "mark-handback-ready", "from": "implementing", "to": "handback_ready"}
+{"artifacts": {}, "at": "2026-09-27T18:44:20Z", "dispositions": {}, "event": "start-review", "from": "handback_ready", "to": "reviewing"}
