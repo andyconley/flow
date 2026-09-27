@@ -55,7 +55,7 @@ from runstate import (  # noqa: E402
 )
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
-from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
+from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, recover_runtime_startup, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
 from delivery_control import change_lead_claim  # noqa: E402
@@ -608,6 +608,15 @@ def main() -> int:
     run_chartered_parser.add_argument("--project-root", type=Path, help="Flow project checkout containing the approved run overlay")
     run_chartered_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
 
+    run_runtime_successor = run_sub.add_parser(
+        "recover-runtime-startup", help="create a linked successor for a sealed zero-send MAF startup failure")
+    run_runtime_successor.add_argument("work_id")
+    run_runtime_successor.add_argument("attempt_id")
+    run_runtime_successor.add_argument("--worktree", required=True, type=Path)
+    run_runtime_successor.add_argument("--source-commit", required=True)
+    run_runtime_successor.add_argument("--project-root", type=Path)
+    run_runtime_successor.add_argument("--json", action="store_true")
+
     run_delivery_resume = run_sub.add_parser(
         "resume-delivery-lead", help="restore an evidence-linked completed Magentic worker action without another send")
     run_delivery_resume.add_argument("work_id")
@@ -1069,6 +1078,18 @@ def main() -> int:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"chartered execution refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
+        return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "recover-runtime-startup":
+        import json
+        try:
+            result = recover_runtime_startup(args.work_id, args.attempt_id, args.worktree, args.source_commit, root=args.project_root)
+        except MafRuntimeUnready as exc:
+            print(json.dumps({"status": "refused", "reason": "maf_runtime_unready", "diagnostic": exc.diagnostic}, sort_keys=True) if args.json else f"runtime startup recovery refused: {exc}")
+            return 2
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"runtime startup recovery refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else f"successor attempt: {result['attempt_id']}")
         return 0 if result["status"] == "completed" else 1
     if args.command == "run" and args.run_target == "resume-delivery-lead":
         import json

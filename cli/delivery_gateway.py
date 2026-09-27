@@ -609,6 +609,36 @@ def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                                       seal_hook=seal_hook)
 
 
+def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, source_commit: str, *,
+                            root: Path | None = None) -> dict[str, Any]:
+    """Create a normal linked successor for one sealed zero-send MAF startup failure.
+
+    This never reopens the predecessor.  The normal chartered prepare path
+    rechecks authority, worktree and the now-healthy MAF runtime before it
+    creates the successor attempt.
+    """
+    project_root = (root or repo_root()).resolve()
+    ledger_path = project_root / ".flow" / "runs" / work_id / "execution" / "ledger.sqlite"
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        raise ContractError("runtime-startup predecessor is absent")
+    snapshot = ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
+    if snapshot.get("work_id") != work_id or snapshot.get("execution_protocol_version") != 8:
+        raise ContractError("runtime-startup predecessor is incompatible")
+    if snapshot.get("status") != "failed":
+        raise ContractError("runtime-startup predecessor is not a terminal failure")
+    reason = str(snapshot.get("reason") or "").lower()
+    if "maf" not in reason and "runtime" not in reason and "agent_framework" not in reason:
+        raise ContractError("terminal failure is not a MAF runtime-startup failure")
+    sent = {"started", "completed", "failed", "unknown"}
+    if any(item.get("status") in sent for item in snapshot.get("actions", [])) or any(
+            item.get("status") in sent for item in snapshot.get("manager_calls", [])):
+        raise ContractError("runtime-startup predecessor has observed or uncertain sends")
+    receipt_path = Path(str(snapshot.get("receipt_path") or ""))
+    if not receipt_path.is_file() or receipt_path.is_symlink() or not snapshot.get("sealed_receipt_sha256"):
+        raise ContractError("runtime-startup predecessor receipt is not sealed")
+    return execute_chartered_delivery(work_id, worktree, source_commit, root=project_root)
+
+
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
                            job: dict[str, Any], *, record: bool = True) -> dict[str, Any]:
     if _git(worktree, "rev-parse", "HEAD") != baseline["source_commit"]:
