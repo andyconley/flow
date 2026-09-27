@@ -1,0 +1,23 @@
+D3 — Ollama verifier reply is empty for a real diff (found at the preflight verifier gate, 2026-09-26, before any paid call)
+
+Request built exactly as Flow builds a v8 structured verifier call (cli/local_worker.py:68-73,
+delivery_gateway.py:1178-1182/1740): system = verifier_instructions(quality-reviewer body),
+user = _verifier_provider_task(charter task, v8-live-validation attempt-1 diff, sha, structured=True),
+format = VERIFIER_OUTPUT_SCHEMA, options.num_predict = 1024 (STRUCTURED_VERIFIER_NUM_PREDICT), no "think" field.
+Prompt: 13,162 chars, 3,298 prompt tokens. Model gemma4:26b, warm (100% GPU, keep_alive Forever).
+
+As Flow sends it (twice):
+  16.67 s  done_reason=length  eval_count=1024  content=""   (gate run, keep_alive -1)
+  13.67 s  done_reason=length  eval_count=1024  content=""   message.thinking = a long reasoning trace
+=> gemma4:26b is a thinking model; with no "think": false its reasoning consumes the whole
+   1024-token num_predict budget and the answer (message.content) is empty. Flow's strict parser
+   would judge the verifier reply unusable, so the live verifier cannot pass on a real four-file diff.
+   The 2026-09-25 live check (local-verifier-json-contract, 6/6) used much smaller inputs, where the
+   reasoning fit inside the budget.
+
+Same request plus "think": false (twice):
+   4.87 s  done_reason=stop  eval_count=112  content = schema-valid JSON verdict (decision pass)
+   1.90 s  done_reason=stop  eval_count=133  content = schema-valid JSON verdict (decision pass)
+
+Classification: Flow defect (R7) — the Ollama verifier call does not disable model thinking.
+Fixed in its own run. No attempt was created; no paid call was made.

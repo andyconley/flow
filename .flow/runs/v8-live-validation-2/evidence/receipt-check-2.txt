@@ -1,0 +1,10 @@
+validate_receipt: ok
+receipt sha256 matches ledger: True
+status: failed | reason: editor changed files outside the approved job scope
+predecessors: ['22ab86c3559e4fd89e47cb9e59ebece2']
+lineage_usage: {'predecessor_paid_calls': 1, 'predecessor_verifier_sends': 0}
+expansion requests: [('delegate', ['paid_worker_calls'], 'granted', 'engineer', 'andy', 'consumed', '1009dd3c83c457668d74bcd5eb810992e9cef604d5ccdd8388a31e2f88f96f61')]
+manager_progress block: None
+action: docs-editor completed expansion_granted flow_observed_claude_cli_completed_turn physical: True usage: {'cache_creation_input_tokens': 34110, 'cache_read_input_tokens': 17162, 'input_tokens': 4, 'output_tokens': 1705}
+events: ['attempt_started', 'manager_policy_allowed', 'manager_send_started', 'manager_response_observed', 'manager_policy_allowed', 'manager_send_started', 'manager_response_observed', 'manager_policy_allowed', 'manager_send_started', 'manager_response_observed', 'expansion_requested', 'policy_denied', 'magentic_checkpoint_bound', 'expansion_decided', 'recovery_claimed', 'duplicate_request', 'expansion_grant_consumed', 'policy_allowed', 'worker_dispatched', 'adapter_send_started', 'response_observed', 'worker_completed', 'runtime_outcome_recorded', 'attempt_failed']
+recoveries: [('pending', None)]

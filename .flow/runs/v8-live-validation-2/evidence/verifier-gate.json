@@ -1,0 +1,11 @@
+{
+  "seconds": 16.67,
+  "limit": 30.0,
+  "schema_json": false,
+  "verdict": "no-go",
+  "prompt_chars": 13162,
+  "eval_count": 1024,
+  "prompt_eval_count": 3298,
+  "load_duration_s": 0.23,
+  "reply": ""
+}

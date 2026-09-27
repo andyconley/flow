@@ -1,0 +1,69 @@
+diff --git a/README.md b/README.md
+index a8b5944..1cf0c3e 100644
+--- a/README.md
++++ b/README.md
+@@ -216,6 +216,7 @@ This is the command map, not the full reference. For detailed flags and behavior
+ | `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Run an approved charter-selected specialist roster through Flow-gated Magentic |
+ | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
+ | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
++| `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny one pending v8 expansion request of a paused attempt; resume with `flow run recover-delivery-lead` |
+ | `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |
+ | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
+ | `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
+diff --git a/docs/cli-reference.md b/docs/cli-reference.md
+index 3c7fd92..41e7377 100644
+--- a/docs/cli-reference.md
++++ b/docs/cli-reference.md
+@@ -182,6 +182,25 @@ Read the current Flow-owned Shaper-to-Delivery authority and, when present, one
+ 
+ The JSON view reports lifecycle state, the sealed charter and owner generation, protocol compatibility diagnostics, and the v7 attempt's current execution and resume eligibility. Historical v6 envelopes remain readable evidence but always report `executable: false` and `resumable: false`; create a new sealed Delivery Charter for new work.
+ 
++### `flow run decide-expansion <work-id> <attempt-id> <request-id>`
++
++Approve or deny one pending v8 expansion request of a paused attempt (ADR 0017).
++
++```sh
++flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) \
++  --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]
++```
++
++`--expected-generation` is a compare-and-swap on the attempt's owner generation; a mismatch refuses rather than deciding against a stale view. The command refuses rather than deciding when:
++
++- `--expected-generation` no longer matches the attempt's current owner generation
++- the request id is unknown, or was already decided (granted, denied, or cancelled)
++- the attempt is not truly paused — an action or manager call is still started or unknown
++- the Delivery Lead claim backing the attempt is no longer active
++- an approval would grant past a runner ceiling for the requested limit
++
++A decision changes only the request and grant records; it never dispatches or resumes the attempt. After a decision, resume the attempt with `flow run recover-delivery-lead`.
++
+ ### `flow run resume-execution <work-id> <attempt-id>`
+ 
+ Fence the previous parent and reopen the same attempt. An uncertain dispatch returns `reconciliation_required` without a provider send. The v1 path can replay one committed result through a bound MAF checkpoint. For v2, a completed first or second action can be replayed through its verified pending checkpoint in a fresh MAF process; Flow reuses committed results and decisions and authorizes only the next logical action. A missing, changed, or incompatible checkpoint halts as a runtime protocol gap. A matching receipt written before the ledger's terminal update is repaired without dispatch. An unresolved third action always halts pending reconciliation. This command never allocates a replacement attempt.
+diff --git a/scaffolds/default/commands/flow-help.md b/scaffolds/default/commands/flow-help.md
+index a4ecb7f..f27ce00 100644
+--- a/scaffolds/default/commands/flow-help.md
++++ b/scaffolds/default/commands/flow-help.md
+@@ -108,6 +108,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
+ | `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Run an approved charter-selected specialist roster through Flow-gated Magentic |
+ | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
+ | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
++| `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny one pending v8 expansion request of a paused attempt; resume with `flow run recover-delivery-lead` |
+ | `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |
+ | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
+ | `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
+diff --git a/scaffolds/default/flow.toml b/scaffolds/default/flow.toml
+index 77bb8fb..6e7231a 100644
+--- a/scaffolds/default/flow.toml
++++ b/scaffolds/default/flow.toml
+@@ -584,6 +584,10 @@ summary = "Inspect durable local execution evidence without dispatch"
+ invocation = "flow run inspect-delivery WORK_ID [--attempt-id ID]"
+ summary = "Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch"
+ 
++[[help.cli_commands]]
++invocation = "flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]"
++summary = "Approve or deny one pending v8 expansion request of a paused attempt; resume with `flow run recover-delivery-lead`"
++
+ [[help.cli_commands]]
+ invocation = "flow run resume-execution WORK_ID ATTEMPT_ID"
+ summary = "Fence the former owner and reopen a safe local attempt"

@@ -538,3 +538,19 @@ Status: observed 2 times, promoted from the capability-gap ledger
 No framework command runs declared mutation checks (break, run named test, confirm failure, restore) and records the results
 
 No harness for mutation checks; ten mutate-test-restore cycles were scripted by hand, and a git restore once discarded uncommitted work
+
+### Local Verifier Realistic Load Check
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+Live acceptance checks for the local verifier used inputs far smaller than a real job's diff, so a reasoning model exhausting its output budget went unnoticed until a live run's preflight
+
+No built-in preflight exercises the local verifier with a realistic diff-sized request; a gate script had to be written by hand
+
+### Handback Unreached Assignment Outputs
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+The handback gate requires output files for every manifest assignment, including ones a halted run never reached, forcing placeholder outputs
+
+The handback gate again required output files for manifest assignments a run never reached
