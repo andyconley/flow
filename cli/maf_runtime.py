@@ -166,6 +166,22 @@ def provision(*, home: Path | None = None, source_root: Path | None = None,
     """
     root = source_root or _source_root()
     home = home or FLOW_HOME
+    # An explicitly selected interpreter is a verified reusable runtime, not
+    # an ambient fallback.  This supports offline installs where an operator
+    # has already built the locked environment, while the default path below
+    # remains the staged managed-environment provisioning transaction.
+    supplied = os.environ.get("FLOW_MAF_PYTHON")
+    if supplied:
+        checked = probe(python_path=supplied, source_root=root)
+        if checked["state"] != READY:
+            raise MafRuntimeUnready(checked)
+        pointer_path(home).parent.mkdir(parents=True, exist_ok=True)
+        temp = pointer_path(home).with_suffix(".tmp")
+        temp.write_text(json.dumps({"schema_version": 1, "interpreter": checked["identity"]["interpreter"],
+                                    "identity": checked["identity"], "installed_at": int(time.time())},
+                                   sort_keys=True) + "\n")
+        os.replace(temp, pointer_path(home))
+        return checked
     base = base_python or os.environ.get("FLOW_MAF_BASE_PYTHON") or sys.executable
     try:
         version_out = subprocess.run([base, "-c", "import sys; print('.'.join(map(str,sys.version_info[:3])))"], capture_output=True, text=True, timeout=10, check=True).stdout.strip()

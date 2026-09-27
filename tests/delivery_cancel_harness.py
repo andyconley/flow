@@ -38,6 +38,19 @@ from tests.test_chartered_delivery_gateway import CharteredFixture  # noqa: E402
 PASS = CharteredFixture.PASS
 
 
+def test_runtime_identity() -> dict:
+    """Provide a sealed test-only identity for subprocess cancellation seams.
+
+    These scenarios exercise parent cancellation and receipt handling, not
+    managed-runtime provisioning.  The normal gateway's readiness fence is
+    covered separately; this local patch keeps the child harness hermetic.
+    """
+    interpreter = os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    return {"schema_version": 1, "interpreter": interpreter, "python": [3, 12, 0],
+            "packages": {"agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0"},
+            "lock_digest": "a" * 64, "protocols": [5, 6, 7, 8], "runtime_digest": "b" * 64}
+
+
 def announce(fifo: str, line: str) -> None:
     fd = os.open(fifo, os.O_WRONLY)
     try:
@@ -131,6 +144,7 @@ def main() -> int:
         return {"command": job["test"]["argv"], "status": "passed", "output_sha256": "0" * 64}
     try:
         with patch("delivery_gateway.run_status", return_value=state), \
+             patch("delivery_gateway.require_ready", return_value=test_runtime_identity()), \
              patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
              patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role), \
              patch("delivery_gateway._run_chartered_test", side_effect=fake_test):

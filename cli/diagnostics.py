@@ -607,7 +607,10 @@ def doctor(as_json: bool = False, check: bool = False) -> int:
     maf = maf_probe()
     diagnostics.append(diagnostic(
         "delivery.maf_runtime", STATUS_OK if maf["state"] == "ready" else STATUS_WARNING,
-        SEVERITY_INFO if maf["state"] == "ready" else SEVERITY_WARNING,
+        # MAF gates only chartered delivery.  Its absence must stay visible
+        # without turning an otherwise healthy base-Flow doctor --check into
+        # a failure.
+        SEVERITY_INFO,
         maf["state"], "MAF Delivery runtime is ready" if maf["state"] == "ready" else "MAF Delivery runtime is unavailable; base Flow remains available",
         next_action=None if maf["state"] == "ready" else maf["remedy"]))
     if as_json:

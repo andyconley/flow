@@ -162,7 +162,10 @@ class LiveCancelTests(CancelFixture):
 
     def _blocking_child(self):
         fake = self.root / "blocking-maf"
-        fake.write_text(f"#!{sys.executable}\nimport os, sys, time\nsys.stdin.readline()\n"
+        fake.write_text(f"#!{sys.executable}\nimport json, os, sys, time\n"
+                        "start = json.loads(sys.stdin.readline())\n"
+                        "print(json.dumps({'protocol_version': start['protocol_version'], 'type': 'runtime_ready', "
+                        "'runtime': start['envelope']['maf_runtime']}), flush=True)\n"
                         f"fd = os.open({str(self.fifo)!r}, os.O_WRONLY); os.write(fd, b'blocked\\n'); os.close(fd)\n"
                         "time.sleep(300)\n")
         fake.chmod(0o700)

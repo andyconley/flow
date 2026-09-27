@@ -107,6 +107,11 @@ def build_terminal_receipt(envelope: dict[str, Any], attempt_dir: Path, snapshot
     receipt.update({field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest",
                                                           "handoff_digest", "delivery_lead_claim_digest",
                                                           "delivery_lead_claim")})
+    # v8 envelopes sealed after MAF readiness was introduced carry the exact
+    # runtime identity into terminal receipts too.  Older delivery envelopes
+    # legitimately omit it, so do not manufacture a field for them.
+    if "maf_runtime" in envelope:
+        receipt["maf_runtime"] = envelope["maf_runtime"]
     receipt["termination"] = {"actor": termination["actor"], "explanation": termination["explanation"],
                               "cause": termination["cause"], "owner_generation": snapshot["owner_generation"],
                               "lead_generation": envelope["delivery_lead_claim"]["generation"]}

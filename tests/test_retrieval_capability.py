@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import venv
 from unittest.mock import patch
 
 
@@ -37,6 +38,23 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.home = Path(self.temporary.name) / "home"
         self.home.mkdir()
         self.receipt = self.home / ".flow" / "retrieval-capabilities.json"
+        # A local distribution-metadata interpreter is sufficient for the
+        # installer/retrieval boundary: MAF workflow execution is deliberately
+        # covered by the real managed-interpreter handshake test instead.
+        self.maf_env = self.home / "maf-fixture"
+        venv.EnvBuilder(with_pip=False).create(self.maf_env)
+        self.maf_python = self.maf_env / "bin" / "python"
+        site_packages = Path(subprocess.check_output(
+            [str(self.maf_python), "-c", "import site; print(site.getsitepackages()[0])"], text=True).strip())
+        for package, version in {
+            "agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0",
+            "annotated-types": "0.8.0", "msgspec": "0.21.1", "opentelemetry-api": "1.45.0",
+            "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
+            "PyYAML": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
+        }.items():
+            metadata = site_packages / (package.replace("-", "_") + ".dist-info")
+            metadata.mkdir()
+            (metadata / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {package}\nVersion: {version}\n")
 
     def test_injected_fts5_failure_keeps_plain_sqlite_usable_and_names_runtime(self):
         with sqlite3.connect(":memory:") as database:
@@ -95,7 +113,8 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.assertEqual(payload["warnings"], 0)
 
     def test_isolated_develop_install_probes_the_selected_interpreter(self):
-        env = {**__import__("os").environ, "HOME": str(self.home), "FLOW_PYTHON": sys.executable}
+        env = {**__import__("os").environ, "HOME": str(self.home), "FLOW_PYTHON": sys.executable,
+               "FLOW_MAF_PYTHON": str(self.maf_python)}
         result = subprocess.run([str(ROOT / "install-flow.sh"), "--develop"], cwd=ROOT, env=env, text=True, capture_output=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = self.home / ".flow" / "retrieval-capabilities.json"
@@ -124,6 +143,7 @@ class RetrievalCapabilityTests(unittest.TestCase):
             **__import__("os").environ,
             "HOME": str(self.home),
             "FLOW_PYTHON": sys.executable,
+            "FLOW_MAF_PYTHON": str(self.maf_python),
             "PYTHONPATH": str(injection),
         }
         install = subprocess.run([str(ROOT / "install-flow.sh"), "--develop"], cwd=ROOT, env=env, text=True, capture_output=True, timeout=60)
