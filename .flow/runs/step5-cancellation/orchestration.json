@@ -21,7 +21,10 @@
     "evidence_collector_assignment": "definition-root",
     "independent": true,
     "producer_assignments": [
-      "definition-root"
+      "definition-root",
+      "research-live-child",
+      "research-abandon-seal",
+      "research-shaper-authority"
     ],
     "verifier_assignment": "adversarial-architecture"
   },

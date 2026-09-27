@@ -77,4 +77,4 @@
 - `research-live-child`, `research-abandon-seal` and `research-shaper-authority` are writable, and each wrote its `research/*.md` note;
 - but `verification.producer_assignments` lists only `definition-root`.
 
-The truthful fix is to add those three to `producer_assignments`. The verifier, `adversarial-architecture`, stays distinct. But `orchestration.json` is a sealed definition artifact (`approved_artifact_digests.orchestration_manifest`), so Andy makes that amendment. `accept-review` is held until then.
+The truthful fix is to add those three to `producer_assignments`. The verifier, `adversarial-architecture`, stays distinct. But `orchestration.json` is a sealed definition artifact (`approved_artifact_digests.orchestration_manifest`), so Andy made that amendment himself on 2026-09-27. After it, the acceptance validation passes. The approved digest in `run.json` still records the definition-time manifest; this amendment is the only change.

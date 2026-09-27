@@ -13,6 +13,7 @@
     "orchestration_manifest": ".flow/runs/step5-cancellation/orchestration.json",
     "plan": ".flow/runs/step5-cancellation/plan.md",
     "requirements": ".flow/runs/step5-cancellation/requirements.md",
+    "review": ".flow/runs/step5-cancellation/review.md",
     "shaper_intent": ".flow/runs/step5-cancellation/shaper-intent.json",
     "validation_plan": ".flow/runs/step5-cancellation/validation-plan.md"
   },
@@ -50,6 +51,7 @@
   },
   "dispositions": {},
   "gates": {
+    "accept-review": "2026-09-27T19:18:16Z",
     "approve-definition": "2026-09-27T15:33:15Z",
     "approve-plan": "2026-09-27T15:59:40Z",
     "mark-handback-ready": "2026-09-27T17:32:34Z",
@@ -59,11 +61,11 @@
     "start-review": "2026-09-27T18:44:20Z"
   },
   "lane": "review",
-  "last_event": "start-review",
-  "phase": "reviewing",
+  "last_event": "accept-review",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "reviewing",
-  "updated_at": "2026-09-27T18:44:20Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-27T19:18:16Z",
   "work_id": "step5-cancellation"
 }
