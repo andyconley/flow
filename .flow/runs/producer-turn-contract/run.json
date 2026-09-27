@@ -7,7 +7,9 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/producer-turn-contract/acceptance-criteria.md",
+    "handback": ".flow/runs/producer-turn-contract/HANDOFF.md",
     "handoff": ".flow/runs/producer-turn-contract/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/producer-turn-contract/validation-results.md",
     "orchestration_manifest": ".flow/runs/producer-turn-contract/orchestration.json",
     "plan": ".flow/runs/producer-turn-contract/plan.md",
     "requirements": ".flow/runs/producer-turn-contract/requirements.md",
@@ -50,15 +52,17 @@
   "gates": {
     "approve-definition": "2026-09-27T03:43:21Z",
     "approve-plan": "2026-09-27T03:47:56Z",
+    "mark-handback-ready": "2026-09-27T03:56:23Z",
     "start-definition": "2026-09-27T03:42:51Z",
+    "start-implementation": "2026-09-27T03:48:57Z",
     "start-plan": "2026-09-27T03:43:21Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-27T03:47:56Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-27T03:56:23Z",
   "work_id": "producer-turn-contract"
 }
