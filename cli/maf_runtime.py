@@ -138,6 +138,8 @@ def probe(*, python_path: str | None = None, home: Path | None = None,
     identity = {"schema_version": 1, "interpreter": str(binary.resolve()), "python": observed["python"],
                 "packages": packages, "lock_digest": lock_digest(root), "protocols": SUPPORTED_PROTOCOLS}
     identity["runtime_digest"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if pointer and isinstance(pointer.get("identity"), dict) and pointer["identity"].get("lock_digest") != identity["lock_digest"]:
+        return _result("lock_mismatch", source=source, remedy="run `flow runtime install-maf`", identity=identity)
     if pointer and pointer.get("identity") != identity:
         return _result("identity_mismatch", source=source, remedy="run `flow runtime install-maf`", identity=identity)
     return _result(READY, source=source, remedy="none", identity=identity)
