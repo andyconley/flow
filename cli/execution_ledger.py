@@ -272,7 +272,8 @@ class ExecutionLedger:
         fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
             os.fchmod(fd, 0o600)
-            deadline = time.monotonic() + 10
+            started = time.monotonic()
+            deadline = started + 10
             while True:
                 try:
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -281,6 +282,11 @@ class ExecutionLedger:
                     # The holder names itself right after locking; an unnamed
                     # holder is a live run that has not written its name yet.
                     current = os.pread(fd, 16, 0).decode(errors="ignore")
+                    # A read-only liveness probe holds the lock for an instant
+                    # and never names itself; outlast it rather than refuse.
+                    if time.monotonic() < started + 0.25:
+                        time.sleep(0.01)
+                        continue
                     # One expansion decision briefly queues behind another, so
                     # the loser sees the winner's decision; nothing else waits.
                     if holder == "decide" and current == "decide" and time.monotonic() < deadline:
@@ -293,6 +299,29 @@ class ExecutionLedger:
                 yield
             finally:
                 fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+    def probe_recovery_lock(self, attempt_id: str) -> str:
+        """``held``, ``free``, or ``absent``: whether some owner holds the attempt fence right now.
+
+        Read-only corroboration for inspection and the stuck scan: it never
+        creates the lock file, never writes a holder name, and unlocks at once.
+        """
+        if not attempt_id or any(not (char.isalnum() or char in "-_") for char in attempt_id):
+            raise ContractError("recovery lock request is invalid")
+        path = self.path.parent / f"recovery-{attempt_id}.lock"
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except FileNotFoundError:
+            return "absent"
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return "held"
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            return "free"
         finally:
             os.close(fd)
 
