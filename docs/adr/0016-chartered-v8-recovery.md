@@ -93,6 +93,15 @@ since receipt validation alone can only bound the self-reported counts.
 `max_manager_calls` stays per attempt, so a successor has a fresh manager
 budget; the first verifier of a successor is not a retry.
 
+## Amendment: cancelled and abandoned attempts (ADR 0019)
+
+The lead-change blocker and the superseded seal now skip exactly
+`cancelled` and `abandoned` attempts, whose receipts seal their uncertain
+rows. Any `started` attempt, and a v5–v7 attempt sealed `unknown`, still
+blocks. Both statuses are terminal: recovery refuses them with
+`attempt_terminal` even after an earlier recovery, and a successor lists
+them as predecessors.
+
 ## Amendment: v8 operator reconcile (chunk 2)
 
 `resolve-execution` accepts a `started` protocol v8 attempt only as

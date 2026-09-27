@@ -1,6 +1,6 @@
 # Adopting Microsoft Agent Framework beneath Flow
 
-Status: architecture direction accepted 2026-09-19. Updated 2026-09-25.
+Status: architecture direction accepted 2026-09-19. Updated 2026-09-27.
 
 Progress against the adoption sequence below:
 
@@ -10,7 +10,7 @@ Progress against the adoption sequence below:
 | 2. Guarded local vertical slice | Done | Supervised local runner; the gateway is the only participant construction path |
 | 3. Multi-turn and recovery | Done | Protocol v5 resume; chartered v8 recovery from the latest bound checkpoint, with operator reconcile (ADR 0012, 0013, 0016; v0.35.0) |
 | 4. Provider adapters and usage | Done, no enforced cap | Codex, Claude, and Ollama adapters with observed usage. Call, runtime, and output bounds apply; there is no token or dollar cap. |
-| 5. Shaper approval and operational handback | In progress: delegated expansion built (slice 1, ADR 0017) | See below |
+| 5. Shaper approval and operational handback | In progress: delegated expansion (ADR 0017) and cancellation with stuck-run recovery (ADR 0019) built | See below |
 
 - **Shipped on the chartered path:**
   - Shaper Contract, Delivery Charter, and a fenced Delivery Lead claim sealed at `start-plan` (ADR 0014, v7).
@@ -22,8 +22,12 @@ Progress against the adoption sequence below:
   - A v8 limit hit within the lineage's headroom is granted automatically. Anything beyond it pauses the attempt for `flow run decide-expansion`, and `recover-delivery-lead` replays the paused proposal under the decision.
   - Receipts list and recompute every request and grant. Replans stay unexpandable, and the optional specialist pool is deferred.
 - **Manager progress repair and retry (ADR 0018):** a malformed Magentic progress reply is repaired (invalid JSON escapes only) or retried as up to two extra Flow-gated manager calls, which count against the limits but not as rounds. The third unparsable reply fails the attempt without a replan, and receipts carry a recomputed `manager_progress` block.
+- **Step 5, cancellation and stuck-run recovery (ADR 0019):**
+  - `flow run cancel-delivery` stops a live v8 parent cooperatively. It verifies the parent's recorded identity and sends SIGTERM; the parent kills its recorded process groups and seals the attempt `cancelled`.
+  - `flow run abandon-delivery` reaps a stuck attempt's recorded groups and seals it `abandoned`. That covers the unknown-send dead end, the runtime cap and a paused expansion.
+  - Both keep every uncertain send uncertain, stop blocking lead changes, and let a successor continue the work id.
+  - `flow run stuck` names each started attempt and its next command, and `flow run delivery-lead` changes the lead claim from the CLI.
 - **Step 5, not built yet:**
-  - Cancellation, and recovery of a stuck run beyond the operator reconcile route.
   - Trace correlation across Flow, MAF, and provider sessions.
   - A handback through MCP. The MCP bridge only reads state and evidence and submits a proposed charter.
   - An enforced token cap.
