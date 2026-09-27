@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 import process_identity
+from delivery_cancel import CANCEL_REQUEST
 from claude_edit_worker import MAX_TRACE_BYTES
 from delivery_control import run_lock
 from delivery_projection import lead_claim_active
@@ -179,10 +180,11 @@ def abandon_delivery(work_id: str, attempt_id: str, *, actor: str, explanation: 
                      root: Path | None = None) -> dict[str, Any]:
     """Seal a stuck started v8 attempt as abandoned after reaping its recorded process groups.
 
-    Fences mirror a lead change (ADR 0016 order): the run lock, a
-    non-blocking claim of the attempt's recovery lock held until the seal (a
-    live run refuses as ``attempt_running``, a recovery or decision as
-    ``recovery_in_progress``), then the send lock and the ledger transaction.
+    Fences: a non-blocking claim of the attempt's recovery lock held until
+    the seal (a live run refuses as ``attempt_running``, a recovery or
+    decision as ``recovery_in_progress``), then the run lock, then the send
+    lock and the ledger transaction. Claiming the recovery lock first means a
+    live parent holding the run lock through a guarded send is refused at once.
     It works whatever the lead status is and never changes the lead claim.
     """
     if type(expected_generation) is not int:
@@ -306,7 +308,6 @@ def stuck_attempts(root: Path | None = None) -> list[dict[str, Any]]:
     return found
 
 
-CANCEL_REQUEST = "cancel-request.json"
 SEAL_DEADLINE_SECONDS = 30
 CANCEL_WAIT_SECONDS = 45
 
@@ -392,7 +393,11 @@ def stop_on_cancel(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
     lead claim is not consulted (the seal must work under any lead status).
     """
     aid = envelope["attempt_id"]
-    reaped = process_identity.reap(attempt_dir)
+    try:
+        reaped = process_identity.reap(attempt_dir)
+    except (OSError, ValueError) as exc:
+        # A failed reap must not skip the seal or the interruption; abandon reaps again.
+        reaped = [{"action": "reap_failed", "detail": str(exc)[:256]}]
     deadline = time.monotonic() + SEAL_DEADLINE_SECONDS
     request = valid_cancel_request(attempt_dir, aid, generation)
     refusal = "no valid cancel request for this attempt and generation"
@@ -407,13 +412,13 @@ def stop_on_cancel(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
                                                             actor=request["actor"], explanation=request["explanation"],
                                                             cause="cancel_request"))
             return {**sealed, "reason": "cancel_request", "reaped": reaped}
-        except (LockDeadline, ContractError) as exc:
+        except (LockDeadline, ContractError, OSError, sqlite3.Error) as exc:
             refusal = f"cancelled seal refused: {exc}"
     try:
         with parent_fences(attempt_dir, ledger, deadline):
             interruption = ledger.record_interruption(aid, "cancel_signal", f"{refusal}; {detail}"[:512],
                                                       generation=generation)
-    except (LockDeadline, ContractError) as exc:
+    except (LockDeadline, ContractError, OSError, sqlite3.Error) as exc:
         # The claim records the process exit instead when recovery starts.
         return {"attempt_id": aid, "status": "interrupted", "reason": "cancel_signal", "receipt_path": None,
                 "detail": f"{refusal}; interruption not recorded: {exc}"[:512], "reaped": reaped}

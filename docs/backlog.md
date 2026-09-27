@@ -554,3 +554,34 @@ Status: observed 2 times, promoted from the capability-gap ledger
 The handback gate requires output files for every manifest assignment, including ones a halted run never reached, forcing placeholder outputs
 
 The handback gate again required output files for manifest assignments a run never reached
+
+### Delivery Termination Follow-Ups
+
+Status: open, from the `step5-cancellation` acceptance review (ADR 0019)
+
+- **Successor worktree drift.** After a cancel or abandon, a producer's partial
+  edit stays in the worktree, and a successor's prepare refuses it.
+  - `inspect-delivery` should report baseline drift for a terminal attempt and
+    suggest a reset to `source_commit`.
+  - Add an AC7 variant whose stub producer edits before the stop.
+- **Stronger process evidence.**
+  - Mirror each group registration in the ledger, and have `reap` require the
+    mirror to match.
+  - Have `change_lead_claim` return stable codes instead of prose.
+- **Hardening for multi-writer or Linux hosts.** Each of these needs write
+  access to `.flow`, or a busy Linux host:
+  - Re-check each member's start time right before signalling it (a pidfd on
+    Linux).
+  - Bound the `stuck` reads of `run.json` and add its component symlink checks.
+  - Poll the abandon `run_lock` and `send_lock` against a deadline.
+  - Open `groups.jsonl` with a FIFO check.
+  - Use `lexists` for every `.closed` check.
+  - Cross-check the record's `attempt_id`.
+  - Refuse the host-name machine-id fallback.
+- **Cancel reporting.**
+  - A CLI that times out can report `cancel_timeout` for an attempt the parent
+    sealed `cancelled`.
+  - A request left by a CLI killed mid-cancel can still count within that run.
+  - A terminal receipt's `evidence.edit` could carry the `repair.diff` digest.
+- **Linux validation.** The `/proc` start-time reader and pidfd signalling are
+  parser-tested only.

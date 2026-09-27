@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import select
@@ -11,12 +12,14 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 import delivery_cancel  # noqa: E402
+import delivery_termination  # noqa: E402
 import process_identity  # noqa: E402
 from delivery_control import change_lead_claim  # noqa: E402
 from delivery_termination import CANCEL_REQUEST, cancel_delivery  # noqa: E402
@@ -267,6 +270,34 @@ class SignalWithoutRequestTests(CancelFixture):
         self.assertEqual(outcome["result"]["status"], "completed")
         self.assertEqual(reply["receipt_path"], outcome["result"]["receipt_path"])
         self.assertEqual(self.ledger().snapshot(self.attempt_id())["status"], "completed")
+
+
+class ReviewRefinementTests(unittest.TestCase):
+    """Acceptance-review fixes: a leftover request and a failed reap."""
+
+    def test_a_request_left_before_the_parent_recorded_itself_is_cleared(self):
+        # A cancel CLI that died after writing its request must not let a later
+        # stray SIGTERM seal cancelled under that request's actor.
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt_dir = Path(tmp)
+            (attempt_dir / CANCEL_REQUEST).write_text(json.dumps(
+                {"schema_version": 1, "attempt_id": "a1", "owner_generation": 1, "actor": "andy",
+                 "explanation": "left over", "nonce": "0" * 32}))
+            with delivery_cancel.parent_scope(attempt_dir, 1, attempt_id="a1"):
+                self.assertFalse(os.path.lexists(attempt_dir / CANCEL_REQUEST))
+                self.assertIsNone(delivery_termination.valid_cancel_request(attempt_dir, "a1", 1))
+
+    def test_a_failed_reap_still_records_the_interruption(self):
+        ledger = unittest.mock.Mock()
+        ledger.record_interruption.return_value = {"interruption_id": "i1"}
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(process_identity, "reap", side_effect=OSError("ps unavailable")), \
+                patch.object(delivery_termination, "parent_fences", lambda *_: contextlib.nullcontext()):
+            outcome = delivery_termination.stop_on_cancel({"attempt_id": "a1"}, Path(tmp), ledger,
+                                                          generation=1, detail="sigterm")
+        self.assertEqual((outcome["status"], outcome["interruption_id"]), ("interrupted", "i1"))
+        self.assertEqual(outcome["reaped"][0]["action"], "reap_failed")
+        ledger.record_interruption.assert_called_once()
 
 
 class CancelRefusalTests(CancelFixture):

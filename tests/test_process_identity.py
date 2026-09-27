@@ -10,6 +10,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
@@ -220,6 +221,46 @@ class ReapTests(ControlRecordTests):
         self.assertTrue(process_identity.pid_alive(elder))
         [record] = process_identity.records(self.attempt_dir)
         self.assertFalse(process_identity.group_alive(record["groups"][0], record))
+
+    def test_a_refused_signal_is_reported_and_the_reap_goes_on(self):
+        # EPERM (a setuid member, a changed uid) must not stop an abandon or a
+        # cancelled parent's seal partway through the reap.
+        refused, killed = _sleeper(), _sleeper()
+        self.addCleanup(_stop, refused)
+        self.addCleanup(_stop, killed)
+        self._record(1, [(refused.pid, "test"), (killed.pid, "provider")])
+        real_killpg = os.killpg
+
+        def killpg(pgid, sig):
+            if pgid == refused.pid:
+                raise PermissionError(1, "Operation not permitted")
+            real_killpg(pgid, sig)
+
+        with mock.patch.object(process_identity.os, "killpg", killpg):
+            report = process_identity.reap(self.attempt_dir)
+        self.assertEqual([item["action"] for item in report], ["skipped_permission", "killed_group"])
+        self.assertIsNone(refused.poll())
+        killed.wait(timeout=10)
+
+    def test_a_leader_owned_by_another_user_is_never_signalled(self):
+        leader = _sleeper()
+        self.addCleanup(_stop, leader)
+        self._record(1, [(leader.pid, "provider")])
+        with mock.patch.object(process_identity, "_uid", return_value=os.getuid() + 1), \
+                mock.patch.object(process_identity.os, "killpg") as killpg:
+            report = process_identity.reap(self.attempt_dir)
+        self.assertEqual(report[0]["action"], "skipped_other_user")
+        killpg.assert_not_called()
+
+    def test_the_callers_group_is_never_signalled(self):
+        leader = _sleeper()
+        self.addCleanup(_stop, leader)
+        self._record(1, [(leader.pid, "provider")])
+        with mock.patch.object(process_identity.os, "getpgid", return_value=leader.pid), \
+                mock.patch.object(process_identity.os, "killpg") as killpg:
+            report = process_identity.reap(self.attempt_dir)
+        self.assertEqual(report[0]["action"], "skipped_unverifiable")
+        killpg.assert_not_called()
 
     def test_every_generation_is_considered(self):
         first, second = _sleeper(), _sleeper()

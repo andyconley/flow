@@ -11,12 +11,16 @@ stack has unwound.
 
 from __future__ import annotations
 
+import os
 import signal
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, ContextManager, Iterator
 
 import process_identity
+
+# The cancel CLI's request file, per attempt directory (ADR 0019).
+CANCEL_REQUEST = "cancel-request.json"
 
 
 class DeliveryCancelled(Exception):
@@ -97,6 +101,12 @@ def parent_scope(attempt_dir: Path, generation: int, *, attempt_id: str) -> Iter
     cancel never signals a parent without its handler.
     """
     global _CURRENT
+    # A request present before this parent recorded itself is left over from
+    # a cancel CLI that died; it must never turn a later stray SIGTERM into a
+    # cancel. (The CLI writes a request only after seeing this parent live.)
+    stale = attempt_dir / CANCEL_REQUEST
+    if os.path.lexists(stale):
+        stale.unlink()
     controller = CancelController()
     supported = controller.install()
     _CURRENT = controller if supported else None

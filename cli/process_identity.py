@@ -364,15 +364,21 @@ def reap(attempt_dir: Path) -> list[dict[str, Any]]:
     A leader still alive with its recorded start time: its whole group is
     killed. A leader that is gone: only this user's members of that pgid that
     started at or after the recorded leader are killed, so a reused pgid is
-    never hit. Anything else is reported and never signalled.
+    never hit. Flow's own group, its caller's group, and a leader owned by
+    another user are never signalled. Anything else, including a signal the
+    kernel refuses, is reported and never raised.
     """
     report = []
     own_group = os.getpgrp()
+    try:
+        caller_group = os.getpgid(os.getppid())
+    except OSError:
+        caller_group = own_group
     for record in records(attempt_dir):
         for group in record["groups"]:
             pgid, leader_start = group["pgid"], group.get("leader_start")
             entry = {"owner_generation": record["owner_generation"], "pgid": pgid, "kind": group["kind"]}
-            if (pgid == own_group or pgid <= 1 or _start_key(leader_start) is None
+            if (pgid in {own_group, caller_group} or pgid <= 1 or _start_key(leader_start) is None
                     or not _within_record(group, record)):
                 report.append({**entry, "action": "skipped_unverifiable"})
                 continue
@@ -381,18 +387,26 @@ def reap(attempt_dir: Path) -> list[dict[str, Any]]:
                 if current_start != leader_start:
                     report.append({**entry, "action": "skipped_identity_mismatch"})
                     continue
+                if _uid(pgid) != os.getuid():
+                    report.append({**entry, "action": "skipped_other_user"})
+                    continue
                 try:
                     os.killpg(pgid, signal.SIGKILL)
                     report.append({**entry, "action": "killed_group"})
                 except ProcessLookupError:
                     report.append({**entry, "action": "gone"})
+                except PermissionError:
+                    report.append({**entry, "action": "skipped_permission"})
                 continue
-            killed = []
+            killed, refused = [], []
             for pid in _members(pgid, leader_start):
                 try:
                     os.kill(pid, signal.SIGKILL)
                     killed.append(pid)
                 except ProcessLookupError:
                     pass
-            report.append({**entry, "action": "killed_members" if killed else "gone", "members": killed})
+                except PermissionError:
+                    refused.append(pid)
+            action = "killed_members" if killed else "skipped_permission" if refused else "gone"
+            report.append({**entry, "action": action, "members": killed, **({"refused": refused} if refused else {})})
     return report
