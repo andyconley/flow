@@ -331,7 +331,15 @@ def _validate_delivery_projection(envelope: dict[str, Any]) -> None:
         raise ContractError("delivery lead claim is invalid")
 
 
-PREDECESSOR_TERMINAL_STATUSES = frozenset({"completed", "failed", "denied", "superseded"})
+# A v8 attempt a person stopped (ADR 0019). Its receipt keeps every uncertain
+# row uncertain; no other status may seal one.
+TERMINAL_UNCERTAIN_STATUSES = frozenset({"cancelled", "abandoned"})
+PREDECESSOR_TERMINAL_STATUSES = frozenset({"completed", "failed", "denied", "superseded"}) | TERMINAL_UNCERTAIN_STATUSES
+EVIDENCE_DAMAGE_KEYS = {
+    "baseline_missing": {"kind"},
+    "trace_oversized": {"kind", "path", "sha256", "bytes"},
+    "draft_receipt_replaced": {"kind", "sha256"},
+}
 RECOVERY_INTERRUPTION_CAUSES = frozenset({"transport", "reconciliation_required", "unmarked_process_exit"})
 RECOVERY_MODES = frozenset({"answer", "pending", "seal", "restart"})
 RECOVERY_GRANT_REASONS = frozenset({"recovery_unconsumed_grant", "recovery_regranted"})
@@ -994,7 +1002,10 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
     require_fields(receipt, ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest",
                              "status", "execution_protocol_version", "roster", "manager_calls", "actions",
                              "replans", "checkpoints", "evidence"), kind="Magentic receipt", max_bytes=512 * 1024)
-    if receipt["execution_protocol_version"] != execution_protocol_version(envelope) or receipt["status"] not in {"completed", "failed", "denied", "unknown"}:
+    protocol = execution_protocol_version(envelope)
+    statuses = ({"completed", "failed", "denied"} | TERMINAL_UNCERTAIN_STATUSES if protocol == STRUCTURED_VERIFIER_PROTOCOL_VERSION
+                else {"completed", "failed", "denied", "unknown"})
+    if receipt["execution_protocol_version"] != protocol or receipt["status"] not in statuses:
         raise ContractError("Magentic receipt status or protocol is invalid")
     for field in ("work_id", "attempt_id", "charter_digest", "manifest_digest"):
         if receipt[field] != envelope[field]:
@@ -1151,6 +1162,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         if usage != expected_usage:
             raise ContractError("structured verifier usage differs from receipt facts")
         _validate_recovery_block(envelope, receipt)
+        _validate_termination(envelope, receipt)
     if receipt["status"] == "completed":
         completed = [item["request"] for item in receipt["actions"] if item["status"] == "completed"]
         if is_chartered_protocol(execution_protocol_version(envelope)):
@@ -1174,6 +1186,47 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
             raise ContractError("Magentic edit evidence is invalid")
         if not isinstance(tests, dict) or tests.get("status") != "passed" or not isinstance(tests.get("command"), list) or not tests["command"] or not all(isinstance(v, str) and v for v in tests["command"]) or not _hex_digest(tests.get("output_sha256")):
             raise ContractError("Magentic focused test evidence is invalid")
+
+
+def _validate_termination(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
+    """Uncertain rows seal only as cancelled or abandoned, with who stopped it and what was lost (ADR 0019)."""
+    terminal = receipt["status"] in TERMINAL_UNCERTAIN_STATUSES
+    uncertain = any(item["status"] in {"started", "unknown"} for item in receipt["actions"] + receipt["manager_calls"])
+    if uncertain and not terminal:
+        raise ContractError("only a cancelled or abandoned receipt may keep an uncertain send")
+    if not terminal:
+        if "termination" in receipt or "evidence_damage" in receipt:
+            raise ContractError("termination evidence requires a cancelled or abandoned receipt")
+        return
+    termination, damage = receipt.get("termination"), receipt.get("evidence_damage")
+    claim_generation = envelope["delivery_lead_claim"]["generation"]
+    text = lambda value, limit: isinstance(value, str) and value.strip() and len(value) <= limit
+    if (not isinstance(termination, dict)
+            or set(termination) != {"actor", "explanation", "cause", "owner_generation", "lead_generation"}
+            or not text(termination["actor"], 256) or not text(termination["explanation"], 2048)
+            or not isinstance(termination["cause"], str) or not 1 <= len(termination["cause"]) <= 64
+            or any(not (char.islower() or char == "_") for char in termination["cause"])
+            or (receipt["status"] == "cancelled") != (termination["cause"] == "cancel_request")
+            or termination["lead_generation"] != claim_generation
+            or type(termination["owner_generation"]) is not int or termination["owner_generation"] < claim_generation):
+        raise ContractError("receipt termination is invalid")
+    if not isinstance(damage, list):
+        raise ContractError("receipt evidence damage is invalid")
+    kinds = []
+    for item in damage:
+        if (not isinstance(item, dict) or set(item) != EVIDENCE_DAMAGE_KEYS.get(item.get("kind"))
+                or ("sha256" in item and not _hex_digest(item["sha256"]))
+                or ("bytes" in item and (type(item["bytes"]) is not int or item["bytes"] < 0))
+                or ("path" in item and item["path"] not in {"claude-implementer.debug.log", "claude-implementer.events.ndjson"})):
+            raise ContractError("receipt evidence damage is invalid")
+        kinds.append((item["kind"], item.get("path")))
+    if len(kinds) != len(set(kinds)):
+        raise ContractError("receipt evidence damage is duplicated")
+    recovery = receipt.get("recovery")
+    replaced = recovery.get("replaced_draft_sha256") if isinstance(recovery, dict) else None
+    listed = [item["sha256"] for item in damage if item["kind"] == "draft_receipt_replaced"]
+    if replaced is not None and listed != [replaced]:
+        raise ContractError("receipt replaced draft differs from its evidence damage")
 
 
 def _validate_chartered_completion(envelope: dict[str, Any], evidence: dict[str, Any],

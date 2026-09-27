@@ -50,6 +50,15 @@ EXPANSION_ALREADY_DECIDED = "expansion_already_decided"
 EXPANSION_CEILING_EXCEEDED = "expansion_ceiling_exceeded"
 EXPANSION_DECISION_REQUIRED = "expansion_decision_required"
 EXPANSION_GRANT_CONSUMED = "expansion_grant_consumed"
+# Cancel, abandon, and the stuck scan (ADR 0019).
+ATTEMPT_NOT_STARTED = "attempt_not_started"
+ATTEMPT_NOT_LIVE = "attempt_not_live"
+ATTEMPT_FINISHED = "attempt_finished"
+ATTEMPT_DIR_UNSAFE = "attempt_dir_unsafe"
+PROCESS_IDENTITY_MISMATCH = "process_identity_mismatch"
+FOREIGN_MACHINE = "foreign_machine"
+CANCEL_UNSUPPORTED = "cancel_unsupported"
+CANCEL_TIMEOUT = "cancel_timeout"
 
 DISPATCH_EVENTS = frozenset({"worker_dispatched", "adapter_send_started"})
 

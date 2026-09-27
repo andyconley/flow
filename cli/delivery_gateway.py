@@ -14,13 +14,14 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from execution_contracts import (ContractError, canonical, digest, envelope_digest,
+from execution_contracts import (TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical, digest, envelope_digest,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
+import delivery_termination  # noqa: F401  (the cancelled seal, ADR 0019)
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
                                EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
                                OWNER_GENERATION_STALE, V8_DISPOSITION_UNSUPPORTED, V8_EVIDENCE_FILE_REFUSED,
@@ -674,7 +675,9 @@ def _recovery_gates(work_id: str, attempt_id: str, run_dir: Path) -> tuple[dict[
             or json.loads(envelope_path.read_text()) != envelope):
         raise RecoveryRefused(ENVELOPE_CHANGED)
     if snapshot["status"] != "started":
-        if snapshot.get("recoveries"):
+        # A cancelled or abandoned attempt is never replayed, even after a
+        # recovery: a person stopped it and its receipt is final (ADR 0019).
+        if snapshot.get("recoveries") and snapshot["status"] not in TERMINAL_UNCERTAIN_STATUSES:
             return snapshot, None
         raise RecoveryRefused(ATTEMPT_TERMINAL)
     try:

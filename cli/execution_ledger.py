@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Callable
 
 from execution_contracts import (
     ContractError,
@@ -27,13 +27,14 @@ from execution_contracts import (
     validate_result,
     validate_manager_call,
     RECOVERY_INTERRUPTION_CAUSES,
+    TERMINAL_UNCERTAIN_STATUSES,
     EXPANSION_LIMIT_KEYS,
     expansion_headroom,
     manager_progress_block,
 )
 from runner_progress import classify as classify_progress
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
-from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
+from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_NOT_STARTED, ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
                                EXPANSION_ALREADY_DECIDED, EXPANSION_CEILING_EXCEEDED, EXPANSION_GRANT_CONSUMED,
                                EXPANSION_UNKNOWN_REQUEST,
                                ITEM_NOT_UNRESOLVED, OWNER_GENERATION_STALE, PREDECESSOR_LINK_INVALID,
@@ -632,14 +633,23 @@ class ExecutionLedger:
         return [{"request_id": request_id, "attempt_id": attempt_id, "limits": json.loads(limits),
                  "owner_generation": generation} for request_id, attempt_id, limits, generation in rows]
 
+    @staticmethod
+    def _blocking_attempts(db: sqlite3.Connection) -> list[str]:
+        """Attempts whose uncertain sends block a lead change: all but the cancelled and abandoned (ADR 0019)."""
+        marks = ",".join("?" for _ in TERMINAL_UNCERTAIN_STATUSES)
+        return [row[0] for row in db.execute(f"SELECT attempt_id FROM attempts WHERE status NOT IN ({marks}) ORDER BY rowid",
+                                             tuple(sorted(TERMINAL_UNCERTAIN_STATUSES)))]
+
     def lead_change_blocker(self) -> str | None:
         """Return the first uncertain action or manager call of any attempt.
 
         A Delivery Lead resume or supersede must not hand a successor work
         whose provider outcome is unknown (ADR 0016, the ADR 0014 amendment).
+        A cancelled or abandoned attempt sealed its uncertainty in a receipt,
+        so it no longer blocks (ADR 0019).
         """
         with self._db() as db:
-            for (attempt_id,) in db.execute("SELECT attempt_id FROM attempts ORDER BY rowid").fetchall():
+            for attempt_id in self._blocking_attempts(db):
                 blocker = self._unresolved_action(db, attempt_id)
                 if blocker:
                     return blocker
@@ -669,8 +679,7 @@ class ExecutionLedger:
         with self.send_lock():
             with self._db() as db:
                 db.execute("BEGIN IMMEDIATE")
-                attempts = [row[0] for row in db.execute("SELECT attempt_id FROM attempts ORDER BY rowid")]
-                if any(self._unresolved_action(db, attempt_id) for attempt_id in attempts):
+                if any(self._unresolved_action(db, attempt_id) for attempt_id in self._blocking_attempts(db)):
                     raise RecoveryRefused(RECONCILIATION_REQUIRED, "an uncertain send blocks the Delivery Lead successor")
                 sealed = []
                 rows = [(attempt_id, envelope_json) for attempt_id, envelope_json in db.execute(
@@ -697,6 +706,92 @@ class ExecutionLedger:
                     self._event(db, attempt_id, None, "attempt_superseded", reason)
                     sealed.append(attempt_id)
                 return sealed
+
+    def seal_terminal_uncertain(self, attempt_id: str, status: str, *, expected_generation: int, actor: str,
+                                explanation: str, cause: str, receipt_path: Path,
+                                build_receipt: Callable[[dict[str, Any], dict[str, Any]], bytes]) -> dict[str, Any]:
+        """Seal a started v8 attempt as cancelled or abandoned, keeping every uncertain row (ADR 0019).
+
+        The caller holds the attempt's ``recovery_lock``, the run lock and the
+        send lock; this is the SQLite step. One transaction releases unconsumed
+        grants, closes open expansions, snapshots the attempt on its own
+        connection, has the pure ``build_receipt(snapshot, blocks)`` render the
+        receipt from that snapshot, writes it, compares its rows with the
+        ledger, and seals it under a bumped owner generation. A refusal leaves
+        at most an unsealed draft behind.
+        """
+        if status not in TERMINAL_UNCERTAIN_STATUSES or type(expected_generation) is not int:
+            raise ContractError("terminal seal request is invalid")
+        for value, limit in ((actor, 256), (explanation, 2048)):
+            if not isinstance(value, str) or not value.strip() or len(value) > limit:
+                raise ContractError("terminal seal actor or explanation is invalid")
+        receipt_path = Path(receipt_path)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT status,owner_generation,execution_protocol_version,recovery_version,envelope_json "
+                             "FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[2] != 8 or row[3] != 2:
+                raise ContractError("a terminal seal requires a protocol v8 attempt")
+            if row[0] != "started":
+                raise RecoveryRefused(ATTEMPT_NOT_STARTED, f"attempt is {row[0]}")
+            if row[1] != expected_generation:
+                raise RecoveryRefused(OWNER_GENERATION_STALE, f"current owner generation is {row[1]}")
+            envelope = json.loads(row[4])
+            released = []
+            for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' ORDER BY rowid",
+                                           (attempt_id,)).fetchall():
+                if db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')",
+                              (action_id,)).fetchone():
+                    continue  # dispatch evidence is never relabelled as unsent
+                db.execute("UPDATE actions SET status='not_dispatched',reason=?,grant_id=NULL WHERE action_id=?",
+                           (f"{status}_unconsumed_grant", action_id))
+                self._event(db, attempt_id, action_id, f"{status}_grant_released", "")
+                released.append(action_id)
+            self._close_expansions_locked(db, attempt_id, status)
+            snapshot = self._snapshot_locked(db, attempt_id)
+            blocks = {"lineage_usage": self._lineage_usage(db, envelope) if envelope.get("predecessors") else None,
+                      "expansion": self._expansion_receipt(db, envelope),
+                      "manager_progress": self._manager_progress_receipt(db, attempt_id)}
+            receipt_bytes = build_receipt(snapshot, blocks)
+            if receipt_path.is_symlink() or receipt_path.parent.is_symlink():
+                raise ContractError("terminal receipt path is unsafe")
+            temporary = receipt_path.with_name(f".{receipt_path.name}.{uuid.uuid4().hex}")
+            fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(receipt_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, receipt_path)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+            try:
+                receipt = json.loads(receipt_bytes)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ContractError("terminal seal requires a JSON receipt") from exc
+            listed = lambda items, key: [(item.get(key), item.get("status")) for item in items] if isinstance(items, list) else None
+            if (not isinstance(receipt, dict) or receipt.get("status") != status or receipt.get("attempt_id") != attempt_id
+                    or listed(receipt.get("actions"), "action_id") != listed(snapshot["actions"], "action_id")
+                    or listed(receipt.get("manager_calls"), "call_id") != listed(snapshot["manager_calls"], "call_id")):
+                raise ContractError("terminal receipt rows differ from the ledger")
+            termination = receipt.get("termination")
+            if (not isinstance(termination, dict) or termination.get("owner_generation") != expected_generation
+                    or termination.get("actor") != actor or termination.get("cause") != cause):
+                raise ContractError("terminal receipt termination differs from the seal")
+            self._assert_receipt_lineage(db, attempt_id, receipt_bytes)
+            if receipt.get("expansion") != blocks["expansion"]:
+                raise ContractError("receipt expansion evidence differs from the ledger")
+            if receipt.get("manager_progress") != blocks["manager_progress"]:
+                raise ContractError("receipt manager_progress evidence differs from the ledger")
+            reason = canonical({"actor": actor, "cause": cause, "owner_generation": expected_generation})
+            db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=?,"
+                       "owner_generation=owner_generation+1,owner_actor=? WHERE attempt_id=?",
+                       (status, reason, str(receipt_path), hashlib.sha256(receipt_bytes).hexdigest(), actor, attempt_id))
+            self._event(db, attempt_id, None, f"attempt_{status}", reason)
+            return {"attempt_id": attempt_id, "status": status, "receipt_path": str(receipt_path),
+                    "sealed_receipt_sha256": hashlib.sha256(receipt_bytes).hexdigest(),
+                    "owner_generation": expected_generation + 1, "released": released}
 
     @staticmethod
     def _close_expansions_locked(db: sqlite3.Connection, attempt_id: str, cause: str) -> None:
@@ -2500,47 +2595,56 @@ class ExecutionLedger:
 
     def continuation_snapshot(self, epoch_id: str) -> dict[str, Any]:
         with self._db() as db:
-            columns = {item[1] for item in db.execute("PRAGMA table_info(continuation_epochs)")}
-            sealed = "sealed_receipt_sha256" if "sealed_receipt_sha256" in columns else "NULL"
-            before = "policy_before_json" if "policy_before_json" in columns else "NULL"
-            row = db.execute(f"SELECT epoch_id,attempt_id,action_id,resolution_id,receipt_sha256,checkpoint_sha256,status,reason,receipt_path,owner_generation,owner_actor,created_at,{sealed},{before} FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
-            if not row:
-                raise ContractError("continuation epoch missing")
-            grant = db.execute("SELECT grant_id,issued_at,status,claimed_at FROM continuation_grants WHERE epoch_id=?", (epoch_id,)).fetchone()
-            response = db.execute("SELECT result_json,result_digest,observed_at FROM continuation_responses WHERE epoch_id=?", (epoch_id,)).fetchone()
-            return {**dict(zip(("epoch_id", "attempt_id", "action_id", "resolution_id", "receipt_sha256", "checkpoint_sha256", "status", "reason", "receipt_path", "owner_generation", "owner_actor", "created_at", "sealed_receipt_sha256", "policy_before_json"), row)),
-                    "grant": dict(zip(("grant_id", "issued_at", "status", "claimed_at"), grant)) if grant else None,
-                    "response": {"result": json.loads(response[0]), "result_digest": response[1], "observed_at": response[2]} if response else None,
-                    "send_claimed": bool(grant and grant[2] == "claimed")}
+            return self._continuation_snapshot_locked(db, epoch_id)
+
+    @staticmethod
+    def _continuation_snapshot_locked(db: sqlite3.Connection, epoch_id: str) -> dict[str, Any]:
+        columns = {item[1] for item in db.execute("PRAGMA table_info(continuation_epochs)")}
+        sealed = "sealed_receipt_sha256" if "sealed_receipt_sha256" in columns else "NULL"
+        before = "policy_before_json" if "policy_before_json" in columns else "NULL"
+        row = db.execute(f"SELECT epoch_id,attempt_id,action_id,resolution_id,receipt_sha256,checkpoint_sha256,status,reason,receipt_path,owner_generation,owner_actor,created_at,{sealed},{before} FROM continuation_epochs WHERE epoch_id=?", (epoch_id,)).fetchone()
+        if not row:
+            raise ContractError("continuation epoch missing")
+        grant = db.execute("SELECT grant_id,issued_at,status,claimed_at FROM continuation_grants WHERE epoch_id=?", (epoch_id,)).fetchone()
+        response = db.execute("SELECT result_json,result_digest,observed_at FROM continuation_responses WHERE epoch_id=?", (epoch_id,)).fetchone()
+        return {**dict(zip(("epoch_id", "attempt_id", "action_id", "resolution_id", "receipt_sha256", "checkpoint_sha256", "status", "reason", "receipt_path", "owner_generation", "owner_actor", "created_at", "sealed_receipt_sha256", "policy_before_json"), row)),
+                "grant": dict(zip(("grant_id", "issued_at", "status", "claimed_at"), grant)) if grant else None,
+                "response": {"result": json.loads(response[0]), "result_digest": response[1], "observed_at": response[2]} if response else None,
+                "send_claimed": bool(grant and grant[2] == "claimed")}
 
     def snapshot(self, attempt_id: str) -> dict[str, Any]:
         with self._db() as db:
-            attempt_columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
-            recovery_columns = {"recovery_version", "owner_generation", "owner_actor"}.issubset(attempt_columns)
-            protocol_column = "execution_protocol_version" in attempt_columns
-            attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "") + (",execution_protocol_version" if protocol_column else "")
-            a = db.execute(f"SELECT {attempt_select} FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
-            if not a:
-                raise ContractError("attempt missing")
-            actions = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall()
-            events = db.execute("SELECT seq,at,action_id,event,detail FROM events WHERE attempt_id=? ORDER BY seq", (attempt_id,)).fetchall()
-            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            observations = db.execute("SELECT action_id,observed_at,result_json,result_digest,owner_generation FROM response_observations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY observed_at", (attempt_id,)).fetchall() if "response_observations" in tables else []
-            verifier_inputs = db.execute("SELECT action_id,recorded_at,input_json,input_digest,diff_digest,test_digest,send_claimed_at,owner_generation FROM verifier_inputs WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY recorded_at", (attempt_id,)).fetchall() if "verifier_inputs" in tables else []
-            verifier_evaluations = db.execute("SELECT action_id,evaluated_at,evaluation_json,evaluation_digest,outcome,reason,owner_generation FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at, rowid", (attempt_id,)).fetchall() if "verifier_evaluations" in tables else []
-            resolutions = db.execute("SELECT resolution_id,action_id,actor,disposition,explanation,evidence_json,result_json,resolution_digest,created_at,owner_generation FROM recovery_resolutions WHERE attempt_id=? ORDER BY created_at", (attempt_id,)).fetchall() if "recovery_resolutions" in tables else []
-            replans = db.execute("SELECT replan_id,sequence,request_json,proposal_digest,status,reason FROM replan_decisions WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "replan_decisions" in tables else []
-            manager_calls = db.execute("SELECT call_id,sequence,request_json,status,reason,grant_id,result_json,observed_at FROM manager_calls WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "manager_calls" in tables else []
-            magentic_checkpoints = db.execute("SELECT pending_kind,pending_id,checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall() if "magentic_checkpoint_links" in tables else []
-            checkpoint_positions = db.execute("SELECT kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? ORDER BY kind,sequence", (attempt_id,)).fetchall() if "checkpoint_position_links" in tables else []
-            checkpoint_columns = {row[1] for row in db.execute("PRAGMA table_info(checkpoint_links)")} if "checkpoint_links" in tables else set()
-            checkpoint_query = "SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,path,bound_at,owner_generation" + (",file_sha256" if "file_sha256" in checkpoint_columns else "") + " FROM checkpoint_links WHERE attempt_id=?"
-            checkpoint = db.execute(checkpoint_query, (attempt_id,)).fetchone() if "checkpoint_links" in tables else None
-            continuation_rows = db.execute("SELECT epoch_id FROM continuation_epochs WHERE attempt_id=? ORDER BY created_at, rowid", (attempt_id,)).fetchall() if "continuation_epochs" in tables else []
-            attempt_protocol = a[9 if recovery_columns else 6] if protocol_column else 1
-            structured_usage = self._verifier_usage(db, attempt_id, json.loads(a[2])) if attempt_protocol == 8 else None
-            recovery_view = self._recovery_view(db, attempt_id, attempt_columns, tables) if attempt_protocol == 8 else None
-        continuations = [self.continuation_snapshot(epoch_id) for (epoch_id,) in continuation_rows]
+            return self._snapshot_locked(db, attempt_id)
+
+    @staticmethod
+    def _snapshot_locked(db: sqlite3.Connection, attempt_id: str) -> dict[str, Any]:
+        """Read one attempt on the caller's connection, so a seal can snapshot its own transaction."""
+        attempt_columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
+        recovery_columns = {"recovery_version", "owner_generation", "owner_actor"}.issubset(attempt_columns)
+        protocol_column = "execution_protocol_version" in attempt_columns
+        attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "") + (",execution_protocol_version" if protocol_column else "")
+        a = db.execute(f"SELECT {attempt_select} FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+        if not a:
+            raise ContractError("attempt missing")
+        actions = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall()
+        events = db.execute("SELECT seq,at,action_id,event,detail FROM events WHERE attempt_id=? ORDER BY seq", (attempt_id,)).fetchall()
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        observations = db.execute("SELECT action_id,observed_at,result_json,result_digest,owner_generation FROM response_observations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY observed_at", (attempt_id,)).fetchall() if "response_observations" in tables else []
+        verifier_inputs = db.execute("SELECT action_id,recorded_at,input_json,input_digest,diff_digest,test_digest,send_claimed_at,owner_generation FROM verifier_inputs WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY recorded_at", (attempt_id,)).fetchall() if "verifier_inputs" in tables else []
+        verifier_evaluations = db.execute("SELECT action_id,evaluated_at,evaluation_json,evaluation_digest,outcome,reason,owner_generation FROM verifier_evaluations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY evaluated_at, rowid", (attempt_id,)).fetchall() if "verifier_evaluations" in tables else []
+        resolutions = db.execute("SELECT resolution_id,action_id,actor,disposition,explanation,evidence_json,result_json,resolution_digest,created_at,owner_generation FROM recovery_resolutions WHERE attempt_id=? ORDER BY created_at", (attempt_id,)).fetchall() if "recovery_resolutions" in tables else []
+        replans = db.execute("SELECT replan_id,sequence,request_json,proposal_digest,status,reason FROM replan_decisions WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "replan_decisions" in tables else []
+        manager_calls = db.execute("SELECT call_id,sequence,request_json,status,reason,grant_id,result_json,observed_at FROM manager_calls WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "manager_calls" in tables else []
+        magentic_checkpoints = db.execute("SELECT pending_kind,pending_id,checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall() if "magentic_checkpoint_links" in tables else []
+        checkpoint_positions = db.execute("SELECT kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? ORDER BY kind,sequence", (attempt_id,)).fetchall() if "checkpoint_position_links" in tables else []
+        checkpoint_columns = {row[1] for row in db.execute("PRAGMA table_info(checkpoint_links)")} if "checkpoint_links" in tables else set()
+        checkpoint_query = "SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,path,bound_at,owner_generation" + (",file_sha256" if "file_sha256" in checkpoint_columns else "") + " FROM checkpoint_links WHERE attempt_id=?"
+        checkpoint = db.execute(checkpoint_query, (attempt_id,)).fetchone() if "checkpoint_links" in tables else None
+        continuation_rows = db.execute("SELECT epoch_id FROM continuation_epochs WHERE attempt_id=? ORDER BY created_at, rowid", (attempt_id,)).fetchall() if "continuation_epochs" in tables else []
+        attempt_protocol = a[9 if recovery_columns else 6] if protocol_column else 1
+        structured_usage = ExecutionLedger._verifier_usage(db, attempt_id, json.loads(a[2])) if attempt_protocol == 8 else None
+        recovery_view = ExecutionLedger._recovery_view(db, attempt_id, attempt_columns, tables) if attempt_protocol == 8 else None
+        continuations = [ExecutionLedger._continuation_snapshot_locked(db, epoch_id) for (epoch_id,) in continuation_rows]
         envelope = json.loads(a[2])
         snapshot = {"attempt_id": a[0], "work_id": a[1], "envelope": envelope, "status": a[3], "reason": a[4], "receipt_path": a[5],
                 "recovery_version": a[6] if recovery_columns else 1, "owner_generation": a[7] if recovery_columns else 0, "owner_actor": a[8] if recovery_columns else None,
