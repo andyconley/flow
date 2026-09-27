@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.38.1](https://github.com/andyconley/flow/compare/v0.38.0...v0.38.1) (2026-09-27)
+
+### Documentation
+
+* **run:** archive step5-cancellation ([12c7885](https://github.com/andyconley/flow/commit/12c788557e042dd7813237cb5f8a8e905ae35006))
+
 ## [0.38.0](https://github.com/andyconley/flow/compare/v0.37.1...v0.38.0) (2026-09-27)
 
 ### Features
