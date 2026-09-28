@@ -135,6 +135,13 @@ TRANSITIONS: dict[str, Transition] = {
         "review",
         gate="implementation handback before review",
     ),
+    "request-refinement": Transition(
+        "request-refinement",
+        (STATE_REVIEWING,),
+        STATE_IMPLEMENTING,
+        "implement",
+        gate="review findings before implementation refinement",
+    ),
     "accept-review": Transition(
         "accept-review",
         (STATE_REVIEWING,),

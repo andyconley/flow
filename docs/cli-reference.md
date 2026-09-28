@@ -289,6 +289,7 @@ For revision-2 runs, `approve-definition` must record `requirements`, `acceptanc
 - `start-implementation`
 - `mark-handback-ready` — requires `--artifact implementation_evidence=...` and `--artifact handback=...`
 - `start-review`
+- `request-refinement` — returns a run from review to implementation when findings require changes
 - `accept-review` — requires `--artifact review=...`
 - `archive` — requires `--disposition capability_gaps=...` and `--disposition memory=...`
 
