@@ -121,6 +121,26 @@ class CharteredFixture(unittest.TestCase):
         with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
             return prepare_chartered_delivery("sample", self.worktree, self.commit, root=self.root)
 
+    def test_declared_regression_directory_scope_accepts_descendants(self):
+        src = self.worktree / "src"
+        src.mkdir()
+        (src / "generated.py").write_text("value = 1\n")
+        subprocess.run(["git", "-C", str(self.worktree), "add", "src/generated.py"], check=True)
+        diff = subprocess.check_output(
+            ["git", "-C", str(self.worktree), "diff", "HEAD", "--"], text=True).rstrip("\n").encode()
+        self.charter["read_paths"] = ["src", "tests"]
+        self.charter["write_paths"] = ["src"]
+        self.charter["baseline"] = {
+            "kind": "declared_regression",
+            "diff_sha256": hashlib.sha256(diff).hexdigest(),
+        }
+        self.manifest["assignments"][1]["write_scopes"] = ["src"]
+        self._write_inputs()
+
+        envelope, _, _, _ = self.prepare()
+
+        self.assertEqual(envelope["job_contract"]["baseline"]["kind"], "declared_regression")
+
     def _proposal(self, envelope, assignment_id, sequence):
         assignment = next(item for item in envelope["roster"] if item["assignment_id"] == assignment_id)
         checkpoint_id = f"checkpoint-{sequence}"
