@@ -1,0 +1,5 @@
+{"at": "2026-09-28T01:13:40.079425+00:00", "kind": "maf", "leader_start": "darwin:1790558020.078303", "pgid": 14416}
+{"at": "2026-09-28T01:13:40.201840+00:00", "kind": "provider", "leader_start": "darwin:1790558020.199108", "pgid": 14444}
+{"at": "2026-09-28T01:14:03.606301+00:00", "kind": "provider", "leader_start": "darwin:1790558043.604475", "pgid": 15402}
+{"at": "2026-09-28T01:14:12.593990+00:00", "kind": "provider", "leader_start": "darwin:1790558052.592215", "pgid": 16367}
+{"at": "2026-09-28T01:14:24.948479+00:00", "kind": "provider", "leader_start": "darwin:1790558064.946694", "pgid": 16917}

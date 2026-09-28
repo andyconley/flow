@@ -51,16 +51,20 @@
   "gates": {
     "approve-definition": "2026-09-28T01:12:54Z",
     "approve-plan": "2026-09-28T01:13:00Z",
+    "block": "2026-09-28T01:15:55Z",
     "start-definition": "2026-09-28T01:11:28Z",
     "start-implementation": "2026-09-28T01:13:12Z",
     "start-plan": "2026-09-28T01:12:55Z"
   },
-  "lane": "implement",
-  "last_event": "start-implementation",
-  "phase": "implementing",
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "Codex manager completed, but the authorized producer call exceeded cli/codex_worker.py's 262144-byte total event-stream cap and became unrecoverable unknown. Attempt 1327f40b59014e87b9c90a3fe03e9803 was sealed abandoned; worker remained clean.",
+  "phase": "blocked",
   "protocol_revision": 2,
+  "return_lane": "implement",
+  "return_state": "implementing",
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-28T01:13:12Z",
+  "state": "blocked",
+  "updated_at": "2026-09-28T01:15:55Z",
   "work_id": "review-provenance-refinement-5"
 }
