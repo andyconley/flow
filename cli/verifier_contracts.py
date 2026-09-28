@@ -304,3 +304,10 @@ def validate_structured_verifier_result(result: object) -> dict[str, Any]:
             isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in usage.values())):
         raise VerifierContractError("structured verifier response usage is invalid")
     return result
+
+
+def verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structured: bool) -> str:
+    """Build the exact evidence-bearing verifier input Flow sends and digests."""
+    text = (task + "\n\nFlow-verified complete bounded diff for this review:\n"
+            + diff + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
+    return text + VERIFIER_CONTRACT_INSTRUCTION if structured else text

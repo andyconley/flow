@@ -596,7 +596,7 @@ Writable definition-lane assignments missing from the manifest's producer list w
 
 ### Delivery Per Call Timings
 
-Status: observed 2 times, promoted from the capability-gap ledger
+Status: addressed by `step5-operational-handback` (ADR 0020): `flow run trace` shows each call's send and observe times and duration; observed 2 times, promoted from the capability-gap ledger
 
 Delivery inspection does not show per-call timings although the ledger records them; a read-only extraction script had to be written
 
@@ -617,3 +617,13 @@ Status: observed 2 times, promoted from the capability-gap ledger
 A provider CLI writes an absolute symlink into attempt evidence; nothing strips or rejects it before evidence is committed
 
 A provider CLI's absolute symlink in the attempt directory again had to be found and removed by hand before committing evidence
+
+### Solution Amends Approved Definition
+
+Status: observed 3 times, promoted from the capability-gap ledger
+
+Solutioning changed approved requirements and acceptance criteria, but there is no lifecycle step to record or re-approve a definition amendment
+
+No lifecycle path to amend approved acceptance criteria after authority is sealed; approved plan-lane amendments had to live in the plan artifact
+
+Two engineer-approved amendments to approved requirements and acceptance criteria after authority was sealed had no lifecycle step; they were edited in place by hand and the sealed charter kept the old bytes

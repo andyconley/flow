@@ -1,0 +1,77 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "001dd5eb2fa9d840d0bdc1ed868a9ba37e1d054568e49017825cd8e689fc9161",
+    "orchestration_manifest": "caa501bfc4d7c7dd1cac7a2cd50ff1ed7eaca31c18f9d97f136e752aa3e50f7b",
+    "requirements": "5741775dd64c24fe464f74e0e69009471e55f8eac013cd420b0bb224c4e1a0b3",
+    "shaper_intent": "cb2f5151b8dabb7f44472dd8b97ea10ae2ea4d27a40c8fe33cb03c4018278f10"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/step5-operational-handback/acceptance-criteria.md",
+    "archive": ".flow/runs/step5-operational-handback/archive.md",
+    "handback": ".flow/runs/step5-operational-handback/HANDOFF.md",
+    "handoff": ".flow/runs/step5-operational-handback/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/step5-operational-handback/validation-results.md",
+    "orchestration_manifest": ".flow/runs/step5-operational-handback/orchestration.json",
+    "plan": ".flow/runs/step5-operational-handback/plan.md",
+    "requirements": ".flow/runs/step5-operational-handback/requirements.md",
+    "review": ".flow/runs/step5-operational-handback/review.md",
+    "shaper_intent": ".flow/runs/step5-operational-handback/shaper-intent.json",
+    "validation_plan": ".flow/runs/step5-operational-handback/validation-plan.md"
+  },
+  "created_at": "2026-09-27T20:57:04Z",
+  "delivery": {
+    "charter_digest": "15a42b58dcf6ef7ac8dfee2072b4209ad7f531c0ee9e74c2d381d44fee3517c8",
+    "charter_id": "delivery-c50536f1ac69a9db215c",
+    "delivery_artifact_dir": "delivery/15a42b58dcf6ef7ac8dfee2072b4209ad7f531c0ee9e74c2d381d44fee3517c8",
+    "handoff_digest": "a52fcabfd04e5ac492ca50c2211820521ca7fab85fdcabc5815c15d497dc24a5",
+    "lead_claim_digest": "4ca0b248f6b5c9cae1e9029275df90e8406be9c9ddc2be18f76e7513ce13bc96",
+    "lead_claim_path": "delivery/15a42b58dcf6ef7ac8dfee2072b4209ad7f531c0ee9e74c2d381d44fee3517c8/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-15a42b58dcf6ef7ac8df",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "6ecc0b17158b284388473945a67ee3e142b41967f5f1923577d23c698e244213",
+    "shaper_contract_id": "shaper-2f910b4662a18f115dd7",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/step5-operational-handback/acceptance-criteria.md",
+        "sha256": "001dd5eb2fa9d840d0bdc1ed868a9ba37e1d054568e49017825cd8e689fc9161"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/step5-operational-handback/orchestration.json",
+        "sha256": "caa501bfc4d7c7dd1cac7a2cd50ff1ed7eaca31c18f9d97f136e752aa3e50f7b"
+      },
+      "requirements": {
+        "path": ".flow/runs/step5-operational-handback/requirements.md",
+        "sha256": "5741775dd64c24fe464f74e0e69009471e55f8eac013cd420b0bb224c4e1a0b3"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/step5-operational-handback/shaper-intent.json",
+        "sha256": "cb2f5151b8dabb7f44472dd8b97ea10ae2ea4d27a40c8fe33cb03c4018278f10"
+      }
+    }
+  },
+  "dispositions": {
+    "archive_enrichment": "1",
+    "capability_gaps": "recorded",
+    "memory": "updated"
+  },
+  "gates": {
+    "accept-review": "2026-09-28T03:30:52Z",
+    "approve-definition": "2026-09-27T21:44:38Z",
+    "approve-plan": "2026-09-28T00:20:12Z",
+    "archive": "2026-09-28T03:35:57Z",
+    "mark-handback-ready": "2026-09-28T02:25:24Z",
+    "start-definition": "2026-09-27T20:57:04Z",
+    "start-implementation": "2026-09-28T00:28:20Z",
+    "start-plan": "2026-09-27T21:44:47Z",
+    "start-review": "2026-09-28T03:12:47Z"
+  },
+  "lane": "archive",
+  "last_event": "archive",
+  "phase": "archived",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "archived",
+  "updated_at": "2026-09-28T03:35:57Z",
+  "work_id": "step5-operational-handback"
+}

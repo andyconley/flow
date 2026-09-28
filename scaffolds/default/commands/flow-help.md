@@ -110,6 +110,9 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
 | `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny a pending v8 expansion request for a paused attempt |
 | `flow run stuck [--json]` | List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only) |
+| `flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]` | Verify a sealed v8 receipt offline against the ledger, sealed authority, checkpoints and evidence; exits 1 on any failed check, 2 when it cannot run (read-only) |
+| `flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]` | Show each call's grant history, provider session, checkpoint, process group, timing and usage for a v8 attempt and its lineage, led by why it is stuck (read-only) |
+| `flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME` | Recover a v8 attempt (after a decision, an interruption, or a pause) under a fenced claim; the actor is recorded |
 | `flow run cancel-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Ask a live v8 parent to stop; it kills its recorded processes and seals the attempt cancelled, or reports attempt_finished |
 | `flow run abandon-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Reap a stuck v8 attempt's recorded processes and seal it abandoned, keeping every uncertain send uncertain |
 | `flow run delivery-lead WORK_ID attention\|release\|resume\|supersede --expected-generation N [--owner ID]` | Change the Delivery Lead claim under its lead generation; refusals print a stable code |

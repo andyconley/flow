@@ -130,8 +130,17 @@ class SealedExpansionEvidenceTests(unittest.TestCase):
         self.block = self.ledger.expansion_receipt("sealed")
 
     def seal(self, block):
+        # A full-row receipt (ADR 0020): the seal compares every block, so only
+        # the expansion block varies between cases.
+        from receipt_compare import expected_blocks
+        view = self.ledger.seal_view("sealed")
+        receipt = {key: value for key, value in expected_blocks(view["snapshot"], view["blocks"]).items()
+                   if value is not None}
+        receipt.pop("expansion", None)
+        if block is not None:
+            receipt["expansion"] = block
         path = self.dir / "receipt.json"
-        path.write_text(json.dumps({"expansion": block} if block is not None else {}))
+        path.write_text(json.dumps(receipt))
         self.ledger.finish_attempt("sealed", "failed", "test", str(path), generation=1)
 
     def test_added_removed_or_altered_grants_are_refused_at_seal(self):

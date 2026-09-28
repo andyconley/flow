@@ -253,7 +253,8 @@ class CharteredPreparationTests(CharteredFixture):
         self.assertEqual(envelope["limits"], {"max_delegations": 2, "max_concurrent": 1,
                          "max_replans": 0, "max_manager_calls": 12,
                          "max_manager_rounds": 6, "max_paid_worker_calls": 2,
-                         "max_runtime_seconds": 300, "max_verifier_calls": 2})
+                         "max_runtime_seconds": 300, "max_verifier_calls": 2,
+                         "max_lineage_tokens": 2_000_000, "token_tranche": 1_000, "unobserved_send_tokens": 1_000})
 
     def test_v7_projects_ownership_and_requires_auditable_provider_choice(self):
         envelope, _, _, _ = self.prepare()
@@ -804,6 +805,8 @@ class CharteredPreparationTests(CharteredFixture):
         # verifier allowance, inputs, evaluations, or usage.
         envelope["execution_protocol_version"] = 7
         envelope["limits"].pop("max_verifier_calls")
+        for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+            envelope["limits"].pop(key)
         receipt["execution_protocol_version"] = 7
         for field in ("verifier_inputs", "verifier_evaluations", "verifier_usage"):
             receipt.pop(field)

@@ -187,11 +187,17 @@ class ControlScope:
                   "host": socket.gethostname(), "cancel_supported": self.cancel_supported, "created_at": _now()}
         _write_new(self.path, (json.dumps(record, sort_keys=True) + "\n").encode())
 
-    def register(self, pgid: int, kind: str) -> None:
-        """Append one started process group with its leader's start time, read now."""
+    def register(self, pgid: int, kind: str, row_id: str | None = None) -> None:
+        """Append one started process group with its leader's start time, read now.
+
+        ``row_id`` names the provider call (action or manager call) the group
+        served; the MAF child and the targeted test carry ``None`` (ADR 0020).
+        """
         if kind not in GROUP_KINDS or type(pgid) is not int or pgid <= 1:
             raise ValueError("process group registration is invalid")
-        line = {"pgid": pgid, "leader_start": start_time(pgid), "kind": kind, "at": _now()}
+        if row_id is not None and (kind != "provider" or not isinstance(row_id, str) or not row_id):
+            raise ValueError("process group row id is invalid")
+        line = {"pgid": pgid, "leader_start": start_time(pgid), "kind": kind, "at": _now(), "row_id": row_id}
         fd = os.open(self.groups_path, os.O_CREAT | os.O_APPEND | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
         with os.fdopen(fd, "ab") as handle:
             handle.write((json.dumps(line, sort_keys=True) + "\n").encode())
@@ -228,11 +234,11 @@ def control_scope(attempt_dir: Path, generation: int, *, attempt_id: str,
         scope.close()
 
 
-def register_group(pgid: int, kind: str) -> None:
+def register_group(pgid: int, kind: str, row_id: str | None = None) -> None:
     """Register a group with the open scope; a no-op outside one (used by test stubs)."""
     scope = current()
     if scope is not None:
-        scope.register(pgid, kind)
+        scope.register(pgid, kind, row_id)
 
 
 def read_bounded(path: Path, limit: int = MAX_RECORD_BYTES) -> bytes | None:

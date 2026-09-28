@@ -15,7 +15,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from execution_contracts import (TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical, digest, envelope_digest,
+from execution_contracts import (MANAGER_IDENTITY_FIELDS, TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical,
+                                 digest, envelope_digest, handback_supported, validate_manager_identity,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
@@ -25,6 +26,7 @@ from delivery_projection import lead_claim_active
 import delivery_termination
 import delivery_cancel
 import process_identity
+from manager_requests import render_manager_prompt, request_bytes, write_request_file
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
                                EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
                                OWNER_GENERATION_STALE, V8_DISPOSITION_UNSUPPORTED, V8_EVIDENCE_FILE_REFUSED,
@@ -34,8 +36,8 @@ from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATIO
                                build_recovery_block, denied_reply,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
                                runtime_outcome)
-from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
-                                validate_shaper_contract)
+from delivery_contracts import (DELIVERY_CHARTER_VERSION, DeliveryContractError, digest as delivery_digest,
+                                project_envelope_limits, validate_delivery_charter, validate_shaper_contract)
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot, resolve_attempt
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
@@ -45,7 +47,8 @@ from codex_worker import call_codex
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
-from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch, verifier_instructions
+from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch,
+                                verifier_instructions, verifier_provider_task)
 
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
@@ -387,6 +390,9 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         # Protocol v8 enforces the verifier allowance the Charter sealed; a
         # legacy Charter never sealed one, so Flow will not invent a default.
         raise ContractError("protocol v8 requires a Delivery Charter that seals max_verifier_calls")
+    if canonical_charter.get("charter_version") != DELIVERY_CHARTER_VERSION:
+        # ADR 0020: the lineage token budget is sealed, never defaulted.
+        raise ContractError("protocol v8 requires a Delivery Charter that seals a token budget")
     if len(specialists) > canonical_limits.get("delegations", 0):
         raise ContractError("runtime roster expands the sealed Delivery Charter")
     if (canonical_limits.get("paths") != ["charter-scoped"]
@@ -452,6 +458,8 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     job_contract = {"task": task, "baseline": job_baseline,
                     "read_paths": charter["read_paths"], "write_paths": charter["write_paths"],
                     "test": charter["test"], "producer_instance_ids": producers, "verifier_instance_ids": verifiers}
+    # One projection, shared with verify-receipt (ADR 0020).
+    limits, headroom = project_envelope_limits(canonical_limits)
     envelope = {"schema_version": 1, "execution_protocol_version": 8, "work_id": work_id, "attempt_id": attempt_id,
                 "charter_digest": digest({"requirements": sources["requirements"]["sha256"], "acceptance": sources["acceptance"]["sha256"]}),
                 "charter_sources": sources, "run_protocol_revision": 2,
@@ -467,18 +475,10 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "handoff_digest": delivery["handoff_digest"],
                 "delivery_lead_claim_digest": delivery["lead_claim_digest"],
                 "delivery_lead_claim": {"lead_id": authority["claim"]["owner"], "generation": delivery["owner_generation"]},
-                "limits": {"max_delegations": canonical_limits["delegations"],
-                           "max_concurrent": canonical_limits["concurrency"],
-                           "max_replans": canonical_limits["replans"],
-                           "max_runtime_seconds": canonical_limits["runtime_seconds"],
-                           "max_manager_calls": canonical_limits["max_manager_calls"],
-                           "max_manager_rounds": canonical_limits["max_manager_rounds"],
-                           "max_paid_worker_calls": canonical_limits["max_paid_worker_calls"],
-                           "max_verifier_calls": canonical_limits["max_verifier_calls"]}}
+                "limits": limits}
     if predecessors:
         # Added only when non-empty, so a first attempt stays byte-identical.
         envelope["predecessors"] = predecessors
-    headroom = {name: value for name, value in canonical_limits.get("expansion_headroom", {}).items() if value}
     if headroom:
         # Projected from the sealed Charter only; omitted when none is sealed.
         envelope["expansion_headroom"] = headroom
@@ -1128,13 +1128,18 @@ def decide_expansion(work_id: str, attempt_id: str, request_id: str, *, approve:
                                        actor=actor, explanation=explanation)
 
 
-def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
-                     actor: str = "codex-assisted-recovery", python_path: str | None = None,
+def recover_delivery(work_id: str, attempt_id: str, *, actor: str, root: Path | None = None,
+                     python_path: str | None = None,
                      manager_adapter: Callable[..., dict[str, Any]] | None = None,
                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
                      supervisor: Callable[..., dict[str, Any]] | None = None,
                      test_runner: Callable[[Path], dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Resolve one observed v5 Claude result and resume it; route v6-v8 to chartered recovery."""
+    """Resolve one observed v5 Claude result and resume it; route v6-v8 to chartered recovery.
+
+    ``actor`` is required: it is recorded on the recovery and as the owner actor (ADR 0020).
+    """
+    if not isinstance(actor, str) or not actor.strip() or len(actor) > 256:
+        raise ContractError("recovery actor is required")
     project_root = (root or repo_root()).resolve()
     valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
     if not valid:
@@ -1210,11 +1215,8 @@ def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
                            python_path=python_path, continuation_epoch_id=epoch["epoch_id"])
 
 
-def _verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structured: bool) -> str:
-    """Build the exact evidence-bearing verifier input Flow sends and digests."""
-    text = (task + "\n\nFlow-verified complete bounded diff for this review:\n"
-            + diff + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
-    return text + VERIFIER_CONTRACT_INSTRUCTION if structured else text
+# One builder, shared with verify-receipt (ADR 0020).
+_verifier_provider_task = verifier_provider_task
 
 
 def _evaluate_verifier(ledger: ExecutionLedger, action: dict[str, Any], result: dict[str, Any],
@@ -1277,7 +1279,7 @@ def _completed_reply(ledger: ExecutionLedger, envelope: dict[str, Any], attempt_
 def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: ExecutionLedger,
                    snapshot: dict[str, Any], *, failure: str, edit_evidence: dict[str, Any] | None,
                    test_evidence: dict[str, Any] | None, verifier_input_sha256: str | None,
-                   continuation_epoch_id: str | None) -> tuple[dict[str, Any], str, str]:
+                   continuation_epoch_id: str | None, blocks: dict[str, Any] | None = None) -> tuple[dict[str, Any], str, str]:
     """Derive the terminal status and the linked receipt from ledger facts."""
     aid = envelope["attempt_id"]
     source_commit = envelope["source_commit"]
@@ -1319,16 +1321,19 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         receipt["verifier_inputs"] = snapshot.get("verifier_inputs", [])
         receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
         receipt["verifier_usage"] = snapshot["verifier_usage"]
-        if envelope.get("predecessors"):
-            receipt["lineage_usage"] = ledger.lineage_usage(aid)
-        expansion = ledger.expansion_receipt(aid)
-        if expansion is not None:
+        # The seal's own blocks, read with the snapshot under the sealing lock (ADR 0020).
+        if blocks is None:
+            raise ContractError("a v8 receipt is built from the sealing seal_view")
+        if blocks["lineage_usage"] is not None:
+            receipt["lineage_usage"] = blocks["lineage_usage"]
+        if blocks["expansion"] is not None:
             # Added only when the lineage expanded, so other receipts stay byte-identical.
-            receipt["expansion"] = expansion
-        manager_progress = ledger.manager_progress_receipt(aid)
-        if manager_progress is not None:
+            receipt["expansion"] = blocks["expansion"]
+        if blocks["manager_progress"] is not None:
             # Added only when a progress reply was repaired or retried (ADR 0018).
-            receipt["manager_progress"] = manager_progress
+            receipt["manager_progress"] = blocks["manager_progress"]
+        if blocks["token_usage"] is not None:
+            receipt["token_usage"] = blocks["token_usage"]
         if snapshot.get("recoveries"):
             # A receipt on disk while the attempt is started is an unsealed
             # draft from a process that died before finish_attempt.
@@ -1459,6 +1464,8 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                                                 edit_evidence["diff_sha256"], structured=structured_verifier)
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
+    manager_provider = (envelope.get("manager") or {}).get("provider", "claude") if structured_verifier else None
+
     def on_manager(message: dict[str, Any]) -> str:
         stop_if_cancelled()
         request = _normalized_manager_request(envelope, message)
@@ -1498,6 +1505,11 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             raise ContractError("Magentic manager call denied: " + decision["reason"])
         with authority_guard(), ledger.send_lock():
             ledger.assert_owner(aid, generation)
+            if structured_verifier:
+                # The exact request is durable before its grant can be used, so
+                # every call that might have been sent has its file (ADR 0020).
+                write_request_file(attempt_dir, request["call_id"],
+                                   request_bytes(request["call_id"], request["prompt_digest"], message["messages"]))
             stop_if_cancelled()  # before the grant is used, so an unsent call stays unsent
             if not ledger.consume_manager_grant(request["call_id"], decision["grant_id"], generation=generation):
                 raise ContractError("Magentic manager grant was already consumed")
@@ -1509,6 +1521,12 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                 observation = {"status": "completed", "output": text,
                                "output_sha256": digest(text),
                                "usage": result.get("usage")}
+                if structured_verifier and manager_provider in MANAGER_IDENTITY_FIELDS:
+                    # The provider session identity joins the call to its
+                    # provider transcript; a reply without it stays uncertain.
+                    for field in MANAGER_IDENTITY_FIELDS[manager_provider]:
+                        observation[field] = result.get(field)
+                    validate_manager_identity(manager_provider, observation)
                 if result.get("normalization") == "exact_json_fence":
                     observation["normalization"] = "exact_json_fence"
                     observation["raw_output_sha256"] = result["raw_output_sha256"]
@@ -1745,18 +1763,36 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                   hook: Callable[[str], None]) -> dict[str, Any]:
     """Build, validate, write, and seal an attempt receipt under the owner fence."""
     aid = envelope["attempt_id"]
-    if envelope["execution_protocol_version"] == 8:
-        # A sealed attempt keeps no open request or unused grant.
-        with authority_guard(), ledger.send_lock():
-            ledger.close_expansions(aid, "sealed", generation=generation)
-    receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
-                                               edit_evidence=edit_evidence, test_evidence=test_evidence,
-                                               verifier_input_sha256=verifier_input_sha256,
-                                               continuation_epoch_id=None)
-    validate_receipt(envelope, receipt)
-    hook("after-receipt-draft")
     receipt_path = attempt_dir / "receipt.json"
+    if envelope["execution_protocol_version"] != 8:
+        receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
+                                                   edit_evidence=edit_evidence, test_evidence=test_evidence,
+                                                   verifier_input_sha256=verifier_input_sha256,
+                                                   continuation_epoch_id=None)
+        validate_receipt(envelope, receipt)
+        hook("after-receipt-draft")
+        with authority_guard(), ledger.send_lock():
+            ledger.assert_owner(aid, generation)
+            write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+            hook("before-finish-attempt")
+            ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+        return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
+                "evidence": receipt["evidence"]}
+    # v8: one send_lock hold closes expansions, snapshots, builds and seals, so
+    # the receipt rows are the rows finish_attempt compares (ADR 0020).
+    if not handback_supported(envelope):
+        # Refused before any draft is written; abandon is the only way to end it.
+        raise ContractError("attempt predates the sealed token budget; abandon it")
     with authority_guard(), ledger.send_lock():
+        # A sealed attempt keeps no open request or unused grant.
+        ledger.close_expansions(aid, "sealed", generation=generation)
+        view = ledger.seal_view(aid)
+        receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, view["snapshot"], failure=failure,
+                                                   edit_evidence=edit_evidence, test_evidence=test_evidence,
+                                                   verifier_input_sha256=verifier_input_sha256,
+                                                   continuation_epoch_id=None, blocks=view["blocks"])
+        validate_receipt(envelope, receipt)
+        hook("after-receipt-draft")
         ledger.assert_owner(aid, generation)
         write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
         hook("before-finish-attempt")
@@ -1766,20 +1802,10 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
 
 
 def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
-                             on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
-    turns = []
-    for item in message["messages"]:
-        contents = item.get("contents") if isinstance(item, dict) else None
-        role = item.get("role") if isinstance(item, dict) else None
-        if not isinstance(role, str) or not isinstance(contents, list) or not contents:
-            raise ContractError("stock manager prompt structure is invalid")
-        parts = [part.get("text") for part in contents if isinstance(part, dict) and part.get("type") == "text"]
-        if len(parts) != len(contents) or any(not isinstance(part, str) for part in parts):
-            raise ContractError("stock manager message contains unsupported content")
-        turns.append(f"{role}:\n" + "\n".join(parts))
-    prompt = "\n\n".join(turns)
-    if not prompt.strip():
-        raise ContractError("stock manager prompt text is absent")
+                             on_process_group: Callable[..., None] | None = None) -> dict[str, Any]:
+    prompt = render_manager_prompt(message["messages"])
+    if on_process_group is not None and isinstance(message.get("call_id"), str):
+        on_process_group = partial(on_process_group, row_id=message["call_id"])
     timeout_seconds = min(120, envelope.get("limits", {}).get("max_runtime_seconds", 120))
     if envelope["manager"].get("provider", "claude") == "claude":
         result = call_claude(instructions="stock Magentic manager", task="model response",
@@ -1809,8 +1835,10 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
 
 def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
                             trace_dir: Path | None = None,
-                            on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
+                            on_process_group: Callable[..., None] | None = None) -> dict[str, Any]:
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
+    if on_process_group is not None and isinstance(action.get("action_id"), str):
+        on_process_group = partial(on_process_group, row_id=action["action_id"])
     timeout_seconds = min(300, envelope.get("limits", {}).get("max_runtime_seconds", 300))
     if action["provider"] == "ollama":
         structured = (envelope["execution_protocol_version"] == 8

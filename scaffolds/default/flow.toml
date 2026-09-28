@@ -593,6 +593,18 @@ invocation = "flow run stuck [--json]"
 summary = "List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only)"
 
 [[help.cli_commands]]
+invocation = "flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]"
+summary = "Verify a sealed v8 receipt offline against the ledger, sealed authority, checkpoints and evidence; exits 1 on any failed check, 2 when it cannot run (read-only)"
+
+[[help.cli_commands]]
+invocation = "flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]"
+summary = "Show each call's grant history, provider session, checkpoint, process group, timing and usage for a v8 attempt and its lineage, led by why it is stuck (read-only)"
+
+[[help.cli_commands]]
+invocation = "flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME"
+summary = "Recover a v8 attempt (after a decision, an interruption, or a pause) under a fenced claim; the actor is recorded"
+
+[[help.cli_commands]]
 invocation = "flow run cancel-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N"
 summary = "Ask a live v8 parent to stop; it kills its recorded processes and seals the attempt cancelled, or reports attempt_finished"
 
