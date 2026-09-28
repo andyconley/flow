@@ -328,16 +328,17 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
     if not _safe_relative_paths(job["read_paths"]) or not _safe_relative_paths(job["write_paths"]) or job["write_paths"] != envelope["allowed_paths"]:
         raise ContractError("chartered job path scope is invalid")
     test = job["test"]
+    argv = test.get("argv") if isinstance(test, dict) else None
+    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+    focused = (isinstance(argv, list) and len(argv) == 8
+               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+               and argv[6] == "-p" and argv[7].startswith("test_") and argv[7].endswith(".py")
+               and argv[7][5:-3].replace("_", "").isalnum())
     if (not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}
             or not isinstance(test["argv"], list) or not test["argv"]
             or any(not isinstance(arg, str) or not arg or "\x00" in arg or "\n" in arg for arg in test["argv"])
             or test["argv"][0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or len(test["argv"]) != 8
-            or test["argv"][1:6] != ["-m", "unittest", "discover", "-s", "tests"]
-            or test["argv"][6] != "-p"
-            or not test["argv"][7].startswith("test_")
-            or not test["argv"][7].endswith(".py")
-            or not test["argv"][7][5:-3].replace("_", "").isalnum()
+            or not (full_discovery or focused)
             or type(test["timeout_seconds"]) is not int or not 1 <= test["timeout_seconds"] <= 3600):
         raise ContractError("chartered job test command is invalid")
     for kind, providers in (("producer_instance_ids", {"claude", "codex"}),

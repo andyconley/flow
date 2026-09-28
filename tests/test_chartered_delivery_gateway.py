@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts,
+from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts, _job_test,
                               _execute_prepared_delivery, _verify_chartered_edit,
                               execute_chartered_delivery, prepare_chartered_delivery)
 from delivery_recovery import RecoveryRefused  # noqa: E402
@@ -1311,6 +1311,11 @@ class ExecutionFactsTests(unittest.TestCase):
 
 
 class CharteredEvidenceScopeTests(unittest.TestCase):
+    def test_full_unittest_discovery_is_a_safe_chartered_test(self):
+        test = {"argv": ["python3", "-m", "unittest", "discover", "-s", "tests"],
+                "timeout_seconds": 120}
+        self.assertEqual(_job_test(test), test)
+
     def test_changed_files_may_descend_from_approved_roots(self):
         self.assertTrue(_paths_within_scopes(
             ["README.md", "src/hardware_watcher/domain/models.py", "tests/test_foundation.py"],

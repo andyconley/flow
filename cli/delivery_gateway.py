@@ -168,14 +168,17 @@ def _job_test(test: Any) -> dict[str, Any]:
     if not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}:
         raise ContractError("targeted test specification is invalid")
     argv, timeout = test["argv"], test["timeout_seconds"]
-    if (not isinstance(argv, list) or len(argv) != 8
+    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+    focused = (isinstance(argv, list) and len(argv) == 8
+               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+               and argv[6] == "-p")
+    if (not isinstance(argv, list)
             or any(not isinstance(arg, str) or not arg or len(arg) > 256 or "\x00" in arg for arg in argv)
             or argv[0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or argv[1:6] != ["-m", "unittest", "discover", "-s", "tests"]
-            or argv[6] != "-p"
+            or not (full_discovery or focused)
             or type(timeout) is not int or not 1 <= timeout <= 3600):
         raise ContractError("targeted test argv or deadline is unsupported")
-    if not argv[7].startswith("test_") or not argv[7].endswith(".py") or not argv[7][5:-3].replace("_", "").isalnum():
+    if focused and (not argv[7].startswith("test_") or not argv[7].endswith(".py") or not argv[7][5:-3].replace("_", "").isalnum()):
         raise ContractError("targeted test pattern is unsafe")
     return test
 

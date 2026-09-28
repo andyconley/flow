@@ -48,6 +48,13 @@ def structured_verifier() -> dict:
     return env
 
 
+class FullSuiteContractTests(unittest.TestCase):
+    def test_full_unittest_discovery_is_valid(self):
+        env = chartered()
+        env["job_contract"]["test"]["argv"] = ["python3", "-m", "unittest", "discover", "-s", "tests"]
+        validate_envelope(env)
+
+
 class CharteredContractTests(unittest.TestCase):
     def test_v6_envelope_accepts_explicit_generic_job(self) -> None:
         validate_envelope(chartered())
