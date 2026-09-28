@@ -177,6 +177,7 @@ def _banner(work_id: str, snapshot: dict[str, Any], control: dict[str, Any] | No
 def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[str, Any], *, delivery: Any,
              probe: bool) -> dict[str, Any]:
     snapshot = entry["snapshot"]
+    token_state = entry.get("token_state")
     attempt_id = entry["attempt_id"]
     if entry["execution_protocol_version"] != 8:
         return {"attempt_id": attempt_id, "execution_protocol_version": entry["execution_protocol_version"],
@@ -205,6 +206,8 @@ def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[s
         "control_records": [{"owner_generation": item["owner_generation"], "pid": item.get("pid"),
                              "closed": item["closed"], "groups": len(item["groups"])} for item in found],
         "contract": "handback" if handback_supported(snapshot["envelope"]) else "unsupported_contract",
+        # Absolute tokens first; tranche counts are secondary (ADR 0020).
+        "token_cap": token_state,
         "entries": entries,
         "totals": {"paid_calls": sum(item["status"] in sent for item in paid_rows),
                    "verifier_calls": sum(item.get("verifier") is True and item["status"] in sent for item in rows),
@@ -284,6 +287,12 @@ def render_text(view: dict[str, Any]) -> str:
                          + (f" grants {grants}" if grants else ""))
         totals = attempt["totals"]
         lines.append("  totals: " + ", ".join(f"{key} {value}" for key, value in totals.items()))
+        cap = attempt.get("token_cap")
+        if cap:
+            lines.append(f"  token cap: charged {cap['charged']:,} of {cap['maximum']:,} "
+                         f"({cap['remaining']:,} remaining; headroom {cap['headroom_tokens_remaining']:,} tokens"
+                         f" = {cap['headroom_tranches_remaining']} x {cap['token_tranche']:,};"
+                         f" {cap['tranches_granted']} tranche(s) granted)")
     lines.append("")
     lines.append("lineage: " + ", ".join(f"{key} {value}" for key, value in view["lineage_totals"].items()))
     return "\n".join(lines)

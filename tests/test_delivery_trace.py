@@ -22,7 +22,7 @@ from tests.test_expansion_gateway import ExpansionGatewayFixture  # noqa: E402
 ROW_KEYS = {"type", "row_id", "seq", "provider", "model", "status", "reason", "grant_history", "grant_id",
             "session_id", "input_sha256", "request_file", "pgids", "checkpoint", "timing", "usage"}
 ATTEMPT_KEYS = {"attempt_id", "execution_protocol_version", "supported", "status", "owner_generation", "owner_actor",
-                "banner", "contract", "control_records", "entries", "totals"}
+                "banner", "contract", "control_records", "entries", "token_cap", "totals"}
 
 
 def tree_digest(root: Path) -> dict[str, str]:
@@ -165,3 +165,45 @@ if __name__ == "__main__":
     import unittest
 
     unittest.main()
+
+
+import tests.test_token_gate as token_gate_tests  # noqa: E402  (module import: its tests are not re-collected)
+
+
+class TokenPauseBannerTests(token_gate_tests.TokenEscalationRecoveryTests):
+    """AC7 banner golden for a token_cap pause, with absolute token numbers (P-F3, P-F6)."""
+
+    test_a_token_pause_resumes_in_answer_mode_and_sends_the_call_once = None
+
+    def test_the_paused_banner_and_cap_state(self):
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            self.run_manager(envelope, on_manager, (1,))
+            proposal = self._proposal(envelope, "editor", 1)
+            self.checkpoint(envelope, proposal)
+            on_action(proposal)
+            self.run_manager(envelope, on_manager, (2,))
+            return {"attempt_id": envelope["attempt_id"]}
+
+        manager = lambda message, **_: manager_reply(message, "facts", usage={"input_tokens": 8_000, "output_tokens": 0})
+
+        def worker(action, *, envelope, workspace):
+            (workspace / "target.py").write_text("new\n")
+            return self._result("codex", "editor-model", "Edited target")
+
+        paused = self.execute(supervisor, worker=worker, manager=manager)
+        view = trace("sample", root=self.root)
+        attempt = view["attempts"][-1]
+        banner = dict(attempt["banner"], since_seq="<seq>", since_at="<at>")
+        denied = self.ledger().snapshot(paused["attempt_id"])["manager_calls"][-1]["call_id"]
+        self.assertEqual(banner, {
+            "state": "started", "reason": "expansion_paused: token_cap", "row_id": denied,
+            "since_seq": "<seq>", "since_at": "<at>",
+            "next_command": f"flow run decide-expansion sample {paused['attempt_id']} {paused['request_id']} "
+                            "--approve|--deny --expected-generation 1 --actor NAME --explanation TEXT"})
+        self.assertEqual(attempt["token_cap"], {"charged": 10_000, "maximum": 10_000, "remaining": 0,
+                                                "tranches_granted": 0, "token_tranche": 5_000,
+                                                "headroom_tokens_remaining": 0, "headroom_tranches_remaining": 0})
+        text = render_text(view).splitlines()
+        self.assertTrue(text[0].startswith(f"STUCK {paused['attempt_id']}: expansion_paused: token_cap on {denied[:12]}"))
+        self.assertIn("  token cap: charged 10,000 of 10,000 (0 remaining; headroom 0 tokens = 0 x 5,000; "
+                      "0 tranche(s) granted)", text)

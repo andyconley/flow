@@ -36,6 +36,7 @@ from execution_contracts import (
     expansion_headroom,
     handback_supported,
     manager_progress_block,
+    token_gate,
     usage_values_valid,
 )
 from runner_progress import classify as classify_progress
@@ -579,6 +580,9 @@ class ExecutionLedger:
         limit that needs exactly one more unit. A request is possible only when
         no hard predicate fails, so a cap can never mask a hard denial.
         """
+        if not handback_supported(envelope):
+            # ADR 0020: a pre-release attempt stays readable and abandonable only.
+            raise ContractError("attempt predates the sealed token budget; abandon it")
         attempt, job = envelope["attempt_id"], envelope["job_contract"]
         rows = [(json.loads(r[0]), r[1]) for r in db.execute(
             "SELECT request_json,status FROM actions WHERE attempt_id=? AND action_id<>?", (attempt, exclude))]
@@ -601,6 +605,9 @@ class ExecutionLedger:
         paid_count += lineage["predecessor_paid_calls"]
         verifier_used = verifier_reserved + lineage["predecessor_verifier_sends"]
         effective = ExecutionLedger._effective_limits(db, envelope)
+        # ADR 0020: observed and sealed charges of the whole lineage, before the grant.
+        over_budget, token_units = token_gate(ExecutionLedger._lineage_charged(db, envelope)["total"], envelope,
+                                              effective["tokens"])
         # (reason, failing, expandable limit or None for hard, units needed)
         checks = [
             ("producer_already_completed", completed_producer, None, 0),
@@ -610,6 +617,7 @@ class ExecutionLedger:
              and (latest is None or latest[0] not in {"valid_fail", "unusable"}), None, 0),
             ("paid_call_cap", action["provider"] in paid and paid_count >= effective["paid_worker_calls"], "paid_worker_calls",
              paid_count - effective["paid_worker_calls"] + 1),
+            ("token_cap", action["provider"] in paid and over_budget, "tokens", token_units),
             ("delegation_cap", delegations >= effective["delegations"], "delegations",
              delegations - effective["delegations"] + 1),
             ("concurrency_cap", concurrent >= envelope["limits"]["max_concurrent"], None, 0),
@@ -1149,6 +1157,63 @@ class ExecutionLedger:
         return ExecutionLedger._v8_action_checks(db, envelope, action, exclude=exclude)[0]
 
     @staticmethod
+    def _v8_manager_checks(db: sqlite3.Connection, envelope: dict[str, Any], request: dict[str, Any], *,
+                           protocol: int, exclude: str = "") -> tuple[str, str | None, list[str]]:
+        """Every manager-call predicate, shared by the decision and both reissues (ADR 0020).
+
+        Returns the stored reason (replan refusals first; the caps historically
+        overwrite it), the hard reason or None, and the expandable limits that
+        each need exactly one more unit. ``exclude`` leaves a reissued row out
+        of its own counts. The token check applies to paid v8 managers only.
+        """
+        attempt = envelope["attempt_id"]
+        if protocol == 8 and not handback_supported(envelope):
+            raise ContractError("attempt predates the sealed token budget; abandon it")
+        reason = "allowed"
+        if request["phase"] in {"replan_facts", "replan_plan"}:
+            replan_sequence = request["replan_sequence"]
+            linked = db.execute("SELECT status FROM replan_decisions WHERE attempt_id=? AND sequence=? AND replan_id=?",
+                                (attempt, replan_sequence, request["replan_id"])).fetchone()
+            if linked != ("allowed",):
+                reason = "replan_not_authorized"
+            else:
+                phase_rows = lambda phase, sequence: db.execute(
+                    "SELECT status FROM manager_calls WHERE attempt_id=? AND call_id<>? AND json_extract(request_json,'$.phase')=? "
+                    "AND json_extract(request_json,'$.replan_sequence')=?", (attempt, exclude, phase, sequence)).fetchall()
+                facts, plans = phase_rows("replan_facts", replan_sequence), phase_rows("replan_plan", replan_sequence)
+                if request["phase"] == "replan_facts":
+                    previous = phase_rows("replan_plan", replan_sequence - 1)
+                    if facts or (replan_sequence > 1 and previous != [("completed",)]):
+                        reason = "replan_out_of_order"
+                elif facts != [("completed",)] or plans:
+                    reason = "replan_out_of_order"
+        attempt_calls = db.execute(
+            "SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND call_id<>? "
+            "AND status IN ('allowed','started','completed','unknown')", (attempt, exclude)).fetchone()[0]
+        # Replan refusals are hard; the caps below historically overwrite the
+        # stored reason, but they can never turn one into a request.
+        replan_reason = reason
+        effective = ExecutionLedger._effective_limits(db, envelope)
+        paid_manager = envelope["manager"]["provider"] in {"codex", "claude"}
+        call_units = attempt_calls - effective["manager_calls"] + 1 if paid_manager and attempt_calls >= effective["manager_calls"] else 0
+        round_units = request["manager_round"] - effective["manager_rounds"] if request["manager_round"] > effective["manager_rounds"] else 0
+        token_units = 0
+        if protocol == 8 and paid_manager:
+            token_units = token_gate(ExecutionLedger._lineage_charged(db, envelope)["total"], envelope,
+                                     effective["tokens"])[1]
+        caps = [(name, limit, units) for name, limit, units in (("manager_call_cap", "manager_calls", call_units),
+                                                                ("manager_round_cap", "manager_rounds", round_units),
+                                                                ("token_cap", "tokens", token_units)) if units]
+        if caps:
+            reason = caps[0][0]
+        if replan_reason != "allowed":
+            hard = replan_reason
+        else:
+            hard = next((name for name, limit, units in caps
+                         if protocol != 8 or units != 1 or not expansion_fits(envelope, limit, effective[limit] + 1)), None)
+        return reason, hard, [limit for _, limit, _ in caps]
+
+    @staticmethod
     def _consume_expansion_grant_locked(db: sqlite3.Connection, attempt_id: str, kind: str, row_id: str) -> str:
         """Consume the one approved, unused grant of a decided request; a second use refuses."""
         grant = db.execute("SELECT g.grant_id,g.status,g.decision,r.status FROM expansion_requests r JOIN expansion_grants g "
@@ -1210,12 +1275,9 @@ class ExecutionLedger:
                 raise RecoveryRefused(EXPANSION_GRANT_CONSUMED, f"manager call is already {row[1]}")
             self._consume_expansion_grant_locked(db, row[0], "manager_call", call_id)
             envelope, request = json.loads(attempt[2]), json.loads(row[2])
-            effective = self._effective_limits(db, envelope)
-            prior = db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND call_id<>? "
-                               "AND status IN ('allowed','started','completed','unknown')", (row[0], call_id)).fetchone()[0]
-            if ((envelope["manager"]["provider"] in {"codex", "claude"} and prior >= effective["manager_calls"])
-                    or request["manager_round"] > effective["manager_rounds"]):
-                raise ContractError("expanded manager call is still over its limit")
+            reason, _, _ = self._v8_manager_checks(db, envelope, request, protocol=8, exclude=call_id)
+            if reason != "allowed":
+                raise ContractError("expanded manager call is still over its limit: " + reason)
             grant = uuid.uuid4().hex
             db.execute("UPDATE manager_calls SET status='allowed',reason='expansion_granted',grant_id=? WHERE call_id=?", (grant, call_id))
             self._grant_changed(db, row[0], call_id, "manager_call", "issue", grant, "expansion_granted")
@@ -1226,15 +1288,25 @@ class ExecutionLedger:
         """Rotate an allowed, never-sent manager grant in place under an active recovery."""
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT attempt_id,status FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
+            row = db.execute("SELECT attempt_id,status,request_json,grant_id FROM manager_calls WHERE call_id=?", (call_id,)).fetchone()
             if row is None:
                 raise ContractError("manager call missing")
             self._assert_owner(db, row[0], generation)
-            attempt = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (row[0],)).fetchone()
+            stored = db.execute("SELECT status,execution_protocol_version,envelope_json FROM attempts WHERE attempt_id=?",
+                                (row[0],)).fetchone()
+            attempt = stored[:2]
             if (row[1] != "allowed" or attempt != ("started", 8) or not self._active_recovery(db, row[0], generation)
                     or self._unresolved_action(db, row[0])
                     or db.execute("SELECT 1 FROM events WHERE action_id=? AND event='manager_send_started'", (call_id,)).fetchone()):
                 raise ContractError("manager call is not eligible for recovery reissue")
+            # ADR 0020: the rotated grant is a new send authorisation, so every
+            # manager limit is checked again, with this row left out of its counts.
+            reason, _, _ = self._v8_manager_checks(db, json.loads(stored[2]), json.loads(row[2]), protocol=8, exclude=call_id)
+            if reason != "allowed":
+                db.execute("UPDATE manager_calls SET status='denied',reason=?,grant_id=NULL WHERE call_id=?", (reason, call_id))
+                self._grant_changed(db, row[0], call_id, "manager_call", "deny", row[3], reason)
+                self._event(db, row[0], call_id, "manager_policy_denied", reason)
+                return {"allowed": False, "reason": reason, "call_id": call_id, "grant_id": None, "replayed": False}
             grant = uuid.uuid4().hex
             db.execute("UPDATE manager_calls SET grant_id=? WHERE call_id=?", (grant, call_id))
             self._grant_changed(db, row[0], call_id, "manager_call", "rotate", grant, "recovery_regranted")
@@ -1481,43 +1553,9 @@ class ExecutionLedger:
             previous = db.execute("SELECT COALESCE(MAX(sequence),0) FROM manager_calls WHERE attempt_id=?", (attempt,)).fetchone()[0]
             if request["sequence"] != previous + 1:
                 raise ContractError("manager call sequence is skipped or out of order")
-            reason = hard = "allowed"
-            if request["phase"] in {"replan_facts", "replan_plan"}:
-                replan_sequence = request["replan_sequence"]
-                linked = db.execute("SELECT status FROM replan_decisions WHERE attempt_id=? AND sequence=? AND replan_id=?",
-                                    (attempt, replan_sequence, request["replan_id"])).fetchone()
-                if linked != ("allowed",):
-                    reason = "replan_not_authorized"
-                else:
-                    facts = db.execute("SELECT status FROM manager_calls WHERE attempt_id=? AND json_extract(request_json,'$.phase')='replan_facts' AND json_extract(request_json,'$.replan_sequence')=?", (attempt, replan_sequence)).fetchall()
-                    plans = db.execute("SELECT status FROM manager_calls WHERE attempt_id=? AND json_extract(request_json,'$.phase')='replan_plan' AND json_extract(request_json,'$.replan_sequence')=?", (attempt, replan_sequence)).fetchall()
-                    if request["phase"] == "replan_facts":
-                        previous = db.execute("SELECT status FROM manager_calls WHERE attempt_id=? AND json_extract(request_json,'$.phase')='replan_plan' AND json_extract(request_json,'$.replan_sequence')=?", (attempt, replan_sequence - 1)).fetchall()
-                        if facts or (replan_sequence > 1 and previous != [("completed",)]):
-                            reason = "replan_out_of_order"
-                    elif facts != [("completed",)] or plans:
-                        reason = "replan_out_of_order"
-            attempt_calls = db.execute(
-                "SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? "
-                "AND status IN ('allowed','started','completed','unknown')",
-                (attempt,),
-            ).fetchone()[0]
-            # Replan refusals are hard; the caps below historically overwrite
-            # the stored reason, but they can never turn one into a request.
-            hard = reason
-            effective = self._effective_limits(db, envelope)
-            paid_manager = envelope["manager"]["provider"] in {"codex", "claude"}
-            call_units = attempt_calls - effective["manager_calls"] + 1 if paid_manager and attempt_calls >= effective["manager_calls"] else 0
-            round_units = request["manager_round"] - effective["manager_rounds"] if request["manager_round"] > effective["manager_rounds"] else 0
-            if call_units:
-                reason = "manager_call_cap"
-            elif round_units:
-                reason = "manager_round_cap"
+            reason, hard, expandable = self._v8_manager_checks(db, envelope, request, protocol=stored[2])
             expansion = None
-            expandable = [name for name, units in (("manager_calls", call_units), ("manager_rounds", round_units)) if units]
-            if (stored[2] == 8 and reason != "allowed" and hard == "allowed" and expandable
-                    and call_units in {0, 1} and round_units in {0, 1}
-                    and all(expansion_fits(envelope, name, effective[name] + 1) for name in expandable)):
+            if stored[2] == 8 and reason != "allowed" and hard is None and expandable:
                 expansion = self._expand_locked(
                     db, envelope, kind="manager_call", row_id=call_id, limits=expandable, proposal_digest=request["prompt_digest"],
                     rationale=f"manager {request['phase']} call {request['sequence']} in round {request['manager_round']}")
@@ -2751,6 +2789,18 @@ class ExecutionLedger:
                 "expansion": self._expansion_receipt(db, envelope),
                 "manager_progress": self._manager_progress_receipt(db, envelope["attempt_id"])}
 
+    @staticmethod
+    def _token_state_locked(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
+        """The lineage token cap as absolute numbers: charged, maximum, remaining and headroom (ADR 0020)."""
+        limits = envelope["limits"]
+        tranches = ExecutionLedger._effective_limits(db, envelope)["tokens"]
+        maximum = limits["max_lineage_tokens"] + tranches * limits["token_tranche"]
+        charged = ExecutionLedger._lineage_charged(db, envelope)["total"]
+        headroom = ExecutionLedger._headroom_remaining(db, envelope)["tokens"]
+        return {"charged": charged, "maximum": maximum, "remaining": max(0, maximum - charged),
+                "tranches_granted": tranches, "token_tranche": limits["token_tranche"],
+                "headroom_tokens_remaining": headroom * limits["token_tranche"], "headroom_tranches_remaining": headroom}
+
     def lineage_view(self, work_id: str, attempt_id: str | None = None) -> dict[str, Any]:
         """One consistent read of an attempt and its v8 lineage, for trace and verify-receipt (ADR 0020).
 
@@ -2789,6 +2839,8 @@ class ExecutionLedger:
                          "snapshot": self._snapshot_locked(db, item_id)}
                 if row[1] == 8:
                     entry["blocks"] = self._seal_blocks_locked(db, item_envelope)
+                    if handback_supported(item_envelope):
+                        entry["token_state"] = self._token_state_locked(db, item_envelope)
                 attempts.append(entry)
             lineage = self._v8_lineage_locked(db, work_id)[0] if target[1] == 8 else []
             return {"work_id": work_id, "attempt_id": attempt_id, "attempts": attempts, "work_lineage": lineage,

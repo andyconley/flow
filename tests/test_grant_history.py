@@ -60,6 +60,8 @@ SITES = {
     ("reissue_expanded_manager_grant", "UPDATE manager_calls SET status='allowed',reason='expansion_granted',"
                                        "grant_id=? WHERE call_id=?"): ("op", ("issue",)),
     ("reissue_recovered_manager_grant", "UPDATE manager_calls SET grant_id=? WHERE call_id=?"): ("op", ("rotate",)),
+    ("reissue_recovered_manager_grant", "UPDATE manager_calls SET status='denied',reason=?,grant_id=NULL WHERE call_id=?"):
+        ("op", ("deny",)),
     ("_append_resolution_locked", "UPDATE actions SET status='not_dispatched',reason='operator_resolved_not_dispatched',"
                                   "grant_id=NULL WHERE action_id=?"):
         ("op", ("release",)),  # unreachable for v8: resolve_unknown refuses protocol 8
