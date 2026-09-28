@@ -68,8 +68,8 @@ Terms:
   - Ollama (not charged, reported under `verifier_tokens`).
 
   The fixture values come from captured real usage (see the open questions).
-- **AC10. Refusal on each path.** With no headroom and charged ≥ cap:
-  - **Initial grants.** The next paid action grant and the next paid manager grant are refused with `token_cap` before any send.
+- **AC10. Refusal on each path.** With charged ≥ cap and no `tokens` headroom left (whether sealed at 0 or used up):
+  - **Initial grants.** The next paid action grant and the next paid manager grant are denied with `token_cap` before any send. Each pauses the attempt with a `pending` expansion request for `decide-expansion`, exactly as the other expandable limits do at 0 headroom. *(Amended 2026-09-27 by Andy.)*
   - **Regrant and reissue.** Each regrant and reissue path makes a hard `token_cap` denial with the documented state change.
   - **`reissue_recovered_manager_grant`** also enforces the call and round caps, excluding its own row. When it is denied, the attempt fails, and the grant events show `op=deny`.
   - **Unpaid calls.** An unpaid manager and the Ollama verifier are still granted.

@@ -43,3 +43,10 @@ Sources:
 | P-F7 | Important | **Accepted as non-goals.** The job-charter digest and symlink hygiene are named, each with a reason. The success criterion's claim is narrowed to match the reconciliation mapping. |
 | P-F8 | Suggestion | **Resolved by F11.** `call_id` is derived from `prompt_digest`, so different messages give a different call and a different file. For the same call, differing bytes can only come from corruption, and they refuse. |
 | P-F9 | Suggestion | **Accepted.** The `--json \| jq` note goes in the CLI reference. There is no filter flag. |
+
+## Amendment after approval (2026-09-27)
+
+- **Who and why.** Andy amended R10 and AC10 during planning, for consistency with ADR 0017.
+- **What changed.** A `token_cap` hit with no `tokens` headroom left, including headroom sealed at 0, now pauses the attempt for `decide-expansion`, like every other expandable limit, instead of refusing hard. Hard refusals remain for `units > 1` and for the tranche ceiling.
+- **Why it was raised.** Plan interpretation I2 showed the approved text differed from how the other limits behave at 0 headroom.
+- **Effect on the sealed records.** The Delivery Charter sealed at `start-plan` and `approved_artifact_digests` in `run.json` still record the revision-2 bytes. This amendment is the only difference, and it changes only those two passages. The same practice was used for `step5-cancellation`'s manifest amendment.

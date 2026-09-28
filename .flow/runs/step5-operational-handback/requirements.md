@@ -178,7 +178,7 @@ A chartered v8 attempt leaves a record that is correct but hard to audit, and no
 - **The predicate.** `token_cap` fails when `charged ≥ max_lineage_tokens + effective_tranches × token_tranche`.
 - **Units.** `units = floor((charged − effective_tokens) / token_tranche) + 1`. It is expandable only when `units = 1` and the tranche ceiling allows it.
 - **Per path:**
-  - **`decide` / `decide_manager_call`:** ADR 0017 expansion. A tranche within the lineage headroom is granted automatically, as `charter_headroom`. Beyond headroom the attempt pauses for `decide-expansion`. With no headroom, or when `units > 1`, the grant is refused hard.
+  - **`decide` / `decide_manager_call`:** ADR 0017 expansion. A tranche within the lineage headroom is granted automatically, as `charter_headroom`. Beyond headroom (including when no `tokens` headroom is sealed) the attempt pauses for `decide-expansion`, as every other expandable limit does. Only `units > 1` or the tranche ceiling makes the refusal hard. *(Amended 2026-09-27 by Andy, for consistency with ADR 0017.)*
   - **`regrant_recovered_action`, `regrant_expanded_action`, `reissue_expanded_manager_grant`:** the token check runs. On failure the grant is a hard `token_cap` denial, with the same state change each path makes today for a limit failure. It never expands.
   - **`reissue_recovered_manager_grant`:** gains the full manager checks: calls, rounds and the token cap. It excludes its own row from the counts. On failure the row is denied with `grant_changed op=deny`, and the gateway fails the attempt instead of assuming success.
 - **A shared helper.** The manager checks are folded into one `_v8_manager_checks`, used by `decide_manager_call` and both reissues.
