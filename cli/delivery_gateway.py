@@ -15,7 +15,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from execution_contracts import (TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical, digest, envelope_digest,
+from execution_contracts import (MANAGER_IDENTITY_FIELDS, TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical,
+                                 digest, envelope_digest, validate_manager_identity,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
@@ -25,6 +26,7 @@ from delivery_projection import lead_claim_active
 import delivery_termination
 import delivery_cancel
 import process_identity
+from manager_requests import render_manager_prompt, request_bytes, write_request_file
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATION_EPOCHS_V5_ONLY, ENVELOPE_CHANGED, EVIDENCE_FILE_REQUIRED,
                                EXPECTED_GENERATION_REQUIRED, EXPECTED_GENERATION_V8_ONLY, LEAD_GENERATION_INACTIVE,
                                OWNER_GENERATION_STALE, V8_DISPOSITION_UNSUPPORTED, V8_EVIDENCE_FILE_REFUSED,
@@ -1128,13 +1130,18 @@ def decide_expansion(work_id: str, attempt_id: str, request_id: str, *, approve:
                                        actor=actor, explanation=explanation)
 
 
-def recover_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
-                     actor: str = "codex-assisted-recovery", python_path: str | None = None,
+def recover_delivery(work_id: str, attempt_id: str, *, actor: str, root: Path | None = None,
+                     python_path: str | None = None,
                      manager_adapter: Callable[..., dict[str, Any]] | None = None,
                      worker_adapter: Callable[..., dict[str, Any]] | None = None,
                      supervisor: Callable[..., dict[str, Any]] | None = None,
                      test_runner: Callable[[Path], dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Resolve one observed v5 Claude result and resume it; route v6-v8 to chartered recovery."""
+    """Resolve one observed v5 Claude result and resume it; route v6-v8 to chartered recovery.
+
+    ``actor`` is required: it is recorded on the recovery and as the owner actor (ADR 0020).
+    """
+    if not isinstance(actor, str) or not actor.strip() or len(actor) > 256:
+        raise ContractError("recovery actor is required")
     project_root = (root or repo_root()).resolve()
     valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
     if not valid:
@@ -1459,6 +1466,8 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                                                 edit_evidence["diff_sha256"], structured=structured_verifier)
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
+    manager_provider = (envelope.get("manager") or {}).get("provider", "claude") if structured_verifier else None
+
     def on_manager(message: dict[str, Any]) -> str:
         stop_if_cancelled()
         request = _normalized_manager_request(envelope, message)
@@ -1498,6 +1507,11 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             raise ContractError("Magentic manager call denied: " + decision["reason"])
         with authority_guard(), ledger.send_lock():
             ledger.assert_owner(aid, generation)
+            if structured_verifier:
+                # The exact request is durable before its grant can be used, so
+                # every call that might have been sent has its file (ADR 0020).
+                write_request_file(attempt_dir, request["call_id"],
+                                   request_bytes(request["call_id"], request["prompt_digest"], message["messages"]))
             stop_if_cancelled()  # before the grant is used, so an unsent call stays unsent
             if not ledger.consume_manager_grant(request["call_id"], decision["grant_id"], generation=generation):
                 raise ContractError("Magentic manager grant was already consumed")
@@ -1509,6 +1523,12 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                 observation = {"status": "completed", "output": text,
                                "output_sha256": digest(text),
                                "usage": result.get("usage")}
+                if structured_verifier and manager_provider in MANAGER_IDENTITY_FIELDS:
+                    # The provider session identity joins the call to its
+                    # provider transcript; a reply without it stays uncertain.
+                    for field in MANAGER_IDENTITY_FIELDS[manager_provider]:
+                        observation[field] = result.get(field)
+                    validate_manager_identity(manager_provider, observation)
                 if result.get("normalization") == "exact_json_fence":
                     observation["normalization"] = "exact_json_fence"
                     observation["raw_output_sha256"] = result["raw_output_sha256"]
@@ -1766,20 +1786,10 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
 
 
 def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
-                             on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
-    turns = []
-    for item in message["messages"]:
-        contents = item.get("contents") if isinstance(item, dict) else None
-        role = item.get("role") if isinstance(item, dict) else None
-        if not isinstance(role, str) or not isinstance(contents, list) or not contents:
-            raise ContractError("stock manager prompt structure is invalid")
-        parts = [part.get("text") for part in contents if isinstance(part, dict) and part.get("type") == "text"]
-        if len(parts) != len(contents) or any(not isinstance(part, str) for part in parts):
-            raise ContractError("stock manager message contains unsupported content")
-        turns.append(f"{role}:\n" + "\n".join(parts))
-    prompt = "\n\n".join(turns)
-    if not prompt.strip():
-        raise ContractError("stock manager prompt text is absent")
+                             on_process_group: Callable[..., None] | None = None) -> dict[str, Any]:
+    prompt = render_manager_prompt(message["messages"])
+    if on_process_group is not None and isinstance(message.get("call_id"), str):
+        on_process_group = partial(on_process_group, row_id=message["call_id"])
     timeout_seconds = min(120, envelope.get("limits", {}).get("max_runtime_seconds", 120))
     if envelope["manager"].get("provider", "claude") == "claude":
         result = call_claude(instructions="stock Magentic manager", task="model response",
@@ -1809,8 +1819,10 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
 
 def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any], workspace: Path,
                             trace_dir: Path | None = None,
-                            on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
+                            on_process_group: Callable[..., None] | None = None) -> dict[str, Any]:
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
+    if on_process_group is not None and isinstance(action.get("action_id"), str):
+        on_process_group = partial(on_process_group, row_id=action["action_id"])
     timeout_seconds = min(300, envelope.get("limits", {}).get("max_runtime_seconds", 300))
     if action["provider"] == "ollama":
         structured = (envelope["execution_protocol_version"] == 8

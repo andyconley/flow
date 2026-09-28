@@ -2,6 +2,14 @@
 
 ## Active work
 
+- `step5-operational-handback` (the last step 5 slice, without MCP handback): plan approved 2026-09-27, on
+  `codex/step5-operational-handback` (commits `6171c7d` definition, `67e26c5` plan; not pushed).
+  - **Scope:** trace correlation plus `flow run trace`; a sealed lineage token cap checked before each paid grant,
+    with tranche expansion; the offline `flow run verify-receipt` (V1–V17); a full-row seal; ADR 0020.
+  - **Next:** `/flow-implement`, commits C1–C7 as in `plan.md`, with amendments A1–A18 overriding the design.
+  - **R10/AC10 amended after approval:** a token cap hit with 0 headroom pauses for a decision. The sealed charter
+    still records the pre-amendment bytes; `definition-dispositions.md` documents this.
+  - **PR #48** (`v8-live-validation-3` run records) merged 2026-09-27 (`715e2df`).
 - No other work in flight. All other runs are archived, blocked as superseded, or (for
   `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
   is a legacy record.

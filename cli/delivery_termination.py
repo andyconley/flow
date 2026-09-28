@@ -254,7 +254,7 @@ def next_command(work_id: str, snapshot: dict[str, Any], control: dict[str, Any]
         return (f"flow run decide-expansion {work_id} {attempt_id} {pending[0]} --approve|--deny "
                 f"--expected-generation {generation} --actor NAME --explanation TEXT")
     if recovery_eligibility(snapshot["envelope"], snapshot, lead_active=lead_active)["recoverable"]:
-        return f"flow run recover-delivery-lead {work_id} {attempt_id}"
+        return f"flow run recover-delivery-lead {work_id} {attempt_id} --actor NAME"
     return f"flow run abandon-delivery {work_id} {attempt_id} {stop}"
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+from tests.manager_stub import manager_reply  # noqa: E402
 
 from delivery_control import change_lead_claim  # noqa: E402
 import runstate  # noqa: E402
@@ -49,7 +50,8 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
             for label, entry in (("resume", resume_delivery), ("recover", recover_delivery)):
                 with self.subTest(entry=label):
                     with self.assertRaises(RecoveryRefused) as raised:
-                        (call or entry)("sample", attempt_id, root=self.root, **adapters)
+                        (call or entry)("sample", attempt_id, root=self.root, **adapters,
+                                        **({"actor": "andy"} if entry is recover_delivery else {}))
                     self.assertEqual(raised.exception.reason, reason)
                     self.assertTrue(str(raised.exception).startswith(reason))
         self.assertEqual(calls, [])
@@ -656,6 +658,8 @@ class RecoveryHarness(CharteredFixture):
         with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
             if seal_hook is not None:
                 return _resume_chartered("sample", attempt_id, root=self.root.resolve(), seal_hook=seal_hook, **kwargs)
+            if entry is recover_delivery:
+                kwargs["actor"] = "andy"
             return (entry or resume_delivery)("sample", attempt_id, root=self.root, **kwargs)
 
     def _receipt(self, result):
@@ -710,6 +714,14 @@ class CharteredRecoveryTests(RecoveryHarness):
                        and item["detail"] == "recovery_regranted")
         self.assertLess(claimed, regrant)
         self.assertLess(regrant, self.adapter_marks[0] + 1)
+        # ADR 0020 (AC3): the grant_changed events alone rebuild the row's history.
+        history = [json.loads(item["detail"]) for item in events
+                   if item["event"] == "grant_changed" and item["action_id"] == editor["action_id"]]
+        self.assertEqual([item["op"] for item in history], ["issue", "release", "issue", "consume"])
+        self.assertEqual(history[0]["grant_id"], history[1]["grant_id"])
+        self.assertNotEqual(history[1]["grant_id"], history[2]["grant_id"])
+        self.assertEqual(history[2]["grant_id"], history[3]["grant_id"])
+        self.assertEqual(history[-1]["grant_id"], editor["grant_id"])
 
     def test_boundary_b_unconsumed_verifier_grant_captures_the_test_once(self):
         with self._kill_once("prepare_verifier_send"):
@@ -907,7 +919,7 @@ class CharteredRecoveryTests(RecoveryHarness):
         def manager(message, *, envelope, workspace):
             manager_sends.append(message["call_id"])
             self.adapter_marks.append(self._ledger().snapshot(envelope["attempt_id"])["events"][-1]["seq"])
-            return {"output": "Fixture facts", "usage": None}
+            return manager_reply(message, "Fixture facts")
 
         self.outputs = [self.PASS]
         with self._kill_once("consume_manager_grant"), \

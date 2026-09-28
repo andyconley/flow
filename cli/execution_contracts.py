@@ -738,6 +738,28 @@ def _validate_magentic_action(envelope: dict[str, Any], action: dict[str, Any]) 
 
 MAGENTIC_PHASES = frozenset({"facts", "plan", "progress", "replan", "replan_facts", "replan_plan", "final"})
 
+# The provider session identity a paid v8 manager observation carries (ADR 0020).
+MANAGER_IDENTITY_FIELDS = {"claude": ("session_id", "input_sha256", "num_turns"), "codex": ("thread_id",)}
+
+
+def handback_evidence_required(envelope: dict[str, Any]) -> bool:
+    """Whether an attempt must carry the ADR 0020 correlation evidence (manager identity)."""
+    return execution_protocol_version(envelope) == 8
+
+
+def validate_manager_identity(provider: str, result: dict[str, Any]) -> None:
+    """Require the adapter's session identity on a completed paid manager observation."""
+    for field in MANAGER_IDENTITY_FIELDS.get(provider, ()):
+        value = result.get(field) if isinstance(result, dict) else None
+        if field == "input_sha256":
+            valid = _hex_digest(value)
+        elif field == "num_turns":
+            valid = type(value) is int and value >= 1
+        else:
+            valid = isinstance(value, str) and bool(value.strip()) and len(value) <= 256
+        if not valid:
+            raise ContractError(f"manager observation lacks provider identity: {field}")
+
 
 def expected_manager_call_id(request: dict[str, Any]) -> str:
     fields = ("attempt_id", "envelope_digest", "sequence", "phase", "manager_round", "prompt_digest")
@@ -1063,6 +1085,8 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         seen_calls.add(request["call_id"])
         if item["status"] == "completed" and not isinstance(item.get("result"), dict):
             raise ContractError("Magentic completed manager call lacks observed result")
+        if item["status"] == "completed" and handback_evidence_required(envelope):
+            validate_manager_identity(envelope["manager"].get("provider", "claude"), item["result"])
     # After the manager calls themselves are validated, so recomputation reads sound entries.
     _validate_manager_progress(receipt)
     seen_actions: set[str] = set()

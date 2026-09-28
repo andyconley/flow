@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+from tests.manager_stub import manager_reply  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import execution_contracts  # noqa: E402
@@ -31,11 +32,11 @@ class SpoilingManagerFixture(MafExpansionFixture):
         reply = super().manager(message, envelope=envelope, workspace=workspace)
         kind = self.spoil.get(message["sequence"]) if message["phase"] == "progress" else None
         if kind == "bad":
-            return {"output": "The verifier should go next."}
+            return manager_reply(message, "The verifier should go next.")
         if kind == "escape":
             value = json.loads(reply["output"])
             value["instruction_or_question"]["answer"] = "@@"
-            return {"output": json.dumps(value).replace('"@@"', '"' + INVALID_ESCAPE + '"')}
+            return manager_reply(message, json.dumps(value).replace('"@@"', '"' + INVALID_ESCAPE + '"'))
         return reply
 
     def receipt(self, result):

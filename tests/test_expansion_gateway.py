@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+from tests.manager_stub import manager_reply  # noqa: E402
 
 from delivery_contracts import digest as delivery_digest  # noqa: E402
 from delivery_gateway import execute_chartered_delivery  # noqa: E402
@@ -155,7 +156,7 @@ class ManagerExpansionPauseTests(ExpansionGatewayFixture):
 
         def manager(message, *, envelope, workspace):
             manager_sends.append(message["sequence"])
-            return {"output": "Fixture facts"}
+            return manager_reply(message, "Fixture facts")
 
         result = self.execute(supervisor, manager=manager)
         self.assertEqual(result["status"], "expansion_paused")

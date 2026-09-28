@@ -618,6 +618,7 @@ def main() -> int:
         "recover-delivery-lead", help="reconcile one completed Claude result and resume a linked Magentic epoch")
     run_delivery_recover.add_argument("work_id")
     run_delivery_recover.add_argument("attempt_id")
+    run_delivery_recover.add_argument("--actor", required=True, help="who is recovering; recorded on the recovery")
     run_delivery_recover.add_argument("--project-root", type=Path)
     run_delivery_recover.add_argument("--json", action="store_true")
 
@@ -1076,7 +1077,7 @@ def main() -> int:
     if args.command == "run" and args.run_target == "recover-delivery-lead":
         import json
         try:
-            result = recover_delivery(args.work_id, args.attempt_id, root=args.project_root)
+            result = recover_delivery(args.work_id, args.attempt_id, actor=args.actor, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
                   if args.json else f"delivery recovery refused: {exc}")

@@ -235,6 +235,10 @@ class ExecutionLedger:
                 db.execute("ALTER TABLE continuation_epochs ADD COLUMN sealed_receipt_sha256 TEXT")
             if "policy_before_json" not in continuation_columns:
                 db.execute("ALTER TABLE continuation_epochs ADD COLUMN policy_before_json TEXT")
+            link_columns = {row[1] for row in db.execute("PRAGMA table_info(magentic_checkpoint_links)")}
+            if "previous_checkpoint_id" not in link_columns:
+                # v8 only: the MAF parent recorded at bind time, informational (ADR 0020).
+                db.execute("ALTER TABLE magentic_checkpoint_links ADD COLUMN previous_checkpoint_id TEXT")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=10) if self.read_only else sqlite3.connect(self.path, timeout=10)
@@ -334,6 +338,22 @@ class ExecutionLedger:
     @staticmethod
     def _event(db: sqlite3.Connection, attempt_id: str, action_id: str | None, event: str, detail: str) -> None:
         db.execute("INSERT INTO events(at,attempt_id,action_id,event,detail) VALUES(?,?,?,?,?)", (utc_now(), attempt_id, action_id, event, detail))
+
+    @staticmethod
+    def _grant_changed(db: sqlite3.Connection, attempt_id: str, row_id: str, kind: str, op: str,
+                       grant_id: str | None, reason: str) -> None:
+        """Record one v8 grant change, so a row's grant history survives overwrites (ADR 0020).
+
+        Written in the caller's transaction, immediately before the event that
+        already describes the change; v5-v7 event streams are left unchanged.
+        """
+        row = db.execute("SELECT owner_generation,execution_protocol_version FROM attempts WHERE attempt_id=?",
+                         (attempt_id,)).fetchone()
+        if row is None or row[1] != 8:
+            return
+        ExecutionLedger._event(db, attempt_id, row_id, "grant_changed", canonical({
+            "grant_id": grant_id, "kind": kind, "op": op, "owner_generation": row[0], "reason": reason,
+            "row_id": row_id}))
 
     @staticmethod
     def _assert_owner(db: sqlite3.Connection, attempt_id: str, generation: int | None) -> None:
@@ -724,10 +744,12 @@ class ExecutionLedger:
                 if [attempt_id for attempt_id, _ in rows] != list(expected):
                     raise RecoveryRefused(RECOVERY_IN_PROGRESS, "attempts changed during the lead change")
                 for attempt_id, envelope_json in rows:
-                    for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' "
-                                                   "ORDER BY rowid", (attempt_id,)).fetchall():
+                    for action_id, grant_id in db.execute("SELECT action_id,grant_id FROM actions WHERE attempt_id=? "
+                                                          "AND status='allowed' ORDER BY rowid", (attempt_id,)).fetchall():
                         db.execute("UPDATE actions SET status='not_dispatched',reason='superseded_unconsumed_grant',"
                                    "grant_id=NULL WHERE action_id=?", (action_id,))
+                        self._grant_changed(db, attempt_id, action_id, "action", "release", grant_id,
+                                            "superseded_unconsumed_grant")
                         self._event(db, attempt_id, action_id, "superseded_grant_released", "")
                     self._close_expansions_locked(db, attempt_id, action)
                     reason = canonical({"action": action, "lead_generation": lead_generation,
@@ -773,13 +795,14 @@ class ExecutionLedger:
                 raise RecoveryRefused(OWNER_GENERATION_STALE, f"current owner generation is {row[1]}")
             envelope = json.loads(row[4])
             released = []
-            for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' ORDER BY rowid",
-                                           (attempt_id,)).fetchall():
+            for action_id, grant_id in db.execute("SELECT action_id,grant_id FROM actions WHERE attempt_id=? AND status='allowed' "
+                                                  "ORDER BY rowid", (attempt_id,)).fetchall():
                 if db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')",
                               (action_id,)).fetchone():
                     continue  # dispatch evidence is never relabelled as unsent
                 db.execute("UPDATE actions SET status='not_dispatched',reason=?,grant_id=NULL WHERE action_id=?",
                            (f"{status}_unconsumed_grant", action_id))
+                self._grant_changed(db, attempt_id, action_id, "action", "release", grant_id, f"{status}_unconsumed_grant")
                 self._event(db, attempt_id, action_id, f"{status}_grant_released", "")
                 released.append(action_id)
             self._close_expansions_locked(db, attempt_id, status)
@@ -931,7 +954,7 @@ class ExecutionLedger:
                         canonical({"request_id": request_id, "decision": decision, "actor": actor.strip()}))
             return {"status": "granted" if approve else "denied", "request_id": request_id, "grant_id": grant_id,
                     "attempt_id": attempt_id, "limits": limits, "owner_generation": expected_generation,
-                    "decided_at": decided_at, "next_action": f"flow run recover-delivery-lead {envelope['work_id']} {attempt_id}"}
+                    "decided_at": decided_at, "next_action": f"flow run recover-delivery-lead {envelope['work_id']} {attempt_id} --actor NAME"}
 
     def claim_recovery(self, attempt_id: str, actor: str = "flow-recovery") -> int:
         with self.send_lock():
@@ -1004,10 +1027,11 @@ class ExecutionLedger:
                 generation = expected_generation + 1
                 db.execute("UPDATE attempts SET owner_generation=?,owner_actor=? WHERE attempt_id=?", (generation, actor, attempt_id))
                 released = []
-                for (action_id,) in db.execute("SELECT action_id FROM actions WHERE attempt_id=? AND status='allowed' ORDER BY rowid", (attempt_id,)).fetchall():
+                for action_id, grant_id in db.execute("SELECT action_id,grant_id FROM actions WHERE attempt_id=? AND status='allowed' ORDER BY rowid", (attempt_id,)).fetchall():
                     if db.execute("SELECT 1 FROM events WHERE action_id=? AND event IN ('worker_dispatched','adapter_send_started')", (action_id,)).fetchone():
                         continue
                     db.execute("UPDATE actions SET status='not_dispatched',reason='recovery_unconsumed_grant',grant_id=NULL WHERE action_id=?", (action_id,))
+                    self._grant_changed(db, attempt_id, action_id, "action", "release", grant_id, "recovery_unconsumed_grant")
                     self._event(db, attempt_id, action_id, "recovery_grant_released", canonical({"generation": generation}))
                     released.append(action_id)
                 if expansion_request_id is not None and db.execute(
@@ -1065,10 +1089,12 @@ class ExecutionLedger:
                 reason = self._v8_limit_reason(db, envelope, action, exclude=action_id)
             if reason != "allowed":
                 db.execute("UPDATE actions SET status='denied',reason=? WHERE action_id=?", (reason, action_id))
+                self._grant_changed(db, attempt_id, action_id, "action", "deny", None, reason)
                 self._event(db, attempt_id, action_id, "policy_denied", reason)
                 return {"allowed": False, "reason": reason, "action_id": action_id, "grant_id": None}
             grant = uuid.uuid4().hex
             db.execute("UPDATE actions SET status='allowed',reason='recovery_regranted',grant_id=? WHERE action_id=?", (grant, action_id))
+            self._grant_changed(db, attempt_id, action_id, "action", "issue", grant, "recovery_regranted")
             # Grant expiry reads policy_allowed events, so the re-grant starts
             # its own clock rather than inheriting the released grant's.
             self._event(db, attempt_id, action_id, "policy_allowed", "recovery_regranted")
@@ -1121,6 +1147,7 @@ class ExecutionLedger:
                 raise ContractError("expanded proposal is still denied: " + reason)
             grant = uuid.uuid4().hex
             db.execute("UPDATE actions SET status='allowed',reason='expansion_granted',grant_id=? WHERE action_id=?", (grant, action_id))
+            self._grant_changed(db, attempt_id, action_id, "action", "issue", grant, "expansion_granted")
             self._event(db, attempt_id, action_id, "policy_allowed", "expansion_granted")
             return {"allowed": True, "reason": "expansion_granted", "action_id": action_id, "grant_id": grant}
 
@@ -1148,6 +1175,7 @@ class ExecutionLedger:
                 raise ContractError("expanded manager call is still over its limit")
             grant = uuid.uuid4().hex
             db.execute("UPDATE manager_calls SET status='allowed',reason='expansion_granted',grant_id=? WHERE call_id=?", (grant, call_id))
+            self._grant_changed(db, row[0], call_id, "manager_call", "issue", grant, "expansion_granted")
             self._event(db, row[0], call_id, "manager_policy_allowed", "expansion_granted")
             return {"allowed": True, "reason": "expansion_granted", "call_id": call_id, "grant_id": grant, "replayed": True}
 
@@ -1166,6 +1194,7 @@ class ExecutionLedger:
                 raise ContractError("manager call is not eligible for recovery reissue")
             grant = uuid.uuid4().hex
             db.execute("UPDATE manager_calls SET grant_id=? WHERE call_id=?", (grant, call_id))
+            self._grant_changed(db, row[0], call_id, "manager_call", "rotate", grant, "recovery_regranted")
             self._event(db, row[0], call_id, "manager_policy_allowed", "recovery_regranted")
             return {"allowed": True, "reason": "allowed", "call_id": call_id, "grant_id": grant, "replayed": True}
 
@@ -1325,6 +1354,7 @@ class ExecutionLedger:
                 reason = "allowed"
             grant = uuid.uuid4().hex if reason in {"allowed", "expansion_granted"} else None
             db.execute("INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)", (aid, attempt, request_json, "allowed" if grant else "denied", reason, grant, None, "delegate", action["sequence"], hashlib.sha256(request_json.encode()).hexdigest()))
+            self._grant_changed(db, attempt, aid, "action", "issue" if grant else "deny", grant, reason)
             self._event(db, attempt, aid, "policy_allowed" if grant else "policy_denied", reason)
             decision = {"allowed": bool(grant), "reason": reason, "action_id": aid, "grant_id": grant}
             return {**decision, "expansion": expansion} if expansion else decision
@@ -1453,6 +1483,7 @@ class ExecutionLedger:
             grant = uuid.uuid4().hex if reason in {"allowed", "expansion_granted"} else None
             db.execute("INSERT INTO manager_calls(call_id,attempt_id,sequence,request_json,status,reason,grant_id) VALUES(?,?,?,?,?,?,?)",
                        (call_id, attempt, request["sequence"], encoded, "allowed" if grant else "denied", reason, grant))
+            self._grant_changed(db, attempt, call_id, "manager_call", "issue" if grant else "deny", grant, reason)
             self._event(db, attempt, call_id, "manager_policy_allowed" if grant else "manager_policy_denied", reason)
             decision = {"allowed": bool(grant), "reason": reason, "call_id": call_id, "grant_id": grant}
             return {**decision, "expansion": expansion} if expansion else decision
@@ -1469,9 +1500,11 @@ class ExecutionLedger:
             issued = db.execute("SELECT at FROM events WHERE action_id=? AND event='manager_policy_allowed' ORDER BY seq DESC LIMIT 1", (call_id,)).fetchone()
             if not issued or datetime.now(timezone.utc) > datetime.fromisoformat(issued[0]) + timedelta(seconds=60):
                 db.execute("UPDATE manager_calls SET status='denied',reason='grant_expired' WHERE call_id=?", (call_id,))
+                self._grant_changed(db, row[0], call_id, "manager_call", "expire", grant_id, "grant_expired")
                 self._event(db, row[0], call_id, "manager_policy_denied", "grant_expired")
                 return False
             db.execute("UPDATE manager_calls SET status='started' WHERE call_id=?", (call_id,))
+            self._grant_changed(db, row[0], call_id, "manager_call", "consume", grant_id, "grant_consumed")
             self._event(db, row[0], call_id, "manager_send_started", "grant_consumed")
             return True
 
@@ -1526,9 +1559,11 @@ class ExecutionLedger:
             issued = db.execute("SELECT at FROM events WHERE action_id=? AND event='policy_allowed' ORDER BY seq DESC LIMIT 1", (action_id,)).fetchone()
             if not issued or datetime.now(timezone.utc) > datetime.fromisoformat(issued[0]) + timedelta(seconds=60):
                 db.execute("UPDATE actions SET status='denied',reason='grant_expired' WHERE action_id=?", (action_id,))
+                self._grant_changed(db, row[0], action_id, "action", "expire", grant_id, "grant_expired")
                 self._event(db, row[0], action_id, "policy_denied", "grant_expired")
                 return False
             db.execute("UPDATE actions SET status='started' WHERE action_id=?", (action_id,))
+            self._grant_changed(db, row[0], action_id, "action", "consume", grant_id, "grant_consumed")
             self._event(db, row[0], action_id, "worker_dispatched", "grant_consumed")
             return True
 
@@ -1556,6 +1591,7 @@ class ExecutionLedger:
                 # Commit the denial before refusing; raising inside the
                 # transaction would roll it back and leave the grant reserved.
                 db.execute("UPDATE actions SET status='denied',reason='grant_expired' WHERE action_id=?", (action_id,))
+                self._grant_changed(db, attempt, action_id, "action", "expire", grant_id, "grant_expired")
                 self._event(db, attempt, action_id, "policy_denied", "grant_expired")
                 expired = True
             elif db.execute("SELECT 1 FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone():
@@ -1565,6 +1601,7 @@ class ExecutionLedger:
                 db.execute("INSERT INTO verifier_inputs VALUES(?,?,?,?,?,?,?,?)",
                            (action_id, now, encoded, input_digest, diff_digest, test_digest, now, generation))
                 db.execute("UPDATE actions SET status='started' WHERE action_id=?", (action_id,))
+                self._grant_changed(db, attempt, action_id, "action", "consume", grant_id, "grant_consumed")
                 self._event(db, attempt, action_id, "verifier_input_recorded", input_digest)
                 self._event(db, attempt, action_id, "worker_dispatched", "grant_consumed")
                 self._event(db, attempt, action_id, "adapter_send_started", "flow_observed_boundary")
@@ -1598,6 +1635,7 @@ class ExecutionLedger:
             if crossed:
                 raise ContractError("pre-send failure conflicts with dispatch evidence")
             db.execute("UPDATE actions SET status='not_dispatched',reason='pre_send_failure',grant_id=NULL WHERE action_id=?", (action_id,))
+            self._grant_changed(db, row[0], action_id, "action", "release", grant_id, "pre_send_failure")
             self._event(db, row[0], action_id, "pre_send_failure", "checkpoint_or_grant_failed_before_dispatch")
 
     def observe_send(self, action_id: str, generation: int) -> None:
@@ -1957,7 +1995,11 @@ class ExecutionLedger:
             result_json = db.execute("SELECT result_json FROM response_observations WHERE action_id=?", (action_id,)).fetchone()[0]
             db.execute("UPDATE actions SET status='completed',result_json=?,reason='operator_resolved_completed' WHERE action_id=?", (result_json, action_id))
         elif disposition == "resolved_not_dispatched":
+            released = db.execute("SELECT grant_id FROM actions WHERE action_id=?", (action_id,)).fetchone()
             db.execute("UPDATE actions SET status='not_dispatched',reason='operator_resolved_not_dispatched',grant_id=NULL WHERE action_id=?", (action_id,))
+            # Unreachable for v8 (resolve_unknown refuses protocol 8); kept so the site stays classified.
+            self._grant_changed(db, attempt_id, action_id, "action", "release", released[0] if released else None,
+                                "operator_resolved_not_dispatched")
         resolution_id = uuid.uuid4().hex
         db.execute("INSERT INTO recovery_resolutions VALUES(?,?,?,?,?,?,?,?,?,?,?)", (resolution_id, attempt_id, action_id, actor, disposition, explanation, canonical(evidence), result_json, record_digest, utc_now(), generation))
         self._event(db, attempt_id, action_id, "operator_resolution", canonical({"resolution_id": resolution_id, "disposition": disposition, "evidence_digest": hashlib.sha256(canonical(evidence).encode()).hexdigest()}))
@@ -2151,14 +2193,21 @@ class ExecutionLedger:
             record = {"attempt_id": attempt_id, "pending_kind": pending_kind, "pending_id": pending_id,
                       "checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq, "path": str(checkpoint_path),
                       "file_sha256": file_sha256, "file_size": file_size, "owner_generation": generation}
+            previous = None
+            if attempt[1] == 8:
+                previous = value.get("previous_checkpoint_id")
+                if previous is not None and (not isinstance(previous, str) or not previous or len(previous) > 128):
+                    raise ContractError("Magentic checkpoint parent is invalid")
+                record["previous_checkpoint_id"] = previous
             old = db.execute("SELECT checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind=? AND pending_id=?", (attempt_id, pending_kind, pending_id)).fetchone()
             if old:
                 if old[:5] != (checkpoint_id, ledger_seq, str(checkpoint_path), file_sha256, file_size):
                     raise ContractError("Magentic checkpoint conflicts with durable link")
                 return {**record, "bound_at": old[5], "replayed": True}
             bound_at = utc_now()
-            db.execute("INSERT INTO magentic_checkpoint_links VALUES(?,?,?,?,?,?,?,?,?,?)",
-                       (attempt_id, pending_kind, pending_id, checkpoint_id, ledger_seq, str(checkpoint_path), file_sha256, file_size, bound_at, generation))
+            db.execute("INSERT INTO magentic_checkpoint_links(attempt_id,pending_kind,pending_id,checkpoint_id,ledger_seq,path,"
+                       "file_sha256,file_size,bound_at,owner_generation,previous_checkpoint_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                       (attempt_id, pending_kind, pending_id, checkpoint_id, ledger_seq, str(checkpoint_path), file_sha256, file_size, bound_at, generation, previous))
             self._event(db, attempt_id, pending_id, "magentic_checkpoint_bound", canonical({"checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq, "file_sha256": file_sha256}))
             return {**record, "bound_at": bound_at, "replayed": False}
 
@@ -2450,7 +2499,7 @@ class ExecutionLedger:
                 before = canonical(self._policy_counts(db, work_id))
                 db.execute("INSERT INTO continuation_epochs(epoch_id,attempt_id,action_id,resolution_id,receipt_sha256,checkpoint_sha256,status,owner_actor,created_at,policy_before_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
                            (epoch_id, attempt_id, action_id, resolution_id, receipt_sha256, checkpoint_sha256, "pending", actor, utc_now(), before))
-                command = "flow run recover-delivery-lead" if protocol == (5,) else "flow run continue-resolved-execution"
+                command = "flow run recover-delivery-lead --actor NAME" if protocol == (5,) else "flow run continue-resolved-execution"
                 self._event(db, attempt_id, action_id, "continuation_opened", canonical({"epoch_id": epoch_id, "resolution_id": resolution_id, "command": command, "actor": actor}))
                 return {"epoch_id": epoch_id, "status": "pending", "generation": 1, "replayed": False}
 
@@ -2672,7 +2721,9 @@ class ExecutionLedger:
         resolutions = db.execute("SELECT resolution_id,action_id,actor,disposition,explanation,evidence_json,result_json,resolution_digest,created_at,owner_generation FROM recovery_resolutions WHERE attempt_id=? ORDER BY created_at", (attempt_id,)).fetchall() if "recovery_resolutions" in tables else []
         replans = db.execute("SELECT replan_id,sequence,request_json,proposal_digest,status,reason FROM replan_decisions WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "replan_decisions" in tables else []
         manager_calls = db.execute("SELECT call_id,sequence,request_json,status,reason,grant_id,result_json,observed_at FROM manager_calls WHERE attempt_id=? ORDER BY sequence", (attempt_id,)).fetchall() if "manager_calls" in tables else []
-        magentic_checkpoints = db.execute("SELECT pending_kind,pending_id,checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall() if "magentic_checkpoint_links" in tables else []
+        link_columns = {row[1] for row in db.execute("PRAGMA table_info(magentic_checkpoint_links)")} if "magentic_checkpoint_links" in tables else set()
+        parent_column = ",previous_checkpoint_id" if "previous_checkpoint_id" in link_columns else ",NULL"
+        magentic_checkpoints = db.execute(f"SELECT pending_kind,pending_id,checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation{parent_column} FROM magentic_checkpoint_links WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall() if "magentic_checkpoint_links" in tables else []
         checkpoint_positions = db.execute("SELECT kind,sequence,checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,protocol_version,path,file_sha256,file_size,bound_at,owner_generation FROM checkpoint_position_links WHERE attempt_id=? ORDER BY kind,sequence", (attempt_id,)).fetchall() if "checkpoint_position_links" in tables else []
         checkpoint_columns = {row[1] for row in db.execute("PRAGMA table_info(checkpoint_links)")} if "checkpoint_links" in tables else set()
         checkpoint_query = "SELECT checkpoint_id,envelope_digest,ledger_seq,format_version,runtime_version,path,bound_at,owner_generation" + (",file_sha256" if "file_sha256" in checkpoint_columns else "") + " FROM checkpoint_links WHERE attempt_id=?"
@@ -2689,7 +2740,9 @@ class ExecutionLedger:
                 "actions": [{"action_id": r[0], "request": json.loads(r[1]), "status": r[2], "reason": r[3], "grant_id": r[4], "result": json.loads(r[5]) if r[5] else None} for r in actions],
                 "replans": [{"replan_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "proposal_digest": r[3], "status": r[4], "reason": r[5]} for r in replans],
                 "manager_calls": [{"call_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "status": r[3], "reason": r[4], "grant_id": r[5], "result": json.loads(r[6]) if r[6] else None, "observed_at": r[7]} for r in manager_calls],
-                "magentic_checkpoints": [{"pending_kind": r[0], "pending_id": r[1], "checkpoint_id": r[2], "ledger_seq": r[3], "path": r[4], "file_sha256": r[5], "file_size": r[6], "bound_at": r[7], "owner_generation": r[8]} for r in magentic_checkpoints],
+                "magentic_checkpoints": [{"pending_kind": r[0], "pending_id": r[1], "checkpoint_id": r[2], "ledger_seq": r[3], "path": r[4], "file_sha256": r[5], "file_size": r[6], "bound_at": r[7], "owner_generation": r[8],
+                                          # v8 only (ADR 0020): v5-v7 receipts keep their shape.
+                                          **({"previous_checkpoint_id": r[9]} if attempt_protocol == 8 else {})} for r in magentic_checkpoints],
                 "checkpoint_positions": [{"kind": r[0], "sequence": r[1], "checkpoint_id": r[2], "envelope_digest": r[3], "ledger_seq": r[4], "format_version": r[5], "runtime_version": r[6], "protocol_version": r[7], "path": r[8], "file_sha256": r[9], "file_size": r[10], "bound_at": r[11], "owner_generation": r[12]} for r in checkpoint_positions],
                 "events": [{"seq": r[0], "at": r[1], "action_id": r[2], "event": r[3], "detail": r[4]} for r in events],
                 "response_observations": [{"action_id": r[0], "observed_at": r[1], "result": json.loads(r[2]), "result_digest": r[3], "owner_generation": r[4]} for r in observations],

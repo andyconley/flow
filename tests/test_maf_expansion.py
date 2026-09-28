@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+from tests.manager_stub import manager_reply  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import delivery_gateway  # noqa: E402
@@ -43,13 +44,13 @@ class MafExpansionFixture(ExpansionGatewayFixture):
         if phase == "progress":
             done = self.passed
             speaker = "editor" if not self.worker_sends else "verifier"
-            return {"output": json.dumps({
+            return manager_reply(message, json.dumps({
                 "is_request_satisfied": {"reason": "verified" if done else "pending", "answer": done},
                 "is_in_loop": {"reason": "no", "answer": False},
                 "is_progress_being_made": {"reason": "yes", "answer": True},
                 "next_speaker": {"reason": "bounded next step", "answer": speaker},
-                "instruction_or_question": {"reason": "task", "answer": "Edit target.py" if speaker == "editor" else "Verify target.py"}})}
-        return {"output": {"facts": "Fixture facts", "plan": "- Edit then verify target.py", "final": "Done"}[phase]}
+                "instruction_or_question": {"reason": "task", "answer": "Edit target.py" if speaker == "editor" else "Verify target.py"}}))
+        return manager_reply(message, {"facts": "Fixture facts", "plan": "- Edit then verify target.py", "final": "Done"}[phase])
 
     def worker(self, action, *, envelope, workspace):
         self.worker_sends.append((action["assignment_id"], action["action_id"]))
@@ -74,7 +75,7 @@ class MafExpansionFixture(ExpansionGatewayFixture):
         with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
              patch("delivery_gateway.run_status", return_value=self.state), \
              patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
-            return delivery_gateway.recover_delivery("sample", attempt, root=self.root, supervisor=real_runner,
+            return delivery_gateway.recover_delivery("sample", attempt, actor="andy", root=self.root, supervisor=real_runner,
                                                      worker_adapter=self.worker, manager_adapter=self.manager)
 
     def assert_calls_unique(self, attempt):

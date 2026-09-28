@@ -97,7 +97,7 @@ def _parse_result(raw: bytes, expected_model: str, *, max_output_bytes: int = MA
             "evidence_level": "flow_observed_claude_cli_completed_turn",
             "output": result,
             "output_sha256": hashlib.sha256(result.encode()).hexdigest(),
-            "usage": usage, "session_id": session_id}
+            "usage": usage, "session_id": session_id, "num_turns": num_turns}
 
 
 def build_prompt(instructions: str, task: str) -> bytes:

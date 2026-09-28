@@ -3496,6 +3496,7 @@ class FlowCliTests(FlowCliHarness):
                 "lifecycle",
                 "local_worker",
                 "maf_supervisor",
+                "manager_requests",
                 "migrate",
                 "model_advice",
                 "model_policy",

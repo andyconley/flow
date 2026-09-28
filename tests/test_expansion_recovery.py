@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+from tests.manager_stub import manager_reply  # noqa: E402
 
 import delivery_gateway  # noqa: E402
 from delivery_recovery import RecoveryRefused  # noqa: E402
@@ -31,7 +32,7 @@ class ExpansionRecoveryFixture(ExpansionGatewayFixture):
     def recover(self, attempt, supervisor, *, worker=None, manager=None):
         first, second, third = self.patched()
         with first, second, third:
-            return delivery_gateway.recover_delivery("sample", attempt, root=self.root, supervisor=supervisor,
+            return delivery_gateway.recover_delivery("sample", attempt, actor="andy", root=self.root, supervisor=supervisor,
                                                      worker_adapter=worker, manager_adapter=manager)
 
     def checkpoint(self, envelope, proposal):
@@ -178,7 +179,7 @@ class ManagerExpansionRecoveryTests(ExpansionRecoveryFixture):
 
         def manager(message, *, envelope, workspace):
             sends.append(message["sequence"])
-            return {"output": f"Fixture facts {message['sequence']}"}
+            return manager_reply(message, f"Fixture facts {message['sequence']}")
 
         paused = self.execute(supervisor, manager=manager)
         self.assertEqual(paused["status"], "expansion_paused")
@@ -202,6 +203,9 @@ class ManagerExpansionRecoveryTests(ExpansionRecoveryFixture):
         self.assertEqual(sends, [1, 2], "call 1 replays from the ledger; call 2 is sent once")
         [request] = self.ledger().expansion_state(paused["attempt_id"])["requests"]
         self.assertEqual(request["grant"]["status"], "consumed")
+        # ADR 0020 (AC6): the recovery records the actor the operator named.
+        snapshot = self.ledger().snapshot(paused["attempt_id"])
+        self.assertEqual([item["actor"] for item in snapshot["recoveries"]], ["andy"])
 
     # AC7 (E5 a): a denied manager call seals the attempt failed with the limit as the reason.
     def test_denied_manager_call_seals_the_attempt_failed(self):
@@ -233,7 +237,7 @@ class ManagerExpansionRecoveryTests(ExpansionRecoveryFixture):
 
         def manager(message, *, envelope, workspace):
             sends.append(message["sequence"])
-            return {"output": "Fixture facts"}
+            return manager_reply(message, "Fixture facts")
 
         def worker(action, *, envelope, workspace):
             (workspace / "target.py").write_text("new\n")
@@ -272,7 +276,7 @@ class ManagerExpansionRecoveryTests(ExpansionRecoveryFixture):
 
         def manager(message, *, envelope, workspace):
             sends.append(message["sequence"])
-            return {"output": f"Fixture facts {message['sequence']}"}
+            return manager_reply(message, f"Fixture facts {message['sequence']}")
 
         def worker(action, *, envelope, workspace):
             worker_sends.append(action["assignment_id"])
