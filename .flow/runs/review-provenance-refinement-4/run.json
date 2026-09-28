@@ -1,0 +1,66 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "4169608f77dba44c4ffe2e703eaa4057a13fe4291bc295cc3b9f0b614cd4f57a",
+    "orchestration_manifest": "dd2ec81b8b0a56264a22c2d4780ee12c8de3767269f421f7d66e77126ae7373b",
+    "requirements": "6c198434686a731b2705f8447f04a6f51afc63bf11f58ed2dc65e631a5ac71b6",
+    "shaper_intent": "242efc52f174d4a9a77a20dd81f92409ef0a14e13443c1b84edcef96ed300b8a"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/review-provenance-refinement-4/acceptance-criteria.md",
+    "handoff": ".flow/runs/review-provenance-refinement-4/implementation-handoff.md",
+    "job_charter": ".flow/runs/review-provenance-refinement-4/job-charter.json",
+    "orchestration_manifest": ".flow/runs/review-provenance-refinement-4/orchestration.json",
+    "plan": ".flow/runs/review-provenance-refinement-4/plan.md",
+    "requirements": ".flow/runs/review-provenance-refinement-4/requirements.md",
+    "shaper_intent": ".flow/runs/review-provenance-refinement-4/shaper-intent.json",
+    "validation_plan": ".flow/runs/review-provenance-refinement-4/validation-plan.md"
+  },
+  "created_at": "2026-09-28T00:48:04Z",
+  "delivery": {
+    "charter_digest": "e17a50f3b0d4d75f2c9ec4e1f673478725076065a4c391b311e2f362ad2768dc",
+    "charter_id": "delivery-499ba4f4d46024f569ae",
+    "delivery_artifact_dir": "delivery/e17a50f3b0d4d75f2c9ec4e1f673478725076065a4c391b311e2f362ad2768dc",
+    "handoff_digest": "72489d58fe993d35851c117d2299800aa7a78eb0b6ec411ca9cc0d883682167d",
+    "lead_claim_digest": "4dd64dfc70789d8804f5800cbaba7b6032786c2435b3b1dc29b0df0cfd7af5ee",
+    "lead_claim_path": "delivery/e17a50f3b0d4d75f2c9ec4e1f673478725076065a4c391b311e2f362ad2768dc/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-e17a50f3b0d4d75f2c9e",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "9e10d49a6f3d99abda9da951fc35f90293c01cdd8278569ddb61932ad95ac029",
+    "shaper_contract_id": "shaper-1f4d062352152a18786a",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/review-provenance-refinement-4/acceptance-criteria.md",
+        "sha256": "4169608f77dba44c4ffe2e703eaa4057a13fe4291bc295cc3b9f0b614cd4f57a"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/review-provenance-refinement-4/orchestration.json",
+        "sha256": "dd2ec81b8b0a56264a22c2d4780ee12c8de3767269f421f7d66e77126ae7373b"
+      },
+      "requirements": {
+        "path": ".flow/runs/review-provenance-refinement-4/requirements.md",
+        "sha256": "6c198434686a731b2705f8447f04a6f51afc63bf11f58ed2dc65e631a5ac71b6"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/review-provenance-refinement-4/shaper-intent.json",
+        "sha256": "242efc52f174d4a9a77a20dd81f92409ef0a14e13443c1b84edcef96ed300b8a"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-28T00:49:16Z",
+    "approve-plan": "2026-09-28T00:49:22Z",
+    "start-definition": "2026-09-28T00:48:04Z",
+    "start-plan": "2026-09-28T00:49:16Z"
+  },
+  "lane": "plan",
+  "last_event": "approve-plan",
+  "next_action": "Engineer approved the runner-compatible executable successor.",
+  "phase": "plan_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "plan_approved",
+  "updated_at": "2026-09-28T00:49:22Z",
+  "work_id": "review-provenance-refinement-4"
+}
