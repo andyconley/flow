@@ -1159,7 +1159,13 @@ class ExecutionFactsTests(unittest.TestCase):
                                '"do not edit yet"', "cannot write linked Git metadata",
                                "Do not ask the editor to commit or push", "Flow owns the verified-diff handback"):
                     self.assertIn(phrase, facts)
-                self.assertLessEqual(len(facts.encode()), 1800)
+                if version == 8:
+                    for phrase in ("not satisfied until Flow reports a verifier valid_pass",
+                                   "set is_request_satisfied to false", "never mark the request satisfied"):
+                        self.assertIn(phrase, facts)
+                else:
+                    self.assertNotIn("verifier valid_pass", facts)
+                self.assertLessEqual(len(facts.encode()), 2200)
 
     def test_protocol_5_facts_are_unchanged(self):
         envelope = {"execution_protocol_version": 5,

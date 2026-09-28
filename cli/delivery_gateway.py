@@ -1461,6 +1461,7 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
 
 def _execution_facts(envelope: dict[str, Any], job: dict[str, Any] | None, source_commit: str) -> str:
     chartered = envelope["execution_protocol_version"] in {6, 7, 8}
+    structured_verifier = envelope["execution_protocol_version"] == 8
     return ("\n\nFlow-verified execution facts:\n"
             "- The isolated worktree is pinned to source commit " + source_commit + ".\n"
             + (("- The approved baseline is " + job["baseline"]["kind"] + ".\n") if chartered else "- The approved regression test is already present and failed before this job's first provider send. Do not ask a specialist to create or rerun that prerequisite.\n")
@@ -1471,6 +1472,10 @@ def _execution_facts(envelope: dict[str, Any], job: dict[str, Any] | None, sourc
             + ("- The editor sandbox cannot write linked Git metadata. Do not ask the editor to commit or push,"
                " and do not treat a missing editor-side commit as incomplete work. Flow owns the verified-diff"
                " handback; repository integration happens only after Flow accepts that handback.\n" if chartered else "")
+            + ("- A protocol-v8 request is not satisfied until Flow reports a verifier valid_pass bound to the"
+               " current diff and test evidence. When a verifier still needs to run, set is_request_satisfied to"
+               " false and select that verifier; never mark the request satisfied in the same decision.\n"
+               if structured_verifier else "")
             + ("- The approved editors get one call in total; Flow refuses any second editor call. That call must"
                " read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or"
                " \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails"
