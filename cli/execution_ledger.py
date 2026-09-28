@@ -497,13 +497,19 @@ class ExecutionLedger:
 
     @staticmethod
     def _lineage_usage(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
-        """Sends the predecessors made, counted against a successor's charter caps.
+        """Sends under this sealed Charter, counted against its caps.
 
-        A handback envelope (ADR 0020) also carries the predecessors' charged
+        Predecessors from an explicitly approved successor Delivery Charter
+        remain linked for recovery evidence, but their spend was authorized by
+        a different sealed budget and must not consume the successor's budget.
+        A handback envelope (ADR 0020) also carries same-authority charged
         tokens; a pre-release one keeps its two-key shape.
         """
         paid = verifier = 0
+        authority_attempts = set(ExecutionLedger._authority_lineage_attempts(db, envelope))
         for item in envelope.get("predecessors", []):
+            if item["attempt_id"] not in authority_attempts:
+                continue
             row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (item["attempt_id"],)).fetchone()
             if row is None:
                 raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
@@ -532,9 +538,12 @@ class ExecutionLedger:
 
     @staticmethod
     def _lineage_charged(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
-        """Charged tokens of the lineage: predecessors (each at its own sealed charge) and this attempt."""
+        """Charged tokens under one sealed Delivery Charter plus this attempt."""
         predecessor = 0
+        authority_attempts = set(ExecutionLedger._authority_lineage_attempts(db, envelope))
         for item in envelope.get("predecessors", []):
+            if item["attempt_id"] not in authority_attempts:
+                continue
             row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (item["attempt_id"],)).fetchone()
             if row is None:
                 raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
@@ -548,6 +557,25 @@ class ExecutionLedger:
     @staticmethod
     def _lineage_attempts(envelope: dict[str, Any]) -> list[str]:
         return [item["attempt_id"] for item in envelope.get("predecessors", [])] + [envelope["attempt_id"]]
+
+    @staticmethod
+    def _authority_lineage_attempts(db: sqlite3.Connection, envelope: dict[str, Any]) -> list[str]:
+        """Attempts whose spend is governed by the current Delivery Charter.
+
+        The full predecessor list is still security evidence and is validated
+        unchanged.  Budget counters, grants, and headroom are scoped to the
+        immutable authority digest that sealed them.
+        """
+        charter = envelope.get("delivery_charter_digest")
+        attempts: list[str] = []
+        for item in envelope.get("predecessors", []):
+            row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (item["attempt_id"],)).fetchone()
+            if row is None:
+                raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
+            if json.loads(row[0]).get("delivery_charter_digest") == charter:
+                attempts.append(item["attempt_id"])
+        attempts.append(envelope["attempt_id"])
+        return attempts
 
     @staticmethod
     def _granted_units(db: sqlite3.Connection, attempt_ids: list[str], *, authority: str | None = None,
@@ -569,14 +597,14 @@ class ExecutionLedger:
             return {name: envelope["limits"][key] for name, (key, _) in EXPANSION_LIMIT_KEYS.items()
                     if key in envelope["limits"]}
         base = expansion_base(envelope)
-        lineage = ExecutionLedger._granted_units(db, ExecutionLedger._lineage_attempts(envelope))
+        lineage = ExecutionLedger._granted_units(db, ExecutionLedger._authority_lineage_attempts(db, envelope))
         own = ExecutionLedger._granted_units(db, [envelope["attempt_id"]])
         return {name: value + (lineage if name in LINEAGE_SCOPED_LIMITS else own)[name] for name, value in base.items()}
 
     @staticmethod
     def _outstanding_units(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
         """Units held by approved, not yet consumed grants in each counter's scope."""
-        lineage, own = ExecutionLedger._lineage_attempts(envelope), [envelope["attempt_id"]]
+        lineage, own = ExecutionLedger._authority_lineage_attempts(db, envelope), [envelope["attempt_id"]]
         held = {}
         for scope, attempts in (("lineage", lineage), ("own", own)):
             approved = ExecutionLedger._granted_units(db, attempts, consumed_only=False)
@@ -587,7 +615,7 @@ class ExecutionLedger:
     @staticmethod
     def _headroom_remaining(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
         """Sealed headroom minus every automatic grant in the lineage; never refilled."""
-        spent = ExecutionLedger._granted_units(db, ExecutionLedger._lineage_attempts(envelope),
+        spent = ExecutionLedger._granted_units(db, ExecutionLedger._authority_lineage_attempts(db, envelope),
                                                authority="charter_headroom", consumed_only=False)
         return {name: value - spent[name] for name, value in expansion_headroom(envelope).items()}
 
@@ -608,7 +636,7 @@ class ExecutionLedger:
         """
         attempt = envelope["attempt_id"]
         request_id = "exp-" + hashlib.sha256(canonical([attempt, kind, row_id]).encode()).hexdigest()[:24]
-        lineage_id = ExecutionLedger._lineage_attempts(envelope)[0]
+        lineage_id = ExecutionLedger._authority_lineage_attempts(db, envelope)[0]
         owner = db.execute("SELECT owner_generation FROM attempts WHERE attempt_id=?", (attempt,)).fetchone()[0]
         effective = ExecutionLedger._effective_limits(db, envelope)
         remaining = ExecutionLedger._headroom_remaining(db, envelope)
@@ -726,7 +754,8 @@ class ExecutionLedger:
         lineage-scoped effective limits; the seal compares the whole block with
         the ledger, so a grant cannot be added, removed, or altered.
         """
-        predecessors = [item["attempt_id"] for item in envelope.get("predecessors", [])]
+        authority_attempts = ExecutionLedger._authority_lineage_attempts(db, envelope)
+        predecessors = authority_attempts[:-1]
         zeros = {name: 0 for name in EXPANSION_LIMIT_KEYS}
         spent = (ExecutionLedger._granted_units(db, predecessors, authority="charter_headroom", consumed_only=False)
                  if predecessors else zeros)
@@ -740,7 +769,7 @@ class ExecutionLedger:
         lineage_grants = {name: inherited[name] for name in sorted(LINEAGE_SCOPED_LIMITS)}
         if not requests and not any(spent.values()) and not any(lineage_grants.values()):
             return None
-        return {"lineage_id": ExecutionLedger._lineage_attempts(envelope)[0], "headroom": expansion_headroom(envelope),
+        return {"lineage_id": authority_attempts[0], "headroom": expansion_headroom(envelope),
                 "predecessor_headroom_spent": spent, "predecessor_lineage_grants": lineage_grants, "requests": requests}
 
     @staticmethod
