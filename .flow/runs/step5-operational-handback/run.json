@@ -7,7 +7,9 @@
   },
   "artifacts": {
     "acceptance_criteria": ".flow/runs/step5-operational-handback/acceptance-criteria.md",
+    "handback": ".flow/runs/step5-operational-handback/HANDOFF.md",
     "handoff": ".flow/runs/step5-operational-handback/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/step5-operational-handback/validation-results.md",
     "orchestration_manifest": ".flow/runs/step5-operational-handback/orchestration.json",
     "plan": ".flow/runs/step5-operational-handback/plan.md",
     "requirements": ".flow/runs/step5-operational-handback/requirements.md",
@@ -50,15 +52,17 @@
   "gates": {
     "approve-definition": "2026-09-27T21:44:38Z",
     "approve-plan": "2026-09-28T00:20:12Z",
+    "mark-handback-ready": "2026-09-28T02:25:24Z",
     "start-definition": "2026-09-27T20:57:04Z",
+    "start-implementation": "2026-09-28T00:28:20Z",
     "start-plan": "2026-09-27T21:44:47Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "mark-handback-ready",
+  "phase": "handback_ready",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-28T00:20:12Z",
+  "state": "handback_ready",
+  "updated_at": "2026-09-28T02:25:24Z",
   "work_id": "step5-operational-handback"
 }

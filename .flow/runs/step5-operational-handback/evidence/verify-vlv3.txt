@@ -1,0 +1,2 @@
+verify-receipt refused: unsupported_receipt: the attempt predates the sealed token budget (ADR 0020)
+exit 2

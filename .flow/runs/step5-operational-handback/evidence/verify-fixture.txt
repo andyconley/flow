@@ -1,0 +1,49 @@
+verify-receipt sample e2c27b66dcdd4e44a0d266bcabbbba94 (completed): PASS
+  V1   pass            sealed digest [3] file digest, receipt path and terminal status match the ledger
+  V2   pass            envelope and receipt validation [2] envelope.json equals the ledger envelope; validate_receipt passes
+  V3   pass            ledger rows [13] 13 rows across 7 blocks equal the ledger, key for key
+  V4   pass            derived blocks [4] lineage, expansion, manager progress and token blocks equal the seal's own
+  V5   pass            recovery and termination [1] recovery and termination equal the ledger (the explanation is receipt-only)
+  V6   pass            predecessors [3] 1 predecessor link(s) match
+  V7   pass            sealed authority [6] authority files recompute and link; the claim chain is unbroken; limits project exactly
+  V8   pass            source snapshots [4] requirements, acceptance and manifest snapshots and charter_digest match
+  V9   pass            bound checkpoints [2] 2 bound checkpoint(s) match their files (bound links only; no chain rule)
+  V10  pass            manager request files [6] 6 request file(s) are canonical and bind to their calls
+  V11  pass            edit chain [4] repair.diff binds the edit, the final verifier input and evaluation; scope holds
+  V12  pass            test chain [3] test digest binds the final verifier input and evaluation; the command is the job's
+  V13  pass            baseline [2] baseline.json equals evidence.baseline and the job baseline
+  V14  pass            traces [1] 1 trace file(s) match
+  V15  pass            events [21] send starts, expansion consumption, grant history, checkpoint order and escalation windows hold
+  V16  pass            process groups [8] group lines name receipt rows; every sent paid row has its group (consistency only)
+  V17  pass            token gate replay [9] 9 paid grant(s) were issued under the token cap
+  --   unverifiable_offline that a provider actually ran, and what it billed: Flow keeps only what the CLI reported
+  --   unverifiable_offline the outcome of an unknown send: no response was observed
+  --   unverifiable_offline the test output bytes: only their digest is kept
+  --   unverifiable_offline the current worktree: it is not evidence once the attempt is sealed
+  --   unverifiable_offline the bytes of a replaced draft receipt: only its digest is kept
+  --   unverifiable_offline the truth of ledger timestamps: they are recorded, not attested
+
+verify-receipt sample 3e953f30ffbc45748eb4fe23009de70c (abandoned): PASS
+  V1   pass            sealed digest [3] file digest, receipt path and terminal status match the ledger
+  V2   pass            envelope and receipt validation [2] envelope.json equals the ledger envelope; validate_receipt passes
+  V3   pass            ledger rows [4] 4 rows across 7 blocks equal the ledger, key for key
+  V4   pass            derived blocks [4] lineage, expansion, manager progress and token blocks equal the seal's own
+  V5   pass            recovery and termination [1] recovery and termination equal the ledger (the explanation is receipt-only)
+  V6   not_applicable  predecessors [0] the attempt has no predecessors
+  V7   pass            sealed authority [6] authority files recompute and link; the claim chain is unbroken; limits project exactly
+  V8   pass            source snapshots [4] requirements, acceptance and manifest snapshots and charter_digest match
+  V9   pass            bound checkpoints [1] 1 bound checkpoint(s) match their files (bound links only; no chain rule)
+  V10  pass            manager request files [1] 1 request file(s) are canonical and bind to their calls
+  V11  not_applicable  edit chain [0] no edit was verified
+  V12  not_applicable  test chain [0] no test evidence was bound
+  V13  pass            baseline [2] baseline.json equals evidence.baseline and the job baseline
+  V14  not_applicable  traces [0] no trace was recorded
+  V15  pass            events [5] send starts, expansion consumption, grant history, checkpoint order and escalation windows hold
+  V16  pass            process groups [3] group lines name receipt rows; every sent paid row has its group (consistency only)
+  V17  pass            token gate replay [2] 2 paid grant(s) were issued under the token cap
+  --   unverifiable_offline that a provider actually ran, and what it billed: Flow keeps only what the CLI reported
+  --   unverifiable_offline the outcome of an unknown send: no response was observed
+  --   unverifiable_offline the test output bytes: only their digest is kept
+  --   unverifiable_offline the current worktree: it is not evidence once the attempt is sealed
+  --   unverifiable_offline the bytes of a replaced draft receipt: only its digest is kept
+  --   unverifiable_offline the truth of ledger timestamps: they are recorded, not attested

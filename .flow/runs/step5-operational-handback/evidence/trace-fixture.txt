@@ -1,0 +1,26 @@
+COMPLETED e2c27b66dcdd4e44a0d266bcabbbba94:  receipt 4a3d39fab6a0db7d
+
+attempt 3e953f30ffbc45748eb4fe23009de70c abandoned generation 2
+  #2     a2c6dcb96901 manager facts r1 claude/manager completed 0.002s charged 1000 session stub-session-a2c6dcb96901de74 pgid 89091 grants issue:b25959ec > consume:b25959ec
+  #7     6b4b2fc8e8e8 producer lead-developer codex/editor-model unknown -s charged 2000 pgid 89092 grants issue:c111ce32 > consume:c111ce32
+  totals: paid_calls 2, verifier_calls 0, unobserved_sends 1, charged_tokens 3000, cache_read_tokens 0
+  token cap: charged 3,000 of 10,000 (7,000 remaining; headroom 5,000 tokens = 1 x 5,000; 0 tranche(s) granted)
+
+attempt e2c27b66dcdd4e44a0d266bcabbbba94 completed generation 2
+  #17    d696d3161b48 manager facts r1 claude/manager completed 0.002s charged 4000 session stub-session-d696d3161b48487e pgid 89100 grants issue:2ef22bcb > consume:2ef22bcb
+  #22    cb4bb061cd05 producer lead-developer codex/editor-model completed 0.003s charged 1500 pgid 89101 grants issue:a531ba6a > consume:a531ba6a
+  #30    2750a6d6e934 manager facts r1 claude/manager completed 0.002s charged 1000 session stub-session-2750a6d6e934d949 pgid 89109 grants issue:1e4b4c36 > consume:1e4b4c36
+  #35    431f6e8911eb verifier test-engineer ollama/local-model completed 0.002s charged 0 pgid 89110 grants issue:9783a951 > consume:9783a951
+  #46    8eaf5bf822a2 manager facts r1 claude/manager completed 0.002s charged 1000 session stub-session-8eaf5bf822a223b3 pgid 89111 grants issue:2115cff2 > consume:2115cff2
+  #51    fcdaa06fb47f manager facts r1 claude/manager completed 0.002s charged 3000 session stub-session-fcdaa06fb47f748b pgid 89112 grants issue:902e9463 > consume:902e9463
+  #51    expansion expansion_requested {"limits": ["tokens"], "request_id": "exp-6dae70c14b34d14242ccc955"}
+  #52    expansion expansion_granted {"authority": "charter_headroom", "request_id": "exp-6dae70c14b34d14242ccc955"}
+  #58    3723a6cc8520 manager facts r1 claude/manager completed 0.002s charged 2000 session stub-session-3723a6cc85204fab pgid 89113 grants issue:00399e53 > consume:00399e53
+  #63    d31834f3a97d manager facts r1 claude/manager completed 0.002s charged 500 session stub-session-d31834f3a97ddd57 pgid 89120 grants deny:- > issue:1093a1c3 > consume:1093a1c3
+  #63    expansion expansion_requested {"limits": ["tokens"], "request_id": "exp-7a2c7f915a1e259238037c56"}
+  #66    expansion expansion_decided {"actor": "andy", "decision": "approve", "request_id": "exp-7a2c7f915a1e259238037c56"}
+  #72    expansion expansion_grant_consumed {"grant_id": "expg-7a2c7f915a1e259238037c56"}
+  totals: paid_calls 7, verifier_calls 1, unobserved_sends 0, charged_tokens 13000, cache_read_tokens 0
+  token cap: charged 16,000 of 20,000 (4,000 remaining; headroom 0 tokens = 0 x 5,000; 2 tranche(s) granted)
+
+lineage: paid_calls 9, verifier_calls 1, unobserved_sends 1, charged_tokens 16000

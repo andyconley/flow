@@ -4,7 +4,7 @@
 
 | AC | Test location | Kind |
 |---|---|---|
-| AC1 | `tests/test_manager_identity.py` (new) | Gateway: stub manager replies with and without the identity fields. Validator: a receipt row with a field missing. |
+| AC1 | `tests/test_manager_requests.py` (`ManagerIdentityContractTests`, `GatewayCorrelationTests`; planned as a separate `test_manager_identity.py`) | Gateway: stub manager replies with and without the identity fields. Validator: a receipt row with a field missing. |
 | AC2 | `tests/test_manager_requests.py` (new) | Pure file tests (link-into-place, conflict, a mid-write fault, orphans). Gateway fault injection between the write and `consume_manager_grant`. Claude `input_sha256` recomputation. |
 | AC3 | `tests/test_grant_history.py` (new) | `ast` enumeration of the `execution_ledger.py` write sites against the `SITES` table (plan D7), plus one scenario per op, plus a history replay on the boundary-b recovery scenario. |
 | AC4 | `tests/test_process_identity.py` | A group line with `row_id`. The default adapters bind the id per call. |

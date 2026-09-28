@@ -1,0 +1,20 @@
+COMPLETED def92b2b2bdb4fe0a40c426edba56bd7:  receipt 0ec8bf30493ce9de
+
+attempt def92b2b2bdb4fe0a40c426edba56bd7 completed generation 2
+  #2     1b50f1e7bb54 manager facts r1 claude/sonnet completed 24.34s
+  #5     5113d022de56 manager plan r1 claude/sonnet completed 9.963s
+  #8     2dace5af77e2 manager progress r1 claude/sonnet completed 15.441s
+  #11    32b18d51cebc producer tech-writer claude/sonnet completed 47.184s session 7578cb3e-1f9a-44ae-abc4-390f80b63909
+  #17    de3c7f247c40 manager progress r2 claude/sonnet completed 15.649s
+  #21    6966b734d742 verifier quality-reviewer ollama/gemma4:26b completed 7.041s
+  #30    e0fc77f52507 manager progress r3 claude/sonnet completed 7.61s
+  #30    expansion expansion_requested {"limits": ["manager_calls"], "request_id": "exp-22aefb883c503fe256a50dae"}
+  #31    expansion expansion_granted {"authority": "charter_headroom", "request_id": "exp-22aefb883c503fe256a50dae"}
+  #35    6780598ce5e5 manager final r3 claude/sonnet completed 6.512s
+  #35    expansion expansion_requested {"limits": ["manager_calls"], "request_id": "exp-bff0f24876dbf0eece027971"}
+  #37    expansion expansion_decided {"actor": "andy", "decision": "approve", "request_id": "exp-bff0f24876dbf0eece027971"}
+  #41    expansion expansion_grant_consumed {"grant_id": "expg-bff0f24876dbf0eece027971"}
+  totals: paid_calls 7, verifier_calls 1, unobserved_sends 0, charged_tokens None, cache_read_tokens None
+
+lineage: paid_calls 7, verifier_calls 1, unobserved_sends 0, charged_tokens None
+exit 0
