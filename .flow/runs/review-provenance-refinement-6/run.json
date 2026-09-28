@@ -51,16 +51,20 @@
   "gates": {
     "approve-definition": "2026-09-28T01:40:14Z",
     "approve-plan": "2026-09-28T01:40:20Z",
+    "block": "2026-09-28T02:31:05Z",
     "start-definition": "2026-09-28T01:38:39Z",
     "start-implementation": "2026-09-28T01:40:33Z",
     "start-plan": "2026-09-28T01:40:20Z"
   },
-  "lane": "implement",
-  "last_event": "start-implementation",
-  "phase": "implementing",
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "The authorized Claude producer timed out after partial writes. Attempt fc28e43db8b44bd6904d3fd6d2f522f9 was sealed abandoned because the send outcome is unknown; partial worker edits are quarantined and must not be reused.",
+  "phase": "blocked",
   "protocol_revision": 2,
+  "return_lane": "implement",
+  "return_state": "implementing",
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-28T01:40:33Z",
+  "state": "blocked",
+  "updated_at": "2026-09-28T02:31:05Z",
   "work_id": "review-provenance-refinement-6"
 }
