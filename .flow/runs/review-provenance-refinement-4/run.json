@@ -52,15 +52,15 @@
     "approve-definition": "2026-09-28T00:49:16Z",
     "approve-plan": "2026-09-28T00:49:22Z",
     "start-definition": "2026-09-28T00:48:04Z",
+    "start-implementation": "2026-09-28T00:49:38Z",
     "start-plan": "2026-09-28T00:49:16Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "next_action": "Engineer approved the runner-compatible executable successor.",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-28T00:49:22Z",
+  "state": "implementing",
+  "updated_at": "2026-09-28T00:49:38Z",
   "work_id": "review-provenance-refinement-4"
 }
