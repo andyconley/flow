@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from fsutil import ensure_dir, repo_root, write_atomic
+from delivery_contracts import DeliveryContractError, validate_shaper_intent
 from delivery_control import start_plan as seal_delivery_start_plan
 from orchestration import manifest_path, valid_work_id, validate_orchestration
 
@@ -505,7 +506,13 @@ def apply_transition(
             if (not path.is_file() or path.is_symlink()
                     or not path.resolve().is_relative_to(active_root)):
                 return False, current or {}, [f"{name} must be a current-run regular file"]
-            payload["approved_artifact_digests"][name] = hashlib.sha256(path.read_bytes()).hexdigest()
+            content = path.read_bytes()
+            if name == "shaper_intent":
+                try:
+                    validate_shaper_intent(json.loads(content))
+                except (json.JSONDecodeError, DeliveryContractError) as exc:
+                    return False, current or {}, [f"shaper_intent failed validation: {exc}"]
+            payload["approved_artifact_digests"][name] = hashlib.sha256(content).hexdigest()
 
     missing = _missing_gate_items(payload, transition)
     if missing:

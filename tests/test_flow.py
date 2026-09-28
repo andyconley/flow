@@ -629,6 +629,41 @@ class OrchestrationCliTests(FlowCliHarness):
         self.assertIn("shaper_intent", refused.stdout)
         self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
 
+    def test_invalid_shaper_intent_refuses_approve_definition_without_writing(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        run_path = run_dir / "run.json"
+        events_path = run_dir / "events.jsonl"
+        intent_path = run_dir / "shaper-intent.json"
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+
+        broken = shaper_intent()
+        del broken["problem"]
+        intent_path.write_text(json.dumps(broken) + "\n")
+        before = (run_path.read_bytes(), events_path.read_bytes())
+        refused = self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("shaper_intent failed validation", refused.stdout)
+        self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
+
+        intent_path.write_text(json.dumps(shaper_intent()) + "\n")
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        ))
+        status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
+        self.assertEqual(status["state"], "definition_approved")
+
     def test_complete_revision_two_lifecycle_reaches_archive(self) -> None:
         self.setup_project()
         self._write_valid_manifest()

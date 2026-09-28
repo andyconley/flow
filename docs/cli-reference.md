@@ -248,7 +248,7 @@ Core path events:
 - `approve-solution` — requires `--artifact solution=...` and `--disposition risk=...`
 - `start-plan`
 
-For revision-2 runs, `approve-definition` must record `requirements`, `acceptance_criteria`, and a reviewed `shaper_intent` JSON artifact. The intent file carries the per-run problem, users, outcomes, boundaries, approvals, and exact effective specialist-definition digests. `start-plan` fails closed if any source is missing or outside the current run; it never infers those semantics from Markdown or substitutes framework defaults.
+For revision-2 runs, `approve-definition` must record `requirements`, `acceptance_criteria`, and a reviewed `shaper_intent` JSON artifact. The intent file carries the per-run problem, users, outcomes, boundaries, approvals, and exact effective specialist-definition digests. `approve-definition` validates `shaper_intent` against the canonical contract before recording any approved digest, run state, or event; invalid intent leaves the run unchanged. `start-plan` fails closed if any source is missing or outside the current run; it never infers those semantics from Markdown or substitutes framework defaults.
 - `approve-plan` — requires `--artifact plan=...`, `--artifact handoff=...`, and `--artifact validation_plan=...`
 - `start-implementation`
 - `mark-handback-ready` — requires `--artifact implementation_evidence=...` and `--artifact handback=...`

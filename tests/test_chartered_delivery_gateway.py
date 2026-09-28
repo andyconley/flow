@@ -1107,6 +1107,26 @@ class CharteredEditVerificationTests(CharteredFixture):
         with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
             self._verify({"target.py": self._sha("old\n")})
 
+    def test_directory_scope_allows_regular_descendant(self):
+        docs = self.worktree / "docs"
+        docs.mkdir()
+        (docs / "guide.md").write_text("new\n")
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+        baseline = {"source_commit": self.commit, "files": {}}
+        result = _verify_chartered_edit(
+            self.worktree, baseline, attempt_dir, {"write_paths": ["docs"]}, record=False)
+        self.assertEqual(result["changed_files"], ["docs/guide.md"])
+
+    def test_directory_scope_does_not_allow_sibling_prefix(self):
+        (self.worktree / "docs-evil.md").write_text("new\n")
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+        baseline = {"source_commit": self.commit, "files": {}}
+        with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
+            _verify_chartered_edit(
+                self.worktree, baseline, attempt_dir, {"write_paths": ["docs"]}, record=False)
+
     def test_deleted_allowed_file_names_scope(self):
         (self.worktree / "target.py").unlink()
         with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):

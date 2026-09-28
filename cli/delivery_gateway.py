@@ -677,12 +677,20 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
                            job: dict[str, Any], *, record: bool = True) -> dict[str, Any]:
     if _git(worktree, "rev-parse", "HEAD") != baseline["source_commit"]:
         raise ContractError("editor changed the pinned source commit")
-    allowed = set(job["write_paths"])
+    allowed = tuple(Path(path) for path in job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
     changed = [line[3:] for line in status]
     if not changed:
         raise ContractError("editor made no edit to the worktree")
-    if any(line[:2] not in {" M", "M ", "??"} or path not in allowed for line, path in zip(status, changed)):
+    def in_scope(relative: str) -> bool:
+        path = Path(relative)
+        if path.is_absolute() or any(part in {"", ".", "..", ".git"} for part in path.parts):
+            return False
+        target = worktree / path
+        if target.is_symlink() or not target.is_file() or not target.resolve().is_relative_to(worktree.resolve()):
+            return False
+        return any(path == scope or path.is_relative_to(scope) for scope in allowed)
+    if any(line[:2] not in {" M", "M ", "??"} or not in_scope(path) for line, path in zip(status, changed)):
         raise ContractError("editor changed files outside the approved job scope")
     if not any((worktree / path).is_file() and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path) for path in changed):
         raise ContractError("editor made no edit: the allowed paths still match the pinned baseline")
