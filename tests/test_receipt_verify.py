@@ -253,6 +253,24 @@ class TamperTests(VerifyFixture):
         path.write_text("".join(json.dumps(line, sort_keys=True) + "\n" for line in lines))
         self.assert_fails_exactly({"V16"})
 
+    def test_a_duplicated_grant_issue_event(self):
+        # Only the transition rule catches this: the end state and grant id still match (M9).
+        with self.db() as db:
+            at, attempt, action, event, detail = db.execute(
+                "SELECT at,attempt_id,action_id,event,detail FROM events WHERE action_id=? AND event='grant_changed' "
+                "ORDER BY seq LIMIT 1", (self.editor()["action_id"],)).fetchone()
+            first = db.execute("SELECT MIN(seq) FROM events WHERE action_id=? AND event='grant_changed'",
+                               (action,)).fetchone()[0]
+            later = db.execute("SELECT seq FROM events WHERE seq>? ORDER BY seq", (first,)).fetchall()
+            # re-number so the copy sits right after the original issue
+            for (seq,) in reversed(later):
+                db.execute("UPDATE events SET seq=seq+1 WHERE seq=?", (seq,))
+            db.execute("INSERT INTO events(seq,at,attempt_id,action_id,event,detail) VALUES(?,?,?,?,?,?)",
+                       (first + 1, at, attempt, action, event, detail))
+        report = self.assert_fails_exactly({"V15"})
+        self.assertIn("illegal grant transition issue after allowed",
+                      [item for item in report["checks"] if item["check"] == "V15"][0]["detail"])
+
     def test_a_deleted_grant_issue_event(self):
         with self.db() as db:
             db.execute("DELETE FROM events WHERE seq=(SELECT MIN(seq) FROM events WHERE action_id=? AND event='grant_changed')",
@@ -285,6 +303,28 @@ class NoVacuousPassTests(VerifyFixture):
         report = self.verify()
         self.assertEqual(report["exit_code"], 1)
         self.assertEqual(self.statuses(report)["V4"], "fail")
+
+    def test_malformed_sources_fail_their_check_instead_of_crashing(self):
+        (self.dir(self.b) / "baseline.json").write_text("[1, 2]")
+        (self.dir(self.b) / "repair.diff").write_bytes(b"\xff\xfe not utf-8")
+        path = self.dir(self.b) / "receipt.json"
+        statuses = self.statuses(self.verify())
+        self.assertEqual((statuses["V13"], statuses["V11"]), ("fail", "fail"))
+        receipt = json.loads(path.read_text())
+        receipt["evidence"]["diagnostic_trace"]["path"] = "../../ledger.sqlite"
+        path.write_text(canonical(receipt) + "\n")
+        self.assertEqual(self.statuses(self.verify())["V14"], "fail")
+        for bad in ("../sample", "a/b"):
+            with self.subTest(work_id=bad), self.assertRaises(VerifyRefused):
+                verify_receipt(bad, root=self.root)
+
+    def test_a_pass_that_compared_nothing_fails(self):
+        real = receipt_verify.check_v8
+        with patch.object(receipt_verify, "CHECKS", [(name, (lambda ctx: ("pass", 0, "empty")) if name == "V8" else fn)
+                                                     for name, fn in receipt_verify.CHECKS]):
+            [v8] = [item for item in self.verify()["checks"] if item["check"] == "V8"]
+        self.assertEqual((v8["status"], v8["detail"]), ("fail", "nothing was compared: empty"))
+        self.assertIs(receipt_verify.check_v8, real)
 
     def test_an_unsealed_attempt_and_a_pre_release_contract_refuse(self):
         with self.db() as db:
@@ -418,3 +458,64 @@ class StockRunnerVerifyTests(maf_expansion.MafExpansionFixture):
         statuses = {item["check"]: item["status"] for item in report["checks"]}
         self.assertEqual(statuses["V9"], "pass", "real MAF checkpoint files bind")
         self.assertEqual(statuses["V17"], "pass")
+
+
+class ReviewRefinementTests(VerifyFixture):
+    """Quality review QR2-QR4: damaged receipts are reported, requiredness and V15 read the ledger."""
+
+    def test_a_truncated_receipt_is_reported_not_crashed(self):
+        path = self.dir(self.b) / "receipt.json"
+        path.write_bytes(path.read_bytes()[:40])
+        report = self.verify()
+        self.assertEqual(report["exit_code"], 1)
+        self.assertEqual(self.statuses(report)["V1"], "fail")
+
+    def test_a_deleted_receipt_of_a_sealed_attempt_fails_v1(self):
+        (self.dir(self.b) / "receipt.json").unlink()
+        report = self.verify(self.b)
+        [v1] = [item for item in report["checks"] if item["check"] == "V1"]
+        self.assertEqual((report["exit_code"], v1["status"], v1["detail"]), (1, "fail", "the sealed receipt file is missing"))
+
+    def test_hiding_an_escalation_in_the_receipt_does_not_hide_it_from_v15(self):
+        path = self.dir(self.b) / "receipt.json"
+        receipt = json.loads(path.read_text())
+        for request in receipt["expansion"]["requests"]:
+            request["grant"]["authority"] = "charter_headroom"
+        path.write_text(canonical(receipt) + "\n")
+        statuses = self.statuses(self.verify())
+        self.assertEqual(statuses["V15"], "pass", "V15 reads the ledger, not the receipt")
+        self.assertEqual(statuses["V1"], "fail")
+
+
+class NonCompletedEditTests(termination_tests.TerminationFixture):
+    """QR1: an edit on a failed or cancelled attempt is judged by what it carries."""
+
+    def editing_worker(self, action, *, envelope, workspace):
+        from tests.delivery_handback_fixture import _child
+        _child(action["action_id"])
+        (workspace / "target.py").write_text("new\n")
+        return self._result("codex", "editor-model", "Edited target")
+
+    def test_a_failed_attempt_that_edited_before_any_verifier(self):
+        result = self.execute(self._plan_supervisor(("editor",)), self.editing_worker)
+        self.assertEqual(result["status"], "failed", result)
+        report = verify_receipt("sample", result["attempt_id"], root=self.root)
+        statuses = {item["check"]: item["status"] for item in report["checks"]}
+        self.assertEqual(report["exit_code"], 0, [item for item in report["checks"] if item["status"] == "fail"])
+        self.assertEqual((statuses["V11"], statuses["V12"]), ("pass", "pass"))
+
+    def test_a_cancelled_attempt_after_its_edit(self):
+        from execution_ledger import ExecutionLedger as Ledger
+
+        def die(*args, **kwargs):
+            raise KeyboardInterrupt("stopped before the runtime outcome")
+
+        with patch.object(Ledger, "record_runtime_outcome", die), self.assertRaises(KeyboardInterrupt):
+            self.execute(self._plan_supervisor(("editor",)), self.editing_worker)
+        attempt_id = self.ledger(read_only=True).v8_lineage("sample")[1][0]
+        self.assertTrue((self.attempt_dir(attempt_id) / "repair.diff").is_file())
+        self.seal(attempt_id, "cancelled")
+        report = verify_receipt("sample", attempt_id, root=self.root)
+        statuses = {item["check"]: item["status"] for item in report["checks"]}
+        self.assertEqual(report["exit_code"], 0, [item for item in report["checks"] if item["status"] == "fail"])
+        self.assertEqual((statuses["V11"], statuses["V12"]), ("not_applicable", "not_applicable"))

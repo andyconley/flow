@@ -207,3 +207,19 @@ class TokenPauseBannerTests(token_gate_tests.TokenEscalationRecoveryTests):
         self.assertTrue(text[0].startswith(f"STUCK {paused['attempt_id']}: expansion_paused: token_cap on {denied[:12]}"))
         self.assertIn("  token cap: charged 10,000 of 10,000 (0 remaining; headroom 0 tokens = 0 x 5,000; "
                       "0 tranche(s) granted)", text)
+
+
+class PreReleaseTraceTests(TraceFixture):
+    """I6/A18: a pre-release v8 attempt is traced without token totals."""
+
+    def test_a_pre_release_attempt_is_traced_as_unsupported_contract(self):
+        import sqlite3
+        from tests.legacy_v8_rows import legacy_envelope
+        self.completed_run()
+        with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+            envelope = json.loads(db.execute("SELECT envelope_json FROM attempts").fetchone()[0])
+            db.execute("UPDATE attempts SET envelope_json=?", (json.dumps(legacy_envelope(envelope), sort_keys=True),))
+        [attempt] = self.trace()["attempts"]
+        self.assertEqual((attempt["supported"], attempt["contract"], attempt["totals"]["charged_tokens"], attempt["token_cap"]),
+                         (True, "unsupported_contract", None, None))
+        self.assertIn("unsupported_contract", render_text(self.trace()))

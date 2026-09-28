@@ -145,6 +145,13 @@ class PreReleaseAttemptTests(AbandonFixture):
         return insert_legacy_attempt(self.run / "execution" / "ledger.sqlite", self.run / "execution" / attempt_id,
                                      envelope, attempt_id, predecessor)
 
+    def test_a_pre_release_attempt_refuses_to_advance(self):
+        from tests.test_structured_verifier_ledger import _action
+        envelope = self.legacy("a" * 32)
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
+        with self.assertRaisesRegex(ContractError, "predates the sealed token budget"):
+            ledger.decide(envelope, _action(envelope, 1, envelope["roster"][1], "Produce."), generation=1)
+
     def test_a_pre_release_attempt_is_abandoned_with_its_legacy_blocks(self):
         envelope = self.legacy("a" * 32)
         self.assertFalse(handback_supported(envelope))

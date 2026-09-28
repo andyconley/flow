@@ -122,7 +122,8 @@ class LedgerSealTests(unittest.TestCase):
         def render(snapshot, blocks):
             receipt = copy.deepcopy({key: value for key, value in expected_blocks(snapshot, blocks).items()
                                      if value is not None})
-            receipt.update(status="abandoned", attempt_id="sealed")
+            receipt.update(status="abandoned", attempt_id="sealed",
+                           termination={"actor": "andy", "cause": "reconciliation_required", "owner_generation": 1})
             receipt["actions"][0]["reason"] = "forged"
             return json.dumps(receipt).encode()
 

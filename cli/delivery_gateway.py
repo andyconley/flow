@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from execution_contracts import (MANAGER_IDENTITY_FIELDS, TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical,
-                                 digest, envelope_digest, validate_manager_identity,
+                                 digest, envelope_digest, handback_supported, validate_manager_identity,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt)
@@ -1322,7 +1322,8 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
         receipt["verifier_usage"] = snapshot["verifier_usage"]
         # The seal's own blocks, read with the snapshot under the sealing lock (ADR 0020).
-        blocks = blocks if blocks is not None else ledger.seal_view(aid)["blocks"]
+        if blocks is None:
+            raise ContractError("a v8 receipt is built from the sealing seal_view")
         if blocks["lineage_usage"] is not None:
             receipt["lineage_usage"] = blocks["lineage_usage"]
         if blocks["expansion"] is not None:
@@ -1779,6 +1780,9 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                 "evidence": receipt["evidence"]}
     # v8: one send_lock hold closes expansions, snapshots, builds and seals, so
     # the receipt rows are the rows finish_attempt compares (ADR 0020).
+    if not handback_supported(envelope):
+        # Refused before any draft is written; abandon is the only way to end it.
+        raise ContractError("attempt predates the sealed token budget; abandon it")
     with authority_guard(), ledger.send_lock():
         # A sealed attempt keeps no open request or unused grant.
         ledger.close_expansions(aid, "sealed", generation=generation)

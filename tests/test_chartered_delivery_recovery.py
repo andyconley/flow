@@ -1087,6 +1087,13 @@ class CharteredRecoveryTests(RecoveryHarness):
         recovery = self._ledger().snapshot(attempt_id)["recoveries"][0]
         self.assertEqual(recovery["quarantined"], [{"name": "stray.json", "sha256": stray_sha}])
         self.assertTrue((self.run / "execution" / attempt_id / "checkpoints-quarantine" / recovery["recovery_id"] / "stray.json").is_file())
+        # ADR 0020 (AC5): the surviving bound links keep the parent read from their files.
+        links = self._ledger().snapshot(attempt_id)["magentic_checkpoints"]
+        self.assertTrue(links)
+        for link in links:
+            value = json.loads(Path(link["path"]).read_text())
+            self.assertIn("previous_checkpoint_id", link)
+            self.assertEqual(link["previous_checkpoint_id"], value.get("previous_checkpoint_id"))
 
     def test_recovery_is_exclusive_and_refuses_a_live_attempt(self):
         with self._kill_once("consume_grant"):

@@ -9,6 +9,7 @@ is the same one ``flow run stuck`` gives.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,15 +18,17 @@ import manager_requests
 import process_identity
 from delivery_projection import lead_claim_active
 from delivery_termination import control_view, next_command
-from execution_contracts import ContractError, charge, digest, handback_supported
+from execution_contracts import PAID_PROVIDERS, SENT_STATUSES, ContractError, charge, digest, handback_supported
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
 
 TRACE_SCHEMA_VERSION = 1
-PAID_PROVIDERS = {"codex", "claude"}
 # The event that starts a send, and the one that observes its response, per row kind.
 SEND_START = {"manager_call": "manager_send_started", "producer": "worker_dispatched", "verifier": "verifier_send_claimed"}
 OBSERVED = {"manager_call": "manager_response_observed", "producer": "response_observed", "verifier": "response_observed"}
+
+
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 class TraceError(Exception):
@@ -197,7 +200,7 @@ def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[s
     control = control_view(attempt_dir, ledger, attempt_id) if probe and snapshot["status"] == "started" else None
     lead_active = lead_claim_active(delivery, snapshot["envelope"])
     paid_rows = [item for item in rows if item["provider"] in PAID_PROVIDERS]
-    sent = {"started", "completed", "failed", "unknown"}
+    sent = SENT_STATUSES
     return {
         "attempt_id": attempt_id, "execution_protocol_version": 8, "supported": True, "status": snapshot["status"],
         "owner_generation": snapshot.get("owner_generation"), "owner_actor": snapshot.get("owner_actor"),
@@ -222,6 +225,8 @@ def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[s
 def trace(work_id: str, attempt_id: str | None = None, *, root: Path | None = None, probe: bool = True) -> dict[str, Any]:
     """The trace view of ``attempt_id`` (default: the latest attempt) and its predecessors."""
     project_root = (root or repo_root()).resolve()
+    if not isinstance(work_id, str) or not _ID.fullmatch(work_id) or (attempt_id is not None and not _ID.fullmatch(attempt_id)):
+        raise TraceError("work or attempt id is invalid")
     run_dir = project_root / ".flow" / "runs" / work_id
     ledger_path = run_dir / "execution" / "ledger.sqlite"
     if run_dir.is_symlink() or not run_dir.is_dir():
@@ -229,8 +234,9 @@ def trace(work_id: str, attempt_id: str | None = None, *, root: Path | None = No
     if ledger_path.is_symlink() or not ledger_path.is_file():
         raise TraceError(f"no delivery ledger for {work_id}")
     try:
-        delivery = json.loads((run_dir / "run.json").read_text()).get("delivery")
-    except (OSError, json.JSONDecodeError, AttributeError):
+        raw = process_identity.read_bounded(run_dir / "run.json", 1024 * 1024)
+        delivery = json.loads(raw).get("delivery") if raw is not None else None
+    except (OSError, ValueError, AttributeError):
         delivery = None
     ledger = ExecutionLedger(ledger_path, read_only=True)
     try:
@@ -269,7 +275,8 @@ def render_text(view: dict[str, Any]) -> str:
         if not attempt.get("supported"):
             lines.append(f"attempt {attempt['attempt_id']} (v{attempt['execution_protocol_version']}): {attempt['detail']}")
             continue
-        lines.append(f"attempt {attempt['attempt_id']} {attempt['status']} generation {attempt['owner_generation']}")
+        lines.append(f"attempt {attempt['attempt_id']} {attempt['status']} generation {attempt['owner_generation']}"
+                     + ("" if attempt.get("contract") == "handback" else " (unsupported_contract: no token budget)"))
         for entry in attempt["entries"]:
             if entry["type"] == "expansion":
                 lines.append(f"  #{entry['seq']:<5} expansion {entry['event']} {json.dumps(entry['detail'], sort_keys=True)}")

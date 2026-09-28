@@ -212,7 +212,7 @@ flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) \
 
 `--expected-generation` must match the attempt's current ledger owner generation (`.attempt.owner_generation` in `flow run inspect-delivery --json`, not the Delivery Lead generation); a mismatch is refused as a stale generation rather than applied against the wrong epoch. The command also refuses when the request is unknown or already decided, when the attempt is not truly paused (an action or manager call is still started or unknown, or a live run or recovery holds the attempt), when the owning lead's generation is no longer active, or, for an approval, when one more unit would exceed a runner ceiling. A refusal changes nothing. A decision does not itself resume the attempt — resume it with `flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME`.
 
-A `token_cap` request is expanded one `token_tranche` at a time (ADR 0020). A shortfall that one tranche cannot clear, or a tranche past `MAX_LINEAGE_TOKENS`, is refused hard and creates no request.
+A `token_cap` request is expanded one `token_tranche` at a time (ADR 0020). A Shaper intent starts from `DEFAULT_TOKEN_BUDGET` in `cli/delivery_contracts.py`: `max_lineage_tokens` 200,000, `token_tranche` 100,000 and `unobserved_send_tokens` 100,000. A shortfall that one tranche cannot clear, or a tranche past `MAX_LINEAGE_TOKENS`, is refused hard and creates no request.
 
 ### `flow run recover-delivery-lead <work-id> <attempt-id> --actor NAME`
 

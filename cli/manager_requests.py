@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import uuid
 from pathlib import Path
 from typing import Any
@@ -62,7 +63,9 @@ def _request_dir(attempt_dir: Path, *, create: bool) -> Path:
         raise ContractError("manager request directory is unsafe")
     if create:
         directory.mkdir(mode=0o700, exist_ok=True)
-        if directory.is_symlink() or not directory.is_dir():
+        info = directory.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o077):
             raise ContractError("manager request directory is unsafe")
     return directory
 
@@ -76,7 +79,12 @@ def _fsync_dir(directory: Path) -> None:
 
 
 def _read_bounded(path: Path) -> bytes:
-    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    """A regular file's bytes: never follows a symlink, never blocks on a FIFO, never reads past the cap."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_REQUEST_BYTES:
+        os.close(fd)
+        raise ContractError("manager request file is unsafe")
     with os.fdopen(fd, "rb") as handle:
         data = handle.read(MAX_REQUEST_BYTES + 1)
     if len(data) > MAX_REQUEST_BYTES:
@@ -118,6 +126,8 @@ def write_request_file(attempt_dir: Path, call_id: str, data: bytes) -> Path:
 
 def read_request_file(attempt_dir: Path, call_id: str) -> bytes | None:
     """The stored request bytes for ``call_id``, or None when there is no file."""
+    if not isinstance(call_id, str) or not _CALL_ID.match(call_id):
+        raise ContractError("manager request call id is invalid")
     directory = _request_dir(attempt_dir, create=False)
     path = directory / f"{call_id}.json"
     if not path.exists() and not path.is_symlink():
@@ -127,18 +137,18 @@ def read_request_file(attempt_dir: Path, call_id: str) -> bytes | None:
     return _read_bounded(path)
 
 
-def list_request_files(attempt_dir: Path) -> tuple[list[str], list[str]]:
-    """The call ids with request files, and any leftover temporary names (informational)."""
+def list_request_files(attempt_dir: Path) -> tuple[list[str], list[str], list[str]]:
+    """The call ids with request files, leftover temporary names (informational), and anything else (unexpected)."""
     directory = Path(attempt_dir) / REQUEST_DIR
     if not directory.is_dir() or directory.is_symlink():
-        return [], []
-    calls, leftovers = [], []
+        return [], [], []
+    calls, leftovers, unexpected = [], [], []
     for entry in sorted(directory.iterdir()):
         name = entry.name
         if name.startswith(".") and name.endswith(".tmp"):
             leftovers.append(name)
-        elif name.endswith(".json"):
+        elif name.endswith(".json") and _CALL_ID.match(name[:-5]):
             calls.append(name[:-5])
         else:
-            leftovers.append(name)
-    return calls, leftovers
+            unexpected.append(name)
+    return calls, leftovers, unexpected

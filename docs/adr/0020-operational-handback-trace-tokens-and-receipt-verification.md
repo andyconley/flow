@@ -89,6 +89,8 @@ A sealed v8 attempt was correct but hard to audit, and nothing bounded its token
 
   Receipts report the actual `overshoot`.
 - **The receipt block.** v8 receipts under a sealed budget carry `token_usage`, recomputed by `validate_receipt` from the receipt's own rows and `lineage_usage.predecessor_charged`. Whether it is required is read from the envelope, never from the receipt.
+  - The block repeats `predecessor_charged`, so it reads on its own.
+  - `cache_read_total` and `verifier_tokens` cover the attempt's own rows only. `verifier_tokens` sums every unpaid sent row: the Ollama verifier, and an unpaid manager when there is one.
 
 ### Full-row seals
 
@@ -124,7 +126,10 @@ A sealed v8 attempt was correct but hard to audit, and nothing bounded its token
   - the current worktree;
   - the bytes of a replaced draft;
   - the truth of ledger timestamps.
-- **Exit codes:** 0 when nothing fails; 1 on any failure; 2 when verification cannot run (`attempt_not_sealed`, `unsupported_receipt`, `run_unreadable`). Whether a receipt is supported is decided from the ledger envelope. A supported `envelope.json` over a pre-release ledger envelope is a V2 failure, not `unsupported_receipt`.
+- **Exit codes:** 0 when nothing fails; 1 on any failure; 2 when verification cannot run (`attempt_not_sealed`, `unsupported_receipt`, `run_unreadable`).
+  - A sealed attempt whose receipt file is missing fails V1; it does not exit 2.
+  - A malformed source fails its own check and never crashes the report.
+  - A v8 attempt never seals `denied`, so such a receipt is `unsupported_receipt`. Whether a receipt is supported is decided from the ledger envelope. A supported `envelope.json` over a pre-release ledger envelope is a V2 failure, not `unsupported_receipt`.
 - **A consistency check, not a signature.** Anyone who can write `.flow` can rewrite every source consistently.
 
 ## Consequences
@@ -135,6 +140,7 @@ A sealed v8 attempt was correct but hard to audit, and nothing bounded its token
     - the D1 event-log content shape;
     - the chartered-facts text search, which becomes a plain `grep` over request files.
   - Per-call timings no longer need a script.
+- **Request files are sensitive.** They hold the full manager prompt: charter facts, task text and diffs, up to 32 KB per call. They are 0600 in a 0700 directory, and `.flow/` is excluded from git. A run directory committed as evidence with `git add -f` carries them too, so review before committing one.
 - **Charters must seal a token budget.**
   - Old runs keep their evidence, but continuing a pre-release run needs a new sealed charter.
   - The budget is a lineage cap on `charged_v1` tokens. Operators still watch provider limits and costs themselves.

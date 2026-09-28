@@ -932,11 +932,6 @@ MAGENTIC_PHASES = frozenset({"facts", "plan", "progress", "replan", "replan_fact
 MANAGER_IDENTITY_FIELDS = {"claude": ("session_id", "input_sha256", "num_turns"), "codex": ("thread_id",)}
 
 
-def handback_evidence_required(envelope: dict[str, Any]) -> bool:
-    """Whether an attempt must carry the ADR 0020 correlation evidence (manager identity)."""
-    return handback_supported(envelope)
-
-
 def validate_manager_identity(provider: str, result: dict[str, Any]) -> None:
     """Require the adapter's session identity on a completed paid manager observation."""
     for field in MANAGER_IDENTITY_FIELDS.get(provider, ()):
@@ -1291,7 +1286,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         seen_calls.add(request["call_id"])
         if item["status"] == "completed" and not isinstance(item.get("result"), dict):
             raise ContractError("Magentic completed manager call lacks observed result")
-        if item["status"] == "completed" and handback_evidence_required(envelope):
+        if item["status"] == "completed" and handback_supported(envelope):
             validate_manager_identity(envelope["manager"].get("provider", "claude"), item["result"])
     # After the manager calls themselves are validated, so recomputation reads sound entries.
     _validate_manager_progress(receipt)

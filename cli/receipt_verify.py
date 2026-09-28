@@ -27,13 +27,14 @@ from execution_contracts import (PAID_PROVIDERS, SENT_STATUSES, ContractError, a
                                  charge, digest, handback_supported, token_maximum, validate_receipt)
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
-from manager_requests import REQUEST_DIR, render_manager_prompt
+from manager_requests import REQUEST_DIR, list_request_files, render_manager_prompt
 from receipt_compare import DERIVED_BLOCKS, ROW_BLOCKS, compare_receipt_rows, describe, expected_blocks
 from verifier_contracts import verifier_provider_task
 import process_identity
 
 SCHEMA_VERSION = 1
-TERMINAL = frozenset({"completed", "failed", "denied", "cancelled", "abandoned"})
+# A v8 attempt never seals ``denied``; such a receipt is refused rather than judged against a missing column.
+TERMINAL = frozenset({"completed", "failed", "cancelled", "abandoned"})
 MAX_FILE_BYTES = 8 * 1024 * 1024
 WORKFLOW_NAME = "flow-magentic-delivery-v8"
 SEND_START = {"manager_call": "manager_send_started", "producer": "worker_dispatched", "verifier": "verifier_send_claimed"}
@@ -75,8 +76,9 @@ def _has_predecessors(ctx):
 
 
 def _claude_editor_sent(ctx):
+    # Read from the ledger snapshot, never the receipt (ADR 0020).
     return any(item["status"] in SENT_STATUSES and item["request"].get("provider") == "claude"
-               and item["request"].get("instance_id") in ctx["job"]["producer_instance_ids"] for item in ctx["receipt"]["actions"])
+               and item["request"].get("instance_id") in ctx["job"]["producer_instance_ids"] for item in ctx["actions"].values())
 
 
 # R14: required (R), checked if present (P), or not applicable (-), per terminal status.
@@ -95,7 +97,6 @@ REQUIREDNESS: dict[str, dict[str, Any]] = {
             "cancelled": "P", "abandoned": "P"},
     "V16": {"completed": "R", "failed": "R", "cancelled": "P", "abandoned": "P"},
 }
-REQUIREDNESS["V1"]["denied"] = REQUIREDNESS["V2"]["denied"] = "R"
 NA_REASONS = {
     "V5": "no recovery ran and the attempt was not cancelled or abandoned",
     "V6": "the attempt has no predecessors",
@@ -149,8 +150,25 @@ def _json(data: bytes | None) -> Any:
         return None
     try:
         return json.loads(data)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ContractError(f"not JSON: {exc}") from exc
+    except (ValueError, RecursionError) as exc:  # UnicodeDecodeError and JSONDecodeError are ValueErrors
+        raise ContractError(f"not JSON: {type(exc).__name__}") from exc
+
+
+_DIGEST = re.compile(r"[0-9a-f]{64}")
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+MAX_DIRECTORY_ENTRIES = 4096
+
+
+def _entries(directory: Path, pattern: str = "*") -> list[Path]:
+    """At most MAX_DIRECTORY_ENTRIES entries of a real directory; more is a failure, not a slow read."""
+    if directory.is_symlink() or not directory.is_dir():
+        return []
+    found = []
+    for path in directory.glob(pattern):
+        found.append(path)
+        if len(found) > MAX_DIRECTORY_ENTRIES:
+            raise ContractError(f"{directory.name}/ has more than {MAX_DIRECTORY_ENTRIES} entries")
+    return sorted(found)
 
 
 # ------------------------------------------------------------------ helpers
@@ -195,6 +213,8 @@ def _grant_history(snapshot: dict[str, Any]) -> dict[str, list[tuple[str, str | 
 
 def check_v1(ctx):
     receipt_bytes, entry = ctx["receipt_bytes"], ctx["entry"]
+    if receipt_bytes is None:
+        return "fail", 1, "the sealed receipt file is missing"
     compared = 0
     if _sha(receipt_bytes) != entry["sealed_receipt_sha256"]:
         return "fail", 1, f"receipt sha256 {_sha(receipt_bytes)[:16]} differs from the sealed {str(entry['sealed_receipt_sha256'])[:16]}"
@@ -294,7 +314,8 @@ def check_v6(ctx):
         compared += 1
         prior_receipt = _json(data)
         if handback_supported(ctx["envelope"]):
-            charged += attempt_token_charges(prior, prior_receipt["actions"], prior_receipt["manager_calls"])["charged"]
+            charges = prior if handback_supported(prior) else {**prior, "limits": ctx["envelope"]["limits"]}
+            charged += attempt_token_charges(charges, prior_receipt["actions"], prior_receipt["manager_calls"])["charged"]
         if ctx["recurse"]:
             nested = _verify_entry(ctx["base"], entry, recurse=True)
             failed = [item for item in nested["checks"] if item["status"] == "fail"]
@@ -311,6 +332,8 @@ def check_v6(ctx):
 
 def check_v7(ctx):
     envelope, run_dir = ctx["envelope"], ctx["run_dir"]
+    if not isinstance(envelope.get("delivery_charter_digest"), str) or not _DIGEST.fullmatch(envelope["delivery_charter_digest"]):
+        return "fail", 0, "the envelope's delivery_charter_digest is not a digest"
     directory = run_dir / "delivery" / envelope["delivery_charter_digest"]
     shaper = _json(_read(directory / "shaper-contract.json", run_dir))
     charter = _json(_read(directory / "delivery-charter.json", run_dir))
@@ -331,7 +354,7 @@ def check_v7(ctx):
     if handoff.get("digest") != delivery_digest(handoff_payload):
         return "fail", 3, "handoff digest does not recompute"
     claims: dict[str, dict[str, Any]] = {}
-    for path in sorted(directory.glob("lead-claim*.json")):
+    for path in _entries(directory, "lead-claim*.json"):
         claim = _json(_read(path, run_dir))
         if isinstance(claim, dict) and claim.get("digest") == delivery_digest({k: v for k, v in claim.items() if k != "digest"}):
             claims[claim["digest"]] = claim
@@ -382,7 +405,7 @@ def check_v9(ctx):
         data = _read(ctx["attempt_dir"] / "checkpoints" / name, ctx["run_dir"])
         if data is None:
             quarantine = ctx["attempt_dir"] / "checkpoints-quarantine"
-            for folder in sorted(quarantine.iterdir()) if quarantine.is_dir() and not quarantine.is_symlink() else []:
+            for folder in _entries(quarantine):
                 data = _read(folder / name, ctx["run_dir"])
                 if data is not None:
                     break
@@ -407,18 +430,16 @@ def check_v9(ctx):
 
 def check_v10(ctx):
     directory = ctx["attempt_dir"] / REQUEST_DIR
+    if len(_entries(directory)) > MAX_DIRECTORY_ENTRIES:
+        return "fail", 0, f"{REQUEST_DIR}/ has too many entries"
+    calls, leftovers, unexpected = list_request_files(ctx["attempt_dir"])
+    if unexpected:
+        return "fail", 0, f"unexpected file in {REQUEST_DIR}/: {unexpected[0]}"
     present: dict[str, bytes] = {}
-    leftovers: list[str] = []
-    if directory.is_dir() and not directory.is_symlink():
-        for entry in sorted(directory.iterdir()):
-            if entry.name.startswith(".") and entry.name.endswith(".tmp"):
-                leftovers.append(entry.name)
-            elif re.fullmatch(r"[0-9a-f]{64}\.json", entry.name):
-                present[entry.name[:-5]] = _read(entry, ctx["run_dir"], limit=65536) or b""
-                ctx["informational"].append({"check": "V10", "item": "file_mode", "call_id": entry.name[:-5],
-                                             "mode": oct(stat.S_IMODE(entry.lstat().st_mode))})
-            else:
-                return "fail", 0, f"unexpected file in {REQUEST_DIR}/: {entry.name}"
+    for call_id in calls:
+        present[call_id] = _read(directory / f"{call_id}.json", ctx["run_dir"], limit=65536) or b""
+        ctx["informational"].append({"check": "V10", "item": "file_mode", "call_id": call_id,
+                                     "mode": oct(stat.S_IMODE((directory / f"{call_id}.json").lstat().st_mode))})
     if leftovers:
         ctx["informational"].append({"check": "V10", "item": "leftover_temporary_files", "names": leftovers})
     orphans = sorted(set(present) - set(ctx["calls"]))
@@ -430,8 +451,11 @@ def check_v10(ctx):
     for call_id in ctx["issued_calls"]:
         call = ctx["calls"][call_id]
         data = present.get(call_id)
-        consumed = any(op == "consume" for op, _ in ctx["grant_history"].get(call_id, []))
+        history = ctx["grant_history"].get(call_id, [])
+        consumed = any(op == "consume" for op, _ in history)
         if data is None:
+            if history and history[-1][0] == "deny" and not consumed:
+                continue  # re-checked and denied before it reached the send section; never sendable
             if consumed or ctx["status"] in {"completed", "failed"}:
                 return "fail", compared, f"manager call {call_id[:12]} has no request file"
             continue
@@ -458,26 +482,36 @@ def check_v11(ctx):
     evidence = ctx["receipt"].get("evidence") or {}
     edit = evidence.get("edit")
     diff = _read(ctx["attempt_dir"] / "repair.diff", ctx["run_dir"])
-    if not edit and diff is None:
+    completed = ctx["status"] == "completed"
+    if not edit and (diff is None or not completed):
+        # A cancelled or abandoned receipt never binds its edit, even when a diff exists.
         raise Absent("no edit evidence")
     if diff is None or not isinstance(edit, dict):
         return "fail", 0, "repair.diff or evidence.edit is missing"
     sha = _sha(diff)
     inputs, evaluations = ctx["receipt"].get("verifier_inputs") or [], ctx["receipt"].get("verifier_evaluations") or []
+    write_paths = set(ctx["job"]["write_paths"])
+    headers = set(re.findall(r"^diff --git a/(\S+) b/", diff.decode(errors="replace"), re.M))
+    in_scope = set(edit.get("changed_files", [])) <= write_paths and headers <= write_paths
     if not inputs or not evaluations:
-        return "fail", 1, "no verifier input or evaluation binds the edit"
+        if completed:
+            return "fail", 1, "no verifier input or evaluation binds the edit"
+        # Failed before the verifier ran: check what is present.
+        if edit.get("diff_sha256") != sha:
+            return "fail", 1, f"evidence.edit.diff_sha256: expected {sha[:16]} (repair.diff), found {str(edit.get('diff_sha256'))[:16]}"
+        if not in_scope:
+            return "fail", 2, "the diff changes files outside the job's write paths"
+        return "pass", 2, "repair.diff binds the edit and stays in scope (no verifier ran)"
     final_input, final_evaluation = inputs[-1], evaluations[-1]["evaluation"]
     for label, value in (("evidence.edit.diff_sha256", edit.get("diff_sha256")),
                          ("final verifier input diff_digest", final_input.get("diff_digest")),
                          ("final evaluation diff_digest", final_evaluation.get("diff_digest"))):
         if value != sha:
             return "fail", 2, f"{label}: expected {sha[:16]} (repair.diff), found {str(value)[:16]}"
-    task = verifier_provider_task(final_input["input"]["task"], diff.decode(), sha, structured=True)
+    task = verifier_provider_task(final_input["input"]["task"], diff.decode(errors="replace"), sha, structured=True)
     if final_input["input"].get("provider_task") != task:
         return "fail", 3, "the final verifier input's provider_task differs from the one rebuilt from repair.diff"
-    write_paths = set(ctx["job"]["write_paths"])
-    headers = set(re.findall(r"^diff --git a/(\S+) b/", diff.decode(errors="replace"), re.M))
-    if not set(edit.get("changed_files", [])) <= write_paths or not headers <= write_paths:
+    if not in_scope:
         return "fail", 4, "the diff changes files outside the job's write paths"
     return "pass", 4, "repair.diff binds the edit, the final verifier input and evaluation; scope holds"
 
@@ -489,7 +523,11 @@ def check_v12(ctx):
         raise Absent("no test evidence")
     inputs, evaluations = ctx["receipt"].get("verifier_inputs") or [], ctx["receipt"].get("verifier_evaluations") or []
     if not inputs or not evaluations:
-        return "fail", 1, "no verifier input or evaluation binds the test evidence"
+        if ctx["status"] == "completed":
+            return "fail", 1, "no verifier input or evaluation binds the test evidence"
+        if tests.get("command") != ctx["job"]["test"]["argv"]:
+            return "fail", 1, "the test command differs from the job's test argv"
+        return "pass", 1, "the test command is the job's (no verifier ran)"
     sha = tests.get("output_sha256")
     for label, value in (("final verifier input test_digest", inputs[-1].get("test_digest")),
                          ("final evaluation test_evidence_digest", evaluations[-1]["evaluation"].get("test_evidence_digest"))):
@@ -505,7 +543,7 @@ def check_v13(ctx):
     if data is None:
         raise Absent("baseline.json is missing")
     baseline = _json(data)
-    if baseline != (ctx["receipt"].get("evidence") or {}).get("baseline"):
+    if not isinstance(baseline, dict) or baseline != (ctx["receipt"].get("evidence") or {}).get("baseline"):
         return "fail", 1, "baseline.json differs from evidence.baseline"
     if baseline.get("regression_diff_sha256") != ctx["job"]["baseline"]["diff_sha256"]:
         return "fail", 2, "the baseline regression digest differs from the job's"
@@ -518,7 +556,10 @@ def check_v14(ctx):
     if not records:
         raise Absent("no trace recorded")
     for record in records:
-        data = _read(ctx["attempt_dir"] / record["path"], ctx["run_dir"])
+        name = record.get("path")
+        if name not in {"claude-implementer.debug.log", "claude-implementer.events.ndjson"}:
+            return "fail", 0, f"trace path {str(name)[:40]!r} is not a trace file name"
+        data = _read(ctx["attempt_dir"] / name, ctx["run_dir"])
         if data is None or _sha(data) != record["sha256"] or len(data) != record["bytes"]:
             return "fail", 1, f"trace {record['path']} differs from its recorded sha256 and size"
     return "pass", len(records), f"{len(records)} trace file(s) match"
@@ -543,11 +584,11 @@ def check_v15(ctx):
         if starts != 1:
             return "fail", compared, f"row {row_id[:12]} has {starts} {SEND_START[_row_kind(ctx, row_id)]} events (resent?)"
         compared += 1
-    sequences = [call["sequence"] for call in ctx["receipt"]["manager_calls"]]
+    sequences = [call["sequence"] for call in ctx["snapshot"]["manager_calls"]]
     if sequences != list(range(1, len(sequences) + 1)):
         return "fail", compared, f"manager sequences are not contiguous from 1: {sequences[:8]}"
     # (b) every consumed expansion grant has its consumption event.
-    for request in ((ctx["receipt"].get("expansion") or {}).get("requests") or []):
+    for request in ctx["snapshot"].get("expansions") or []:
         grant = request.get("grant") or {}
         if grant.get("status") != "consumed":
             continue
@@ -573,7 +614,7 @@ def check_v15(ctx):
             grant = grant_id if op in {"issue", "rotate", "consume", "expire"} else None
         final = row["status"]
         expected_state = ("sent" if final in SENT_STATUSES else final)
-        if state != expected_state or (row.get("grant_id") != grant and state != "denied"):
+        if state != expected_state or row.get("grant_id") != grant:
             return "fail", compared, f"row {row_id[:12]}: history ends at {state}/{str(grant)[:8]}, row is {final}"
         compared += 1
     # (d) checkpoint binding precedes its bound event.
@@ -584,7 +625,7 @@ def check_v15(ctx):
             return "fail", compared, f"checkpoint {link['checkpoint_id']} ledger_seq does not precede its bound event"
         compared += 1
     # (e) no send falls inside a pending escalation window (by seq).
-    automatic = {request["request_id"] for request in ((ctx["receipt"].get("expansion") or {}).get("requests") or [])
+    automatic = {request["request_id"] for request in ctx["snapshot"].get("expansions") or []
                  if (request.get("grant") or {}).get("authority") == "charter_headroom"}
     windows = []
     for event in events:
@@ -680,6 +721,9 @@ def check_v17(ctx):
             return "fail", compared, (f"paid grant at seq {event['seq']} issued with {charged} charged against a cap of "
                                       f"{token_maximum(envelope, tranches)}")
         compared += 1
+    if not compared and not any(provider in PAID_PROVIDERS and status in SENT_STATUSES
+                                for status, provider, _ in rows.values()):
+        return "pass", 1, "no paid grant was issued and no paid call was sent"
     for row_id, (status, provider, _) in rows.items():
         if provider in PAID_PROVIDERS and status in SENT_STATUSES:
             issued = [event["seq"] for event in events if event["action_id"] == row_id and event["event"] == "grant_changed"
@@ -705,12 +749,13 @@ def _verify_entry(base: dict[str, Any], entry: dict[str, Any], *, recurse: bool)
     attempt_id = entry["attempt_id"]
     attempt_dir = run_dir / "execution" / attempt_id
     envelope = json.loads(entry["envelope_json"])
-    receipt_bytes = _read(attempt_dir / "receipt.json", run_dir)
-    if receipt_bytes is None:
-        raise VerifyRefused("attempt_not_sealed", f"{attempt_id} has no receipt file")
     try:
-        receipt = json.loads(receipt_bytes)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        receipt_bytes = _read(attempt_dir / "receipt.json", run_dir)
+    except ContractError:
+        receipt_bytes = None
+    try:
+        receipt = json.loads(receipt_bytes) if receipt_bytes is not None else {}
+    except (ValueError, RecursionError):
         receipt = {}
     snapshot = entry["snapshot"]
     ctx = {"base": base, "run_dir": run_dir, "attempt_id": attempt_id, "attempt_dir": attempt_dir, "entry": entry,
@@ -725,7 +770,10 @@ def _verify_entry(base: dict[str, Any], entry: dict[str, Any], *, recurse: bool)
                            if any(op in {"issue", "rotate"} for op, _ in ctx["grant_history"].get(call_id, []))]
     checks = []
     for check, function in CHECKS:
-        required = _requiredness(check, ctx)
+        try:
+            required = _requiredness(check, ctx)
+        except Exception:  # requiredness is read from the ledger; a malformed row still decides "required"
+            required = "R"
         try:
             status, compared, detail = function(ctx)
         except Absent as missing:
@@ -733,6 +781,8 @@ def _verify_entry(base: dict[str, Any], entry: dict[str, Any], *, recurse: bool)
                                         ("not_applicable", 0, NA_REASONS.get(check, str(missing))))
         except ContractError as exc:
             status, compared, detail = "fail", 0, str(exc)
+        except Exception as exc:  # a malformed source fails its check; it never crashes the report
+            status, compared, detail = "fail", 0, f"{type(exc).__name__}: {str(exc)[:160]}"
         if status == "pass" and compared < 1:
             status, detail = "fail", f"nothing was compared: {detail}"
         checks.append({"check": check, "name": NAMES[check], "status": status, "compared": compared, "detail": detail})
@@ -744,6 +794,8 @@ def verify_receipt(work_id: str, attempt_id: str | None = None, *, root: Path | 
                    lineage: bool = True) -> dict[str, Any]:
     """Verify ``attempt_id`` (default: the latest sealed attempt) of ``work_id``; see the module docstring."""
     project_root = (root or repo_root()).resolve()
+    if not isinstance(work_id, str) or not _ID.fullmatch(work_id) or (attempt_id is not None and not _ID.fullmatch(attempt_id)):
+        raise VerifyRefused("run_unreadable", "work or attempt id is invalid")
     run_dir = project_root / ".flow" / "runs" / work_id
     ledger_path = run_dir / "execution" / "ledger.sqlite"
     if run_dir.is_symlink() or not run_dir.is_dir() or ledger_path.is_symlink() or not ledger_path.is_file():
@@ -758,6 +810,8 @@ def verify_receipt(work_id: str, attempt_id: str | None = None, *, root: Path | 
     target = entries[view["attempt_id"]]
     if target["execution_protocol_version"] != 8:
         raise VerifyRefused("unsupported_receipt", "only protocol v8 receipts are verified")
+    if target["status"] == "denied":
+        raise VerifyRefused("unsupported_receipt", "a v8 attempt never seals denied")
     if target["sealed_receipt_sha256"] is None or target["status"] not in TERMINAL:
         raise VerifyRefused("attempt_not_sealed", f"{view['attempt_id']} is {target['status']}")
     envelope = json.loads(target["envelope_json"])

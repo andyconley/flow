@@ -50,7 +50,7 @@ class RequestFileTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), (canonical(stored) + "\n").encode())
         self.assertEqual(digest(stored["messages"]), stored["prompt_digest"])
         self.assertEqual(read_request_file(self.attempt, CALL), data)
-        self.assertEqual(list_request_files(self.attempt), ([CALL], []))
+        self.assertEqual(list_request_files(self.attempt), ([CALL], [], []))
 
     def test_a_digest_mismatch_is_refused_before_any_file(self):
         with self.assertRaises(ContractError):
@@ -72,14 +72,32 @@ class RequestFileTests(unittest.TestCase):
         with patch("manager_requests.os.link", side_effect=OSError("disk full")), self.assertRaises(OSError):
             write_request_file(self.attempt, CALL, data)
         self.assertIsNone(read_request_file(self.attempt, CALL))
-        self.assertEqual(list_request_files(self.attempt), ([], []))
+        self.assertEqual(list_request_files(self.attempt), ([], [], []))
 
     def test_a_kill_after_the_temporary_file_leaves_only_an_informational_leftover(self):
         directory = self.attempt / "manager-requests"
         directory.mkdir(mode=0o700)
         (directory / f".{CALL}.dead.tmp").write_bytes(b"partial")
         write_request_file(self.attempt, CALL, request_bytes(CALL, digest(MESSAGES), MESSAGES))
-        self.assertEqual(list_request_files(self.attempt), ([CALL], [f".{CALL}.dead.tmp"]))
+        self.assertEqual(list_request_files(self.attempt), ([CALL], [f".{CALL}.dead.tmp"], []))
+
+    def test_a_fifo_at_the_final_path_is_refused_without_blocking(self):
+        directory = self.attempt / "manager-requests"
+        directory.mkdir(mode=0o700)
+        os.mkfifo(directory / f"{CALL}.json")
+        with self.assertRaises(ContractError):
+            write_request_file(self.attempt, CALL, request_bytes(CALL, digest(MESSAGES), MESSAGES))
+        with self.assertRaises(ContractError):
+            read_request_file(self.attempt, CALL)
+        with self.assertRaises(ContractError):
+            read_request_file(self.attempt, "../escape")
+
+    def test_a_group_or_world_readable_directory_is_refused(self):
+        directory = self.attempt / "manager-requests"
+        directory.mkdir(mode=0o755)
+        os.chmod(directory, 0o755)
+        with self.assertRaises(ContractError):
+            write_request_file(self.attempt, CALL, request_bytes(CALL, digest(MESSAGES), MESSAGES))
 
     def test_a_symlinked_directory_is_refused(self):
         target = self.attempt / "elsewhere"
@@ -258,7 +276,7 @@ class RecoveryActorCliTests(unittest.TestCase):
 
     def test_the_hard_coded_default_is_gone(self):
         cli = Path(__file__).resolve().parents[1] / "cli"
-        hits = [path.name for path in cli.glob("*.py") if "codex-assisted-recovery" in path.read_text()]
+        hits = [path.name for path in cli.rglob("*.py") if "codex-assisted-recovery" in path.read_text()]
         self.assertEqual(hits, [])
         with self.assertRaises(ContractError):
             delivery_gateway.recover_delivery("work", "attempt", actor=" ")

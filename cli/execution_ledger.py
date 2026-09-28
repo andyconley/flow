@@ -628,8 +628,11 @@ class ExecutionLedger:
         reason = failing[0][0] if failing else "allowed"
         # A limit that needs more than one unit, or whose next unit would pass
         # the runner ceiling, can never be granted: it stays a terminal denial.
+        outstanding = ExecutionLedger._outstanding_units(db, envelope)
+        # A tranche already approved but unconsumed counts toward the absolute ceiling (D2).
         hard = next((name for name, _, limit, units in failing
-                     if limit is None or units != 1 or not expansion_fits(envelope, limit, effective[limit] + 1)), None)
+                     if limit is None or units != 1 or not expansion_fits(
+                         envelope, limit, effective[limit] + (outstanding[limit] if limit == "tokens" else 0) + 1)), None)
         return reason, hard, [limit for _, _, limit, _ in failing if limit is not None]
 
     def lineage_usage(self, attempt_id: str) -> dict[str, int]:
@@ -853,18 +856,12 @@ class ExecutionLedger:
                 raise ContractError("terminal seal requires a JSON receipt") from exc
             if not isinstance(receipt, dict) or receipt.get("status") != status or receipt.get("attempt_id") != attempt_id:
                 raise ContractError("terminal receipt rows differ from the ledger")
-            mismatches = compare_receipt_rows(receipt, expected_blocks(snapshot, blocks), blocks=ROW_BLOCKS)
-            if mismatches:
-                raise ContractError("terminal receipt rows differ from the ledger: " + describe(mismatches[0]))
             termination = receipt.get("termination")
             if (not isinstance(termination, dict) or termination.get("owner_generation") != expected_generation
                     or termination.get("actor") != actor or termination.get("cause") != cause):
                 raise ContractError("terminal receipt termination differs from the seal")
-            if receipt.get("lineage_usage") != blocks["lineage_usage"]:
-                raise ContractError("receipt lineage usage differs from the ledger")
-            for key in ("expansion", "manager_progress", "token_usage"):
-                if receipt.get(key) != blocks[key]:
-                    raise ContractError(f"receipt {key} evidence differs from the ledger")
+            self._compare_seal_locked(db, attempt_id, envelope, receipt,
+                                      rows_message="terminal receipt rows differ from the ledger")
             if receipt_path.is_symlink() or receipt_path.parent.is_symlink():
                 raise ContractError("terminal receipt path is unsafe")
             temporary = receipt_path.with_name(f".{receipt_path.name}.{uuid.uuid4().hex}")
@@ -1192,8 +1189,11 @@ class ExecutionLedger:
         if replan_reason != "allowed":
             hard = replan_reason
         else:
+            outstanding = ExecutionLedger._outstanding_units(db, envelope) if protocol == 8 else {}
             hard = next((name for name, limit, units in caps
-                         if protocol != 8 or units != 1 or not expansion_fits(envelope, limit, effective[limit] + 1)), None)
+                         if protocol != 8 or units != 1 or not expansion_fits(
+                             envelope, limit, effective[limit] + (outstanding.get(limit, 0) if limit == "tokens" else 0) + 1)),
+                        None)
         return reason, hard, [limit for _, limit, _ in caps]
 
     @staticmethod
