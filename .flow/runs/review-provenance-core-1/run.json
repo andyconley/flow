@@ -52,15 +52,15 @@
     "approve-definition": "2026-09-28T02:50:21Z",
     "approve-plan": "2026-09-28T02:50:21Z",
     "start-definition": "2026-09-28T02:48:21Z",
+    "start-implementation": "2026-09-28T02:50:36Z",
     "start-plan": "2026-09-28T02:50:21Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "next_action": "Approved bounded plan; no reuse of quarantined edits and no provider-adapter work.",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-28T02:50:21Z",
+  "state": "implementing",
+  "updated_at": "2026-09-28T02:50:36Z",
   "work_id": "review-provenance-core-1"
 }
