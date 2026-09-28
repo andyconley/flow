@@ -699,7 +699,8 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
         if target.is_symlink() or not target.is_file() or not target.resolve().is_relative_to(worktree.resolve()):
             return False
         return any(path == scope or path.is_relative_to(scope) for scope in allowed)
-    if any(line[:2] not in {" M", "M ", "??"} or not in_scope(path) for line, path in zip(status, changed)):
+    permitted_statuses = {" M", "M ", "MM", "A ", "AM", "??"}
+    if any(line[:2] not in permitted_statuses or not in_scope(path) for line, path in zip(status, changed)):
         raise ContractError("editor changed files outside the approved job scope")
     if not any((worktree / path).is_file() and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path) for path in changed):
         raise ContractError("editor made no edit: the allowed paths still match the pinned baseline")
