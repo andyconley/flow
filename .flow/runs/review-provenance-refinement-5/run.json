@@ -1,0 +1,66 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "ec2f0435ee439ec5846f5a97a5d54e76186bfc3dfe737cfc7735115d0ff5d80d",
+    "orchestration_manifest": "3284ec0339466967209756347ff0aa44d11f1b327afed8d0bfc05e738c42b7f3",
+    "requirements": "0b4909bd96216ccba69ab2c182f5285783907cad4c71510f561b8c34ae40b09f",
+    "shaper_intent": "a1dae74cc1079a81133c249f82c31f1284e4ec1c3d03c7f834812cb907fee8be"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/review-provenance-refinement-5/acceptance-criteria.md",
+    "handoff": ".flow/runs/review-provenance-refinement-5/implementation-handoff.md",
+    "job_charter": ".flow/runs/review-provenance-refinement-5/job-charter.json",
+    "orchestration_manifest": ".flow/runs/review-provenance-refinement-5/orchestration.json",
+    "plan": ".flow/runs/review-provenance-refinement-5/plan.md",
+    "requirements": ".flow/runs/review-provenance-refinement-5/requirements.md",
+    "shaper_intent": ".flow/runs/review-provenance-refinement-5/shaper-intent.json",
+    "validation_plan": ".flow/runs/review-provenance-refinement-5/validation-plan.md"
+  },
+  "created_at": "2026-09-28T01:11:28Z",
+  "delivery": {
+    "charter_digest": "d924c89e9b9b6a780ef2ae587436fd1453a009e93bcfe85902a4842c9410bfc5",
+    "charter_id": "delivery-ec6cd7065d927d544d8b",
+    "delivery_artifact_dir": "delivery/d924c89e9b9b6a780ef2ae587436fd1453a009e93bcfe85902a4842c9410bfc5",
+    "handoff_digest": "68f5ffa324b4c695231fd9d2738e0f02782bf3d06b44ce2a15b1dfe29925dcff",
+    "lead_claim_digest": "9ace88650b33274b1df059a4e23c7041a54dd819d0d796710c289db8e0e9b100",
+    "lead_claim_path": "delivery/d924c89e9b9b6a780ef2ae587436fd1453a009e93bcfe85902a4842c9410bfc5/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-d924c89e9b9b6a780ef2",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "6f785cd42eb7a3e057ec3b38a52a8a729815044430e175545850eab20bd6afcd",
+    "shaper_contract_id": "shaper-e23691b13c196a240775",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/review-provenance-refinement-5/acceptance-criteria.md",
+        "sha256": "ec2f0435ee439ec5846f5a97a5d54e76186bfc3dfe737cfc7735115d0ff5d80d"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/review-provenance-refinement-5/orchestration.json",
+        "sha256": "3284ec0339466967209756347ff0aa44d11f1b327afed8d0bfc05e738c42b7f3"
+      },
+      "requirements": {
+        "path": ".flow/runs/review-provenance-refinement-5/requirements.md",
+        "sha256": "0b4909bd96216ccba69ab2c182f5285783907cad4c71510f561b8c34ae40b09f"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/review-provenance-refinement-5/shaper-intent.json",
+        "sha256": "a1dae74cc1079a81133c249f82c31f1284e4ec1c3d03c7f834812cb907fee8be"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-28T01:12:54Z",
+    "approve-plan": "2026-09-28T01:13:00Z",
+    "start-definition": "2026-09-28T01:11:28Z",
+    "start-plan": "2026-09-28T01:12:55Z"
+  },
+  "lane": "plan",
+  "last_event": "approve-plan",
+  "next_action": "Engineer approved the Codex Delivery Lead successor.",
+  "phase": "plan_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "plan_approved",
+  "updated_at": "2026-09-28T01:13:00Z",
+  "work_id": "review-provenance-refinement-5"
+}
