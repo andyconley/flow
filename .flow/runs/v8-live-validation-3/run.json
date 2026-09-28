@@ -1,0 +1,77 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "073c3b68d00de2153e3f68997bf54c9dd431ebb5d73b6f495e31433b8ae3abe6",
+    "orchestration_manifest": "b6d4a60a94e363c26ab2d4a58aa2c7d44345d19f2fe34f2c635eb65bcf8935a7",
+    "requirements": "9e86c668150d8f765eb352bc8f6c9beb02e354fde5e1f016132ee269834faae3",
+    "shaper_intent": "ea190a538261b7262d8d9217c8df1622d4df73cff1fd979203b6db092205c51f"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+    "archive": ".flow/runs/v8-live-validation-3/archive.md",
+    "handback": ".flow/runs/v8-live-validation-3/HANDOFF.md",
+    "handoff": ".flow/runs/v8-live-validation-3/implementation-handoff.md",
+    "implementation_evidence": ".flow/runs/v8-live-validation-3/validation-results.md",
+    "orchestration_manifest": ".flow/runs/v8-live-validation-3/orchestration.json",
+    "plan": ".flow/runs/v8-live-validation-3/plan.md",
+    "requirements": ".flow/runs/v8-live-validation-3/requirements.md",
+    "review": ".flow/runs/v8-live-validation-3/review.md",
+    "shaper_intent": ".flow/runs/v8-live-validation-3/shaper-intent.json",
+    "validation_plan": ".flow/runs/v8-live-validation-3/validation-plan.md"
+  },
+  "created_at": "2026-09-27T19:33:06Z",
+  "delivery": {
+    "charter_digest": "756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98",
+    "charter_id": "delivery-6f8ac2db5492091dc682",
+    "delivery_artifact_dir": "delivery/756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98",
+    "handoff_digest": "c6b340a976222edb2bfd7e03ce192bb7a43af5e0cfda8a85c5a6bce76261d46a",
+    "lead_claim_digest": "230b09b01a0b43b8934d02432d3aff10c4cd1f61bf6441a6c50b191ca61f095c",
+    "lead_claim_path": "delivery/756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-756f650390a4f3cf0a8a",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "9201040ee3b842221ba0ebca6d95e6b9b8ba12470e9df8432412f7e678324c6b",
+    "shaper_contract_id": "shaper-9e9f5820b07f867133f2",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+        "sha256": "073c3b68d00de2153e3f68997bf54c9dd431ebb5d73b6f495e31433b8ae3abe6"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/v8-live-validation-3/orchestration.json",
+        "sha256": "b6d4a60a94e363c26ab2d4a58aa2c7d44345d19f2fe34f2c635eb65bcf8935a7"
+      },
+      "requirements": {
+        "path": ".flow/runs/v8-live-validation-3/requirements.md",
+        "sha256": "9e86c668150d8f765eb352bc8f6c9beb02e354fde5e1f016132ee269834faae3"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/v8-live-validation-3/shaper-intent.json",
+        "sha256": "ea190a538261b7262d8d9217c8df1622d4df73cff1fd979203b6db092205c51f"
+      }
+    }
+  },
+  "dispositions": {
+    "archive_enrichment": "1",
+    "capability_gaps": "recorded",
+    "memory": "updated"
+  },
+  "gates": {
+    "accept-review": "2026-09-27T20:47:12Z",
+    "approve-definition": "2026-09-27T19:43:33Z",
+    "approve-plan": "2026-09-27T19:56:00Z",
+    "archive": "2026-09-27T20:48:54Z",
+    "mark-handback-ready": "2026-09-27T20:22:37Z",
+    "start-definition": "2026-09-27T19:33:06Z",
+    "start-implementation": "2026-09-27T19:56:01Z",
+    "start-plan": "2026-09-27T19:43:50Z",
+    "start-review": "2026-09-27T20:39:51Z"
+  },
+  "lane": "archive",
+  "last_event": "archive",
+  "phase": "archived",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "archived",
+  "updated_at": "2026-09-27T20:48:54Z",
+  "work_id": "v8-live-validation-3"
+}

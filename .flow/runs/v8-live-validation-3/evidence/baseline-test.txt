@@ -1,0 +1,22 @@
+== date
+2026-09-27T19:56:07Z
+== HEAD
+d6d771f2eccdcdd4a0ab43b9691b8cf8f92823a2
+== porcelain (untracked=all) lines
+       0
+== baseline test (charter argv)
+======================================================================
+FAIL: test_help_source_documents_the_real_invocation (test_decide_expansion_docs.DecideExpansionDocsTest.test_help_source_documents_the_real_invocation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/andyconley/src/flow-v8-live-job-2/tests/test_decide_expansion_docs.py", line 52, in test_help_source_documents_the_real_invocation
+    self.assertEqual(len(entries), 1, "add exactly one [[help.cli_commands]] entry for decide-expansion (see module docstring, rule 1)")
+AssertionError: 0 != 1 : add exactly one [[help.cli_commands]] entry for decide-expansion (see module docstring, rule 1)
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.030s
+
+FAILED (failures=2)
+rc=0
+== job charter sha256
+fef217325168cf4fbe378f605a006d4315bbebb98af106cd7e9c8ce943fdf798  /Users/andyconley/src/flow/.flow/runs/v8-live-validation-3/job-charter.json

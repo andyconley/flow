@@ -1,0 +1,39 @@
+== date
+2026-09-27T19:56:18Z
+== ollama list
+NAME                     ID              SIZE      MODIFIED     
+gemma4:26b               5571076f3d70    17 GB     5 months ago    
+== warm (keep_alive -1)
+load_s 0.26 total_s 6.1
+== claude auth
+{
+  "loggedIn": true,
+  "authMethod": "claude.ai",
+  "apiProvider": "firstParty",
+== flow version
+current: v0.38.0
+remote:  https://github.com/andyconley/flow.git
+latest:  v0.38.1
+== digests (installed)
+tech-writer 9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe
+quality-reviewer 1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718
+== MAF interpreter
+agent_framework import ok
+== inspect-delivery
+work: v8-live-validation-3
+state: implementing
+charter: v3 756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98
+logical attempt: logical-756f650390a4f3cf0a8a
+owner: generation 1 (active)
+attempt: none
+== orchestration
+orchestration valid: v8-live-validation-3 (dispatch)
+== worktree
+job/decide-expansion-docs-2
+d6d771f2eccdcdd4a0ab43b9691b8cf8f92823a2
+porcelain lines:        0
+== stuck (this work id)
+[]
+== note: v0.38.1 is docs-only (git diff --stat v0.38.0 v0.38.1 -- cli runtime scaffolds is empty); staying on sealed v0.38.0
+NAME          ID              SIZE     PROCESSOR    CONTEXT    UNTIL   
+gemma4:26b    5571076f3d70    17 GB    100% GPU     32768      Forever    

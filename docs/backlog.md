@@ -593,3 +593,27 @@ Status: observed 2 times, promoted from the capability-gap ledger
 Implementation handback does not require the orchestration manifest to declare producer and evidence-collector assignments, so the gap surfaces only at the acceptance gate
 
 Writable definition-lane assignments missing from the manifest's producer list were caught only at the acceptance gate, after the manifest was sealed, so closing it required amending a sealed artifact by hand
+
+### Delivery Per Call Timings
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+Delivery inspection does not show per-call timings although the ledger records them; a read-only extraction script had to be written
+
+Delivery inspection still does not show per-call timings, so a live run needed a separate timing script again
+
+### Job Charter Sealed Digest
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+The per-job charter passed as input evidence is not covered by the sealed authority digests; its integrity rests on a hand-recorded hash
+
+The job charter is still outside the sealed digests, so its hash was recorded by hand for a third run
+
+### Run Evidence Symlink Hygiene
+
+Status: observed 2 times, promoted from the capability-gap ledger
+
+A provider CLI writes an absolute symlink into attempt evidence; nothing strips or rejects it before evidence is committed
+
+A provider CLI's absolute symlink in the attempt directory again had to be found and removed by hand before committing evidence

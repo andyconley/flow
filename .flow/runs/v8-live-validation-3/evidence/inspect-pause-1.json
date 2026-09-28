@@ -1,0 +1,343 @@
+{
+  "attempt": {
+    "attempt_id": "def92b2b2bdb4fe0a40c426edba56bd7",
+    "attempt_status": "started",
+    "contracts": {
+      "delivery_charter_digest": "756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98",
+      "delivery_lead_claim_digest": "230b09b01a0b43b8934d02432d3aff10c4cd1f61bf6441a6c50b191ca61f095c",
+      "handoff_digest": "c6b340a976222edb2bfd7e03ce192bb7a43af5e0cfda8a85c5a6bce76261d46a",
+      "shaper_contract_digest": "9201040ee3b842221ba0ebca6d95e6b9b8ba12470e9df8432412f7e678324c6b"
+    },
+    "control": {
+      "cancel_supported": true,
+      "live": false,
+      "lock": "free",
+      "parent": "closed",
+      "records": [
+        {
+          "closed": true,
+          "groups": [
+            {
+              "alive": false,
+              "kind": "maf",
+              "pgid": 21678
+            },
+            {
+              "alive": false,
+              "kind": "provider",
+              "pgid": 21679
+            },
+            {
+              "alive": false,
+              "kind": "provider",
+              "pgid": 21758
+            },
+            {
+              "alive": false,
+              "kind": "provider",
+              "pgid": 21782
+            },
+            {
+              "alive": false,
+              "kind": "provider",
+              "pgid": 21838
+            },
+            {
+              "alive": false,
+              "kind": "test",
+              "pgid": 21949
+            },
+            {
+              "alive": false,
+              "kind": "provider",
+              "pgid": 21954
+            },
+            {
+              "alive": false,
+              "kind": "provider",
+              "pgid": 22033
+            }
+          ],
+          "owner_generation": 1,
+          "pid": 21671,
+          "verdict": "closed"
+        }
+      ]
+    },
+    "delivery_lead": {
+      "active": true,
+      "current_generation": 1,
+      "generation": 1,
+      "id": "delivery-lead"
+    },
+    "executable": true,
+    "execution_protocol_version": 8,
+    "expansion": {
+      "effective_limits": {
+        "delegations": 2,
+        "manager_calls": 5,
+        "manager_rounds": 6,
+        "paid_worker_calls": 1,
+        "verifier_calls": 1
+      },
+      "headroom_remaining": {
+        "delegations": 1,
+        "manager_calls": 0,
+        "manager_rounds": 0,
+        "paid_worker_calls": 1,
+        "verifier_calls": 1
+      },
+      "requests": [
+        {
+          "amount": 1,
+          "created_at": "2026-09-27T20:12:17.643650+00:00",
+          "denied_row_id": "e0fc77f5250765603cbe31dafdcb4493f40f9315ef58536b22f2c590eefa29d6",
+          "grant": {
+            "actor": null,
+            "amount": 1,
+            "authority": "charter_headroom",
+            "consumed_by": "e0fc77f5250765603cbe31dafdcb4493f40f9315ef58536b22f2c590eefa29d6",
+            "decided_at": "2026-09-27T20:12:17.643650+00:00",
+            "decision": "approve",
+            "explanation": null,
+            "grant_id": "expg-22aefb883c503fe256a50dae",
+            "owner_generation": 1,
+            "status": "consumed"
+          },
+          "kind": "manager_call",
+          "limits": [
+            "manager_calls"
+          ],
+          "lineage_id": "def92b2b2bdb4fe0a40c426edba56bd7",
+          "owner_generation": 1,
+          "proposal_digest": "31bcf01b434070f49816db40c683b1183acc3af5841c4befa9b28334520d1215",
+          "rationale": "manager progress call 5 in round 3",
+          "request_id": "exp-22aefb883c503fe256a50dae",
+          "status": "granted"
+        },
+        {
+          "amount": 1,
+          "created_at": "2026-09-27T20:12:25.266024+00:00",
+          "denied_row_id": "6780598ce5e5e64fbe6ef1b62aa0e8b170b0f3423f5ff6daa99857b5acd374a8",
+          "grant": null,
+          "kind": "manager_call",
+          "limits": [
+            "manager_calls"
+          ],
+          "lineage_id": "def92b2b2bdb4fe0a40c426edba56bd7",
+          "owner_generation": 1,
+          "proposal_digest": "5bf2f02deef87adbe13eeac4f87ed1cb45c7c5e5ad1579c5c60605dce4d69897",
+          "rationale": "manager final call 6 in round 3",
+          "request_id": "exp-bff0f24876dbf0eece027971",
+          "status": "pending"
+        }
+      ]
+    },
+    "expansion_status": "pending",
+    "interruptions": [],
+    "next_action": "decide expansion exp-bff0f24876dbf0eece027971",
+    "next_command": "flow run decide-expansion v8-live-validation-3 def92b2b2bdb4fe0a40c426edba56bd7 exp-bff0f24876dbf0eece027971 --approve|--deny --expected-generation 1 --actor NAME --explanation TEXT",
+    "owner_generation": 1,
+    "pending_approvals": [],
+    "pending_unknowns": [],
+    "predecessors": [],
+    "provider_choices": [
+      {
+        "eligible_candidates": [
+          {
+            "assignment_id": "docs-editor",
+            "definition_digest": "9daf3e0f1b1177b860ed9289638c2bbb23f4685a8a4e775b85abb6a1841f6cfe",
+            "instance_id": "docs-editor",
+            "model": "sonnet",
+            "provider": "claude",
+            "role": "tech-writer"
+          }
+        ],
+        "rationale": {
+          "facts": [
+            "approved producer identity",
+            "task selected by Magentic progress decision"
+          ],
+          "manager_reason": "The editor must act first (and only once) to make all required file changes before any review can happen."
+        },
+        "rejection_reasons": {},
+        "selected_candidate": "docs-editor"
+      },
+      {
+        "eligible_candidates": [
+          {
+            "assignment_id": "local-verifier",
+            "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+            "instance_id": "local-verifier",
+            "model": "gemma4:26b",
+            "provider": "ollama",
+            "role": "quality-reviewer"
+          }
+        ],
+        "rationale": {
+          "facts": [
+            "approved verifier identity",
+            "task selected by Magentic progress decision"
+          ],
+          "manager_reason": "The editor has used its one allowed call and cannot be invoked again; the remaining required step is the independent read-only review by local-verifier before the job can be marked complete."
+        },
+        "rejection_reasons": {},
+        "selected_candidate": "local-verifier"
+      }
+    ],
+    "recoveries": [],
+    "recovery": {
+      "blockers": [
+        {
+          "evidence_needed": "flow run decide-expansion --approve|--deny with --expected-generation",
+          "id": "exp-bff0f24876dbf0eece027971",
+          "kind": "expansion_request",
+          "reason": "expansion_decision_required",
+          "status": "pending"
+        }
+      ],
+      "checked_by_command": [
+        "live_run_fence",
+        "worktree_drift",
+        "envelope_file"
+      ],
+      "decided_from": "ledger",
+      "mode": null,
+      "reason": "expansion_decision_required",
+      "recoverable": false
+    },
+    "resolutions": [],
+    "resumable": false,
+    "sealed_receipt": {
+      "consistent": true,
+      "file_sha256": null,
+      "ledger_sha256": null,
+      "matches": false,
+      "recovery_block_present": null,
+      "recovery_block_required": false
+    },
+    "status": "started",
+    "verifier_evaluations": [
+      {
+        "action_id": "6966b734d742c13282b2b20e40d98aea1e8380c3857ffdc01e8f57edd5566e26",
+        "evaluated_at": "2026-09-27T20:12:17.621652+00:00",
+        "evaluation": {
+          "action_id": "6966b734d742c13282b2b20e40d98aea1e8380c3857ffdc01e8f57edd5566e26",
+          "candidate": {
+            "decision": "pass",
+            "findings": [],
+            "schema_version": 1,
+            "summary": "The documentation changes correctly implement all requirements. The `flow.toml` uses the raw unescaped pipe for the invocation. Both `README.md` and `scaffolds/default/commands/flow-help.md` use the escaped `\\|` syntax. `docs/cli-reference.md` includes a complete section covering all five specified refusal reasons (stale generation, unknown or already decided request, attempt not truly paused, inactive lead, and runner ceiling) and correctly references `flow run recover-delivery-lead`. The scope is limited to the four requested files, and no extra flags were introduced."
+          },
+          "diff_digest": "922ac8d8c8cd90ffb6e04b92c3e80f0c8006a60323b805546c0522925c2df2be",
+          "disposition": "valid_pass",
+          "evaluation_digest": "5dcd3b36d5246d98ab60f09fd0d22637b528e12b78697b41dd151b0a6affccfd",
+          "kind": "flow_verifier_evaluation",
+          "raw_output_digest": "7c85e44cbc2a3a3cb2e08ae8b6eed91c59a7c28cd61fa6f5c69846298db0e68f",
+          "reason": "accepted_pass",
+          "schema_version": 1,
+          "test_evidence_digest": "f3fd74346cea500e44550ebda35f4a3a4d4a9a4be96f3348a5a370c5569752bd",
+          "verifier_input_digest": "796a8fb4070dd91c433ba4a27595f8ee5cb714518106c0f2d273b0812bb5a75f"
+        },
+        "evaluation_digest": "5dcd3b36d5246d98ab60f09fd0d22637b528e12b78697b41dd151b0a6affccfd",
+        "outcome": "valid_pass",
+        "owner_generation": 1,
+        "reason": "accepted_pass"
+      }
+    ],
+    "verifier_usage": {
+      "consumed": 1,
+      "denied": 0,
+      "maximum": 1,
+      "reserved": 1,
+      "retry_eligible": false
+    },
+    "work_id": "v8-live-validation-3"
+  },
+  "compatibility_diagnostics": [],
+  "contracts": {
+    "charter": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+          "sha256": "073c3b68d00de2153e3f68997bf54c9dd431ebb5d73b6f495e31433b8ae3abe6"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation-3/orchestration.json",
+          "sha256": "b6d4a60a94e363c26ab2d4a58aa2c7d44345d19f2fe34f2c635eb65bcf8935a7"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation-3/requirements.md",
+          "sha256": "9e86c668150d8f765eb352bc8f6c9beb02e354fde5e1f016132ee269834faae3"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation-3/shaper-intent.json",
+          "sha256": "ea190a538261b7262d8d9217c8df1622d4df73cff1fd979203b6db092205c51f"
+        }
+      },
+      "digest": "756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98",
+      "id": "delivery-6f8ac2db5492091dc682",
+      "version": 3
+    },
+    "shaper": {
+      "approved_sources": {
+        "acceptance_criteria": {
+          "path": ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+          "sha256": "073c3b68d00de2153e3f68997bf54c9dd431ebb5d73b6f495e31433b8ae3abe6"
+        },
+        "orchestration_manifest": {
+          "path": ".flow/runs/v8-live-validation-3/orchestration.json",
+          "sha256": "b6d4a60a94e363c26ab2d4a58aa2c7d44345d19f2fe34f2c635eb65bcf8935a7"
+        },
+        "requirements": {
+          "path": ".flow/runs/v8-live-validation-3/requirements.md",
+          "sha256": "9e86c668150d8f765eb352bc8f6c9beb02e354fde5e1f016132ee269834faae3"
+        },
+        "shaper_intent": {
+          "path": ".flow/runs/v8-live-validation-3/shaper-intent.json",
+          "sha256": "ea190a538261b7262d8d9217c8df1622d4df73cff1fd979203b6db092205c51f"
+        }
+      },
+      "digest": "9201040ee3b842221ba0ebca6d95e6b9b8ba12470e9df8432412f7e678324c6b",
+      "id": "shaper-9e9f5820b07f867133f2",
+      "version": 3
+    }
+  },
+  "delivery_authority": {
+    "charter_digest": "756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98",
+    "charter_id": "delivery-6f8ac2db5492091dc682",
+    "delivery_artifact_dir": "delivery/756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98",
+    "handoff_digest": "c6b340a976222edb2bfd7e03ce192bb7a43af5e0cfda8a85c5a6bce76261d46a",
+    "lead_claim_digest": "230b09b01a0b43b8934d02432d3aff10c4cd1f61bf6441a6c50b191ca61f095c",
+    "lead_claim_path": "delivery/756f650390a4f3cf0a8a227c87a4ee39981f0707f67e55c282fea5f574462b98/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-756f650390a4f3cf0a8a",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "9201040ee3b842221ba0ebca6d95e6b9b8ba12470e9df8432412f7e678324c6b",
+    "shaper_contract_id": "shaper-9e9f5820b07f867133f2",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+        "sha256": "073c3b68d00de2153e3f68997bf54c9dd431ebb5d73b6f495e31433b8ae3abe6"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/v8-live-validation-3/orchestration.json",
+        "sha256": "b6d4a60a94e363c26ab2d4a58aa2c7d44345d19f2fe34f2c635eb65bcf8935a7"
+      },
+      "requirements": {
+        "path": ".flow/runs/v8-live-validation-3/requirements.md",
+        "sha256": "9e86c668150d8f765eb352bc8f6c9beb02e354fde5e1f016132ee269834faae3"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/v8-live-validation-3/shaper-intent.json",
+        "sha256": "ea190a538261b7262d8d9217c8df1622d4df73cff1fd979203b6db092205c51f"
+      }
+    }
+  },
+  "lifecycle": {
+    "phase": "implementing",
+    "state": "implementing",
+    "updated_at": "2026-09-27T19:56:01Z"
+  },
+  "work_id": "v8-live-validation-3"
+}

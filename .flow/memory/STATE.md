@@ -19,6 +19,17 @@
 
 ## Recently completed
 
+- `v8-live-validation-3` accepted and archived 2026-09-27. It was the
+  **first completed live v8 chartered job**, on v0.38.0.
+  - **Proven live:** an automatic grant, an escalation followed by
+    `decide-expansion` and an answer-mode resume, a D4 repair, a D5 recover,
+    and a local-verifier pass.
+  - **Docs:** the job's documentation merged as PR #47.
+  - **Still unproven live:** D6, and the successor path (stuck, then abandon,
+    then a successor).
+  - **Next:** the remaining step 5 slices (trace correlation, receipt
+    verification, MCP handback, token cap).
+
 - `step5-cancellation` accepted and archived 2026-09-27; PR #45, released
   as v0.38.0 (installed and synced). ADR 0019.
   - **Terminal statuses:** new receipt-backed `cancelled` and `abandoned`.
@@ -29,9 +40,7 @@
   - **Follow-ups:** in the backlog under "Delivery Termination Follow-Ups".
     The remaining step 5 slices are trace correlation, receipt
     verification, MCP handback and the token cap.
-  - **Next:** `v8-live-validation-3`, with a new work id. It is paid and needs
-    Andy's go. Reset `~/src/flow-v8-live-job-2` to `d6d771f2` first. A
-    successor after a cancel or abandon needs a clean worktree.
+  - **Next:** done. `v8-live-validation-3` completed (see above).
 
 - `producer-turn-contract` accepted and archived 2026-09-27 on
   `codex/producer-turn-contract`; PR #44.
