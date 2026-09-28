@@ -727,7 +727,9 @@ class OrchestrationCliTests(FlowCliHarness):
             "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
             "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
         ))
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-plan"))
         run_payload = json.loads((run_dir / "run.json").read_text())
+        original_charter = run_payload["delivery"]["charter_digest"]
         run_payload.update({"state": "reviewing", "phase": "reviewing", "lane": "review"})
         (run_dir / "run.json").write_text(json.dumps(run_payload, indent=2) + "\n")
         amended = json.loads(manifest_path.read_text())
@@ -750,6 +752,16 @@ class OrchestrationCliTests(FlowCliHarness):
         final = json.loads((run_dir / "run.json").read_text())
         self.assertEqual(len(final["amendments"]), 1)
         self.assertEqual(final["amendments"][0]["approval"]["authority"], "user")
+        self.assertNotEqual(final["delivery"]["charter_digest"], original_charter)
+        self.assertEqual(final["delivery"]["owner_status"], "active")
+        successor_dir = run_dir / final["delivery"]["delivery_artifact_dir"]
+        successor_charter = json.loads((successor_dir / "delivery-charter.json").read_text())
+        self.assertEqual(successor_charter["charter_version"], 4)
+        self.assertEqual(
+            successor_charter["approved_sources"]["orchestration_manifest"]["sha256"],
+            final["approved_artifact_digests"]["orchestration_manifest"],
+        )
+        self.assertTrue((run_dir / "amendments" / "0001-shaper-intent.json").is_file())
         self.assertTrue((run_dir / "amendments" / "0001-original.json").is_file())
         self.assertEqual(json.loads(manifest_path.read_text())["verification"]["producer_assignments"], ["producer", "handback"])
         self.assert_ok(self.run_flow("run", "verify", "demo"))

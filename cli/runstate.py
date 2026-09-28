@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from fsutil import ensure_dir, repo_root, write_atomic
-from delivery_contracts import DeliveryContractError, validate_shaper_intent
+from delivery_contracts import (DEFAULT_TOKEN_BUDGET, DeliveryContractError,
+                                build_delivery_charter, build_shaper_contract,
+                                digest as delivery_digest, validate_shaper_intent)
 from delivery_control import start_plan as seal_delivery_start_plan
 from orchestration import manifest_path, valid_work_id, validate_manifest, validate_orchestration
 
@@ -744,12 +746,135 @@ def approve_orchestration_amendment(
         "reason": reason.strip(),
         "approval": {"authority": "user", "explicit": True, "at": now},
     }
+
+    # An orchestration amendment made after start-plan must replace the
+    # authority projection as well as the manifest bytes.  Otherwise a valid
+    # user-approved roster remains bound to stale role definitions (and, for
+    # pre-v8 runs, a charter version that cannot execute).  The original
+    # authority remains immutable and the successor is digest-addressed.
+    successor_delivery: dict[str, Any] | None = None
+    amended_intent_relative: str | None = None
+    delivery = current.get("delivery")
+    if isinstance(delivery, dict):
+        intent_relative = (current.get("artifacts") or {}).get("shaper_intent")
+        if not isinstance(intent_relative, str):
+            return False, current, ["approved Shaper intent is unavailable for authority amendment"]
+        intent_path = project_root / intent_relative
+        try:
+            amended_intent = json.loads(intent_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return False, current, ["approved Shaper intent is unavailable for authority amendment"]
+        allowed = {item.get("role"): dict(item) for item in amended_intent.get("allowed_specialists", [])
+                   if isinstance(item, dict) and isinstance(item.get("role"), str)}
+        roles = {item.get("role") for item in replacement_data.get("assignments", [])
+                 if isinstance(item, dict) and item.get("lane") == "implement"
+                 and item.get("role") != "delivery-lead"}
+        if not roles or not roles.issubset(allowed):
+            return False, current, ["amended implementation roster exceeds approved specialist roles"]
+        # Import lazily: execution_gateway imports runstate while constructing
+        # the CLI, so a module-level import would create a cycle.
+        from execution_gateway import _effective_specialist_for
+        for role in roles:
+            instructions = _effective_specialist_for(role)
+            allowed[role]["definition_digest"] = delivery_digest({"role": role, "instructions": instructions})
+        amended_intent["allowed_specialists"] = [allowed[item["role"]]
+                                                  for item in amended_intent["allowed_specialists"]]
+        enforceable = amended_intent.get("budget_safety_envelope", {}).get("enforceable", {})
+        for name, value in DEFAULT_TOKEN_BUDGET.items():
+            enforceable.setdefault(name, value)
+        lineage = list(amended_intent.get("amendment_lineage") or [])
+        lineage.append({
+            "sequence": sequence,
+            "authority": "user",
+            "approved_at": now,
+            "reason": reason.strip(),
+            "prior_shaper_contract_digest": delivery.get("shaper_contract_digest"),
+            "prior_delivery_charter_digest": delivery.get("charter_digest"),
+            "original_orchestration_digest": original_digest,
+            "replacement_orchestration_digest": replacement_digest,
+        })
+        amended_intent["amendment_lineage"] = lineage
+        amended_intent["approval_history"] = list(amended_intent.get("approval_history") or []) + [{
+            "event": "approve-orchestration-amendment", "authority": "user", "at": now,
+        }]
+        try:
+            amended_intent = validate_shaper_intent(amended_intent)
+        except DeliveryContractError as exc:
+            return False, current, [f"amended Shaper intent is invalid: {exc}"]
+        amended_intent_path = amendment_dir / f"{sequence:04d}-shaper-intent.json"
+        amended_intent_text = json.dumps(amended_intent, indent=2, sort_keys=True) + "\n"
+        amended_intent_digest = hashlib.sha256(amended_intent_text.encode()).hexdigest()
+        amended_intent_relative = amended_intent_path.relative_to(project_root).as_posix()
+        source_artifacts = dict(current.get("artifacts") or {})
+        source_artifacts["shaper_intent"] = amended_intent_relative
+        snapshots: dict[str, dict[str, str]] = {}
+        for name in ("requirements", "acceptance_criteria", "shaper_intent", "solution", "orchestration_manifest"):
+            relative = source_artifacts.get(name)
+            if not isinstance(relative, str):
+                continue
+            if name == "orchestration_manifest":
+                sha256 = replacement_digest
+            elif name == "shaper_intent":
+                sha256 = amended_intent_digest
+            else:
+                source_path = project_root / relative
+                if not source_path.is_file() or source_path.is_symlink():
+                    return False, current, [f"approved {name} is unavailable for authority amendment"]
+                sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+            snapshots[name] = {"path": relative, "sha256": sha256}
+        try:
+            shaper = build_shaper_contract(work_id, snapshots, amended_intent,
+                                           approval_event="approve-orchestration-amendment")
+            charter = build_delivery_charter(shaper)
+        except DeliveryContractError as exc:
+            return False, current, [f"successor delivery authority is invalid: {exc}"]
+        handoff = {
+            "schema_version": 1, "kind": "definition_to_delivery_handoff", "run_id": work_id,
+            "shaper_contract_id": shaper["shaper_contract_id"], "shaper_contract_digest": shaper["digest"],
+            "delivery_charter_id": charter["charter_id"], "delivery_charter_digest": charter["digest"],
+            "source_digests": snapshots, "transition": "approve-orchestration-amendment",
+        }
+        handoff["digest"] = delivery_digest(handoff)
+        generation = int(delivery.get("owner_generation", 0)) + 1
+        attempt_id = f"logical-{charter['digest'][:20]}"
+        claim = {
+            "schema_version": 1, "kind": "delivery_lead_claim", "logical_delivery_attempt_id": attempt_id,
+            "owner": "delivery-lead", "generation": generation, "status": "active",
+            "charter_digest": charter["digest"], "supersedes": delivery.get("lead_claim_digest"),
+        }
+        claim["digest"] = delivery_digest(claim)
+        successor_dir = run_dir / "delivery" / charter["digest"]
+        successor_delivery = {
+            "shaper_contract_id": shaper["shaper_contract_id"], "shaper_contract_digest": shaper["digest"],
+            "charter_id": charter["charter_id"], "charter_digest": charter["digest"],
+            "handoff_digest": handoff["digest"], "logical_delivery_attempt_id": attempt_id,
+            "lead_claim_digest": claim["digest"], "owner_generation": generation,
+            "owner_status": "active", "delivery_artifact_dir": f"delivery/{charter['digest']}",
+            "lead_claim_path": f"delivery/{charter['digest']}/lead-claim.json", "source_digests": snapshots,
+        }
+        record["successor_authority"] = {
+            "shaper_contract_digest": shaper["digest"],
+            "delivery_charter_digest": charter["digest"],
+            "owner_generation": generation,
+            "shaper_intent": amended_intent_relative,
+        }
     write_atomic(snapshot, original.decode("utf-8"))
+    if successor_delivery is not None:
+        write_atomic(project_root / amended_intent_relative, amended_intent_text)
+        ensure_dir(successor_dir)
+        for name, value in (("shaper-contract.json", shaper), ("delivery-charter.json", charter),
+                            ("handoff.json", handoff), ("lead-claim.json", claim)):
+            write_atomic(successor_dir / name, json.dumps(value, indent=2, sort_keys=True) + "\n")
     write_atomic(record_path, json.dumps(record, indent=2, sort_keys=True) + "\n")
     write_atomic(canonical, replacement_bytes.decode("utf-8"))
     payload = dict(current)
     payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
     payload["approved_artifact_digests"]["orchestration_manifest"] = replacement_digest
+    if successor_delivery is not None:
+        payload["artifacts"] = dict(payload.get("artifacts") or {})
+        payload["artifacts"]["shaper_intent"] = amended_intent_relative
+        payload["approved_artifact_digests"]["shaper_intent"] = amended_intent_digest
+        payload["delivery"] = successor_delivery
     payload["amendments"] = amendments + [record]
     payload["updated_at"] = now
     payload["last_event"] = "approve-orchestration-amendment"
@@ -759,8 +884,14 @@ def approve_orchestration_amendment(
         "from": payload.get("state"), "to": payload.get("state"),
         "artifacts": {"amendment": record_path.relative_to(project_root).as_posix()},
         "dispositions": {"approval": "explicit-user-approval"},
-        "approved_artifact_digests": {"orchestration_manifest": replacement_digest},
+        "approved_artifact_digests": {
+            "orchestration_manifest": replacement_digest,
+            **({"shaper_intent": amended_intent_digest} if successor_delivery is not None else {}),
+        },
         "reason": reason.strip(),
+        **({"delivery_charter_digest": successor_delivery["charter_digest"],
+            "owner_generation": successor_delivery["owner_generation"]}
+           if successor_delivery is not None else {}),
     }, project_root)
     return True, payload, []
 
