@@ -17,7 +17,7 @@ from delivery_gateway import (ContractError, _default_worker_adapter, _execution
                               execute_chartered_delivery, prepare_chartered_delivery)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
-                                 expected_magentic_action_id, validate_action, validate_envelope,
+                                 expected_magentic_action_id, _paths_within_scopes, validate_action, validate_envelope,
                                  validate_receipt)
 from delivery_contracts import build_delivery_charter, build_shaper_contract, digest as delivery_digest
 from delivery_control import change_lead_claim
@@ -1188,6 +1188,16 @@ class ExecutionFactsTests(unittest.TestCase):
                          "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs the"
                          " targeted test after that edit; the full suite is an acceptance check.\n"
                          "- Predecessor attempt a1 ended failed under lead generation 2; its evidence is not reused.\n")
+
+
+class CharteredEvidenceScopeTests(unittest.TestCase):
+    def test_changed_files_may_descend_from_approved_roots(self):
+        self.assertTrue(_paths_within_scopes(
+            ["README.md", "src/hardware_watcher/domain/models.py", "tests/test_foundation.py"],
+            ["README.md", "src", "tests"],
+        ))
+        self.assertFalse(_paths_within_scopes(["src-evil/file.py"], ["src"]))
+        self.assertFalse(_paths_within_scopes(["src/../secret"], ["src"]))
 
 
 class ProviderRouteTests(unittest.TestCase):
