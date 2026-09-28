@@ -2,6 +2,30 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.38.3](https://github.com/andyconley/flow/compare/v0.38.2...v0.38.3) (2026-09-28)
+
+### Documentation
+
+* **run:** accept v8-live-validation-3 review ([5023ddd](https://github.com/andyconley/flow/commit/5023ddd2d866b4c3487e5be4eb5bcc512ea54bdb))
+* **run:** archive v8-live-validation-3 ([bd91a09](https://github.com/andyconley/flow/commit/bd91a09b3f27f0aee3b39e3f50f05f6cfe109e75))
+* **run:** correct v8-live-validation-3 evidence after acceptance review ([a6bf108](https://github.com/andyconley/flow/commit/a6bf10864219498858ec8664908b50fb991f85a8))
+* **run:** define v8-live-validation-3 ([112d0d6](https://github.com/andyconley/flow/commit/112d0d6e25dac6e0d294948fdf1f9e5d91126dea))
+* **run:** plan v8-live-validation-3 ([a28f8b0](https://github.com/andyconley/flow/commit/a28f8b06f0d14d530581feb6454d877e8e3a043b))
+* **run:** record v8-live-validation-3 live evidence and handback ([80edda4](https://github.com/andyconley/flow/commit/80edda46992fd873f1cad6f6c438ce63cb2900c2))
+
+## [0.38.2](https://github.com/andyconley/flow/compare/v0.38.1...v0.38.2) (2026-09-27)
+
+### Documentation
+
+* **cli:** document flow run decide-expansion ([2fb98d3](https://github.com/andyconley/flow/commit/2fb98d3c29176ca8ee45e67a7b84bb0ac0eee466))
+* **cli:** tighten decide-expansion refusal descriptions ([ab3aefb](https://github.com/andyconley/flow/commit/ab3aefb16f2df7fa61b961317641352071182417))
+
+## [0.38.1](https://github.com/andyconley/flow/compare/v0.38.0...v0.38.1) (2026-09-27)
+
+### Documentation
+
+* **run:** archive step5-cancellation ([12c7885](https://github.com/andyconley/flow/commit/12c788557e042dd7813237cb5f8a8e905ae35006))
+
 ## [0.38.0](https://github.com/andyconley/flow/compare/v0.37.1...v0.38.0) (2026-09-27)
 
 ### Features

@@ -1,0 +1,92 @@
+# Acceptance Criteria: v8 live validation 3
+
+Carried over from `v8-live-validation-2`. The changes are in AC2, AC4, AC6, AC8, AC10 and AC12, and AC13 is new. They were revised after adversarial review.
+
+- **AC1, authority sealed.**
+  - `start-plan` seals a v3 Shaper Contract and Delivery Charter carrying the R1 limits and headroom, with `delegated_expansion: true`.
+  - `inspect-delivery` shows the charter digest and the headroom.
+- **AC2, live preparation.**
+  - Preflight records that the worktree `~/src/flow-v8-live-job-2` is clean at the job commit `d6d771f2` on `job/decide-expansion-docs-2`. The same holds after any reset before a successor.
+  - `execute-chartered-job` prepares a protocol v8 attempt against the isolated worktree pinned to the job commit.
+  - The envelope's `expansion_headroom`, which drops zero values, equals `{delegations: 1, manager_calls: 1, paid_worker_calls: 1, verifier_calls: 1}`.
+  - The roster has exactly `docs-editor` (Claude) and `local-verifier` (Ollama `gemma4:26b`), and the manager is Claude.
+- **AC3, real providers.** Every provider call in the receipt is a physical call with Flow-observed evidence:
+  - Claude CLI completed turns, for the manager and the producer;
+  - Ollama local HTTP responses, for the verifier.
+
+  No `local-stub` evidence appears.
+- **AC4, automatic grant observed.**
+  - At least one expansion request is granted under `charter_headroom` authority with no operator input. The expected one is manager call 5.
+  - The attempt continues without pausing.
+  - **In a successor,** where the manager headroom is already spent across the lineage, AC4 is met by any `charter_headroom` grant. The likely ones are the paid edit or a verifier retry. The key and call number are recorded.
+- **AC5, escalation observed and decided.**
+  - At least one request escalates, and the attempt stops as `expansion_paused`, with nothing sent for the paused call.
+  - `flow run status` shows the decision as the next action.
+  - Andy decides it with `flow run decide-expansion … --expected-generation N`.
+- **AC6, resume replays identically.**
+  - `recover-delivery-lead` resumes the attempt.
+  - The paused `call_id` (or action id) is identical after resume.
+  - Completed manager calls replay from the ledger, with no second send.
+  - Completed actions are not re-sent.
+  - The run records whether the paused call was a D4 retry.
+  - Observed paid-call counts match the ledger.
+- **AC7, sealed valid receipt.**
+  - The final attempt seals a receipt.
+  - `validate_receipt` passes, and the ledger's `sealed_receipt_sha256` matches the file.
+  - The receipt's `expansion` block lists every request and decision.
+- **AC8, verdict.** Every attempt ends in exactly one of these outcomes, recorded with its evidence:
+  - **`completed`** (the target): Flow observed the diff and a passing targeted test, then a valid pass from the verifier.
+  - **`failed` by legitimate verifier judgment:** meets AC8.
+  - **`failed` by manager or producer model behaviour, where Flow's check held:** for example, the editor made no edit, or the targeted test failed after the edit. This meets AC8 as a legitimate outcome, recorded with the reason text. It is not a Flow defect.
+  - **Flow defect:** fails AC8. It is recorded under R7 and fixed in its own run.
+  - **Environmental failure (B1, B3):** Ollama is down, Claude authentication expired, a network error, or the 600 s launch deadline hit between calls. It is not a Flow defect. The verdict records the specific error signature (for example, connection refused, HTTP 401, a socket error, or a deadline) from the launch output, stderr and ledger.
+    - A v8 transport loss records an interruption. After the environment is fixed, `recover-delivery-lead` resumes the same attempt, and that does not use up an attempt.
+    - An attempt that is superseded or abandoned does count against the two.
+  - **Uncertain send (C1):** a provider call that raised before its completion was observed, including an adapter timeout (manager over 120 s, producer over 300 s, verifier over 60 s).
+    - The action or call is marked `unknown`, and the attempt can't be resumed.
+    - It is sealed with `flow run abandon-delivery`, and its receipt keeps the send `unknown` (AC13). A successor may then run on the same work id (AC10).
+    - An adapter timeout (120, 300 or 60 s) is an accepted environmental or model-latency outcome. It is a Flow defect only if a D1-class stream, output or trace cap cut the turn off, if the provider's completion was observed inside the cap, or if a Flow bug caused it. The signature and evidence are recorded either way.
+  - **No receipt (B2):** a v8 attempt never seals as unknown. An interrupted or paused attempt with no receipt is recorded (its state, blockers and `inspect-delivery` output) and is either resumed or counted as an attempt when it is superseded.
+- **AC9, evidence preserved.** `validation-results.md` records, for each attempt:
+  - the commands run;
+  - the `inspect-delivery` snapshots before and after each decision;
+  - the receipt path and digest;
+  - the expansion state;
+  - replay-identity observations;
+  - provider usage, and the per-call timings for every manager, producer and verifier call. They come from the ledger event timestamps, read with `ExecutionLedger(..., read_only=True).snapshot(attempt_id)`. A missing timing is recorded as a gap, not inferred;
+  - the timed verifier warm-up result (the go/no-go gate against the 60 s cap);
+  - verifier-retry evidence, when a retry happens (B4): the first evaluation, the automatic grant for the retry, and the second evaluation;
+  - the job charter's sha256 (A7), and the job commit containing the escaped-row contract;
+  - the targeted test failing at the job commit before the run (A8);
+  - the preflight results (P1, A4, A5);
+  - a verdict for each AC.
+- **AC10, attempt discipline.**
+  - AC1–AC9 apply to each attempt (B5), with the lineage scoping in AC4.
+  - At most two live attempts.
+  - A second attempt is a successor after a terminal predecessor (`failed`, `abandoned` or `cancelled`), under the same sealed limits, and it records why it was needed.
+  - **Before the successor launches:**
+    - the worktree reset is recorded: the saved diff, then an empty `git status --porcelain --untracked-files=all` at `d6d771f2`;
+    - the R6 verifier precondition holds, checked from `inspect-delivery`.
+  - The successor lists its predecessor with the predecessor's sealed receipt digest.
+  - A supersede successor, which needs Python, is used only as a fallback and is recorded as a gap.
+  - No provider behaviour is staged.
+- **AC11, the documentation change.** If the job completes, the produced diff touches only the four approved files, the targeted test passes in the worktree, and `scripts/regenerate-flow-help.py --check` is clean (the row uses `\|`). A human-readable review of the diff is recorded before any merge.
+- **AC12, the earlier fixes hold live.**
+  - **D1:** each producer Claude edit turn ends in a terminal `result` event observed by Flow, with no `output exceeds limit` or trace-limit interruption and no `stream_event` partial-message records. Its event-log size is recorded.
+  - **D3:** each verifier call returns non-empty content inside the 60 s cap.
+  - **D4:** any malformed manager progress reply is repaired or retried. The receipt's `manager_progress` block lists it, and no attempt fails on a single malformed reply. If none occurs, record "not exercised".
+  - **D5:** `recover-delivery-lead` succeeds after a `charter_headroom` grant has been made in the attempt.
+  - **D6:** a no-edit editor turn, if one occurs, fails with reason "editor made no edit to the worktree".
+  - **D7:**
+    - **Pass/fail:** the manager's request messages in the ledger contain "The approved editors get one call in total".
+    - **Observation only:** whether the manager's editor delegation asked for the complete edit.
+  - If a turn is cut off by a D1-class stream, output or trace cap, that is a Flow defect under R7.
+- **AC13, the operator surface (new).**
+  - If any attempt stops without sealing, `flow run stuck` lists it, with the right next command.
+  - If an attempt is abandoned or cancelled:
+    - the receipt validates;
+    - uncertain rows stay `unknown`;
+    - the attempt's ledger `owner_generation` becomes N+1, and the lead claim is unchanged;
+    - `flow run stuck` lists no started attempt for this work id afterwards.
+  - Any step that had to drop into Python is recorded as a gap (R9).
+  - This AC is not applicable if every attempt seals on its own.

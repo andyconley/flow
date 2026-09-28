@@ -1,0 +1,14 @@
+work id:     v8-live-validation-3
+state:       implementing
+lane:        implement
+phase:       implementing
+updated:     2026-09-27T19:56:01Z
+next action: decide expansion exp-bff0f24876dbf0eece027971 for attempt def92b2b2bdb4fe0a40c426edba56bd7 (--expected-generation 1)
+artifacts:
+- acceptance_criteria: .flow/runs/v8-live-validation-3/acceptance-criteria.md
+- handoff: .flow/runs/v8-live-validation-3/implementation-handoff.md
+- orchestration_manifest: .flow/runs/v8-live-validation-3/orchestration.json
+- plan: .flow/runs/v8-live-validation-3/plan.md
+- requirements: .flow/runs/v8-live-validation-3/requirements.md
+- shaper_intent: .flow/runs/v8-live-validation-3/shaper-intent.json
+- validation_plan: .flow/runs/v8-live-validation-3/validation-plan.md

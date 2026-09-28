@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "work_id": "v8-live-validation-3",
+  "mode": "delegated",
+  "risk": {
+    "classification": "high",
+    "hard_triggers": [
+      "security_or_privacy_boundary"
+    ],
+    "aggravating_factors": [
+      "concurrency_or_cross_system_coordination"
+    ],
+    "rationale": "Live paid provider dispatch and repository mutation cross permission boundaries, and delegated expansion grants extra provider calls without a per-request decision."
+  },
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/v8-live-validation-3/reconciliation.md",
+    "status": "resolved",
+    "claims": []
+  },
+  "verification": {
+    "artifact_path": ".flow/runs/v8-live-validation-3/verification.md",
+    "evidence_collector_assignment": "definition-root",
+    "independent": true,
+    "producer_assignments": [
+      "definition-root",
+      "docs-editor"
+    ],
+    "verifier_assignment": "adversarial-architecture"
+  },
+  "assignments": [
+    {
+      "id": "definition-root",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "claude-code-definition-root"
+      },
+      "brief_path": ".flow/runs/v8-live-validation-3/requirements.md",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation-3/requirements.md"
+      ],
+      "read_scopes": [
+        ".flow/runs/v8-live-validation-3",
+        "cli",
+        "docs",
+        "runtime",
+        "tests",
+        "scaffolds/default",
+        "README.md",
+        ".flow/runs/v8-live-validation-2",
+        ".flow/runs/producer-turn-contract",
+        ".flow/runs/step5-cancellation",
+        ".flow/runs/manager-progress-retry"
+      ],
+      "write_scopes": [
+        ".flow/runs/v8-live-validation-3"
+      ],
+      "read_only": false,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/v8-live-validation-3/requirements.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Third live validation definition adapted from v8-live-validation-2 after the D3-D7 fixes and step 5 cancellation, from engineer decisions"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "run-authoring"
+      }
+    },
+    {
+      "id": "adversarial-architecture",
+      "lane": "define",
+      "role": "solution-architect",
+      "provider": {
+        "kind": "agent",
+        "id": "flow-solution-architect-v8-live-adversarial-architecture"
+      },
+      "brief_path": ".flow/runs/v8-live-validation-3/briefs/adversarial-review.md",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation-3/briefs/adversarial-review.md",
+        ".flow/runs/v8-live-validation-3/requirements.md",
+        ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation-3/shaper-intent.json"
+      ],
+      "read_scopes": [
+        ".flow/runs/v8-live-validation-3",
+        "cli",
+        "docs",
+        "runtime",
+        "tests",
+        "scaffolds/default",
+        "README.md",
+        ".flow/runs/v8-live-validation-2",
+        ".flow/runs/step5-cancellation"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [
+        {
+          "name": "filesystem-read",
+          "status": "confirmed"
+        }
+      ],
+      "output": {
+        "path": ".flow/runs/v8-live-validation-3/adversarial-review.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Adversarial findings with evidence and a recommended disposition"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "concurrent",
+        "group": "definition-review"
+      }
+    },
+    {
+      "id": "magentic-manager",
+      "lane": "implement",
+      "role": "delivery-lead",
+      "provider": {
+        "kind": "agent",
+        "id": "magentic-manager"
+      },
+      "brief_path": ".flow/runs/v8-live-validation-3/job-charter.json",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation-3/requirements.md",
+        ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation-3/job-charter.json"
+      ],
+      "read_scopes": [
+        "scaffolds/default",
+        "README.md",
+        "docs",
+        "scripts",
+        "tests",
+        "cli",
+        ".flow"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/v8-live-validation-3/execution/magentic-manager.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Deliver one bounded response under Flow policy"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "chartered-live-job"
+      },
+      "execution": {
+        "provider": "claude",
+        "model": "sonnet",
+        "timeout_seconds": 120,
+        "max_output_chars": 4096
+      }
+    },
+    {
+      "id": "docs-editor",
+      "lane": "implement",
+      "role": "tech-writer",
+      "provider": {
+        "kind": "agent",
+        "id": "docs-editor"
+      },
+      "brief_path": ".flow/runs/v8-live-validation-3/job-charter.json",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation-3/requirements.md",
+        ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation-3/job-charter.json"
+      ],
+      "read_scopes": [
+        "scaffolds/default",
+        "README.md",
+        "docs",
+        "scripts",
+        "tests",
+        "cli"
+      ],
+      "write_scopes": [
+        "scaffolds/default/flow.toml",
+        "scaffolds/default/commands/flow-help.md",
+        "README.md",
+        "docs/cli-reference.md"
+      ],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {
+        "path": "README.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Deliver one bounded response under Flow policy"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "chartered-live-job"
+      },
+      "execution": {
+        "provider": "claude",
+        "model": "sonnet",
+        "timeout_seconds": 300,
+        "max_output_chars": 4096
+      }
+    },
+    {
+      "id": "local-verifier",
+      "lane": "implement",
+      "role": "quality-reviewer",
+      "provider": {
+        "kind": "agent",
+        "id": "local-verifier"
+      },
+      "brief_path": ".flow/runs/v8-live-validation-3/job-charter.json",
+      "input_evidence": [
+        ".flow/runs/v8-live-validation-3/requirements.md",
+        ".flow/runs/v8-live-validation-3/acceptance-criteria.md",
+        ".flow/runs/v8-live-validation-3/job-charter.json"
+      ],
+      "read_scopes": [
+        "scaffolds/default",
+        "README.md",
+        "docs",
+        "scripts",
+        "tests",
+        "cli"
+      ],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {
+        "path": ".flow/runs/v8-live-validation-3/execution/local-verifier.md",
+        "format": "markdown"
+      },
+      "success_criteria": [
+        "Deliver one bounded response under Flow policy"
+      ],
+      "claim_statuses": [
+        "observed",
+        "inferred",
+        "recommended",
+        "unverified"
+      ],
+      "coordination": {
+        "mode": "serialized",
+        "group": "chartered-live-job"
+      },
+      "execution": {
+        "provider": "ollama",
+        "model": "gemma4:26b",
+        "timeout_seconds": 120,
+        "max_output_chars": 4096
+      }
+    }
+  ]
+}
