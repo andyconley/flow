@@ -142,6 +142,23 @@ def _path_exists(
     return path
 
 
+def _output_exists(
+    findings: list[Finding], root: Path, output: dict[str, Any], field: str, subject: str
+) -> Path | None:
+    path = _safe_repo_path(output.get("path"), root)
+    if path is None:
+        _finding(findings, field, subject, "safe-repository-path",
+                 "the declared path is empty, absolute, or escapes the repository",
+                 "use a repository-relative path without parent traversal")
+    elif output.get("format") == "code" and path.is_dir():
+        return path
+    elif not path.is_file():
+        _finding(findings, field, subject, "referenced-artifact-exists",
+                 "the referenced artifact is missing or is not a regular file",
+                 "create the file at the declared path before this stage")
+    return path
+
+
 def _path_within(path: Path, scope: Path) -> bool:
     return path == scope or scope in path.parents
 
@@ -503,7 +520,7 @@ def _validate_handback(
         item = _dict(raw)
         subject = item.get("id", f"assignments[{index}]")
         output = _dict(item.get("output"))
-        _path_exists(findings, root, output.get("path"), f"assignments[{index}].output.path", subject)
+        _output_exists(findings, root, output, f"assignments[{index}].output.path", subject)
 
     reconciliation = _dict(data.get("reconciliation"))
     _path_exists(findings, root, reconciliation.get("artifact_path"), "reconciliation.artifact_path", "reconciliation")

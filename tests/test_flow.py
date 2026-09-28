@@ -412,6 +412,14 @@ class OrchestrationValidationTests(unittest.TestCase):
         manifest["assignments"][0]["brief_path"] = f".flow/runs/{self.work_id}"
         self.assertIn("referenced-artifact-exists", {finding.rule for finding in self._findings(manifest)})
 
+    def test_handback_accepts_code_output_directory(self) -> None:
+        manifest = self._manifest()
+        code_dir = self.root / "src" / "package"
+        code_dir.mkdir(parents=True)
+        manifest["assignments"][0]["output"] = {"path": "src/package", "format": "code"}
+        rules = {finding.rule for finding in self._findings(manifest, "handback")}
+        self.assertNotIn("referenced-artifact-exists", rules)
+
     def test_shared_structural_mutations_serialize_even_across_declared_regions(self) -> None:
         manifest = self._manifest()
         self._add_shared_mutation(manifest, "structural")
