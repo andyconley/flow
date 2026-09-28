@@ -87,6 +87,14 @@ def _safe_job_path(path: Any) -> str:
     return path
 
 
+def _path_within_scopes(relative: str, scopes: list[str]) -> bool:
+    """Treat charter paths as file-or-directory scopes, consistently."""
+    path = Path(relative)
+    if path.is_absolute() or any(part in {"", ".", "..", ".git"} for part in path.parts):
+        return False
+    return any(path == Path(scope) or path.is_relative_to(Path(scope)) for scope in scopes)
+
+
 def _read_sealed_json(path: Path, name: str) -> dict[str, Any]:
     if not path.is_file() or path.is_symlink():
         raise ContractError(f"sealed delivery {name} is unavailable")
@@ -436,7 +444,8 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         if lines or diff or baseline["diff_sha256"] != hashlib.sha256(b"").hexdigest():
             raise ContractError("isolated worktree baseline is not clean")
     elif baseline["kind"] == "declared_regression":
-        if not diff or baseline["diff_sha256"] != hashlib.sha256(diff).hexdigest() or any(line[3:] not in charter["write_paths"] for line in lines):
+        if (not diff or baseline["diff_sha256"] != hashlib.sha256(diff).hexdigest()
+                or any(not _path_within_scopes(line[3:], charter["write_paths"]) for line in lines)):
             raise ContractError("declared regression differs from pinned baseline")
     else:
         raise ContractError("job baseline kind is unsupported")
