@@ -21,6 +21,7 @@
 | C6 `9e1d123` | 1,757 OK, 0 skipped |
 | C7 `d1bcc5f` | docs only |
 | review refinement | 1769 OK, 0 skipped |
+| RS1 conservative charge | 1769 OK, 0 skipped |
 
 `python3.12 scripts/regenerate-flow-help.py --check`: both files up to date.
 
@@ -82,8 +83,9 @@ Each mutation was applied from a file backup and restored from it (never `git ch
 | M11 | a hard `token_cap` at zero headroom | `test_at_the_cap_a_paid_action_pauses_for_a_decision_before_any_send` |
 | M12 | V17 counts rows sent after the issue | `CleanPassTests` |
 | M13 | the legacy refusal removed from `_v8_action_checks` | `test_a_pre_release_attempt_refuses_to_advance` |
+| M14 | the conservative charge reverted to a flat U (RS1) | `ChargeTableTests` |
 
-All 13 were caught.
+All 14 were caught.
 
 ## AC22 fixture changes, by category
 
@@ -148,4 +150,4 @@ The whole run tree hashed identically before and after each command.
 
 - Real Codex and Claude managers and editors under a v4 charter: not run live. That is `v8-live-validation-4`.
 - The Codex manager `thread_id` through the gateway: covered at the contract level only.
-- **RS1:** an unrecognised usage shape is charged U, as approved. It needs Andy's decision (see `implementation-review.md`).
+- **RS1, resolved by the conservative charge (R9 and AC9 amended):** a usage block with no readable counter still charges U, and is reported as `unrecognised_usage`.

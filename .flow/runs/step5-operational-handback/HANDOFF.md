@@ -29,18 +29,13 @@ On branch `codex/step5-operational-handback`: seven planned commits, plus one re
 
 - **Full suite:** 1769 tests OK, with 0 skipped, using `FLOW_MAF_PYTHON`. Help is up to date.
 - **Acceptance criteria:** all 23 pass, plus AC12b and AC12c (`validation-results.md`). The AC16 tamper suite asserts exact failing sets, with two documented deviations.
-- **Mutations:** all 13 are caught.
+- **Mutations:** all 14 are caught, including M14 for the RS1 conservative charge.
 - **Real data:** trace and verify were run against `v8-live-validation-3`. Trace reads it and marks it `unsupported_contract`; verify refuses it with `unsupported_receipt` (exit 2). The run tree is unchanged.
 - **Stock runner:** one lineage through the pinned stock Magentic runner verifies cleanly.
 
-## Decision needed from Andy
+## Decision taken
 
-**RS1 (security, Important).** A paid call whose usage has a shape Flow doesn't recognise is charged the sealed `unobserved_send_tokens`, as approved in R9, P2 and F3. If a provider CLI changes its usage shape, every call would be charged that fixed amount, and the cap would under-count.
-
-The options:
-1. **Keep as approved.** The count is reported in `token_usage.unrecognised_usage` and trace.
-2. **Conservative charge.** Charge the maximum of U, `total_tokens`, or the sum of the known counters present. It stays deterministic, amends R9 slightly, and is recommended.
-3. **Hard gate.** Make unrecognised usage a hard gate condition, which amends R9 and F3.
+**RS1, approved by Andy.** A paid call with usage Flow cannot normalise is now charged the largest of three amounts: the sealed unobserved charge, a reported `total_tokens`, and the chargeable counters present. R9 and AC9 are amended, and `definition-dispositions.md` records it. Only a usage block with no readable counter at all still charges the sealed amount; it is counted in `unrecognised_usage`.
 
 ## Residual risks and follow-ups
 

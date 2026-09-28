@@ -73,10 +73,11 @@ A sealed v8 attempt was correct but hard to audit, and nothing bounded its token
   | Row | Charge |
   | --- | --- |
   | Completed or failed paid row with recognised usage | the observed usage |
-  | Any other sent paid row: started, unknown, or without usable usage | `unobserved_send_tokens` |
+  | Completed or failed paid row with usage Flow cannot normalise | the largest of `unobserved_send_tokens`, a reported `total_tokens`, and the sum of the chargeable counters present |
+  | Started or unknown paid row | `unobserved_send_tokens` |
   | Unsent row, or unpaid provider (the Ollama verifier, an unpaid manager) | nothing |
 
-  One pure function computes this, and the gate, both seals, `validate_receipt`, trace and verify-receipt all use it. Record-time usage checks validate only the counters Flow reads. A key a newer provider CLI adds is kept and ignored; it never turns a paid call into an unresolvable unknown.
+  One pure function computes this, and the gate, both seals, `validate_receipt`, trace and verify-receipt all use it. The conservative rule means a provider that changes its usage shape can't make its calls cheaper than it reported. A usage block with no readable counter at all still charges the sealed amount; it is counted in `unrecognised_usage`, and trace shows it. Record-time usage checks validate only the counters Flow reads. A key a newer provider CLI adds is kept and ignored; it never turns a paid call into an unresolvable unknown.
 - **The gate.** Before every grant that can lead to a paid send, `token_cap` fails when `charged ≥ max_lineage_tokens + tranches × token_tranche`. The grants checked are the decisions, both regrants and both manager reissues. The tranches counted are those granted across the lineage.
   - **At the first decision:** ADR 0017 applies with the tranche as the unit. A shortfall one tranche clears is granted automatically within the lineage's headroom. Otherwise the attempt pauses for `decide-expansion`, including at zero headroom, like every other expandable limit.
   - **Hard refusals:** a shortfall needing more than one tranche, or a tranche past `MAX_LINEAGE_TOKENS`. Engineer grants are held to the same ceiling. An approved tranche that later lapses stays counted toward it, which is conservative.

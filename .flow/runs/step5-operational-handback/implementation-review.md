@@ -58,7 +58,7 @@
 
 | # | Sev | Disposition |
 |---|---|---|
-| RS1 | Important | **Needs Andy's decision.** A paid call whose usage has an unrecognised shape is charged the sealed `unobserved_send_tokens`, exactly as the approved R9, P2 and F3 say. If a provider CLI changes its usage shape, every call would then be charged U, and real spend could run past the cap. Options: charge a conservative figure (the maximum of U, `total_tokens`, or the sum of the known counters present), or make `unrecognised_usage > 0` a hard gate condition. Either amends R9. For now the count is reported in `token_usage.unrecognised_usage` and trace. |
+| RS1 | Important | **Fixed (Andy approved option 2).** Unrecognised usage is charged the largest of U, `total_tokens`, and the chargeable counters present (`conservative_charge`), and R9 and AC9 are amended. The original finding: **Needs Andy's decision.** A paid call whose usage has an unrecognised shape is charged the sealed `unobserved_send_tokens`, exactly as the approved R9, P2 and F3 say. If a provider CLI changes its usage shape, every call would then be charged U, and real spend could run past the cap. Options: charge a conservative figure (the maximum of U, `total_tokens`, or the sum of the known counters present), or make `unrecognised_usage > 0` a hard gate condition. Either amends R9. For now the count is reported in `token_usage.unrecognised_usage` and trace. |
 | RS2 | Suggestion | **Accepted residual.** Grants that are allowed but not yet consumed reserve no tokens. That is the concurrent-overshoot bound Andy chose, documented in ADR 0020 and R12. |
 | RS3 | Suggestion | **Fixed.** Request-file reads use `O_NONBLOCK`, `fstat` S_ISREG and a size check. `read_request_file` validates the call id. The request directory must be a directory owned by the user with no group or world access. Tests: a FIFO at the final path, a traversal id, and a world-readable directory. |
 | RS4 | Suggestion | **Fixed.** trace reads `run.json` through `process_identity.read_bounded`. |
@@ -68,7 +68,7 @@
 
 ## Residual risks
 
-- **RS1:** the cap under-counts if a provider changes its usage shape. Needs Andy's decision.
+- **RS1, resolved:** a usage block with no readable counter at all still charges U. It is reported as `unrecognised_usage`.
 - **RS2 / R12:** the concurrent overshoot bound, accepted.
 - **The fixture lineage uses stub supervisors.** One stock-runner lineage also verifies. Real providers are exercised by `v8-live-validation-4`, which is still to run.
 - **QR17:** the lineage charge is computed twice per action decision.

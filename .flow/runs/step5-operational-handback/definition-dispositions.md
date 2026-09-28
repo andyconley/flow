@@ -50,3 +50,11 @@ Sources:
 - **What changed.** A `token_cap` hit with no `tokens` headroom left, including headroom sealed at 0, now pauses the attempt for `decide-expansion`, like every other expandable limit, instead of refusing hard. Hard refusals remain for `units > 1` and for the tranche ceiling.
 - **Why it was raised.** Plan interpretation I2 showed the approved text differed from how the other limits behave at 0 headroom.
 - **Effect on the sealed records.** The Delivery Charter sealed at `start-plan` and `approved_artifact_digests` in `run.json` still record the revision-2 bytes. This amendment is the only difference, and it changes only those two passages. The same practice was used for `step5-cancellation`'s manifest amendment.
+
+## Second amendment after approval (2026-09-27, implementation review)
+
+- **Who and why.** Andy approved the security review's RS1 recommendation.
+- **What changed.** A paid row whose usage shape Flow cannot normalise is now charged conservatively: the largest of `unobserved_send_tokens`, a reported `total_tokens`, and the sum of the chargeable counters present (uncached input, output and cache writes).
+- **Where.** R9 and AC9 are amended.
+- **Why.** A provider CLI that changes its usage shape can no longer make its calls cheaper than they reported. A shape with no readable counter still falls back to the sealed charge and is counted in `unrecognised_usage`.
+- **Effect on the sealed records.** The Delivery Charter sealed at `start-plan` still records the revision-2 bytes, as with the first amendment.

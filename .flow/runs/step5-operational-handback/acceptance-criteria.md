@@ -63,7 +63,7 @@ Terms:
   - Codex, with `cached_input_tokens` ⊂ input;
   - Codex, with an extra unknown key (ignored);
   - an `unknown` row, a `started` row, and a `failed` row without usage (each charged `unobserved_send_tokens`);
-  - a completed paid row with an unrecognised shape (charged the sealed amount, `recognised: false`; the call completes and is not marked unknown);
+  - a completed paid row with an unrecognised shape: charged the largest of the sealed amount, `total_tokens` and the chargeable counters present, with `recognised: false`; the call completes and is not marked unknown *(amended, RS1)*;
   - `allowed`, `denied` and `not_dispatched` rows (0);
   - Ollama (not charged, reported under `verifier_tokens`).
 

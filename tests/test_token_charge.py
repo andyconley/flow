@@ -39,6 +39,13 @@ class ChargeTableTests(unittest.TestCase):
             ("failed without usage", "failed", "claude", {"output": "x"}, (U, 0, False)),
             ("completed, no usage", "completed", "claude", {"usage": None}, (U, 0, False)),
             ("completed, missing output_tokens", "completed", "claude", {"usage": {"input_tokens": 3}}, (U, 0, False)),
+            # RS1 (approved): an unrecognised shape is never cheaper than it reported.
+            ("renamed counters, large input", "completed", "claude", {"usage": {"input_tokens": 250_000}},
+             (250_000, 0, False)),
+            ("codex total above the charge", "completed", "codex", {"usage": {"total_tokens": 300_000, "tokens_in": 1}},
+             (300_000, 0, False)),
+            ("nested shape, nothing readable", "completed", "claude", {"usage": {"totals": {"input": 900_000}}},
+             (U, 0, False)),
             ("codex cached above input", "completed", "codex",
              {"usage": {"input_tokens": 1, "cached_input_tokens": 2, "output_tokens": 1}}, (U, 0, False)),
             ("allowed", "allowed", "claude", None, (0, 0, True)),

@@ -462,21 +462,43 @@ def normalized_charge(provider: str, usage: Any) -> tuple[int, int] | None:
     return None
 
 
+# Counters that would be charged if the shape were recognised; cache reads and
+# Codex cached input (a subset of input) are not, and reasoning is inside output.
+_CHARGEABLE_KEYS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_write_input_tokens")
+
+
+def conservative_charge(usage: Any, unobserved_send_tokens: int) -> int:
+    """The charge of a sent paid row whose usage Flow cannot normalise (ADR 0020, RS1).
+
+    The largest of the sealed unobserved charge, a reported ``total_tokens``,
+    and the sum of the chargeable counters present, so a provider that changes
+    its usage shape can never make its calls cheaper than they reported.
+    """
+    if not isinstance(usage, dict):
+        return unobserved_send_tokens
+    total = usage.get("total_tokens") if _counter(usage.get("total_tokens")) else 0
+    present = sum(usage[key] for key in _CHARGEABLE_KEYS if _counter(usage.get(key)))
+    return max(unobserved_send_tokens, total, present)
+
+
 def charge(status: str, provider: str | None, result: Any, unobserved_send_tokens: int) -> dict[str, Any]:
     """The charge of one row, by its status only, from data a receipt carries (ADR 0020).
 
     A completed or failed paid row with recognised usage is charged what it
-    reported. Any other sent paid row (started, unknown, or without usable
-    usage) is charged the sealed ``unobserved_send_tokens``. Unsent rows and
-    unpaid providers cost nothing.
+    reported; one whose usage cannot be normalised is charged conservatively
+    (never less than the sealed charge). A started or unknown paid row is
+    charged the sealed ``unobserved_send_tokens``. Unsent rows and unpaid
+    providers cost nothing.
     """
     if provider not in PAID_PROVIDERS or status not in SENT_STATUSES:
         return {"charged": 0, "cache_read": 0, "recognised": True, "unobserved": False}
     if status in {"completed", "failed"}:
-        normalized = normalized_charge(provider, result.get("usage") if isinstance(result, dict) else None)
+        usage = result.get("usage") if isinstance(result, dict) else None
+        normalized = normalized_charge(provider, usage)
         if normalized is not None:
             return {"charged": normalized[0], "cache_read": normalized[1], "recognised": True, "unobserved": False}
-        return {"charged": unobserved_send_tokens, "cache_read": 0, "recognised": False, "unobserved": True}
+        return {"charged": conservative_charge(usage, unobserved_send_tokens), "cache_read": 0, "recognised": False,
+                "unobserved": True}
     return {"charged": unobserved_send_tokens, "cache_read": 0, "recognised": True, "unobserved": True}
 
 

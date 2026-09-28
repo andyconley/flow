@@ -170,7 +170,7 @@ A chartered v8 attempt leaves a record that is correct but hard to audit, and no
 - **Tolerant normalisation (F3).**
   - The known keys must be non-negative integers.
   - Extra keys are ignored.
-  - A missing or unrecognised shape is never an error at record time. It is charged `unobserved_send_tokens` and marked `recognised: false`.
+  - A missing or unrecognised shape is never an error at record time. It is charged conservatively: the largest of `unobserved_send_tokens`, a reported `total_tokens`, and the sum of the chargeable counters present. It is marked `recognised: false`. *(Amended by Andy after the security review, finding RS1, 2026-09-27.)*
 - **Lineage total.** `lineage_charged(ledger, envelope)` sums the charges of the paid actions, and of the manager calls when the manager is paid, across the lineage. The gate, both seals, `validate_receipt` (from receipt rows), trace and verify-receipt all use this one function.
 
 #### R10. Pre-grant check (F1, F5, F6)
