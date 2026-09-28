@@ -52,15 +52,15 @@
     "approve-definition": "2026-09-28T00:46:04Z",
     "approve-plan": "2026-09-28T00:46:12Z",
     "start-definition": "2026-09-28T00:44:15Z",
+    "start-implementation": "2026-09-28T00:46:23Z",
     "start-plan": "2026-09-28T00:46:07Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "next_action": "Engineer approved the executable successor and codification scope.",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-28T00:46:12Z",
+  "state": "implementing",
+  "updated_at": "2026-09-28T00:46:23Z",
   "work_id": "review-provenance-refinement-3"
 }
