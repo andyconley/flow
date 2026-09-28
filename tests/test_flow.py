@@ -764,6 +764,9 @@ class OrchestrationCliTests(FlowCliHarness):
         self.assertEqual(final["amendments"][0]["approval"]["authority"], "user")
         self.assertNotEqual(final["delivery"]["charter_digest"], original_charter)
         self.assertEqual(final["delivery"]["owner_status"], "active")
+        self.assertEqual(final["state"], "implementing")
+        self.assertEqual(final["phase"], "implementing")
+        self.assertEqual(final["lane"], "implement")
         successor_dir = run_dir / final["delivery"]["delivery_artifact_dir"]
         successor_charter = json.loads((successor_dir / "delivery-charter.json").read_text())
         self.assertEqual(successor_charter["charter_version"], 4)
