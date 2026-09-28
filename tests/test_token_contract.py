@@ -189,6 +189,18 @@ class LineageChargeTests(AbandonFixture):
         self.assertEqual(charged["predecessor_charged"], unobserved)
         self.assertEqual(charged["total"], charged["predecessor_charged"] + charged["own"])
 
+    def test_successor_charter_starts_a_fresh_sealed_budget(self):
+        attempt_id = self.unknown_editor_send()
+        self.abandon(attempt_id)
+        _, _, _, captured = self._run_v8([self.PASS])
+        successor = copy.deepcopy(captured["envelope"])
+        successor["delivery_charter_digest"] = "f" * 64
+        with sqlite3.connect(self.run / "execution" / "ledger.sqlite") as db:
+            charged = ExecutionLedger._lineage_charged(db, successor)
+            attempts = ExecutionLedger._authority_lineage_attempts(db, successor)
+        self.assertEqual(charged["predecessor_charged"], 0)
+        self.assertEqual(attempts, [successor["attempt_id"]])
+
 
 if __name__ == "__main__":
     unittest.main()
