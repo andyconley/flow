@@ -52,15 +52,15 @@
     "approve-definition": "2026-09-28T01:12:54Z",
     "approve-plan": "2026-09-28T01:13:00Z",
     "start-definition": "2026-09-28T01:11:28Z",
+    "start-implementation": "2026-09-28T01:13:12Z",
     "start-plan": "2026-09-28T01:12:55Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "next_action": "Engineer approved the Codex Delivery Lead successor.",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-28T01:13:00Z",
+  "state": "implementing",
+  "updated_at": "2026-09-28T01:13:12Z",
   "work_id": "review-provenance-refinement-5"
 }
