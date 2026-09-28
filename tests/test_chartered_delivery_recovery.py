@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
+from tests.manager_stub import manager_reply  # noqa: E402
 
 from delivery_control import change_lead_claim  # noqa: E402
 import runstate  # noqa: E402
@@ -49,7 +50,8 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
             for label, entry in (("resume", resume_delivery), ("recover", recover_delivery)):
                 with self.subTest(entry=label):
                     with self.assertRaises(RecoveryRefused) as raised:
-                        (call or entry)("sample", attempt_id, root=self.root, **adapters)
+                        (call or entry)("sample", attempt_id, root=self.root, **adapters,
+                                        **({"actor": "andy"} if entry is recover_delivery else {}))
                     self.assertEqual(raised.exception.reason, reason)
                     self.assertTrue(str(raised.exception).startswith(reason))
         self.assertEqual(calls, [])
@@ -63,6 +65,8 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
         legacy["checkpoint_dir"] = str(attempt_dir.parent / legacy["attempt_id"] / "checkpoints")
         if protocol == 7:
             legacy["limits"].pop("max_verifier_calls")
+            for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+                legacy["limits"].pop(key)
         else:
             legacy["limits"] = {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
                                 "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 1}
@@ -218,6 +222,8 @@ class LeadChangeFenceTests(CharteredFixture):
         legacy["attempt_id"] = "b" * 32
         legacy["execution_protocol_version"] = 7
         legacy["limits"].pop("max_verifier_calls")
+        for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+            legacy["limits"].pop(key)
         legacy["checkpoint_dir"] = str(self.run / "execution" / legacy["attempt_id"] / "checkpoints")
         ExecutionLedger(self.run / "execution" / "ledger.sqlite").create_attempt(legacy)
         return legacy["attempt_id"]
@@ -468,7 +474,7 @@ class SuccessorLineageTests(CharteredFixture):
         actions = self._ledger().snapshot(second["attempt_id"])["actions"]
         self.assertEqual([(item["status"], item["reason"]) for item in actions][-1], ("denied", "verifier_call_cap"))
         receipt = json.loads(Path(second["receipt_path"]).read_text())
-        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 2})
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 2})
         self.assertFalse(receipt["verifier_usage"]["retry_eligible"])
         validate_receipt(captured["envelope"], receipt)
         self.assertEqual(self._regrant_limit_reason(second["attempt_id"], actions[-1]), "verifier_call_cap")
@@ -506,7 +512,7 @@ class SuccessorLineageTests(CharteredFixture):
                       "its evidence is not reused.", captured["task"])
         envelope = captured["envelope"]
         receipt = json.loads(Path(second["receipt_path"]).read_text())
-        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
         validate_receipt(envelope, receipt)
         tampered = {"removed": lambda r: r.pop("lineage_usage"),
                     "negative": lambda r: r["lineage_usage"].update(predecessor_paid_calls=-1),
@@ -519,7 +525,7 @@ class SuccessorLineageTests(CharteredFixture):
                 with self.assertRaises(ExecutionContractError):
                     validate_receipt(envelope, forged)
         first_receipt = json.loads(Path(first["receipt_path"]).read_text())
-        first_receipt["lineage_usage"] = {"predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
+        first_receipt["lineage_usage"] = {"predecessor_charged": 0, "predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
         first_envelope = json.loads((self.run / "execution" / first["attempt_id"] / "envelope.json").read_text())
         with self.assertRaisesRegex(ExecutionContractError, "lineage usage requires predecessors"):
             validate_receipt(first_envelope, first_receipt)
@@ -538,7 +544,7 @@ class SuccessorLineageTamperTests(CharteredFixture):
         receipt = json.loads(Path(second["receipt_path"]).read_text())
         # One own send plus one predecessor send exhausts the cap of two, so
         # the lineage alone is what makes this valid_fail not retry-eligible.
-        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
         self.assertFalse(receipt["verifier_usage"]["retry_eligible"])
         validate_receipt(captured["envelope"], receipt)
         for label, field, value, message in (
@@ -554,15 +560,27 @@ class SuccessorLineageTamperTests(CharteredFixture):
     def test_the_seal_refuses_understated_lineage_usage_that_receipt_validation_accepts(self):
         first, _, _, _ = self._run_v8([self.FAIL], plan=("editor", "verifier"))
         self._reset_worktree()
-        understated = {"predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
+        understated = {"predecessor_charged": 0, "predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
         envelope = {}
         original = ExecutionLedger.create_attempt
+        real_view = ExecutionLedger.seal_view
 
         def capture(ledger, candidate):
             envelope.update(candidate)
             return original(ledger, candidate)
 
-        with patch.object(ExecutionLedger, "lineage_usage", return_value=understated), \
+        def understated_view(ledger, attempt_id):
+            # The receipt builder reads the seal's blocks (ADR 0020); understate them
+            # consistently, so only the ledger comparison at the seal can catch it.
+            view = real_view(ledger, attempt_id)
+            hidden = view["blocks"]["lineage_usage"]["predecessor_charged"]
+            tokens = dict(view["blocks"]["token_usage"])
+            tokens.update(predecessor_charged=0, charged_total=tokens["charged_total"] - hidden)
+            tokens["overshoot"] = max(0, tokens["charged_total"] - tokens["maximum"])
+            view["blocks"] = {**view["blocks"], "lineage_usage": understated, "token_usage": tokens}
+            return view
+
+        with patch.object(ExecutionLedger, "seal_view", understated_view), \
              patch.object(ExecutionLedger, "create_attempt", capture), \
              self.assertRaisesRegex(ExecutionContractError, "lineage usage differs from the ledger"):
             self._run_v8([self.PASS], plan=("editor", "verifier"))
@@ -575,7 +593,7 @@ class SuccessorLineageTamperTests(CharteredFixture):
         snapshot = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True).snapshot(attempt_id)
         self.assertEqual((snapshot["status"], snapshot["sealed_receipt_sha256"]), ("started", None))
         self.assertEqual(ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
-                         .lineage_usage(attempt_id), {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+                         .lineage_usage(attempt_id), {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
         self.assertEqual(first["status"], "failed")
 
     def test_prepare_refuses_a_claim_that_changed_before_the_attempt_was_created(self):
@@ -656,6 +674,8 @@ class RecoveryHarness(CharteredFixture):
         with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
             if seal_hook is not None:
                 return _resume_chartered("sample", attempt_id, root=self.root.resolve(), seal_hook=seal_hook, **kwargs)
+            if entry is recover_delivery:
+                kwargs["actor"] = "andy"
             return (entry or resume_delivery)("sample", attempt_id, root=self.root, **kwargs)
 
     def _receipt(self, result):
@@ -710,6 +730,14 @@ class CharteredRecoveryTests(RecoveryHarness):
                        and item["detail"] == "recovery_regranted")
         self.assertLess(claimed, regrant)
         self.assertLess(regrant, self.adapter_marks[0] + 1)
+        # ADR 0020 (AC3): the grant_changed events alone rebuild the row's history.
+        history = [json.loads(item["detail"]) for item in events
+                   if item["event"] == "grant_changed" and item["action_id"] == editor["action_id"]]
+        self.assertEqual([item["op"] for item in history], ["issue", "release", "issue", "consume"])
+        self.assertEqual(history[0]["grant_id"], history[1]["grant_id"])
+        self.assertNotEqual(history[1]["grant_id"], history[2]["grant_id"])
+        self.assertEqual(history[2]["grant_id"], history[3]["grant_id"])
+        self.assertEqual(history[-1]["grant_id"], editor["grant_id"])
 
     def test_boundary_b_unconsumed_verifier_grant_captures_the_test_once(self):
         with self._kill_once("prepare_verifier_send"):
@@ -907,7 +935,7 @@ class CharteredRecoveryTests(RecoveryHarness):
         def manager(message, *, envelope, workspace):
             manager_sends.append(message["call_id"])
             self.adapter_marks.append(self._ledger().snapshot(envelope["attempt_id"])["events"][-1]["seq"])
-            return {"output": "Fixture facts", "usage": None}
+            return manager_reply(message, "Fixture facts")
 
         self.outputs = [self.PASS]
         with self._kill_once("consume_manager_grant"), \
@@ -932,6 +960,69 @@ class CharteredRecoveryTests(RecoveryHarness):
         self.assertLessEqual(reissued, self.adapter_marks[-2])
         calls = self._receipt(result)["manager_calls"]
         self.assertEqual([item["status"] for item in calls], ["completed"])
+
+    def test_a_recovered_manager_reissue_denied_by_the_token_cap_fails_the_attempt(self):
+        """ADR 0020 (AC10): the rotated grant is re-checked; a denial is never sent and fails the attempt."""
+        manager_sends = []
+
+        def manager_request(envelope, sequence):
+            messages = [{"role": "user", "contents": [{"type": "text", "text": f"progress {sequence}"}]}]
+            request = {"schema_version": 1, "attempt_id": envelope["attempt_id"],
+                       "envelope_digest": envelope_digest(envelope), "sequence": sequence, "phase": "facts",
+                       "manager_round": 1, "prompt_digest": digest(messages)}
+            return {**request, "call_id": expected_manager_call_id(request), "messages": messages}
+
+        def supervisor(envelope, task, on_manager, on_action, resume=None, **kwargs):
+            self.attempt_id = envelope["attempt_id"]
+            self.resumes.append(resume)
+            if resume is None:
+                proposal = self._proposal(envelope, "editor", 1)
+                (Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json").write_text(json.dumps(
+                    {"checkpoint_id": proposal["checkpoint_id"], "workflow_name": "flow-magentic-delivery-v8",
+                     "pending_request_info_events": {"flow-magentic-action-1": {}}}))
+                on_action(proposal)
+            # MAF restored after action 1 replays the manager call it made there.
+            on_manager(manager_request(envelope, 1))
+            proposal = self._proposal(envelope, "verifier", 2)
+            (Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json").write_text(json.dumps(
+                {"checkpoint_id": proposal["checkpoint_id"], "workflow_name": "flow-magentic-delivery-v8",
+                 "pending_request_info_events": {"flow-magentic-action-2": {}}}))
+            on_action(proposal)
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def manager(message, *, envelope, workspace):
+            manager_sends.append(message["call_id"])
+            self.adapter_marks.append(self._ledger().snapshot(envelope["attempt_id"])["events"][-1]["seq"])
+            return manager_reply(message, "Fixture facts")
+
+        self.outputs = [self.PASS]
+        with self._kill_once("consume_manager_grant"), \
+             patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role), \
+             self.assertRaises(KillPoint):
+            execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root, supervisor=supervisor,
+                                       worker_adapter=self._worker, manager_adapter=manager)
+        self.assertEqual((self.sends, manager_sends), (["editor"], []))
+        real = ExecutionLedger._v8_manager_checks
+
+        def over_budget(db, envelope, request, *, protocol, exclude=""):
+            if exclude:  # only the recovered reissue excludes its own row
+                return "token_cap", "token_cap", []
+            return real(db, envelope, request, protocol=protocol, exclude=exclude)
+
+        with patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch.object(ExecutionLedger, "_v8_manager_checks", staticmethod(over_budget)):
+            result = resume_delivery("sample", self.attempt_id, root=self.root, supervisor=supervisor,
+                                     worker_adapter=self._worker, manager_adapter=manager)
+        self.assertEqual(result["status"], "failed", result)
+        self.assertIn("token_cap", result["reason"])
+        self.assertEqual(manager_sends, [], "a denied reissue is never sent")
+        [call] = self._receipt(result)["manager_calls"]
+        self.assertEqual((call["status"], call["reason"]), ("denied", "token_cap"))
+        ops = [json.loads(item["detail"])["op"] for item in self._ledger().snapshot(self.attempt_id)["events"]
+               if item["event"] == "grant_changed" and item["action_id"] == call["call_id"]]
+        self.assertEqual(ops[-1], "deny")
 
     def test_clean_transport_loss_recovers_from_the_committed_producer(self):
         result = self._start(("editor", "verifier"), [self.PASS], fail_after=1)
@@ -996,6 +1087,13 @@ class CharteredRecoveryTests(RecoveryHarness):
         recovery = self._ledger().snapshot(attempt_id)["recoveries"][0]
         self.assertEqual(recovery["quarantined"], [{"name": "stray.json", "sha256": stray_sha}])
         self.assertTrue((self.run / "execution" / attempt_id / "checkpoints-quarantine" / recovery["recovery_id"] / "stray.json").is_file())
+        # ADR 0020 (AC5): the surviving bound links keep the parent read from their files.
+        links = self._ledger().snapshot(attempt_id)["magentic_checkpoints"]
+        self.assertTrue(links)
+        for link in links:
+            value = json.loads(Path(link["path"]).read_text())
+            self.assertIn("previous_checkpoint_id", link)
+            self.assertEqual(link["previous_checkpoint_id"], value.get("previous_checkpoint_id"))
 
     def test_recovery_is_exclusive_and_refuses_a_live_attempt(self):
         with self._kill_once("consume_grant"):

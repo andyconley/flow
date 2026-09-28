@@ -1,0 +1,143 @@
+{
+  "problem": "A sealed v8 receipt cannot be verified against its sources without a hand-written script, correlation between Flow grants, MAF checkpoints and provider sessions breaks at the manager, and no token budget bounds a lineage.",
+  "intended_users": [
+    "Andy, auditing attempts from the CLI.",
+    "The Shaper, sealing a token budget and headroom.",
+    "Live-validation reviewers."
+  ],
+  "outcomes": [
+    "flow run trace shows the full per-call chain; flow run verify-receipt verifies a sealed receipt offline block by block; a sealed lineage token budget is enforced before every paid grant, with tranche expansion and honest overshoot."
+  ],
+  "scope": [
+    "Manager provider identity, manager request files, grant-history events, call-tagged process groups, checkpoint chain, required recovery actor, flow run trace, sealed token budget and tranche expansion, charged-usage accounting, pre-grant token check, receipt token block, full-row seal comparison, flow run verify-receipt, ADR 0020 and docs."
+  ],
+  "exclusions": [
+    "MCP handback.",
+    "W3C traceparent or OpenTelemetry export.",
+    "Dollar costs or billing reconciliation.",
+    "Per-call token caps or mid-call cancel.",
+    "Verifying pre-release or v5-v7 receipts.",
+    "Re-running tests, re-applying diffs, or worktree-drift checks.",
+    "Receipt signing.",
+    "Live provider runs."
+  ],
+  "constraints": [
+    "The ledger and existing fences stay authoritative; lock order unchanged.",
+    "trace and verify-receipt never write.",
+    "No backwards-compatibility work.",
+    "Hermetic tests only."
+  ],
+  "assumptions": [
+    "Claude cache fields are disjoint from input; Codex cached input is a subset of input.",
+    "MAF checkpoint files carry previous_checkpoint_id.",
+    "v8 dispatches paid calls serially."
+  ],
+  "acceptance_criteria": [
+    "AC1-AC23 (with AC12b, AC12c) in .flow/runs/step5-operational-handback/acceptance-criteria.md."
+  ],
+  "risks": [
+    {
+      "risk": "token normalization miscounts one provider",
+      "owner": "Andy",
+      "status": "owned"
+    },
+    {
+      "risk": "verify-receipt drifts from the seal logic",
+      "owner": "Andy",
+      "status": "owned"
+    },
+    {
+      "risk": "overshoot larger than documented under concurrency or unknown sends",
+      "owner": "Andy",
+      "status": "owned"
+    },
+    {
+      "risk": "token defaults calibrated on one live lineage",
+      "owner": "Andy",
+      "status": "owned"
+    }
+  ],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {
+      "role": "lead-developer",
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1
+    },
+    {
+      "role": "test-engineer",
+      "capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 1
+    },
+    {
+      "role": "quality-reviewer",
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1
+    }
+  ],
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "ungranted-provider-dispatch"
+  ],
+  "delegation_matrix": {
+    "max_delegations": 3,
+    "delegated_expansion": false
+  },
+  "approval_matrix": {
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant",
+    "acceptance": "Flow_gate"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 1,
+      "max_replans": 0,
+      "runtime_seconds": 300,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "retries": 0,
+      "max_manager_calls": 6,
+      "max_manager_rounds": 3,
+      "max_paid_worker_calls": 1
+    },
+    "observations": [
+      "provider_usage_when_available"
+    ]
+  },
+  "max_verifier_calls": 1,
+  "boundaries": {
+    "artifact_root": ".flow/runs/step5-operational-handback",
+    "worktree_policy": "Flow-bound"
+  },
+  "amendment_lineage": [],
+  "approval_history": [
+    {
+      "event": "approve-definition",
+      "authority": "engineer"
+    }
+  ],
+  "next_lane_eligibility": [
+    "delivery"
+  ]
+}

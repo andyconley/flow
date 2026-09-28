@@ -61,6 +61,8 @@ from claude_gateway import execute_claude  # noqa: E402
 from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, recover_runtime_startup, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
+from delivery_trace import TraceError, render_text as render_trace, trace as trace_delivery  # noqa: E402
+from receipt_verify import VerifyRefused, render_text as render_verification, verify_receipt  # noqa: E402
 from delivery_control import change_lead_claim  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
@@ -641,6 +643,7 @@ def main() -> int:
         "recover-delivery-lead", help="reconcile one completed Claude result and resume a linked Magentic epoch")
     run_delivery_recover.add_argument("work_id")
     run_delivery_recover.add_argument("attempt_id")
+    run_delivery_recover.add_argument("--actor", required=True, help="who is recovering; recorded on the recovery")
     run_delivery_recover.add_argument("--project-root", type=Path)
     run_delivery_recover.add_argument("--json", action="store_true")
 
@@ -694,6 +697,19 @@ def main() -> int:
     run_stuck = run_sub.add_parser("stuck", help="list every started v8 attempt with its single next command (read-only)")
     run_stuck.add_argument("--project-root", type=Path)
     run_stuck.add_argument("--json", action="store_true")
+
+    run_trace = run_sub.add_parser("trace", help="show the per-call correlation chain of a v8 attempt and its lineage (read-only)")
+    run_trace.add_argument("work_id")
+    run_trace.add_argument("--attempt", dest="attempt_id", help="attempt to trace (default: the latest)")
+    run_trace.add_argument("--project-root", type=Path)
+    run_trace.add_argument("--json", action="store_true")
+
+    run_verify = run_sub.add_parser("verify-receipt", help="verify a sealed v8 receipt offline against the ledger, authority and evidence (read-only)")
+    run_verify.add_argument("work_id")
+    run_verify.add_argument("--attempt", dest="attempt_id", help="attempt to verify (default: the latest sealed)")
+    run_verify.add_argument("--no-lineage", action="store_true", help="do not verify predecessor receipts recursively")
+    run_verify.add_argument("--project-root", type=Path)
+    run_verify.add_argument("--json", action="store_true")
 
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
@@ -1133,7 +1149,7 @@ def main() -> int:
     if args.command == "run" and args.run_target == "recover-delivery-lead":
         import json
         try:
-            result = recover_delivery(args.work_id, args.attempt_id, root=args.project_root)
+            result = recover_delivery(args.work_id, args.attempt_id, actor=args.actor, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc), **({"code": exc.reason} if hasattr(exc, "reason") else {})})
                   if args.json else f"delivery recovery refused: {exc}")
@@ -1195,6 +1211,25 @@ def main() -> int:
                 "owner_generation": delivery["owner_generation"]}
         print(json.dumps(view, sort_keys=True) if args.json else
               f"lead: {view['owner_status']}\ngeneration: {view['owner_generation']}")
+        return 0
+    if args.command == "run" and args.run_target == "verify-receipt":
+        import json
+        try:
+            report = verify_receipt(args.work_id, args.attempt_id, root=args.project_root, lineage=not args.no_lineage)
+        except VerifyRefused as exc:
+            print(json.dumps({"status": "refused", "code": exc.code, "reason": str(exc)}) if args.json
+                  else f"verify-receipt refused: {exc}")
+            return 2
+        print(json.dumps(report, sort_keys=True, indent=2) if args.json else render_verification(report))
+        return report["exit_code"]
+    if args.command == "run" and args.run_target == "trace":
+        import json
+        try:
+            view = trace_delivery(args.work_id, args.attempt_id, root=args.project_root)
+        except TraceError as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"trace refused: {exc}")
+            return 2
+        print(json.dumps(view, sort_keys=True, indent=2) if args.json else render_trace(view))
         return 0
     if args.command == "run" and args.run_target == "stuck":
         import json

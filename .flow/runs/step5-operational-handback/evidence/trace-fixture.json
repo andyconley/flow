@@ -1,0 +1,9 @@
+{
+  "charged": 16000,
+  "maximum": 20000,
+  "remaining": 4000,
+  "tranches_granted": 2,
+  "token_tranche": 5000,
+  "headroom_tokens_remaining": 0,
+  "headroom_tranches_remaining": 0
+}

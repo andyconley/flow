@@ -32,12 +32,13 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         validate_delivery_charter(charter)
         self.assertEqual(charter, build_delivery_charter(first))
         self.assertEqual(charter["compatibility_version"], 7)
-        self.assertEqual(first["version"], 3)
+        self.assertEqual(first["version"], 4)
         self.assertEqual(first["max_verifier_calls"], 2)
-        self.assertEqual(charter["charter_version"], 3)
+        self.assertEqual(charter["charter_version"], 4)
         self.assertEqual(charter["limits"]["max_verifier_calls"], 2)
         # Omitted headroom seals as explicit zeros (AC1).
-        zeros = {"delegations": 0, "paid_worker_calls": 0, "verifier_calls": 0, "manager_calls": 0, "manager_rounds": 0}
+        zeros = {"delegations": 0, "paid_worker_calls": 0, "verifier_calls": 0, "manager_calls": 0, "manager_rounds": 0,
+                 "tokens": 0}
         self.assertEqual(first["expansion_headroom"], zeros)
         self.assertEqual(charter["limits"]["expansion_headroom"], zeros)
 
@@ -60,7 +61,8 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         charter = build_delivery_charter(shaper)
         self.assertTrue(shaper["delegation_matrix"]["delegated_expansion"])
         self.assertEqual(charter["limits"]["expansion_headroom"], {
-            "delegations": 3, "paid_worker_calls": 1, "verifier_calls": 1, "manager_calls": 4, "manager_rounds": 2})
+            "delegations": 3, "paid_worker_calls": 1, "verifier_calls": 1, "manager_calls": 4, "manager_rounds": 2,
+            "tokens": 0})
 
     def test_expansion_headroom_refusals(self):
         low = {"max_concurrent": 2, "max_paid_worker_calls": 2, "max_manager_calls": 8, "max_manager_rounds": 4}
@@ -107,11 +109,15 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         charter = build_delivery_charter(shaper)
         shaper["version"] = 2
         del shaper["expansion_headroom"]
+        for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v2 predates tokens
+            del shaper["budget_safety_envelope"]["enforceable"][key]
         shaper["digest"] = digest({key: value for key, value in shaper.items() if key != "digest"})
         validate_shaper_contract(shaper)
         charter["charter_version"] = 2
         charter["shaper_contract"] = {**charter["shaper_contract"], "version": 2}
         del charter["limits"]["expansion_headroom"]
+        for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):
+            del charter["limits"][key]
         charter["digest"] = digest({key: value for key, value in charter.items() if key != "digest"})
         validate_delivery_charter(charter)
         shaper["delegation_matrix"] = {**shaper["delegation_matrix"], "delegated_expansion": True}
@@ -131,6 +137,8 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         charter["shaper_contract"] = {**charter["shaper_contract"], "version": 1}
         del charter["limits"]["max_verifier_calls"]
         del charter["limits"]["expansion_headroom"]
+        for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v1 predates tokens
+            del charter["limits"][key]
         charter["digest"] = digest({key: value for key, value in charter.items() if key != "digest"})
         validate_delivery_charter(charter)
 

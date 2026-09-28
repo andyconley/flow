@@ -199,6 +199,8 @@ class StructuredVerifierLedgerTests(unittest.TestCase):
                 if version == 7:
                     env["execution_protocol_version"] = 7
                     env["limits"].pop("max_verifier_calls")
+                    for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+                        env["limits"].pop(key)
                 self.ledger.create_attempt(env)
                 proposal = _action(env, 1, env["roster"][1], "Edit, then fail before dispatch.")
                 grant = self.ledger.decide(env, proposal, generation=1)

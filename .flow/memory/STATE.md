@@ -2,6 +2,13 @@
 
 ## Active work
 
+- `step5-operational-handback` was **archived** on 2026-09-27 (ADR 0020). It completes MAF step 5 except MCP handback.
+  - **Branch:** `codex/step5-operational-handback`, with local commits from `a51f4f1` through the archive commit. **Not pushed.**
+  - **Next:** a PR, a merge and a release; each needs Andy's word.
+  - **Then:** `v8-live-validation-4` with a new work id on a v4 charter. Its Shaper intent must seal `max_lineage_tokens`, `token_tranche` and `unobserved_send_tokens`. Exercise `flow run trace`, the token cap and `flow run verify-receipt` live.
+  - **Follow-ups:**
+    - QR17: the lineage charge is computed twice per action decision;
+    - the Codex manager identity is still unproven through the gateway.
 - No other work in flight. All other runs are archived, blocked as superseded, or (for
   `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
   is a legacy record.
@@ -18,6 +25,13 @@
     llama3.1:8b 6/6, each usable and correct.
 
 ## Recently completed
+
+- `step5-operational-handback` accepted and archived 2026-09-27 (ADR 0020).
+  - **What shipped:**
+    - `flow run trace` and `flow run verify-receipt`;
+    - the v4 lineage token budget, checked before every paid grant;
+    - full-row seals.
+  - **Proof:** 1,771 tests OK; 14 mutations caught.
 
 - `v8-live-validation-3` accepted and archived 2026-09-27. It was the
   **first completed live v8 chartered job**, on v0.38.0.

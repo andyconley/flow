@@ -217,6 +217,25 @@ Read the current Flow-owned Shaper-to-Delivery authority and, when present, one 
 
 The JSON view reports lifecycle state, the sealed charter and owner generation, protocol compatibility diagnostics, and the v7 attempt's current execution and resume eligibility. Historical v6 envelopes remain readable evidence but always report `executable: false` and `resumable: false`; create a new sealed Delivery Charter for new work.
 
+### `flow run trace <work-id> [--attempt <id>] [--json]`
+
+Show the per-call correlation chain of a v8 attempt and its predecessors (ADR 0020). Read-only: the ledger is read in one read transaction, and the command creates no lock file.
+
+- A stuck attempt leads with a banner naming why it is stuck (`expansion_paused: token_cap`, `reconciliation_required`, `running`, `recovery_in_progress`, an inactive lead, or the last interruption), since which ledger event, on which row, and the same next command `flow run stuck` gives. A terminal attempt shows its status, cause and sealed receipt digest.
+- One row per manager call and action in ledger order, with expansion events interleaved: grant history (`grant_changed`), provider session or thread id and `input_sha256`, the manager request file and whether its digest matches, the process groups that served it, its bound checkpoint and parent, send and observe times with the duration, and raw and charged usage.
+- Totals per attempt and lineage, and the token cap in absolute tokens: charged, maximum, remaining, and headroom (with tranche counts second).
+- v5–v7 attempts print `unsupported_protocol`; a pre-release v8 attempt is traced with `contract: unsupported_contract` and no token totals.
+
+For long lineages, filter the JSON form, for example `flow run trace WORK_ID --json | jq '.attempts[-1].entries[] | select(.status != "completed")'`. It exits 0, or 2 when the run, the attempt or the ledger cannot be read.
+
+### `flow run verify-receipt <work-id> [--attempt <id>] [--no-lineage] [--json]`
+
+Verify a sealed v8 receipt offline against the ledger, the sealed authority, the checkpoints and the on-disk evidence (ADR 0020). It calls no provider, applies no diff, runs no test, makes no subprocess or network call and writes nothing. The default target is the latest sealed attempt; predecessors are verified recursively unless `--no-lineage`.
+
+Each of the 17 checks (V1–V17) reports `pass` with how many facts it compared, `fail` with the row, key path and both values, or `not_applicable` where the requiredness table for that terminal status allows, with a fixed reason. Six items are always `unverifiable_offline`: that a provider ran and what it billed, the outcome of an unknown send, the test output bytes, the current worktree, a replaced draft's bytes, and the truth of ledger timestamps. It is a consistency check, not a signature.
+
+Exit codes: 0 when no check fails, 1 on any failure, 2 when it cannot run (`attempt_not_sealed`, `unsupported_receipt` for an attempt sealed before the token budget, `run_unreadable`).
+
 ### `flow run decide-expansion <work-id> <attempt-id> <request-id>`
 
 Approve or deny one pending v8 expansion request of a paused attempt.
@@ -226,7 +245,13 @@ flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve | --deny) \
   --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]
 ```
 
-`--expected-generation` must match the attempt's current ledger owner generation (`.attempt.owner_generation` in `flow run inspect-delivery --json`, not the Delivery Lead generation); a mismatch is refused as a stale generation rather than applied against the wrong epoch. The command also refuses when the request is unknown or already decided, when the attempt is not truly paused (an action or manager call is still started or unknown, or a live run or recovery holds the attempt), when the owning lead's generation is no longer active, or, for an approval, when one more unit would exceed a runner ceiling. A refusal changes nothing. A decision does not itself resume the attempt — resume it with `flow run recover-delivery-lead`.
+`--expected-generation` must match the attempt's current ledger owner generation (`.attempt.owner_generation` in `flow run inspect-delivery --json`, not the Delivery Lead generation); a mismatch is refused as a stale generation rather than applied against the wrong epoch. The command also refuses when the request is unknown or already decided, when the attempt is not truly paused (an action or manager call is still started or unknown, or a live run or recovery holds the attempt), when the owning lead's generation is no longer active, or, for an approval, when one more unit would exceed a runner ceiling. A refusal changes nothing. A decision does not itself resume the attempt — resume it with `flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME`.
+
+A `token_cap` request is expanded one `token_tranche` at a time (ADR 0020). A Shaper intent starts from `DEFAULT_TOKEN_BUDGET` in `cli/delivery_contracts.py`: `max_lineage_tokens` 200,000, `token_tranche` 100,000 and `unobserved_send_tokens` 100,000. A shortfall that one tranche cannot clear, or a tranche past `MAX_LINEAGE_TOKENS`, is refused hard and creates no request.
+
+### `flow run recover-delivery-lead <work-id> <attempt-id> --actor NAME`
+
+Recover a v8 attempt through a fenced recovery claim, or reconcile and resume a v5 Magentic epoch. `--actor` is required and is recorded on the recovery and as the attempt's owner actor.
 
 ### `flow run resume-execution <work-id> <attempt-id>`
 

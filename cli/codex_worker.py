@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from delivery_cancel import interruptible
+from execution_contracts import usage_values_valid
 
 MAX_PROMPT_BYTES = 32768
 MAX_OUTPUT_BYTES = 4096
@@ -55,12 +56,10 @@ def _parse_event_lines(lines, expected_model: str, *, max_output_bytes: int = MA
     if len(output.encode("utf-8")) > max_output_bytes:
         raise CodexWorkerError("Codex final message exceeds output limit")
     usage = completed[0].get("usage")
-    if usage is not None:
-        if not isinstance(usage, dict) or any(
-            isinstance(value, bool) or not isinstance(value, int) or value < 0
-            for value in usage.values()
-        ):
-            raise CodexWorkerError("Codex usage is invalid")
+    # Known counters must be non-negative integers; a key a newer Codex adds is
+    # kept and ignored, so it never turns a paid call into an unknown (ADR 0020).
+    if not usage_values_valid(usage):
+        raise CodexWorkerError("Codex usage is invalid")
     return {"schema_version": 1, "status": "completed", "provider": "codex",
             "model": expected_model, "physical_call": True,
             "evidence_level": "flow_observed_codex_cli_completed_turn",

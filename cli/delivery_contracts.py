@@ -10,40 +10,57 @@ import hashlib
 import json
 from typing import Any
 
-from runner_limits import MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_VERIFIER_CALLS
+from runner_limits import (MAX_ACTIONS, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_TOKEN_TRANCHES,
+                           MAX_VERIFIER_CALLS)
 
 
 SCHEMA_VERSION = 1
-SHAPER_CONTRACT_VERSION = 3
-DELIVERY_CHARTER_VERSION = 3
-# v2 records predate sealed expansion headroom; v1 records predate the
-# verifier allowance. Both stay readable for already-sealed runs.
+SHAPER_CONTRACT_VERSION = 4
+DELIVERY_CHARTER_VERSION = 4
+# v3 records predate the sealed lineage token budget (ADR 0020); v2 records
+# predate sealed expansion headroom; v1 records predate the verifier
+# allowance. All stay readable for already-sealed runs.
+EXPANSION_SHAPER_CONTRACT_VERSION = 3
+EXPANSION_DELIVERY_CHARTER_VERSION = 3
 VERIFIER_SHAPER_CONTRACT_VERSION = 2
 VERIFIER_DELIVERY_CHARTER_VERSION = 2
 LEGACY_SHAPER_CONTRACT_VERSION = 1
 LEGACY_DELIVERY_CHARTER_VERSION = 1
-SHAPER_CONTRACT_VERSIONS = {LEGACY_SHAPER_CONTRACT_VERSION, VERIFIER_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION}
-DELIVERY_CHARTER_VERSIONS = {LEGACY_DELIVERY_CHARTER_VERSION, VERIFIER_DELIVERY_CHARTER_VERSION, DELIVERY_CHARTER_VERSION}
+SHAPER_CONTRACT_VERSIONS = {LEGACY_SHAPER_CONTRACT_VERSION, VERIFIER_SHAPER_CONTRACT_VERSION,
+                            EXPANSION_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION}
+DELIVERY_CHARTER_VERSIONS = {LEGACY_DELIVERY_CHARTER_VERSION, VERIFIER_DELIVERY_CHARTER_VERSION,
+                             EXPANSION_DELIVERY_CHARTER_VERSION, DELIVERY_CHARTER_VERSION}
+# Contract versions that seal expansion headroom, and the one that also seals tokens.
+HEADROOM_VERSIONS = {EXPANSION_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION}
 
 CAPABILITY_TO_RUNTIME = {
     "scoped-edit": ["read", "edit"],
     "read-only-review": ["read"],
     "bounded-verification": ["read"],
 }
+# The sealed lineage token budget (ADR 0020), in charged_v1 tokens.
+TOKEN_LIMIT_FIELDS = ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens")
 ENFORCEABLE_LIMIT_FIELDS = {
     "max_concurrent", "max_replans", "runtime_seconds", "tools", "paths",
     "outputs", "retries", "max_manager_calls", "max_manager_rounds",
-    "max_paid_worker_calls",
+    "max_paid_worker_calls", *TOKEN_LIMIT_FIELDS,
 }
+# Calibrated on the v8-live-validation-3 lineage: 133,898 charged tokens, the
+# largest single call 82,376 (ADR 0020). A Shaper intent starts from these.
+DEFAULT_TOKEN_BUDGET = {"max_lineage_tokens": 200_000, "token_tranche": 100_000, "unobserved_send_tokens": 100_000}
 # Limits a Shaper may pre-approve growth for, mapped to their runner ceiling.
 # Replans and concurrency are deliberately absent: they are never expandable.
+# ``tokens`` counts tranches from a sealed base of zero.
 EXPANSION_CEILINGS = {
     "delegations": MAX_ACTIONS,
     "paid_worker_calls": MAX_ACTIONS,
     "verifier_calls": MAX_VERIFIER_CALLS,
     "manager_calls": MAX_MANAGER_CALLS,
     "manager_rounds": MAX_MANAGER_ROUNDS,
+    "tokens": MAX_TOKEN_TRANCHES,
 }
+# Expandable names a v3 (pre-token) record may carry.
+PRE_TOKEN_EXPANSION_NAMES = ("delegations", "paid_worker_calls", "verifier_calls", "manager_calls", "manager_rounds")
 
 
 class DeliveryContractError(ValueError):
@@ -101,16 +118,19 @@ def _sources(sources: object, work_id: str) -> dict[str, dict[str, str]]:
     return normalized
 
 
-def validate_expansion_headroom(headroom: object, base: dict[str, int]) -> dict[str, int]:
+def validate_expansion_headroom(headroom: object, base: dict[str, int], *,
+                                names: tuple[str, ...] | None = None) -> dict[str, int]:
     """Return the full headroom map, refusing anything the runner cannot run.
 
     ``base`` holds the sealed limit for every expandable name. Base plus
     headroom must stay within the runner ceiling, and paid calls can never
-    outgrow delegations, because every paid call is a delegation.
+    outgrow delegations, because every paid call is a delegation. ``names``
+    narrows the expandable set for a v3 record, which predates tokens.
     """
-    if not isinstance(headroom, dict) or not set(headroom) <= set(EXPANSION_CEILINGS):
+    names = tuple(EXPANSION_CEILINGS) if names is None else names
+    if not isinstance(headroom, dict) or not set(headroom) <= set(names):
         raise DeliveryContractError("expansion_headroom has an unknown or non-expandable limit")
-    full = {name: headroom.get(name, 0) for name in EXPANSION_CEILINGS}
+    full = {name: headroom.get(name, 0) for name in names}
     for name, value in full.items():
         if type(value) is not int or value < 0:
             raise DeliveryContractError(f"expansion_headroom {name} must be a non-negative integer")
@@ -122,8 +142,45 @@ def validate_expansion_headroom(headroom: object, base: dict[str, int]) -> dict[
 
 
 def _expansion_base(delegations: int, paid: int, verifier: int, manager_calls: int, manager_rounds: int) -> dict[str, int]:
+    # Token tranches are counted from zero; the sealed budget is separate.
     return {"delegations": delegations, "paid_worker_calls": paid, "verifier_calls": verifier,
-            "manager_calls": manager_calls, "manager_rounds": manager_rounds}
+            "manager_calls": manager_calls, "manager_rounds": manager_rounds, "tokens": 0}
+
+
+def validate_token_budget(values: object, tranches: int) -> None:
+    """Refuse a lineage token budget the runner ceiling or the charging rules forbid (ADR 0020).
+
+    One unobserved send can never need more than one tranche, and the sealed
+    budget plus every tranche of headroom stays within ``MAX_LINEAGE_TOKENS``.
+    """
+    if not isinstance(values, dict):
+        raise DeliveryContractError("token budget is invalid")
+    for name in TOKEN_LIMIT_FIELDS:
+        if type(values.get(name)) is not int or values[name] < 1:
+            raise DeliveryContractError(f"{name} must be a positive integer")
+    if values["token_tranche"] < values["unobserved_send_tokens"]:
+        raise DeliveryContractError("token_tranche must be at least unobserved_send_tokens")
+    if values["unobserved_send_tokens"] > values["max_lineage_tokens"]:
+        raise DeliveryContractError("unobserved_send_tokens exceeds max_lineage_tokens")
+    if type(tranches) is not int or tranches < 0 or \
+            values["max_lineage_tokens"] + tranches * values["token_tranche"] > MAX_LINEAGE_TOKENS:
+        raise DeliveryContractError("the token budget plus headroom exceeds the runner ceiling")
+
+
+def project_envelope_limits(limits: dict[str, Any]) -> tuple[dict[str, int], dict[str, int]]:
+    """Project a sealed v4 Delivery Charter's limits into the v8 envelope (the one shared projection).
+
+    Returns the envelope ``limits`` and the non-zero ``expansion_headroom``.
+    Prepare and ``verify-receipt`` both call this, so they cannot drift.
+    """
+    projected = {"max_delegations": limits["delegations"], "max_concurrent": limits["concurrency"],
+                 "max_replans": limits["replans"], "max_runtime_seconds": limits["runtime_seconds"],
+                 "max_manager_calls": limits["max_manager_calls"], "max_manager_rounds": limits["max_manager_rounds"],
+                 "max_paid_worker_calls": limits["max_paid_worker_calls"],
+                 "max_verifier_calls": limits["max_verifier_calls"],
+                 **{name: limits[name] for name in TOKEN_LIMIT_FIELDS}}
+    headroom = {name: value for name, value in limits.get("expansion_headroom", {}).items() if value}
+    return projected, headroom
 
 
 def _claim(value: str, sources: dict[str, dict[str, str]]) -> dict[str, Any]:
@@ -191,11 +248,13 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
         raise DeliveryContractError("enforceable tools, paths, or outputs are unsupported")
     if enforceable["max_concurrent"] > delegation["max_delegations"] or enforceable["max_paid_worker_calls"] > delegation["max_delegations"]:
         raise DeliveryContractError("concurrency or paid-worker limit exceeds max_delegations")
+    validate_token_budget({name: enforceable[name] for name in TOKEN_LIMIT_FIELDS}, 0)
     if type(intent["max_verifier_calls"]) is not int or intent["max_verifier_calls"] not in {1, 2}:
         raise DeliveryContractError("max_verifier_calls must be one or two")
     intent["expansion_headroom"] = validate_expansion_headroom(intent["expansion_headroom"], _expansion_base(
         delegation["max_delegations"], enforceable["max_paid_worker_calls"], intent["max_verifier_calls"],
         enforceable["max_manager_calls"], enforceable["max_manager_rounds"]))
+    validate_token_budget({name: enforceable[name] for name in TOKEN_LIMIT_FIELDS}, intent["expansion_headroom"]["tokens"])
     # The flag is derived, never independent: it states whether any headroom exists.
     if type(delegation["delegated_expansion"]) is not bool or delegation["delegated_expansion"] != any(intent["expansion_headroom"].values()):
         raise DeliveryContractError("delegated_expansion must state whether any expansion headroom is sealed")
@@ -260,7 +319,7 @@ def build_delivery_charter(shaper: dict[str, Any]) -> dict[str, Any]:
         "provider_capabilities": {"claude": {"binding": "capability"}, "codex": {"binding": "capability"}, "ollama": {"binding": "verifier"}},
         "limits": {"delegations": shaper["delegation_matrix"]["max_delegations"],
                    "concurrency": enforceable["max_concurrent"], "replans": enforceable["max_replans"],
-                   **{name: enforceable[name] for name in ("runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")},
+                   **{name: enforceable[name] for name in ("runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls", *TOKEN_LIMIT_FIELDS)},
                    "max_verifier_calls": shaper["max_verifier_calls"],
                    "expansion_headroom": shaper["expansion_headroom"]},
         "approval_matrix": shaper["approval_matrix"], "producer_verifier_rules": {"distinct_identities": True, "verifier_read_only": True},
@@ -314,14 +373,19 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
             raise DeliveryContractError("Shaper Contract max_verifier_calls is invalid")
     elif "max_verifier_calls" in record:
         raise DeliveryContractError("legacy Shaper Contract cannot carry max_verifier_calls")
-    if record["version"] == SHAPER_CONTRACT_VERSION:
+    if record["version"] in HEADROOM_VERSIONS:
         delegation = record["delegation_matrix"]
-        enforceable = _mapping(record["budget_safety_envelope"].get("enforceable"), "budget_safety_envelope enforceable")
+        tokens = record["version"] == SHAPER_CONTRACT_VERSION
+        enforceable = _mapping(record["budget_safety_envelope"].get("enforceable"), "budget_safety_envelope enforceable",
+                               keys=ENFORCEABLE_LIMIT_FIELDS if tokens else ENFORCEABLE_LIMIT_FIELDS - set(TOKEN_LIMIT_FIELDS))
         headroom = validate_expansion_headroom(record.get("expansion_headroom"), _expansion_base(
             delegation.get("max_delegations"), enforceable.get("max_paid_worker_calls"), record["max_verifier_calls"],
-            enforceable.get("max_manager_calls"), enforceable.get("max_manager_rounds")))
+            enforceable.get("max_manager_calls"), enforceable.get("max_manager_rounds")),
+            names=None if tokens else PRE_TOKEN_EXPANSION_NAMES)
         if headroom != record["expansion_headroom"] or delegation.get("delegated_expansion") is not any(headroom.values()):
             raise DeliveryContractError("Shaper Contract expansion headroom is invalid")
+        if tokens:
+            validate_token_budget({name: enforceable[name] for name in TOKEN_LIMIT_FIELDS}, headroom["tokens"])
     elif "expansion_headroom" in record or record["delegation_matrix"].get("delegated_expansion") is not False:
         raise DeliveryContractError("pre-expansion Shaper Contract cannot carry expansion headroom")
     _validate_digest(record, "Shaper Contract")
@@ -359,8 +423,10 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
     limit_keys = {"delegations", "concurrency", "replans", "runtime_seconds", "tools", "paths", "outputs", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls"}
     if record["charter_version"] != LEGACY_DELIVERY_CHARTER_VERSION:
         limit_keys.add("max_verifier_calls")
-    if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+    if record["charter_version"] in HEADROOM_VERSIONS:
         limit_keys.add("expansion_headroom")
+    if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+        limit_keys.update(TOKEN_LIMIT_FIELDS)
     limits = _mapping(record.get("limits"), "limits", keys=limit_keys)
     if not all(type(limits[key]) is int and limits[key] >= 0 for key in ("delegations", "concurrency", "replans", "runtime_seconds", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")):
         raise DeliveryContractError("Delivery Charter numeric limits are invalid")
@@ -368,10 +434,14 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
         # A charter and its Shaper Contract share one version line after v1.
         if source["version"] != record["charter_version"] or limits["max_verifier_calls"] not in {1, 2}:
             raise DeliveryContractError("Delivery Charter max_verifier_calls is invalid")
-        if record["charter_version"] == DELIVERY_CHARTER_VERSION and validate_expansion_headroom(limits["expansion_headroom"], _expansion_base(
+        if record["charter_version"] in HEADROOM_VERSIONS and validate_expansion_headroom(limits["expansion_headroom"], _expansion_base(
                 limits["delegations"], limits["max_paid_worker_calls"], limits["max_verifier_calls"],
-                limits["max_manager_calls"], limits["max_manager_rounds"])) != limits["expansion_headroom"]:
+                limits["max_manager_calls"], limits["max_manager_rounds"]),
+                names=None if record["charter_version"] == DELIVERY_CHARTER_VERSION else PRE_TOKEN_EXPANSION_NAMES
+                ) != limits["expansion_headroom"]:
             raise DeliveryContractError("Delivery Charter expansion headroom is invalid")
+        if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+            validate_token_budget({name: limits[name] for name in TOKEN_LIMIT_FIELDS}, limits["expansion_headroom"]["tokens"])
     elif "max_verifier_calls" in limits:
         raise DeliveryContractError("legacy Delivery Charter cannot carry max_verifier_calls")
     for name in ("approval_matrix", "producer_verifier_rules", "validation", "recovery", "escalation_stop_cancellation", "boundaries", "approver"):

@@ -20,7 +20,7 @@ class RunnerLimitsTests(unittest.TestCase):
     def test_cli_shim_loads_the_runner_module_file(self):
         self.assertEqual(Path(runtime_limits.__file__).resolve(), runner_limits.LIMITS_PATH)
         for name in ("MAX_MANAGER_CALLS", "MAX_MANAGER_ROUNDS", "MAX_ACTIONS", "MAX_VERIFIER_CALLS",
-                     "MAX_CONCURRENT", "MAX_REPLANS"):
+                     "MAX_CONCURRENT", "MAX_REPLANS", "MAX_TOKEN_TRANCHES", "MAX_LINEAGE_TOKENS"):
             self.assertEqual(getattr(runner_limits, name), getattr(runtime_limits, name), name)
 
     def test_runner_reads_its_ceilings_from_the_shared_module(self):

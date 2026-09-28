@@ -1,5 +1,8 @@
 """Reviewed structured Shaper intent fixture for delivery-boundary tests."""
 
+# The sealed lineage token budget legacy delivery tests run under (ADR 0020).
+TEST_TOKEN_BUDGET = {"max_lineage_tokens": 2_000_000, "token_tranche": 1_000, "unobserved_send_tokens": 1_000}
+
 
 def shaper_intent(definition_digests=None, *, limits=None, expansion_headroom=None, max_delegations=6):
     """Return a valid intent; ``limits`` overrides enforceable values.
@@ -40,6 +43,9 @@ def shaper_intent(definition_digests=None, *, limits=None, expansion_headroom=No
             "tools": ["read", "edit", "test"], "paths": ["charter-scoped"],
             "outputs": ["diff", "test", "receipt"], "retries": 0,
             "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 6,
+            # A large budget at a small charge: stub calls reporting no usage
+            # cost 1,000 each and never reach the cap unless a test means to.
+            **TEST_TOKEN_BUDGET,
         }, "observations": ["provider_usage_when_available"]},
         "boundaries": {"artifact_root": ".flow/runs/current", "worktree_policy": "Flow-bound"},
         "amendment_lineage": [],

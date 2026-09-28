@@ -253,6 +253,8 @@ class UncertaintyScopingTests(TerminationFixture):
         envelope.update(attempt_id="b" * 32, execution_protocol_version=7,
                         checkpoint_dir=str(self.run / "execution" / ("b" * 32) / "checkpoints"))
         envelope["limits"].pop("max_verifier_calls")
+        for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+            envelope["limits"].pop(key)
         envelope.pop("predecessors", None)
         ledger = self.ledger()
         ledger.create_attempt(envelope)
@@ -337,7 +339,7 @@ class SuccessorTests(TerminationFixture):
                          [{"attempt_id": attempt_id, "terminal_status": "abandoned", "receipt_sha256": digest,
                            "lead_generation": 1}])
         receipt = json.loads(Path(result["receipt_path"]).read_text())
-        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 0})
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 0})
         self.assertIn(f"Predecessor attempt {attempt_id} ended abandoned", captured["task"])
 
 

@@ -36,7 +36,8 @@ def chartered() -> dict:
 def structured_verifier() -> dict:
     env = chartered()
     env["execution_protocol_version"] = 8
-    env["limits"] = {**env["limits"], "max_runtime_seconds": 300, "max_verifier_calls": 2}
+    env["limits"] = {**env["limits"], "max_runtime_seconds": 300, "max_verifier_calls": 2,
+                     "max_lineage_tokens": 2_000_000, "token_tranche": 1_000, "unobserved_send_tokens": 1_000}
     env.update({
         "shaper_contract_digest": "e" * 64,
         "delivery_charter_digest": "f" * 64,
