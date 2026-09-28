@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "work_id": "review-provenance-refinement",
+  "intent": "Restore a trustworthy path from a provenance-blocked review to independently validated acceptance without rewriting sealed Delivery authority.",
+  "scope_posture": "bounded_remediation",
+  "decision_owner": "engineer",
+  "approved_decisions": [
+    "reviewing-only amendment",
+    "immutable original plus separately approved replacement",
+    "AC2 and AC13 dispositions bound to original acceptance criteria",
+    "bounded ADR and support-status corrections"
+  ],
+  "excluded": [
+    "general lifecycle artifact editing",
+    "direct new-run to planning shortcut",
+    "macOS cancellation baseline repair",
+    "broader MAF feature changes"
+  ]
+}
+

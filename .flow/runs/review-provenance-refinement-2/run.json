@@ -1,0 +1,65 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+    "orchestration_manifest": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+    "requirements": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+    "shaper_intent": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/review-provenance-refinement-2/acceptance-criteria.md",
+    "handoff": ".flow/runs/review-provenance-refinement-2/implementation-handoff.md",
+    "orchestration_manifest": ".flow/runs/review-provenance-refinement-2/orchestration.json",
+    "plan": ".flow/runs/review-provenance-refinement-2/plan.md",
+    "requirements": ".flow/runs/review-provenance-refinement-2/requirements.md",
+    "shaper_intent": ".flow/runs/review-provenance-refinement-2/shaper-intent.json",
+    "validation_plan": ".flow/runs/review-provenance-refinement-2/validation-plan.md"
+  },
+  "created_at": "2026-09-28T00:37:38Z",
+  "delivery": {
+    "charter_digest": "6ef7e07f26fa0d7187b97cb993ee6d553a681e7f1a7f08dd4be243412d4eecff",
+    "charter_id": "delivery-e3b21970a1cf2ec4901a",
+    "delivery_artifact_dir": "delivery/6ef7e07f26fa0d7187b97cb993ee6d553a681e7f1a7f08dd4be243412d4eecff",
+    "handoff_digest": "96f18ca5077d24b5aa3457be077dc5d4160f419d37b5b0ad59f95319ffa53998",
+    "lead_claim_digest": "72a15b42295bbc2b9b63dfe50ae2bee2eb7d2bcabd50217a6c48adbca3415b6d",
+    "lead_claim_path": "delivery/6ef7e07f26fa0d7187b97cb993ee6d553a681e7f1a7f08dd4be243412d4eecff/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-6ef7e07f26fa0d7187b9",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "9a27ba94fdcb1a67d0f83b0cde18cf7fabf05e00509be9130fc0a71e06371984",
+    "shaper_contract_id": "shaper-b597dc492f2496b46a03",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/review-provenance-refinement-2/acceptance-criteria.md",
+        "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/review-provenance-refinement-2/orchestration.json",
+        "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4"
+      },
+      "requirements": {
+        "path": ".flow/runs/review-provenance-refinement-2/requirements.md",
+        "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/review-provenance-refinement-2/shaper-intent.json",
+        "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-28T00:39:21Z",
+    "approve-plan": "2026-09-28T00:39:31Z",
+    "start-definition": "2026-09-28T00:37:38Z",
+    "start-plan": "2026-09-28T00:39:23Z"
+  },
+  "lane": "plan",
+  "last_event": "approve-plan",
+  "next_action": "Engineer approved the compact four-slice remediation plan.",
+  "phase": "plan_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "plan_approved",
+  "updated_at": "2026-09-28T00:39:31Z",
+  "work_id": "review-provenance-refinement-2"
+}

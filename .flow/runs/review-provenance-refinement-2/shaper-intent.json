@@ -1,0 +1,30 @@
+{
+  "problem": "A reviewing run with incomplete sealed producer provenance cannot be corrected without rewriting historical Delivery authority.",
+  "intended_users": ["Flow operators and reviewers."],
+  "outcomes": ["Approve one constrained review amendment and complete trustworthy independent acceptance."],
+  "scope": ["Review-only immutable orchestration overlay, explicit MAF dispositions, bounded evidence corrections, and real-run proof."],
+  "exclusions": ["General artifact editing, multiple amendment generations, macOS baseline repair, MAF redesign, and direct new-run planning."],
+  "constraints": ["Original approved bytes and Delivery digests remain immutable.", "Flow grants every provider dispatch."],
+  "assumptions": ["The blocked MAF run remains in reviewing and its existing evidence remains available."],
+  "acceptance_criteria": ["AC1-AC10 in .flow/runs/review-provenance-refinement-2/acceptance-criteria.md"],
+  "risks": [{"risk": "A review amendment could expand authority or erase provenance.", "owner": "Andy Conley", "status": "owned"}],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {"role": "lead-developer", "capabilities": ["scoped-edit"], "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80", "maximum_instances": 1},
+    {"role": "test-engineer", "capabilities": ["bounded-verification"], "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f", "maximum_instances": 1},
+    {"role": "quality-reviewer", "capabilities": ["read-only-review"], "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718", "maximum_instances": 1},
+    {"role": "security-reviewer", "capabilities": ["read-only-review"], "definition_digest": "3110698309937f9c6f9eb98ef75c938a4f3c538b3aec953179e1d43570446227", "maximum_instances": 1},
+    {"role": "sre", "capabilities": ["read-only-review"], "definition_digest": "9a7fc5abfc9f7e669bfe997e68fb9f01f4984aec065d249dbf1251a60cb6eac3", "maximum_instances": 1}
+  ],
+  "prohibited_capabilities": ["silent-charter-amendment", "original-manifest-rewrite", "ungranted-provider-dispatch"],
+  "delegation_matrix": {"max_delegations": 6, "delegated_expansion": false},
+  "approval_matrix": {"charter_amendment": "shaper_or_engineer", "provider_dispatch": "Flow_grant", "acceptance": "Flow_gate"},
+  "budget_safety_envelope": {"enforceable": {"max_concurrent": 3, "max_replans": 1, "runtime_seconds": 1800, "tools": ["read", "edit", "test"], "paths": ["charter-scoped"], "outputs": ["diff", "test", "receipt"], "retries": 0, "max_manager_calls": 6, "max_manager_rounds": 3, "max_paid_worker_calls": 6}, "observations": ["manual planning roles and Flow-governed implementation evidence"]},
+  "max_verifier_calls": 2,
+  "boundaries": {"artifact_root": ".flow/runs/review-provenance-refinement-2", "worktree_policy": "Flow-bound"},
+  "amendment_lineage": [{"prior_work_id": "review-provenance-refinement", "reason": "Delivery sealing rejected a noncanonical shaper-intent schema after definition approval; no dispatch occurred."}],
+  "approval_history": [{"event": "approve-definition", "authority": "engineer"}],
+  "next_lane_eligibility": ["delivery"]
+}
+

@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "work_id": "review-provenance-refinement",
+  "mode": "delegated",
+  "risk": {
+    "classification": "high",
+    "hard_triggers": ["security_or_privacy_boundary"],
+    "aggravating_factors": ["material_unresolved_ambiguity"],
+    "rationale": "The change governs sealed authority, provenance, and acceptance behavior."
+  },
+  "shared_state": [],
+  "reconciliation": {
+    "artifact_path": ".flow/runs/review-provenance-refinement/reconciliation.md",
+    "status": "resolved",
+    "claims": []
+  },
+  "verification": {
+    "artifact_path": ".flow/runs/review-provenance-refinement/validation-results.md",
+    "evidence_collector_assignment": "implementation-test",
+    "independent": true,
+    "producer_assignments": ["implementation-core", "implementation-handback"],
+    "verifier_assignment": "implementation-quality"
+  },
+  "assignments": [
+    {
+      "id": "implementation-core",
+      "lane": "implement",
+      "role": "lead-developer",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/review-provenance-refinement/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/review-provenance-refinement/requirements.md",
+        ".flow/runs/review-provenance-refinement/acceptance-criteria.md",
+        ".flow/runs/review-provenance-refinement/plan.md"
+      ],
+      "read_scopes": ["cli", "tests", "docs", "scaffolds", ".flow/runs/maf-runtime-readiness-2"],
+      "write_scopes": ["cli", "tests", "docs", "scaffolds", ".flow/runs/maf-runtime-readiness-2"],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {"path": "cli/runstate.py", "format": "code"},
+      "success_criteria": ["Implement the approved amendment contract and apply it to the blocked MAF review"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "review-provenance-remediation"}
+    },
+    {
+      "id": "implementation-handback",
+      "lane": "handback",
+      "role": "tech-writer",
+      "provider": {"kind": "agent", "id": "root"},
+      "brief_path": ".flow/runs/review-provenance-refinement/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/review-provenance-refinement/requirements.md",
+        ".flow/runs/review-provenance-refinement/acceptance-criteria.md"
+      ],
+      "read_scopes": [".flow/runs/review-provenance-refinement", ".flow/runs/maf-runtime-readiness-2", "docs"],
+      "write_scopes": [".flow/runs/review-provenance-refinement"],
+      "read_only": false,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/review-provenance-refinement/HANDOFF.md", "format": "markdown"},
+      "success_criteria": ["Record implementation and validation evidence without omitting producer provenance"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "review-provenance-remediation"}
+    },
+    {
+      "id": "implementation-test",
+      "lane": "validate",
+      "role": "test-engineer",
+      "provider": {"kind": "agent", "id": "review-provenance-test"},
+      "brief_path": ".flow/runs/review-provenance-refinement/validation-plan.md",
+      "input_evidence": [
+        ".flow/runs/review-provenance-refinement/acceptance-criteria.md",
+        ".flow/runs/review-provenance-refinement/validation-plan.md"
+      ],
+      "read_scopes": ["cli", "tests", "docs", "scaffolds", ".flow/runs/review-provenance-refinement", ".flow/runs/maf-runtime-readiness-2"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/review-provenance-refinement/research/test-review.md", "format": "markdown"},
+      "success_criteria": ["Independently verify lifecycle, tamper, compatibility, and real-run evidence"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "review-provenance-remediation"}
+    },
+    {
+      "id": "implementation-quality",
+      "lane": "review",
+      "role": "quality-reviewer",
+      "provider": {"kind": "agent", "id": "review-provenance-quality"},
+      "brief_path": ".flow/runs/review-provenance-refinement/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/review-provenance-refinement/requirements.md",
+        ".flow/runs/review-provenance-refinement/acceptance-criteria.md",
+        ".flow/runs/review-provenance-refinement/validation-plan.md"
+      ],
+      "read_scopes": ["cli", "tests", "docs", "scaffolds", ".flow/runs/review-provenance-refinement", ".flow/runs/maf-runtime-readiness-2"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/review-provenance-refinement/review.md", "format": "markdown"},
+      "success_criteria": ["Judge final requirement and provenance fit"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "review-provenance-remediation"}
+    },
+    {
+      "id": "implementation-security",
+      "lane": "review",
+      "role": "security-reviewer",
+      "provider": {"kind": "agent", "id": "review-provenance-security"},
+      "brief_path": ".flow/runs/review-provenance-refinement/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/review-provenance-refinement/requirements.md",
+        ".flow/runs/review-provenance-refinement/acceptance-criteria.md"
+      ],
+      "read_scopes": ["cli", "tests", "docs", "scaffolds", ".flow/runs/review-provenance-refinement", ".flow/runs/maf-runtime-readiness-2"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/review-provenance-refinement/research/security-review.md", "format": "markdown"},
+      "success_criteria": ["Verify amendment cannot expand authority or erase provenance"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "review-provenance-remediation"}
+    },
+    {
+      "id": "implementation-sre",
+      "lane": "review",
+      "role": "sre",
+      "provider": {"kind": "agent", "id": "review-provenance-sre"},
+      "brief_path": ".flow/runs/review-provenance-refinement/implementation-handoff.md",
+      "input_evidence": [
+        ".flow/runs/review-provenance-refinement/requirements.md",
+        ".flow/runs/review-provenance-refinement/validation-plan.md"
+      ],
+      "read_scopes": ["cli", "tests", "docs", "scaffolds", ".flow/runs/review-provenance-refinement", ".flow/runs/maf-runtime-readiness-2"],
+      "write_scopes": [],
+      "read_only": true,
+      "required_capabilities": [],
+      "output": {"path": ".flow/runs/review-provenance-refinement/research/sre-review.md", "format": "markdown"},
+      "success_criteria": ["Verify recovery, diagnostics, and operator behavior"],
+      "claim_statuses": ["observed", "inferred", "recommended", "unverified"],
+      "coordination": {"mode": "serialized", "group": "review-provenance-remediation"}
+    }
+  ]
+}
+

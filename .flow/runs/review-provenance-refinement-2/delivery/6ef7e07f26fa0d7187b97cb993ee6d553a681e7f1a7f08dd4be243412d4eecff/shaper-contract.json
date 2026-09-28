@@ -1,0 +1,412 @@
+{
+  "acceptance_criteria": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "AC1-AC10 in .flow/runs/review-provenance-refinement-2/acceptance-criteria.md"
+    }
+  ],
+  "allowed_specialists": [
+    {
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1,
+      "role": "lead-developer"
+    },
+    {
+      "capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 1,
+      "role": "test-engineer"
+    },
+    {
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1,
+      "role": "quality-reviewer"
+    },
+    {
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "3110698309937f9c6f9eb98ef75c938a4f3c538b3aec953179e1d43570446227",
+      "maximum_instances": 1,
+      "role": "security-reviewer"
+    },
+    {
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "9a7fc5abfc9f7e669bfe997e68fb9f01f4984aec065d249dbf1251a60cb6eac3",
+      "maximum_instances": 1,
+      "role": "sre"
+    }
+  ],
+  "amendment_lineage": [
+    {
+      "prior_work_id": "review-provenance-refinement",
+      "reason": "Delivery sealing rejected a noncanonical shaper-intent schema after definition approval; no dispatch occurred."
+    }
+  ],
+  "approval_event": "approve-definition",
+  "approval_history": [
+    {
+      "authority": "engineer",
+      "event": "approve-definition"
+    }
+  ],
+  "approval_matrix": {
+    "acceptance": "Flow_gate",
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant"
+  },
+  "approved_sources": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/review-provenance-refinement-2/acceptance-criteria.md",
+      "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/review-provenance-refinement-2/orchestration.json",
+      "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4"
+    },
+    "requirements": {
+      "path": ".flow/runs/review-provenance-refinement-2/requirements.md",
+      "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/review-provenance-refinement-2/shaper-intent.json",
+      "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163"
+    }
+  },
+  "assumptions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "The blocked MAF run remains in reviewing and its existing evidence remains available."
+    }
+  ],
+  "boundaries": {
+    "artifact_root": ".flow/runs/review-provenance-refinement-2",
+    "worktree_policy": "Flow-bound"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 3,
+      "max_manager_calls": 6,
+      "max_manager_rounds": 3,
+      "max_paid_worker_calls": 6,
+      "max_replans": 1,
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "retries": 0,
+      "runtime_seconds": 1800,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ]
+    },
+    "observations": [
+      "manual planning roles and Flow-governed implementation evidence"
+    ]
+  },
+  "constraints": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Original approved bytes and Delivery digests remain immutable."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow grants every provider dispatch."
+    }
+  ],
+  "decision_owners": [],
+  "delegation_matrix": {
+    "delegated_expansion": false,
+    "max_delegations": 6
+  },
+  "digest": "9a27ba94fdcb1a67d0f83b0cde18cf7fabf05e00509be9130fc0a71e06371984",
+  "exclusions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "General artifact editing, multiple amendment generations, macOS baseline repair, MAF redesign, and direct new-run planning."
+    }
+  ],
+  "expansion_headroom": {
+    "delegations": 0,
+    "manager_calls": 0,
+    "manager_rounds": 0,
+    "paid_worker_calls": 0,
+    "verifier_calls": 0
+  },
+  "intended_users": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow operators and reviewers."
+    }
+  ],
+  "kind": "shaper_contract",
+  "max_verifier_calls": 2,
+  "next_lane_eligibility": [
+    "delivery"
+  ],
+  "open_decisions": [],
+  "outcomes": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Approve one constrained review amendment and complete trustworthy independent acceptance."
+    }
+  ],
+  "problem": {
+    "provenance": [
+      {
+        "claim_status": "approved",
+        "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+        "source": "acceptance_criteria"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+        "source": "orchestration_manifest"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+        "source": "requirements"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+        "source": "shaper_intent"
+      }
+    ],
+    "value": "A reviewing run with incomplete sealed producer provenance cannot be corrected without rewriting historical Delivery authority."
+  },
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "original-manifest-rewrite",
+    "ungranted-provider-dispatch"
+  ],
+  "risks": [
+    {
+      "owner": "Andy Conley",
+      "risk": "A review amendment could expand authority or erase provenance.",
+      "status": "owned"
+    }
+  ],
+  "run_id": "review-provenance-refinement-2",
+  "schema_version": 1,
+  "scope": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Review-only immutable orchestration overlay, explicit MAF dispositions, bounded evidence corrections, and real-run proof."
+    }
+  ],
+  "shaper_contract_id": "shaper-b597dc492f2496b46a03",
+  "source_evidence": [
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/review-provenance-refinement-2/acceptance-criteria.md",
+      "sha256": "eba84303366ffc332454bd14585376688ec74672f7eec10e5d0a16ab25203bab",
+      "source": "acceptance_criteria"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/review-provenance-refinement-2/orchestration.json",
+      "sha256": "5b11cab2ff34fa0eca05fc415c674010e831bc55758cd3137e143725d55194a4",
+      "source": "orchestration_manifest"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/review-provenance-refinement-2/requirements.md",
+      "sha256": "73f7848b3c997bbe144f5033ed5c9983f4059d22a011f9d3aa0559831970441d",
+      "source": "requirements"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/review-provenance-refinement-2/shaper-intent.json",
+      "sha256": "34043f5bd2da560964800bcae67ae93ce0a1909537a6a398d7f0b4dd6efcf163",
+      "source": "shaper_intent"
+    }
+  ],
+  "status": "approved",
+  "version": 3
+}
