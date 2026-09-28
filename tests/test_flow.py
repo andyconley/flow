@@ -804,6 +804,36 @@ class OrchestrationCliTests(FlowCliHarness):
             "requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest"
         })
 
+    def test_review_can_request_refinement_and_require_fresh_handback(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        manifest_arg = "orchestration_manifest=.flow/runs/demo/orchestration.json"
+        commands = (
+            ("start-definition", ()),
+            ("approve-definition", ("--artifact", "requirements=.flow/runs/demo/requirements.md", "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md", "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json", "--artifact", manifest_arg)),
+            ("start-plan", ()),
+            ("approve-plan", ("--artifact", "plan=.flow/runs/demo/plan.md", "--artifact", "handoff=.flow/runs/demo/handoff.md", "--artifact", "validation_plan=.flow/runs/demo/validation.md")),
+            ("start-implementation", ()),
+            ("mark-handback-ready", ("--artifact", "implementation_evidence=.flow/runs/demo/output.md", "--artifact", "handback=.flow/runs/demo/output.md")),
+            ("start-review", ()),
+            ("request-refinement", ()),
+        )
+        for event, extra in commands:
+            with self.subTest(event=event):
+                self.assert_ok(self.run_flow("run", "transition", "demo", event, *extra))
+        status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
+        self.assertEqual(status["state"], "implementing")
+        self.assertEqual(status["lane"], "implement")
+        refused = self.run_flow("run", "transition", "demo", "start-review")
+        self.assertEqual(refused.returncode, 1)
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "mark-handback-ready",
+            "--artifact", "implementation_evidence=.flow/runs/demo/output.md",
+            "--artifact", "handback=.flow/runs/demo/output.md",
+        ))
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-review"))
+        self.assert_ok(self.run_flow("run", "verify", "demo"))
+
     def test_revision_two_stage_refusals_leave_lifecycle_files_unchanged(self) -> None:
         self.setup_project()
         self._write_valid_manifest()

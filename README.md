@@ -361,7 +361,7 @@ Use these to inspect install state, generated runtime surfaces, drift, and comma
 Use these when a `/flow-*` command needs to record or inspect the hard-gated lifecycle state for one work item. `run.json` is the current-state projection; `events.jsonl` is the append-only history. Revision-2 runs keep the detailed contract in `orchestration.json`. `flow run transition` is the only lifecycle writer.
 
 - `flow run transition WORK_ID EVENT`
-  - apply a legal transition such as `start-definition`, `approve-plan`, `mark-handback-ready`, `accept-review`, or `archive`
+  - apply a legal transition such as `start-definition`, `approve-plan`, `mark-handback-ready`, `request-refinement`, `accept-review`, or `archive`
 - `--artifact NAME=PATH`
   - attach required gate evidence such as `requirements`, `plan`, `validation_plan`, `implementation_evidence`, or `review`
 - `--disposition NAME=VALUE`
