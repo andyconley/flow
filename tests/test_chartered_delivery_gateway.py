@@ -1239,6 +1239,24 @@ class CharteredEditVerificationTests(CharteredFixture):
         (self.worktree / "target.py").write_text("fixed\n")
         self.assertEqual(self._verify({"target.py": self._sha("regressed\n")})["changed_files"], ["target.py"])
 
+    def test_declared_regression_with_staged_then_modified_file_passes(self):
+        (self.worktree / "target.py").write_text("regressed\n")
+        subprocess.run(["git", "add", "target.py"], cwd=self.worktree, check=True)
+        (self.worktree / "target.py").write_text("fixed\n")
+        self.assertEqual(self._verify({"target.py": self._sha("regressed\n")})["changed_files"], ["target.py"])
+
+    def test_declared_regression_with_staged_new_then_modified_file_passes(self):
+        new_file = self.worktree / "new.py"
+        new_file.write_text("regressed\n")
+        subprocess.run(["git", "add", "new.py"], cwd=self.worktree, check=True)
+        new_file.write_text("fixed\n")
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+        baseline = {"source_commit": self.commit, "files": {"new.py": self._sha("regressed\n")}}
+        result = _verify_chartered_edit(
+            self.worktree, baseline, attempt_dir, {"write_paths": ["new.py"]}, record=False)
+        self.assertEqual(result["changed_files"], ["new.py"])
+
 
 class ExecutionFactsTests(unittest.TestCase):
     """The facts block Flow appends to the manager task."""
