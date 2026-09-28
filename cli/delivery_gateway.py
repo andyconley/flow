@@ -1824,11 +1824,15 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         cause = "reconciliation_required" if uncertain else "transport"
         with authority_guard(), ledger.send_lock():
             interruption = ledger.record_interruption(aid, cause, failure, generation=generation)
+        # A clean transport loss is not necessarily resumable. The latest
+        # checkpoint may belong to a denied or otherwise unreplayable action,
+        # so report the same ledger-derived verdict used by inspect/recovery.
+        recovery = recovery_eligibility(envelope, ledger.snapshot(aid), lead_active=True)
         blocking = [item.get("action_id") or item.get("call_id") for item in actions + manager_calls
                     if item["status"] in {"started", "unknown"}]
         return {"attempt_id": aid, "status": "interrupted", "reason": cause, "detail": failure[:512],
                 "interruption_id": interruption["interruption_id"], "receipt_path": None,
-                "resume_available": not uncertain, "blocking": blocking}
+                "resume_available": recovery["recoverable"], "blocking": blocking}
     if structured_verifier:
         with authority_guard(), ledger.send_lock():
             ledger.record_runtime_outcome(aid, failure=failure, transport=recoverable_transport_failure,
