@@ -599,7 +599,7 @@ def activate_managed_maf_runtime() -> dict[str, object]:
         return {"attempted": False, "state": "unmanaged"}
     config = read_install_config()
     if (config.get("maf_runtime_activation_revision") == MAF_RUNTIME_ACTIVATION_REVISION
-            and config.get("maf_runtime_activation_state") in {"succeeded", "failed"}):
+            and config.get("maf_runtime_activation_state") in {"succeeded", "failed", "unsupported"}):
         return {"attempted": False, "state": config["maf_runtime_activation_state"]}
     if not _provision_maf_runtime():
         config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
@@ -623,6 +623,19 @@ def record_managed_maf_runtime_repair() -> None:
                    "maf_runtime_activation_state": "succeeded",
                    "maf_runtime_activation_attempted_at": _now_utc_iso()})
     config.pop("maf_runtime_activation_detail", None)
+    write_install_config(config)
+
+
+def record_managed_maf_runtime_unavailable(reason: str) -> None:
+    """Persist a truthful optional-runtime state after an explicit install attempt."""
+    if not FLOW_CONFIG.is_file():
+        return
+    state = "unsupported" if reason == "unsupported_runtime" else "failed"
+    config = read_install_config()
+    config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                   "maf_runtime_activation_state": state,
+                   "maf_runtime_activation_attempted_at": _now_utc_iso(),
+                   "maf_runtime_activation_detail": reason})
     write_install_config(config)
 
 

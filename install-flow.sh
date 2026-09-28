@@ -228,7 +228,7 @@ version = "${version}"
 remote = "${remote}"
 installed_at = "${installed_at}"
 maf_runtime_activation_revision = 1
-maf_runtime_activation_state = "succeeded"
+maf_runtime_activation_state = "pending"
 maf_runtime_activation_attempted_at = "${installed_at}"
 TOML
 else
@@ -245,7 +245,7 @@ mode = "develop"
 source_target = "${ROOT_DIR}"
 installed_at = "${installed_at}"
 maf_runtime_activation_revision = 1
-maf_runtime_activation_state = "succeeded"
+maf_runtime_activation_state = "pending"
 maf_runtime_activation_attempted_at = "${installed_at}"
 TOML
 fi

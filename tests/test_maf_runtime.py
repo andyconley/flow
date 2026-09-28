@@ -141,6 +141,16 @@ class MafLifecycleTransactionTests(unittest.TestCase):
             self.assertEqual(restored["maf_runtime_activation_state"], "failed")
             self.assertEqual(restored["maf_runtime_activation_detail"], 'needs "repair"')
 
+    def test_unsupported_runtime_records_truthful_activation_state(self):
+        with tempfile.TemporaryDirectory() as raw:
+            config_path = Path(raw) / "config.toml"
+            with patch.object(lifecycle, "FLOW_CONFIG", config_path):
+                lifecycle.write_install_config({"mode": "release", "maf_runtime_activation_state": "pending"})
+                lifecycle.record_managed_maf_runtime_unavailable("unsupported_runtime")
+                restored = lifecycle.read_install_config()
+            self.assertEqual(restored["maf_runtime_activation_state"], "unsupported")
+            self.assertEqual(restored["maf_runtime_activation_detail"], "unsupported_runtime")
+
     def test_develop_conversion_restores_source_config_and_runtime_pointer_when_provision_fails(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

@@ -37,7 +37,8 @@ from expertise_commands import register as register_expertise, dispatch as dispa
 from gaps import cmd_add, cmd_list, cmd_promote  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
 from lifecycle import (activate_managed_maf_runtime, install_command,
-                       record_managed_maf_runtime_repair, update_command)  # noqa: E402
+                       record_managed_maf_runtime_repair,
+                       record_managed_maf_runtime_unavailable, update_command)  # noqa: E402
 from model_advice import context_command as model_context_command  # noqa: E402
 from model_advice import resolve_command as model_resolve_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
@@ -1322,6 +1323,7 @@ def main() -> int:
         try:
             result = maf_provision()
         except MafRuntimeUnready as exc:
+            record_managed_maf_runtime_unavailable(str(exc.diagnostic.get("state", "provisioning_failed")))
             print(json.dumps(exc.diagnostic, sort_keys=True) if args.json else str(exc))
             return 1
         record_managed_maf_runtime_repair()

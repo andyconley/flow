@@ -32,6 +32,7 @@
     "prior_failure": ".flow/runs/maf-runtime-readiness/run.json",
     "reconciliation": ".flow/runs/maf-runtime-readiness-2/reconciliation.md",
     "requirements": ".flow/runs/maf-runtime-readiness-2/requirements.md",
+    "review": ".flow/runs/maf-runtime-readiness-2/review-final.md",
     "shaper_intent": ".flow/runs/maf-runtime-readiness-2/shaper-intent.json",
     "validation_plan": ".flow/runs/maf-runtime-readiness-2/validation-plan.md"
   },
@@ -67,8 +68,12 @@
       }
     }
   },
-  "dispositions": {},
+  "dispositions": {
+    "ac13": "no-new-regression",
+    "legacy_update": "accepted"
+  },
   "gates": {
+    "accept-review": "2026-09-28T03:42:17Z",
     "approve-definition": "2026-09-27T20:42:29Z",
     "approve-plan": "2026-09-27T20:42:29Z",
     "mark-handback-ready": "2026-09-27T22:55:52Z",
@@ -78,11 +83,12 @@
     "start-review": "2026-09-28T00:19:34Z"
   },
   "lane": "review",
-  "last_event": "approve-orchestration-amendment",
-  "phase": "reviewing",
+  "last_event": "accept-review",
+  "next_action": "Accepted by explicit user approval after direct repairs",
+  "phase": "review_accepted",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "reviewing",
-  "updated_at": "2026-09-28T03:37:12Z",
+  "state": "review_accepted",
+  "updated_at": "2026-09-28T03:42:17Z",
   "work_id": "maf-runtime-readiness-2"
 }

@@ -2803,6 +2803,8 @@ class FlowCliTests(FlowCliHarness):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("managed MAF runtime is unsupported", result.stdout)
         self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('maf_runtime_activation_state = "unsupported"', config)
         readiness = subprocess.run([sys.executable, str(FLOW_CLI), "runtime", "readiness"], cwd=self.repo,
                                   text=True, capture_output=True, env=env)
         self.assertNotEqual(readiness.returncode, 0)
