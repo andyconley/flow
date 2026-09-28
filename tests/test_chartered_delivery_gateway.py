@@ -1243,7 +1243,9 @@ class CharteredEditVerificationTests(CharteredFixture):
         (self.worktree / "target.py").write_text("regressed\n")
         subprocess.run(["git", "add", "target.py"], cwd=self.worktree, check=True)
         (self.worktree / "target.py").write_text("fixed\n")
-        self.assertEqual(self._verify({"target.py": self._sha("regressed\n")})["changed_files"], ["target.py"])
+        result = self._verify({"target.py": self._sha("regressed\n")})
+        self.assertEqual(result["changed_files"], ["target.py"])
+        self.assertEqual((self.root / "attempt" / "repair.diff").exists(), False)
 
     def test_declared_regression_with_staged_new_then_modified_file_passes(self):
         new_file = self.worktree / "new.py"
@@ -1256,6 +1258,22 @@ class CharteredEditVerificationTests(CharteredFixture):
         result = _verify_chartered_edit(
             self.worktree, baseline, attempt_dir, {"write_paths": ["new.py"]}, record=False)
         self.assertEqual(result["changed_files"], ["new.py"])
+
+    def test_declared_regression_evidence_excludes_unchanged_staged_files(self):
+        (self.worktree / "target.py").write_text("regressed\n")
+        (self.worktree / "other.py").write_text("baseline\n")
+        subprocess.run(["git", "add", "target.py", "other.py"], cwd=self.worktree, check=True)
+        (self.worktree / "target.py").write_text("fixed\n")
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+        baseline = {"source_commit": self.commit, "files": {
+            "target.py": self._sha("regressed\n"), "other.py": self._sha("baseline\n")}}
+        result = _verify_chartered_edit(
+            self.worktree, baseline, attempt_dir, {"write_paths": ["target.py", "other.py"]})
+        self.assertEqual(result["changed_files"], ["target.py"])
+        diff = Path(result["diff_path"]).read_text()
+        self.assertIn("+fixed", diff)
+        self.assertNotIn("other.py", diff)
 
 
 class ExecutionFactsTests(unittest.TestCase):
