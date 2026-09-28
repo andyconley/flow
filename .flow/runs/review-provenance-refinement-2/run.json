@@ -50,16 +50,20 @@
   "gates": {
     "approve-definition": "2026-09-28T00:39:21Z",
     "approve-plan": "2026-09-28T00:39:31Z",
+    "block": "2026-09-28T00:42:25Z",
     "start-definition": "2026-09-28T00:37:38Z",
     "start-implementation": "2026-09-28T00:41:06Z",
     "start-plan": "2026-09-28T00:39:23Z"
   },
-  "lane": "implement",
-  "last_event": "start-implementation",
-  "phase": "implementing",
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "Zero-send Delivery Lead refusal: sealed plan lacks magentic-manager, executable roster bindings, job-charter.json, and separate worker worktree contract. Create a provenance-linked successor rather than mutating authority.",
+  "phase": "blocked",
   "protocol_revision": 2,
+  "return_lane": "implement",
+  "return_state": "implementing",
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-28T00:41:06Z",
+  "state": "blocked",
+  "updated_at": "2026-09-28T00:42:25Z",
   "work_id": "review-provenance-refinement-2"
 }
