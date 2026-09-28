@@ -593,6 +593,10 @@ invocation = "flow run stuck [--json]"
 summary = "List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only)"
 
 [[help.cli_commands]]
+invocation = "flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]"
+summary = "Verify a sealed v8 receipt offline against the ledger, sealed authority, checkpoints and evidence; exits 1 on any failed check, 2 when it cannot run (read-only)"
+
+[[help.cli_commands]]
 invocation = "flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]"
 summary = "Show each call's grant history, provider session, checkpoint, process group, timing and usage for a v8 attempt and its lineage, led by why it is stuck (read-only)"
 

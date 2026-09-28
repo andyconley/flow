@@ -47,7 +47,8 @@ from codex_worker import call_codex
 from maf_supervisor import MafTransportError, run_maf_delivery
 from orchestration import validate_orchestration
 from runstate import status as run_status
-from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch, verifier_instructions
+from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch,
+                                verifier_instructions, verifier_provider_task)
 
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
@@ -1214,11 +1215,8 @@ def recover_delivery(work_id: str, attempt_id: str, *, actor: str, root: Path | 
                            python_path=python_path, continuation_epoch_id=epoch["epoch_id"])
 
 
-def _verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structured: bool) -> str:
-    """Build the exact evidence-bearing verifier input Flow sends and digests."""
-    text = (task + "\n\nFlow-verified complete bounded diff for this review:\n"
-            + diff + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
-    return text + VERIFIER_CONTRACT_INSTRUCTION if structured else text
+# One builder, shared with verify-receipt (ADR 0020).
+_verifier_provider_task = verifier_provider_task
 
 
 def _evaluate_verifier(ledger: ExecutionLedger, action: dict[str, Any], result: dict[str, Any],

@@ -2830,7 +2830,7 @@ class ExecutionLedger:
                 "tranches_granted": tranches, "token_tranche": limits["token_tranche"],
                 "headroom_tokens_remaining": headroom * limits["token_tranche"], "headroom_tranches_remaining": headroom}
 
-    def lineage_view(self, work_id: str, attempt_id: str | None = None) -> dict[str, Any]:
+    def lineage_view(self, work_id: str, attempt_id: str | None = None, *, sealed_only: bool = False) -> dict[str, Any]:
         """One consistent read of an attempt and its v8 lineage, for trace and verify-receipt (ADR 0020).
 
         Read-only ledgers only: every read runs in a single read transaction on
@@ -2848,9 +2848,11 @@ class ExecutionLedger:
             rows = db.execute(f"SELECT attempt_id,{protocol},status,{sealed},envelope_json FROM attempts "
                               "WHERE work_id=? ORDER BY rowid", (work_id,)).fetchall()
             if attempt_id is None:
-                if not rows:
-                    raise ContractError("no attempt exists for this work id")
-                attempt_id = rows[-1][0]
+                candidates = [row for row in rows if row[3] is not None] if sealed_only else rows
+                if not candidates:
+                    raise ContractError("no sealed attempt exists for this work id" if sealed_only
+                                        else "no attempt exists for this work id")
+                attempt_id = candidates[-1][0]
             by_id = {row[0]: row for row in rows}
             if attempt_id not in by_id:
                 raise ContractError("attempt is not part of this work id")
