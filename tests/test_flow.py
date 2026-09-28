@@ -664,6 +664,54 @@ class OrchestrationCliTests(FlowCliHarness):
         status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
         self.assertEqual(status["state"], "definition_approved")
 
+    def test_explicit_user_approval_amends_orchestration_with_lineage(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        manifest_path = run_dir / "orchestration.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["assignments"][0]["coordination"] = {"mode": "serialized", "group": "primary"}
+        handback = dict(manifest["assignments"][0])
+        handback["id"] = "handback"
+        handback["output"] = {"path": ".flow/runs/demo/output.md", "format": "markdown"}
+        handback["coordination"] = {"mode": "serialized", "group": "primary"}
+        manifest["assignments"].append(handback)
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        ))
+        run_payload = json.loads((run_dir / "run.json").read_text())
+        run_payload.update({"state": "reviewing", "phase": "reviewing", "lane": "review"})
+        (run_dir / "run.json").write_text(json.dumps(run_payload, indent=2) + "\n")
+        amended = json.loads(manifest_path.read_text())
+        amended["verification"]["producer_assignments"].append("handback")
+        replacement = run_dir / "orchestration.amended.json"
+        replacement.write_text(json.dumps(amended, indent=2) + "\n")
+
+        refused = self.run_flow(
+            "run", "amend-orchestration", "demo",
+            "--replacement", ".flow/runs/demo/orchestration.amended.json",
+            "--reason", "bind the omitted handback producer",
+        )
+        self.assertEqual(refused.returncode, 1)
+        accepted = self.run_flow(
+            "run", "amend-orchestration", "demo",
+            "--replacement", ".flow/runs/demo/orchestration.amended.json",
+            "--reason", "bind the omitted handback producer", "--approved-by-user",
+        )
+        self.assert_ok(accepted)
+        final = json.loads((run_dir / "run.json").read_text())
+        self.assertEqual(len(final["amendments"]), 1)
+        self.assertEqual(final["amendments"][0]["approval"]["authority"], "user")
+        self.assertTrue((run_dir / "amendments" / "0001-original.json").is_file())
+        self.assertEqual(json.loads(manifest_path.read_text())["verification"]["producer_assignments"], ["producer", "handback"])
+        self.assert_ok(self.run_flow("run", "verify", "demo"))
+
     def test_complete_revision_two_lifecycle_reaches_archive(self) -> None:
         self.setup_project()
         self._write_valid_manifest()

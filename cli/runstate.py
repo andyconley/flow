@@ -17,7 +17,7 @@ from typing import Any
 from fsutil import ensure_dir, repo_root, write_atomic
 from delivery_contracts import DeliveryContractError, validate_shaper_intent
 from delivery_control import start_plan as seal_delivery_start_plan
-from orchestration import manifest_path, valid_work_id, validate_orchestration
+from orchestration import manifest_path, valid_work_id, validate_manifest, validate_orchestration
 
 
 SCHEMA_VERSION = 1
@@ -605,6 +605,93 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
     return ok, messages, payload
 
 
+def approve_orchestration_amendment(
+    work_id: str,
+    replacement: str,
+    reason: str,
+    *,
+    approved_by_user: bool,
+    root: Path | None = None,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    """Replace a sealed orchestration manifest while preserving approved lineage."""
+    if not approved_by_user:
+        return False, {}, ["explicit user approval is required"]
+    if not valid_work_id(work_id):
+        return False, {}, ["invalid work id"]
+    if not isinstance(reason, str) or not reason.strip():
+        return False, {}, ["amendment reason is required"]
+    project_root = (root or repo_root()).resolve()
+    current = _load_run(work_id, project_root)
+    if not current or _protocol_revision(current) != PROTOCOL_REVISION_CURRENT:
+        return False, current or {}, ["amendment requires a revision-2 run"]
+    canonical = manifest_path(work_id, project_root)
+    declared = (current.get("artifacts") or {}).get("orchestration_manifest")
+    if declared != canonical.relative_to(project_root).as_posix() or not canonical.is_file() or canonical.is_symlink():
+        return False, current, ["sealed canonical orchestration manifest is unavailable"]
+    original = canonical.read_bytes()
+    original_digest = hashlib.sha256(original).hexdigest()
+    approved_digest = (current.get("approved_artifact_digests") or {}).get("orchestration_manifest")
+    amendments = list(current.get("amendments") or [])
+    expected_digest = amendments[-1]["replacement_digest"] if amendments else approved_digest
+    if not expected_digest or original_digest != expected_digest:
+        return False, current, ["current orchestration bytes differ from the approved amendment lineage"]
+    replacement_path = project_root / replacement
+    run_dir = canonical.parent.resolve()
+    if (Path(replacement).is_absolute() or not replacement_path.is_file() or replacement_path.is_symlink()
+            or not replacement_path.resolve().is_relative_to(run_dir)):
+        return False, current, ["replacement must be a current-run regular file"]
+    replacement_bytes = replacement_path.read_bytes()
+    try:
+        replacement_data = json.loads(replacement_bytes)
+    except json.JSONDecodeError as exc:
+        return False, current, [f"replacement is invalid JSON: {exc}"]
+    stage = "acceptance" if current.get("state") in {STATE_HANDBACK_READY, STATE_REVIEWING, STATE_REVIEW_ACCEPTED} else "dispatch"
+    findings = validate_manifest(replacement_data, work_id, stage, root=project_root)
+    if findings:
+        return False, current, [f"{f.field} [{f.rule}]: {f.message}" for f in findings]
+    replacement_digest = hashlib.sha256(replacement_bytes).hexdigest()
+    if replacement_digest == original_digest:
+        return False, current, ["replacement does not change the orchestration manifest"]
+
+    sequence = len(amendments) + 1
+    amendment_dir = run_dir / "amendments"
+    ensure_dir(amendment_dir)
+    original_relative = canonical.relative_to(project_root).as_posix()
+    snapshot = amendment_dir / f"{sequence:04d}-original.json"
+    record_path = amendment_dir / f"{sequence:04d}.json"
+    now = _now()
+    record = {
+        "sequence": sequence,
+        "artifact": "orchestration_manifest",
+        "original_path": original_relative,
+        "original_digest": original_digest,
+        "original_snapshot": snapshot.relative_to(project_root).as_posix(),
+        "replacement_source": replacement_path.relative_to(project_root).as_posix(),
+        "replacement_digest": replacement_digest,
+        "reason": reason.strip(),
+        "approval": {"authority": "user", "explicit": True, "at": now},
+    }
+    write_atomic(snapshot, original.decode("utf-8"))
+    write_atomic(record_path, json.dumps(record, indent=2, sort_keys=True) + "\n")
+    write_atomic(canonical, replacement_bytes.decode("utf-8"))
+    payload = dict(current)
+    payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
+    payload["approved_artifact_digests"]["orchestration_manifest"] = replacement_digest
+    payload["amendments"] = amendments + [record]
+    payload["updated_at"] = now
+    payload["last_event"] = "approve-orchestration-amendment"
+    _write_run(work_id, payload, project_root)
+    _append_event(work_id, {
+        "at": now, "event": "approve-orchestration-amendment",
+        "from": payload.get("state"), "to": payload.get("state"),
+        "artifacts": {"amendment": record_path.relative_to(project_root).as_posix()},
+        "dispositions": {"approval": "explicit-user-approval"},
+        "approved_artifact_digests": {"orchestration_manifest": replacement_digest},
+        "reason": reason.strip(),
+    }, project_root)
+    return True, payload, []
+
+
 def _print_run(payload: dict[str, Any]) -> None:
     print(f"work id:     {payload.get('work_id')}")
     print(f"state:       {payload.get('state')}")
@@ -716,5 +803,23 @@ def cmd_transition(args) -> int:
             print(f"- {error}")
         return 1
     print(f"transition accepted: {args.event}")
+    print(f"state: {payload.get('state')}")
+    return 0
+
+
+def cmd_amend_orchestration(args) -> int:
+    ok, payload, errors = approve_orchestration_amendment(
+        args.work_id, args.replacement, args.reason,
+        approved_by_user=args.approved_by_user,
+    )
+    if args.json:
+        print(json.dumps({"ok": ok, "errors": errors, "run": payload}, indent=2, sort_keys=True))
+        return 0 if ok else 1
+    if not ok:
+        print("orchestration amendment refused")
+        for error in errors:
+            print(f"- {error}")
+        return 1
+    print("orchestration amendment approved")
     print(f"state: {payload.get('state')}")
     return 0

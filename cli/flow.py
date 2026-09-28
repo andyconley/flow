@@ -48,6 +48,7 @@ from plugin_usage import (  # noqa: E402
     plugin_usage_snapshot_command,
 )
 from runstate import (  # noqa: E402
+    cmd_amend_orchestration as run_amend_orchestration_command,
     cmd_history as run_history_command,
     cmd_list as run_list_command,
     cmd_status as run_status_command,
@@ -539,6 +540,16 @@ def main() -> int:
     )
     run_transition_parser.add_argument("--note", help="next action or transition note")
     run_transition_parser.add_argument("--json", action="store_true", help="emit JSON")
+
+    run_amend_parser = run_sub.add_parser(
+        "amend-orchestration",
+        help="replace sealed orchestration with an explicitly user-approved amendment",
+    )
+    run_amend_parser.add_argument("work_id")
+    run_amend_parser.add_argument("--replacement", required=True)
+    run_amend_parser.add_argument("--reason", required=True)
+    run_amend_parser.add_argument("--approved-by-user", action="store_true")
+    run_amend_parser.add_argument("--json", action="store_true", help="emit JSON")
 
     run_orchestration_parser = run_sub.add_parser(
         "validate-orchestration",
@@ -1039,6 +1050,8 @@ def main() -> int:
             from archive_service import archive_transition
             return archive_transition(args)
         return run_transition_command(args)
+    if args.command == "run" and args.run_target == "amend-orchestration":
+        return run_amend_orchestration_command(args)
     if args.command == "run" and args.run_target == "validate-orchestration":
         return orchestration_validate_command(args)
     if args.command == "run" and args.run_target == "execute-local":

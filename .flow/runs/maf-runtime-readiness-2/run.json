@@ -1,7 +1,24 @@
 {
+  "amendments": [
+    {
+      "approval": {
+        "at": "2026-09-28T03:37:12Z",
+        "authority": "user",
+        "explicit": true
+      },
+      "artifact": "orchestration_manifest",
+      "original_digest": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+      "original_path": ".flow/runs/maf-runtime-readiness-2/orchestration.json",
+      "original_snapshot": ".flow/runs/maf-runtime-readiness-2/amendments/0001-original.json",
+      "reason": "Bind the omitted implementation-handback producer after explicit user approval",
+      "replacement_digest": "69fd981d95c112de1a27bd10535230d24e84c9bca8212e8ac50a9dcdf7b90f44",
+      "replacement_source": ".flow/runs/maf-runtime-readiness-2/orchestration.amended.json",
+      "sequence": 1
+    }
+  ],
   "approved_artifact_digests": {
     "acceptance_criteria": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69",
-    "orchestration_manifest": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+    "orchestration_manifest": "69fd981d95c112de1a27bd10535230d24e84c9bca8212e8ac50a9dcdf7b90f44",
     "requirements": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819",
     "shaper_intent": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38"
   },
@@ -61,11 +78,11 @@
     "start-review": "2026-09-28T00:19:34Z"
   },
   "lane": "review",
-  "last_event": "start-review",
+  "last_event": "approve-orchestration-amendment",
   "phase": "reviewing",
   "protocol_revision": 2,
   "schema_version": 1,
   "state": "reviewing",
-  "updated_at": "2026-09-28T00:19:34Z",
+  "updated_at": "2026-09-28T03:37:12Z",
   "work_id": "maf-runtime-readiness-2"
 }

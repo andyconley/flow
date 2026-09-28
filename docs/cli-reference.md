@@ -265,6 +265,8 @@ Support events:
 
 `flow run transition` is the only command that writes lifecycle state. `/flow-*` commands call it when they cross gates; they do not hand-edit `run.json`.
 
+`flow run amend-orchestration <work-id> --replacement <run-local-json> --reason <text> --approved-by-user` replaces a sealed orchestration manifest only after explicit user approval. It preserves the prior bytes and an append-only digest-linked amendment record, validates the replacement before activation, and leaves the run in its current lifecycle state.
+
 New runs are protocol revision 2 while `run.json` remains schema 1. Their definition, solution, and plan approvals require `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` and dispatch validation. Handback and review acceptance re-run the later stages. Runs without `protocol_revision` are revision 1 and retain the previous behavior. A scout remains lightweight unless it supplies an orchestration manifest, in which case `archive-scout` validates acceptance.
 
 ### `flow model context`
