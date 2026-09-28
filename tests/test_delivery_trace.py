@@ -22,7 +22,7 @@ from tests.test_expansion_gateway import ExpansionGatewayFixture  # noqa: E402
 ROW_KEYS = {"type", "row_id", "seq", "provider", "model", "status", "reason", "grant_history", "grant_id",
             "session_id", "input_sha256", "request_file", "pgids", "checkpoint", "timing", "usage"}
 ATTEMPT_KEYS = {"attempt_id", "execution_protocol_version", "supported", "status", "owner_generation", "owner_actor",
-                "banner", "control_records", "entries", "totals"}
+                "banner", "contract", "control_records", "entries", "totals"}
 
 
 def tree_digest(root: Path) -> dict[str, str]:
@@ -74,7 +74,10 @@ class TraceRowTests(TraceFixture):
         self.assertTrue(manager["session_id"].startswith("stub-session-"))
         self.assertEqual(manager["request_file"]["present"], True)
         self.assertEqual(manager["request_file"]["digest_matches"], True)
-        self.assertEqual(manager["usage"]["raw"], {"input_tokens": 5, "output_tokens": 7})
+        self.assertEqual(manager["usage"], {"raw": {"input_tokens": 5, "output_tokens": 7}, "charged": 12,
+                                            "cache_read": 0, "recognised": True})
+        self.assertEqual(attempt["contract"], "handback")
+        self.assertEqual(attempt["totals"]["charged_tokens"], sum(row["usage"]["charged"] for row in rows))
 
     def test_durations_are_the_event_differences(self):
         result = self.completed_run()

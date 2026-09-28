@@ -249,7 +249,7 @@ class ExpansionLedgerTests(unittest.TestCase):
         self.assertEqual(state["effective_limits"]["paid_worker_calls"], 2)
         self.assertEqual(state["effective_limits"]["delegations"], 1)
         self.assertEqual(state["headroom_remaining"], {"delegations": 0, "paid_worker_calls": 0, "verifier_calls": 0,
-                                                       "manager_calls": 0, "manager_rounds": 0})
+                                                       "manager_calls": 0, "manager_rounds": 0, "tokens": 0})
 
     # AC11 (T5): earlier protocols keep their legacy denial shape and never record requests.
     def test_protocols_before_v8_keep_terminal_denials(self):
@@ -264,6 +264,8 @@ class ExpansionLedgerTests(unittest.TestCase):
                 v7 = structured_verifier()
                 v7["execution_protocol_version"] = 7
                 del v7["limits"]["max_verifier_calls"]
+                for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+                    del v7["limits"][key]
                 v7.update(attempt_id=f"v7-{reason}", work_id=f"v7-{reason}")
                 v7["limits"].update(limits)
                 self.start(v7)

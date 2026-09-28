@@ -29,8 +29,14 @@ from execution_contracts import (
     RECOVERY_INTERRUPTION_CAUSES,
     TERMINAL_UNCERTAIN_STATUSES,
     EXPANSION_LIMIT_KEYS,
+    LINEAGE_SCOPED_LIMITS,
+    attempt_token_charges,
+    expansion_base,
+    expansion_fits,
     expansion_headroom,
+    handback_supported,
     manager_progress_block,
+    usage_values_valid,
 )
 from runner_progress import classify as classify_progress
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
@@ -43,9 +49,9 @@ from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_NOT_STARTED, ATTEMPT_
                                V8_RESOLUTION_REQUIRES_CHUNK_2, RecoveryRefused)
 
 
-# Expandable limits counted across the delivery lineage; the other three are
+# Expandable limits counted across the delivery lineage (paid calls, verifier
+# calls and token tranches) come from execution_contracts; the other three are
 # per-attempt counters, so their grants raise only the granting attempt (ADR 0017).
-LINEAGE_SCOPED_LIMITS = frozenset({"paid_worker_calls", "verifier_calls"})
 MAX_EXPANSION_RATIONALE = 512
 
 
@@ -387,6 +393,10 @@ class ExecutionLedger:
             claim = envelope.get("delivery_lead_claim") if protocol_version in {7, 8} else None
             owner_generation = claim["generation"] if isinstance(claim, dict) else 1
             owner_actor = claim["lead_id"] if isinstance(claim, dict) else "initial"
+            if protocol_version == 8 and not handback_supported(envelope):
+                # A pre-release v8 envelope stays readable and abandonable, but
+                # no new attempt may start without a sealed token budget (ADR 0020).
+                raise ContractError("protocol v8 attempts require a sealed lineage token budget")
             if protocol_version == 8:
                 # Re-checked inside the write transaction, so two concurrent
                 # prepares cannot both pass, and a successor cannot drop a
@@ -425,7 +435,11 @@ class ExecutionLedger:
 
     @staticmethod
     def _lineage_usage(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
-        """Sends the predecessors made, counted against a successor's charter caps."""
+        """Sends the predecessors made, counted against a successor's charter caps.
+
+        A handback envelope (ADR 0020) also carries the predecessors' charged
+        tokens; a pre-release one keeps its two-key shape.
+        """
         paid = verifier = 0
         for item in envelope.get("predecessors", []):
             row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (item["attempt_id"],)).fetchone()
@@ -438,7 +452,36 @@ class ExecutionLedger:
                 "AND json_extract(request_json,'$.provider') IN ('codex','claude') "
                 "AND status IN ('started','completed','failed','unknown')", (item["attempt_id"],)).fetchone()[0]
             verifier += ExecutionLedger._verifier_consumed(db, item["attempt_id"], json.loads(row[0]))
-        return {"predecessor_paid_calls": paid, "predecessor_verifier_sends": verifier}
+        usage = {"predecessor_paid_calls": paid, "predecessor_verifier_sends": verifier}
+        if handback_supported(envelope):
+            usage["predecessor_charged"] = ExecutionLedger._lineage_charged(db, envelope)["predecessor_charged"]
+        return usage
+
+    @staticmethod
+    def _attempt_rows(db: sqlite3.Connection, attempt_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """An attempt's actions and manager calls in the shape a receipt carries, for charging."""
+        actions = [{"status": status, "request": json.loads(request), "result": json.loads(result) if result else None}
+                   for request, status, result in db.execute(
+                       "SELECT request_json,status,result_json FROM actions WHERE attempt_id=? ORDER BY rowid", (attempt_id,))]
+        calls = [{"status": status, "result": json.loads(result) if result else None}
+                 for status, result in db.execute(
+                     "SELECT status,result_json FROM manager_calls WHERE attempt_id=? ORDER BY sequence", (attempt_id,))]
+        return actions, calls
+
+    @staticmethod
+    def _lineage_charged(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
+        """Charged tokens of the lineage: predecessors (each at its own sealed charge) and this attempt."""
+        predecessor = 0
+        for item in envelope.get("predecessors", []):
+            row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (item["attempt_id"],)).fetchone()
+            if row is None:
+                raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
+            prior = json.loads(row[0])
+            charges = prior if handback_supported(prior) else envelope
+            predecessor += attempt_token_charges({**prior, "limits": charges["limits"]},
+                                                 *ExecutionLedger._attempt_rows(db, item["attempt_id"]))["charged"]
+        own = attempt_token_charges(envelope, *ExecutionLedger._attempt_rows(db, envelope["attempt_id"]))["charged"]
+        return {"predecessor_charged": predecessor, "own": own, "total": predecessor + own}
 
     @staticmethod
     def _lineage_attempts(envelope: dict[str, Any]) -> list[str]:
@@ -460,10 +503,10 @@ class ExecutionLedger:
     @staticmethod
     def _effective_limits(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
         """Sealed base plus consumed grants in each counter's own scope (ADR 0017)."""
-        base = {name: envelope["limits"][key] for name, (key, _) in EXPANSION_LIMIT_KEYS.items()
-                if key in envelope["limits"]}
         if execution_protocol_version(envelope) != 8:
-            return base
+            return {name: envelope["limits"][key] for name, (key, _) in EXPANSION_LIMIT_KEYS.items()
+                    if key in envelope["limits"]}
+        base = expansion_base(envelope)
         lineage = ExecutionLedger._granted_units(db, ExecutionLedger._lineage_attempts(envelope))
         own = ExecutionLedger._granted_units(db, [envelope["attempt_id"]])
         return {name: value + (lineage if name in LINEAGE_SCOPED_LIMITS else own)[name] for name, value in base.items()}
@@ -508,7 +551,7 @@ class ExecutionLedger:
         effective = ExecutionLedger._effective_limits(db, envelope)
         remaining = ExecutionLedger._headroom_remaining(db, envelope)
         outstanding = ExecutionLedger._outstanding_units(db, envelope)
-        automatic = all(remaining[name] >= 1 and effective[name] + outstanding[name] + 1 <= EXPANSION_LIMIT_KEYS[name][1]
+        automatic = all(remaining[name] >= 1 and expansion_fits(envelope, name, effective[name] + outstanding[name] + 1)
                         for name in limits)
         now = utc_now()
         db.execute("INSERT INTO expansion_requests VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -576,7 +619,7 @@ class ExecutionLedger:
         # A limit that needs more than one unit, or whose next unit would pass
         # the runner ceiling, can never be granted: it stays a terminal denial.
         hard = next((name for name, _, limit, units in failing
-                     if limit is None or units != 1 or effective[limit] + 1 > EXPANSION_LIMIT_KEYS[limit][1]), None)
+                     if limit is None or units != 1 or not expansion_fits(envelope, limit, effective[limit] + 1)), None)
         return reason, hard, [limit for _, _, limit, _ in failing if limit is not None]
 
     @staticmethod
@@ -940,7 +983,7 @@ class ExecutionLedger:
             if approve:
                 effective = self._effective_limits(db, envelope)
                 outstanding = self._outstanding_units(db, envelope)
-                if any(effective[name] + outstanding[name] + 1 > EXPANSION_LIMIT_KEYS[name][1] for name in limits):
+                if any(not expansion_fits(envelope, name, effective[name] + outstanding[name] + 1) for name in limits):
                     raise RecoveryRefused(EXPANSION_CEILING_EXCEEDED)
             decided_at = utc_now()
             grant_id = "expg-" + request_id[4:]
@@ -1474,7 +1517,7 @@ class ExecutionLedger:
             expandable = [name for name, units in (("manager_calls", call_units), ("manager_rounds", round_units)) if units]
             if (stored[2] == 8 and reason != "allowed" and hard == "allowed" and expandable
                     and call_units in {0, 1} and round_units in {0, 1}
-                    and all(effective[name] + 1 <= EXPANSION_LIMIT_KEYS[name][1] for name in expandable)):
+                    and all(expansion_fits(envelope, name, effective[name] + 1) for name in expandable)):
                 expansion = self._expand_locked(
                     db, envelope, kind="manager_call", row_id=call_id, limits=expandable, proposal_digest=request["prompt_digest"],
                     rationale=f"manager {request['phase']} call {request['sequence']} in round {request['manager_round']}")
@@ -1515,7 +1558,7 @@ class ExecutionLedger:
         if (not isinstance(response, dict) or response.get("status") != "completed" or output is None
                 or response.get("output_sha256") != hashlib.sha256(canonical(output).encode()).hexdigest()
                 or len(encoded.encode()) > 65536 or
-                (usage is not None and (not isinstance(usage, dict) or any(type(v) is not int or v < 0 for v in usage.values())))):
+                not usage_values_valid(usage)):
             raise ContractError("manager response is invalid")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")

@@ -68,8 +68,10 @@ class ClaudeContractTests(unittest.TestCase):
         validate_result(env, result, action=action(env, 2))
         with self.assertRaises(ContractError):
             validate_result(env, {**result, "session_id": ""}, action=action(env, 2))
+        # ADR 0020: a key Flow does not read is tolerated; a known counter must still be a valid integer.
+        validate_result(env, {**result, "usage": {"input_tokens": 10, "service_tier": "standard"}}, action=action(env, 2))
         with self.assertRaises(ContractError):
-            validate_result(env, {**result, "usage": {"service_tier": "standard"}}, action=action(env, 2))
+            validate_result(env, {**result, "usage": {"input_tokens": "10"}}, action=action(env, 2))
 
     def test_one_claude_call_cap_spans_attempts(self):
         with tempfile.TemporaryDirectory() as temporary:

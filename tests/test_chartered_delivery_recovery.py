@@ -65,6 +65,8 @@ class CharteredRecoveryRefusalTests(CharteredFixture):
         legacy["checkpoint_dir"] = str(attempt_dir.parent / legacy["attempt_id"] / "checkpoints")
         if protocol == 7:
             legacy["limits"].pop("max_verifier_calls")
+            for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+                legacy["limits"].pop(key)
         else:
             legacy["limits"] = {"max_delegations": 6, "max_concurrent": 3, "max_replans": 2,
                                 "max_manager_calls": 12, "max_manager_rounds": 6, "max_paid_worker_calls": 1}
@@ -220,6 +222,8 @@ class LeadChangeFenceTests(CharteredFixture):
         legacy["attempt_id"] = "b" * 32
         legacy["execution_protocol_version"] = 7
         legacy["limits"].pop("max_verifier_calls")
+        for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v7 predates the token budget
+            legacy["limits"].pop(key)
         legacy["checkpoint_dir"] = str(self.run / "execution" / legacy["attempt_id"] / "checkpoints")
         ExecutionLedger(self.run / "execution" / "ledger.sqlite").create_attempt(legacy)
         return legacy["attempt_id"]
@@ -470,7 +474,7 @@ class SuccessorLineageTests(CharteredFixture):
         actions = self._ledger().snapshot(second["attempt_id"])["actions"]
         self.assertEqual([(item["status"], item["reason"]) for item in actions][-1], ("denied", "verifier_call_cap"))
         receipt = json.loads(Path(second["receipt_path"]).read_text())
-        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 2})
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 2})
         self.assertFalse(receipt["verifier_usage"]["retry_eligible"])
         validate_receipt(captured["envelope"], receipt)
         self.assertEqual(self._regrant_limit_reason(second["attempt_id"], actions[-1]), "verifier_call_cap")
@@ -508,7 +512,7 @@ class SuccessorLineageTests(CharteredFixture):
                       "its evidence is not reused.", captured["task"])
         envelope = captured["envelope"]
         receipt = json.loads(Path(second["receipt_path"]).read_text())
-        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
         validate_receipt(envelope, receipt)
         tampered = {"removed": lambda r: r.pop("lineage_usage"),
                     "negative": lambda r: r["lineage_usage"].update(predecessor_paid_calls=-1),
@@ -521,7 +525,7 @@ class SuccessorLineageTests(CharteredFixture):
                 with self.assertRaises(ExecutionContractError):
                     validate_receipt(envelope, forged)
         first_receipt = json.loads(Path(first["receipt_path"]).read_text())
-        first_receipt["lineage_usage"] = {"predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
+        first_receipt["lineage_usage"] = {"predecessor_charged": 0, "predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
         first_envelope = json.loads((self.run / "execution" / first["attempt_id"] / "envelope.json").read_text())
         with self.assertRaisesRegex(ExecutionContractError, "lineage usage requires predecessors"):
             validate_receipt(first_envelope, first_receipt)
@@ -540,7 +544,7 @@ class SuccessorLineageTamperTests(CharteredFixture):
         receipt = json.loads(Path(second["receipt_path"]).read_text())
         # One own send plus one predecessor send exhausts the cap of two, so
         # the lineage alone is what makes this valid_fail not retry-eligible.
-        self.assertEqual(receipt["lineage_usage"], {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+        self.assertEqual(receipt["lineage_usage"], {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
         self.assertFalse(receipt["verifier_usage"]["retry_eligible"])
         validate_receipt(captured["envelope"], receipt)
         for label, field, value, message in (
@@ -556,7 +560,7 @@ class SuccessorLineageTamperTests(CharteredFixture):
     def test_the_seal_refuses_understated_lineage_usage_that_receipt_validation_accepts(self):
         first, _, _, _ = self._run_v8([self.FAIL], plan=("editor", "verifier"))
         self._reset_worktree()
-        understated = {"predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
+        understated = {"predecessor_charged": 0, "predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
         envelope = {}
         original = ExecutionLedger.create_attempt
 
@@ -577,7 +581,7 @@ class SuccessorLineageTamperTests(CharteredFixture):
         snapshot = ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True).snapshot(attempt_id)
         self.assertEqual((snapshot["status"], snapshot["sealed_receipt_sha256"]), ("started", None))
         self.assertEqual(ExecutionLedger(self.run / "execution" / "ledger.sqlite", read_only=True)
-                         .lineage_usage(attempt_id), {"predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
+                         .lineage_usage(attempt_id), {"predecessor_charged": 1000, "predecessor_paid_calls": 1, "predecessor_verifier_sends": 1})
         self.assertEqual(first["status"], "failed")
 
     def test_prepare_refuses_a_claim_that_changed_before_the_attempt_was_created(self):

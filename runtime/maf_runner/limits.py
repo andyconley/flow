@@ -13,3 +13,7 @@ MAX_ACTIONS = 6
 MAX_VERIFIER_CALLS = 2
 MAX_CONCURRENT = 3
 MAX_REPLANS = 2
+# The lineage token budget (ADR 0020): expansion headroom counts tranches, and
+# the sealed budget plus every tranche stays within the absolute ceiling.
+MAX_TOKEN_TRANCHES = 10
+MAX_LINEAGE_TOKENS = 2_000_000

@@ -17,7 +17,7 @@ import manager_requests
 import process_identity
 from delivery_projection import lead_claim_active
 from delivery_termination import control_view, next_command
-from execution_contracts import ContractError, digest
+from execution_contracts import ContractError, charge, digest, handback_supported
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
 
@@ -110,8 +110,17 @@ def _row(kind: str, item: dict[str, Any], snapshot: dict[str, Any], attempt_dir:
         "timing": {"send_started_at": started["at"] if started else None,
                    "observed_at": observed["at"] if observed else None,
                    "duration_seconds": _seconds(started["at"] if started else None, observed["at"] if observed else None)},
-        "usage": {"raw": result.get("usage")},
+        "usage": _usage(item["status"], provider, result, envelope),
     }
+
+
+def _usage(status: str, provider: str | None, result: dict[str, Any], envelope: dict[str, Any]) -> dict[str, Any]:
+    """Raw usage, plus the ADR 0020 charge when the envelope seals a token budget."""
+    if not handback_supported(envelope):
+        return {"raw": result.get("usage"), "charged": None, "cache_read": None, "recognised": None}
+    item = charge(status, provider, result, envelope["limits"]["unobserved_send_tokens"])
+    return {"raw": result.get("usage"), "charged": item["charged"], "cache_read": item["cache_read"],
+            "recognised": item["recognised"]}
 
 
 def _expansion_entries(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
@@ -172,6 +181,7 @@ def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[s
     if entry["execution_protocol_version"] != 8:
         return {"attempt_id": attempt_id, "execution_protocol_version": entry["execution_protocol_version"],
                 "status": entry["status"], "supported": False, "detail": "unsupported_protocol"}
+    # A pre-release v8 attempt is traced, but it seals no token budget (ADR 0020).
     attempt_dir = run_dir / "execution" / attempt_id
     found = process_identity.records(attempt_dir)
     groups: dict[str, list[int]] = {}
@@ -194,10 +204,15 @@ def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[s
                           lead_status=(delivery or {}).get("owner_status") if isinstance(delivery, dict) else None),
         "control_records": [{"owner_generation": item["owner_generation"], "pid": item.get("pid"),
                              "closed": item["closed"], "groups": len(item["groups"])} for item in found],
+        "contract": "handback" if handback_supported(snapshot["envelope"]) else "unsupported_contract",
         "entries": entries,
         "totals": {"paid_calls": sum(item["status"] in sent for item in paid_rows),
                    "verifier_calls": sum(item.get("verifier") is True and item["status"] in sent for item in rows),
-                   "unobserved_sends": sum(item["status"] in {"started", "unknown"} for item in paid_rows)},
+                   "unobserved_sends": sum(item["status"] in {"started", "unknown"} for item in paid_rows),
+                   "charged_tokens": (sum(item["usage"]["charged"] for item in rows)
+                                      if handback_supported(snapshot["envelope"]) else None),
+                   "cache_read_tokens": (sum(item["usage"]["cache_read"] for item in rows)
+                                         if handback_supported(snapshot["envelope"]) else None)},
     }
 
 
@@ -224,6 +239,8 @@ def trace(work_id: str, attempt_id: str | None = None, *, root: Path | None = No
     attempts = [_attempt(work_id, run_dir, ledger, entry, delivery=delivery, probe=probe) for entry in view["attempts"]]
     lineage_totals = {key: sum(item.get("totals", {}).get(key, 0) for item in attempts)
                       for key in ("paid_calls", "verifier_calls", "unobserved_sends")}
+    charged = [item.get("totals", {}).get("charged_tokens") for item in attempts if item.get("supported")]
+    lineage_totals["charged_tokens"] = sum(charged) if charged and None not in charged else None
     return {"schema_version": TRACE_SCHEMA_VERSION, "work_id": work_id, "attempt_id": view["attempt_id"],
             "attempts": attempts, "lineage_totals": lineage_totals}
 

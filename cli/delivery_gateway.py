@@ -36,8 +36,8 @@ from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_TERMINAL, CONTINUATIO
                                build_recovery_block, denied_reply,
                                rebuild_chartered_evidence_plan, recovery_eligibility, restore_position,
                                runtime_outcome)
-from delivery_contracts import (DeliveryContractError, digest as delivery_digest, validate_delivery_charter,
-                                validate_shaper_contract)
+from delivery_contracts import (DELIVERY_CHARTER_VERSION, DeliveryContractError, digest as delivery_digest,
+                                project_envelope_limits, validate_delivery_charter, validate_shaper_contract)
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot, resolve_attempt
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
@@ -389,6 +389,9 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         # Protocol v8 enforces the verifier allowance the Charter sealed; a
         # legacy Charter never sealed one, so Flow will not invent a default.
         raise ContractError("protocol v8 requires a Delivery Charter that seals max_verifier_calls")
+    if canonical_charter.get("charter_version") != DELIVERY_CHARTER_VERSION:
+        # ADR 0020: the lineage token budget is sealed, never defaulted.
+        raise ContractError("protocol v8 requires a Delivery Charter that seals a token budget")
     if len(specialists) > canonical_limits.get("delegations", 0):
         raise ContractError("runtime roster expands the sealed Delivery Charter")
     if (canonical_limits.get("paths") != ["charter-scoped"]
@@ -454,6 +457,8 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     job_contract = {"task": task, "baseline": job_baseline,
                     "read_paths": charter["read_paths"], "write_paths": charter["write_paths"],
                     "test": charter["test"], "producer_instance_ids": producers, "verifier_instance_ids": verifiers}
+    # One projection, shared with verify-receipt (ADR 0020).
+    limits, headroom = project_envelope_limits(canonical_limits)
     envelope = {"schema_version": 1, "execution_protocol_version": 8, "work_id": work_id, "attempt_id": attempt_id,
                 "charter_digest": digest({"requirements": sources["requirements"]["sha256"], "acceptance": sources["acceptance"]["sha256"]}),
                 "charter_sources": sources, "run_protocol_revision": 2,
@@ -469,18 +474,10 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "handoff_digest": delivery["handoff_digest"],
                 "delivery_lead_claim_digest": delivery["lead_claim_digest"],
                 "delivery_lead_claim": {"lead_id": authority["claim"]["owner"], "generation": delivery["owner_generation"]},
-                "limits": {"max_delegations": canonical_limits["delegations"],
-                           "max_concurrent": canonical_limits["concurrency"],
-                           "max_replans": canonical_limits["replans"],
-                           "max_runtime_seconds": canonical_limits["runtime_seconds"],
-                           "max_manager_calls": canonical_limits["max_manager_calls"],
-                           "max_manager_rounds": canonical_limits["max_manager_rounds"],
-                           "max_paid_worker_calls": canonical_limits["max_paid_worker_calls"],
-                           "max_verifier_calls": canonical_limits["max_verifier_calls"]}}
+                "limits": limits}
     if predecessors:
         # Added only when non-empty, so a first attempt stays byte-identical.
         envelope["predecessors"] = predecessors
-    headroom = {name: value for name, value in canonical_limits.get("expansion_headroom", {}).items() if value}
     if headroom:
         # Projected from the sealed Charter only; omitted when none is sealed.
         envelope["expansion_headroom"] = headroom

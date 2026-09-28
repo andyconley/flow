@@ -7,7 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from runner_limits import MAX_ACTIONS, MAX_CONCURRENT, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS, MAX_VERIFIER_CALLS
+from runner_limits import (MAX_ACTIONS, MAX_CONCURRENT, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS,
+                           MAX_TOKEN_TRANCHES, MAX_VERIFIER_CALLS)
 from runner_progress import classify as classify_progress
 
 try:
@@ -250,8 +251,11 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
                         and type(limits["max_runtime_seconds"]) is int and 1 <= limits["max_runtime_seconds"] <= 600
                         and type(paid_calls) is int and 0 <= paid_calls <= limits["max_delegations"])
     elif envelope["execution_protocol_version"] == STRUCTURED_VERIFIER_PROTOCOL_VERSION:
+        # Pre-release v8 envelopes stay readable (ADR 0020); only a handback
+        # envelope, which seals the lineage token budget, may be advanced.
         valid_limits = (isinstance(limits, dict)
-                        and set(limits) == set(expected) | {"max_paid_worker_calls", "max_runtime_seconds", "max_verifier_calls"}
+                        and set(limits) in (LEGACY_V8_LIMIT_KEYS, HANDBACK_V8_LIMIT_KEYS)
+                        and (set(limits) == LEGACY_V8_LIMIT_KEYS or _token_budget_valid(limits))
                         and all(type(limits[key]) is int and 0 <= limits[key] <= maximum for key, maximum in expected.items())
                         and limits["max_delegations"] >= 1 and limits["max_concurrent"] >= 1
                         and limits["max_manager_calls"] >= 1 and limits["max_manager_rounds"] >= 1
@@ -264,6 +268,30 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
                         and type(paid_calls) is int and 1 <= paid_calls <= expected["max_delegations"])
     if not valid_limits:
         raise ContractError("Magentic limits differ from approved envelope")
+
+
+LEGACY_V8_LIMIT_KEYS = frozenset({"max_delegations", "max_concurrent", "max_replans", "max_manager_calls",
+                                  "max_manager_rounds", "max_paid_worker_calls", "max_runtime_seconds",
+                                  "max_verifier_calls"})
+TOKEN_LIMIT_KEYS = ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens")
+HANDBACK_V8_LIMIT_KEYS = LEGACY_V8_LIMIT_KEYS | frozenset(TOKEN_LIMIT_KEYS)
+
+
+def _token_budget_valid(limits: dict[str, Any]) -> bool:
+    return (all(type(limits.get(key)) is int and limits[key] >= 1 for key in TOKEN_LIMIT_KEYS)
+            and limits["token_tranche"] >= limits["unobserved_send_tokens"]
+            and limits["unobserved_send_tokens"] <= limits["max_lineage_tokens"] <= MAX_LINEAGE_TOKENS)
+
+
+def handback_supported(envelope: Any) -> bool:
+    """Whether a v8 envelope seals the lineage token budget (ADR 0020).
+
+    Read from the raw envelope, so it is safe on a pre-release envelope and
+    never depends on a receipt's own contents.
+    """
+    limits = envelope.get("limits") if isinstance(envelope, dict) else None
+    return (isinstance(envelope, dict) and envelope.get("execution_protocol_version") == STRUCTURED_VERIFIER_PROTOCOL_VERSION
+            and isinstance(limits, dict) and set(limits) == HANDBACK_V8_LIMIT_KEYS)
 
 
 def _safe_relative_paths(paths: Any) -> bool:
@@ -348,19 +376,174 @@ RECOVERY_GRANT_REASONS = frozenset({"recovery_unconsumed_grant", "recovery_regra
 RECOVERY_TRIGGER_REASONS = RECOVERY_GRANT_REASONS | {"recovery_after_dispatch"}
 
 
+# Expandable limits: the envelope key each extends, and its runner ceiling.
+# ``tokens`` has no envelope key: it counts tranches from a base of zero, and
+# only the token predicate turns tranches into tokens (ADR 0020).
 EXPANSION_LIMIT_KEYS = {
     "delegations": ("max_delegations", MAX_ACTIONS),
     "paid_worker_calls": ("max_paid_worker_calls", MAX_ACTIONS),
     "verifier_calls": ("max_verifier_calls", MAX_VERIFIER_CALLS),
     "manager_calls": ("max_manager_calls", MAX_MANAGER_CALLS),
     "manager_rounds": ("max_manager_rounds", MAX_MANAGER_ROUNDS),
+    "tokens": (None, MAX_TOKEN_TRANCHES),
 }
+# Limits whose grants and spent headroom count across the whole lineage.
+LINEAGE_SCOPED_LIMITS = frozenset({"paid_worker_calls", "verifier_calls", "tokens"})
+
+
+def expansion_base(envelope: dict[str, Any]) -> dict[str, int]:
+    """The sealed value each expandable limit starts from; token tranches start at zero."""
+    limits = envelope["limits"]
+    return {name: (limits[key] if key is not None else 0) for name, (key, _) in EXPANSION_LIMIT_KEYS.items()}
+
+
+def expansion_fits(envelope: dict[str, Any], name: str, units: int) -> bool:
+    """Whether ``units`` of one expandable limit stay within its ceilings.
+
+    Token tranches also keep the absolute budget within ``MAX_LINEAGE_TOKENS``,
+    so no grant, automatic or engineer-decided, can push past it.
+    """
+    if units > EXPANSION_LIMIT_KEYS[name][1]:
+        return False
+    if name == "tokens":
+        limits = envelope["limits"]
+        if not handback_supported(envelope):
+            return units == 0
+        return limits["max_lineage_tokens"] + units * limits["token_tranche"] <= MAX_LINEAGE_TOKENS
+    return True
 
 
 def expansion_headroom(envelope: dict[str, Any]) -> dict[str, int]:
     """Return the sealed headroom an envelope projects; absent means none."""
     projected = envelope.get("expansion_headroom", {})
     return {name: projected.get(name, 0) for name in EXPANSION_LIMIT_KEYS}
+
+
+# Token charging (ADR 0020). ``charged_v1`` = uncached input + cache writes +
+# output; cache reads are reported, never charged. It is a stable budget unit,
+# not a cost proxy.
+CHARGED_UNIT = "charged_v1"
+PAID_PROVIDERS = frozenset({"codex", "claude"})
+SENT_STATUSES = frozenset({"started", "completed", "failed", "unknown"})
+# Usage counters Flow reads; any other key a provider adds is kept and ignored.
+KNOWN_USAGE_KEYS = frozenset({"input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
+                              "cached_input_tokens", "cache_write_input_tokens", "reasoning_output_tokens",
+                              "total_tokens", "prompt_eval_count", "eval_count"})
+
+
+def _counter(value: Any) -> bool:
+    return type(value) is int and value >= 0
+
+
+def usage_values_valid(usage: Any) -> bool:
+    """A usage block is absent, or a mapping whose known counters are non-negative integers.
+
+    Unknown keys are tolerated: a provider CLI that adds a field must never turn
+    a paid call into an unresolvable unknown (ADR 0020).
+    """
+    return usage is None or (isinstance(usage, dict) and all(_counter(usage[key]) for key in KNOWN_USAGE_KEYS & set(usage)))
+
+
+def normalized_charge(provider: str, usage: Any) -> tuple[int, int] | None:
+    """``(charged, cache_read)`` for a recognised paid usage block, else None."""
+    if not isinstance(usage, dict) or not _counter(usage.get("input_tokens")) or not _counter(usage.get("output_tokens")):
+        return None
+    if provider == "claude":
+        write, read = usage.get("cache_creation_input_tokens", 0), usage.get("cache_read_input_tokens", 0)
+        if not _counter(write) or not _counter(read):
+            return None
+        return usage["input_tokens"] + write + usage["output_tokens"], read
+    if provider == "codex":
+        # Codex cached input is a subset of input; reasoning is inside output.
+        cached = usage.get("cached_input_tokens", 0)
+        if not _counter(cached) or cached > usage["input_tokens"]:
+            return None
+        return usage["input_tokens"] - cached + usage["output_tokens"], cached
+    return None
+
+
+def charge(status: str, provider: str | None, result: Any, unobserved_send_tokens: int) -> dict[str, Any]:
+    """The charge of one row, by its status only, from data a receipt carries (ADR 0020).
+
+    A completed or failed paid row with recognised usage is charged what it
+    reported. Any other sent paid row (started, unknown, or without usable
+    usage) is charged the sealed ``unobserved_send_tokens``. Unsent rows and
+    unpaid providers cost nothing.
+    """
+    if provider not in PAID_PROVIDERS or status not in SENT_STATUSES:
+        return {"charged": 0, "cache_read": 0, "recognised": True, "unobserved": False}
+    if status in {"completed", "failed"}:
+        normalized = normalized_charge(provider, result.get("usage") if isinstance(result, dict) else None)
+        if normalized is not None:
+            return {"charged": normalized[0], "cache_read": normalized[1], "recognised": True, "unobserved": False}
+        return {"charged": unobserved_send_tokens, "cache_read": 0, "recognised": False, "unobserved": True}
+    return {"charged": unobserved_send_tokens, "cache_read": 0, "recognised": True, "unobserved": True}
+
+
+def verifier_tokens(result: Any) -> int:
+    """Local verifier tokens, reported only: never charged."""
+    usage = result.get("usage") if isinstance(result, dict) else None
+    if not isinstance(usage, dict):
+        return 0
+    return sum(usage[key] for key in ("prompt_eval_count", "eval_count") if _counter(usage.get(key)))
+
+
+def attempt_token_charges(envelope: dict[str, Any], actions: list[dict[str, Any]],
+                          manager_calls: list[dict[str, Any]]) -> dict[str, int]:
+    """The charges of one attempt's own rows; manager calls count only when the manager is paid."""
+    unobserved = envelope["limits"]["unobserved_send_tokens"]
+    manager_provider = (envelope.get("manager") or {}).get("provider")
+    totals = {"observed_charged": 0, "unobserved_sends": 0, "unobserved_charged": 0, "unrecognised_usage": 0,
+              "cache_read_total": 0, "verifier_tokens": 0}
+    rows = [(item.get("status"), (item.get("request") or {}).get("provider"), item.get("result")) for item in actions]
+    rows += [(item.get("status"), manager_provider, item.get("result")) for item in manager_calls]
+    for status, provider, result in rows:
+        if provider not in PAID_PROVIDERS:
+            if status in SENT_STATUSES:
+                totals["verifier_tokens"] += verifier_tokens(result)
+            continue
+        item = charge(status, provider, result, unobserved)
+        totals["cache_read_total"] += item["cache_read"]
+        if item["unobserved"]:
+            totals["unobserved_sends"] += 1
+            totals["unobserved_charged"] += item["charged"]
+            totals["unrecognised_usage"] += not item["recognised"]
+        else:
+            totals["observed_charged"] += item["charged"]
+    totals["charged"] = totals["observed_charged"] + totals["unobserved_charged"]
+    return totals
+
+
+def token_maximum(envelope: dict[str, Any], tranches: int) -> int:
+    """The effective lineage token cap: the sealed budget plus every granted tranche."""
+    limits = envelope["limits"]
+    return limits["max_lineage_tokens"] + tranches * limits["token_tranche"]
+
+
+def token_gate(charged: int, envelope: dict[str, Any], tranches: int) -> tuple[bool, int]:
+    """``(failing, units)``: whether the next paid grant is over the cap, and the tranches it needs.
+
+    One tranche clears any shortfall below ``token_tranche``; a larger one
+    needs more than one unit and is a hard refusal (ADR 0020).
+    """
+    maximum = token_maximum(envelope, tranches)
+    if charged < maximum:
+        return False, 0
+    return True, (charged - maximum) // envelope["limits"]["token_tranche"] + 1
+
+
+def token_usage_block(envelope: dict[str, Any], actions: list[dict[str, Any]], manager_calls: list[dict[str, Any]],
+                      *, predecessor_charged: int, tranches_granted: int) -> dict[str, Any]:
+    """The receipt ``token_usage`` block; recomputable from a receipt's own rows (ADR 0020)."""
+    own = attempt_token_charges(envelope, actions, manager_calls)
+    maximum = token_maximum(envelope, tranches_granted)
+    total = own["charged"] + predecessor_charged
+    return {"unit": CHARGED_UNIT, "maximum": maximum, "tranches_granted": tranches_granted,
+            "observed_charged": own["observed_charged"], "unobserved_sends": own["unobserved_sends"],
+            "unobserved_charged": own["unobserved_charged"], "unrecognised_usage": own["unrecognised_usage"],
+            "predecessor_charged": predecessor_charged, "charged_total": total,
+            "overshoot": max(0, total - maximum), "cache_read_total": own["cache_read_total"],
+            "verifier_tokens": own["verifier_tokens"]}
 
 
 def _validate_expansion_headroom(envelope: dict[str, Any]) -> None:
@@ -372,8 +555,11 @@ def _validate_expansion_headroom(envelope: dict[str, Any]) -> None:
             or any(type(value) is not int or value < 0 for value in headroom.values()) or not any(headroom.values())):
         raise ContractError("expansion headroom is invalid")
     full = expansion_headroom(envelope)
-    for name, (limit, ceiling) in EXPANSION_LIMIT_KEYS.items():
-        if limits[limit] + full[name] > ceiling:
+    base = expansion_base(envelope)
+    if full["tokens"] and not handback_supported(envelope):
+        raise ContractError("token headroom requires a sealed token budget")
+    for name in EXPANSION_LIMIT_KEYS:
+        if not expansion_fits(envelope, name, base[name] + full[name]):
             raise ContractError("expansion headroom exceeds the runner ceiling")
     if limits["max_paid_worker_calls"] + full["paid_worker_calls"] > limits["max_delegations"] + full["delegations"]:
         raise ContractError("paid-worker headroom exceeds delegation headroom")
@@ -411,8 +597,7 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
     generation of this attempt's recovery chain. Rows allowed as
     ``expansion_granted`` must be backed by a consumed grant.
     """
-    limits = envelope["limits"]
-    effective = {name: limits[key] for name, (key, _) in EXPANSION_LIMIT_KEYS.items()}
+    effective = expansion_base(envelope)
     rows = {item["action_id"]: item for item in receipt["actions"]}
     rows.update({item["call_id"]: item for item in receipt["manager_calls"]})
     block = receipt.get("expansion")
@@ -427,7 +612,7 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
                 or set(block) != {"lineage_id", "headroom", "predecessor_headroom_spent", "predecessor_lineage_grants", "requests"}
                 or block["lineage_id"] != lineage_id or block["headroom"] != expansion_headroom(envelope)
                 or not counters(block["predecessor_headroom_spent"], names)
-                or not counters(block["predecessor_lineage_grants"], {"paid_worker_calls", "verifier_calls"})
+                or not counters(block["predecessor_lineage_grants"], set(LINEAGE_SCOPED_LIMITS))
                 or not isinstance(block["requests"], list)
                 or (not predecessors and (any(block["predecessor_headroom_spent"].values())
                                           or any(block["predecessor_lineage_grants"].values())))):
@@ -492,9 +677,13 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
     for row_id, item in rows.items():
         if item.get("reason") == "expansion_granted" and row_id not in backed:
             raise ContractError("receipt expansion-granted proposal lacks a consumed grant")
-    if any(effective[name] > ceiling for name, (_, ceiling) in EXPANSION_LIMIT_KEYS.items()):
+    if not all(expansion_fits(envelope, name, effective[name]) for name in EXPANSION_LIMIT_KEYS):
         raise ContractError("receipt effective limits exceed the runner ceiling")
     return effective
+
+
+LEGACY_LINEAGE_USAGE_KEYS = frozenset({"predecessor_paid_calls", "predecessor_verifier_sends"})
+LINEAGE_USAGE_KEYS = LEGACY_LINEAGE_USAGE_KEYS | {"predecessor_charged"}
 
 
 def _validate_lineage_usage(envelope: dict[str, Any], receipt: dict[str, Any],
@@ -505,11 +694,12 @@ def _validate_lineage_usage(envelope: dict[str, Any], receipt: dict[str, Any],
     for agreeing with its own verifier usage (the ledger stays authoritative).
     """
     usage = receipt.get("lineage_usage")
+    keys = LINEAGE_USAGE_KEYS if handback_supported(envelope) else LEGACY_LINEAGE_USAGE_KEYS
     if not envelope.get("predecessors"):
         if "lineage_usage" in receipt:
             raise ContractError("receipt lineage usage requires predecessors")
-        return {"predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
-    if (not isinstance(usage, dict) or set(usage) != {"predecessor_paid_calls", "predecessor_verifier_sends"}
+        return {key: 0 for key in sorted(keys)}
+    if (not isinstance(usage, dict) or set(usage) != keys
             or any(type(value) is not int or value < 0 for value in usage.values())):
         raise ContractError("receipt lineage usage is invalid")
     # The lineage shares the charter caps, so the attempt's own sends plus its
@@ -744,7 +934,7 @@ MANAGER_IDENTITY_FIELDS = {"claude": ("session_id", "input_sha256", "num_turns")
 
 def handback_evidence_required(envelope: dict[str, Any]) -> bool:
     """Whether an attempt must carry the ADR 0020 correlation evidence (manager identity)."""
-    return execution_protocol_version(envelope) == 8
+    return handback_supported(envelope)
 
 
 def validate_manager_identity(provider: str, result: dict[str, Any]) -> None:
@@ -865,10 +1055,8 @@ def validate_result(envelope: dict[str, Any], result: dict[str, Any], *, action:
         raise ContractError("result output digest mismatch")
     if assignment["provider"] == "claude" and (not isinstance(result.get("session_id"), str) or not result["session_id"]):
         raise ContractError("Claude result session identity is absent")
-    usage = result.get("usage")
-    if usage is not None:
-        if not isinstance(usage, dict) or any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in usage.values()):
-            raise ContractError("result usage is invalid")
+    if not usage_values_valid(result.get("usage")):
+        raise ContractError("result usage is invalid")
 
 
 def validate_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:

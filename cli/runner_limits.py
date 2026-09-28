@@ -24,8 +24,11 @@ MAX_ACTIONS: int = _module.MAX_ACTIONS
 MAX_VERIFIER_CALLS: int = _module.MAX_VERIFIER_CALLS
 MAX_CONCURRENT: int = _module.MAX_CONCURRENT
 MAX_REPLANS: int = _module.MAX_REPLANS
+MAX_TOKEN_TRANCHES: int = _module.MAX_TOKEN_TRANCHES
+MAX_LINEAGE_TOKENS: int = _module.MAX_LINEAGE_TOKENS
 
-for _name in ("MAX_MANAGER_CALLS", "MAX_MANAGER_ROUNDS", "MAX_ACTIONS", "MAX_VERIFIER_CALLS", "MAX_CONCURRENT", "MAX_REPLANS"):
+for _name in ("MAX_MANAGER_CALLS", "MAX_MANAGER_ROUNDS", "MAX_ACTIONS", "MAX_VERIFIER_CALLS", "MAX_CONCURRENT", "MAX_REPLANS",
+              "MAX_TOKEN_TRANCHES", "MAX_LINEAGE_TOKENS"):
     _value = globals()[_name]
     if type(_value) is not int or _value < 1:
         raise ImportError(f"runner limit {_name} must be a positive integer")
