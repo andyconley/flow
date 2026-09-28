@@ -872,6 +872,7 @@ def approve_orchestration_amendment(
     write_atomic(record_path, json.dumps(record, indent=2, sort_keys=True) + "\n")
     write_atomic(canonical, replacement_bytes.decode("utf-8"))
     payload = dict(current)
+    prior_state = payload.get("state")
     payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
     payload["approved_artifact_digests"]["orchestration_manifest"] = replacement_digest
     if successor_delivery is not None:
@@ -879,13 +880,17 @@ def approve_orchestration_amendment(
         payload["artifacts"]["shaper_intent"] = amended_intent_relative
         payload["approved_artifact_digests"]["shaper_intent"] = amended_intent_digest
         payload["delivery"] = successor_delivery
+        if prior_state in {STATE_HANDBACK_READY, STATE_REVIEWING, STATE_REVIEW_ACCEPTED}:
+            payload["state"] = STATE_IMPLEMENTING
+            payload["phase"] = STATE_IMPLEMENTING
+            payload["lane"] = STATE_LANES[STATE_IMPLEMENTING]
     payload["amendments"] = amendments + [record]
     payload["updated_at"] = now
     payload["last_event"] = "approve-orchestration-amendment"
     _write_run(work_id, payload, project_root)
     _append_event(work_id, {
         "at": now, "event": "approve-orchestration-amendment",
-        "from": payload.get("state"), "to": payload.get("state"),
+        "from": prior_state, "to": payload.get("state"),
         "artifacts": {"amendment": record_path.relative_to(project_root).as_posix()},
         "dispositions": {"approval": "explicit-user-approval"},
         "approved_artifact_digests": {
