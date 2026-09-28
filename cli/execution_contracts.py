@@ -236,8 +236,9 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
         if assignment["definition_digest"] != digest({"role": assignment["role"], "instructions": assignment["instructions"]}):
             raise ContractError("specialist definition digest mismatch")
         if is_chartered_protocol(envelope["execution_protocol_version"]):
-            expected_capabilities = ["read", "edit"] if assignment["provider"] in {"claude", "codex"} else ["read"]
-            if assignment["capabilities"] != expected_capabilities:
+            valid_capabilities = (["read"], ["read", "edit"]) if assignment["provider"] == "codex" else (
+                (["read", "edit"],) if assignment["provider"] == "claude" else (["read"],))
+            if assignment["capabilities"] not in valid_capabilities:
                 raise ContractError("specialist capabilities differ from provider")
     limits = envelope["limits"]
     expected = {"max_delegations": MAX_ACTIONS, "max_concurrent": MAX_CONCURRENT, "max_replans": MAX_REPLANS,
@@ -331,13 +332,16 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
             or type(test["timeout_seconds"]) is not int or not 1 <= test["timeout_seconds"] <= 3600):
         raise ContractError("chartered job test command is invalid")
     for kind, providers in (("producer_instance_ids", {"claude", "codex"}),
-                            ("verifier_instance_ids", {"ollama", "local-stub"})):
+                            ("verifier_instance_ids", {"ollama", "local-stub", "codex"})):
         ids = job[kind]
         if not isinstance(ids, list) or not ids or len(ids) != len(set(ids)):
             raise ContractError(f"chartered job {kind} is invalid")
         bindings = {item["instance_id"]: item for item in envelope["roster"]}
         if any(instance not in bindings or bindings[instance]["provider"] not in providers for instance in ids):
             raise ContractError(f"chartered job {kind} differs from roster")
+        expected = ["read", "edit"] if kind == "producer_instance_ids" else ["read"]
+        if any(bindings[instance]["capabilities"] != expected for instance in ids):
+            raise ContractError(f"chartered job {kind} capabilities differ from roster")
     if set(job["producer_instance_ids"]) & set(job["verifier_instance_ids"]):
         raise ContractError("chartered job producer and verifier overlap")
 
