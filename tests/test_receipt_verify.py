@@ -463,6 +463,18 @@ class StockRunnerVerifyTests(maf_expansion.MafExpansionFixture):
 class ReviewRefinementTests(VerifyFixture):
     """Quality review QR2-QR4: damaged receipts are reported, requiredness and V15 read the ledger."""
 
+    def test_write_scope_includes_descendants_but_not_prefix_siblings(self):
+        self.assertTrue(receipt_verify._within_declared_paths("src/package/module.py", {"src"}))
+        self.assertTrue(receipt_verify._within_declared_paths("README.md", {"README.md"}))
+        self.assertFalse(receipt_verify._within_declared_paths("src-other/module.py", {"src"}))
+
+    def test_token_and_recursive_receipt_lineage_are_scoped_to_delivery_authority(self):
+        current = {"delivery_charter_digest": "a" * 64}
+        self.assertTrue(receipt_verify._same_delivery_authority(current, dict(current)))
+        self.assertFalse(receipt_verify._same_delivery_authority(
+            current, {"delivery_charter_digest": "b" * 64}
+        ))
+
     def test_a_truncated_receipt_is_reported_not_crashed(self):
         path = self.dir(self.b) / "receipt.json"
         path.write_bytes(path.read_bytes()[:40])
