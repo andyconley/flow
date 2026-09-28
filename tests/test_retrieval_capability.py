@@ -40,7 +40,10 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.home.mkdir()
         self.receipt = self.home / ".flow" / "retrieval-capabilities.json"
         self.wheelhouse = managed_wheelhouse()
-        self.assertTrue(self.wheelhouse.is_dir(), "managed runtime wheelhouse is required")
+
+    def require_wheelhouse(self):
+        if not self.wheelhouse.is_dir():
+            self.skipTest("managed runtime wheelhouse is not available on this test host")
 
     def test_injected_fts5_failure_keeps_plain_sqlite_usable_and_names_runtime(self):
         with sqlite3.connect(":memory:") as database:
@@ -99,6 +102,7 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.assertEqual(payload["warnings"], 0)
 
     def test_isolated_develop_install_probes_the_selected_interpreter(self):
+        self.require_wheelhouse()
         env = {**__import__("os").environ, "HOME": str(self.home), "FLOW_PYTHON": sys.executable,
                "FLOW_MAF_WHEELHOUSE": str(self.wheelhouse)}
         result = subprocess.run([str(ROOT / "install-flow.sh"), "--develop"], cwd=ROOT, env=env, text=True, capture_output=True, timeout=60)
@@ -109,6 +113,7 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.assertIn("Python:", result.stdout)
 
     def test_isolated_install_succeeds_and_persists_unavailable_receipt_when_fts5_is_injected_missing(self):
+        self.require_wheelhouse()
         injection = self.home / "injection"
         injection.mkdir()
         (injection / "sitecustomize.py").write_text(
