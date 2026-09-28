@@ -1022,6 +1022,43 @@ class CharteredPreparationTests(CharteredFixture):
         self.assertEqual((result["status"], result["reason"]), ("interrupted", "transport"))
         self.assertFalse(result["resume_available"])
 
+    def test_v8_repeated_exhausted_editor_after_valid_fail_seals_for_successor(self):
+        calls = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence, assignment_id in enumerate(("editor", "verifier", "editor", "editor"), 1):
+                proposal = self._proposal(envelope, assignment_id, sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                reply = on_action(proposal)
+                if sequence == 3:
+                    self.assertEqual((reply["status"], reply["reason"]),
+                                     ("denied", "producer_already_completed"))
+            return {"attempt_id": envelope["attempt_id"]}
+
+        def worker(action, *, envelope, workspace):
+            calls.append(action["assignment_id"])
+            if action["assignment_id"] == "editor":
+                (workspace / "target.py").write_text("new\n")
+                return self._result("codex", "editor-model", "Edited target")
+            return self._result(
+                "ollama", "local-model",
+                '{"schema_version":1,"decision":"fail","summary":"repair",'
+                '"findings":[{"severity":"blocking","summary":"bad","evidence":"test"}]}'
+            )
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(calls, ["editor", "verifier"])
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"],
+                         "structured verifier ended valid_fail; producer repair requires successor attempt")
+
     def test_v7_editor_head_drift_halts_after_one_send(self):
         calls = []
 
