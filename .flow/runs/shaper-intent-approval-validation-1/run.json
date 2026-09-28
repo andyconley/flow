@@ -52,15 +52,15 @@
     "approve-definition": "2026-09-28T03:01:46Z",
     "approve-plan": "2026-09-28T03:01:46Z",
     "start-definition": "2026-09-28T02:59:55Z",
+    "start-implementation": "2026-09-28T03:01:59Z",
     "start-plan": "2026-09-28T03:01:46Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "next_action": "Approved one-defect plan with focused read/write scopes.",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-28T03:01:46Z",
+  "state": "implementing",
+  "updated_at": "2026-09-28T03:01:59Z",
   "work_id": "shaper-intent-approval-validation-1"
 }
