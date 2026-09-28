@@ -450,8 +450,14 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     else:
         raise ContractError("job baseline kind is unsupported")
     job_baseline = {key: baseline[key] for key in ("kind", "diff_sha256")}
+    baseline_files = {}
+    for line in lines:
+        relative = line[3:]
+        path = worktree / relative
+        if path.is_file() and _path_within_scopes(relative, charter["write_paths"]):
+            baseline_files[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
     baseline = {"regression_diff_sha256": baseline["diff_sha256"], "source_commit": source_commit,
-                "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in charter["write_paths"] if (worktree / path).is_file()}}
+                "files": baseline_files}
     # This is the pre-attempt fence. All authority and worktree proof above is
     # read-only. No execution directory, ledger row, receipt, process, or
     # provider callback exists until the optional runtime is healthy.
@@ -702,10 +708,15 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     permitted_statuses = {" M", "M ", "MM", "A ", "AM", "??"}
     if any(line[:2] not in permitted_statuses or not in_scope(path) for line, path in zip(status, changed)):
         raise ContractError("editor changed files outside the approved job scope")
-    if not any((worktree / path).is_file() and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path) for path in changed):
+    edited = [path for path in changed if ((worktree / path).is_file()
+              and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path))]
+    if not edited:
         raise ContractError("editor made no edit: the allowed paths still match the pinned baseline")
-    diff = _git(worktree, "diff", "HEAD", "--", *job["write_paths"]).encode()
-    for path in changed:
+    # The index is the declared-regression fence. Compare the producer's
+    # worktree edit to that fence, not to HEAD, or verifier evidence contains
+    # the pre-existing regression again and can exceed the bounded prompt.
+    diff = _git(worktree, "diff", "--", *job["write_paths"]).encode()
+    for path in edited:
         if path not in baseline["files"]:
             diff += ("\nNEW FILE " + path + "\n").encode() + (worktree / path).read_bytes()
     if not diff or len(diff) > 32768:
@@ -716,9 +727,9 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
             raise ContractError("recorded chartered diff changed")
     elif record:
         _write_snapshot(diff_path, diff)
-    return {"changed_files": changed, "diff_sha256": hashlib.sha256(diff).hexdigest(),
+    return {"changed_files": edited, "diff_sha256": hashlib.sha256(diff).hexdigest(),
             "diff_path": str(diff_path),
-            "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in changed}}
+            "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in edited}}
 
 
 def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
