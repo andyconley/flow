@@ -995,6 +995,33 @@ class CharteredPreparationTests(CharteredFixture):
             ledger.finish_attempt(result["attempt_id"], "unknown", "reconciliation_required",
                                   str(attempt_dir / "receipt.json"), generation=1)
 
+    def test_v8_transport_loss_after_denied_second_editor_is_not_resumable(self):
+        replies = []
+
+        def supervisor(envelope, task, on_manager, on_action, **kwargs):
+            for sequence in (1, 2):
+                proposal = self._proposal(envelope, "editor", sequence)
+                checkpoint = Path(envelope["checkpoint_dir"]) / f"{proposal['checkpoint_id']}.json"
+                checkpoint.write_text(json.dumps({"checkpoint_id": proposal["checkpoint_id"],
+                                                  "workflow_name": "flow-magentic-delivery-v8",
+                                                  "pending_request_info_events": {f"flow-magentic-action-{sequence}": {}}}))
+                replies.append(on_action(proposal))
+            raise MafTransportError("simulated transport loss after denied second editor")
+
+        def worker(action, *, envelope, workspace):
+            (workspace / "target.py").write_text("new\n")
+            return self._result("codex", "editor-model", "Edited target")
+
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+             patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
+             patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
+            result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
+                                                supervisor=supervisor, worker_adapter=worker)
+        self.assertEqual(replies[0]["status"], "completed")
+        self.assertEqual(replies[1]["status"], "denied")
+        self.assertEqual((result["status"], result["reason"]), ("interrupted", "transport"))
+        self.assertFalse(result["resume_available"])
+
     def test_v7_editor_head_drift_halts_after_one_send(self):
         calls = []
 
