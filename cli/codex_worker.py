@@ -22,12 +22,33 @@ from execution_contracts import usage_values_valid
 
 MAX_PROMPT_BYTES = 32768
 MAX_OUTPUT_BYTES = 4096
+MAX_STDERR_BYTES = 8192
 CODEX_ENV_KEYS = ("HOME", "CODEX_HOME", "PATH", "TMPDIR", "LANG", "LC_ALL",
                   "LC_CTYPE", "USER", "LOGNAME")
 
 
 class CodexWorkerError(RuntimeError):
     """Codex may have acted, but Flow did not observe a valid completed turn."""
+
+
+def _failure_category(stderr: bytes) -> str:
+    """Return a fixed diagnostic label without retaining provider text."""
+    evidence = stderr[:MAX_STDERR_BYTES].decode("utf-8", errors="replace").lower()
+    if any(marker in evidence for marker in (
+        "not logged in", "not authenticated", "authentication required", "please log in",
+    )):
+        return "authentication_unavailable"
+    if any(marker in evidence for marker in (
+        "operation not permitted", "permission denied", "readonly database", "read-only database",
+    )):
+        return "filesystem_access_denied"
+    if any(marker in evidence for marker in ("unknown option", "unknown argument", "unrecognized option")):
+        return "unsupported_cli_option"
+    if any(marker in evidence for marker in ("rate limit", "rate_limit")):
+        return "rate_limited"
+    if any(marker in evidence for marker in ("model not found", "invalid model", "model unavailable")):
+        return "model_unavailable"
+    return "unclassified"
 
 
 def _parse_event_lines(lines, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
@@ -112,9 +133,9 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
     env = {key: os.environ[key] for key in CODEX_ENV_KEYS if key in os.environ}
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.DEVNULL, cwd=workspace, env=env,
+                               stderr=subprocess.PIPE, cwd=workspace, env=env,
                                start_new_session=True)
-    assert process.stdin is not None and process.stdout is not None
+    assert process.stdin is not None and process.stdout is not None and process.stderr is not None
     deadline = time.monotonic() + timeout_seconds
     try:
         if on_process_group is not None:
@@ -122,12 +143,15 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
             on_process_group(process.pid, "provider")
         with interruptible():  # a cancel breaks this wait once; the finally below kills the group
             written = 0
+            stderr_chunks: list[bytes] = []
+            stderr_size = 0
             selector = selectors.DefaultSelector()
             with tempfile.TemporaryFile() as event_file:
                 try:
                     os.set_blocking(process.stdin.fileno(), False)
                     selector.register(process.stdin, selectors.EVENT_WRITE)
                     selector.register(process.stdout, selectors.EVENT_READ)
+                    selector.register(process.stderr, selectors.EVENT_READ)
                     while selector.get_map():
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
@@ -142,19 +166,32 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                                 if written == len(prompt_bytes):
                                     selector.unregister(process.stdin)
                                     process.stdin.close()
-                            else:
+                            elif key.fileobj is process.stdout:
                                 chunk = os.read(process.stdout.fileno(), 8192)
                                 if not chunk:
                                     selector.unregister(process.stdout)
                                     continue
                                 event_file.write(chunk)
+                            else:
+                                chunk = os.read(process.stderr.fileno(), min(8192, MAX_STDERR_BYTES + 1 - stderr_size))
+                                if not chunk:
+                                    selector.unregister(process.stderr)
+                                    continue
+                                stderr_chunks.append(chunk)
+                                stderr_size += len(chunk)
+                                if stderr_size > MAX_STDERR_BYTES:
+                                    raise CodexWorkerError("Codex error stream exceeds limit")
                 finally:
                     selector.close()
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise CodexWorkerError("Codex turn timed out")
-                if process.wait(timeout=remaining) != 0:
-                    raise CodexWorkerError("Codex exited without a successful turn")
+                exit_code = process.wait(timeout=remaining)
+                if exit_code != 0:
+                    category = _failure_category(b"".join(stderr_chunks))
+                    raise CodexWorkerError(
+                        f"Codex exited without a successful turn (status {exit_code}; category {category})"
+                    )
                 event_file.seek(0)
                 return _parse_event_lines(event_file, model, max_output_bytes=max_output_bytes)
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
@@ -170,3 +207,4 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
         if not process.stdin.closed:
             process.stdin.close()
         process.stdout.close()
+        process.stderr.close()

@@ -114,6 +114,20 @@ class CodexWorkerTests(unittest.TestCase):
                 call_codex(instructions="Charter", task="Task", workspace=root,
                            model="gpt-test", timeout_seconds=1, codex_bin=str(fake))
 
+    def test_nonzero_exit_reports_fixed_category_without_provider_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "codex-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import sys\n"
+                            "sys.stderr.write('failed to open logs: readonly database; secret=do-not-record\\n')\n"
+                            "sys.exit(1)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaisesRegex(CodexWorkerError, "category filesystem_access_denied") as error:
+                call_codex(instructions="Charter", task="Task", workspace=root,
+                           model="gpt-test", timeout_seconds=5, codex_bin=str(fake))
+            self.assertNotIn("do-not-record", str(error.exception))
+
     def test_timeout_includes_prompt_write(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -156,6 +170,7 @@ class CodexWorkerTests(unittest.TestCase):
         self.assertIsNotNone(process.poll())
         self.assertTrue(process.stdin.closed)
         self.assertTrue(process.stdout.closed)
+        self.assertTrue(process.stderr.closed)
 
 
 if __name__ == "__main__":
