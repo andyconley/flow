@@ -10,9 +10,9 @@
     - a v4 charter with a sealed lineage token budget, checked before every paid grant;
     - full-row seals, request files and `grant_changed`;
     - `recover-delivery-lead --actor`.
-  - **Proof:** 1,769 tests OK with 0 skipped; all 13 mutations caught.
+  - **Proof:** 1,769 tests OK with 0 skipped; all 14 mutations caught.
   - **Next:** `/flow-review`.
-  - **Decision needed from Andy:** RS1, the charge for an unrecognised usage shape (see `HANDOFF.md`).
+  - **RS1 resolved:** the conservative charge was approved and committed as `46cefbf`.
   - **After review:** a PR, a release, then `v8-live-validation-4` on a v4 charter.
 - No other work in flight. All other runs are archived, blocked as superseded, or (for
   `agent-expertise-rag-retrieval`) paused; `20260809-105804-agent-model-routing`
