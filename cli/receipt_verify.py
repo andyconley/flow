@@ -171,6 +171,15 @@ def _entries(directory: Path, pattern: str = "*") -> list[Path]:
     return sorted(found)
 
 
+def _within_declared_paths(path: str, scopes: set[str]) -> bool:
+    """Return whether a repository-relative path is equal to or below a scope."""
+    return any(path == scope or path.startswith(scope.rstrip("/") + "/") for scope in scopes)
+
+
+def _same_delivery_authority(current: dict[str, Any], prior: dict[str, Any]) -> bool:
+    return prior.get("delivery_charter_digest") == current.get("delivery_charter_digest")
+
+
 # ------------------------------------------------------------------ helpers
 
 
@@ -314,10 +323,15 @@ def check_v6(ctx):
             return "fail", compared, f"predecessor {link['attempt_id'][:12]} receipt digest differs from its link"
         compared += 1
         prior_receipt = _json(data)
-        if handback_supported(ctx["envelope"]):
+        same_authority = _same_delivery_authority(ctx["envelope"], prior)
+        if handback_supported(ctx["envelope"]) and same_authority:
             charges = prior if handback_supported(prior) else {**prior, "limits": ctx["envelope"]["limits"]}
             charged += attempt_token_charges(charges, prior_receipt["actions"], prior_receipt["manager_calls"])["charged"]
-        if ctx["recurse"] and not handback_supported(prior):
+        if ctx["recurse"] and not same_authority:
+            ctx["informational"].append({"check": "V6", "item": "predecessor_other_authority",
+                                         "attempt_id": link["attempt_id"],
+                                         "detail": "predecessor receipt belongs to a superseded Delivery Charter"})
+        elif ctx["recurse"] and not handback_supported(prior):
             # A pre-release receipt is never judged by ADR 0020 rules (P9); its link and charge are checked above.
             ctx["informational"].append({"check": "V6", "item": "predecessor_not_recursed",
                                          "attempt_id": link["attempt_id"], "detail": "predecessor predates ADR 0020"})
@@ -362,7 +376,10 @@ def check_v7(ctx):
     if handoff.get("digest") != delivery_digest(handoff_payload):
         return "fail", 3, "handoff digest does not recompute"
     claims: dict[str, dict[str, Any]] = {}
-    for path in _entries(directory, "lead-claim*.json"):
+    delivery_root = run_dir / "delivery"
+    claim_paths = [path for authority_dir in _entries(delivery_root)
+                   for path in _entries(authority_dir, "lead-claim*.json")]
+    for path in claim_paths:
         claim = _json(_read(path, run_dir))
         if isinstance(claim, dict) and claim.get("digest") == delivery_digest({k: v for k, v in claim.items() if k != "digest"}):
             claims[claim["digest"]] = claim
@@ -499,7 +516,8 @@ def check_v11(ctx):
     inputs, evaluations = ctx["receipt"].get("verifier_inputs") or [], ctx["receipt"].get("verifier_evaluations") or []
     write_paths = set(ctx["job"]["write_paths"])
     headers = set(re.findall(r"^diff --git a/(\S+) b/", diff.decode(errors="replace"), re.M))
-    in_scope = set(edit.get("changed_files", [])) <= write_paths and headers <= write_paths
+    in_scope = all(_within_declared_paths(path, write_paths)
+                   for path in set(edit.get("changed_files", [])) | headers)
     if not inputs or not evaluations:
         if completed:
             return "fail", 1, "no verifier input or evaluation binds the edit"
@@ -683,8 +701,15 @@ def check_v17(ctx):
     if not handback_supported(ctx["envelope"]):
         raise Absent("no token budget")
     envelope = ctx["envelope"]
-    lineage = [ctx["view_entries"][item["attempt_id"]] for item in envelope.get("predecessors", [])
-               if item["attempt_id"] in ctx["view_entries"]] + [ctx["entry"]]
+    lineage = []
+    for item in envelope.get("predecessors", []):
+        entry = ctx["view_entries"].get(item["attempt_id"])
+        if entry is None:
+            continue
+        prior = json.loads(entry["envelope_json"])
+        if _same_delivery_authority(envelope, prior):
+            lineage.append(entry)
+    lineage.append(ctx["entry"])
     events: list[dict[str, Any]] = []
     rows: dict[str, tuple[str, str | None, Any]] = {}
     tranche_marks: list[int] = []
