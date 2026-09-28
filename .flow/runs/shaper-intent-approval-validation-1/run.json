@@ -1,0 +1,66 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+    "orchestration_manifest": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+    "requirements": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+    "shaper_intent": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/shaper-intent-approval-validation-1/acceptance-criteria.md",
+    "handoff": ".flow/runs/shaper-intent-approval-validation-1/implementation-handoff.md",
+    "job_charter": ".flow/runs/shaper-intent-approval-validation-1/job-charter.json",
+    "orchestration_manifest": ".flow/runs/shaper-intent-approval-validation-1/orchestration.json",
+    "plan": ".flow/runs/shaper-intent-approval-validation-1/plan.md",
+    "requirements": ".flow/runs/shaper-intent-approval-validation-1/requirements.md",
+    "shaper_intent": ".flow/runs/shaper-intent-approval-validation-1/shaper-intent.json",
+    "validation_plan": ".flow/runs/shaper-intent-approval-validation-1/validation-plan.md"
+  },
+  "created_at": "2026-09-28T02:59:55Z",
+  "delivery": {
+    "charter_digest": "3cacffe2256ba95dc42c1d51465070b57497bd66409989a6f6e07c7d044fd1b5",
+    "charter_id": "delivery-222bf6ba44b81cc77c7f",
+    "delivery_artifact_dir": "delivery/3cacffe2256ba95dc42c1d51465070b57497bd66409989a6f6e07c7d044fd1b5",
+    "handoff_digest": "262dc986bc7f8ed7de20485c98879278b1a6d7984941e3552f5eeb598ac29b8b",
+    "lead_claim_digest": "0489b2b83660ab8b9ba8013dd4406ba93b1713eb1fda35e4ef9fce844895f490",
+    "lead_claim_path": "delivery/3cacffe2256ba95dc42c1d51465070b57497bd66409989a6f6e07c7d044fd1b5/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-3cacffe2256ba95dc42c",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "f84cdf07152ab14408da6d1f0e9f674dcc80e32649734a0ca2197e118242d507",
+    "shaper_contract_id": "shaper-70d9b69725c12031f3c6",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/shaper-intent-approval-validation-1/acceptance-criteria.md",
+        "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/shaper-intent-approval-validation-1/orchestration.json",
+        "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348"
+      },
+      "requirements": {
+        "path": ".flow/runs/shaper-intent-approval-validation-1/requirements.md",
+        "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/shaper-intent-approval-validation-1/shaper-intent.json",
+        "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-28T03:01:46Z",
+    "approve-plan": "2026-09-28T03:01:46Z",
+    "start-definition": "2026-09-28T02:59:55Z",
+    "start-plan": "2026-09-28T03:01:46Z"
+  },
+  "lane": "plan",
+  "last_event": "approve-plan",
+  "next_action": "Approved one-defect plan with focused read/write scopes.",
+  "phase": "plan_approved",
+  "protocol_revision": 2,
+  "schema_version": 1,
+  "state": "plan_approved",
+  "updated_at": "2026-09-28T03:01:46Z",
+  "work_id": "shaper-intent-approval-validation-1"
+}

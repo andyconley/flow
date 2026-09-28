@@ -1,0 +1,449 @@
+{
+  "acceptance_criteria": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "AC1-AC5 in this run."
+    }
+  ],
+  "allowed_specialists": [
+    {
+      "capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1,
+      "role": "lead-developer"
+    },
+    {
+      "capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1,
+      "role": "quality-reviewer"
+    },
+    {
+      "capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 1,
+      "role": "test-engineer"
+    }
+  ],
+  "amendment_lineage": [
+    {
+      "prior_work_id": "review-provenance-refinement",
+      "reason": "Noncanonical Shaper intent was sealed before later validation."
+    },
+    {
+      "prior_work_id": "review-provenance-core-1",
+      "reason": "Combined core charter timed out during producer analysis; this successor isolates the first defect."
+    }
+  ],
+  "approval_event": "approve-definition",
+  "approval_history": [
+    {
+      "authority": "engineer",
+      "event": "approve-definition"
+    }
+  ],
+  "approval_matrix": {
+    "acceptance": "Flow_gate",
+    "provider_dispatch": "Flow_grant"
+  },
+  "approved_sources": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/shaper-intent-approval-validation-1/acceptance-criteria.md",
+      "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/shaper-intent-approval-validation-1/orchestration.json",
+      "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348"
+    },
+    "requirements": {
+      "path": ".flow/runs/shaper-intent-approval-validation-1/requirements.md",
+      "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/shaper-intent-approval-validation-1/shaper-intent.json",
+      "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d"
+    }
+  },
+  "assumptions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "cli.delivery_contracts.validate_shaper_intent remains the canonical validator."
+    }
+  ],
+  "boundaries": {
+    "artifact_root": ".flow/runs/shaper-intent-approval-validation-1",
+    "worktree_policy": "isolated-pinned-worker"
+  },
+  "budget_safety_envelope": {
+    "enforceable": {
+      "max_concurrent": 2,
+      "max_manager_calls": 8,
+      "max_manager_rounds": 4,
+      "max_paid_worker_calls": 1,
+      "max_replans": 1,
+      "outputs": [
+        "diff",
+        "test",
+        "receipt"
+      ],
+      "paths": [
+        "charter-scoped"
+      ],
+      "retries": 0,
+      "runtime_seconds": 600,
+      "tools": [
+        "read",
+        "edit",
+        "test"
+      ]
+    },
+    "observations": [
+      "Flow-supervised provider usage"
+    ]
+  },
+  "constraints": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow remains authority."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Validation occurs before persistence."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Implementation uses the chartered Delivery Lead gateway in an isolated pinned worker."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Unknown provider sends are never replayed."
+    }
+  ],
+  "decision_owners": [],
+  "delegation_matrix": {
+    "delegated_expansion": false,
+    "max_delegations": 3
+  },
+  "digest": "f84cdf07152ab14408da6d1f0e9f674dcc80e32649734a0ca2197e118242d507",
+  "exclusions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Review amendments, Delivery-plan validation, provider adapters, MAF review application, and unrelated lifecycle changes."
+    }
+  ],
+  "expansion_headroom": {
+    "delegations": 0,
+    "manager_calls": 0,
+    "manager_rounds": 0,
+    "paid_worker_calls": 0,
+    "verifier_calls": 0
+  },
+  "intended_users": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow operators and maintainers"
+    }
+  ],
+  "kind": "shaper_contract",
+  "max_verifier_calls": 1,
+  "next_lane_eligibility": [
+    "delivery"
+  ],
+  "open_decisions": [],
+  "outcomes": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Reject invalid Shaper intent atomically at approve-definition while preserving valid lifecycle behavior."
+    }
+  ],
+  "problem": {
+    "provenance": [
+      {
+        "claim_status": "approved",
+        "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+        "source": "acceptance_criteria"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+        "source": "orchestration_manifest"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+        "source": "requirements"
+      },
+      {
+        "claim_status": "approved",
+        "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+        "source": "shaper_intent"
+      }
+    ],
+    "value": "approve-definition can seal a noncanonical Shaper intent before a later gate discovers the invalid contract."
+  },
+  "prohibited_capabilities": [
+    "scope-expansion",
+    "quarantined-diff-reuse",
+    "manual-implementation-substitute"
+  ],
+  "risks": [
+    {
+      "owner": "Andy Conley",
+      "risk": "Changing transition ordering could affect valid Definition approval.",
+      "status": "owned"
+    }
+  ],
+  "run_id": "shaper-intent-approval-validation-1",
+  "schema_version": 1,
+  "scope": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Approval validation ordering, focused tests, and directly affected guidance."
+    }
+  ],
+  "shaper_contract_id": "shaper-70d9b69725c12031f3c6",
+  "source_evidence": [
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-intent-approval-validation-1/acceptance-criteria.md",
+      "sha256": "5c350706090f059bc3f42c19bb7e969d49ee912f0d6cf56218987ef23334634f",
+      "source": "acceptance_criteria"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-intent-approval-validation-1/orchestration.json",
+      "sha256": "1ad99d71924855360170620deda9f30d5543ce68f4f687a97859641ea9be1348",
+      "source": "orchestration_manifest"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-intent-approval-validation-1/requirements.md",
+      "sha256": "84ffe0c89d89c989088f7f5ed3f091f40b8528c7332d38f7583821e142ac435f",
+      "source": "requirements"
+    },
+    {
+      "claim_status": "approved",
+      "provenance": ".flow/runs/shaper-intent-approval-validation-1/shaper-intent.json",
+      "sha256": "6281f3589217ec24685a376661969c90df608b38edffe8363aa625fba618028d",
+      "source": "shaper_intent"
+    }
+  ],
+  "status": "approved",
+  "version": 3
+}

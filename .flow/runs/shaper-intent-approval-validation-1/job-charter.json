@@ -1,0 +1,9 @@
+{
+  "task": "Implement exactly one defect repair: validate canonical shaper-intent.json before approve-definition writes lifecycle state, events, or approved digests. Reuse the existing canonical validator, add focused atomicity and compatibility tests, and update only directly affected guidance. Do not implement review amendments, Delivery-plan validation, provider-adapter changes, or any other predecessor scope.",
+  "read_paths": ["cli/runstate.py", "cli/delivery_contracts.py", "cli/flow.py", "tests/test_flow.py", "docs", "README.md", ".flow/runs/review-provenance-refinement", ".flow/runs/review-provenance-core-1", ".flow/runs/shaper-intent-approval-validation-1"],
+  "write_paths": ["cli/runstate.py", "tests/test_flow.py", "docs", "README.md"],
+  "test": {"argv": ["/opt/homebrew/bin/python3.12", "-m", "unittest", "discover", "-s", "tests", "-p", "test_flow.py"], "timeout_seconds": 600},
+  "producer_instance_ids": ["shaper-intent-producer"],
+  "verifier_instance_ids": ["shaper-intent-verifier"],
+  "baseline": {"kind": "clean", "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+}

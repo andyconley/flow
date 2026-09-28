@@ -1,0 +1,30 @@
+{
+  "problem": "approve-definition can seal a noncanonical Shaper intent before a later gate discovers the invalid contract.",
+  "intended_users": ["Flow operators and maintainers"],
+  "outcomes": ["Reject invalid Shaper intent atomically at approve-definition while preserving valid lifecycle behavior."],
+  "scope": ["Approval validation ordering, focused tests, and directly affected guidance."],
+  "exclusions": ["Review amendments, Delivery-plan validation, provider adapters, MAF review application, and unrelated lifecycle changes."],
+  "constraints": ["Flow remains authority.", "Validation occurs before persistence.", "Implementation uses the chartered Delivery Lead gateway in an isolated pinned worker.", "Unknown provider sends are never replayed."],
+  "assumptions": ["cli.delivery_contracts.validate_shaper_intent remains the canonical validator."],
+  "acceptance_criteria": ["AC1-AC5 in this run."],
+  "risks": [{"risk": "Changing transition ordering could affect valid Definition approval.", "owner": "Andy Conley", "status": "owned"}],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {"role": "lead-developer", "capabilities": ["scoped-edit"], "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80", "maximum_instances": 1},
+    {"role": "quality-reviewer", "capabilities": ["read-only-review"], "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718", "maximum_instances": 1},
+    {"role": "test-engineer", "capabilities": ["bounded-verification"], "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f", "maximum_instances": 1}
+  ],
+  "prohibited_capabilities": ["scope-expansion", "quarantined-diff-reuse", "manual-implementation-substitute"],
+  "delegation_matrix": {"max_delegations": 3, "delegated_expansion": false},
+  "approval_matrix": {"provider_dispatch": "Flow_grant", "acceptance": "Flow_gate"},
+  "budget_safety_envelope": {"enforceable": {"max_concurrent": 2, "max_replans": 1, "runtime_seconds": 600, "tools": ["read", "edit", "test"], "paths": ["charter-scoped"], "outputs": ["diff", "test", "receipt"], "retries": 0, "max_manager_calls": 8, "max_manager_rounds": 4, "max_paid_worker_calls": 1}, "observations": ["Flow-supervised provider usage"]},
+  "max_verifier_calls": 1,
+  "boundaries": {"artifact_root": ".flow/runs/shaper-intent-approval-validation-1", "worktree_policy": "isolated-pinned-worker"},
+  "amendment_lineage": [
+    {"prior_work_id": "review-provenance-refinement", "reason": "Noncanonical Shaper intent was sealed before later validation."},
+    {"prior_work_id": "review-provenance-core-1", "reason": "Combined core charter timed out during producer analysis; this successor isolates the first defect."}
+  ],
+  "approval_history": [{"event": "approve-definition", "authority": "engineer"}],
+  "next_lane_eligibility": ["delivery"]
+}
