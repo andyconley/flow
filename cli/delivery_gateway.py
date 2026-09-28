@@ -1683,6 +1683,18 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         if decision.get("replayed") and not decision["allowed"]:
             raise ContractError("Magentic specialist call needs reconciliation: " + decision["reason"])
         if not decision["allowed"]:
+            if structured_verifier and decision["reason"] == "producer_already_completed":
+                denied_producer_calls = [
+                    item for item in ledger.snapshot(aid)["actions"]
+                    if item["status"] == "denied"
+                    and item["reason"] == "producer_already_completed"
+                    and item["request"]["instance_id"] == action["instance_id"]
+                ]
+                if len(denied_producer_calls) > 1:
+                    # One denial lets the stock manager choose the authorized
+                    # verifier retry. Repeating the exhausted editor cannot
+                    # change evidence and otherwise drives a denial/replan loop.
+                    raise ContractError("structured verifier ended valid_fail; producer repair requires successor attempt")
             if structured_verifier and not decision.get("replayed"):
                 # Bind the denied position so a later manager pause can resume
                 # from it in answer mode; nothing was granted or sent.
