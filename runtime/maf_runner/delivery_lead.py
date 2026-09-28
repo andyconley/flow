@@ -8,7 +8,10 @@ process has neither provider credentials nor permission to dispatch work.
 import asyncio
 import hashlib
 import json
+import os
+import platform
 import sys
+import sysconfig
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -17,6 +20,7 @@ from runtime.maf_runner.limits import MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGE
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
+SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
@@ -32,6 +36,32 @@ class PolicyAbort(BaseException):
 def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                                      allow_nan=False).encode()).hexdigest()
+
+
+def _runtime_identity() -> dict[str, Any]:
+    """Compute, rather than echo, the interpreter identity Flow sealed."""
+    root = Path(__file__).resolve().parents[2]
+    lock = root / "runtime" / "maf_runner" / "requirements.lock"
+    names = ("agent-framework-core", "agent-framework-orchestrations", "annotated-types", "msgspec",
+             "opentelemetry-api", "pydantic", "pydantic-core", "python-dotenv", "pyyaml",
+             "typing-inspection", "typing-extensions")
+    packages = {name: version(name) for name in names}
+    records = {}
+    for name in names:
+        import importlib.metadata as metadata
+        distribution = metadata.distribution(name)
+        record = distribution.locate_file(distribution._path.name + "/RECORD")
+        records[name] = {"record": hashlib.sha256(record.read_bytes()).hexdigest(), "bad": []}
+    protocols = SUPPORTED_PROTOCOLS
+    identity = {"schema_version": 2, "interpreter": str(Path(sys.executable).resolve()),
+                "python": list(sys.version_info[:3]), "packages": packages,
+                "platform": sys.platform, "lock_digest": hashlib.sha256(lock.read_bytes()).hexdigest(),
+                "runner_digest": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "protocols": protocols,
+                "protocol_digest": _digest(protocols), "machine": platform.machine(),
+                "implementation": platform.python_implementation(), "soabi": sysconfig.get_config_var("SOABI")}
+    identity["record_digest"] = _digest(records)
+    identity["runtime_digest"] = _digest(identity)
+    return identity
 
 
 def _write(value: dict[str, Any]) -> None:
@@ -91,16 +121,27 @@ def _maf_reads_canonical(canonical: str, value: dict[str, Any]) -> bool:
 
 
 async def _run(start: dict[str, Any]) -> None:
+    # Prove that the real runner surface imports before asserting readiness.
+    # The parent still receives no manager/action callback until it validates
+    # the computed identity below.
     from agent_framework import AgentResponse, Executor, FileCheckpointStorage, Message, WorkflowContext, handler, response_handler
     from agent_framework_orchestrations import (
         GroupChatParticipantMessage, GroupChatRequestMessage, GroupChatResponseMessage,
         MagenticBuilder, StandardMagenticManager,
     )
-
     envelope = start.get("envelope")
     protocol_version = _active_protocol_version
     if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != protocol_version:
         raise RuntimeError("Delivery Lead envelope and transport protocol differ")
+    runtime = envelope.get("maf_runtime")
+    if runtime is not None:
+        if not isinstance(runtime, dict) or not isinstance(runtime.get("runtime_digest"), str):
+            raise RuntimeError("Delivery Lead runtime identity is invalid")
+        # This is intentionally before the first manager callback. The parent
+        # compares it to its sealed envelope before permitting any provider
+        # route, so a swapped interpreter cannot silently become a send.
+        computed_runtime = _runtime_identity()
+        _write({"protocol_version": protocol_version, "type": "runtime_ready", "runtime": computed_runtime})
     attempt_id = envelope.get("attempt_id")
     task = start.get("task")
     assignments = envelope.get("roster")
@@ -126,6 +167,10 @@ async def _run(start: dict[str, Any]) -> None:
         "agent_framework_orchestrations._magentic:MagenticProgressLedger",
         "agent_framework_orchestrations._magentic:MagenticProgressLedgerItem",
     ])
+    # A credential-free construction milestone.  Flow will not permit a
+    # manager/action callback until this proves the runner's storage surface
+    # is usable under the sealed interpreter.
+    _write({"protocol_version": protocol_version, "type": "runtime_initialized"})
     workflow_name = f"flow-magentic-delivery-v{protocol_version}"
     manager_call = 0
     manager_round = 1

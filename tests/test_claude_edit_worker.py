@@ -162,14 +162,13 @@ class ClaudeEditWorkerTests(unittest.TestCase):
             self.assertGreater(len(events), 3 * 1024 * 1024)
             self.assertEqual(sum(b'"type": "result"' in line for line in events.splitlines()), 1)
 
-    def test_stream_over_event_cap_is_uncertain(self):
+    def test_large_event_stream_completes_without_semantic_size_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            fake = self._stream_fake(root, payload_bytes=512 * 1024)
-            with patch("claude_edit_worker.MAX_EVENT_BYTES", 256 * 1024), \
-                    self.assertRaisesRegex(ClaudeEditError, "output exceeds limit"):
-                self._stream_call(root, fake)
-            self.assertEqual((root / "claude-implementer.events.ndjson").stat().st_size, 256 * 1024)
+            result = self._stream_call(root, self._stream_fake(root, payload_bytes=18 * 1024 * 1024))
+            self.assertEqual(result["output"], "Edited.")
+            self.assertGreater((root / "claude-implementer.events.ndjson").stat().st_size,
+                               16 * 1024 * 1024)
 
     def test_stream_mode_omits_partial_messages(self):
         with tempfile.TemporaryDirectory() as temporary:

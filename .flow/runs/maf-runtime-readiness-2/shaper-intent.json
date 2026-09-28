@@ -1,0 +1,27 @@
+{
+  "problem": "Flow persists chartered attempts before proving its optional MAF runtime can start, and install/diagnostics do not own that runtime.",
+  "intended_users": ["Flow operators", "Flow maintainers", "Chartered Delivery users"],
+  "outcomes": ["A managed MAF runtime is proven before attempt creation and zero-send startup failures recover through immutable successors."],
+  "scope": ["Adopt the full approved scope in .flow/runs/maf-runtime-readiness/requirements.md"],
+  "exclusions": ["Live provider calls in CI", "MAF replacement", "automatic retry after observed or unknown sends", "old environment garbage collection"],
+  "constraints": ["Flow retains authority", "ordinary Flow does not import MAF", "historical evidence remains immutable", "bootstrap implementation uses manual Flow coordination and does not dispatch through MAF"],
+  "assumptions": ["Python virtual environments remain supported", "Pinned MAF packages support selected platforms"],
+  "acceptance_criteria": ["AC1-AC15 in .flow/runs/maf-runtime-readiness/acceptance-criteria.md"],
+  "risks": [{"risk": "Installer and evidence changes cross consequential boundaries", "owner": "Andy Conley", "status": "owned"}],
+  "open_decisions": [],
+  "decision_owners": [],
+  "allowed_specialists": [
+    {"role": "lead-developer", "capabilities": ["scoped-edit"], "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80", "maximum_instances": 1},
+    {"role": "test-engineer", "capabilities": ["bounded-verification"], "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f", "maximum_instances": 1},
+    {"role": "quality-reviewer", "capabilities": ["read-only-review"], "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718", "maximum_instances": 1}
+  ],
+  "prohibited_capabilities": ["maf-provider-dispatch-during-bootstrap", "unprobed-runtime-selection", "post-dispatch-automatic-retry", "historical-receipt-rewrite"],
+  "delegation_matrix": {"max_delegations": 4, "delegated_expansion": false},
+  "approval_matrix": {"charter_amendment": "shaper_or_engineer", "provider_dispatch": "Flow_grant", "acceptance": "Flow_gate"},
+  "budget_safety_envelope": {"enforceable": {"max_concurrent": 1, "max_replans": 1, "runtime_seconds": 1800, "tools": ["read", "edit", "test"], "paths": ["charter-scoped"], "outputs": ["diff", "test", "receipt"], "retries": 0, "max_manager_calls": 1, "max_manager_rounds": 1, "max_paid_worker_calls": 1}, "observations": ["manual-bootstrap-agent-usage"]},
+  "max_verifier_calls": 1,
+  "boundaries": {"artifact_root": ".flow/runs/maf-runtime-readiness-2", "worktree_policy": "Flow-bound"},
+  "amendment_lineage": [{"prior_work_id": "maf-runtime-readiness", "reason": "start-plan rejected an invalid zero manager-call envelope; no dispatch"}],
+  "approval_history": [{"event": "approve-definition", "authority": "engineer"}],
+  "next_lane_eligibility": ["manual_flow_implementation"]
+}

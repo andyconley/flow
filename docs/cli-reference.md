@@ -156,7 +156,26 @@ flow run execute-local WORK_ID --assignment ASSIGNMENT_ID \
 
 The run must be revision 2 and `implementing`, with a valid `orchestration.json`. The selected `test-engineer` assignment must declare `execution.provider = "ollama"` and a local `execution.model`. The task file must live inside that run and is limited to 4096 bytes. The command returns an attempt ID, status, receipt path, and reason. An interrupted physical call is `unknown` and is never retried automatically. A failed start or denial receives a no-dispatch receipt. Paid providers are disabled.
 
-MAF is optional: ordinary Flow commands do not import it. For this first slice, install the pinned runner requirements in a separate Python environment and set `FLOW_MAF_PYTHON` to that environment's Python executable before calling `execute-local`. See `runtime/maf_runner/requirements.txt`. A configured local Ollama server and model are required for a physical worker call. The receipt and ledger live under `.flow/runs/WORK_ID/execution/`; a receipt reports observed facts and does not itself approve lifecycle handback.
+MAF is optional: ordinary Flow commands do not import it. Delivery commands use
+the selected managed runtime under `~/.flow/runtimes/maf/`; provision or repair
+it with `flow runtime install-maf`. The command stages and probes a
+digest-addressed environment before atomically selecting it. `FLOW_MAF_PYTHON`
+is an execution override, not a managed-pointer installer. When a v0.38-era
+updater activates a newer Flow source, it cannot call code it did not ship.
+The first later chartered execution (or machine bootstrap) performs one
+recorded, transactional activation attempt; diagnostics remain read-only.
+Failure retains the old runtime pointer and is not retried implicitly. Run
+`flow runtime install-maf` for the explicit repair path. The managed hashed
+wheel inventory currently supports macOS arm64 with CPython 3.12; unsupported
+hosts retain ordinary Flow operation and report `unsupported_runtime`. The
+override is an explicit, validated compatibility override for a pinned interpreter; it
+must pass the same credential-free package, runner, and protocol probe and is
+never an implicit fallback. See `runtime/maf_runner/requirements.lock` for the
+resolved inventory and `runtime/maf_runner/requirements.txt` for the source
+requirements. A configured local Ollama server and model are required for a
+physical worker call. The receipt and ledger live under
+`.flow/runs/WORK_ID/execution/`; a receipt reports observed facts and does not
+itself approve lifecycle handback.
 
 For the bounded multi-turn exercise, add `--multi-turn`. Flow then records three ordered action positions and three separate replan decisions. The first two replans may be allowed; the third is denied by the two-replan cap and ends that MAF phase. Flow checks the denial state before starting an independent action-3 phase in the same attempt. `--interrupt-after-third-send` is an exercise-only fault point: it marks the third action `unknown` immediately after Flow records `adapter_send_started`, before calling Ollama. The first two actions still make physical Ollama calls. This flag does not prove that Ollama received the third request. Inspect the v2 receipt and checkpoint positions for the evidence actually recorded. For a disposable loopback arrival observer, set `FLOW_OLLAMA_OBSERVER=1`, `FLOW_OLLAMA_URL=http://127.0.0.1:PORT/api/chat`, and `FLOW_OLLAMA_OBSERVER_LOG` to its owner-only JSONL file inside the run. The receipt seals a per-action arrival table; without an observer it labels endpoint arrival evidence unavailable.
 
@@ -171,6 +190,22 @@ flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [-
 The run must be revision 2 and `implementing`, with a valid dispatch-stage `orchestration.json`. The approved `job-charter.json` must be linked through that orchestration manifest — the `magentic-manager` assignment's `input_evidence` must name the charter, or the run's declared `job_charter` artifact must match it. The charter pins the task, read/write paths, test, baseline, and the producer and verifier instance IDs drawn from the manifest's roster.
 
 Direct Claude and Codex edits are Flow-gated: only specialists the charter names as producers may hold edit capability, and their write scope must equal the charter's declared `write_paths`. Ollama performs read-only verification only — an Ollama-backed specialist must be read-only, and every declared verifier must be an independent read-only specialist disjoint from the producers. Native subagents are disabled; the roster runs only the Flow-approved specialists bound in the orchestration manifest.
+
+Provider event volume is not a semantic failure. Flow drains Codex JSONL through a file-backed parser and records Claude event traces as streamed, digest-bound evidence, so a completed valid call is not rejected merely because its event stream crosses a fixed byte threshold. Runtime deadlines, bounded final messages, malformed or ambiguous terminal events, process cleanup, and unknown-send fencing remain enforced.
+
+The gateway checks the managed MAF interpreter after read-only authority and worktree validation, before it creates an attempt. An unavailable runtime returns `maf_runtime_unready` without consuming execution authority. Use `flow runtime install-maf` to repair it; `FLOW_MAF_PYTHON` is an explicit validated override and never silently falls back.
+
+Use `flow runtime readiness --json` for the strict pre-attempt check. A healthy
+result reports the selected interpreter, package/runner identity, protocol
+compatibility, and the runtime digest. A failed result is diagnostic only: no
+execution directory, attempt, grant, receipt, or provider process is created.
+`flow doctor` reports the same missing optional runtime as a warning because
+base Flow remains usable without MAF. `flow runtime smoke --target maf` is the
+strict release/readiness check; `flow runtime smoke --target all` includes it.
+
+### `flow run recover-runtime-startup <work-id> <attempt-id>`
+
+Create a fresh linked successor only after a sealed v8 MAF startup failure with no manager, worker, verifier, observed, or uncertain send. The original receipt remains immutable. The successor performs normal authority, clean-worktree, and MAF readiness checks; it is not a replay of the predecessor.
 
 ### `flow run inspect-execution <work-id> <attempt-id>`
 
@@ -249,7 +284,7 @@ Core path events:
 - `approve-solution` — requires `--artifact solution=...` and `--disposition risk=...`
 - `start-plan`
 
-For revision-2 runs, `approve-definition` must record `requirements`, `acceptance_criteria`, and a reviewed `shaper_intent` JSON artifact. The intent file carries the per-run problem, users, outcomes, boundaries, approvals, and exact effective specialist-definition digests. `start-plan` fails closed if any source is missing or outside the current run; it never infers those semantics from Markdown or substitutes framework defaults.
+For revision-2 runs, `approve-definition` must record `requirements`, `acceptance_criteria`, and a reviewed `shaper_intent` JSON artifact. The intent file carries the per-run problem, users, outcomes, boundaries, approvals, and exact effective specialist-definition digests. `approve-definition` validates `shaper_intent` against the canonical contract before recording any approved digest, run state, or event; invalid intent leaves the run unchanged. `start-plan` fails closed if any source is missing or outside the current run; it never infers those semantics from Markdown or substitutes framework defaults.
 - `approve-plan` — requires `--artifact plan=...`, `--artifact handoff=...`, and `--artifact validation_plan=...`
 - `start-implementation`
 - `mark-handback-ready` — requires `--artifact implementation_evidence=...` and `--artifact handback=...`
@@ -265,6 +300,8 @@ Support events:
 - `archive-scout` — creates the minimal scout closure envelope and requires `--artifact scout_summary=...`, `--disposition capability_gaps=...`, and `--disposition memory=...`
 
 `flow run transition` is the only command that writes lifecycle state. `/flow-*` commands call it when they cross gates; they do not hand-edit `run.json`.
+
+`flow run amend-orchestration <work-id> --replacement <run-local-json> --reason <text> --approved-by-user` replaces a sealed orchestration manifest only after explicit user approval. It preserves the prior bytes and an append-only digest-linked amendment record, validates the replacement before activation, and leaves the run in its current lifecycle state.
 
 New runs are protocol revision 2 while `run.json` remains schema 1. Their definition, solution, and plan approvals require `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` and dispatch validation. Handback and review acceptance re-run the later stages. Runs without `protocol_revision` are revision 1 and retain the previous behavior. A scout remains lightweight unless it supplies an orchestration manifest, in which case `archive-scout` validates acceptance.
 
@@ -312,12 +349,12 @@ configure delegated agents.
 
 ### `flow runtime smoke`
 
-Check generated Claude and Codex runtime adapter surfaces and list the manual
-runtime smoke evidence still required.
+Check generated Claude and Codex runtime adapter surfaces, or strict MAF
+Delivery readiness with `--target maf`.
 
 Flags:
 
-- `--target all|claude|codex` — runtime target to check (default: all)
+- `--target all|claude|codex|maf` — runtime target to check (default: all)
 - `--json` — emit JSON
 
 Static checks prove local generated files only:

@@ -214,12 +214,17 @@ class TerminalSealTests(TerminationFixture):
         (attempt_dir / "baseline.json").unlink()
         trace = b"x" * (1024 * 1024 + 1)
         (attempt_dir / "claude-implementer.debug.log").write_bytes(trace)
+        events = b'{"type":"event"}\n' * 70000
+        (attempt_dir / "claude-implementer.events.ndjson").write_bytes(events)
         draft = b'{"draft": true}\n'
         (attempt_dir / "receipt.json").write_bytes(draft)
         self.seal(attempt_id, "abandoned")
         receipt = self.receipt(attempt_id)
         self.assertIsNone(receipt["evidence"]["baseline"])
         self.assertNotIn("diagnostic_trace", receipt["evidence"])
+        self.assertEqual(receipt["evidence"]["event_trace"], {
+            "path": "claude-implementer.events.ndjson",
+            "sha256": hashlib.sha256(events).hexdigest(), "bytes": len(events)})
         self.assertEqual(receipt["evidence_damage"], [
             {"kind": "baseline_missing"},
             {"kind": "trace_oversized", "path": "claude-implementer.debug.log",
@@ -409,9 +414,17 @@ class AbandonTests(AbandonFixture):
         (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
         self._write_delivery_authority()
         fake = self.root / "silent-maf"
-        fake.write_text(f"#!{sys.executable}\nimport sys, time\nsys.stdin.readline()\ntime.sleep(600)\n")
+        fake.write_text(f"#!{sys.executable}\nimport json, sys, time\n"
+                        "start = json.loads(sys.stdin.readline())\n"
+                        "print(json.dumps({'protocol_version': start['protocol_version'], 'type': 'runtime_ready', "
+                        "'runtime': start['envelope']['maf_runtime']}), flush=True)\n"
+                        "time.sleep(600)\n")
         fake.chmod(0o700)
+        runtime_identity = {"schema_version": 1, "interpreter": str(fake), "python": [3, 12, 0],
+                            "packages": {"agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0"},
+                            "lock_digest": "a" * 64, "protocols": [5, 6, 7, 8], "runtime_digest": "b" * 64}
         with patch.dict(os.environ, {"FLOW_MAF_PYTHON": str(fake)}), \
+             patch("delivery_gateway.require_ready", return_value=runtime_identity), \
              patch("delivery_gateway.run_status", return_value=self.state), \
              patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
              patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):

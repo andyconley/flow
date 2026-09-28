@@ -1,0 +1,70 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "d7abbe51a5d8b4d7fc78276817cb0dc9173a96d30966a51ceb137efa5f053066",
+    "orchestration_manifest": "3dee3c0b7ebaf53214d044f2543f244bf12123eab788d68ece4b951f4715f4fd",
+    "requirements": "ae8860f07f5fb7509622879d3aa683ea45483138b03d79736e99a86d4479e7fc",
+    "shaper_intent": "e71dbe8f893135f2554b501b38185fd7fb16285e76cf1eba6830eca3e0de9065"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/review-provenance-refinement-6/acceptance-criteria.md",
+    "handoff": ".flow/runs/review-provenance-refinement-6/implementation-handoff.md",
+    "job_charter": ".flow/runs/review-provenance-refinement-6/job-charter.json",
+    "orchestration_manifest": ".flow/runs/review-provenance-refinement-6/orchestration.json",
+    "plan": ".flow/runs/review-provenance-refinement-6/plan.md",
+    "requirements": ".flow/runs/review-provenance-refinement-6/requirements.md",
+    "shaper_intent": ".flow/runs/review-provenance-refinement-6/shaper-intent.json",
+    "validation_plan": ".flow/runs/review-provenance-refinement-6/validation-plan.md"
+  },
+  "created_at": "2026-09-28T01:38:39Z",
+  "delivery": {
+    "charter_digest": "682d4293b103b974873b14b46be383828be00a2ae7ae344ff7e8e6c0d2df09f1",
+    "charter_id": "delivery-7f381369f1c75894b3db",
+    "delivery_artifact_dir": "delivery/682d4293b103b974873b14b46be383828be00a2ae7ae344ff7e8e6c0d2df09f1",
+    "handoff_digest": "4f4b45416b5f8d4d1aad4aa4a80801c27c609d15f916f79e62389da240ccd376",
+    "lead_claim_digest": "5fefc5e116c04e712779f7531420f31ba621b2457f84067a84ac6e5921c1d9d4",
+    "lead_claim_path": "delivery/682d4293b103b974873b14b46be383828be00a2ae7ae344ff7e8e6c0d2df09f1/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-682d4293b103b974873b",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "97db3517a7c73f1eac2f27dd18178b91794166a20fa2d201be635ccf9ab5a940",
+    "shaper_contract_id": "shaper-a51b8959778695f46b2e",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/review-provenance-refinement-6/acceptance-criteria.md",
+        "sha256": "d7abbe51a5d8b4d7fc78276817cb0dc9173a96d30966a51ceb137efa5f053066"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/review-provenance-refinement-6/orchestration.json",
+        "sha256": "3dee3c0b7ebaf53214d044f2543f244bf12123eab788d68ece4b951f4715f4fd"
+      },
+      "requirements": {
+        "path": ".flow/runs/review-provenance-refinement-6/requirements.md",
+        "sha256": "ae8860f07f5fb7509622879d3aa683ea45483138b03d79736e99a86d4479e7fc"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/review-provenance-refinement-6/shaper-intent.json",
+        "sha256": "e71dbe8f893135f2554b501b38185fd7fb16285e76cf1eba6830eca3e0de9065"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-28T01:40:14Z",
+    "approve-plan": "2026-09-28T01:40:20Z",
+    "block": "2026-09-28T02:31:05Z",
+    "start-definition": "2026-09-28T01:38:39Z",
+    "start-implementation": "2026-09-28T01:40:33Z",
+    "start-plan": "2026-09-28T01:40:20Z"
+  },
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "The authorized Claude producer timed out after partial writes. Attempt fc28e43db8b44bd6904d3fd6d2f522f9 was sealed abandoned because the send outcome is unknown; partial worker edits are quarantined and must not be reused.",
+  "phase": "blocked",
+  "protocol_revision": 2,
+  "return_lane": "implement",
+  "return_state": "implementing",
+  "schema_version": 1,
+  "state": "blocked",
+  "updated_at": "2026-09-28T02:31:05Z",
+  "work_id": "review-provenance-refinement-6"
+}

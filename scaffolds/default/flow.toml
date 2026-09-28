@@ -577,6 +577,10 @@ invocation = "flow run execute-chartered-job WORK_ID --worktree PATH --source-co
 summary = "Run an approved charter-selected specialist roster through Flow-gated Magentic"
 
 [[help.cli_commands]]
+invocation = "flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]"
+summary = "Create a linked successor only for a sealed zero-send MAF startup failure"
+
+[[help.cli_commands]]
 invocation = "flow run inspect-execution WORK_ID ATTEMPT_ID"
 summary = "Inspect durable local execution evidence without dispatch"
 
@@ -633,8 +637,16 @@ invocation = "flow archive search/backfill/inspect/refine/import"
 summary = "Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports"
 
 [[help.cli_commands]]
-invocation = "flow runtime smoke [--target all|claude|codex] [--json]"
-summary = "Check generated runtime surfaces and list manual runtime smoke evidence"
+invocation = "flow runtime smoke [--target all|claude|codex|maf] [--json]"
+summary = "Check generated runtime surfaces and strict optional MAF readiness"
+
+[[help.cli_commands]]
+invocation = "flow runtime readiness [--json]"
+summary = "Check strict MAF Delivery readiness without creating an attempt"
+
+[[help.cli_commands]]
+invocation = "flow runtime install-maf [--json]"
+summary = "Stage, prove, and select Flow's managed pinned MAF runtime"
 
 [[help.cli_commands]]
 invocation = "flow model context --runtime <runtime> --lane <entry> [--json]"

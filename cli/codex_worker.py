@@ -12,6 +12,7 @@ import json
 import os
 import selectors
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -20,7 +21,6 @@ from delivery_cancel import interruptible
 from execution_contracts import usage_values_valid
 
 MAX_PROMPT_BYTES = 32768
-MAX_EVENT_BYTES = 262144
 MAX_OUTPUT_BYTES = 4096
 CODEX_ENV_KEYS = ("HOME", "CODEX_HOME", "PATH", "TMPDIR", "LANG", "LC_ALL",
                   "LC_CTYPE", "USER", "LOGNAME")
@@ -30,9 +30,9 @@ class CodexWorkerError(RuntimeError):
     """Codex may have acted, but Flow did not observe a valid completed turn."""
 
 
-def _parse_events(raw: bytes, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
+def _parse_event_lines(lines, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
     try:
-        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        events = [json.loads(line) for line in lines if line.strip()]
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CodexWorkerError("Codex emitted invalid JSONL") from exc
     if not events or any(not isinstance(event, dict) for event in events):
@@ -66,6 +66,10 @@ def _parse_events(raw: bytes, expected_model: str, *, max_output_bytes: int = MA
             "output": output,
             "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
             "usage": usage, "thread_id": thread_id}
+
+
+def _parse_events(raw: bytes, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
+    return _parse_event_lines(raw.splitlines(), expected_model, max_output_bytes=max_output_bytes)
 
 
 def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
@@ -117,44 +121,42 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
             # Recorded before any byte is sent, so a stuck turn can be reaped.
             on_process_group(process.pid, "provider")
         with interruptible():  # a cancel breaks this wait once; the finally below kills the group
-            chunks: list[bytes] = []
-            size = written = 0
+            written = 0
             selector = selectors.DefaultSelector()
-            try:
-                os.set_blocking(process.stdin.fileno(), False)
-                selector.register(process.stdin, selectors.EVENT_WRITE)
-                selector.register(process.stdout, selectors.EVENT_READ)
-                while selector.get_map():
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        raise CodexWorkerError("Codex turn timed out")
-                    ready = selector.select(remaining)
-                    if not ready:
-                        raise CodexWorkerError("Codex turn timed out")
-                    for key, _ in ready:
-                        if key.fileobj is process.stdin:
-                            count = os.write(process.stdin.fileno(), prompt_bytes[written:])
-                            written += count
-                            if written == len(prompt_bytes):
-                                selector.unregister(process.stdin)
-                                process.stdin.close()
-                        else:
-                            chunk = os.read(process.stdout.fileno(), min(8192, MAX_EVENT_BYTES + 1 - size))
-                            if not chunk:
-                                selector.unregister(process.stdout)
-                                continue
-                            chunks.append(chunk)
-                            size += len(chunk)
-                            if size > MAX_EVENT_BYTES:
-                                raise CodexWorkerError("Codex event stream exceeds limit")
-            finally:
-                selector.close()
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise CodexWorkerError("Codex turn timed out")
-            if process.wait(timeout=remaining) != 0:
-                raise CodexWorkerError("Codex exited without a successful turn")
-            return _parse_events(b"".join(chunks), model, max_output_bytes=max_output_bytes)
+            with tempfile.TemporaryFile() as event_file:
+                try:
+                    os.set_blocking(process.stdin.fileno(), False)
+                    selector.register(process.stdin, selectors.EVENT_WRITE)
+                    selector.register(process.stdout, selectors.EVENT_READ)
+                    while selector.get_map():
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise CodexWorkerError("Codex turn timed out")
+                        ready = selector.select(remaining)
+                        if not ready:
+                            raise CodexWorkerError("Codex turn timed out")
+                        for key, _ in ready:
+                            if key.fileobj is process.stdin:
+                                count = os.write(process.stdin.fileno(), prompt_bytes[written:])
+                                written += count
+                                if written == len(prompt_bytes):
+                                    selector.unregister(process.stdin)
+                                    process.stdin.close()
+                            else:
+                                chunk = os.read(process.stdout.fileno(), 8192)
+                                if not chunk:
+                                    selector.unregister(process.stdout)
+                                    continue
+                                event_file.write(chunk)
+                finally:
+                    selector.close()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise CodexWorkerError("Codex turn timed out")
+                if process.wait(timeout=remaining) != 0:
+                    raise CodexWorkerError("Codex exited without a successful turn")
+                event_file.seek(0)
+                return _parse_event_lines(event_file, model, max_output_bytes=max_output_bytes)
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:
         raise CodexWorkerError("Codex turn outcome uncertain") from exc
     finally:

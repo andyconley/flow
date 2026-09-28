@@ -1,0 +1,35 @@
+{
+  "workflow_name": "flow-magentic-delivery-v8",
+  "graph_signature_hash": "0bd91db58000dfef8aa95da8fc1c1f059d9b81ca4d85f04a10870470cf987a89",
+  "checkpoint_id": "df4637ae-1b14-4189-a8b2-a3e27b5d9664",
+  "previous_checkpoint_id": null,
+  "timestamp": "2026-09-28T02:51:24.979855+00:00",
+  "messages": {
+    "internal:magentic_orchestrator": [
+      {
+        "__pickled__": "gAWV+AUAAAAAAACMKmFnZW50X2ZyYW1ld29yay5fd29ya2Zsb3dzLl9ydW5uZXJfY29udGV4dJSMD1dvcmtmbG93TWVzc2FnZZSTlCmBlH2UKIwEZGF0YZRY5AQAAEltcGxlbWVudCBvbmx5IHRoZSBhcHByb3ZlZCByZXZpZXctcHJvdmVuYW5jZSBjb3JlOiBhIHJldmlldy1vbmx5IGltbXV0YWJsZSBvcmNoZXN0cmF0aW9uIGFtZW5kbWVudCBtZWNoYW5pc20sIGVhcmx5IGNhbm9uaWNhbCBTaGFwZXItaW50ZW50IHZhbGlkYXRpb24sIGVhcmx5IGNoYXJ0ZXJlZCBEZWxpdmVyeSBMZWFkIHBsYW4gdmFsaWRhdGlvbiwgYW5kIHByb3RvY29sLXY4IGVudmVsb3BlLWxpbWl0IHZhbGlkYXRpb24uIEFkZCBmb2N1c2VkIHRlc3RzIGFuZCBnZW5lcmF0ZWQgcHJvY2VzcyBkb2N1bWVudGF0aW9uLiBQcmVzZXJ2ZSBvcmlnaW5hbCBhdXRob3JpdHkgYW5kIGNvbXBhdGliaWxpdHkuIERvIG5vdCBpbXBsZW1lbnQgQ2xhdWRlIG9yIENvZGV4IHByb3ZpZGVyLWFkYXB0ZXIgcmVwYWlycywgZWRpdCBydW4gYXJ0aWZhY3RzLCBvciBhcHBseSB0aGUgYW1lbmRtZW50IHRvIG1hZi1ydW50aW1lLXJlYWRpbmVzcy0yLgoKRmxvdy12ZXJpZmllZCBleGVjdXRpb24gZmFjdHM6Ci0gVGhlIGlzb2xhdGVkIHdvcmt0cmVlIGlzIHBpbm5lZCB0byBzb3VyY2UgY29tbWl0IDVhYzQzMzQzYjgzZTJiMWM5MTY4NTA4ZWJkMzYwOWFkNDAyNTE3NzEuCi0gVGhlIGFwcHJvdmVkIGJhc2VsaW5lIGlzIGNsZWFuLgotIFJlYWQtb25seSBhbmFseXN0IGFuZCB2ZXJpZmllciBzcGVjaWFsaXN0cyBjYW4gYW5hbHl6ZSBzdXBwbGllZCB0YXNrIHRleHQgb25seTsgdGhleSBjYW5ub3QgcmVhZCBmaWxlcywgcnVuIGNvbW1hbmRzLCBvciBlZGl0IHRoZSB3b3JrdHJlZS4KLSBUaGUgYXBwcm92ZWQgZWRpdG9yIG1heSBlZGl0IG9ubHkgdGhlIGNoYXJ0ZXIncyBhbGxvd2VkIHBhdGhzLiBGbG93IHZlcmlmaWVzIHRoZSBkaWZmIGFuZCBydW5zIHRoZSB0YXJnZXRlZCB0ZXN0IGFmdGVyIHRoYXQgZWRpdDsgdGhlIGZ1bGwgc3VpdGUgaXMgYW4gYWNjZXB0YW5jZSBjaGVjay4KLSBUaGUgYXBwcm92ZWQgZWRpdG9ycyBnZXQgb25lIGNhbGwgaW4gdG90YWw7IEZsb3cgcmVmdXNlcyBhbnkgc2Vjb25kIGVkaXRvciBjYWxsLiBUaGF0IGNhbGwgbXVzdCByZWFkIHdoYXQgaXQgbmVlZHMgYW5kIG1ha2UgdGhlIGNvbXBsZXRlIGVkaXQgaW4gdGhlIHNhbWUgdHVybi4gTmV2ZXIgZGVsZWdhdGUgYW4gaW5zcGVjdC1vbmx5IG9yICJkbyBub3QgZWRpdCB5ZXQiIHN0ZXAgdG8gYW4gZWRpdG9yOiBGbG93IGNoZWNrcyB0aGUgd29ya3RyZWUgcmlnaHQgYWZ0ZXIgaXQsIGFuZCBubyBlZGl0IGZhaWxzIHRoZSBhdHRlbXB0LgqUjAlzb3VyY2VfaWSUjB5pbnRlcm5hbDptYWdlbnRpY19vcmNoZXN0cmF0b3KUjAl0YXJnZXRfaWSUjBVtYWdlbnRpY19vcmNoZXN0cmF0b3KUjAR0eXBllGgAjAtNZXNzYWdlVHlwZZSTlIwIc3RhbmRhcmSUhZRSlIwOdHJhY2VfY29udGV4dHOUTowPc291cmNlX3NwYW5faWRzlE6MG29yaWdpbmFsX3JlcXVlc3RfaW5mb19ldmVudJROdWIu",
+        "__type__": "agent_framework._workflows._runner_context:WorkflowMessage"
+      }
+    ]
+  },
+  "state": {
+    "_workflow_run_kwargs": {},
+    "_resolved_workflow_run_kwargs": {},
+    "_executor_state": {
+      "magentic_orchestrator": {
+        "conversation": [],
+        "round_index": 0,
+        "orchestrator_name": "magentic_orchestrator",
+        "metadata": {},
+        "terminated": false,
+        "manager_state": {}
+      },
+      "review-provenance-producer": {},
+      "review-provenance-verifier": {}
+    }
+  },
+  "pending_request_info_events": {},
+  "iteration_count": 0,
+  "metadata": {},
+  "version": "1.0"
+}

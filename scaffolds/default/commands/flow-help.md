@@ -106,6 +106,7 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow run execute-mixed WORK_ID --local-task-file PATH --codex-task-file PATH` | Run one guarded Ollama test-engineer and Codex lead-developer job through MAF |
 | `flow run execute-local-claude WORK_ID --local-task-file PATH --claude-task-file PATH` | Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter |
 | `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Run an approved charter-selected specialist roster through Flow-gated Magentic |
+| `flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Create a linked successor only for a sealed zero-send MAF startup failure |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
 | `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny a pending v8 expansion request for a paused attempt |
@@ -120,7 +121,9 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
 | `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
 | `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
-| `flow runtime smoke [--target all\|claude\|codex] [--json]` | Check generated runtime surfaces and list manual runtime smoke evidence |
+| `flow runtime smoke [--target all\|claude\|codex\|maf] [--json]` | Check generated runtime surfaces and strict optional MAF readiness |
+| `flow runtime readiness [--json]` | Check strict MAF Delivery readiness without creating an attempt |
+| `flow runtime install-maf [--json]` | Stage, prove, and select Flow's managed pinned MAF runtime |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |
 | `flow model resolve --runtime <runtime> --profile <profile> [--json]` | Resolve an agent-selected session profile without changing runtime configuration |
 <!-- generated:cli-commands-table:end -->

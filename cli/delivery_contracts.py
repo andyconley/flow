@@ -238,6 +238,8 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
         minimum = 1 if name in {"max_concurrent", "runtime_seconds", "max_manager_calls", "max_manager_rounds"} else 0
         if type(enforceable[name]) is not int or enforceable[name] < minimum:
             raise DeliveryContractError(f"{name} is invalid")
+    if enforceable["runtime_seconds"] > 600:
+        raise DeliveryContractError("runtime_seconds exceeds the protocol maximum of 600")
     for name in ("tools", "paths", "outputs"):
         values = _list(enforceable[name], name, nonempty=True)
         if len(values) != len(set(values)) or any(not isinstance(value, str) or not value for value in values):

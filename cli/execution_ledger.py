@@ -87,7 +87,8 @@ class ExecutionLedger:
                 recovery_version INTEGER NOT NULL DEFAULT 1,
                 owner_generation INTEGER NOT NULL DEFAULT 0,
                 owner_actor TEXT,
-                execution_protocol_version INTEGER NOT NULL DEFAULT 1
+                execution_protocol_version INTEGER NOT NULL DEFAULT 1,
+                failure_class TEXT
             );
             CREATE TABLE IF NOT EXISTS actions (
                 action_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
@@ -205,6 +206,10 @@ class ExecutionLedger:
                 actor TEXT, explanation TEXT, owner_generation INTEGER NOT NULL, decided_at TEXT NOT NULL,
                 status TEXT NOT NULL, consumed_by TEXT
             );
+            CREATE TABLE IF NOT EXISTS runtime_startup_successors (
+                predecessor_attempt_id TEXT PRIMARY KEY REFERENCES attempts(attempt_id),
+                successor_attempt_id TEXT UNIQUE, claimed_at TEXT NOT NULL
+            );
             """)
             # SQLite's CREATE TABLE IF NOT EXISTS cannot evolve first-slice
             # databases. These columns make existing records explicitly v1 and
@@ -216,6 +221,7 @@ class ExecutionLedger:
                 ("owner_actor", "TEXT"),
                 ("execution_protocol_version", "INTEGER NOT NULL DEFAULT 1"),
                 ("sealed_receipt_sha256", "TEXT"),
+                ("failure_class", "TEXT"),
             ):
                 if name not in columns:
                     db.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
@@ -435,6 +441,59 @@ class ExecutionLedger:
         """Terminal v8 predecessors of ``work_id`` in creation order, and any still-started v8 attempts."""
         with self._db() as db:
             return self._v8_lineage_locked(db, work_id)
+
+    def claim_runtime_startup_successor(self, predecessor_attempt_id: str) -> None:
+        """Fence a sealed zero-send predecessor to one successor request."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                db.execute("INSERT INTO runtime_startup_successors(predecessor_attempt_id,successor_attempt_id,claimed_at) VALUES(?,?,?)",
+                           (predecessor_attempt_id, None, utc_now()))
+            except sqlite3.IntegrityError as exc:
+                raise ContractError("runtime-startup predecessor already has a successor") from exc
+
+    def reconcile_runtime_startup_successor(self, predecessor_attempt_id: str) -> str | None:
+        """Repair a crash between successor creation and claim binding.
+
+        The predecessor claim is never simply discarded: under one immediate
+        transaction we either bind the sole successor whose sealed envelope
+        names it, return an already bound successor, or prove no successor row
+        exists and reopen only the empty claim.
+        """
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT successor_attempt_id FROM runtime_startup_successors WHERE predecessor_attempt_id=?",
+                             (predecessor_attempt_id,)).fetchone()
+            if row is None:
+                return None
+            if row[0]:
+                return row[0]
+            candidates = db.execute(
+                "SELECT DISTINCT attempts.attempt_id FROM attempts, json_each(attempts.envelope_json,'$.predecessors') "
+                "WHERE json_extract(json_each.value,'$.attempt_id')=?",
+                (predecessor_attempt_id,)).fetchall()
+            if len(candidates) == 1:
+                db.execute("UPDATE runtime_startup_successors SET successor_attempt_id=? WHERE predecessor_attempt_id=?",
+                           (candidates[0][0], predecessor_attempt_id))
+                return candidates[0][0]
+            if len(candidates) > 1:
+                raise ContractError("runtime-startup claim has multiple successor candidates")
+            db.execute("DELETE FROM runtime_startup_successors WHERE predecessor_attempt_id=? AND successor_attempt_id IS NULL",
+                       (predecessor_attempt_id,))
+            return None
+
+    def release_runtime_startup_successor(self, predecessor_attempt_id: str) -> None:
+        with self._db() as db:
+            db.execute("DELETE FROM runtime_startup_successors WHERE predecessor_attempt_id=? AND successor_attempt_id IS NULL",
+                       (predecessor_attempt_id,))
+
+    def bind_runtime_startup_successor(self, predecessor_attempt_id: str, successor_attempt_id: str) -> None:
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            changed = db.execute("UPDATE runtime_startup_successors SET successor_attempt_id=? WHERE predecessor_attempt_id=? AND successor_attempt_id IS NULL",
+                                 (successor_attempt_id, predecessor_attempt_id)).rowcount
+            if changed != 1:
+                raise ContractError("runtime-startup successor claim is absent or already bound")
 
     @staticmethod
     def _lineage_usage(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:
@@ -2369,7 +2428,8 @@ class ExecutionLedger:
             self._event(db, attempt_id, None, "checkpoint_bound", canonical({"checkpoint_id": checkpoint_id, "ledger_seq": ledger_seq, "format_version": format_version}))
             return {**record, "bound_at": bound_at, "replayed": False}
 
-    def finish_attempt(self, attempt_id: str, status: str, reason: str, receipt_path: str, *, generation: int | None = None) -> None:
+    def finish_attempt(self, attempt_id: str, status: str, reason: str, receipt_path: str, *,
+                       generation: int | None = None, failure_class: str | None = None) -> None:
         if status not in {"completed", "failed", "denied", "unknown"}:
             raise ContractError("invalid attempt terminal status")
         receipt = Path(receipt_path) if isinstance(receipt_path, str) and receipt_path else None
@@ -2404,10 +2464,11 @@ class ExecutionLedger:
                 if not isinstance(parsed, dict):
                     raise ContractError("protocol v8 seal requires a JSON receipt")
                 self._compare_seal_locked(db, attempt_id, envelope, parsed, rows_message="receipt rows differ from the ledger")
-                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
-                           (status, reason, receipt_path, receipt_sha256, attempt_id))
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=?,failure_class=? WHERE attempt_id=?",
+                           (status, reason, receipt_path, receipt_sha256, failure_class, attempt_id))
             else:
-                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=? WHERE attempt_id=?", (status, reason, receipt_path, attempt_id))
+                db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,failure_class=? WHERE attempt_id=?",
+                           (status, reason, receipt_path, failure_class, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
 
     @staticmethod
@@ -2887,7 +2948,8 @@ class ExecutionLedger:
         attempt_columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
         recovery_columns = {"recovery_version", "owner_generation", "owner_actor"}.issubset(attempt_columns)
         protocol_column = "execution_protocol_version" in attempt_columns
-        attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "") + (",execution_protocol_version" if protocol_column else "")
+        failure_column = "failure_class" in attempt_columns
+        attempt_select = "attempt_id,work_id,envelope_json,status,reason,receipt_path" + (",recovery_version,owner_generation,owner_actor" if recovery_columns else "") + (",execution_protocol_version" if protocol_column else "") + (",failure_class" if failure_column else "")
         a = db.execute(f"SELECT {attempt_select} FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
         if not a:
             raise ContractError("attempt missing")
@@ -2916,6 +2978,7 @@ class ExecutionLedger:
         snapshot = {"attempt_id": a[0], "work_id": a[1], "envelope": envelope, "status": a[3], "reason": a[4], "receipt_path": a[5],
                 "recovery_version": a[6] if recovery_columns else 1, "owner_generation": a[7] if recovery_columns else 0, "owner_actor": a[8] if recovery_columns else None,
                 "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
+                "failure_class": a[(10 if recovery_columns else 7) if protocol_column else (9 if recovery_columns else 6)] if failure_column else None,
                 "actions": [{"action_id": r[0], "request": json.loads(r[1]), "status": r[2], "reason": r[3], "grant_id": r[4], "result": json.loads(r[5]) if r[5] else None} for r in actions],
                 "replans": [{"replan_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "proposal_digest": r[3], "status": r[4], "reason": r[5]} for r in replans],
                 "manager_calls": [{"call_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "status": r[3], "reason": r[4], "grant_id": r[5], "result": json.loads(r[6]) if r[6] else None, "observed_at": r[7]} for r in manager_calls],

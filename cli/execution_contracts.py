@@ -1263,6 +1263,8 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
         for field in ("shaper_contract_digest", "delivery_charter_digest", "handoff_digest", "delivery_lead_claim_digest", "delivery_lead_claim"):
             if receipt.get(field) != envelope[field]:
                 raise ContractError("Delivery receipt ownership link mismatch")
+    if "maf_runtime" in envelope and receipt.get("maf_runtime") != envelope["maf_runtime"]:
+        raise ContractError("Delivery receipt MAF runtime identity link mismatch")
     evidence = receipt["evidence"]
     if not isinstance(evidence, dict) or any(evidence.get(field) != envelope[field] for field in ("source_commit", "worktree", "allowed_paths")):
         raise ContractError("Magentic receipt source or scope link mismatch")
@@ -1283,7 +1285,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                                     or event_trace["path"] != "claude-implementer.events.ndjson"
                                     or not _hex_digest(event_trace["sha256"])
                                     or type(event_trace["bytes"]) is not int
-                                    or not 0 <= event_trace["bytes"] <= 1024 * 1024):
+                                    or event_trace["bytes"] < 0):
         raise ContractError("Magentic event trace evidence is invalid")
     continuation = evidence.get("continuation")
     if continuation is not None and (not isinstance(continuation, dict)

@@ -1,0 +1,677 @@
+2026-09-28T02:52:25.026Z [DEBUG] MDM settings load completed in 0ms
+2026-09-28T02:52:25.028Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-09-28T02:52:25.060Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-09-28T02:52:25.060Z [DEBUG] CA certs: Config fallback - globalEnv keys: , settingsEnv keys: none
+2026-09-28T02:52:25.075Z [DEBUG] [init] configureGlobalMTLS starting
+2026-09-28T02:52:25.075Z [DEBUG] [init] configureGlobalMTLS complete
+2026-09-28T02:52:25.075Z [DEBUG] [init] configureGlobalAgents starting
+2026-09-28T02:52:25.075Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-09-28T02:52:25.075Z [DEBUG] CA certs: Loaded 121 bundled root certificates
+2026-09-28T02:52:25.081Z [DEBUG] CA certs: system store returned empty
+2026-09-28T02:52:25.081Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-09-28T02:52:25.081Z [DEBUG] [init] configureGlobalAgents complete
+2026-09-28T02:52:25.082Z [DEBUG] Error log sink initialized
+2026-09-28T02:52:25.087Z [DEBUG] [ToolSearch:optimistic] mode=tst, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-09-28T02:52:25.089Z [DEBUG] Applying permission update: Adding 20 allow rule(s) to destination 'policySettings': ["Bash(docker compose down*)","Bash(docker compose logs*)","Bash(docker compose ps*)","Bash(docker compose stop*)","Bash(find *)","Bash(ls *)","Bash(terraform fmt*)","Bash(terraform init*)","Bash(terraform plan*)","Bash(terraform validate*)","Bash(terraform workspace*)","Bash(uv add*)","Bash(uv build*)","Bash(uv run pytest*)","Bash(uv run ruff check*)","Bash(uv run ruff format*)","Bash(uv sync*)","Bash(uv version*)","Bash(wc *)","Bash(xargs ls *)"]
+2026-09-28T02:52:25.089Z [DEBUG] Applying permission update: Adding 12 deny rule(s) to destination 'policySettings': ["Bash(*find*-delete*)","Bash(*find*-exec*)","Bash(*find*-execdir*)","Bash(*find*-fls*)","Bash(*find*-ok*)","Bash(*find*-okdir*)","Bash(terraform apply*)","Bash(terraform destroy*)","Bash(tf apply*)","Bash(tf destroy*)","Bash(tofu apply*)","Bash(tofu destroy*)"]
+2026-09-28T02:52:25.112Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /private/tmp/review-provenance-core-worker/.claude/settings.json
+2026-09-28T02:52:25.113Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-09-28T02:52:25.121Z [DEBUG] installed_plugins.json doesn't exist, returning empty V2 object
+2026-09-28T02:52:25.121Z [DEBUG] Found 2 plugins (2 enabled, 0 disabled)
+2026-09-28T02:52:25.123Z [DEBUG] Git remote URL: https://github.com/andyconley/flow.git
+2026-09-28T02:52:25.123Z [DEBUG] Parsed repository: github.com/andyconley/flow from URL: https://github.com/andyconley/flow.git
+2026-09-28T02:52:25.123Z [DEBUG] [STARTUP] Running setup()...
+2026-09-28T02:52:25.125Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/andyconley/.claude/skills, project=[/Users/andyconley/src/flow/.claude/skills]
+2026-09-28T02:52:25.125Z [DEBUG] [reduced mode] Skipping skill dir discovery
+2026-09-28T02:52:25.131Z [INFO] [uds-messaging] Listening: /tmp/cc-socks/25100.sock
+2026-09-28T02:52:25.131Z [INFO] [uds-messaging] Inject messages (auth line optional here): { echo '{"type":"auth","token":"[REDACTED]"$CLAUDE_CODE_MESSAGING_TOKEN"'"}'; echo '{"type":"user","message":{"role":"user","content":"hello"}}'; } | socat - UNIX-CONNECT:/tmp/cc-socks/25100.sock
+2026-09-28T02:52:25.131Z [INFO] [uds-messaging] Connect when the data is ready (e.g. out=$(cmd); printf '%s\n' "$out" | nc -U "$CLAUDE_CODE_MESSAGING_SOCKET" — or the socat form above): a connection that sends no complete line within 30000 ms is closed
+2026-09-28T02:52:25.132Z [DEBUG] Error log sink initialized
+2026-09-28T02:52:25.133Z [DEBUG] [STARTUP] setup() completed in 10ms
+2026-09-28T02:52:25.135Z [DEBUG] Safe mode: installed plugins are disabled, none of their hooks or hooks modules load; built-in plugins load regardless
+2026-09-28T02:52:25.135Z [DEBUG] installed plugins' hooks modules not loaded: rollout flag (tengu_plugin_hooks_modules) is off, from the default (a cold GrowthBook cache, no payload yet); built-in plugins load regardless
+2026-09-28T02:52:25.135Z [DEBUG] sec-default@builtin not seated: installed plugins' hooks modules are off in this process
+2026-09-28T02:52:25.136Z [DEBUG] plugin agents-md: no pluginConfigs["agents-md@builtin"].options in user, --settings or managed settings (project settings are not read); every option is its default
+2026-09-28T02:52:25.136Z [DEBUG] Cleared mTLS configuration cache
+2026-09-28T02:52:25.136Z [DEBUG] Cleared proxy agent cache
+2026-09-28T02:52:25.136Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-09-28T02:52:25.139Z [WARN] plugin telemetry: options requested but its manifest declares no userConfig; every option reads as absent
+2026-09-28T02:52:25.139Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/andyconley/src/flow/.claude/settings.local.json
+2026-09-28T02:52:25.139Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /private/tmp/review-provenance-core-worker/.claude/settings.local.json
+2026-09-28T02:52:25.140Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-09-28T02:52:25.143Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 40 bundled skills, 0 builtin plugin skills
+2026-09-28T02:52:25.143Z [DEBUG] hooks module agents-md@builtin loaded (native, environment 1, tier builtin); events: session.start,prompt.context,agent.spawn,tool.call
+2026-09-28T02:52:25.146Z [DEBUG] hooks module telemetry@builtin loaded (native, environment 2, tier builtin); events: telemetry.*,session.start,session.end,engine.create
+2026-09-28T02:52:25.147Z [DEBUG] [STARTUP] Commands and agents loaded in 7ms
+2026-09-28T02:52:25.148Z [DEBUG] hooks module telemetry@builtin engine.create settled in 1.1ms (native hop, next() included)
+2026-09-28T02:52:25.148Z [DEBUG] engine.create: $.telemetry (telemetry: log, mark); $ built for agents-md,telemetry
+2026-09-28T02:52:25.148Z [DEBUG] plugin.register: agents-md (builtin, agents-md@builtin), judged by core alone: admitted
+2026-09-28T02:52:25.148Z [DEBUG] plugin.register: telemetry (builtin, telemetry@builtin), judged by core alone: admitted
+2026-09-28T02:52:25.149Z [DEBUG] Registered 0 hooks from 2 plugins
+2026-09-28T02:52:25.155Z [DEBUG] Cannot acquire lock for 2.1.283 - held by PID 68256
+2026-09-28T02:52:25.155Z [ERROR] NON-FATAL: Lock acquisition failed for /Users/andyconley/.local/share/claude/versions/2.1.283 (expected in multi-process scenarios): Lock already held by another process
+2026-09-28T02:52:25.159Z [DEBUG] [servedCatalog] primary: using served rows (10 rows via cache over the org route, fetched 1624s ago); the served list replaces the compiled picker for this session
+2026-09-28T02:52:25.160Z [DEBUG] Starting background startup prefetches
+2026-09-28T02:52:25.160Z [DEBUG] [Bootstrap] Fetching
+2026-09-28T02:52:25.182Z [DEBUG] [STARTUP] MCP configs resolved in 0ms (awaited at +69ms)
+2026-09-28T02:52:25.185Z [DEBUG] Cleared mTLS configuration cache
+2026-09-28T02:52:25.185Z [DEBUG] Cleared proxy agent cache
+2026-09-28T02:52:25.185Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-09-28T02:52:25.185Z [DEBUG] [3P telemetry] Waiting for remote managed settings fetch before telemetry init
+2026-09-28T02:52:25.185Z [DEBUG] Skipping plugin hooks - safe mode disables installed plugins (managed settings-file hooks still run; built-in plugins load regardless)
+2026-09-28T02:52:25.186Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:25.186Z [DEBUG] [MCP] --mcp-config servers running fully async (nonblocking)
+2026-09-28T02:52:25.186Z [DEBUG] [MCP] claude.ai connectors running fully async (nonblocking)
+2026-09-28T02:52:25.186Z [DEBUG] Initialized versioned plugins system with 0 plugins
+2026-09-28T02:52:25.193Z [DEBUG] [event-loop-stall] detector started (interval=200ms, threshold=500ms)
+2026-09-28T02:52:25.199Z [DEBUG] [ScheduledTasks] scheduler start() — enabled=false, hasTasks=false
+2026-09-28T02:52:25.200Z [DEBUG] session.start: raised (surface none, not interactive)
+2026-09-28T02:52:25.204Z [DEBUG] hooks module telemetry@builtin (native): telemetry.log nested in agents-md#0
+2026-09-28T02:52:25.204Z [DEBUG] [claudeai-mcp] Disabled in safe mode
+2026-09-28T02:52:25.205Z [DEBUG] $.telemetry.log (agents-md -> telemetry) answered in 0.9ms
+2026-09-28T02:52:25.205Z [DEBUG] installPluginsForHeadless: starting
+2026-09-28T02:52:25.205Z [DEBUG] installPluginsForHeadless: no marketplaces declared
+2026-09-28T02:52:25.206Z [DEBUG] hooks module telemetry@builtin session.start settled in 2.0ms (native link, next() included)
+2026-09-28T02:52:25.206Z [DEBUG] hooks module telemetry@builtin telemetry.log settled in 2.2ms (native link, next() included)
+2026-09-28T02:52:25.206Z [DEBUG] hooks module agents-md@builtin session.start settled in 2.6ms (native link, next() included)
+2026-09-28T02:52:25.209Z [DEBUG] act_dont_rederive_arm_active source=growthbook
+2026-09-28T02:52:25.210Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:25.210Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:25.210Z [DEBUG] hooks module telemetry@builtin (native): telemetry.log nested in agents-md#1
+2026-09-28T02:52:25.210Z [DEBUG] hooks module telemetry@builtin (native): telemetry.mark nested in agents-md#1
+2026-09-28T02:52:25.210Z [DEBUG] $.telemetry.log (agents-md -> telemetry) answered in 0.1ms
+2026-09-28T02:52:25.210Z [DEBUG] $.telemetry.mark (agents-md -> telemetry) answered in 0.1ms
+2026-09-28T02:52:25.210Z [DEBUG] hooks module agents-md@builtin prompt.context settled in 2.2ms (native link, next() included)
+2026-09-28T02:52:25.210Z [DEBUG] hooks module telemetry@builtin telemetry.log settled in 0.3ms (native link, next() included)
+2026-09-28T02:52:25.210Z [DEBUG] hooks module telemetry@builtin telemetry.mark settled in 0.2ms (native link, next() included)
+2026-09-28T02:52:25.212Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:52:25.212Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:52:25.215Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:25.215Z [DEBUG] [session-notices] advertise=false mode=acceptEdits flag=true(disk) pollChannel=false remote=false remoteEnv=false nonInteractive=true
+2026-09-28T02:52:25.216Z [DEBUG] [engine] turn 1 start
+2026-09-28T02:52:25.217Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:52:25.220Z [DEBUG] [servedCatalog] shadow compare logged (fetch=cache_fresh, rows=10, source=served)
+2026-09-28T02:52:25.220Z [DEBUG] [servedCatalog] primary: served list replaces the compiled picker; every compiled row is served
+2026-09-28T02:52:25.226Z [DEBUG] [sessionRegistry] sweep permitted (domain darwin)
+2026-09-28T02:52:25.240Z [DEBUG] Ripgrep first use test: PASSED (mode=embedded, path=/Users/andyconley/.local/share/claude/versions/2.1.283)
+2026-09-28T02:52:25.240Z [DEBUG] "rg error (signal=undefined, code=2, stderr: rg: /Users/andyconley/.claude/plugins/cache: IO error for operation on /Users/andyconley/.claude/plugins/cache: No such file or directory (os error 2)\n), 0 results"
+2026-09-28T02:52:25.243Z [DEBUG] Watching /private/tmp/review-provenance-core-worker for /private/tmp/review-provenance-core-worker/.claude to appear
+2026-09-28T02:52:25.243Z [DEBUG] Watching for changes in setting files /Users/andyconley/.claude/settings.json, /Users/andyconley/src/flow/.claude/settings.local.json...
+2026-09-28T02:52:25.244Z [DEBUG] $.process.run (telemetry): sh with 2 args in /private/tmp/review-provenance-core-worker (pid 25117)
+2026-09-28T02:52:25.253Z [DEBUG] $.process.run (telemetry): sh exited 0 in 10ms, 36 + 0 chars
+2026-09-28T02:52:25.314Z [DEBUG] [auto-mode] verifyAutoModeGateAccess: enabledState=enabled disabledBySettings=false model=claude-sonnet-5 modelSupported=true disableFastModeBreakerFires=false carouselAvailable=true canEnterAuto=true
+2026-09-28T02:52:25.315Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:52:25.317Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:52:25.317Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:25.318Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:25.320Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:25.320Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:52:25.320Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:52:25.321Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=075f4fbb-9f3e-4acd-8a46-07600264fd5e source=sdk
+2026-09-28T02:52:25.323Z [DEBUG] Preserving file permissions: 100600
+2026-09-28T02:52:25.323Z [DEBUG] Writing to temp file: /Users/andyconley/.claude.json.tmp.25100.f05da4f14307
+2026-09-28T02:52:25.323Z [DEBUG] Applied original permissions to temp file
+2026-09-28T02:52:25.323Z [DEBUG] Temp file written successfully, size: 74831 bytes
+2026-09-28T02:52:25.323Z [DEBUG] Renaming /Users/andyconley/.claude.json.tmp.25100.f05da4f14307 to /Users/andyconley/.claude.json
+2026-09-28T02:52:25.323Z [DEBUG] File /Users/andyconley/.claude.json written atomically
+2026-09-28T02:52:25.420Z [DEBUG] Remote settings: Using cached settings (304)
+2026-09-28T02:52:25.420Z [DEBUG] Remote settings: Cache still valid (304 Not Modified)
+2026-09-28T02:52:25.420Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-09-28T02:52:25.421Z [DEBUG] Cleared mTLS configuration cache
+2026-09-28T02:52:25.421Z [DEBUG] Cleared proxy agent cache
+2026-09-28T02:52:25.421Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-09-28T02:52:25.422Z [DEBUG] Programmatic settings change notification for policySettings
+2026-09-28T02:52:25.422Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-09-28T02:52:25.423Z [DEBUG] Plugin hooks: skipping reload, plugin-affecting settings unchanged
+2026-09-28T02:52:25.424Z [DEBUG] Settings changed from policySettings, updating app state
+2026-09-28T02:52:25.424Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-09-28T02:52:25.424Z [DEBUG] Replacing all allow rules for destination 'userSettings' with 0 rule(s): []
+2026-09-28T02:52:25.424Z [DEBUG] Replacing all deny rules for destination 'userSettings' with 0 rule(s): []
+2026-09-28T02:52:25.424Z [DEBUG] Replacing all ask rules for destination 'userSettings' with 0 rule(s): []
+2026-09-28T02:52:25.424Z [DEBUG] Replacing all allow rules for destination 'projectSettings' with 0 rule(s): []
+2026-09-28T02:52:25.424Z [DEBUG] Replacing all deny rules for destination 'projectSettings' with 0 rule(s): []
+2026-09-28T02:52:25.424Z [DEBUG] Replacing all ask rules for destination 'projectSettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all allow rules for destination 'localSettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all deny rules for destination 'localSettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all ask rules for destination 'localSettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all allow rules for destination 'flagSettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all deny rules for destination 'flagSettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all ask rules for destination 'flagSettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all allow rules for destination 'policySettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all deny rules for destination 'policySettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all ask rules for destination 'policySettings' with 0 rule(s): []
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all allow rules for destination 'policySettings' with 20 rule(s): ["Bash(docker compose down*)","Bash(docker compose logs*)","Bash(docker compose ps*)","Bash(docker compose stop*)","Bash(find *)","Bash(ls *)","Bash(terraform fmt*)","Bash(terraform init*)","Bash(terraform plan*)","Bash(terraform validate*)","Bash(terraform workspace*)","Bash(uv add*)","Bash(uv build*)","Bash(uv run pytest*)","Bash(uv run ruff check*)","Bash(uv run ruff format*)","Bash(uv sync*)","Bash(uv version*)","Bash(wc *)","Bash(xargs ls *)"]
+2026-09-28T02:52:25.425Z [DEBUG] Replacing all deny rules for destination 'policySettings' with 12 rule(s): ["Bash(*find*-delete*)","Bash(*find*-exec*)","Bash(*find*-execdir*)","Bash(*find*-fls*)","Bash(*find*-ok*)","Bash(*find*-okdir*)","Bash(terraform apply*)","Bash(terraform destroy*)","Bash(tf apply*)","Bash(tf destroy*)","Bash(tofu apply*)","Bash(tofu destroy*)"]
+2026-09-28T02:52:25.457Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /private/tmp/review-provenance-core-worker/.claude/settings.json
+2026-09-28T02:52:25.459Z [DEBUG] [3P telemetry] Remote managed settings fetch settled, initializing telemetry
+2026-09-28T02:52:25.459Z [DEBUG] Cleared mTLS configuration cache
+2026-09-28T02:52:25.459Z [DEBUG] Cleared proxy agent cache
+2026-09-28T02:52:25.459Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-09-28T02:52:25.460Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-09-28T02:52:25.460Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-09-28T02:52:25.461Z [DEBUG] Policy limits: Using cached restrictions (304)
+2026-09-28T02:52:25.461Z [DEBUG] Policy limits: Cache still valid (304 Not Modified)
+2026-09-28T02:52:25.461Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 40 bundled skills, 0 builtin plugin skills
+2026-09-28T02:52:25.461Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 40 bundled skills, 0 builtin plugin skills
+2026-09-28T02:52:25.467Z [DEBUG] Org fast mode: disabled (preference)
+2026-09-28T02:52:25.539Z [DEBUG] [Bootstrap] Fetch ok
+2026-09-28T02:52:25.539Z [DEBUG] [Bootstrap] Cache unchanged, skipping write
+2026-09-28T02:52:25.549Z [DEBUG] [fs.watch probe] verdict: delivers
+2026-09-28T02:52:25.880Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:52:25.880Z [DEBUG] [API:timing] first byte after 561ms
+2026-09-28T02:52:30.208Z [DEBUG] $.http.fetch (telemetry): POST https://api.anthropic.com/api/event_logging/v2/batch
+2026-09-28T02:52:30.326Z [DEBUG] $.http.fetch (telemetry): 200 in 118ms, 39 chars
+2026-09-28T02:52:30.326Z [DEBUG] [telemetry] $.ui.log (to debug): telemetry: sent 3 row(s)
+2026-09-28T02:52:39.317Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/andyconley/src/flow/.claude/settings.local.json
+2026-09-28T02:52:39.317Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /private/tmp/review-provenance-core-worker/.claude/settings.local.json
+2026-09-28T02:52:39.321Z [WARN] [3P telemetry] Event dropped (no event logger initialized): tool_decision
+2026-09-28T02:52:39.322Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01GZdE9n46cpkwLeKLuxQw3D permissionDecisionMs=8
+2026-09-28T02:52:39.347Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01GZdE9n46cpkwLeKLuxQw3D outcome=ok durationMs=26
+2026-09-28T02:52:39.350Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:52:39.350Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:52:39.351Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:52:39.352Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:52:39.353Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5bz9aAVV3MhR3KgGf8; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:52:39.353Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:39.354Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:39.355Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:39.355Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:52:39.355Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:52:39.355Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=fc897854-93dd-4fb8-bac9-7ea1f802cb24 source=sdk
+2026-09-28T02:52:39.819Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:52:39.819Z [DEBUG] [API:timing] first byte after 464ms
+2026-09-28T02:52:40.736Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_017ncBonEvVoENarnBEXq11h permissionDecisionMs=5
+2026-09-28T02:52:40.755Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_017ncBonEvVoENarnBEXq11h outcome=ok durationMs=19
+2026-09-28T02:52:41.069Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01VpHjfNRF1RjyayMMm7WLix permissionDecisionMs=2
+2026-09-28T02:52:41.085Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01VpHjfNRF1RjyayMMm7WLix outcome=ok durationMs=16
+2026-09-28T02:52:41.281Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_0199wq3MRQpHgR7GX6CsQpEk permissionDecisionMs=6
+2026-09-28T02:52:41.307Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_0199wq3MRQpHgR7GX6CsQpEk outcome=ok durationMs=26
+2026-09-28T02:52:41.308Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:52:41.309Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:52:41.309Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:52:41.310Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:52:41.311Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5d28RE6g9hmcQJmcPH; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:52:41.311Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:41.312Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:41.313Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:41.313Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:52:41.313Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:52:41.314Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=30216b4f-7271-4301-952f-a44bcdad723d source=sdk
+2026-09-28T02:52:41.802Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:52:41.802Z [DEBUG] [API:timing] first byte after 489ms
+2026-09-28T02:52:46.815Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01LWRVHUpWCCXoJcGBUGWj8N permissionDecisionMs=7
+2026-09-28T02:52:46.832Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01LWRVHUpWCCXoJcGBUGWj8N outcome=ok durationMs=17
+2026-09-28T02:52:47.412Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01MbhLWwKNa4PWtRm8BBTkMU permissionDecisionMs=3
+2026-09-28T02:52:47.423Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01MbhLWwKNa4PWtRm8BBTkMU outcome=ok durationMs=11
+2026-09-28T02:52:47.424Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:52:47.424Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:52:47.425Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:52:47.426Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:52:47.427Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5dAafKnRg6adryy3ah; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:52:47.427Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:47.428Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:47.429Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:47.429Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:52:47.429Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:52:47.429Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=152a1fd2-8401-48c8-a514-a85489603fc0 source=sdk
+2026-09-28T02:52:47.917Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:52:47.917Z [DEBUG] [API:timing] first byte after 489ms
+2026-09-28T02:52:50.963Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01NrtZsEFZ7eaA99VpYKM4Ds permissionDecisionMs=5
+2026-09-28T02:52:50.986Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01NrtZsEFZ7eaA99VpYKM4Ds outcome=ok durationMs=22
+2026-09-28T02:52:51.237Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_0167KK9EXemyoe1Nz3cVPwXL permissionDecisionMs=5
+2026-09-28T02:52:51.255Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_0167KK9EXemyoe1Nz3cVPwXL outcome=ok durationMs=17
+2026-09-28T02:52:51.466Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01AQ5rxBqkeouDFAXz9DmiZE permissionDecisionMs=6
+2026-09-28T02:52:51.485Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01AQ5rxBqkeouDFAXz9DmiZE outcome=ok durationMs=19
+2026-09-28T02:52:51.487Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:52:51.487Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:52:51.488Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:52:51.488Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:52:51.489Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5dcjmee8k9oMnsbm6G; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:52:51.489Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:51.490Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:51.491Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:51.491Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:52:51.491Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:52:51.491Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=0fa01426-fb5a-454e-aea1-fd7889901b17 source=sdk
+2026-09-28T02:52:52.087Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:52:52.087Z [DEBUG] [API:timing] first byte after 597ms
+2026-09-28T02:52:53.613Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01BreZd2yngFFQye5ShRHY81 permissionDecisionMs=4
+2026-09-28T02:52:53.615Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01BreZd2yngFFQye5ShRHY81 outcome=ok durationMs=2
+2026-09-28T02:52:53.617Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:53.617Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:53.617Z [DEBUG] hooks module agents-md@builtin tool.call settled in 10.2ms (native link, next() included)
+2026-09-28T02:52:54.111Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_013iTd6M8nSyzjRGLUJKpPqR permissionDecisionMs=4
+2026-09-28T02:52:54.113Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_013iTd6M8nSyzjRGLUJKpPqR outcome=ok durationMs=2
+2026-09-28T02:52:54.115Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:54.115Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:54.115Z [DEBUG] hooks module agents-md@builtin tool.call settled in 8.3ms (native link, next() included)
+2026-09-28T02:52:54.518Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01LhrCTuGMNE7iWqW896qaBa permissionDecisionMs=5
+2026-09-28T02:52:54.522Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01LhrCTuGMNE7iWqW896qaBa outcome=ok durationMs=4
+2026-09-28T02:52:54.523Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:54.523Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:54.523Z [DEBUG] hooks module agents-md@builtin tool.call settled in 11.2ms (native link, next() included)
+2026-09-28T02:52:54.525Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:52:54.525Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:52:54.526Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:52:54.527Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:52:54.529Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5dv44pitFjBza99X7F; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:52:54.529Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:54.530Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:54.531Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:54.531Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:52:54.531Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:52:54.531Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=911296d1-3715-421c-bb81-e1219ee45378 source=sdk
+2026-09-28T02:52:55.075Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:52:55.075Z [DEBUG] [API:timing] first byte after 544ms
+2026-09-28T02:52:56.603Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_016VjmnJ9EDxwkteKBP4uNU1 permissionDecisionMs=3
+2026-09-28T02:52:56.604Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_016VjmnJ9EDxwkteKBP4uNU1 outcome=ok durationMs=1
+2026-09-28T02:52:56.606Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:56.606Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:56.606Z [DEBUG] hooks module agents-md@builtin tool.call settled in 7.1ms (native link, next() included)
+2026-09-28T02:52:57.151Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01PEpH95G84Qn4gmPc3tWkUu permissionDecisionMs=5
+2026-09-28T02:52:57.153Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01PEpH95G84Qn4gmPc3tWkUu outcome=ok durationMs=2
+2026-09-28T02:52:57.154Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:57.155Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:57.155Z [DEBUG] hooks module agents-md@builtin tool.call settled in 9.1ms (native link, next() included)
+2026-09-28T02:52:57.603Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_011AwjHhBy1vnG8iCZ7rBGZW permissionDecisionMs=3
+2026-09-28T02:52:57.605Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_011AwjHhBy1vnG8iCZ7rBGZW outcome=ok durationMs=1
+2026-09-28T02:52:57.606Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:57.606Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:57.606Z [DEBUG] hooks module agents-md@builtin tool.call settled in 7.3ms (native link, next() included)
+2026-09-28T02:52:58.059Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01UP1WZyt4uTmp8PF52JvKfi permissionDecisionMs=6
+2026-09-28T02:52:58.064Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01UP1WZyt4uTmp8PF52JvKfi outcome=ok durationMs=6
+2026-09-28T02:52:58.066Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:58.066Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:52:58.066Z [DEBUG] hooks module agents-md@builtin tool.call settled in 15.0ms (native link, next() included)
+2026-09-28T02:52:58.067Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:52:58.068Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:52:58.069Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:52:58.070Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:52:58.071Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5e92frGW9H8GLB41HY; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:52:58.072Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:58.072Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:58.093Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:52:58.093Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:52:58.093Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:52:58.094Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=9851bc2a-76eb-419f-8db9-39b1c740f4a9 source=sdk
+2026-09-28T02:52:58.721Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:52:58.721Z [DEBUG] [API:timing] first byte after 628ms
+2026-09-28T02:53:01.124Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01P7fMr9gkDs96i5ZgkrhCaa permissionDecisionMs=8
+2026-09-28T02:53:01.125Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01P7fMr9gkDs96i5ZgkrhCaa outcome=ok durationMs=1
+2026-09-28T02:53:01.127Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:01.127Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:01.127Z [DEBUG] hooks module agents-md@builtin tool.call settled in 11.8ms (native link, next() included)
+2026-09-28T02:53:01.574Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01XFuojoy1eVYZAHRFXCFwKJ permissionDecisionMs=4
+2026-09-28T02:53:01.576Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01XFuojoy1eVYZAHRFXCFwKJ outcome=ok durationMs=2
+2026-09-28T02:53:01.577Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:01.577Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:01.578Z [DEBUG] hooks module agents-md@builtin tool.call settled in 7.6ms (native link, next() included)
+2026-09-28T02:53:02.083Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01DudUiZQJZTru9WpknG8tuG permissionDecisionMs=6
+2026-09-28T02:53:02.084Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01DudUiZQJZTru9WpknG8tuG outcome=ok durationMs=1
+2026-09-28T02:53:02.086Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:02.086Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:02.086Z [DEBUG] hooks module agents-md@builtin tool.call settled in 10.3ms (native link, next() included)
+2026-09-28T02:53:02.574Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01XoAskKGqEW8e3Gtf3WiKKz permissionDecisionMs=4
+2026-09-28T02:53:02.575Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01XoAskKGqEW8e3Gtf3WiKKz outcome=ok durationMs=1
+2026-09-28T02:53:02.577Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:02.577Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:02.577Z [DEBUG] hooks module agents-md@builtin tool.call settled in 7.2ms (native link, next() included)
+2026-09-28T02:53:02.582Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:02.582Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:02.583Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:02.584Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:02.586Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5eQGTSGfc5o3PmRpYx; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:02.586Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:02.587Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:02.588Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:02.588Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:02.588Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:02.589Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=1539bdaa-704a-4241-acb7-d725b5c19d06 source=sdk
+2026-09-28T02:53:03.008Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:03.008Z [DEBUG] [API:timing] first byte after 420ms
+2026-09-28T02:53:04.706Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01UHVLN7AVE4G9xyGGxJ9kmf permissionDecisionMs=5
+2026-09-28T02:53:04.723Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01UHVLN7AVE4G9xyGGxJ9kmf outcome=ok durationMs=17
+2026-09-28T02:53:05.302Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01VA9Go5XSuWDPqrKUsZnCke permissionDecisionMs=2
+2026-09-28T02:53:05.318Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01VA9Go5XSuWDPqrKUsZnCke outcome=ok durationMs=16
+2026-09-28T02:53:05.938Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01NRoN4jdEiZbsvijnHsbqrk permissionDecisionMs=4
+2026-09-28T02:53:05.954Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01NRoN4jdEiZbsvijnHsbqrk outcome=ok durationMs=16
+2026-09-28T02:53:06.259Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01LDUfNSH7pJUTritJ9hskDm permissionDecisionMs=3
+2026-09-28T02:53:06.277Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01LDUfNSH7pJUTritJ9hskDm outcome=ok durationMs=18
+2026-09-28T02:53:06.531Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01LpJkqcT926VBPcEXC9ZJdU permissionDecisionMs=3
+2026-09-28T02:53:06.550Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01LpJkqcT926VBPcEXC9ZJdU outcome=ok durationMs=19
+2026-09-28T02:53:06.752Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=toolu_01Hs6BZ3EZRu1kABf2ndMbPF permissionDecisionMs=3
+2026-09-28T02:53:06.772Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=toolu_01Hs6BZ3EZRu1kABf2ndMbPF outcome=ok durationMs=20
+2026-09-28T02:53:06.774Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:06.774Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:06.775Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:06.776Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:06.777Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5ejSsw6ymGzkPEHi4v; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:06.777Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:06.778Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:06.779Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:06.779Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:06.779Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:06.779Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=d21e0f9f-8e98-4c02-8811-385a7701ce8b source=sdk
+2026-09-28T02:53:07.179Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:07.179Z [DEBUG] [API:timing] first byte after 400ms
+2026-09-28T02:53:09.506Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01N6iXTNpwwnhWNDq8aUjj9J permissionDecisionMs=2
+2026-09-28T02:53:09.516Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01N6iXTNpwwnhWNDq8aUjj9J outcome=ok durationMs=11
+2026-09-28T02:53:10.077Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_013tATKXdUVsvySmYApRaNCc permissionDecisionMs=5
+2026-09-28T02:53:10.088Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_013tATKXdUVsvySmYApRaNCc outcome=ok durationMs=12
+2026-09-28T02:53:10.090Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:10.090Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:10.091Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:10.092Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:10.094Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5f3Sr8AmMFSHaSZnR2; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:10.094Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:10.094Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:10.095Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:10.096Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:10.096Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:10.096Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=1a433e1b-9eeb-4583-b711-640812232d38 source=sdk
+2026-09-28T02:53:10.639Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:10.639Z [DEBUG] [API:timing] first byte after 543ms
+2026-09-28T02:53:10.998Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01SwLiHHXmffs7UviCAA82kA permissionDecisionMs=4
+2026-09-28T02:53:11.001Z [DEBUG] [API REQUEST] /v1/messages/count_tokens x-client-request-id=39efe81a-1d86-4388-84a7-3859a76885fe source=count_tokens
+2026-09-28T02:53:11.144Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01SwLiHHXmffs7UviCAA82kA outcome=ok durationMs=146
+2026-09-28T02:53:11.149Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:11.149Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:11.150Z [DEBUG] hooks module agents-md@builtin tool.call settled in 156.6ms (native link, next() included)
+2026-09-28T02:53:11.153Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:11.154Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:11.155Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:11.156Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:11.158Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5fHaA1m9sDnGHhhxUp; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:11.158Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:11.159Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:11.160Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:11.161Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:11.161Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:11.161Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=820b3c1a-efa3-4797-9209-917c65e33267 source=sdk
+2026-09-28T02:53:11.836Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:11.836Z [DEBUG] [API:timing] first byte after 675ms
+2026-09-28T02:53:13.635Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01LE2Fbq4KyXvuxUyw7XQPMF permissionDecisionMs=3
+2026-09-28T02:53:13.646Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01LE2Fbq4KyXvuxUyw7XQPMF outcome=ok durationMs=11
+2026-09-28T02:53:14.364Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_017MSPLYUb12Y84ypkJEq5Q7 permissionDecisionMs=5
+2026-09-28T02:53:14.374Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_017MSPLYUb12Y84ypkJEq5Q7 outcome=ok durationMs=10
+2026-09-28T02:53:14.376Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:14.376Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:14.377Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:14.377Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:14.379Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5fN9EnwMqT8KTPye53; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:14.379Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:14.380Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:14.381Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:14.381Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:14.381Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:14.381Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=8ca04d0f-6438-41b4-bc5e-d9fff697c5d2 source=sdk
+2026-09-28T02:53:14.837Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:14.837Z [DEBUG] [API:timing] first byte after 457ms
+2026-09-28T02:53:17.350Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01HwqpYQWR3gHjAiqW1L38ow permissionDecisionMs=2
+2026-09-28T02:53:17.352Z [DEBUG] [API REQUEST] /v1/messages/count_tokens x-client-request-id=8c996693-3fa8-460d-9623-3d46d27d6909 source=count_tokens
+2026-09-28T02:53:17.469Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01HwqpYQWR3gHjAiqW1L38ow outcome=ok durationMs=118
+2026-09-28T02:53:17.474Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:17.474Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:17.474Z [DEBUG] hooks module agents-md@builtin tool.call settled in 126.9ms (native link, next() included)
+2026-09-28T02:53:17.478Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:17.478Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:17.480Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:17.481Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:17.483Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5fbvDMZAT5De959SeZ; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:17.483Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:17.485Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:17.486Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:17.486Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:17.486Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:17.487Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=5925a16f-0c77-4fb3-8a04-9c1d62b9696c source=sdk
+2026-09-28T02:53:18.092Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:18.093Z [DEBUG] [API:timing] first byte after 607ms
+2026-09-28T02:53:22.636Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_013zzTzt1yqa8cN5YkbEQjXi permissionDecisionMs=3
+2026-09-28T02:53:22.637Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_013zzTzt1yqa8cN5YkbEQjXi outcome=ok durationMs=1
+2026-09-28T02:53:22.638Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:22.638Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:22.639Z [DEBUG] hooks module agents-md@builtin tool.call settled in 7.2ms (native link, next() included)
+2026-09-28T02:53:22.642Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:22.642Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:22.643Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:22.644Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:22.646Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5fqAgxeMNRc5r2ejuK; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:22.646Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:22.647Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:22.648Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:22.648Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:22.648Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:22.648Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=f3fc6d74-1a9d-4cb5-a949-181309bdae83 source=sdk
+2026-09-28T02:53:23.295Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:23.295Z [DEBUG] [API:timing] first byte after 647ms
+2026-09-28T02:53:25.973Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01RVjppLGgzbvbLvaXVA4WqX permissionDecisionMs=6
+2026-09-28T02:53:25.990Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01RVjppLGgzbvbLvaXVA4WqX outcome=ok durationMs=17
+2026-09-28T02:53:26.883Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01JXgFwDDTnrRhvtpkrxqKtx permissionDecisionMs=4
+2026-09-28T02:53:26.899Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01JXgFwDDTnrRhvtpkrxqKtx outcome=ok durationMs=16
+2026-09-28T02:53:27.915Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_015hNyMGZBjfdqTsDE34LmL1 permissionDecisionMs=5
+2026-09-28T02:53:27.931Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_015hNyMGZBjfdqTsDE34LmL1 outcome=ok durationMs=16
+2026-09-28T02:53:27.933Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:27.933Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:27.934Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:27.934Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:27.936Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5gDDFayRpkBebxC1ZE; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:27.936Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:27.937Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:27.938Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:27.938Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:27.938Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:27.938Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=a962d4b8-7aaf-494a-9b7a-f8546f549b18 source=sdk
+2026-09-28T02:53:28.510Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:28.510Z [DEBUG] [API:timing] first byte after 573ms
+2026-09-28T02:53:28.964Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01HCtwjVcePcZownn4WSwtx9 permissionDecisionMs=3
+2026-09-28T02:53:28.995Z [DEBUG] [API REQUEST] /v1/messages/count_tokens x-client-request-id=f5f9ddc4-56ff-4d89-9815-3377ef448c8f source=count_tokens
+2026-09-28T02:53:29.107Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01HCtwjVcePcZownn4WSwtx9 outcome=ok durationMs=143
+2026-09-28T02:53:29.109Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:29.109Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:29.109Z [DEBUG] hooks module agents-md@builtin tool.call settled in 149.3ms (native link, next() included)
+2026-09-28T02:53:29.111Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:29.111Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:29.112Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:29.113Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:29.116Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5gbsWahzRzJMtQMXMA; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:29.116Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:29.117Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:29.118Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:29.118Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:29.118Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:29.118Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=21440301-55b8-4982-863c-6ca4721bc99b source=sdk
+2026-09-28T02:53:29.967Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:29.967Z [DEBUG] [API:timing] first byte after 850ms
+2026-09-28T02:53:40.023Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01Bkr5LJcSxMzecAdT2fAzfB permissionDecisionMs=4
+2026-09-28T02:53:40.025Z [DEBUG] [API REQUEST] /v1/messages/count_tokens x-client-request-id=d76b3c76-7431-43a9-9219-b298e7a91e75 source=count_tokens
+2026-09-28T02:53:40.127Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01Bkr5LJcSxMzecAdT2fAzfB outcome=ok durationMs=104
+2026-09-28T02:53:40.131Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:40.131Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:40.131Z [DEBUG] hooks module agents-md@builtin tool.call settled in 113.6ms (native link, next() included)
+2026-09-28T02:53:40.133Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:40.133Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:40.134Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:40.135Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:40.138Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5ggvdW3o8QBqR5HHZF; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:40.138Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:40.139Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:40.146Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:40.146Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:40.146Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:40.147Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=38c529f1-72ee-481d-8454-c4e6b991edd2 source=sdk
+2026-09-28T02:53:40.994Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:40.994Z [DEBUG] [API:timing] first byte after 853ms
+2026-09-28T02:53:44.561Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01We2obgeaZzAyyyFBvg7XmT permissionDecisionMs=4
+2026-09-28T02:53:44.562Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01We2obgeaZzAyyyFBvg7XmT outcome=ok durationMs=1
+2026-09-28T02:53:44.564Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:44.564Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:44.564Z [DEBUG] hooks module agents-md@builtin tool.call settled in 8.2ms (native link, next() included)
+2026-09-28T02:53:44.570Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:44.570Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:44.571Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:44.572Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:44.574Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5hW3JqGo4BNHLGdwoV; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:44.574Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:44.575Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:44.576Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:44.576Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:44.576Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:44.577Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=5347297e-6652-471a-91c9-11822fa29567 source=sdk
+2026-09-28T02:53:45.282Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:45.283Z [DEBUG] [API:timing] first byte after 706ms
+2026-09-28T02:53:47.944Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01BTg4gpt2Zh4s6czWsboXN8 permissionDecisionMs=5
+2026-09-28T02:53:47.945Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01BTg4gpt2Zh4s6czWsboXN8 outcome=ok durationMs=1
+2026-09-28T02:53:47.947Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:47.947Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:53:47.947Z [DEBUG] hooks module agents-md@builtin tool.call settled in 9.0ms (native link, next() included)
+2026-09-28T02:53:47.950Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:47.950Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:47.951Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:47.952Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:47.955Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5hqtQ5Zq9aGMmyWMxd; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:47.955Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:47.956Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:47.957Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:47.957Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:47.957Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:47.958Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=a6eaf717-acd7-4f2c-a8f1-0247d0feb4dd source=sdk
+2026-09-28T02:53:48.390Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:48.390Z [DEBUG] [API:timing] first byte after 433ms
+2026-09-28T02:53:50.244Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01VXwxbeB1RCsf7rjpVZk3Dx permissionDecisionMs=3
+2026-09-28T02:53:50.262Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01VXwxbeB1RCsf7rjpVZk3Dx outcome=ok durationMs=18
+2026-09-28T02:53:51.053Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_01VGzVu53mdqMG6DBoXgWjiC permissionDecisionMs=5
+2026-09-28T02:53:51.067Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_01VGzVu53mdqMG6DBoXgWjiC outcome=ok durationMs=14
+2026-09-28T02:53:51.070Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:53:51.070Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:53:51.071Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:53:51.071Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:53:51.073Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5i5Sjn9Aq7LxWgkrAd; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:53:51.073Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:51.074Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:51.074Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:53:51.075Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:53:51.075Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:53:51.075Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=fdfd97c6-d86e-4dcc-a27f-3df781757a0a source=sdk
+2026-09-28T02:53:51.596Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:53:51.596Z [DEBUG] [API:timing] first byte after 521ms
+2026-09-28T02:54:02.297Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01Mr5q5RAFnXo5MzKHhtVAG1 permissionDecisionMs=5
+2026-09-28T02:54:02.301Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01Mr5q5RAFnXo5MzKHhtVAG1 outcome=ok durationMs=4
+2026-09-28T02:54:02.303Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:54:02.303Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:54:02.303Z [DEBUG] hooks module agents-md@builtin tool.call settled in 12.3ms (native link, next() included)
+2026-09-28T02:54:02.304Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:54:02.304Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:54:02.305Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:54:02.305Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:54:02.307Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5iJssaCZTMXCgAjUjh; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:54:02.307Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:54:02.308Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:54:02.330Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:54:02.330Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:54:02.330Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:54:02.331Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=4d31141a-3b07-4c92-88d1-2a24e6a1ad02 source=sdk
+2026-09-28T02:54:02.919Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:54:02.919Z [DEBUG] [API:timing] first byte after 589ms
+2026-09-28T02:54:04.846Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_019gEnnWUF7nLvCCcwkrrZjX permissionDecisionMs=4
+2026-09-28T02:54:04.848Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_019gEnnWUF7nLvCCcwkrrZjX outcome=ok durationMs=2
+2026-09-28T02:54:04.849Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:54:04.849Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:54:04.849Z [DEBUG] hooks module agents-md@builtin tool.call settled in 8.1ms (native link, next() included)
+2026-09-28T02:54:04.853Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:54:04.853Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:54:04.854Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:54:04.855Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:54:04.857Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5j8us7wRTxhsXkfBwM; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:54:04.857Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:54:04.858Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:54:04.859Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:54:04.859Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:54:04.859Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:54:04.860Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=09959080-f8c4-4233-b036-956578c508d3 source=sdk
+2026-09-28T02:54:05.337Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:54:05.337Z [DEBUG] [API:timing] first byte after 478ms
+2026-09-28T02:54:35.792Z [DEBUG] Plugin autoupdate: checking installed plugins
+2026-09-28T02:55:12.392Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_016SJy3T4o5fBWjA2EG5Jfmu permissionDecisionMs=6
+2026-09-28T02:55:12.405Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_016SJy3T4o5fBWjA2EG5Jfmu outcome=ok durationMs=13
+2026-09-28T02:55:12.407Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:55:12.407Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:55:12.408Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:55:12.409Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:55:12.410Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5jKhG3S3Ju4wyHtAVm; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:55:12.411Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:12.411Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:12.431Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:12.431Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:55:12.431Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:55:12.432Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=21f7ce77-5ed9-4152-91ff-c035b2c82f1a source=sdk
+2026-09-28T02:55:13.253Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:55:13.253Z [DEBUG] [API:timing] first byte after 822ms
+2026-09-28T02:55:14.023Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_01TexntAdwMzLTBusoGyZZsW permissionDecisionMs=4
+2026-09-28T02:55:14.024Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_01TexntAdwMzLTBusoGyZZsW outcome=ok durationMs=1
+2026-09-28T02:55:14.026Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:55:14.026Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:55:14.026Z [DEBUG] hooks module agents-md@builtin tool.call settled in 7.3ms (native link, next() included)
+2026-09-28T02:55:14.029Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:55:14.029Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:55:14.030Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:55:14.031Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:55:14.033Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5pJbB1FbQGWiNi7c8x; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:55:14.033Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:14.033Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:14.034Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:14.034Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:55:14.034Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:55:14.035Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=88495c15-7f05-43d0-be0e-64d6ca60dee4 source=sdk
+2026-09-28T02:55:14.564Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:55:14.564Z [DEBUG] [API:timing] first byte after 530ms
+2026-09-28T02:55:19.398Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_014aqb9AehK3jcqJCZ4KoGqJ permissionDecisionMs=3
+2026-09-28T02:55:19.400Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_014aqb9AehK3jcqJCZ4KoGqJ outcome=ok durationMs=2
+2026-09-28T02:55:19.401Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:55:19.401Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:55:19.401Z [DEBUG] hooks module agents-md@builtin tool.call settled in 6.6ms (native link, next() included)
+2026-09-28T02:55:19.410Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:55:19.410Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:55:19.411Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:55:19.412Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:55:19.414Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5pRRgYtWB8piQVTNXL; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:55:19.414Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:19.415Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:19.416Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:55:19.416Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:55:19.416Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:55:19.417Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=5f808dfe-1827-4c88-8965-757091a563bf source=sdk
+2026-09-28T02:55:20.029Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:55:20.029Z [DEBUG] [API:timing] first byte after 613ms
+2026-09-28T02:56:16.141Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=toolu_017WoFsTZHTBz8Zkgb9VCyHK permissionDecisionMs=4
+2026-09-28T02:56:16.152Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=toolu_017WoFsTZHTBz8Zkgb9VCyHK outcome=ok durationMs=12
+2026-09-28T02:56:16.153Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:56:16.153Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:56:16.154Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:56:16.155Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:56:16.156Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5ppWkyE71jgtxGNFAi; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:56:16.156Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:56:16.157Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:56:16.176Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:56:16.176Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:56:16.176Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:56:16.176Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=b23e3dcf-37e7-419c-a1ef-f0f93d8303fa source=sdk
+2026-09-28T02:56:16.893Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:56:16.893Z [DEBUG] [API:timing] first byte after 717ms
+2026-09-28T02:56:18.889Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=toolu_011tg4AAu111rriEGSB2bGhb permissionDecisionMs=5
+2026-09-28T02:56:18.892Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=toolu_011tg4AAu111rriEGSB2bGhb outcome=ok durationMs=3
+2026-09-28T02:56:18.893Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:56:18.893Z [DEBUG] $.fs.ancestors (agents-md): project memory is off
+2026-09-28T02:56:18.893Z [DEBUG] hooks module agents-md@builtin tool.call settled in 10.9ms (native link, next() included)
+2026-09-28T02:56:18.895Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-09-28T02:56:18.895Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-09-28T02:56:18.896Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=980000
+2026-09-28T02:56:18.897Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-09-28T02:56:18.899Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.283.d82; cc_entrypoint=sdk-cli; cch=00000; cc_prev_req=req_011CfV5u18q5dGQsV1BWfW7R; cc_prompt_id=6e282573-da5e-42a9-9f86-3a722ba5b2f5; cc_turn_origin=sdk;
+2026-09-28T02:56:18.899Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:56:18.900Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:56:18.901Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-09-28T02:56:18.902Z [DEBUG] [API:timing] dispatching to firstParty model=claude-sonnet-5
+2026-09-28T02:56:18.902Z [DEBUG] [dispatch] sent anthropic-dispatch-id=v2d
+2026-09-28T02:56:18.902Z [DEBUG] [API REQUEST] /v1/messages x-client-request-id=86ae6b23-300e-4abd-8932-457ee6ac603e source=sdk
+2026-09-28T02:56:19.452Z [DEBUG] Stream started - received first chunk
+2026-09-28T02:56:19.453Z [DEBUG] [API:timing] first byte after 551ms

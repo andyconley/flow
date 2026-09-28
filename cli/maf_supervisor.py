@@ -457,7 +457,9 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
         raise MafProtocolError("delivery requires a v5, v6, v7, or v8 envelope and task")
     if not callable(on_manager) or not callable(on_action) or not 0 < timeout_s <= 900:
         raise MafProtocolError("delivery callbacks or timeout are invalid")
-    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    runtime = envelope.get("maf_runtime")
+    bound = runtime.get("interpreter") if isinstance(runtime, dict) else None
+    executable = python_path or bound or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
     root = Path(__file__).resolve().parents[1]
     process = subprocess.Popen(
         [executable, "-m", "runtime.maf_runner.delivery_lead"],
@@ -469,6 +471,8 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     deadline = time.monotonic() + timeout_s
     pending = bytearray()
     manager_calls = actions = 0
+    runtime_ready_seen = False
+    runtime_initialized_seen = False
     # v8 limits can grow by ledger grants, so the process guard backstops at
     # the runner ceiling; the ledger enforces the effective limit per call.
     expandable = protocol_version == 8
@@ -485,6 +489,20 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
             with interruptible():
                 message = _read_message(process.stdout.fileno(), deadline, pending, protocol_version)
             kind = message["type"]
+            if kind == "runtime_ready":
+                if runtime_ready_seen:
+                    raise MafProtocolError("MAF child sent duplicate runtime readiness")
+                if runtime is None or message.get("runtime") != runtime:
+                    raise MafProtocolError("MAF child runtime identity differs from the sealed envelope")
+                runtime_ready_seen = True
+                continue
+            if kind == "runtime_initialized":
+                if not runtime_ready_seen or runtime_initialized_seen:
+                    raise MafProtocolError("MAF child runtime initialization is invalid")
+                runtime_initialized_seen = True
+                continue
+            if not runtime_ready_seen or not runtime_initialized_seen:
+                raise MafProtocolError("MAF child acted before proving runtime identity")
             if kind == "manager_request":
                 manager_calls += 1
                 if (envelope["manager"]["provider"] in {"codex", "claude"}

@@ -15,8 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from fsutil import ensure_dir, repo_root, write_atomic
+from delivery_contracts import DeliveryContractError, validate_shaper_intent
 from delivery_control import start_plan as seal_delivery_start_plan
-from orchestration import manifest_path, valid_work_id, validate_orchestration
+from orchestration import manifest_path, valid_work_id, validate_manifest, validate_orchestration
 
 
 SCHEMA_VERSION = 1
@@ -421,6 +422,74 @@ def _orchestration_gate_errors(
     return []
 
 
+def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path | None = None) -> list[str]:
+    """Reject incomplete chartered Delivery plans before their approval is sealed."""
+    project_root = (root or repo_root()).resolve()
+    artifacts = payload.get("artifacts") or {}
+    manifest_relative = artifacts.get("orchestration_manifest")
+    if not isinstance(manifest_relative, str):
+        return []
+    try:
+        manifest = json.loads((project_root / manifest_relative).read_text())
+    except (OSError, json.JSONDecodeError):
+        return []  # The orchestration gate reports the canonical error.
+    assignments = manifest.get("assignments") if isinstance(manifest, dict) else None
+    if not isinstance(assignments, list):
+        return []
+    managers = [item for item in assignments if isinstance(item, dict) and item.get("id") == "magentic-manager"]
+    charter_relative = artifacts.get("job_charter")
+    if not managers and charter_relative is None:
+        return []
+    expected = f".flow/runs/{work_id}/job-charter.json"
+    errors: list[str] = []
+    if len(managers) != 1:
+        errors.append("chartered Delivery plan requires exactly one magentic-manager assignment")
+    else:
+        manager = managers[0]
+        execution = manager.get("execution") or {}
+        if (manager.get("lane") != "implement" or manager.get("role") != "delivery-lead"
+                or execution.get("provider") not in {"claude", "codex"}
+                or not isinstance(execution.get("model"), str) or not execution.get("model", "").strip()):
+            errors.append("magentic-manager requires an executable Claude or Codex delivery-lead binding")
+        timeout = execution.get("timeout_seconds")
+        if type(timeout) is not int or not 1 <= timeout <= 600:
+            errors.append("magentic-manager timeout_seconds must be between 1 and 600")
+        if expected not in (manager.get("input_evidence") or []):
+            errors.append("magentic-manager must cite the run-local job charter")
+    if charter_relative != expected:
+        errors.append("chartered Delivery plan requires the canonical run-local job_charter artifact")
+        return errors
+    charter_path = project_root / expected
+    try:
+        charter = json.loads(charter_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        errors.append("job_charter must be valid run-local JSON")
+        return errors
+    required = {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}
+    if not isinstance(charter, dict) or set(charter) != required:
+        errors.append("job_charter fields are incomplete")
+        return errors
+    baseline = charter.get("baseline")
+    if (not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}
+            or baseline.get("kind") not in {"clean", "declared_regression"}):
+        errors.append("job_charter must declare a clean or declared-regression worktree baseline")
+    ids = {item.get("id"): item for item in assignments if isinstance(item, dict) and isinstance(item.get("id"), str)}
+    for field, writable in (("producer_instance_ids", True), ("verifier_instance_ids", False)):
+        values = charter.get(field)
+        if not isinstance(values, list) or not values or len(values) != len(set(values)):
+            errors.append(f"job_charter {field} is invalid")
+            continue
+        for instance_id in values:
+            assignment = ids.get(instance_id)
+            if assignment is None:
+                errors.append(f"job_charter {field} names unknown assignment {instance_id}")
+            elif writable and assignment.get("read_only") is True:
+                errors.append(f"producer assignment {instance_id} is read-only")
+            elif not writable and assignment.get("read_only") is not True:
+                errors.append(f"verifier assignment {instance_id} is writable")
+    return errors
+
+
 def apply_transition(
     work_id: str,
     event_name: str,
@@ -505,12 +574,23 @@ def apply_transition(
             if (not path.is_file() or path.is_symlink()
                     or not path.resolve().is_relative_to(active_root)):
                 return False, current or {}, [f"{name} must be a current-run regular file"]
-            payload["approved_artifact_digests"][name] = hashlib.sha256(path.read_bytes()).hexdigest()
+            content = path.read_bytes()
+            if name == "shaper_intent":
+                try:
+                    validate_shaper_intent(json.loads(content))
+                except (json.JSONDecodeError, DeliveryContractError) as exc:
+                    return False, current or {}, [f"shaper_intent failed validation: {exc}"]
+            payload["approved_artifact_digests"][name] = hashlib.sha256(content).hexdigest()
 
     missing = _missing_gate_items(payload, transition)
     if missing:
         gate = f" for {transition.gate}" if transition.gate else ""
         return False, current or {}, [f"missing{gate}: {item}" for item in missing]
+
+    if event_name == "approve-plan" and _protocol_revision(payload) == PROTOCOL_REVISION_CURRENT:
+        plan_errors = _delivery_plan_errors(work_id, payload, root=root)
+        if plan_errors:
+            return False, current or {}, plan_errors
 
     orchestration_errors = _orchestration_gate_errors(
         work_id, event_name, payload, root=root
@@ -581,20 +661,108 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
         events = _load_events(work_id, root)
     except ValueError as exc:
         return False, [str(exc)], payload
-    if not events:
+    lifecycle_events = [event for event in events if not str(event.get("event", "")).startswith("delivery-lead-")]
+    if not lifecycle_events:
         ok = False
         messages.append("events: missing transition history")
-    elif events[-1].get("to") != payload.get("state"):
+    elif lifecycle_events[-1].get("to") != payload.get("state"):
         ok = False
         messages.append(
-            f"state/history mismatch: run.json={payload.get('state')} events.jsonl={events[-1].get('to')}"
+            f"state/history mismatch: run.json={payload.get('state')} events.jsonl={lifecycle_events[-1].get('to')}"
         )
-    if payload.get("last_event") and events and events[-1].get("event") != payload.get("last_event"):
+    if payload.get("last_event") and lifecycle_events and lifecycle_events[-1].get("event") != payload.get("last_event"):
         ok = False
         messages.append("last_event does not match latest history event")
     if ok:
         messages.append("ok")
     return ok, messages, payload
+
+
+def approve_orchestration_amendment(
+    work_id: str,
+    replacement: str,
+    reason: str,
+    *,
+    approved_by_user: bool,
+    root: Path | None = None,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    """Replace a sealed orchestration manifest while preserving approved lineage."""
+    if not approved_by_user:
+        return False, {}, ["explicit user approval is required"]
+    if not valid_work_id(work_id):
+        return False, {}, ["invalid work id"]
+    if not isinstance(reason, str) or not reason.strip():
+        return False, {}, ["amendment reason is required"]
+    project_root = (root or repo_root()).resolve()
+    current = _load_run(work_id, project_root)
+    if not current or _protocol_revision(current) != PROTOCOL_REVISION_CURRENT:
+        return False, current or {}, ["amendment requires a revision-2 run"]
+    canonical = manifest_path(work_id, project_root)
+    declared = (current.get("artifacts") or {}).get("orchestration_manifest")
+    if declared != canonical.relative_to(project_root).as_posix() or not canonical.is_file() or canonical.is_symlink():
+        return False, current, ["sealed canonical orchestration manifest is unavailable"]
+    original = canonical.read_bytes()
+    original_digest = hashlib.sha256(original).hexdigest()
+    approved_digest = (current.get("approved_artifact_digests") or {}).get("orchestration_manifest")
+    amendments = list(current.get("amendments") or [])
+    expected_digest = amendments[-1]["replacement_digest"] if amendments else approved_digest
+    if not expected_digest or original_digest != expected_digest:
+        return False, current, ["current orchestration bytes differ from the approved amendment lineage"]
+    replacement_path = project_root / replacement
+    run_dir = canonical.parent.resolve()
+    if (Path(replacement).is_absolute() or not replacement_path.is_file() or replacement_path.is_symlink()
+            or not replacement_path.resolve().is_relative_to(run_dir)):
+        return False, current, ["replacement must be a current-run regular file"]
+    replacement_bytes = replacement_path.read_bytes()
+    try:
+        replacement_data = json.loads(replacement_bytes)
+    except json.JSONDecodeError as exc:
+        return False, current, [f"replacement is invalid JSON: {exc}"]
+    stage = "acceptance" if current.get("state") in {STATE_HANDBACK_READY, STATE_REVIEWING, STATE_REVIEW_ACCEPTED} else "dispatch"
+    findings = validate_manifest(replacement_data, work_id, stage, root=project_root)
+    if findings:
+        return False, current, [f"{f.field} [{f.rule}]: {f.message}" for f in findings]
+    replacement_digest = hashlib.sha256(replacement_bytes).hexdigest()
+    if replacement_digest == original_digest:
+        return False, current, ["replacement does not change the orchestration manifest"]
+
+    sequence = len(amendments) + 1
+    amendment_dir = run_dir / "amendments"
+    ensure_dir(amendment_dir)
+    original_relative = canonical.relative_to(project_root).as_posix()
+    snapshot = amendment_dir / f"{sequence:04d}-original.json"
+    record_path = amendment_dir / f"{sequence:04d}.json"
+    now = _now()
+    record = {
+        "sequence": sequence,
+        "artifact": "orchestration_manifest",
+        "original_path": original_relative,
+        "original_digest": original_digest,
+        "original_snapshot": snapshot.relative_to(project_root).as_posix(),
+        "replacement_source": replacement_path.relative_to(project_root).as_posix(),
+        "replacement_digest": replacement_digest,
+        "reason": reason.strip(),
+        "approval": {"authority": "user", "explicit": True, "at": now},
+    }
+    write_atomic(snapshot, original.decode("utf-8"))
+    write_atomic(record_path, json.dumps(record, indent=2, sort_keys=True) + "\n")
+    write_atomic(canonical, replacement_bytes.decode("utf-8"))
+    payload = dict(current)
+    payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
+    payload["approved_artifact_digests"]["orchestration_manifest"] = replacement_digest
+    payload["amendments"] = amendments + [record]
+    payload["updated_at"] = now
+    payload["last_event"] = "approve-orchestration-amendment"
+    _write_run(work_id, payload, project_root)
+    _append_event(work_id, {
+        "at": now, "event": "approve-orchestration-amendment",
+        "from": payload.get("state"), "to": payload.get("state"),
+        "artifacts": {"amendment": record_path.relative_to(project_root).as_posix()},
+        "dispositions": {"approval": "explicit-user-approval"},
+        "approved_artifact_digests": {"orchestration_manifest": replacement_digest},
+        "reason": reason.strip(),
+    }, project_root)
+    return True, payload, []
 
 
 def _print_run(payload: dict[str, Any]) -> None:
@@ -708,5 +876,23 @@ def cmd_transition(args) -> int:
             print(f"- {error}")
         return 1
     print(f"transition accepted: {args.event}")
+    print(f"state: {payload.get('state')}")
+    return 0
+
+
+def cmd_amend_orchestration(args) -> int:
+    ok, payload, errors = approve_orchestration_amendment(
+        args.work_id, args.replacement, args.reason,
+        approved_by_user=args.approved_by_user,
+    )
+    if args.json:
+        print(json.dumps({"ok": ok, "errors": errors, "run": payload}, indent=2, sort_keys=True))
+        return 0 if ok else 1
+    if not ok:
+        print("orchestration amendment refused")
+        for error in errors:
+            print(f"- {error}")
+        return 1
+    print("orchestration amendment approved")
     print(f"state: {payload.get('state')}")
     return 0

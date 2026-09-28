@@ -140,9 +140,28 @@ done
 resolve_python
 
 mkdir -p "${FLOW_HOME}" "${BIN_DIR}"
-# Remove the legacy framework→source rename target and any prior install at the
-# current path. Works for both symlinks (develop) and directories (release).
-rm -rf "${FLOW_HOME}/framework" "${SOURCE_DIR}"
+# Keep the active installation intact until the optional managed runtime has
+# been staged and proven.  This matters most on a package-index outage: Flow
+# itself remains usable and the runtime pointer is independently atomic.
+SOURCE_BACKUP="${FLOW_HOME}/source.rollback.$$"
+CONFIG_BACKUP="${FLOW_HOME}/config.rollback.$$"
+had_source=0
+had_config=0
+if [[ -e "${SOURCE_DIR}" || -L "${SOURCE_DIR}" ]]; then
+  mv "${SOURCE_DIR}" "${SOURCE_BACKUP}"
+  had_source=1
+fi
+if [[ -f "${CONFIG_FILE}" ]]; then
+  cp -p "${CONFIG_FILE}" "${CONFIG_BACKUP}"
+  had_config=1
+fi
+rm -rf "${FLOW_HOME}/framework"
+
+rollback_install() {
+  rm -rf "${SOURCE_DIR}"
+  if [[ ${had_source} -eq 1 ]]; then mv "${SOURCE_BACKUP}" "${SOURCE_DIR}"; fi
+  if [[ ${had_config} -eq 1 ]]; then mv "${CONFIG_BACKUP}" "${CONFIG_FILE}"; else rm -f "${CONFIG_FILE}"; fi
+}
 
 installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -208,6 +227,9 @@ mode = "release"
 version = "${version}"
 remote = "${remote}"
 installed_at = "${installed_at}"
+maf_runtime_activation_revision = 1
+maf_runtime_activation_state = "pending"
+maf_runtime_activation_attempted_at = "${installed_at}"
 TOML
 else
   ln -s "${ROOT_DIR}" "${SOURCE_DIR}"
@@ -222,6 +244,9 @@ python_version = "${FLOW_PYTHON_VERSION}"
 mode = "develop"
 source_target = "${ROOT_DIR}"
 installed_at = "${installed_at}"
+maf_runtime_activation_revision = 1
+maf_runtime_activation_state = "pending"
+maf_runtime_activation_attempted_at = "${installed_at}"
 TOML
 fi
 
@@ -250,6 +275,26 @@ if ! "${BIN_DIR}/flow" --help >/dev/null 2>&1; then
   } >&2
   exit 1
 fi
+
+# Delivery is optional after installation, but a successful install owns a
+# verified runtime for the chartered lane. `install-maf` stages and probes its
+# environment before atomically changing the runtime pointer, so an existing
+# known-good selection remains intact if this step fails.
+set +e
+maf_install_output="$("${BIN_DIR}/flow" runtime install-maf 2>&1)"
+maf_install_status=$?
+set -e
+printf '%s\n' "${maf_install_output}"
+if [[ ${maf_install_status} -ne 0 ]]; then
+  if [[ "${maf_install_output}" == *"unsupported_runtime"* ]]; then
+    echo "warning: managed MAF runtime is unsupported on this host; base Flow installed without Delivery readiness"
+  else
+    rollback_install
+    err "managed MAF runtime could not be provisioned; prior Flow source, config, and runtime selection were restored"
+  fi
+fi
+
+rm -rf "${SOURCE_BACKUP}" "${CONFIG_BACKUP}"
 
 "${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/archive_preflight.py" || true
 

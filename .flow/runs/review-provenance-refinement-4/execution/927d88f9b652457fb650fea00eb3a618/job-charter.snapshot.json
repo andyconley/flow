@@ -1,0 +1,9 @@
+{
+  "task": "Implement the approved review-provenance refinement and codify all three predecessor bootstrap failures. Add the review-only immutable amendment mechanism, early canonical Shaper-intent validation, chartered Delivery Lead plan validation including protocol-v8 envelope limits, focused regression tests, and generated process documentation. Preserve original authority and compatibility. Do not edit run artifacts or apply the amendment to maf-runtime-readiness-2; the Flow coordinator will perform that gated operation after this code is reviewed and validated.",
+  "read_paths": ["cli", "tests", "docs", "scaffolds", "README.md", ".flow/runs/review-provenance-refinement", ".flow/runs/review-provenance-refinement-2", ".flow/runs/review-provenance-refinement-4", ".flow/runs/maf-runtime-readiness-2"],
+  "write_paths": ["cli", "tests", "docs", "scaffolds", "README.md"],
+  "test": {"argv": ["/opt/homebrew/bin/python3.12", "-m", "unittest", "discover", "-s", "tests", "-p", "test_flow.py"], "timeout_seconds": 600},
+  "producer_instance_ids": ["review-provenance-producer"],
+  "verifier_instance_ids": ["review-provenance-verifier"],
+  "baseline": {"kind": "clean", "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+}

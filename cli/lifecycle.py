@@ -59,6 +59,12 @@ from paths import (
 )
 from setup import _ensure_usage_store
 from sync import sync_target
+from maf_runtime import MafRuntimeUnready, provision as provision_maf_runtime
+
+# This constant is deliberately carried in every release source tree. An
+# updater from the preceding release only has to activate that tree; the first
+# invocation of its new CLI can then complete the bounded runtime bridge.
+MAF_RUNTIME_ACTIVATION_REVISION = 1
 
 
 def _now_utc_iso() -> str:
@@ -129,10 +135,23 @@ def write_install_config(install: dict) -> None:
     for key, value in flow_section.items():
         lines.append(f'{key} = "{value}"')
     lines.extend(["", "[install]"])
-    # Stable key order keeps diffs readable.
-    for key in ("mode", "version", "remote", "source_target", "installed_at"):
+    # Preserve structured activation evidence. Do not serialize integers and
+    # booleans as quoted strings: a bridge revision must round-trip as an int.
+    def toml_scalar(value: object) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        raise ValueError("install configuration values must be TOML scalars")
+
+    preferred = ("mode", "version", "remote", "source_target", "installed_at",
+                 "maf_runtime_activation_revision", "maf_runtime_activation_state",
+                 "maf_runtime_activation_attempted_at", "maf_runtime_activation_detail")
+    for key in (*preferred, *sorted(key for key in install if key not in preferred)):
         if key in install:
-            lines.append(f'{key} = "{install[key]}"')
+            lines.append(f"{key} = {toml_scalar(install[key])}")
     lines.append("")
     FLOW_CONFIG.write_text("\n".join(lines))
 
@@ -475,7 +494,7 @@ def _validate_staging(staging: Path) -> str | None:
     return None
 
 
-def _swap_source_with_staging(staging: Path) -> str | None:
+def _swap_source_with_staging(staging: Path, *, keep_old: bool = False) -> str | None:
     """Atomically swap ~/.flow/source/ with staging. Returns None on success or an error string.
 
     Strategy: rename current source aside, then rename staging into place. On a
@@ -504,11 +523,37 @@ def _swap_source_with_staging(staging: Path) -> str | None:
                     f"previous install at {old_dir}; staging at {staging}"
                 )
         return f"rename failed: {err}"
-    if moved_existing:
+    if moved_existing and not keep_old:
         # The renamed-aside entry may have been a symlink (develop→release case) — use
         # the symlink-aware helper so it actually gets cleaned up rather than silently leaked.
         _remove_path(old_dir)
     return None
+
+
+def _restore_after_maf_failure(config_bytes: bytes | None) -> None:
+    """Restore the source/config selection retained by a transactional swap."""
+    old_dir = _stage_path("old")
+    if old_dir.exists() or old_dir.is_symlink():
+        _remove_path(SOURCE_DIR)
+        os.rename(old_dir, SOURCE_DIR)
+    if config_bytes is None:
+        _remove_path(FLOW_CONFIG)
+    else:
+        FLOW_CONFIG.write_bytes(config_bytes)
+
+
+def _finish_maf_transaction(config_bytes: bytes | None) -> bool:
+    if _provision_maf_runtime():
+        config = read_install_config()
+        config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                       "maf_runtime_activation_state": "succeeded",
+                       "maf_runtime_activation_attempted_at": _now_utc_iso()})
+        config.pop("maf_runtime_activation_detail", None)
+        write_install_config(config)
+        _remove_path(_stage_path("old"))
+        return True
+    _restore_after_maf_failure(config_bytes)
+    return False
 
 
 def _print_resync_hint(prefix: str = "") -> None:
@@ -517,6 +562,81 @@ def _print_resync_hint(prefix: str = "") -> None:
     print("Re-sync user-level adapters to pick up any new commands, agents, or hooks:")
     print("  flow sync claude --user")
     print("  flow sync codex --user")
+
+
+def _provision_maf_runtime() -> bool:
+    """Keep the optional Delivery runtime separate from source swapping.
+
+    Provision itself never overwrites the previous pointer until its staged
+    interpreter probes cleanly, so source conversion/update cannot turn a
+    working runtime selection into an ambient-Python fallback.
+    """
+    try:
+        provision_maf_runtime()
+    except MafRuntimeUnready as exc:
+        print(f"managed MAF runtime provisioning failed: {exc}")
+        return False
+    return True
+
+
+def activate_managed_maf_runtime() -> dict[str, object]:
+    """Complete the first-upgrade bridge once an older updater activates us.
+
+    Older ``flow update`` code cannot call a hook it does not contain. The new
+    source therefore carries this revision and self-activates on its first CLI
+    invocation. Failure is retained as an explicit install-config marker and
+    never changes the selected source/config pair.
+    """
+    # Never turn a project overlay or inferred legacy source into a machine
+    # mutation. The bridge belongs only to an explicit machine installation.
+    if not FLOW_CONFIG.is_file():
+        return {"attempted": False, "state": "unmanaged"}
+    try:
+        raw = read_toml(FLOW_CONFIG)
+    except Exception:
+        raw = {}
+    if not isinstance(raw.get("install"), dict) or not raw["install"].get("mode"):
+        return {"attempted": False, "state": "unmanaged"}
+    config = read_install_config()
+    if (config.get("maf_runtime_activation_revision") == MAF_RUNTIME_ACTIVATION_REVISION
+            and config.get("maf_runtime_activation_state") in {"succeeded", "failed", "unsupported"}):
+        return {"attempted": False, "state": config["maf_runtime_activation_state"]}
+    if not _provision_maf_runtime():
+        config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                       "maf_runtime_activation_state": "failed",
+                       "maf_runtime_activation_attempted_at": _now_utc_iso(),
+                       "maf_runtime_activation_detail": "provisioning failed; run flow runtime install-maf to repair"})
+        write_install_config(config)
+        return {"attempted": True, "state": "failed"}
+    config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                   "maf_runtime_activation_state": "succeeded",
+                   "maf_runtime_activation_attempted_at": _now_utc_iso()})
+    config.pop("maf_runtime_activation_detail", None)
+    write_install_config(config)
+    return {"attempted": True, "state": "succeeded"}
+
+
+def record_managed_maf_runtime_repair() -> None:
+    """Record an explicit ``runtime install-maf`` repair without re-provisioning."""
+    config = read_install_config()
+    config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                   "maf_runtime_activation_state": "succeeded",
+                   "maf_runtime_activation_attempted_at": _now_utc_iso()})
+    config.pop("maf_runtime_activation_detail", None)
+    write_install_config(config)
+
+
+def record_managed_maf_runtime_unavailable(reason: str) -> None:
+    """Persist a truthful optional-runtime state after an explicit install attempt."""
+    if not FLOW_CONFIG.is_file():
+        return
+    state = "unsupported" if reason == "unsupported_runtime" else "failed"
+    config = read_install_config()
+    config.update({"maf_runtime_activation_revision": MAF_RUNTIME_ACTIVATION_REVISION,
+                   "maf_runtime_activation_state": state,
+                   "maf_runtime_activation_attempted_at": _now_utc_iso(),
+                   "maf_runtime_activation_detail": reason})
+    write_install_config(config)
 
 
 def install_command(release: bool, develop_path: str | None) -> int:
@@ -577,7 +697,8 @@ def _convert_to_release() -> int:
         print(invalid)
         return 1
 
-    swap_err = _swap_source_with_staging(staging)
+    prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
+    swap_err = _swap_source_with_staging(staging, keep_old=True)
     if swap_err:
         print(swap_err)
         return 1
@@ -592,7 +713,7 @@ def _convert_to_release() -> int:
     )
     print(f"converted to release mode (version: {version})")
     print(f"clone preserved at: {clone}")
-    return 0
+    return 0 if _finish_maf_transaction(prior_config) else 1
 
 
 def _convert_to_develop(clone: Path) -> int:
@@ -616,20 +737,22 @@ def _convert_to_develop(clone: Path) -> int:
 
     print(f"converting -> develop, symlink target: {clone}")
 
-    # Replace the existing source — directory or symlink — with a symlink to the clone.
-    if SOURCE_DIR.is_symlink() or SOURCE_DIR.is_file():
-        try:
-            SOURCE_DIR.unlink()
-        except OSError as err:
-            print(f"could not remove existing source link: {err}")
-            return 1
-    elif SOURCE_DIR.is_dir():
-        shutil.rmtree(SOURCE_DIR, ignore_errors=True)
-
+    # Treat conversion just like release/update: keep the old source and
+    # config until the optional delivery runtime is proved.  A failed
+    # provision must never leave a user on a new source/config pair with an
+    # unusable runtime pointer.
+    prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
+    staging = _stage_path("new")
+    _remove_path(staging)
     try:
-        os.symlink(str(clone), str(SOURCE_DIR))
+        os.symlink(str(clone), str(staging))
     except OSError as err:
-        print(f"could not create symlink: {err}")
+        print(f"could not stage develop source link: {err}")
+        return 1
+    swap_err = _swap_source_with_staging(staging, keep_old=True)
+    if swap_err:
+        _remove_path(staging)
+        print(swap_err)
         return 1
 
     write_install_config(
@@ -640,7 +763,7 @@ def _convert_to_develop(clone: Path) -> int:
         }
     )
     print(f"converted to develop mode (source: {clone})")
-    return 0
+    return 0 if _finish_maf_transaction(prior_config) else 1
 
 
 def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False) -> int:
@@ -846,7 +969,8 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
             print(invalid)
             return 1
 
-        swap_err = _swap_source_with_staging(staging)
+        prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
+        swap_err = _swap_source_with_staging(staging, keep_old=True)
         if swap_err:
             print(swap_err)
             return 1
@@ -859,4 +983,4 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
     write_install_config(new_install)
 
     print(f"updated to {tag}")
-    return 0
+    return 0 if _finish_maf_transaction(prior_config) else 1

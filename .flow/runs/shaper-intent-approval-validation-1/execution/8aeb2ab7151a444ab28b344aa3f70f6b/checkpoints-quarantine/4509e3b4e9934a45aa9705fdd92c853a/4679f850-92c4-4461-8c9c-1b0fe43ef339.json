@@ -1,0 +1,35 @@
+{
+  "workflow_name": "flow-magentic-delivery-v8",
+  "graph_signature_hash": "f56924e4402b5d49cddcf5a611d5860937787accc9ee25c2fe3c6a5fb9bd626f",
+  "checkpoint_id": "4679f850-92c4-4461-8c9c-1b0fe43ef339",
+  "previous_checkpoint_id": null,
+  "timestamp": "2026-09-28T03:02:19.195038+00:00",
+  "messages": {
+    "internal:magentic_orchestrator": [
+      {
+        "__pickled__": "gAWVsgUAAAAAAACMKmFnZW50X2ZyYW1ld29yay5fd29ya2Zsb3dzLl9ydW5uZXJfY29udGV4dJSMD1dvcmtmbG93TWVzc2FnZZSTlCmBlH2UKIwEZGF0YZRYngQAAEltcGxlbWVudCBleGFjdGx5IG9uZSBkZWZlY3QgcmVwYWlyOiB2YWxpZGF0ZSBjYW5vbmljYWwgc2hhcGVyLWludGVudC5qc29uIGJlZm9yZSBhcHByb3ZlLWRlZmluaXRpb24gd3JpdGVzIGxpZmVjeWNsZSBzdGF0ZSwgZXZlbnRzLCBvciBhcHByb3ZlZCBkaWdlc3RzLiBSZXVzZSB0aGUgZXhpc3RpbmcgY2Fub25pY2FsIHZhbGlkYXRvciwgYWRkIGZvY3VzZWQgYXRvbWljaXR5IGFuZCBjb21wYXRpYmlsaXR5IHRlc3RzLCBhbmQgdXBkYXRlIG9ubHkgZGlyZWN0bHkgYWZmZWN0ZWQgZ3VpZGFuY2UuIERvIG5vdCBpbXBsZW1lbnQgcmV2aWV3IGFtZW5kbWVudHMsIERlbGl2ZXJ5LXBsYW4gdmFsaWRhdGlvbiwgcHJvdmlkZXItYWRhcHRlciBjaGFuZ2VzLCBvciBhbnkgb3RoZXIgcHJlZGVjZXNzb3Igc2NvcGUuCgpGbG93LXZlcmlmaWVkIGV4ZWN1dGlvbiBmYWN0czoKLSBUaGUgaXNvbGF0ZWQgd29ya3RyZWUgaXMgcGlubmVkIHRvIHNvdXJjZSBjb21taXQgNzYxMzZjMjhlZGE2MTYyZjZhN2U0MmFjYTIzY2UxOTI3OWUwOWVlMS4KLSBUaGUgYXBwcm92ZWQgYmFzZWxpbmUgaXMgY2xlYW4uCi0gUmVhZC1vbmx5IGFuYWx5c3QgYW5kIHZlcmlmaWVyIHNwZWNpYWxpc3RzIGNhbiBhbmFseXplIHN1cHBsaWVkIHRhc2sgdGV4dCBvbmx5OyB0aGV5IGNhbm5vdCByZWFkIGZpbGVzLCBydW4gY29tbWFuZHMsIG9yIGVkaXQgdGhlIHdvcmt0cmVlLgotIFRoZSBhcHByb3ZlZCBlZGl0b3IgbWF5IGVkaXQgb25seSB0aGUgY2hhcnRlcidzIGFsbG93ZWQgcGF0aHMuIEZsb3cgdmVyaWZpZXMgdGhlIGRpZmYgYW5kIHJ1bnMgdGhlIHRhcmdldGVkIHRlc3QgYWZ0ZXIgdGhhdCBlZGl0OyB0aGUgZnVsbCBzdWl0ZSBpcyBhbiBhY2NlcHRhbmNlIGNoZWNrLgotIFRoZSBhcHByb3ZlZCBlZGl0b3JzIGdldCBvbmUgY2FsbCBpbiB0b3RhbDsgRmxvdyByZWZ1c2VzIGFueSBzZWNvbmQgZWRpdG9yIGNhbGwuIFRoYXQgY2FsbCBtdXN0IHJlYWQgd2hhdCBpdCBuZWVkcyBhbmQgbWFrZSB0aGUgY29tcGxldGUgZWRpdCBpbiB0aGUgc2FtZSB0dXJuLiBOZXZlciBkZWxlZ2F0ZSBhbiBpbnNwZWN0LW9ubHkgb3IgImRvIG5vdCBlZGl0IHlldCIgc3RlcCB0byBhbiBlZGl0b3I6IEZsb3cgY2hlY2tzIHRoZSB3b3JrdHJlZSByaWdodCBhZnRlciBpdCwgYW5kIG5vIGVkaXQgZmFpbHMgdGhlIGF0dGVtcHQuCpSMCXNvdXJjZV9pZJSMHmludGVybmFsOm1hZ2VudGljX29yY2hlc3RyYXRvcpSMCXRhcmdldF9pZJSMFW1hZ2VudGljX29yY2hlc3RyYXRvcpSMBHR5cGWUaACMC01lc3NhZ2VUeXBllJOUjAhzdGFuZGFyZJSFlFKUjA50cmFjZV9jb250ZXh0c5ROjA9zb3VyY2Vfc3Bhbl9pZHOUTowbb3JpZ2luYWxfcmVxdWVzdF9pbmZvX2V2ZW50lE51Yi4=",
+        "__type__": "agent_framework._workflows._runner_context:WorkflowMessage"
+      }
+    ]
+  },
+  "state": {
+    "_workflow_run_kwargs": {},
+    "_resolved_workflow_run_kwargs": {},
+    "_executor_state": {
+      "magentic_orchestrator": {
+        "conversation": [],
+        "round_index": 0,
+        "orchestrator_name": "magentic_orchestrator",
+        "metadata": {},
+        "terminated": false,
+        "manager_state": {}
+      },
+      "shaper-intent-producer": {},
+      "shaper-intent-verifier": {}
+    }
+  },
+  "pending_request_info_events": {},
+  "iteration_count": 0,
+  "metadata": {},
+  "version": "1.0"
+}

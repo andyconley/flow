@@ -87,6 +87,23 @@ class CodexWorkerTests(unittest.TestCase):
                 call_codex(instructions="Manager", task="Return a plan", workspace=workspace,
                            model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="danger-full-access")
 
+    def test_large_event_stream_completes_without_semantic_size_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "codex-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "sys.stdin.read()\n"
+                            "print(json.dumps({'type':'thread.started','thread_id':'large'}))\n"
+                            "for _ in range(5000):\n"
+                            " print(json.dumps({'type':'item.completed','item':{'type':'command_execution','output':'x' * 100}}))\n"
+                            "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'done'}}))\n"
+                            "print(json.dumps({'type':'turn.completed'}))\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            result = call_codex(instructions="Charter", task="Task", workspace=root,
+                                model="gpt-test", timeout_seconds=20, codex_bin=str(fake))
+            self.assertEqual(result["output"], "done")
+
     def test_timeout_is_uncertain(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

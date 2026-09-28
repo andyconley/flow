@@ -1,0 +1,11 @@
+{
+  "charter_digest": "682d4293b103b974873b14b46be383828be00a2ae7ae344ff7e8e6c0d2df09f1",
+  "digest": "5fefc5e116c04e712779f7531420f31ba621b2457f84067a84ac6e5921c1d9d4",
+  "generation": 1,
+  "kind": "delivery_lead_claim",
+  "logical_delivery_attempt_id": "logical-682d4293b103b974873b",
+  "owner": "delivery-lead",
+  "schema_version": 1,
+  "status": "active",
+  "supersedes": null
+}

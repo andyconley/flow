@@ -9,8 +9,10 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
+import venv
 from pathlib import Path
 from tests.shaper_intent_fixture import shaper_intent
+from tests.maf_env import managed_wheelhouse
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +63,10 @@ def _clean_env(home: Path | None = None) -> dict[str, str]:
     env["NO_COLOR"] = "1"
     if home is not None:
         env["HOME"] = str(home)
+    # Installer/lifecycle tests exercise the same digest-addressed managed
+    # environment as release, without network or an override escape hatch.
+    if managed_wheelhouse().is_dir():
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
     return env
 
 
@@ -79,6 +85,13 @@ class FlowCliHarness(unittest.TestCase):
         self.repo = Path(self._tempdir.name)
         (self.repo / ".git").mkdir()
         self._fake_home: Path | None = None
+        # Every CLI subprocess gets an isolated HOME, even tests that do not
+        # exercise installation. A project overlay must never inherit or
+        # mutate the developer's real machine installation.
+        self._sandbox_home = self.repo / "sandbox_home"
+        self._sandbox_home.mkdir()
+        (self._sandbox_home / ".flow").mkdir()
+        (self._sandbox_home / ".flow" / "source").symlink_to(REPO_ROOT)
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
@@ -89,7 +102,7 @@ class FlowCliHarness(unittest.TestCase):
             cwd=self.repo,
             text=True,
             capture_output=True,
-            env=_clean_env(self._fake_home),
+            env=_clean_env(self._fake_home or self._sandbox_home),
         )
 
     def run_flow_with_input(self, stdin: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -99,7 +112,7 @@ class FlowCliHarness(unittest.TestCase):
             text=True,
             input=stdin,
             capture_output=True,
-            env=_clean_env(self._fake_home),
+            env=_clean_env(self._fake_home or self._sandbox_home),
         )
 
     def assert_ok(self, result: subprocess.CompletedProcess[str]) -> None:
@@ -173,6 +186,9 @@ class FlowCliHarness(unittest.TestCase):
         fake_home.mkdir()
         (fake_home / ".flow").mkdir()
         (fake_home / ".flow" / "source").symlink_to(REPO_ROOT)
+        (fake_home / ".flow" / "config.toml").write_text(
+            "[install]\nmode = \"develop\"\nsource_target = \"test fixture\"\n"
+        )
         self._fake_home = fake_home
         return fake_home
 
@@ -613,6 +629,131 @@ class OrchestrationCliTests(FlowCliHarness):
         self.assertIn("shaper_intent", refused.stdout)
         self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
 
+    def test_invalid_shaper_intent_refuses_approve_definition_without_writing(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        run_path = run_dir / "run.json"
+        events_path = run_dir / "events.jsonl"
+        intent_path = run_dir / "shaper-intent.json"
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+
+        broken = shaper_intent()
+        del broken["problem"]
+        intent_path.write_text(json.dumps(broken) + "\n")
+        before = (run_path.read_bytes(), events_path.read_bytes())
+        refused = self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("shaper_intent failed validation", refused.stdout)
+        self.assertEqual(before, (run_path.read_bytes(), events_path.read_bytes()))
+
+        intent_path.write_text(json.dumps(shaper_intent()) + "\n")
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        ))
+        status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
+        self.assertEqual(status["state"], "definition_approved")
+
+    def test_shaper_intent_refuses_runtime_above_protocol_ceiling(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+        intent = shaper_intent()
+        intent["budget_safety_envelope"]["enforceable"]["runtime_seconds"] = 1800
+        (run_dir / "shaper-intent.json").write_text(json.dumps(intent) + "\n")
+        refused = self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("runtime_seconds exceeds the protocol maximum", refused.stdout)
+
+    def test_chartered_delivery_plan_is_checked_before_approval(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        manifest_path = run_dir / "orchestration.json"
+        manifest = json.loads(manifest_path.read_text())
+        manager = manifest["assignments"][0]
+        manager.update({
+            "id": "magentic-manager", "role": "delivery-lead",
+            "execution": {"provider": "claude", "model": "claude-test", "timeout_seconds": 1800},
+        })
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        payload = {"artifacts": {"orchestration_manifest": ".flow/runs/demo/orchestration.json"}}
+        import importlib
+        sys.path.insert(0, str(REPO_ROOT / "cli"))
+        try:
+            runstate = importlib.import_module("runstate")
+            errors = runstate._delivery_plan_errors("demo", payload, root=self.repo)
+        finally:
+            sys.path.pop(0)
+            sys.modules.pop("runstate", None)
+        self.assertIn("magentic-manager timeout_seconds must be between 1 and 600", errors)
+        self.assertIn("chartered Delivery plan requires the canonical run-local job_charter artifact", errors)
+
+    def test_explicit_user_approval_amends_orchestration_with_lineage(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        manifest_path = run_dir / "orchestration.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["assignments"][0]["coordination"] = {"mode": "serialized", "group": "primary"}
+        handback = dict(manifest["assignments"][0])
+        handback["id"] = "handback"
+        handback["output"] = {"path": ".flow/runs/demo/output.md", "format": "markdown"}
+        handback["coordination"] = {"mode": "serialized", "group": "primary"}
+        manifest["assignments"].append(handback)
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+        self.assert_ok(self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        ))
+        run_payload = json.loads((run_dir / "run.json").read_text())
+        run_payload.update({"state": "reviewing", "phase": "reviewing", "lane": "review"})
+        (run_dir / "run.json").write_text(json.dumps(run_payload, indent=2) + "\n")
+        amended = json.loads(manifest_path.read_text())
+        amended["verification"]["producer_assignments"].append("handback")
+        replacement = run_dir / "orchestration.amended.json"
+        replacement.write_text(json.dumps(amended, indent=2) + "\n")
+
+        refused = self.run_flow(
+            "run", "amend-orchestration", "demo",
+            "--replacement", ".flow/runs/demo/orchestration.amended.json",
+            "--reason", "bind the omitted handback producer",
+        )
+        self.assertEqual(refused.returncode, 1)
+        accepted = self.run_flow(
+            "run", "amend-orchestration", "demo",
+            "--replacement", ".flow/runs/demo/orchestration.amended.json",
+            "--reason", "bind the omitted handback producer", "--approved-by-user",
+        )
+        self.assert_ok(accepted)
+        final = json.loads((run_dir / "run.json").read_text())
+        self.assertEqual(len(final["amendments"]), 1)
+        self.assertEqual(final["amendments"][0]["approval"]["authority"], "user")
+        self.assertTrue((run_dir / "amendments" / "0001-original.json").is_file())
+        self.assertEqual(json.loads(manifest_path.read_text())["verification"]["producer_assignments"], ["producer", "handback"])
+        self.assert_ok(self.run_flow("run", "verify", "demo"))
+
     def test_complete_revision_two_lifecycle_reaches_archive(self) -> None:
         self.setup_project()
         self._write_valid_manifest()
@@ -727,15 +868,48 @@ class FlowCliTests(FlowCliHarness):
         self._fake_home = fake_home
         return fake_home
 
+    def _offline_maf_python(self) -> Path:
+        """Build the local, no-network interpreter injected into install tests.
+
+        Installer tests assert Flow's source/config transaction.  They do not
+        exercise package resolution (covered by the managed-runtime tests),
+        so the supplied interpreter carries the resolved distribution metadata
+        and lets the installer test its documented reuse path hermetically.
+        """
+        assert self._fake_home is not None
+        environment = self._fake_home / "maf-fixture"
+        interpreter = environment / "bin" / "python"
+        if interpreter.exists():
+            return interpreter
+        venv.EnvBuilder(with_pip=False).create(environment)
+        site_packages = Path(subprocess.check_output(
+            [str(interpreter), "-c", "import site; print(site.getsitepackages()[0])"], text=True).strip())
+        for package, version in {
+            "agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0",
+            "annotated-types": "0.8.0", "msgspec": "0.21.1", "opentelemetry-api": "1.45.0",
+            "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
+            "PyYAML": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
+        }.items():
+            metadata = site_packages / (package.replace("-", "_") + ".dist-info")
+            metadata.mkdir()
+            (metadata / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {package}\nVersion: {version}\n")
+        for module in ("agent_framework", "agent_framework_orchestrations"):
+            package_dir = site_packages / module
+            package_dir.mkdir()
+            (package_dir / "__init__.py").write_text("# local runtime-fixture import proof\n")
+        return interpreter
+
     def _run_install_sh(self, *args: str) -> subprocess.CompletedProcess[str]:
         if self._fake_home is None:
             self._new_fake_home()
+        env = _clean_env(self._fake_home)
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), *args],
             cwd=str(REPO_ROOT),
             text=True,
             capture_output=True,
-            env=_clean_env(self._fake_home),
+            env=env,
         )
         return result
 
@@ -1278,6 +1452,10 @@ class FlowCliTests(FlowCliHarness):
 
     def test_runtime_smoke_checks_generated_surfaces(self) -> None:
         fake_home = self.use_fake_home()
+        # Smoke is deliberately diagnostic-only. Provision the real locked
+        # managed runtime explicitly before asking the all-target report to
+        # require MAF readiness.
+        self.assert_ok(self.run_flow("runtime", "install-maf"))
         self.assert_ok(self.run_flow("sync", "claude", "--user"))
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
@@ -2561,12 +2739,14 @@ class FlowCliTests(FlowCliHarness):
         (temp_repo / "FUTURE_FILE.md").write_text("Pretend-future top-level file.\n")
 
         fake_home = self._new_fake_home()
+        env = _clean_env(fake_home)
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
         result = subprocess.run(
             ["bash", str(temp_repo / "install-flow.sh"), "--release"],
             cwd=str(temp_repo),
             text=True,
             capture_output=True,
-            env=_clean_env(fake_home),
+            env=env,
         )
         self.assertEqual(
             result.returncode,
@@ -2611,12 +2791,32 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("brew install python@3.12", combined)
         self.assertFalse((fake_home / ".flow" / "source").exists())
 
+    def test_unsupported_managed_maf_host_keeps_base_install_and_readiness_is_strict(self) -> None:
+        fake_home = self._new_fake_home()
+        base = self.repo / "unsupported-maf-python"
+        base.write_text("#!/bin/sh\ncase \"$2\" in\n  *sys.platform*) echo 'linux|x86_64|3|12' ;;\n  *) echo '3.12.0' ;;\nesac\n")
+        base.chmod(0o755)
+        env = _clean_env(fake_home)
+        env["FLOW_MAF_BASE_PYTHON"] = str(base)
+        result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
+                                text=True, capture_output=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("managed MAF runtime is unsupported", result.stdout)
+        self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
+        config = (fake_home / ".flow" / "config.toml").read_text()
+        self.assertIn('maf_runtime_activation_state = "unsupported"', config)
+        readiness = subprocess.run([sys.executable, str(FLOW_CLI), "runtime", "readiness"], cwd=self.repo,
+                                  text=True, capture_output=True, env=env)
+        self.assertNotEqual(readiness.returncode, 0)
+        self.assertIn("not_installed", readiness.stdout)
+
     def test_install_flow_sh_uses_versioned_python_when_python3_is_too_old(self) -> None:
         fake_home = self._new_fake_home()
         fake_bin = self._make_fake_python_bin(include_compatible=True)
         env = _clean_env(fake_home)
         env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
         env["FLOW_PYTHON_CANDIDATES"] = f"{fake_bin / 'python3'}:{fake_bin / f'python{sys.version_info.major}.{sys.version_info.minor}'}"
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
 
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), "--release"],
@@ -2956,6 +3156,7 @@ class FlowCliTests(FlowCliHarness):
 
         env = _clean_env(fake_home)
         env["FLOW_REPO_URL"] = f"file://{remote}"
+        env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
 
         result = subprocess.run(
             ["bash", str(BOOTSTRAP_INSTALL_SCRIPT)],
@@ -3496,6 +3697,7 @@ class FlowCliTests(FlowCliHarness):
                 "legacy_delivery",
                 "lifecycle",
                 "local_worker",
+                "maf_runtime",
                 "maf_supervisor",
                 "manager_requests",
                 "migrate",

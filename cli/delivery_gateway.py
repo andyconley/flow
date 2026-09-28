@@ -42,9 +42,10 @@ from execution_gateway import _effective_specialist_for, _run_file, _write_snaps
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from claude_worker import call_claude
-from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, _stream_result, call_claude_edit
+from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
-from maf_supervisor import MafTransportError, run_maf_delivery
+from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, run_maf_delivery
+from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import status as run_status
 from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch,
@@ -53,6 +54,14 @@ from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidat
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
+
+
+def _stream_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class ExpansionPaused(Exception):
@@ -434,6 +443,10 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     job_baseline = {key: baseline[key] for key in ("kind", "diff_sha256")}
     baseline = {"regression_diff_sha256": baseline["diff_sha256"], "source_commit": source_commit,
                 "files": {path: hashlib.sha256((worktree / path).read_bytes()).hexdigest() for path in charter["write_paths"] if (worktree / path).is_file()}}
+    # This is the pre-attempt fence. All authority and worktree proof above is
+    # read-only. No execution directory, ledger row, receipt, process, or
+    # provider callback exists until the optional runtime is healthy.
+    runtime_identity = require_ready()
     execution_dir = run_dir / "execution"
     # A successor lists every earlier v8 attempt so its spend shares the
     # charter caps; the ledger re-checks the list inside create_attempt.
@@ -475,6 +488,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                 "handoff_digest": delivery["handoff_digest"],
                 "delivery_lead_claim_digest": delivery["lead_claim_digest"],
                 "delivery_lead_claim": {"lead_id": authority["claim"]["owner"], "generation": delivery["owner_generation"]},
+                "maf_runtime": runtime_identity,
                 "limits": limits}
     if predecessors:
         # Added only when non-empty, so a first attempt stays byte-identical.
@@ -603,16 +617,80 @@ def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                                       seal_hook=seal_hook)
 
 
+def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, source_commit: str, *,
+                            root: Path | None = None) -> dict[str, Any]:
+    """Create a normal linked successor for one sealed zero-send MAF startup failure.
+
+    This never reopens the predecessor.  The normal chartered prepare path
+    rechecks authority, worktree and the now-healthy MAF runtime before it
+    creates the successor attempt.
+    """
+    project_root = (root or repo_root()).resolve()
+    ledger_path = project_root / ".flow" / "runs" / work_id / "execution" / "ledger.sqlite"
+    if not ledger_path.is_file() or ledger_path.is_symlink():
+        raise ContractError("runtime-startup predecessor is absent")
+    snapshot = ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
+    if snapshot.get("work_id") != work_id or snapshot.get("execution_protocol_version") != 8:
+        raise ContractError("runtime-startup predecessor is incompatible")
+    if snapshot.get("status") != "failed":
+        raise ContractError("runtime-startup predecessor is not a terminal failure")
+    if snapshot.get("failure_class") != "maf_runtime_startup":
+        raise ContractError("terminal failure is not a MAF runtime-startup failure")
+    sent = {"started", "completed", "failed", "unknown"}
+    if any(item.get("status") in sent for item in snapshot.get("actions", [])) or any(
+            item.get("status") in sent for item in snapshot.get("manager_calls", [])):
+        raise ContractError("runtime-startup predecessor has observed or uncertain sends")
+    receipt_path = Path(str(snapshot.get("receipt_path") or ""))
+    expected_receipt = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id / "receipt.json"
+    if (receipt_path.resolve(strict=False) != expected_receipt.resolve(strict=False) or not receipt_path.is_file() or receipt_path.is_symlink()
+            or not snapshot.get("sealed_receipt_sha256")):
+        raise ContractError("runtime-startup predecessor receipt is not sealed")
+    receipt_bytes = receipt_path.read_bytes()
+    if hashlib.sha256(receipt_bytes).hexdigest() != snapshot["sealed_receipt_sha256"]:
+        raise ContractError("runtime-startup predecessor receipt digest differs from ledger")
+    try:
+        receipt = json.loads(receipt_bytes)
+    except (TypeError, ValueError) as exc:
+        raise ContractError("runtime-startup predecessor receipt is invalid") from exc
+    if (not isinstance(receipt, dict) or receipt.get("attempt_id") != attempt_id
+            or receipt.get("envelope_digest") != envelope_digest(snapshot["envelope"])
+            or receipt.get("status") != "failed" or receipt.get("reason") != snapshot.get("reason")
+            or receipt.get("failure_class") != snapshot.get("failure_class")):
+        raise ContractError("runtime-startup predecessor receipt identity differs from ledger")
+    # Claim inside the ledger before preparing a new attempt: concurrent
+    # recovery commands cannot both turn one sealed failure into successors.
+    writable = ExecutionLedger(ledger_path)
+    prior_successor = writable.reconcile_runtime_startup_successor(attempt_id)
+    if prior_successor is not None:
+        return {"attempt_id": prior_successor, "status": "reconciled", "predecessor_attempt_id": attempt_id}
+    writable.claim_runtime_startup_successor(attempt_id)
+    try:
+        result = execute_chartered_delivery(work_id, worktree, source_commit, root=project_root)
+    except Exception:
+        writable.release_runtime_startup_successor(attempt_id)
+        raise
+    writable.bind_runtime_startup_successor(attempt_id, result["attempt_id"])
+    return result
+
+
 def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir: Path,
                            job: dict[str, Any], *, record: bool = True) -> dict[str, Any]:
     if _git(worktree, "rev-parse", "HEAD") != baseline["source_commit"]:
         raise ContractError("editor changed the pinned source commit")
-    allowed = set(job["write_paths"])
+    allowed = tuple(Path(path) for path in job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
     changed = [line[3:] for line in status]
     if not changed:
         raise ContractError("editor made no edit to the worktree")
-    if any(line[:2] not in {" M", "M ", "??"} or path not in allowed for line, path in zip(status, changed)):
+    def in_scope(relative: str) -> bool:
+        path = Path(relative)
+        if path.is_absolute() or any(part in {"", ".", "..", ".git"} for part in path.parts):
+            return False
+        target = worktree / path
+        if target.is_symlink() or not target.is_file() or not target.resolve().is_relative_to(worktree.resolve()):
+            return False
+        return any(path == scope or path.is_relative_to(scope) for scope in allowed)
+    if any(line[:2] not in {" M", "M ", "??"} or not in_scope(path) for line, path in zip(status, changed)):
         raise ContractError("editor changed files outside the approved job scope")
     if not any((worktree / path).is_file() and hashlib.sha256((worktree / path).read_bytes()).hexdigest() != baseline["files"].get(path) for path in changed):
         raise ContractError("editor made no edit: the allowed paths still match the pinned baseline")
@@ -1344,6 +1422,8 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
     if delivery_protocol:
         receipt.update({field: envelope[field] for field in ("shaper_contract_digest", "delivery_charter_digest",
                                                               "handoff_digest", "delivery_lead_claim_digest", "delivery_lead_claim")})
+    if "maf_runtime" in envelope:
+        receipt["maf_runtime"] = envelope["maf_runtime"]
     trace_path = attempt_dir / "claude-implementer.debug.log"
     if trace_path.is_file() and not trace_path.is_symlink():
         trace_size = trace_path.stat().st_size
@@ -1355,10 +1435,8 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
     event_path = attempt_dir / "claude-implementer.events.ndjson"
     if event_path.is_file() and not event_path.is_symlink():
         event_size = event_path.stat().st_size
-        if event_size > MAX_EVENT_BYTES:
-            raise ContractError("Claude event trace exceeds limit")
         receipt["evidence"]["event_trace"] = {
-            "path": event_path.name, "sha256": hashlib.sha256(event_path.read_bytes()).hexdigest(),
+            "path": event_path.name, "sha256": _stream_sha256(event_path),
             "bytes": event_size}
     if continuation_epoch_id:
         epoch = ledger.continuation_snapshot(continuation_epoch_id)
@@ -1448,6 +1526,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     edit_evidence: dict[str, Any] | None = None
     test_evidence: dict[str, Any] | None = None
     failure = ""
+    failure_exception: Exception | None = None
     recoverable_transport_failure = False
     verifier_input_sha256: str | None = None
     initial_snapshot = ledger.snapshot(aid)
@@ -1693,6 +1772,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         paused_request = paused.request_id
     except Exception as exc:
         failure = str(exc)
+        failure_exception = exc
         recoverable_transport_failure = isinstance(exc, MafTransportError)
     if controller is not None and controller.requested:
         # Keyed on the flag, not the exception: the stack has unwound, every
@@ -1738,7 +1818,9 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             controller.disarm()
         hook("after-runtime-outcome")
     if not continuation_epoch_id:
-        return _seal_attempt(envelope, attempt_dir, ledger, snapshot, failure=failure,
+        failure_class = ("maf_runtime_startup" if failure and not actions and not manager_calls
+                         and isinstance(failure_exception, (MafProtocolError, MafChildError)) else None)
+        return _seal_attempt(envelope, attempt_dir, ledger, snapshot, failure=failure, failure_class=failure_class,
                              edit_evidence=edit_evidence, test_evidence=test_evidence,
                              verifier_input_sha256=verifier_input_sha256, generation=generation,
                              authority_guard=authority_guard, hook=hook)
@@ -1758,7 +1840,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
 
 
 def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: ExecutionLedger, snapshot: dict[str, Any], *,
-                  failure: str, edit_evidence: dict[str, Any] | None, test_evidence: dict[str, Any] | None,
+                  failure: str, failure_class: str | None = None, edit_evidence: dict[str, Any] | None, test_evidence: dict[str, Any] | None,
                   verifier_input_sha256: str | None, generation: int, authority_guard: Callable[[], Any],
                   hook: Callable[[str], None]) -> dict[str, Any]:
     """Build, validate, write, and seal an attempt receipt under the owner fence."""
@@ -1769,6 +1851,8 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                                                    edit_evidence=edit_evidence, test_evidence=test_evidence,
                                                    verifier_input_sha256=verifier_input_sha256,
                                                    continuation_epoch_id=None)
+        if failure_class is not None:
+            receipt["failure_class"] = failure_class
         validate_receipt(envelope, receipt)
         hook("after-receipt-draft")
         with authority_guard(), ledger.send_lock():
@@ -1791,12 +1875,15 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                                                    edit_evidence=edit_evidence, test_evidence=test_evidence,
                                                    verifier_input_sha256=verifier_input_sha256,
                                                    continuation_epoch_id=None, blocks=view["blocks"])
+        if failure_class is not None:
+            receipt["failure_class"] = failure_class
         validate_receipt(envelope, receipt)
         hook("after-receipt-draft")
         ledger.assert_owner(aid, generation)
         write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
         hook("before-finish-attempt")
-        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+        ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation,
+                              failure_class=failure_class)
     return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
             "evidence": receipt["evidence"]}
 

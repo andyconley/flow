@@ -1,0 +1,15 @@
+{
+  "approval": {
+    "at": "2026-09-28T03:37:12Z",
+    "authority": "user",
+    "explicit": true
+  },
+  "artifact": "orchestration_manifest",
+  "original_digest": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0",
+  "original_path": ".flow/runs/maf-runtime-readiness-2/orchestration.json",
+  "original_snapshot": ".flow/runs/maf-runtime-readiness-2/amendments/0001-original.json",
+  "reason": "Bind the omitted implementation-handback producer after explicit user approval",
+  "replacement_digest": "69fd981d95c112de1a27bd10535230d24e84c9bca8212e8ac50a9dcdf7b90f44",
+  "replacement_source": ".flow/runs/maf-runtime-readiness-2/orchestration.amended.json",
+  "sequence": 1
+}

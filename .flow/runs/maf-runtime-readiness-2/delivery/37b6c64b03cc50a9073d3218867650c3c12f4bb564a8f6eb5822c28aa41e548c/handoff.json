@@ -1,0 +1,29 @@
+{
+  "delivery_charter_digest": "37b6c64b03cc50a9073d3218867650c3c12f4bb564a8f6eb5822c28aa41e548c",
+  "delivery_charter_id": "delivery-ce556aea2de2824004cd",
+  "digest": "5df7e65751f0db7437cf228e3822f55dc47fded8618192749ee8c7ddbe7d96f2",
+  "kind": "definition_to_delivery_handoff",
+  "run_id": "maf-runtime-readiness-2",
+  "schema_version": 1,
+  "shaper_contract_digest": "ef0e237c2aa8ed4bed5f281a75e4a786f1c9afe7746022989c90b5578e28caa1",
+  "shaper_contract_id": "shaper-57f7fabb330c96a4bdc3",
+  "source_digests": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/maf-runtime-readiness-2/acceptance-criteria.md",
+      "sha256": "4535dc370e9143b2805df8307b94d998aeb087179c2c22cdee6814017304ae69"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/maf-runtime-readiness-2/orchestration.json",
+      "sha256": "65556cd9af0047f9cc61388a53f2238a77fce6118b90e8bb034abd32f10776b0"
+    },
+    "requirements": {
+      "path": ".flow/runs/maf-runtime-readiness-2/requirements.md",
+      "sha256": "9a7029f7faf988dfb67cecd81c2ef0dc3623f7c3ab2a8b7704e874deda3fe819"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/maf-runtime-readiness-2/shaper-intent.json",
+      "sha256": "42e44db2e3e28701c8ce615e291d45760e37049bfedbedfdf8218077d98a4f38"
+    }
+  },
+  "transition": "start-plan"
+}

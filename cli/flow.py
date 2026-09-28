@@ -36,7 +36,9 @@ from diagnostics import bootstrap, doctor, help_command  # noqa: E402
 from expertise_commands import register as register_expertise, dispatch as dispatch_expertise  # noqa: E402
 from gaps import cmd_add, cmd_list, cmd_promote  # noqa: E402
 from harvest import harvest_claude_command, harvest_codex_command  # noqa: E402
-from lifecycle import install_command, update_command  # noqa: E402
+from lifecycle import (activate_managed_maf_runtime, install_command,
+                       record_managed_maf_runtime_repair,
+                       record_managed_maf_runtime_unavailable, update_command)  # noqa: E402
 from model_advice import context_command as model_context_command  # noqa: E402
 from model_advice import resolve_command as model_resolve_command  # noqa: E402
 from normalize import normalize_command  # noqa: E402
@@ -47,6 +49,7 @@ from plugin_usage import (  # noqa: E402
     plugin_usage_snapshot_command,
 )
 from runstate import (  # noqa: E402
+    cmd_amend_orchestration as run_amend_orchestration_command,
     cmd_history as run_history_command,
     cmd_list as run_list_command,
     cmd_status as run_status_command,
@@ -55,7 +58,7 @@ from runstate import (  # noqa: E402
 )
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
-from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
+from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, recover_runtime_startup, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
 from delivery_trace import TraceError, render_text as render_trace, trace as trace_delivery  # noqa: E402
@@ -63,6 +66,7 @@ from receipt_verify import VerifyRefused, render_text as render_verification, ve
 from delivery_control import change_lead_claim  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
+from maf_runtime import MafRuntimeUnready, probe as maf_probe, provision as maf_provision  # noqa: E402
 from migrate import cmd_migrate  # noqa: E402
 from project import cmd_audit  # noqa: E402
 from setup import (  # noqa: E402
@@ -540,6 +544,16 @@ def main() -> int:
     run_transition_parser.add_argument("--note", help="next action or transition note")
     run_transition_parser.add_argument("--json", action="store_true", help="emit JSON")
 
+    run_amend_parser = run_sub.add_parser(
+        "amend-orchestration",
+        help="replace sealed orchestration with an explicitly user-approved amendment",
+    )
+    run_amend_parser.add_argument("work_id")
+    run_amend_parser.add_argument("--replacement", required=True)
+    run_amend_parser.add_argument("--reason", required=True)
+    run_amend_parser.add_argument("--approved-by-user", action="store_true")
+    run_amend_parser.add_argument("--json", action="store_true", help="emit JSON")
+
     run_orchestration_parser = run_sub.add_parser(
         "validate-orchestration",
         help="validate a run's orchestration safety contract",
@@ -608,6 +622,15 @@ def main() -> int:
     run_chartered_parser.add_argument("--source-commit", required=True, help="pinned source commit at the worktree HEAD")
     run_chartered_parser.add_argument("--project-root", type=Path, help="Flow project checkout containing the approved run overlay")
     run_chartered_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
+
+    run_runtime_successor = run_sub.add_parser(
+        "recover-runtime-startup", help="create a linked successor for a sealed zero-send MAF startup failure")
+    run_runtime_successor.add_argument("work_id")
+    run_runtime_successor.add_argument("attempt_id")
+    run_runtime_successor.add_argument("--worktree", required=True, type=Path)
+    run_runtime_successor.add_argument("--source-commit", required=True)
+    run_runtime_successor.add_argument("--project-root", type=Path)
+    run_runtime_successor.add_argument("--json", action="store_true")
 
     run_delivery_resume = run_sub.add_parser(
         "resume-delivery-lead", help="restore an evidence-linked completed Magentic worker action without another send")
@@ -743,11 +766,13 @@ def main() -> int:
     )
     runtime_smoke_parser.add_argument(
         "--target",
-        choices=("all", "claude", "codex"),
+        choices=("all", "claude", "codex", "maf"),
         default="all",
         help="runtime target to check (default: all)",
     )
     runtime_smoke_parser.add_argument("--json", action="store_true", help="emit JSON")
+    runtime_sub.add_parser("readiness", help="check strict MAF Delivery readiness").add_argument("--json", action="store_true")
+    runtime_sub.add_parser("install-maf", help="stage and select the managed pinned MAF runtime").add_argument("--json", action="store_true")
 
     model_parser = sub.add_parser(
         "model",
@@ -930,6 +955,20 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    # A v0.38 updater can activate this source but cannot invoke a hook it did
+    # not ship. On the first later operational command, do one transactional
+    # activation attempt. Help, read-only checks, and explicit repair stay
+    # side-effect free; a recorded failure is never retried implicitly.
+    bridge_command = ((args.command == "bootstrap")
+                      or (args.command == "setup" and args.setup_target == "machine")
+                      or (args.command == "run" and args.run_target == "execute-chartered-job"))
+    if bridge_command:
+        bridge = activate_managed_maf_runtime()
+        if bridge["attempted"]:
+            print("MAF runtime post-activation: " + str(bridge["state"]) +
+                  ("; run `flow runtime install-maf` to repair." if bridge["state"] == "failed" else ""),
+                  file=sys.stderr)
+
     if args.command == "setup" and args.setup_target == "machine":
         return setup_machine()
     if args.command == "setup" and args.setup_target == "project":
@@ -1028,6 +1067,8 @@ def main() -> int:
             from archive_service import archive_transition
             return archive_transition(args)
         return run_transition_command(args)
+    if args.command == "run" and args.run_target == "amend-orchestration":
+        return run_amend_orchestration_command(args)
     if args.command == "run" and args.run_target == "validate-orchestration":
         return orchestration_validate_command(args)
     if args.command == "run" and args.run_target == "execute-local":
@@ -1074,11 +1115,27 @@ def main() -> int:
         import json
         try:
             result = execute_chartered_delivery(args.work_id, args.worktree, args.source_commit, root=args.project_root)
+        except MafRuntimeUnready as exc:
+            payload = {"status": "refused", "reason": "maf_runtime_unready", "diagnostic": exc.diagnostic}
+            print(json.dumps(payload, sort_keys=True) if args.json else f"chartered execution refused: maf_runtime_unready: {exc}")
+            return 2
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"chartered execution refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
         return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "recover-runtime-startup":
+        import json
+        try:
+            result = recover_runtime_startup(args.work_id, args.attempt_id, args.worktree, args.source_commit, root=args.project_root)
+        except MafRuntimeUnready as exc:
+            print(json.dumps({"status": "refused", "reason": "maf_runtime_unready", "diagnostic": exc.diagnostic}, sort_keys=True) if args.json else f"runtime startup recovery refused: {exc}")
+            return 2
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"runtime startup recovery refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else f"successor attempt: {result['attempt_id']}")
+        return 0 if result["status"] in {"completed", "reconciled"} else 1
     if args.command == "run" and args.run_target == "resume-delivery-lead":
         import json
         try:
@@ -1291,6 +1348,22 @@ def main() -> int:
         return 0 if result["status"] == "completed" else 1
     if args.command == "runtime" and args.runtime_target == "smoke":
         return runtime_smoke_command(args)
+    if args.command == "runtime" and args.runtime_target == "readiness":
+        import json
+        result = maf_probe()
+        print(json.dumps(result, sort_keys=True) if args.json else f"MAF Delivery readiness: {result['state']}\n{result['remedy']}")
+        return 0 if result["state"] == "ready" else 1
+    if args.command == "runtime" and args.runtime_target == "install-maf":
+        import json
+        try:
+            result = maf_provision()
+        except MafRuntimeUnready as exc:
+            record_managed_maf_runtime_unavailable(str(exc.diagnostic.get("state", "provisioning_failed")))
+            print(json.dumps(exc.diagnostic, sort_keys=True) if args.json else str(exc))
+            return 1
+        record_managed_maf_runtime_repair()
+        print(json.dumps(result, sort_keys=True) if args.json else "MAF runtime installed and verified")
+        return 0
     if args.command == "model" and args.model_target == "context":
         return model_context_command(args)
     if args.command == "model" and args.model_target == "resolve":

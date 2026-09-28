@@ -1,0 +1,29 @@
+{
+  "delivery_charter_digest": "682d4293b103b974873b14b46be383828be00a2ae7ae344ff7e8e6c0d2df09f1",
+  "delivery_charter_id": "delivery-7f381369f1c75894b3db",
+  "digest": "4f4b45416b5f8d4d1aad4aa4a80801c27c609d15f916f79e62389da240ccd376",
+  "kind": "definition_to_delivery_handoff",
+  "run_id": "review-provenance-refinement-6",
+  "schema_version": 1,
+  "shaper_contract_digest": "97db3517a7c73f1eac2f27dd18178b91794166a20fa2d201be635ccf9ab5a940",
+  "shaper_contract_id": "shaper-a51b8959778695f46b2e",
+  "source_digests": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/review-provenance-refinement-6/acceptance-criteria.md",
+      "sha256": "d7abbe51a5d8b4d7fc78276817cb0dc9173a96d30966a51ceb137efa5f053066"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/review-provenance-refinement-6/orchestration.json",
+      "sha256": "3dee3c0b7ebaf53214d044f2543f244bf12123eab788d68ece4b951f4715f4fd"
+    },
+    "requirements": {
+      "path": ".flow/runs/review-provenance-refinement-6/requirements.md",
+      "sha256": "ae8860f07f5fb7509622879d3aa683ea45483138b03d79736e99a86d4479e7fc"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/review-provenance-refinement-6/shaper-intent.json",
+      "sha256": "e71dbe8f893135f2554b501b38185fd7fb16285e76cf1eba6830eca3e0de9065"
+    }
+  },
+  "transition": "start-plan"
+}

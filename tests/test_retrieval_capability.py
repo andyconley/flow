@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import venv
 from unittest.mock import patch
 
 
@@ -16,6 +17,7 @@ CLI = ROOT / "cli"
 sys.path.insert(0, str(CLI))
 import archive_preflight as preflight
 import diagnostics
+from tests.maf_env import managed_wheelhouse
 
 
 class _NoFtsConnection:
@@ -37,6 +39,11 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.home = Path(self.temporary.name) / "home"
         self.home.mkdir()
         self.receipt = self.home / ".flow" / "retrieval-capabilities.json"
+        self.wheelhouse = managed_wheelhouse()
+
+    def require_wheelhouse(self):
+        if not self.wheelhouse.is_dir():
+            self.skipTest("managed runtime wheelhouse is not available on this test host")
 
     def test_injected_fts5_failure_keeps_plain_sqlite_usable_and_names_runtime(self):
         with sqlite3.connect(":memory:") as database:
@@ -95,7 +102,9 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.assertEqual(payload["warnings"], 0)
 
     def test_isolated_develop_install_probes_the_selected_interpreter(self):
-        env = {**__import__("os").environ, "HOME": str(self.home), "FLOW_PYTHON": sys.executable}
+        self.require_wheelhouse()
+        env = {**__import__("os").environ, "HOME": str(self.home), "FLOW_PYTHON": sys.executable,
+               "FLOW_MAF_WHEELHOUSE": str(self.wheelhouse)}
         result = subprocess.run([str(ROOT / "install-flow.sh"), "--develop"], cwd=ROOT, env=env, text=True, capture_output=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = self.home / ".flow" / "retrieval-capabilities.json"
@@ -104,6 +113,7 @@ class RetrievalCapabilityTests(unittest.TestCase):
         self.assertIn("Python:", result.stdout)
 
     def test_isolated_install_succeeds_and_persists_unavailable_receipt_when_fts5_is_injected_missing(self):
+        self.require_wheelhouse()
         injection = self.home / "injection"
         injection.mkdir()
         (injection / "sitecustomize.py").write_text(
@@ -124,6 +134,7 @@ class RetrievalCapabilityTests(unittest.TestCase):
             **__import__("os").environ,
             "HOME": str(self.home),
             "FLOW_PYTHON": sys.executable,
+            "FLOW_MAF_WHEELHOUSE": str(self.wheelhouse),
             "PYTHONPATH": str(injection),
         }
         install = subprocess.run([str(ROOT / "install-flow.sh"), "--develop"], cwd=ROOT, env=env, text=True, capture_output=True, timeout=60)

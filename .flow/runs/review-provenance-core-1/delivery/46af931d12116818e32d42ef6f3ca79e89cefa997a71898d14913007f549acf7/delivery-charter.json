@@ -1,0 +1,414 @@
+{
+  "acceptance_criteria": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "AC1-AC10 in this run."
+    }
+  ],
+  "accepted_risks": [
+    {
+      "owner": "Andy Conley",
+      "risk": "Lifecycle amendment code could expand authority or invalidate historical evidence.",
+      "status": "owned"
+    }
+  ],
+  "amendment_lineage": [
+    {
+      "prior_work_id": "review-provenance-refinement",
+      "reason": "Noncanonical Shaper intent was sealed before later validation; zero dispatch."
+    },
+    {
+      "prior_work_id": "review-provenance-refinement-2",
+      "reason": "Sealed plan omitted executable Delivery Lead roster and job charter; zero provider sends."
+    },
+    {
+      "prior_work_id": "review-provenance-refinement-3",
+      "reason": "Sealed runtime allowance exceeded the protocol-v8 execution ceiling; managed MAF activated but zero provider sends."
+    },
+    {
+      "prior_work_id": "review-provenance-refinement-4",
+      "reason": "Claude Delivery Lead facts completed, plan call became unknown under invalid turn-count validation, and the attempt was sealed abandoned before worker dispatch."
+    },
+    {
+      "prior_work_id": "review-provenance-refinement-5",
+      "reason": "Codex producer became unknown at the total event-stream ceiling; the attempt was sealed abandoned without edits."
+    },
+    {
+      "prior_work_id": "review-provenance-refinement-6",
+      "reason": "Hybrid dispatch reached the Claude editing producer, but the oversized combined charter timed out; partial edits were quarantined and the attempt was sealed abandoned."
+    }
+  ],
+  "approval_matrix": {
+    "acceptance": "Flow_gate",
+    "charter_amendment": "shaper_or_engineer",
+    "provider_dispatch": "Flow_grant"
+  },
+  "approved_sources": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/review-provenance-core-1/acceptance-criteria.md",
+      "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/review-provenance-core-1/orchestration.json",
+      "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155"
+    },
+    "requirements": {
+      "path": ".flow/runs/review-provenance-core-1/requirements.md",
+      "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/review-provenance-core-1/shaper-intent.json",
+      "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b"
+    }
+  },
+  "approver": {
+    "event": "approve-definition",
+    "identity": "engineer"
+  },
+  "boundaries": {
+    "artifact_root": ".flow/runs/review-provenance-core-1",
+    "worktree_policy": "isolated-pinned-worker"
+  },
+  "charter_id": "delivery-63baf619c9a637179c0b",
+  "charter_version": 3,
+  "compatibility_version": 7,
+  "constraints": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Flow remains authority."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Original approved evidence remains immutable."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Implementation uses the generic chartered Delivery Lead gateway with a Codex manager, Claude editing producer, local read-only verifier, and isolated worker worktree."
+    },
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Unknown provider sends are never automatically replayed."
+    }
+  ],
+  "delivery_attempt_policy": {
+    "one_active_lead": true,
+    "resume_or_supersede": "explicit"
+  },
+  "digest": "46af931d12116818e32d42ef6f3ca79e89cefa997a71898d14913007f549acf7",
+  "eligible_specialists": {
+    "lead-developer": {
+      "approved_capabilities": [
+        "scoped-edit"
+      ],
+      "definition_digest": "c8f50ab3c60868ddb2a9f519ed4ca53241ac54fb0a2c5c364bf569b7605f9f80",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "edit",
+        "read"
+      ]
+    },
+    "quality-reviewer": {
+      "approved_capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "1ee52e2466f93074bd6881fcf81709e141a48bbffd6b435dd5dabc222ecc7718",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "read"
+      ]
+    },
+    "security-reviewer": {
+      "approved_capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "3110698309937f9c6f9eb98ef75c938a4f3c538b3aec953179e1d43570446227",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "read"
+      ]
+    },
+    "sre": {
+      "approved_capabilities": [
+        "read-only-review"
+      ],
+      "definition_digest": "9a7fc5abfc9f7e669bfe997e68fb9f01f4984aec065d249dbf1251a60cb6eac3",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "read"
+      ]
+    },
+    "test-engineer": {
+      "approved_capabilities": [
+        "bounded-verification"
+      ],
+      "definition_digest": "96e4f43aa9783f56e7852b92f520d302cdf915cb351f2828c6055b40d674be9f",
+      "maximum_instances": 1,
+      "runtime_capabilities": [
+        "read"
+      ]
+    }
+  },
+  "escalation_stop_cancellation": {
+    "cancellation": "Flow_only",
+    "scope_expansion": "halt_for_shaper"
+  },
+  "exclusions": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Provider-adapter repairs, application to maf-runtime-readiness-2, general artifact editing, multiple amendment generations, macOS baseline repair, MAF redesign, and manual implementation substitution."
+    }
+  ],
+  "handback": [
+    "receipt",
+    "diff",
+    "test",
+    "verifier_evidence"
+  ],
+  "kind": "delivery_charter",
+  "limits": {
+    "concurrency": 2,
+    "delegations": 6,
+    "expansion_headroom": {
+      "delegations": 0,
+      "manager_calls": 0,
+      "manager_rounds": 0,
+      "paid_worker_calls": 0,
+      "verifier_calls": 0
+    },
+    "max_manager_calls": 8,
+    "max_manager_rounds": 4,
+    "max_paid_worker_calls": 1,
+    "max_verifier_calls": 1,
+    "outputs": [
+      "diff",
+      "test",
+      "receipt"
+    ],
+    "paths": [
+      "charter-scoped"
+    ],
+    "replans": 1,
+    "retries": 0,
+    "runtime_seconds": 600,
+    "tools": [
+      "read",
+      "edit",
+      "test"
+    ]
+  },
+  "outcomes": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Implement the constrained amendment and codify the definition, charter-planning, and protocol-envelope bootstrap failures."
+    }
+  ],
+  "producer_verifier_rules": {
+    "distinct_identities": true,
+    "verifier_read_only": true
+  },
+  "prohibited_capabilities": [
+    "silent-charter-amendment",
+    "original-manifest-rewrite",
+    "ungranted-provider-dispatch",
+    "manual-implementation-substitute"
+  ],
+  "provider_capabilities": {
+    "claude": {
+      "binding": "capability"
+    },
+    "codex": {
+      "binding": "capability"
+    },
+    "ollama": {
+      "binding": "verifier"
+    }
+  },
+  "recovery": {
+    "takeover": "explicit_resume_or_supersede",
+    "unknown_action_blocks_successor": true
+  },
+  "run_id": "review-provenance-core-1",
+  "schema_version": 1,
+  "scope": [
+    {
+      "provenance": [
+        {
+          "claim_status": "approved",
+          "sha256": "41814f71402f86e961e1e14a5d104a3c01c6010a02ab966792998b1ec2a43c54",
+          "source": "acceptance_criteria"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "77383c5c5efc7fadec163783c9688fef98d5cf11cb48692c6b9a4e81c6356155",
+          "source": "orchestration_manifest"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "f479100893c9303892c1f2138dd172a9efc4d119be444aae7388f36454242bc3",
+          "source": "requirements"
+        },
+        {
+          "claim_status": "approved",
+          "sha256": "6daa2c56c3a0d80e0a2f037c7094c837d530c810b3ca26d21ef51151ee938d3b",
+          "source": "shaper_intent"
+        }
+      ],
+      "value": "Review amendment capability, definition validation ordering, chartered-job planning validation, tests, and documentation."
+    }
+  ],
+  "shaper_contract": {
+    "digest": "541e2d04367895f6386a5e0f65a2aeee12017f609ebcc3879f6286e3b6887a07",
+    "id": "shaper-e2ba3d24a87801cee18e",
+    "version": 3
+  },
+  "validation": {
+    "flow_observed_diff_and_test_before_verifier": true
+  }
+}

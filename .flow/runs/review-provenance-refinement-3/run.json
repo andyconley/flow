@@ -1,0 +1,70 @@
+{
+  "approved_artifact_digests": {
+    "acceptance_criteria": "67a60dfa9e73cca1b31b31e26aa0d1b115fe64e02c0865abc84e8d3990747720",
+    "orchestration_manifest": "1147197e8896ac67b5cfce4024de9f25386b3e97868d118e6ed9b383ce5d580d",
+    "requirements": "d509343b005bdf4ca7d306d79dc85c39961d8f31fad086c25e9b9b00390cd327",
+    "shaper_intent": "f130e51cb2c7e7bafbfafd8a9ba984f4fdb553d0860972d76d5052ba5497a64e"
+  },
+  "artifacts": {
+    "acceptance_criteria": ".flow/runs/review-provenance-refinement-3/acceptance-criteria.md",
+    "handoff": ".flow/runs/review-provenance-refinement-3/implementation-handoff.md",
+    "job_charter": ".flow/runs/review-provenance-refinement-3/job-charter.json",
+    "orchestration_manifest": ".flow/runs/review-provenance-refinement-3/orchestration.json",
+    "plan": ".flow/runs/review-provenance-refinement-3/plan.md",
+    "requirements": ".flow/runs/review-provenance-refinement-3/requirements.md",
+    "shaper_intent": ".flow/runs/review-provenance-refinement-3/shaper-intent.json",
+    "validation_plan": ".flow/runs/review-provenance-refinement-3/validation-plan.md"
+  },
+  "created_at": "2026-09-28T00:44:15Z",
+  "delivery": {
+    "charter_digest": "82e48039ffae8028cb7e3b1dc29b80d2ad26e5179c6115f4db766d45e49644ef",
+    "charter_id": "delivery-4a2709ad7b27f942c7ce",
+    "delivery_artifact_dir": "delivery/82e48039ffae8028cb7e3b1dc29b80d2ad26e5179c6115f4db766d45e49644ef",
+    "handoff_digest": "933066c1d657e03eac6621ea344ae799a7f22d2555fd17abac4e46fc3186a1a1",
+    "lead_claim_digest": "f51565e16e7035311f489ba33ffcbdfcb9b43e913a31b5af32a1366093337562",
+    "lead_claim_path": "delivery/82e48039ffae8028cb7e3b1dc29b80d2ad26e5179c6115f4db766d45e49644ef/lead-claim.json",
+    "logical_delivery_attempt_id": "logical-82e48039ffae8028cb7e",
+    "owner_generation": 1,
+    "owner_status": "active",
+    "shaper_contract_digest": "5ecfa473a7706b4a7c5fb95f01b5ae4bc7e587566bc81e4e56b20ba52bb1454a",
+    "shaper_contract_id": "shaper-0bb068c958554ec529f9",
+    "source_digests": {
+      "acceptance_criteria": {
+        "path": ".flow/runs/review-provenance-refinement-3/acceptance-criteria.md",
+        "sha256": "67a60dfa9e73cca1b31b31e26aa0d1b115fe64e02c0865abc84e8d3990747720"
+      },
+      "orchestration_manifest": {
+        "path": ".flow/runs/review-provenance-refinement-3/orchestration.json",
+        "sha256": "1147197e8896ac67b5cfce4024de9f25386b3e97868d118e6ed9b383ce5d580d"
+      },
+      "requirements": {
+        "path": ".flow/runs/review-provenance-refinement-3/requirements.md",
+        "sha256": "d509343b005bdf4ca7d306d79dc85c39961d8f31fad086c25e9b9b00390cd327"
+      },
+      "shaper_intent": {
+        "path": ".flow/runs/review-provenance-refinement-3/shaper-intent.json",
+        "sha256": "f130e51cb2c7e7bafbfafd8a9ba984f4fdb553d0860972d76d5052ba5497a64e"
+      }
+    }
+  },
+  "dispositions": {},
+  "gates": {
+    "approve-definition": "2026-09-28T00:46:04Z",
+    "approve-plan": "2026-09-28T00:46:12Z",
+    "block": "2026-09-28T00:47:50Z",
+    "start-definition": "2026-09-28T00:44:15Z",
+    "start-implementation": "2026-09-28T00:46:23Z",
+    "start-plan": "2026-09-28T00:46:07Z"
+  },
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "Zero-send envelope refusal: sealed runtime_seconds=1800 exceeds protocol-v8 max_runtime_seconds=600. Successor must use runner-compatible limits and codify early rejection.",
+  "phase": "blocked",
+  "protocol_revision": 2,
+  "return_lane": "implement",
+  "return_state": "implementing",
+  "schema_version": 1,
+  "state": "blocked",
+  "updated_at": "2026-09-28T00:47:50Z",
+  "work_id": "review-provenance-refinement-3"
+}
