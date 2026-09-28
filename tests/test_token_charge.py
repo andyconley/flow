@@ -124,8 +124,6 @@ class GateTests(unittest.TestCase):
         self.assertEqual(block["unit"], "charged_v1")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class RecordTimeToleranceTests(unittest.TestCase):
@@ -165,3 +163,7 @@ class RecordTimeToleranceTests(unittest.TestCase):
                 "usage": {"input_tokens": 1, "output_tokens": 2, "service_tier": "standard"}}, generation=1)
             [call] = ledger.snapshot("tolerance")["manager_calls"]
             self.assertEqual(call["status"], "completed")
+
+
+if __name__ == "__main__":
+    unittest.main()

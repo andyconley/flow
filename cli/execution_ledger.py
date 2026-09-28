@@ -2383,9 +2383,9 @@ class ExecutionLedger:
             row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             if row is None or row[0] != "started":
                 raise ContractError("attempt not active")
-            if row[1] == 8 and status == "unknown":
-                # v8 records an interruption and stays recoverable instead.
-                raise ContractError("protocol v8 never seals an unknown receipt")
+            if row[1] == 8 and status in {"unknown", "denied"}:
+                # v8 records an interruption and stays recoverable instead; a denial fails the attempt.
+                raise ContractError(f"protocol v8 never seals {'an' if status == 'unknown' else 'a'} {status} receipt")
             if row[1] in {5, 6, 7, 8}:
                 uncertain = db.execute("SELECT COUNT(*) FROM actions WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]
                 uncertain += db.execute("SELECT COUNT(*) FROM manager_calls WHERE attempt_id=? AND status IN ('started','unknown')", (attempt_id,)).fetchone()[0]

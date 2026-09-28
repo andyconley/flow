@@ -214,7 +214,11 @@ def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[s
         "entries": entries,
         "totals": {"paid_calls": sum(item["status"] in sent for item in paid_rows),
                    "verifier_calls": sum(item.get("verifier") is True and item["status"] in sent for item in rows),
-                   "unobserved_sends": sum(item["status"] in {"started", "unknown"} for item in paid_rows),
+                   # The receipt's rule: a sent paid row without usable usage is an unobserved send.
+                   "unobserved_sends": (sum(item["status"] in {"started", "unknown"} or item["usage"]["recognised"] is False
+                                            for item in paid_rows if item["status"] in sent)
+                                        if handback_supported(snapshot["envelope"])
+                                        else sum(item["status"] in {"started", "unknown"} for item in paid_rows)),
                    "charged_tokens": (sum(item["usage"]["charged"] for item in rows)
                                       if handback_supported(snapshot["envelope"]) else None),
                    "cache_read_tokens": (sum(item["usage"]["cache_read"] for item in rows)

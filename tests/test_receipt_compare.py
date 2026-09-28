@@ -110,6 +110,12 @@ class LedgerSealTests(unittest.TestCase):
                     self.finish(forged)
         self.assertEqual(self.ledger.snapshot("sealed")["status"], "started")
 
+    def test_a_v8_attempt_never_seals_denied(self):
+        path = self.dir / "receipt.json"
+        path.write_text(json.dumps(self.receipt()))
+        with self.assertRaisesRegex(ContractError, "never seals a denied receipt"):
+            self.ledger.finish_attempt("sealed", "denied", "test", str(path), generation=1)
+
     def test_finish_refuses_an_edited_token_block(self):
         forged = self.receipt()
         forged["token_usage"]["observed_charged"] += 1

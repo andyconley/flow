@@ -487,6 +487,19 @@ class ReviewRefinementTests(VerifyFixture):
         self.assertEqual(statuses["V1"], "fail")
 
 
+class PreReleasePredecessorTests(VerifyFixture):
+    """AQ1: a v4 successor's pre-release predecessor is linked and charged, never judged by ADR 0020 rules."""
+
+    def test_the_successor_verifies_without_recursing_into_a_pre_release_predecessor(self):
+        with self.db() as db:
+            envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (self.a,)).fetchone()[0])
+            db.execute("UPDATE attempts SET envelope_json=? WHERE attempt_id=?", (canonical(legacy_envelope(envelope)), self.a))
+        report = self.verify()
+        self.assertEqual(report["exit_code"], 0, [item for item in report["checks"] if item["status"] == "fail"])
+        self.assertIn({"check": "V6", "item": "predecessor_not_recursed", "attempt_id": self.a,
+                       "detail": "predecessor predates ADR 0020"}, report["informational"])
+
+
 class NonCompletedEditTests(termination_tests.TerminationFixture):
     """QR1: an edit on a failed or cancelled attempt is judged by what it carries."""
 

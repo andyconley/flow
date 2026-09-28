@@ -214,7 +214,8 @@ def _grant_history(snapshot: dict[str, Any]) -> dict[str, list[tuple[str, str | 
 def check_v1(ctx):
     receipt_bytes, entry = ctx["receipt_bytes"], ctx["entry"]
     if receipt_bytes is None:
-        return "fail", 1, "the sealed receipt file is missing"
+        return "fail", 1, (f"the sealed receipt file is unsafe: {ctx['receipt_unsafe']}" if ctx.get("receipt_unsafe")
+                           else "the sealed receipt file is missing")
     compared = 0
     if _sha(receipt_bytes) != entry["sealed_receipt_sha256"]:
         return "fail", 1, f"receipt sha256 {_sha(receipt_bytes)[:16]} differs from the sealed {str(entry['sealed_receipt_sha256'])[:16]}"
@@ -316,8 +317,15 @@ def check_v6(ctx):
         if handback_supported(ctx["envelope"]):
             charges = prior if handback_supported(prior) else {**prior, "limits": ctx["envelope"]["limits"]}
             charged += attempt_token_charges(charges, prior_receipt["actions"], prior_receipt["manager_calls"])["charged"]
-        if ctx["recurse"]:
-            nested = _verify_entry(ctx["base"], entry, recurse=True)
+        if ctx["recurse"] and not handback_supported(prior):
+            # A pre-release receipt is never judged by ADR 0020 rules (P9); its link and charge are checked above.
+            ctx["informational"].append({"check": "V6", "item": "predecessor_not_recursed",
+                                         "attempt_id": link["attempt_id"], "detail": "predecessor predates ADR 0020"})
+        elif ctx["recurse"]:
+            memo = ctx["base"].setdefault("memo", {})
+            if link["attempt_id"] not in memo:
+                memo[link["attempt_id"]] = _verify_entry(ctx["base"], entry, recurse=True)
+            nested = memo[link["attempt_id"]]
             failed = [item for item in nested["checks"] if item["status"] == "fail"]
             if failed:
                 return "fail", compared, (f"predecessor {link['attempt_id'][:12]} fails "
@@ -430,8 +438,7 @@ def check_v9(ctx):
 
 def check_v10(ctx):
     directory = ctx["attempt_dir"] / REQUEST_DIR
-    if len(_entries(directory)) > MAX_DIRECTORY_ENTRIES:
-        return "fail", 0, f"{REQUEST_DIR}/ has too many entries"
+    _entries(directory)  # refuses a directory past MAX_DIRECTORY_ENTRIES
     calls, leftovers, unexpected = list_request_files(ctx["attempt_dir"])
     if unexpected:
         return "fail", 0, f"unexpected file in {REQUEST_DIR}/: {unexpected[0]}"
@@ -749,10 +756,11 @@ def _verify_entry(base: dict[str, Any], entry: dict[str, Any], *, recurse: bool)
     attempt_id = entry["attempt_id"]
     attempt_dir = run_dir / "execution" / attempt_id
     envelope = json.loads(entry["envelope_json"])
+    unsafe = None
     try:
         receipt_bytes = _read(attempt_dir / "receipt.json", run_dir)
-    except ContractError:
-        receipt_bytes = None
+    except ContractError as exc:
+        receipt_bytes, unsafe = None, str(exc)
     try:
         receipt = json.loads(receipt_bytes) if receipt_bytes is not None else {}
     except (ValueError, RecursionError):
@@ -765,7 +773,7 @@ def _verify_entry(base: dict[str, Any], entry: dict[str, Any], *, recurse: bool)
            "calls": {item["call_id"]: item for item in snapshot["manager_calls"]},
            "actions": {item["action_id"]: item for item in snapshot["actions"]},
            "grant_history": _grant_history(snapshot), "view_entries": base["entries"],
-           "work_lineage": base["work_lineage"], "recurse": recurse, "informational": []}
+           "work_lineage": base["work_lineage"], "recurse": recurse, "informational": [], "receipt_unsafe": unsafe}
     ctx["issued_calls"] = [call_id for call_id in ctx["calls"]
                            if any(op in {"issue", "rotate"} for op, _ in ctx["grant_history"].get(call_id, []))]
     checks = []
@@ -817,7 +825,10 @@ def verify_receipt(work_id: str, attempt_id: str | None = None, *, root: Path | 
     envelope = json.loads(target["envelope_json"])
     base = {"run_dir": run_dir, "entries": entries, "work_lineage": view["work_lineage"]}
     if not handback_supported(envelope):
-        on_disk = _json(_read(run_dir / "execution" / view["attempt_id"] / "envelope.json", run_dir))
+        try:
+            on_disk = _json(_read(run_dir / "execution" / view["attempt_id"] / "envelope.json", run_dir))
+        except ContractError:
+            on_disk = None
         if handback_supported(on_disk):
             # A supported file over a pre-release ledger envelope is tampering, not an old receipt.
             checks = [{"check": "V2", "name": NAMES["V2"], "status": "fail", "compared": 1,
