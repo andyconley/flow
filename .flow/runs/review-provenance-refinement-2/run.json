@@ -51,15 +51,15 @@
     "approve-definition": "2026-09-28T00:39:21Z",
     "approve-plan": "2026-09-28T00:39:31Z",
     "start-definition": "2026-09-28T00:37:38Z",
+    "start-implementation": "2026-09-28T00:41:06Z",
     "start-plan": "2026-09-28T00:39:23Z"
   },
-  "lane": "plan",
-  "last_event": "approve-plan",
-  "next_action": "Engineer approved the compact four-slice remediation plan.",
-  "phase": "plan_approved",
+  "lane": "implement",
+  "last_event": "start-implementation",
+  "phase": "implementing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "plan_approved",
-  "updated_at": "2026-09-28T00:39:31Z",
+  "state": "implementing",
+  "updated_at": "2026-09-28T00:41:06Z",
   "work_id": "review-provenance-refinement-2"
 }
