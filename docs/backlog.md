@@ -596,7 +596,7 @@ Writable definition-lane assignments missing from the manifest's producer list w
 
 ### Delivery Per Call Timings
 
-Status: observed 2 times, promoted from the capability-gap ledger
+Status: addressed by `step5-operational-handback` (ADR 0020): `flow run trace` shows each call's send and observe times and duration; observed 2 times, promoted from the capability-gap ledger
 
 Delivery inspection does not show per-call timings although the ledger records them; a read-only extraction script had to be written
 
