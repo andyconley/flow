@@ -1198,6 +1198,24 @@ class ProviderRouteTests(unittest.TestCase):
             with patch("delivery_gateway.call_claude_edit", return_value={"provider": "claude"}) as claude:
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "claude")
                 self.assertEqual(claude.call_args.kwargs["timeout_seconds"], 45)
+
+    def test_protocol_8_codex_verifier_uses_read_only_sandbox(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            workspace = Path(dirname)
+            envelope = {
+                "execution_protocol_version": 8,
+                "attempt_id": "attempt",
+                "roster": [{"assignment_id": "verifier", "instructions": "review", "model": "gpt-test",
+                            "provider": "codex"}],
+                "job_contract": {"verifier_instance_ids": ["verifier"]},
+                "limits": {"max_runtime_seconds": 45},
+            }
+            action = {"action_id": "action", "assignment_id": "verifier", "instance_id": "verifier",
+                      "provider": "codex", "task": "review", "provider_task": "bound review"}
+            with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
+                self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "codex")
+                self.assertEqual(codex.call_args.kwargs["sandbox"], "read-only")
+                self.assertEqual(codex.call_args.kwargs["task"], "bound review")
             action["provider"] = "ollama"
             with patch("delivery_gateway.call_local", return_value={"provider": "ollama"}) as ollama:
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "ollama")

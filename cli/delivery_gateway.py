@@ -1640,7 +1640,8 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         action = _normalized_action(envelope, message)
         is_verifier = action["instance_id"] in job["verifier_instance_ids"] if chartered else action["assignment_id"] == "local-verifier"
         is_producer = action["instance_id"] in job["producer_instance_ids"] if chartered else action["assignment_id"] == "claude-implementer"
-        if chartered and action["provider"] in {"claude", "codex"} and not is_producer:
+        if (chartered and action["provider"] in {"claude", "codex"} and not is_producer
+                and not (structured_verifier and is_verifier and action["provider"] == "codex")):
             raise ContractError("selected editor is not eligible to produce this job")
         if is_verifier and (edit_evidence is None or test_evidence is None):
             raise ContractError("Magentic verifier selected before Flow verified Claude repair")
@@ -1962,7 +1963,11 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
                                 trace_path=(trace_dir / "claude-implementer.debug.log") if trace_dir else None,
                                 on_process_group=on_process_group)
     if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7, 8}:
-        return call_codex(instructions=assignment["instructions"], task=action["task"],
+        is_verifier = (envelope["execution_protocol_version"] == 8
+                       and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
+        return call_codex(instructions=assignment["instructions"],
+                          task=action.get("provider_task", action["task"]),
                           workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,
+                          sandbox="read-only" if is_verifier else "workspace-write",
                           on_process_group=on_process_group)
     raise ContractError("selected specialist provider has no approved adapter")
