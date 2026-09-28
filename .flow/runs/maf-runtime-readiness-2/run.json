@@ -57,14 +57,15 @@
     "mark-handback-ready": "2026-09-27T22:55:52Z",
     "start-definition": "2026-09-27T20:41:25Z",
     "start-implementation": "2026-09-27T20:43:18Z",
-    "start-plan": "2026-09-27T20:42:29Z"
+    "start-plan": "2026-09-27T20:42:29Z",
+    "start-review": "2026-09-28T00:19:34Z"
   },
-  "lane": "implement",
-  "last_event": "mark-handback-ready",
-  "phase": "handback_ready",
+  "lane": "review",
+  "last_event": "start-review",
+  "phase": "reviewing",
   "protocol_revision": 2,
   "schema_version": 1,
-  "state": "handback_ready",
-  "updated_at": "2026-09-27T22:55:52Z",
+  "state": "reviewing",
+  "updated_at": "2026-09-28T00:19:34Z",
   "work_id": "maf-runtime-readiness-2"
 }
