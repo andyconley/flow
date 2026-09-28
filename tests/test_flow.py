@@ -723,7 +723,9 @@ class OrchestrationCliTests(FlowCliHarness):
         manifest["assignments"][0]["coordination"] = {"mode": "serialized", "group": "primary"}
         handback = dict(manifest["assignments"][0])
         handback["id"] = "handback"
-        handback["output"] = {"path": ".flow/runs/demo/output.md", "format": "markdown"}
+        # The amendment defines a successor assignment. Its output is a future
+        # artifact and must not be required before that successor dispatches.
+        handback["output"] = {"path": ".flow/runs/demo/future-verification.md", "format": "markdown"}
         handback["coordination"] = {"mode": "serialized", "group": "primary"}
         manifest["assignments"].append(handback)
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")

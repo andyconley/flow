@@ -720,8 +720,12 @@ def approve_orchestration_amendment(
         replacement_data = json.loads(replacement_bytes)
     except json.JSONDecodeError as exc:
         return False, current, [f"replacement is invalid JSON: {exc}"]
-    stage = "acceptance" if current.get("state") in {STATE_HANDBACK_READY, STATE_REVIEWING, STATE_REVIEW_ACCEPTED} else "dispatch"
-    findings = validate_manifest(replacement_data, work_id, stage, root=project_root)
+    # An amendment creates successor delivery authority.  Its assignment
+    # outputs are future artifacts and therefore may not exist yet, even when
+    # the predecessor run is already at handback or review.  Validate the new
+    # manifest at dispatch here; the normal handback/acceptance gates will
+    # require those outputs after the successor has actually run.
+    findings = validate_manifest(replacement_data, work_id, "dispatch", root=project_root)
     if findings:
         return False, current, [f"{f.field} [{f.rule}]: {f.message}" for f in findings]
     replacement_digest = hashlib.sha256(replacement_bytes).hexdigest()
