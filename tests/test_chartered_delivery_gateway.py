@@ -1359,6 +1359,23 @@ class ProviderRouteTests(unittest.TestCase):
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "ollama")
                 self.assertEqual(ollama.call_args.kwargs["timeout_seconds"], 45)
 
+    def test_codex_worker_uses_supported_six_hundred_second_ceiling(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            workspace = Path(dirname)
+            envelope = {
+                "execution_protocol_version": 8,
+                "attempt_id": "attempt",
+                "roster": [{"assignment_id": "editor", "instructions": "do task", "model": "gpt-test",
+                            "provider": "codex"}],
+                "job_contract": {"verifier_instance_ids": []},
+                "limits": {"max_runtime_seconds": 900},
+            }
+            action = {"action_id": "action", "assignment_id": "editor", "instance_id": "editor",
+                      "provider": "codex", "task": "edit"}
+            with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
+                _default_worker_adapter(action, envelope=envelope, workspace=workspace)
+                self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 600)
+
 
 if __name__ == "__main__":
     unittest.main()

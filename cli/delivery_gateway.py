@@ -1983,7 +1983,9 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
     if on_process_group is not None and isinstance(action.get("action_id"), str):
         on_process_group = partial(on_process_group, row_id=action["action_id"])
-    timeout_seconds = min(300, envelope.get("limits", {}).get("max_runtime_seconds", 300))
+    # Provider workers support up to 600 seconds. Do not silently halve a
+    # charter whose sealed runtime budget permits the full worker timeout.
+    timeout_seconds = min(600, envelope.get("limits", {}).get("max_runtime_seconds", 600))
     if action["provider"] == "ollama":
         structured = (envelope["execution_protocol_version"] == 8
                       and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
