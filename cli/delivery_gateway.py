@@ -1457,6 +1457,9 @@ def _execution_facts(envelope: dict[str, Any], job: dict[str, Any] | None, sourc
             " run commands, or edit the worktree.\n"
             "- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs"
             " the targeted test after that edit; the full suite is an acceptance check.\n"
+            + ("- The editor sandbox cannot write linked Git metadata. Do not ask the editor to commit or push,"
+               " and do not treat a missing editor-side commit as incomplete work. Flow owns the verified-diff"
+               " handback; repository integration happens only after Flow accepts that handback.\n" if chartered else "")
             + ("- The approved editors get one call in total; Flow refuses any second editor call. That call must"
                " read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or"
                " \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails"
