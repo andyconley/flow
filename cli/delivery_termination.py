@@ -28,8 +28,6 @@ from execution_contracts import ContractError, canonical, envelope_digest, valid
 from execution_ledger import ExecutionLedger, utc_now
 from fsutil import repo_root
 
-# The receipt validator's own bound on either trace (execution_contracts).
-MAX_SEALED_TRACE_BYTES = MAX_TRACE_BYTES
 TRACE_FILES = ("claude-implementer.debug.log", "claude-implementer.events.ndjson")
 TRACE_FIELDS = {"claude-implementer.debug.log": "diagnostic_trace", "claude-implementer.events.ndjson": "event_trace"}
 
@@ -78,7 +76,7 @@ def build_terminal_receipt(envelope: dict[str, Any], attempt_dir: Path, snapshot
         if found is None:
             continue
         record = {"path": name, "sha256": found[0], "bytes": found[1]}
-        if found[1] > MAX_SEALED_TRACE_BYTES:
+        if name == "claude-implementer.debug.log" and found[1] > MAX_TRACE_BYTES:
             damage.append({"kind": "trace_oversized", **record})
         else:
             evidence[TRACE_FIELDS[name]] = record

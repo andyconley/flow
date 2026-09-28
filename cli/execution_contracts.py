@@ -1040,7 +1040,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
                                     or event_trace["path"] != "claude-implementer.events.ndjson"
                                     or not _hex_digest(event_trace["sha256"])
                                     or type(event_trace["bytes"]) is not int
-                                    or not 0 <= event_trace["bytes"] <= 1024 * 1024):
+                                    or event_trace["bytes"] < 0):
         raise ContractError("Magentic event trace evidence is invalid")
     continuation = evidence.get("continuation")
     if continuation is not None and (not isinstance(continuation, dict)

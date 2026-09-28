@@ -214,12 +214,17 @@ class TerminalSealTests(TerminationFixture):
         (attempt_dir / "baseline.json").unlink()
         trace = b"x" * (1024 * 1024 + 1)
         (attempt_dir / "claude-implementer.debug.log").write_bytes(trace)
+        events = b'{"type":"event"}\n' * 70000
+        (attempt_dir / "claude-implementer.events.ndjson").write_bytes(events)
         draft = b'{"draft": true}\n'
         (attempt_dir / "receipt.json").write_bytes(draft)
         self.seal(attempt_id, "abandoned")
         receipt = self.receipt(attempt_id)
         self.assertIsNone(receipt["evidence"]["baseline"])
         self.assertNotIn("diagnostic_trace", receipt["evidence"])
+        self.assertEqual(receipt["evidence"]["event_trace"], {
+            "path": "claude-implementer.events.ndjson",
+            "sha256": hashlib.sha256(events).hexdigest(), "bytes": len(events)})
         self.assertEqual(receipt["evidence_damage"], [
             {"kind": "baseline_missing"},
             {"kind": "trace_oversized", "path": "claude-implementer.debug.log",

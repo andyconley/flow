@@ -40,7 +40,7 @@ from execution_gateway import _effective_specialist_for, _run_file, _write_snaps
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from claude_worker import call_claude
-from claude_edit_worker import MAX_EVENT_BYTES, MAX_TRACE_BYTES, _stream_result, call_claude_edit
+from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
 from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, run_maf_delivery
 from maf_runtime import require_ready
@@ -51,6 +51,14 @@ from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
+
+
+def _stream_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class ExpansionPaused(Exception):
@@ -1414,10 +1422,8 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
     event_path = attempt_dir / "claude-implementer.events.ndjson"
     if event_path.is_file() and not event_path.is_symlink():
         event_size = event_path.stat().st_size
-        if event_size > MAX_EVENT_BYTES:
-            raise ContractError("Claude event trace exceeds limit")
         receipt["evidence"]["event_trace"] = {
-            "path": event_path.name, "sha256": hashlib.sha256(event_path.read_bytes()).hexdigest(),
+            "path": event_path.name, "sha256": _stream_sha256(event_path),
             "bytes": event_size}
     if continuation_epoch_id:
         epoch = ledger.continuation_snapshot(continuation_epoch_id)

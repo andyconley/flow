@@ -191,6 +191,8 @@ The run must be revision 2 and `implementing`, with a valid dispatch-stage `orch
 
 Direct Claude and Codex edits are Flow-gated: only specialists the charter names as producers may hold edit capability, and their write scope must equal the charter's declared `write_paths`. Ollama performs read-only verification only — an Ollama-backed specialist must be read-only, and every declared verifier must be an independent read-only specialist disjoint from the producers. Native subagents are disabled; the roster runs only the Flow-approved specialists bound in the orchestration manifest.
 
+Provider event volume is not a semantic failure. Flow drains Codex JSONL through a file-backed parser and records Claude event traces as streamed, digest-bound evidence, so a completed valid call is not rejected merely because its event stream crosses a fixed byte threshold. Runtime deadlines, bounded final messages, malformed or ambiguous terminal events, process cleanup, and unknown-send fencing remain enforced.
+
 The gateway checks the managed MAF interpreter after read-only authority and worktree validation, before it creates an attempt. An unavailable runtime returns `maf_runtime_unready` without consuming execution authority. Use `flow runtime install-maf` to repair it; `FLOW_MAF_PYTHON` is an explicit validated override and never silently falls back.
 
 Use `flow runtime readiness --json` for the strict pre-attempt check. A healthy
