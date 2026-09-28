@@ -1154,9 +1154,10 @@ class ExecutionFactsTests(unittest.TestCase):
             with self.subTest(version=version):
                 facts = _execution_facts({"execution_protocol_version": version}, {"baseline": {"kind": "clean"}}, "a" * 40)
                 for phrase in ("one call in total", "refuses any second editor call", "complete edit in the same turn",
-                               '"do not edit yet"'):
+                               '"do not edit yet"', "cannot write linked Git metadata",
+                               "Do not ask the editor to commit or push", "Flow owns the verified-diff handback"):
                     self.assertIn(phrase, facts)
-                self.assertLessEqual(len(facts.encode()), 1500)
+                self.assertLessEqual(len(facts.encode()), 1800)
 
     def test_protocol_5_facts_are_unchanged(self):
         envelope = {"execution_protocol_version": 5,
