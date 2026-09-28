@@ -303,6 +303,15 @@ def _safe_relative_paths(paths: Any) -> bool:
                     for path in paths))
 
 
+def _paths_within_scopes(paths: Any, scopes: Any) -> bool:
+    """Whether each safe relative path equals or descends from an approved scope."""
+    if not _safe_relative_paths(paths) or not _safe_relative_paths(scopes):
+        return False
+    approved = tuple(Path(scope) for scope in scopes)
+    return all(any(Path(path) == scope or Path(path).is_relative_to(scope) for scope in approved)
+               for path in paths)
+
+
 def _validate_chartered_job(envelope: dict[str, Any]) -> None:
     job = envelope.get("job_contract")
     required = {"task", "baseline", "read_paths", "write_paths", "test",
@@ -1500,8 +1509,7 @@ def _validate_chartered_completion(envelope: dict[str, Any], evidence: dict[str,
             or not isinstance(baseline.get("files"), dict)
             or not all(_hex_digest(value) for value in baseline["files"].values())):
         raise ContractError("chartered baseline evidence is invalid")
-    if (not isinstance(edit, dict) or not isinstance(edit.get("changed_files"), list)
-            or not edit["changed_files"] or not set(edit["changed_files"]).issubset(set(job["write_paths"]))
+    if (not isinstance(edit, dict) or not _paths_within_scopes(edit.get("changed_files"), job["write_paths"])
             or not _hex_digest(edit.get("diff_sha256")) or not isinstance(edit.get("diff_path"), str)
             or not edit["diff_path"] or not isinstance(edit.get("files"), dict)
             or not all(_hex_digest(value) for value in edit["files"].values())):
