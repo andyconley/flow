@@ -1281,7 +1281,7 @@ def _completed_reply(ledger: ExecutionLedger, envelope: dict[str, Any], attempt_
 def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: ExecutionLedger,
                    snapshot: dict[str, Any], *, failure: str, edit_evidence: dict[str, Any] | None,
                    test_evidence: dict[str, Any] | None, verifier_input_sha256: str | None,
-                   continuation_epoch_id: str | None) -> tuple[dict[str, Any], str, str]:
+                   continuation_epoch_id: str | None, blocks: dict[str, Any] | None = None) -> tuple[dict[str, Any], str, str]:
     """Derive the terminal status and the linked receipt from ledger facts."""
     aid = envelope["attempt_id"]
     source_commit = envelope["source_commit"]
@@ -1323,16 +1323,18 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         receipt["verifier_inputs"] = snapshot.get("verifier_inputs", [])
         receipt["verifier_evaluations"] = snapshot.get("verifier_evaluations", [])
         receipt["verifier_usage"] = snapshot["verifier_usage"]
-        if envelope.get("predecessors"):
-            receipt["lineage_usage"] = ledger.lineage_usage(aid)
-        expansion = ledger.expansion_receipt(aid)
-        if expansion is not None:
+        # The seal's own blocks, read with the snapshot under the sealing lock (ADR 0020).
+        blocks = blocks if blocks is not None else ledger.seal_view(aid)["blocks"]
+        if blocks["lineage_usage"] is not None:
+            receipt["lineage_usage"] = blocks["lineage_usage"]
+        if blocks["expansion"] is not None:
             # Added only when the lineage expanded, so other receipts stay byte-identical.
-            receipt["expansion"] = expansion
-        manager_progress = ledger.manager_progress_receipt(aid)
-        if manager_progress is not None:
+            receipt["expansion"] = blocks["expansion"]
+        if blocks["manager_progress"] is not None:
             # Added only when a progress reply was repaired or retried (ADR 0018).
-            receipt["manager_progress"] = manager_progress
+            receipt["manager_progress"] = blocks["manager_progress"]
+        if blocks["token_usage"] is not None:
+            receipt["token_usage"] = blocks["token_usage"]
         if snapshot.get("recoveries"):
             # A receipt on disk while the attempt is started is an unsealed
             # draft from a process that died before finish_attempt.
@@ -1762,18 +1764,33 @@ def _seal_attempt(envelope: dict[str, Any], attempt_dir: Path, ledger: Execution
                   hook: Callable[[str], None]) -> dict[str, Any]:
     """Build, validate, write, and seal an attempt receipt under the owner fence."""
     aid = envelope["attempt_id"]
-    if envelope["execution_protocol_version"] == 8:
-        # A sealed attempt keeps no open request or unused grant.
-        with authority_guard(), ledger.send_lock():
-            ledger.close_expansions(aid, "sealed", generation=generation)
-    receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
-                                               edit_evidence=edit_evidence, test_evidence=test_evidence,
-                                               verifier_input_sha256=verifier_input_sha256,
-                                               continuation_epoch_id=None)
-    validate_receipt(envelope, receipt)
-    hook("after-receipt-draft")
     receipt_path = attempt_dir / "receipt.json"
+    if envelope["execution_protocol_version"] != 8:
+        receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, snapshot, failure=failure,
+                                                   edit_evidence=edit_evidence, test_evidence=test_evidence,
+                                                   verifier_input_sha256=verifier_input_sha256,
+                                                   continuation_epoch_id=None)
+        validate_receipt(envelope, receipt)
+        hook("after-receipt-draft")
+        with authority_guard(), ledger.send_lock():
+            ledger.assert_owner(aid, generation)
+            write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
+            hook("before-finish-attempt")
+            ledger.finish_attempt(aid, terminal, reason, str(receipt_path), generation=generation)
+        return {"attempt_id": aid, "status": terminal, "reason": reason, "receipt_path": str(receipt_path),
+                "evidence": receipt["evidence"]}
+    # v8: one send_lock hold closes expansions, snapshots, builds and seals, so
+    # the receipt rows are the rows finish_attempt compares (ADR 0020).
     with authority_guard(), ledger.send_lock():
+        # A sealed attempt keeps no open request or unused grant.
+        ledger.close_expansions(aid, "sealed", generation=generation)
+        view = ledger.seal_view(aid)
+        receipt, terminal, reason = _build_receipt(envelope, attempt_dir, ledger, view["snapshot"], failure=failure,
+                                                   edit_evidence=edit_evidence, test_evidence=test_evidence,
+                                                   verifier_input_sha256=verifier_input_sha256,
+                                                   continuation_epoch_id=None, blocks=view["blocks"])
+        validate_receipt(envelope, receipt)
+        hook("after-receipt-draft")
         ledger.assert_owner(aid, generation)
         write_atomic(receipt_path, canonical(receipt) + "\n", mode=0o600)
         hook("before-finish-attempt")

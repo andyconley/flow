@@ -3508,6 +3508,7 @@ class FlowCliTests(FlowCliHarness):
                 "plugin_usage",
                 "process_identity",
                 "project",
+                "receipt_compare",
                 "render",
                 "runner_limits",
                 "runner_progress",

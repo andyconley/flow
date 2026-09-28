@@ -99,7 +99,7 @@ def build_terminal_receipt(envelope: dict[str, Any], attempt_dir: Path, snapshot
         "verifier_evaluations": snapshot.get("verifier_evaluations", []),
         "verifier_usage": snapshot["verifier_usage"],
     }
-    for key in ("lineage_usage", "expansion", "manager_progress"):
+    for key in ("lineage_usage", "expansion", "manager_progress", "token_usage"):
         if blocks.get(key) is not None:
             receipt[key] = blocks[key]
     if snapshot.get("recoveries"):

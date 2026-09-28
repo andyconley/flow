@@ -37,8 +37,10 @@ from execution_contracts import (
     handback_supported,
     manager_progress_block,
     token_gate,
+    token_usage_block,
     usage_values_valid,
 )
+from receipt_compare import ROW_BLOCKS, compare_receipt_rows, describe, expected_blocks
 from runner_progress import classify as classify_progress
 from verifier_contracts import VerifierContractError, validate_evaluation, validate_structured_verifier_result
 from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_NOT_STARTED, ATTEMPT_RUNNING, ATTEMPT_TERMINAL, EVIDENCE_INSUFFICIENT, EVIDENCE_INVALID,
@@ -630,23 +632,6 @@ class ExecutionLedger:
                      if limit is None or units != 1 or not expansion_fits(envelope, limit, effective[limit] + 1)), None)
         return reason, hard, [limit for _, _, limit, _ in failing if limit is not None]
 
-    @staticmethod
-    def _assert_receipt_lineage(db: sqlite3.Connection, attempt_id: str, receipt_bytes: bytes) -> None:
-        """A sealed v8 receipt's lineage_usage must be the ledger's own count.
-
-        Receipt validation can only bound the self-reported counts; the seal
-        compares them with the ledger inside the sealing transaction.
-        """
-        envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?",
-                                         (attempt_id,)).fetchone()[0])
-        expected = ExecutionLedger._lineage_usage(db, envelope) if envelope.get("predecessors") else None
-        try:
-            receipt = json.loads(receipt_bytes)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ContractError("protocol v8 seal requires a JSON receipt") from exc
-        if not isinstance(receipt, dict) or receipt.get("lineage_usage") != expected:
-            raise ContractError("receipt lineage usage differs from the ledger")
-
     def lineage_usage(self, attempt_id: str) -> dict[str, int]:
         with self._db() as db:
             row = db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
@@ -858,9 +843,7 @@ class ExecutionLedger:
                 released.append(action_id)
             self._close_expansions_locked(db, attempt_id, status)
             snapshot = self._snapshot_locked(db, attempt_id)
-            blocks = {"lineage_usage": self._lineage_usage(db, envelope) if envelope.get("predecessors") else None,
-                      "expansion": self._expansion_receipt(db, envelope),
-                      "manager_progress": self._manager_progress_receipt(db, attempt_id)}
+            blocks = self._seal_blocks_locked(db, envelope)
             receipt_bytes = build_receipt(snapshot, blocks)
             # Every comparison runs on the bytes before anything is written, so
             # a refused seal leaves any earlier draft exactly as it was.
@@ -868,20 +851,20 @@ class ExecutionLedger:
                 receipt = json.loads(receipt_bytes)
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise ContractError("terminal seal requires a JSON receipt") from exc
-            listed = lambda items, key: [(item.get(key), item.get("status")) for item in items] if isinstance(items, list) else None
-            if (not isinstance(receipt, dict) or receipt.get("status") != status or receipt.get("attempt_id") != attempt_id
-                    or listed(receipt.get("actions"), "action_id") != listed(snapshot["actions"], "action_id")
-                    or listed(receipt.get("manager_calls"), "call_id") != listed(snapshot["manager_calls"], "call_id")):
+            if not isinstance(receipt, dict) or receipt.get("status") != status or receipt.get("attempt_id") != attempt_id:
                 raise ContractError("terminal receipt rows differ from the ledger")
+            mismatches = compare_receipt_rows(receipt, expected_blocks(snapshot, blocks), blocks=ROW_BLOCKS)
+            if mismatches:
+                raise ContractError("terminal receipt rows differ from the ledger: " + describe(mismatches[0]))
             termination = receipt.get("termination")
             if (not isinstance(termination, dict) or termination.get("owner_generation") != expected_generation
                     or termination.get("actor") != actor or termination.get("cause") != cause):
                 raise ContractError("terminal receipt termination differs from the seal")
-            self._assert_receipt_lineage(db, attempt_id, receipt_bytes)
-            if receipt.get("expansion") != blocks["expansion"]:
-                raise ContractError("receipt expansion evidence differs from the ledger")
-            if receipt.get("manager_progress") != blocks["manager_progress"]:
-                raise ContractError("receipt manager_progress evidence differs from the ledger")
+            if receipt.get("lineage_usage") != blocks["lineage_usage"]:
+                raise ContractError("receipt lineage usage differs from the ledger")
+            for key in ("expansion", "manager_progress", "token_usage"):
+                if receipt.get(key) != blocks[key]:
+                    raise ContractError(f"receipt {key} evidence differs from the ledger")
             if receipt_path.is_symlink() or receipt_path.parent.is_symlink():
                 raise ContractError("terminal receipt path is unsafe")
             temporary = receipt_path.with_name(f".{receipt_path.name}.{uuid.uuid4().hex}")
@@ -2390,11 +2373,12 @@ class ExecutionLedger:
         if status not in {"completed", "failed", "denied", "unknown"}:
             raise ContractError("invalid attempt terminal status")
         receipt = Path(receipt_path) if isinstance(receipt_path, str) and receipt_path else None
-        receipt_bytes = (receipt.read_bytes()
-                         if receipt is not None and receipt.is_file() and not receipt.is_symlink() else None)
-        receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest() if receipt_bytes is not None else None
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
+            # Read inside the transaction, so the bytes compared are the bytes sealed.
+            receipt_bytes = (receipt.read_bytes()
+                             if receipt is not None and receipt.is_file() and not receipt.is_symlink() else None)
+            receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest() if receipt_bytes is not None else None
             self._assert_owner(db, attempt_id, generation)
             row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             if row is None or row[0] != "started":
@@ -2410,12 +2394,16 @@ class ExecutionLedger:
             if row[1] == 8:
                 if receipt_bytes is None:
                     raise ContractError("protocol v8 seal requires the written receipt")
-                self._assert_receipt_lineage(db, attempt_id, receipt_bytes)
                 envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0])
-                if json.loads(receipt_bytes).get("expansion") != self._expansion_receipt(db, envelope):
-                    raise ContractError("receipt expansion evidence differs from the ledger")
-                if json.loads(receipt_bytes).get("manager_progress") != self._manager_progress_receipt(db, attempt_id):
-                    raise ContractError("receipt manager_progress evidence differs from the ledger")
+                if not handback_supported(envelope):
+                    raise ContractError("attempt predates the sealed token budget; abandon it")
+                try:
+                    parsed = json.loads(receipt_bytes)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ContractError("protocol v8 seal requires a JSON receipt") from exc
+                if not isinstance(parsed, dict):
+                    raise ContractError("protocol v8 seal requires a JSON receipt")
+                self._compare_seal_locked(db, attempt_id, envelope, parsed, rows_message="receipt rows differ from the ledger")
                 db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
                            (status, reason, receipt_path, receipt_sha256, attempt_id))
             else:
@@ -2783,11 +2771,52 @@ class ExecutionLedger:
         with self._db() as db:
             return self._snapshot_locked(db, attempt_id)
 
-    def _seal_blocks_locked(self, db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, Any]:
-        """The ledger-derived receipt blocks the seal compares, for a v8 attempt."""
-        return {"lineage_usage": self._lineage_usage(db, envelope) if envelope.get("predecessors") else None,
-                "expansion": self._expansion_receipt(db, envelope),
-                "manager_progress": self._manager_progress_receipt(db, envelope["attempt_id"])}
+    @staticmethod
+    def _seal_blocks_locked(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, Any]:
+        """The ledger-derived receipt blocks the seal compares, for a v8 attempt.
+
+        Never raises for a pre-release envelope: it has no token block and a
+        two-key lineage block, so its attempt can still be abandoned (ADR 0020).
+        """
+        lineage = ExecutionLedger._lineage_usage(db, envelope) if envelope.get("predecessors") else None
+        blocks = {"lineage_usage": lineage,
+                  "expansion": ExecutionLedger._expansion_receipt(db, envelope),
+                  "manager_progress": ExecutionLedger._manager_progress_receipt(db, envelope["attempt_id"]),
+                  "token_usage": None}
+        if handback_supported(envelope):
+            blocks["token_usage"] = token_usage_block(
+                envelope, *ExecutionLedger._attempt_rows(db, envelope["attempt_id"]),
+                predecessor_charged=(lineage or {}).get("predecessor_charged", 0),
+                tranches_granted=ExecutionLedger._effective_limits(db, envelope)["tokens"])
+        return blocks
+
+    def seal_view(self, attempt_id: str) -> dict[str, Any]:
+        """The snapshot and seal blocks of one attempt, read in one transaction, to build its receipt from."""
+        db = self._db()
+        try:
+            db.execute("BEGIN")
+            envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?",
+                                             (attempt_id,)).fetchone()[0])
+            return {"snapshot": self._snapshot_locked(db, attempt_id), "blocks": self._seal_blocks_locked(db, envelope)}
+        finally:
+            db.rollback()
+            db.close()
+
+    @staticmethod
+    def _compare_seal_locked(db: sqlite3.Connection, attempt_id: str, envelope: dict[str, Any],
+                             receipt: dict[str, Any], *, rows_message: str) -> None:
+        """The full-row seal comparison (ADR 0020): derived blocks first, then every row block."""
+        snapshot = ExecutionLedger._snapshot_locked(db, attempt_id)
+        blocks = ExecutionLedger._seal_blocks_locked(db, envelope)
+        if receipt.get("lineage_usage") != blocks["lineage_usage"]:
+            raise ContractError("receipt lineage usage differs from the ledger")
+        for key, label in (("expansion", "expansion"), ("manager_progress", "manager_progress"),
+                           ("token_usage", "token_usage")):
+            if receipt.get(key) != blocks[key]:
+                raise ContractError(f"receipt {label} evidence differs from the ledger")
+        mismatches = compare_receipt_rows(receipt, expected_blocks(snapshot, blocks), blocks=ROW_BLOCKS)
+        if mismatches:
+            raise ContractError(f"{rows_message}: " + describe(mismatches[0]))
 
     @staticmethod
     def _token_state_locked(db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, int]:

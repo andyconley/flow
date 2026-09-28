@@ -1210,6 +1210,24 @@ def _validate_manager_progress(receipt: dict[str, Any]) -> None:
         raise ContractError("manager_progress evidence differs from the receipt's manager calls")
 
 
+def _validate_token_usage(envelope: dict[str, Any], receipt: dict[str, Any], lineage: dict[str, int],
+                          effective: dict[str, int]) -> None:
+    """A handback receipt carries the token block its own rows recompute to; a pre-release one carries none.
+
+    Required or not is read from the envelope, never from the receipt, so
+    deleting the block from a handback receipt is a failure (ADR 0020).
+    """
+    if not handback_supported(envelope):
+        if "token_usage" in receipt:
+            raise ContractError("token usage requires a sealed token budget")
+        return
+    expected = token_usage_block(envelope, receipt["actions"], receipt["manager_calls"],
+                                 predecessor_charged=lineage.get("predecessor_charged", 0),
+                                 tranches_granted=effective["tokens"])
+    if receipt.get("token_usage") != expected:
+        raise ContractError("receipt token usage differs from its rows")
+
+
 def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]) -> None:
     require_fields(receipt, ("work_id", "attempt_id", "envelope_digest", "charter_digest", "manifest_digest",
                              "status", "execution_protocol_version", "roster", "manager_calls", "actions",
@@ -1377,6 +1395,7 @@ def _validate_magentic_receipt(envelope: dict[str, Any], receipt: dict[str, Any]
             raise ContractError("structured verifier usage differs from receipt facts")
         _validate_recovery_block(envelope, receipt)
         _validate_termination(envelope, receipt)
+        _validate_token_usage(envelope, receipt, lineage, effective)
     if receipt["status"] == "completed":
         completed = [item["request"] for item in receipt["actions"] if item["status"] == "completed"]
         if is_chartered_protocol(execution_protocol_version(envelope)):

@@ -563,12 +563,24 @@ class SuccessorLineageTamperTests(CharteredFixture):
         understated = {"predecessor_charged": 0, "predecessor_paid_calls": 0, "predecessor_verifier_sends": 0}
         envelope = {}
         original = ExecutionLedger.create_attempt
+        real_view = ExecutionLedger.seal_view
 
         def capture(ledger, candidate):
             envelope.update(candidate)
             return original(ledger, candidate)
 
-        with patch.object(ExecutionLedger, "lineage_usage", return_value=understated), \
+        def understated_view(ledger, attempt_id):
+            # The receipt builder reads the seal's blocks (ADR 0020); understate them
+            # consistently, so only the ledger comparison at the seal can catch it.
+            view = real_view(ledger, attempt_id)
+            hidden = view["blocks"]["lineage_usage"]["predecessor_charged"]
+            tokens = dict(view["blocks"]["token_usage"])
+            tokens.update(predecessor_charged=0, charged_total=tokens["charged_total"] - hidden)
+            tokens["overshoot"] = max(0, tokens["charged_total"] - tokens["maximum"])
+            view["blocks"] = {**view["blocks"], "lineage_usage": understated, "token_usage": tokens}
+            return view
+
+        with patch.object(ExecutionLedger, "seal_view", understated_view), \
              patch.object(ExecutionLedger, "create_attempt", capture), \
              self.assertRaisesRegex(ExecutionContractError, "lineage usage differs from the ledger"):
             self._run_v8([self.PASS], plan=("editor", "verifier"))
