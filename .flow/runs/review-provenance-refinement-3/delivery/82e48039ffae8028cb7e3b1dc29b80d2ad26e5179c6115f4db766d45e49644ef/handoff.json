@@ -1,0 +1,29 @@
+{
+  "delivery_charter_digest": "82e48039ffae8028cb7e3b1dc29b80d2ad26e5179c6115f4db766d45e49644ef",
+  "delivery_charter_id": "delivery-4a2709ad7b27f942c7ce",
+  "digest": "933066c1d657e03eac6621ea344ae799a7f22d2555fd17abac4e46fc3186a1a1",
+  "kind": "definition_to_delivery_handoff",
+  "run_id": "review-provenance-refinement-3",
+  "schema_version": 1,
+  "shaper_contract_digest": "5ecfa473a7706b4a7c5fb95f01b5ae4bc7e587566bc81e4e56b20ba52bb1454a",
+  "shaper_contract_id": "shaper-0bb068c958554ec529f9",
+  "source_digests": {
+    "acceptance_criteria": {
+      "path": ".flow/runs/review-provenance-refinement-3/acceptance-criteria.md",
+      "sha256": "67a60dfa9e73cca1b31b31e26aa0d1b115fe64e02c0865abc84e8d3990747720"
+    },
+    "orchestration_manifest": {
+      "path": ".flow/runs/review-provenance-refinement-3/orchestration.json",
+      "sha256": "1147197e8896ac67b5cfce4024de9f25386b3e97868d118e6ed9b383ce5d580d"
+    },
+    "requirements": {
+      "path": ".flow/runs/review-provenance-refinement-3/requirements.md",
+      "sha256": "d509343b005bdf4ca7d306d79dc85c39961d8f31fad086c25e9b9b00390cd327"
+    },
+    "shaper_intent": {
+      "path": ".flow/runs/review-provenance-refinement-3/shaper-intent.json",
+      "sha256": "f130e51cb2c7e7bafbfafd8a9ba984f4fdb553d0860972d76d5052ba5497a64e"
+    }
+  },
+  "transition": "start-plan"
+}
