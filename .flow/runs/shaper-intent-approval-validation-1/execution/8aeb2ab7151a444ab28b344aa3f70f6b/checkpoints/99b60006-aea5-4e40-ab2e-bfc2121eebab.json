@@ -1,0 +1,145 @@
+{
+  "workflow_name": "flow-magentic-delivery-v8",
+  "graph_signature_hash": "f56924e4402b5d49cddcf5a611d5860937787accc9ee25c2fe3c6a5fb9bd626f",
+  "checkpoint_id": "99b60006-aea5-4e40-ab2e-bfc2121eebab",
+  "previous_checkpoint_id": "3c07b46b-9190-4170-8303-0254a7ac2d30",
+  "timestamp": "2026-09-28T03:02:55.657334+00:00",
+  "messages": {},
+  "state": {
+    "_workflow_run_kwargs": {},
+    "_resolved_workflow_run_kwargs": {},
+    "_executor_state": {
+      "magentic_orchestrator": {
+        "conversation": [],
+        "round_index": 1,
+        "orchestrator_name": "magentic_orchestrator",
+        "metadata": {},
+        "terminated": false,
+        "magentic_context": {
+          "task": "Implement exactly one defect repair: validate canonical shaper-intent.json before approve-definition writes lifecycle state, events, or approved digests. Reuse the existing canonical validator, add focused atomicity and compatibility tests, and update only directly affected guidance. Do not implement review amendments, Delivery-plan validation, provider-adapter changes, or any other predecessor scope.\n\nFlow-verified execution facts:\n- The isolated worktree is pinned to source commit 76136c28eda6162f6a7e42aca23ce19279e09ee1.\n- The approved baseline is clean.\n- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files, run commands, or edit the worktree.\n- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs the targeted test after that edit; the full suite is an acceptance check.\n- The approved editors get one call in total; Flow refuses any second editor call. That call must read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails the attempt.\n",
+          "chat_history": [
+            {
+              "type": "message",
+              "role": "user",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Implement exactly one defect repair: validate canonical shaper-intent.json before approve-definition writes lifecycle state, events, or approved digests. Reuse the existing canonical validator, add focused atomicity and compatibility tests, and update only directly affected guidance. Do not implement review amendments, Delivery-plan validation, provider-adapter changes, or any other predecessor scope.\n\nFlow-verified execution facts:\n- The isolated worktree is pinned to source commit 76136c28eda6162f6a7e42aca23ce19279e09ee1.\n- The approved baseline is clean.\n- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files, run commands, or edit the worktree.\n- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs the targeted test after that edit; the full suite is an acceptance check.\n- The approved editors get one call in total; Flow refuses any second editor call. That call must read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails the attempt.\n",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "\nWe are working to address the following user request:\n\nImplement exactly one defect repair: validate canonical shaper-intent.json before approve-definition writes lifecycle state, events, or approved digests. Reuse the existing canonical validator, add focused atomicity and compatibility tests, and update only directly affected guidance. Do not implement review amendments, Delivery-plan validation, provider-adapter changes, or any other predecessor scope.\n\nFlow-verified execution facts:\n- The isolated worktree is pinned to source commit 76136c28eda6162f6a7e42aca23ce19279e09ee1.\n- The approved baseline is clean.\n- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files, run commands, or edit the worktree.\n- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs the targeted test after that edit; the full suite is an acceptance check.\n- The approved editors get one call in total; Flow refuses any second editor call. That call must read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails the attempt.\n\n\n\nTo answer this request we have assembled the following team:\n\n- shaper-intent-producer: <no description, use name to identify the purpose of this participant>\n- shaper-intent-verifier: <no description, use name to identify the purpose of this participant>\n\n\nHere is an initial fact sheet to consider:\n\n## 1. GIVEN OR VERIFIED FACTS\n\n- The requested repair is to validate the canonical `shaper-intent.json` before `approve-definition` writes lifecycle state, events, or approved digests.\n- The existing canonical validator must be reused.\n- Focused atomicity and compatibility tests must be added.\n- Only directly affected guidance may be updated.\n- Review amendments, Delivery-plan validation, provider-adapter changes, and all other predecessor scope are excluded.\n- The isolated worktree is pinned to commit `76136c28eda6162f6a7e42aca23ce19279e09ee1`.\n- The approved baseline is clean.\n- Read-only analyst and verifier specialists cannot inspect files, execute commands, or edit the worktree.\n- The approved editor may modify only charter-allowed paths.\n- Flow will verify the diff, run the targeted test after editing, and use the full suite as an acceptance check.\n- Only one editor call is allowed, and it must both inspect the necessary files and complete all edits.\n- An inspect-only editor call or an editor call that produces no changes would fail the attempt.\n- Work must remain within the provided workspace.\n- Subagents and delegation are prohibited.\n\n## 2. FACTS TO LOOK UP\n\n- The location and API of the existing canonical `shaper-intent.json` validator, found in the repository source at the pinned commit.\n- The implementation and write order of `approve-definition`, found in its command or workflow handler.\n- Every lifecycle-state, event, and approved-digest write performed by `approve-definition`, found in that implementation and its direct collaborators.\n- The charter’s exact allowed edit paths, found in the Flow run or charter metadata.\n- Existing tests for `approve-definition`, canonical intent validation, write atomicity, and backward compatibility, found in the repository’s test directories.\n- The targeted test command and full-suite command, found in project configuration, scripts, or directly affected contributor guidance.\n- The directly affected guidance files and current documented behavior, found in the repository documentation within the permitted paths.\n- Any repository-specific instructions such as `AGENTS.md`, found in the workspace hierarchy.\n\n## 3. FACTS TO DERIVE\n\n- The earliest safe validation point that guarantees invalid canonical intent causes no lifecycle-state, event, or approved-digest writes.\n- Which observable artifacts must remain unchanged to prove atomic failure behavior.\n- Which valid legacy or currently supported intent shapes must continue to pass, establishing compatibility coverage.\n- The minimal set of source, test, and guidance changes needed to repair exactly this defect.\n- Whether the existing validator’s error type, message, or exit behavior must be preserved by `approve-definition`.\n- Whether validation requires loading canonical intent before any transaction, mutation, or event emission begins.\n\n## 4. EDUCATED GUESSES\n\n- `approve-definition` likely performs at least one mutation before currently validating—or without validating—the canonical intent.\n- The canonical validator is probably already used by another command or workflow and can be invoked without adding a new validation implementation.\n- Atomicity tests will likely use malformed canonical intent and assert that all relevant files, digests, state, and event records remain byte-for-byte or semantically unchanged.\n- Compatibility tests will likely exercise an existing valid fixture to ensure successful approvals retain their prior behavior.\n- The guidance update will probably be a narrow statement that approval validates canonical shaper intent before committing any approval-related writes.\n\n\nHere is the plan to follow as best as possible:\n\n- Have `shaper-intent-producer` inspect the repository instructions, charter-allowed paths, existing canonical validator, `approve-definition` write sequence, related tests, and directly affected guidance in its single editor call.\n- Reuse the canonical validator at the start of `approve-definition`, before any lifecycle-state, event, or approved-digest mutation.\n- Add focused tests proving invalid canonical intent produces no partial writes and valid existing intent remains compatible.\n- Update only guidance directly affected by the validation-order guarantee; avoid all excluded predecessor scope.\n- Run the targeted test, then the full acceptance suite.\n- Have `shaper-intent-verifier` review the resulting diff and test evidence for scope compliance, atomicity, compatibility, and absence of unrelated changes.\n",
+                  "additional_properties": {}
+                }
+              ],
+              "author_name": "magentic_manager",
+              "additional_properties": {}
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Use your single authorized editor call now. In that same turn, inspect the repository instructions and charter-allowed paths; locate the existing canonical shaper-intent.json validator and approve-definition write sequence; implement validation before every lifecycle-state, event, or approved-digest write; add focused tests proving invalid canonical intent causes no partial writes and supported valid intent remains compatible; update only directly affected guidance; and run the targeted test plus the full suite if available. Do not touch review amendments, Delivery-plan validation, provider adapters, or any other predecessor scope. Report the exact files changed, validation placement, tests and results, and any remaining issue.",
+                  "additional_properties": {}
+                }
+              ],
+              "author_name": "magentic_manager",
+              "additional_properties": {}
+            }
+          ],
+          "participant_descriptions": {
+            "shaper-intent-producer": "<no description, use name to identify the purpose of this participant>",
+            "shaper-intent-verifier": "<no description, use name to identify the purpose of this participant>"
+          },
+          "round_count": 1,
+          "stall_count": 0,
+          "reset_count": 0
+        },
+        "task_ledger": {
+          "type": "message",
+          "role": "assistant",
+          "contents": [
+            {
+              "type": "text",
+              "text": "\nWe are working to address the following user request:\n\nImplement exactly one defect repair: validate canonical shaper-intent.json before approve-definition writes lifecycle state, events, or approved digests. Reuse the existing canonical validator, add focused atomicity and compatibility tests, and update only directly affected guidance. Do not implement review amendments, Delivery-plan validation, provider-adapter changes, or any other predecessor scope.\n\nFlow-verified execution facts:\n- The isolated worktree is pinned to source commit 76136c28eda6162f6a7e42aca23ce19279e09ee1.\n- The approved baseline is clean.\n- Read-only analyst and verifier specialists can analyze supplied task text only; they cannot read files, run commands, or edit the worktree.\n- The approved editor may edit only the charter's allowed paths. Flow verifies the diff and runs the targeted test after that edit; the full suite is an acceptance check.\n- The approved editors get one call in total; Flow refuses any second editor call. That call must read what it needs and make the complete edit in the same turn. Never delegate an inspect-only or \"do not edit yet\" step to an editor: Flow checks the worktree right after it, and no edit fails the attempt.\n\n\n\nTo answer this request we have assembled the following team:\n\n- shaper-intent-producer: <no description, use name to identify the purpose of this participant>\n- shaper-intent-verifier: <no description, use name to identify the purpose of this participant>\n\n\nHere is an initial fact sheet to consider:\n\n## 1. GIVEN OR VERIFIED FACTS\n\n- The requested repair is to validate the canonical `shaper-intent.json` before `approve-definition` writes lifecycle state, events, or approved digests.\n- The existing canonical validator must be reused.\n- Focused atomicity and compatibility tests must be added.\n- Only directly affected guidance may be updated.\n- Review amendments, Delivery-plan validation, provider-adapter changes, and all other predecessor scope are excluded.\n- The isolated worktree is pinned to commit `76136c28eda6162f6a7e42aca23ce19279e09ee1`.\n- The approved baseline is clean.\n- Read-only analyst and verifier specialists cannot inspect files, execute commands, or edit the worktree.\n- The approved editor may modify only charter-allowed paths.\n- Flow will verify the diff, run the targeted test after editing, and use the full suite as an acceptance check.\n- Only one editor call is allowed, and it must both inspect the necessary files and complete all edits.\n- An inspect-only editor call or an editor call that produces no changes would fail the attempt.\n- Work must remain within the provided workspace.\n- Subagents and delegation are prohibited.\n\n## 2. FACTS TO LOOK UP\n\n- The location and API of the existing canonical `shaper-intent.json` validator, found in the repository source at the pinned commit.\n- The implementation and write order of `approve-definition`, found in its command or workflow handler.\n- Every lifecycle-state, event, and approved-digest write performed by `approve-definition`, found in that implementation and its direct collaborators.\n- The charter’s exact allowed edit paths, found in the Flow run or charter metadata.\n- Existing tests for `approve-definition`, canonical intent validation, write atomicity, and backward compatibility, found in the repository’s test directories.\n- The targeted test command and full-suite command, found in project configuration, scripts, or directly affected contributor guidance.\n- The directly affected guidance files and current documented behavior, found in the repository documentation within the permitted paths.\n- Any repository-specific instructions such as `AGENTS.md`, found in the workspace hierarchy.\n\n## 3. FACTS TO DERIVE\n\n- The earliest safe validation point that guarantees invalid canonical intent causes no lifecycle-state, event, or approved-digest writes.\n- Which observable artifacts must remain unchanged to prove atomic failure behavior.\n- Which valid legacy or currently supported intent shapes must continue to pass, establishing compatibility coverage.\n- The minimal set of source, test, and guidance changes needed to repair exactly this defect.\n- Whether the existing validator’s error type, message, or exit behavior must be preserved by `approve-definition`.\n- Whether validation requires loading canonical intent before any transaction, mutation, or event emission begins.\n\n## 4. EDUCATED GUESSES\n\n- `approve-definition` likely performs at least one mutation before currently validating—or without validating—the canonical intent.\n- The canonical validator is probably already used by another command or workflow and can be invoked without adding a new validation implementation.\n- Atomicity tests will likely use malformed canonical intent and assert that all relevant files, digests, state, and event records remain byte-for-byte or semantically unchanged.\n- Compatibility tests will likely exercise an existing valid fixture to ensure successful approvals retain their prior behavior.\n- The guidance update will probably be a narrow statement that approval validates canonical shaper intent before committing any approval-related writes.\n\n\nHere is the plan to follow as best as possible:\n\n- Have `shaper-intent-producer` inspect the repository instructions, charter-allowed paths, existing canonical validator, `approve-definition` write sequence, related tests, and directly affected guidance in its single editor call.\n- Reuse the canonical validator at the start of `approve-definition`, before any lifecycle-state, event, or approved-digest mutation.\n- Add focused tests proving invalid canonical intent produces no partial writes and valid existing intent remains compatible.\n- Update only guidance directly affected by the validation-order guarantee; avoid all excluded predecessor scope.\n- Run the targeted test, then the full acceptance suite.\n- Have `shaper-intent-verifier` review the resulting diff and test evidence for scope compliance, atomicity, compatibility, and absence of unrelated changes.\n",
+              "additional_properties": {}
+            }
+          ],
+          "author_name": "magentic_manager",
+          "additional_properties": {}
+        },
+        "progress_ledger": {
+          "is_request_satisfied": {
+            "reason": "No implementation, tests, guidance update, or successful verification evidence has been produced yet.",
+            "answer": false
+          },
+          "is_in_loop": {
+            "reason": "The request has been restated, but the team has not yet repeated an unsuccessful implementation or verification action.",
+            "answer": false
+          },
+          "is_progress_being_made": {
+            "reason": "The scope, constraints, and execution plan are established, and the next required action is the producer's single authorized inspect-and-edit call.",
+            "answer": true
+          },
+          "next_speaker": {
+            "reason": "The producer must perform the only authorized editor call and complete the repository inspection and all scoped edits before verification can occur.",
+            "answer": "shaper-intent-producer"
+          },
+          "instruction_or_question": {
+            "reason": "The one-call constraint requires the producer to inspect, implement, test, and report the complete scoped repair in one turn.",
+            "answer": "Use your single authorized editor call now. In that same turn, inspect the repository instructions and charter-allowed paths; locate the existing canonical shaper-intent.json validator and approve-definition write sequence; implement validation before every lifecycle-state, event, or approved-digest write; add focused tests proving invalid canonical intent causes no partial writes and supported valid intent remains compatible; update only directly affected guidance; and run the targeted test plus the full suite if available. Do not touch review amendments, Delivery-plan validation, provider adapters, or any other predecessor scope. Report the exact files changed, validation placement, tests and results, and any remaining issue."
+          }
+        },
+        "manager_state": {
+          "task_ledger": {
+            "facts": {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "## 1. GIVEN OR VERIFIED FACTS\n\n- The requested repair is to validate the canonical `shaper-intent.json` before `approve-definition` writes lifecycle state, events, or approved digests.\n- The existing canonical validator must be reused.\n- Focused atomicity and compatibility tests must be added.\n- Only directly affected guidance may be updated.\n- Review amendments, Delivery-plan validation, provider-adapter changes, and all other predecessor scope are excluded.\n- The isolated worktree is pinned to commit `76136c28eda6162f6a7e42aca23ce19279e09ee1`.\n- The approved baseline is clean.\n- Read-only analyst and verifier specialists cannot inspect files, execute commands, or edit the worktree.\n- The approved editor may modify only charter-allowed paths.\n- Flow will verify the diff, run the targeted test after editing, and use the full suite as an acceptance check.\n- Only one editor call is allowed, and it must both inspect the necessary files and complete all edits.\n- An inspect-only editor call or an editor call that produces no changes would fail the attempt.\n- Work must remain within the provided workspace.\n- Subagents and delegation are prohibited.\n\n## 2. FACTS TO LOOK UP\n\n- The location and API of the existing canonical `shaper-intent.json` validator, found in the repository source at the pinned commit.\n- The implementation and write order of `approve-definition`, found in its command or workflow handler.\n- Every lifecycle-state, event, and approved-digest write performed by `approve-definition`, found in that implementation and its direct collaborators.\n- The charter’s exact allowed edit paths, found in the Flow run or charter metadata.\n- Existing tests for `approve-definition`, canonical intent validation, write atomicity, and backward compatibility, found in the repository’s test directories.\n- The targeted test command and full-suite command, found in project configuration, scripts, or directly affected contributor guidance.\n- The directly affected guidance files and current documented behavior, found in the repository documentation within the permitted paths.\n- Any repository-specific instructions such as `AGENTS.md`, found in the workspace hierarchy.\n\n## 3. FACTS TO DERIVE\n\n- The earliest safe validation point that guarantees invalid canonical intent causes no lifecycle-state, event, or approved-digest writes.\n- Which observable artifacts must remain unchanged to prove atomic failure behavior.\n- Which valid legacy or currently supported intent shapes must continue to pass, establishing compatibility coverage.\n- The minimal set of source, test, and guidance changes needed to repair exactly this defect.\n- Whether the existing validator’s error type, message, or exit behavior must be preserved by `approve-definition`.\n- Whether validation requires loading canonical intent before any transaction, mutation, or event emission begins.\n\n## 4. EDUCATED GUESSES\n\n- `approve-definition` likely performs at least one mutation before currently validating—or without validating—the canonical intent.\n- The canonical validator is probably already used by another command or workflow and can be invoked without adding a new validation implementation.\n- Atomicity tests will likely use malformed canonical intent and assert that all relevant files, digests, state, and event records remain byte-for-byte or semantically unchanged.\n- Compatibility tests will likely exercise an existing valid fixture to ensure successful approvals retain their prior behavior.\n- The guidance update will probably be a narrow statement that approval validates canonical shaper intent before committing any approval-related writes.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            },
+            "plan": {
+              "type": "message",
+              "role": "assistant",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "- Have `shaper-intent-producer` inspect the repository instructions, charter-allowed paths, existing canonical validator, `approve-definition` write sequence, related tests, and directly affected guidance in its single editor call.\n- Reuse the canonical validator at the start of `approve-definition`, before any lifecycle-state, event, or approved-digest mutation.\n- Add focused tests proving invalid canonical intent produces no partial writes and valid existing intent remains compatible.\n- Update only guidance directly affected by the validation-order guarantee; avoid all excluded predecessor scope.\n- Run the targeted test, then the full acceptance suite.\n- Have `shaper-intent-verifier` review the resulting diff and test evidence for scope compliance, atomicity, compatibility, and absence of unrelated changes.",
+                  "additional_properties": {}
+                }
+              ],
+              "additional_properties": {}
+            }
+          }
+        }
+      },
+      "shaper-intent-producer": {},
+      "shaper-intent-verifier": {}
+    }
+  },
+  "pending_request_info_events": {
+    "flow-magentic-action-1": {
+      "__pickled__": "gAWV6wcAAAAAAACMImFnZW50X2ZyYW1ld29yay5fd29ya2Zsb3dzLl9ldmVudHOUjA1Xb3JrZmxvd0V2ZW50lJOUKYGUfZQojAR0eXBllIwMcmVxdWVzdF9pbmZvlIwEZGF0YZR9lCiMEHByb3RvY29sX3ZlcnNpb26USwiMDnNjaGVtYV92ZXJzaW9ulEsBaAWMDnByb3Bvc2VfYWN0aW9ulIwEa2luZJSMCGRlbGVnYXRllIwKYXR0ZW1wdF9pZJSMIDhhZWIyYWI3MTUxYTQ0NGFiMjhiMzQ0YWEzZjcwZjZilIwPZW52ZWxvcGVfZGlnZXN0lIxANWMyY2I0MTE2MGNhNjY2NmRkNTc1NWQzZmEzMmQxNTFkYzVmZjEzMzljZTEzNDkwZTE5YmNhZTgxNTY3MDE0ZJSMCHNlcXVlbmNllEsBjA1hc3NpZ25tZW50X2lklIwWc2hhcGVyLWludGVudC1wcm9kdWNlcpSMEWRlZmluaXRpb25fZGlnZXN0lIxAYzhmNTBhYjNjNjA4NjhkZGIyYTlmNTE5ZWQ0Y2E1MzI0MWFjNTRmYjBhMmM1YzM2NGJmNTY5Yjc2MDVmOWY4MJSMC2luc3RhbmNlX2lklIwWc2hhcGVyLWludGVudC1wcm9kdWNlcpSMBHJvbGWUjA5sZWFkLWRldmVsb3BlcpSMCHByb3ZpZGVylIwGY2xhdWRllIwFbW9kZWyUjAZzb25uZXSUjAxtYW5hZ2VyX3R1cm6USwGMBHRhc2uUWOECAABVc2UgeW91ciBzaW5nbGUgYXV0aG9yaXplZCBlZGl0b3IgY2FsbCBub3cuIEluIHRoYXQgc2FtZSB0dXJuLCBpbnNwZWN0IHRoZSByZXBvc2l0b3J5IGluc3RydWN0aW9ucyBhbmQgY2hhcnRlci1hbGxvd2VkIHBhdGhzOyBsb2NhdGUgdGhlIGV4aXN0aW5nIGNhbm9uaWNhbCBzaGFwZXItaW50ZW50Lmpzb24gdmFsaWRhdG9yIGFuZCBhcHByb3ZlLWRlZmluaXRpb24gd3JpdGUgc2VxdWVuY2U7IGltcGxlbWVudCB2YWxpZGF0aW9uIGJlZm9yZSBldmVyeSBsaWZlY3ljbGUtc3RhdGUsIGV2ZW50LCBvciBhcHByb3ZlZC1kaWdlc3Qgd3JpdGU7IGFkZCBmb2N1c2VkIHRlc3RzIHByb3ZpbmcgaW52YWxpZCBjYW5vbmljYWwgaW50ZW50IGNhdXNlcyBubyBwYXJ0aWFsIHdyaXRlcyBhbmQgc3VwcG9ydGVkIHZhbGlkIGludGVudCByZW1haW5zIGNvbXBhdGlibGU7IHVwZGF0ZSBvbmx5IGRpcmVjdGx5IGFmZmVjdGVkIGd1aWRhbmNlOyBhbmQgcnVuIHRoZSB0YXJnZXRlZCB0ZXN0IHBsdXMgdGhlIGZ1bGwgc3VpdGUgaWYgYXZhaWxhYmxlLiBEbyBub3QgdG91Y2ggcmV2aWV3IGFtZW5kbWVudHMsIERlbGl2ZXJ5LXBsYW4gdmFsaWRhdGlvbiwgcHJvdmlkZXIgYWRhcHRlcnMsIG9yIGFueSBvdGhlciBwcmVkZWNlc3NvciBzY29wZS4gUmVwb3J0IHRoZSBleGFjdCBmaWxlcyBjaGFuZ2VkLCB2YWxpZGF0aW9uIHBsYWNlbWVudCwgdGVzdHMgYW5kIHJlc3VsdHMsIGFuZCBhbnkgcmVtYWluaW5nIGlzc3VlLpSMC3Rhc2tfZGlnZXN0lIxAYTdmZDY2YTBiOGM1MmRmYjgzMTU2YTFkYjg2OGZhYzRlNjI5NTM2NTQzMmUxMTY3OWE0ZWQ4YTc0MzE0NWY0ZpSMCXJhdGlvbmFsZZSMlFRoZSBwcm9kdWNlciBtdXN0IHBlcmZvcm0gdGhlIG9ubHkgYXV0aG9yaXplZCBlZGl0b3IgY2FsbCBhbmQgY29tcGxldGUgdGhlIHJlcG9zaXRvcnkgaW5zcGVjdGlvbiBhbmQgYWxsIHNjb3BlZCBlZGl0cyBiZWZvcmUgdmVyaWZpY2F0aW9uIGNhbiBvY2N1ci6UjBBwYXJlbnRfYWN0aW9uX2lklE6MD3Byb3ZpZGVyX2Nob2ljZZR9lCiME2VsaWdpYmxlX2NhbmRpZGF0ZXOUXZR9lChoE2gUaBVoFmgXaBhoGWgaaBtoHGgdaB51YYwSc2VsZWN0ZWRfY2FuZGlkYXRllGgYaCR9lCiMDm1hbmFnZXJfcmVhc29ulGgljAVmYWN0c5RdlCiMGmFwcHJvdmVkIHByb2R1Y2VyIGlkZW50aXR5lIwrdGFzayBzZWxlY3RlZCBieSBNYWdlbnRpYyBwcm9ncmVzcyBkZWNpc2lvbpRldYwRcmVqZWN0aW9uX3JlYXNvbnOUfZR1dYwGb3JpZ2lulGgAjBNXb3JrZmxvd0V2ZW50U291cmNllJOUjAhFWEVDVVRPUpSFlFKUjAVzdGF0ZZROjAdkZXRhaWxzlE6MC2V4ZWN1dG9yX2lklE6MC19yZXF1ZXN0X2lklIwWZmxvdy1tYWdlbnRpYy1hY3Rpb24tMZSME19zb3VyY2VfZXhlY3V0b3JfaWSUaBiMDV9yZXF1ZXN0X3R5cGWUjAhidWlsdGluc5SMBGRpY3SUk5SMDl9yZXNwb25zZV90eXBllGhEjAlpdGVyYXRpb26UTnViLg==",
+      "__type__": "agent_framework._workflows._events:WorkflowEvent"
+    }
+  },
+  "iteration_count": 2,
+  "metadata": {},
+  "version": "1.0"
+}

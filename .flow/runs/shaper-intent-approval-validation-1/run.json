@@ -51,16 +51,20 @@
   "gates": {
     "approve-definition": "2026-09-28T03:01:46Z",
     "approve-plan": "2026-09-28T03:01:46Z",
+    "block": "2026-09-28T03:17:03Z",
     "start-definition": "2026-09-28T02:59:55Z",
     "start-implementation": "2026-09-28T03:01:59Z",
     "start-plan": "2026-09-28T03:01:46Z"
   },
-  "lane": "implement",
-  "last_event": "start-implementation",
-  "phase": "implementing",
+  "lane": "run",
+  "last_event": "block",
+  "next_action": "Provider trace size restriction repaired and recovery accepted the 1162867-byte trace. Recovery then sealed failure because directory write scope docs did not authorize docs/cli-reference.md; feature diff remains unaccepted.",
+  "phase": "blocked",
   "protocol_revision": 2,
+  "return_lane": "implement",
+  "return_state": "implementing",
   "schema_version": 1,
-  "state": "implementing",
-  "updated_at": "2026-09-28T03:01:59Z",
+  "state": "blocked",
+  "updated_at": "2026-09-28T03:17:03Z",
   "work_id": "shaper-intent-approval-validation-1"
 }
