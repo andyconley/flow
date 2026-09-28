@@ -89,7 +89,10 @@ def _parse_result(raw: bytes, expected_model: str, *, max_output_bytes: int = MA
     if not isinstance(session_id, str) or not session_id.strip():
         raise ClaudeWorkerError("Claude session identity missing")
     num_turns = payload.get("num_turns")
-    if isinstance(num_turns, bool) or not isinstance(num_turns, int) or not 1 <= num_turns <= 1:
+    # Claude reports provider-internal turns here, not Flow dispatches. A
+    # successful terminal result may legitimately report more than one even
+    # though Flow made exactly one physical call.
+    if isinstance(num_turns, bool) or not isinstance(num_turns, int) or num_turns < 1:
         raise ClaudeWorkerError("Claude turn count is invalid")
     usage = _normalized_usage(payload.get("usage"))
     return {"schema_version": 1, "status": "completed", "provider": "claude",
@@ -97,7 +100,7 @@ def _parse_result(raw: bytes, expected_model: str, *, max_output_bytes: int = MA
             "evidence_level": "flow_observed_claude_cli_completed_turn",
             "output": result,
             "output_sha256": hashlib.sha256(result.encode()).hexdigest(),
-            "usage": usage, "session_id": session_id}
+            "usage": usage, "session_id": session_id, "num_turns": num_turns}
 
 
 def build_prompt(instructions: str, task: str) -> bytes:

@@ -664,6 +664,48 @@ class OrchestrationCliTests(FlowCliHarness):
         status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
         self.assertEqual(status["state"], "definition_approved")
 
+    def test_shaper_intent_refuses_runtime_above_protocol_ceiling(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
+        intent = shaper_intent()
+        intent["budget_safety_envelope"]["enforceable"]["runtime_seconds"] = 1800
+        (run_dir / "shaper-intent.json").write_text(json.dumps(intent) + "\n")
+        refused = self.run_flow(
+            "run", "transition", "demo", "approve-definition",
+            "--artifact", "requirements=.flow/runs/demo/requirements.md",
+            "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
+            "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
+            "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("runtime_seconds exceeds the protocol maximum", refused.stdout)
+
+    def test_chartered_delivery_plan_is_checked_before_approval(self) -> None:
+        self.setup_project()
+        self._write_valid_manifest()
+        run_dir = self.repo / ".flow" / "runs" / "demo"
+        manifest_path = run_dir / "orchestration.json"
+        manifest = json.loads(manifest_path.read_text())
+        manager = manifest["assignments"][0]
+        manager.update({
+            "id": "magentic-manager", "role": "delivery-lead",
+            "execution": {"provider": "claude", "model": "claude-test", "timeout_seconds": 1800},
+        })
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        payload = {"artifacts": {"orchestration_manifest": ".flow/runs/demo/orchestration.json"}}
+        import importlib
+        sys.path.insert(0, str(REPO_ROOT / "cli"))
+        try:
+            runstate = importlib.import_module("runstate")
+            errors = runstate._delivery_plan_errors("demo", payload, root=self.repo)
+        finally:
+            sys.path.pop(0)
+            sys.modules.pop("runstate", None)
+        self.assertIn("magentic-manager timeout_seconds must be between 1 and 600", errors)
+        self.assertIn("chartered Delivery plan requires the canonical run-local job_charter artifact", errors)
+
     def test_explicit_user_approval_amends_orchestration_with_lineage(self) -> None:
         self.setup_project()
         self._write_valid_manifest()

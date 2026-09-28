@@ -422,6 +422,74 @@ def _orchestration_gate_errors(
     return []
 
 
+def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path | None = None) -> list[str]:
+    """Reject incomplete chartered Delivery plans before their approval is sealed."""
+    project_root = (root or repo_root()).resolve()
+    artifacts = payload.get("artifacts") or {}
+    manifest_relative = artifacts.get("orchestration_manifest")
+    if not isinstance(manifest_relative, str):
+        return []
+    try:
+        manifest = json.loads((project_root / manifest_relative).read_text())
+    except (OSError, json.JSONDecodeError):
+        return []  # The orchestration gate reports the canonical error.
+    assignments = manifest.get("assignments") if isinstance(manifest, dict) else None
+    if not isinstance(assignments, list):
+        return []
+    managers = [item for item in assignments if isinstance(item, dict) and item.get("id") == "magentic-manager"]
+    charter_relative = artifacts.get("job_charter")
+    if not managers and charter_relative is None:
+        return []
+    expected = f".flow/runs/{work_id}/job-charter.json"
+    errors: list[str] = []
+    if len(managers) != 1:
+        errors.append("chartered Delivery plan requires exactly one magentic-manager assignment")
+    else:
+        manager = managers[0]
+        execution = manager.get("execution") or {}
+        if (manager.get("lane") != "implement" or manager.get("role") != "delivery-lead"
+                or execution.get("provider") not in {"claude", "codex"}
+                or not isinstance(execution.get("model"), str) or not execution.get("model", "").strip()):
+            errors.append("magentic-manager requires an executable Claude or Codex delivery-lead binding")
+        timeout = execution.get("timeout_seconds")
+        if type(timeout) is not int or not 1 <= timeout <= 600:
+            errors.append("magentic-manager timeout_seconds must be between 1 and 600")
+        if expected not in (manager.get("input_evidence") or []):
+            errors.append("magentic-manager must cite the run-local job charter")
+    if charter_relative != expected:
+        errors.append("chartered Delivery plan requires the canonical run-local job_charter artifact")
+        return errors
+    charter_path = project_root / expected
+    try:
+        charter = json.loads(charter_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        errors.append("job_charter must be valid run-local JSON")
+        return errors
+    required = {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}
+    if not isinstance(charter, dict) or set(charter) != required:
+        errors.append("job_charter fields are incomplete")
+        return errors
+    baseline = charter.get("baseline")
+    if (not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}
+            or baseline.get("kind") not in {"clean", "declared_regression"}):
+        errors.append("job_charter must declare a clean or declared-regression worktree baseline")
+    ids = {item.get("id"): item for item in assignments if isinstance(item, dict) and isinstance(item.get("id"), str)}
+    for field, writable in (("producer_instance_ids", True), ("verifier_instance_ids", False)):
+        values = charter.get(field)
+        if not isinstance(values, list) or not values or len(values) != len(set(values)):
+            errors.append(f"job_charter {field} is invalid")
+            continue
+        for instance_id in values:
+            assignment = ids.get(instance_id)
+            if assignment is None:
+                errors.append(f"job_charter {field} names unknown assignment {instance_id}")
+            elif writable and assignment.get("read_only") is True:
+                errors.append(f"producer assignment {instance_id} is read-only")
+            elif not writable and assignment.get("read_only") is not True:
+                errors.append(f"verifier assignment {instance_id} is writable")
+    return errors
+
+
 def apply_transition(
     work_id: str,
     event_name: str,
@@ -518,6 +586,11 @@ def apply_transition(
     if missing:
         gate = f" for {transition.gate}" if transition.gate else ""
         return False, current or {}, [f"missing{gate}: {item}" for item in missing]
+
+    if event_name == "approve-plan" and _protocol_revision(payload) == PROTOCOL_REVISION_CURRENT:
+        plan_errors = _delivery_plan_errors(work_id, payload, root=root)
+        if plan_errors:
+            return False, current or {}, plan_errors
 
     orchestration_errors = _orchestration_gate_errors(
         work_id, event_name, payload, root=root

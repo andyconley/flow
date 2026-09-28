@@ -46,7 +46,6 @@ class ClaudeWorkerTests(unittest.TestCase):
             result_json(session_id=""),
             result_json(session_id=None),
             result_json(num_turns=0),
-            result_json(num_turns=2),
             result_json(num_turns=True),
             result_json(num_turns="1"),
             result_json(usage={"input_tokens": -1}),
@@ -59,6 +58,11 @@ class ClaudeWorkerTests(unittest.TestCase):
         for raw in cases:
             with self.subTest(raw=raw), self.assertRaises(ClaudeWorkerError):
                 _parse_result(raw, "claude-test")
+
+    def test_completed_call_accepts_provider_internal_multiturn_count(self):
+        result = _parse_result(result_json(num_turns=2), "claude-test")
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["num_turns"], 2)
 
     def test_output_over_limit_rejected(self):
         with self.assertRaises(ClaudeWorkerError):
