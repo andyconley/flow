@@ -190,7 +190,7 @@ class CharteredFixture(unittest.TestCase):
                 (workspace / "target.py").write_text("new\n")
                 return self._result("codex", "editor-model", "Edited target")
             captured.setdefault("provider_tasks", []).append(action["provider_task"])
-            return self._result("ollama", "local-model", outputs.pop(0))
+            return self._result(action["provider"], action["model"], outputs.pop(0))
 
         with patch("delivery_gateway.run_status", return_value=self.state), \
              patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), \
@@ -326,7 +326,7 @@ class CharteredPreparationTests(CharteredFixture):
         self.state["artifacts"]["job_charter"] = ".flow/runs/sample/job-charter.json"
         self.manifest["assignments"][1]["read_only"] = True
         self._write_inputs()
-        with self.assertRaisesRegex(ContractError, "permissions"):
+        with self.assertRaisesRegex(ContractError, "permissions|write scope"):
             self.prepare()
 
     def test_rejects_unsafe_test_and_dirty_baseline(self):
@@ -409,6 +409,14 @@ class CharteredPreparationTests(CharteredFixture):
     def test_manager_task_carries_the_single_editor_call_fact(self):
         _, _, _, captured = self._run_v8(['{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}'])
         self.assertIn("Flow refuses any second editor call", captured["task"])
+
+    def test_protocol_8_accepts_read_only_codex_verifier(self):
+        self.manifest["assignments"][2]["execution"] = {"provider": "codex", "model": "verifier-model"}
+        self._write_inputs()
+        result, calls, _, _ = self._run_v8(
+            ['{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}'])
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(calls, ["editor", "verifier"])
 
     def test_editor_without_an_edit_fails_with_a_no_edit_reason(self):
         def supervisor(envelope, task, on_manager, on_action, **kwargs):

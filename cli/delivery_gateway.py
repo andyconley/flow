@@ -361,7 +361,7 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         read_only = entry.get("read_only") is True
         if provider not in {"claude", "codex", "ollama"} or not isinstance(model, str) or not model.strip():
             raise ContractError("specialist provider or model is unsupported")
-        if read_only != (provider == "ollama"):
+        if (provider == "ollama" and not read_only) or (provider == "claude" and read_only):
             raise ContractError("specialist provider and permissions disagree")
         if not read_only and entry.get("write_scopes") != charter["write_paths"]:
             raise ContractError("editing assignment scope differs from charter")
