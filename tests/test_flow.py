@@ -3469,6 +3469,7 @@ class FlowCliTests(FlowCliHarness):
                 "delivery_projection",
                 "delivery_recovery",
                 "delivery_termination",
+                "delivery_trace",
                 "diagnostic_model",
                 "diagnostics",
                 "execution_contracts",

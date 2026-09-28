@@ -2702,6 +2702,59 @@ class ExecutionLedger:
         with self._db() as db:
             return self._snapshot_locked(db, attempt_id)
 
+    def _seal_blocks_locked(self, db: sqlite3.Connection, envelope: dict[str, Any]) -> dict[str, Any]:
+        """The ledger-derived receipt blocks the seal compares, for a v8 attempt."""
+        return {"lineage_usage": self._lineage_usage(db, envelope) if envelope.get("predecessors") else None,
+                "expansion": self._expansion_receipt(db, envelope),
+                "manager_progress": self._manager_progress_receipt(db, envelope["attempt_id"])}
+
+    def lineage_view(self, work_id: str, attempt_id: str | None = None) -> dict[str, Any]:
+        """One consistent read of an attempt and its v8 lineage, for trace and verify-receipt (ADR 0020).
+
+        Read-only ledgers only: every read runs in a single read transaction on
+        one connection, so a live successor cannot produce a torn view, and the
+        connection is rolled back and closed without writing anything.
+        """
+        if not self.read_only:
+            raise ContractError("lineage_view requires a read-only ledger")
+        db = self._db()
+        try:
+            db.execute("BEGIN")
+            columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
+            protocol = "execution_protocol_version" if "execution_protocol_version" in columns else "1"
+            sealed = "sealed_receipt_sha256" if "sealed_receipt_sha256" in columns else "NULL"
+            rows = db.execute(f"SELECT attempt_id,{protocol},status,{sealed},envelope_json FROM attempts "
+                              "WHERE work_id=? ORDER BY rowid", (work_id,)).fetchall()
+            if attempt_id is None:
+                if not rows:
+                    raise ContractError("no attempt exists for this work id")
+                attempt_id = rows[-1][0]
+            by_id = {row[0]: row for row in rows}
+            if attempt_id not in by_id:
+                raise ContractError("attempt is not part of this work id")
+            target = by_id[attempt_id]
+            envelope = json.loads(target[4])
+            chain = ([item["attempt_id"] for item in envelope.get("predecessors", [])] if target[1] == 8 else []) + [attempt_id]
+            attempts = []
+            for item_id in chain:
+                row = by_id.get(item_id)
+                if row is None:
+                    raise ContractError("a predecessor attempt is missing from the ledger")
+                item_envelope = json.loads(row[4])
+                entry = {"attempt_id": item_id, "execution_protocol_version": row[1], "status": row[2],
+                         "sealed_receipt_sha256": row[3], "envelope_json": row[4],
+                         "snapshot": self._snapshot_locked(db, item_id)}
+                if row[1] == 8:
+                    entry["blocks"] = self._seal_blocks_locked(db, item_envelope)
+                attempts.append(entry)
+            lineage = self._v8_lineage_locked(db, work_id)[0] if target[1] == 8 else []
+            return {"work_id": work_id, "attempt_id": attempt_id, "attempts": attempts, "work_lineage": lineage,
+                    "work_attempts": [{"attempt_id": row[0], "execution_protocol_version": row[1], "status": row[2]}
+                                      for row in rows]}
+        finally:
+            db.rollback()
+            db.close()
+
     @staticmethod
     def _snapshot_locked(db: sqlite3.Connection, attempt_id: str) -> dict[str, Any]:
         """Read one attempt on the caller's connection, so a seal can snapshot its own transaction."""

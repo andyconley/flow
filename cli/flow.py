@@ -58,6 +58,7 @@ from claude_gateway import execute_claude  # noqa: E402
 from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, resolve_execution, resume_delivery  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
+from delivery_trace import TraceError, render_text as render_trace, trace as trace_delivery  # noqa: E402
 from delivery_control import change_lead_claim  # noqa: E402
 from execution_contracts import ContractError  # noqa: E402
 from runtime_smoke import cmd_smoke as runtime_smoke_command  # noqa: E402
@@ -673,6 +674,12 @@ def main() -> int:
     run_stuck.add_argument("--project-root", type=Path)
     run_stuck.add_argument("--json", action="store_true")
 
+    run_trace = run_sub.add_parser("trace", help="show the per-call correlation chain of a v8 attempt and its lineage (read-only)")
+    run_trace.add_argument("work_id")
+    run_trace.add_argument("--attempt", dest="attempt_id", help="attempt to trace (default: the latest)")
+    run_trace.add_argument("--project-root", type=Path)
+    run_trace.add_argument("--json", action="store_true")
+
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
@@ -1139,6 +1146,15 @@ def main() -> int:
                 "owner_generation": delivery["owner_generation"]}
         print(json.dumps(view, sort_keys=True) if args.json else
               f"lead: {view['owner_status']}\ngeneration: {view['owner_generation']}")
+        return 0
+    if args.command == "run" and args.run_target == "trace":
+        import json
+        try:
+            view = trace_delivery(args.work_id, args.attempt_id, root=args.project_root)
+        except TraceError as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"trace refused: {exc}")
+            return 2
+        print(json.dumps(view, sort_keys=True, indent=2) if args.json else render_trace(view))
         return 0
     if args.command == "run" and args.run_target == "stuck":
         import json
