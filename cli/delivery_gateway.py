@@ -1383,6 +1383,17 @@ def _build_receipt(envelope: dict[str, Any], attempt_dir: Path, ledger: Executio
         structured_pass = False
         failure = "structured verifier pass is bound to stale evidence"
     terminal = "unknown" if uncertain else ("completed" if not failure and producer and verified_order and structured_pass and edit_evidence and test_evidence else "failed")
+    if terminal == "failed" and not failure:
+        if structured_verifier and final_evaluation:
+            failure = "structured verifier ended " + final_evaluation["disposition"]
+        elif not producer:
+            failure = "no producer result was completed"
+        elif not verified_order:
+            failure = "no verifier completed after the producer"
+        elif not edit_evidence or not test_evidence:
+            failure = "Flow did not capture complete edit and test evidence"
+        else:
+            failure = "delivery manager did not produce an acceptable handback"
     reason = "reconciliation_required" if terminal == "unknown" else failure
     receipt = {"schema_version": 1, "execution_protocol_version": envelope["execution_protocol_version"], "work_id": envelope["work_id"], "attempt_id": aid,
                "envelope_digest": envelope_digest(envelope), "charter_digest": envelope["charter_digest"],

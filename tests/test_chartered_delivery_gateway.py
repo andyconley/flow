@@ -581,8 +581,10 @@ class CharteredPreparationTests(CharteredFixture):
             result = execute_chartered_delivery("sample", self.worktree, self.commit, root=self.root,
                                                 supervisor=supervisor, worker_adapter=worker)
         self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "structured verifier ended valid_fail")
         self.assertEqual(sends, ["editor", "verifier", "verifier"])
         receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["failure_detail"], "structured verifier ended valid_fail")
         self.assertEqual(receipt["verifier_usage"]["denied"], 1)
 
     def test_v8_provider_mismatch_is_unusable_then_retry_can_pass(self):
