@@ -1,13 +1,13 @@
 # Implementation Review: step5-operational-handback
 
-- **Scope:** `be5937b..d1bcc5f` (C1–C7), plus the review-refinement commit that follows this file.
+- **Scope:** `be5937b..d1bcc5f` (C1–C7), plus the review-refinement commits `6106762` and `46cefbf` (RS1).
 - **Reviewers:** three read-only subagents:
   - quality-reviewer (opus);
   - test-engineer (sonnet), advisory expertise `no_match` (request `81a7f846-bfa3-4c08-b058-dae03a961c09`);
   - security-reviewer (opus).
 - **Checks the coordinator ran:**
   - the full suite after each commit and after the refinements;
-  - 13 mutation checks;
+  - 14 mutation checks (M14 added with RS1);
   - `trace` and `verify-receipt` against the real `v8-live-validation-3` run.
 
 ## Verdicts

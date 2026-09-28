@@ -54,7 +54,7 @@ A chartered v8 attempt leaves a record that is correct but hard to audit, and no
 | # | Question | Proposal |
 |---|---|---|
 | P1 | Token unit | **`charged_v1`** = uncached input + cache writes + output. For Codex, uncached input is `input_tokens − cached_input_tokens`. Cache reads are recorded and reported, but not charged. This is a stable budget unit, **not a cost proxy** (F19). |
-| P2 | Charging | **By row status only** (F2), from data the receipt carries:<br>• `completed` or `failed` with recognised usage: the observed charge;<br>• any other sent row (`started`, `unknown`, or `completed`/`failed` without recognised usage): the sealed `unobserved_send_tokens`;<br>• `allowed`, `denied` or `not_dispatched`: 0. |
+| P2 | Charging | **By row status only** (F2), from data the receipt carries:<br>• `completed` or `failed` with recognised usage: the observed charge;<br>• any other sent row (`started`, `unknown`, or `completed`/`failed` without recognised usage): the sealed `unobserved_send_tokens` *(amended by Andy, RS1: a `completed`/`failed` row without recognised usage is charged conservatively; see R9)*;<br>• `allowed`, `denied` or `not_dispatched`: 0. |
 | P3 | Token expansion | **Tranches counted as units** (F1). `tokens` is an expandable, lineage-scoped counter of tranches with a sealed base of 0. Only the token predicate turns tranches into tokens. Every existing +1 path stays unchanged. |
 | P3a | A shortfall needing more than one tranche | **A hard `token_cap` refusal,** never expandable (F1). A charter rule `token_tranche ≥ unobserved_send_tokens` means one unknown send can never cause it. With a calibrated tranche (P10) it takes a single call larger than the tranche. |
 | P4 | Ollama verifier tokens | Reported, and excluded from the cap. |

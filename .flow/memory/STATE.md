@@ -11,7 +11,7 @@
     - full-row seals, request files and `grant_changed`;
     - `recover-delivery-lead --actor`.
   - **Proof:** 1,769 tests OK with 0 skipped; all 14 mutations caught.
-  - **Next:** `/flow-review`.
+  - **Review:** accepted 2026-09-27 (`review.md`). **Next:** `/flow-archive`, then a PR and release (both need Andy).
   - **RS1 resolved:** the conservative charge was approved and committed as `46cefbf`.
   - **After review:** a PR, a release, then `v8-live-validation-4` on a v4 charter.
 - No other work in flight. All other runs are archived, blocked as superseded, or (for

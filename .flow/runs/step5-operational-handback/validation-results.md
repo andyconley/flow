@@ -22,6 +22,7 @@
 | C7 `d1bcc5f` | docs only |
 | review refinement | 1769 OK, 0 skipped |
 | RS1 conservative charge | 1769 OK, 0 skipped |
+| acceptance-review fixes | 1771 OK, 0 skipped; all 14 mutations re-run and caught |
 
 `python3.12 scripts/regenerate-flow-help.py --check`: both files up to date.
 
