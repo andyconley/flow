@@ -21,7 +21,7 @@ from typing import Any, Callable
 from delivery_cancel import interruptible
 from execution_contracts import usage_values_valid
 
-MAX_PROMPT_BYTES = 32768
+MAX_PROMPT_BYTES = 1024 * 1024
 MAX_OUTPUT_BYTES = 4096
 MAX_STDERR_BYTES = 8192
 CODEX_ENV_KEYS = ("HOME", "CODEX_HOME", "PATH", "TMPDIR", "LANG", "LC_ALL",

@@ -113,6 +113,24 @@ class CodexWorkerTests(unittest.TestCase):
                                 model="gpt-test", timeout_seconds=20, codex_bin=str(fake))
             self.assertEqual(result["output"], "done")
 
+    def test_evidence_prompt_larger_than_legacy_limit_is_accepted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "codex-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "prompt = sys.stdin.read()\n"
+                            "assert len(prompt.encode()) > 32768\n"
+                            "print(json.dumps({'type':'thread.started','thread_id':'large-prompt'}))\n"
+                            "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'done'}}))\n"
+                            "print(json.dumps({'type':'turn.completed'}))\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+
+            result = call_codex(instructions="Verifier", task="x" * 65536, workspace=root,
+                                model="gpt-test", timeout_seconds=5, codex_bin=str(fake))
+
+            self.assertEqual(result["output"], "done")
+
     def test_timeout_is_uncertain(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

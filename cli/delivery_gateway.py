@@ -54,6 +54,7 @@ from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidat
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
+MAX_CHARTERED_DIFF_BYTES = 1024 * 1024
 
 
 def _stream_sha256(path: Path) -> str:
@@ -740,8 +741,12 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     for path in edited:
         if path in untracked:
             diff += ("\nNEW FILE " + path + "\n").encode() + (worktree / path).read_bytes()
-    if not diff or len(diff) > 32768:
-        raise ContractError("chartered edit diff is empty or oversized")
+    if not diff:
+        raise ContractError("chartered edit diff is empty")
+    if len(diff) > MAX_CHARTERED_DIFF_BYTES:
+        raise ContractError(
+            f"chartered edit diff is {len(diff)} bytes; limit is {MAX_CHARTERED_DIFF_BYTES} bytes"
+        )
     diff_path = attempt_dir / "repair.diff"
     if diff_path.exists():
         if diff_path.is_symlink() or diff_path.read_bytes() != diff:
