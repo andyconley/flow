@@ -191,6 +191,9 @@ async def _run(start: dict[str, Any]) -> None:
         if selected in job.get("producer_instance_ids", []):
             candidate_ids = job["producer_instance_ids"]
             capability_fact = "approved producer identity"
+        elif selected in job.get("evidence_collector_instance_ids", []):
+            candidate_ids = job["evidence_collector_instance_ids"]
+            capability_fact = "approved evidence collector identity"
         elif selected in job.get("verifier_instance_ids", []):
             candidate_ids = job["verifier_instance_ids"]
             capability_fact = "approved verifier identity"
