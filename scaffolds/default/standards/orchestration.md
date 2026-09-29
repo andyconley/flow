@@ -12,6 +12,19 @@ Revision-2 runs keep the machine contract at:
 
 The manifest uses `schema_version: 1` and contains `work_id`, `mode`, `risk`, `assignments`, `shared_state`, `reconciliation`, and `verification`. Unknown additive object fields are allowed. Unknown controlled values, wrong types, unsafe paths, and omitted required fields fail closed.
 
+An explicitly user-approved `flow run amend-orchestration` replacement may
+also request one narrow successor-charter authority change:
+
+```json
+"authority_amendment": {
+  "allowed_lifecycle_operations": ["handoff_to_review"]
+}
+```
+
+The command still requires `--approved-by-user`. The successor Shaper intent
+validates the controlled lifecycle vocabulary, so this mechanism cannot grant
+review acceptance or an operation outside Flow's allowlist.
+
 Run the structural checks at the moment they matter:
 
 ```bash
