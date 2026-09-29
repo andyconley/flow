@@ -715,6 +715,7 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     allowed = tuple(Path(path) for path in job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
     changed = [line[3:] for line in status]
+    untracked = {path for line, path in zip(status, changed) if line[:2] == "??"}
     if not changed:
         raise ContractError("editor made no edit to the worktree")
     def in_scope(relative: str) -> bool:
@@ -737,7 +738,7 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     # the pre-existing regression again and can exceed the bounded prompt.
     diff = _git(worktree, "diff", "--", *job["write_paths"]).encode()
     for path in edited:
-        if path not in baseline["files"]:
+        if path in untracked:
             diff += ("\nNEW FILE " + path + "\n").encode() + (worktree / path).read_bytes()
     if not diff or len(diff) > 32768:
         raise ContractError("chartered edit diff is empty or oversized")

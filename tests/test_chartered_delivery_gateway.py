@@ -1260,6 +1260,24 @@ class CharteredEditVerificationTests(CharteredFixture):
         with self.assertRaisesRegex(ContractError, "^editor made no edit to the worktree$"):
             self._verify({"target.py": self._sha("old\n")})
 
+    def test_clean_baseline_does_not_append_full_tracked_file_as_new_evidence(self):
+        large = self.worktree / "large.py"
+        large.write_text("value = 1\n" + "# padding\n" * 5000)
+        subprocess.run(["git", "add", "large.py"], cwd=self.worktree, check=True)
+        subprocess.run(["git", "commit", "-qm", "large tracked fixture"], cwd=self.worktree, check=True)
+        self.commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=self.worktree, text=True).strip()
+        large.write_text(large.read_text().replace("value = 1", "value = 2", 1))
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+
+        result = _verify_chartered_edit(
+            self.worktree, {"source_commit": self.commit, "files": {}}, attempt_dir,
+            {"write_paths": ["large.py"]}, record=False,
+        )
+
+        self.assertEqual(result["changed_files"], ["large.py"])
+
     def test_out_of_scope_file_names_scope(self):
         (self.worktree / "other.py").write_text("x\n")
         with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
