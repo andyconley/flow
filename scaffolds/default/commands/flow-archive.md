@@ -52,8 +52,8 @@ flow run transition <work-id> archive \
   --disposition memory=<updated|n/a>
 ```
 
-For scout work that never escalated into the gated core path, create only the
-minimal closure envelope:
+Legacy scout work that was completed before scout review became mandatory may
+still create the old minimal closure envelope:
 
 ```bash
 flow run transition <work-id> archive-scout \

@@ -201,6 +201,44 @@ class CharteredFixture(unittest.TestCase):
 
 
 class CharteredPreparationTests(CharteredFixture):
+    def test_completed_authorized_job_reaches_real_review_state(self):
+        self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+        verified = {"attempt_id": None, "exit_code": 0, "status": "completed", "checks": []}
+
+        def verify_latest(*_args, **_kwargs):
+            receipt = next((self.run / "execution").glob("*/receipt.json"))
+            return {**verified, "attempt_id": receipt.parent.name}
+
+        with patch("runstate.validate_orchestration", return_value=(True, None, [])), \
+             patch("receipt_verify.verify_receipt", side_effect=verify_latest):
+            result, _, _, _ = self._run_v8([self.PASS])
+
+        state = json.loads((self.run / "run.json").read_text())
+        events_path = self.run / "events.jsonl"
+        self.assertTrue(events_path.is_file(), result)
+        events = [json.loads(line) for line in events_path.read_text().splitlines()]
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["review_handoff"], {"status": "completed", "state": "reviewing"})
+        self.assertEqual(state["state"], "reviewing")
+        self.assertEqual([event["event"] for event in events[-2:]],
+                         ["mark-handback-ready", "start-review"])
+        self.assertTrue((self.run / "handoff" / "implementation-evidence.json").is_file())
+        self.assertTrue((self.run / "handoff" / "handback.json").is_file())
+        self.assertTrue((self.run / "handoff" / "review-inputs.json").is_file())
+        self.assertNotIn("review", state["artifacts"])
+        self.assertNotIn("accept-review", state["gates"])
+
+    def test_completed_unauthorized_job_does_not_mutate_lifecycle(self):
+        before = (self.run / "run.json").read_bytes()
+        result, _, _, _ = self._run_v8([self.PASS])
+
+        self.assertEqual(result["status"], "completed")
+        self.assertNotIn("review_handoff", result)
+        self.assertEqual(before, (self.run / "run.json").read_bytes())
+        self.assertFalse((self.run / "events.jsonl").exists())
+
     def test_completed_authorized_job_automatically_enters_review(self):
         self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
         (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))

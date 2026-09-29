@@ -32,7 +32,7 @@ C_LITE_COMMAND_NEEDLES = {
     "flow-implement": "flow run transition <work-id> start-implementation",
     "flow-review": "flow run transition <work-id> start-review",
     "flow-archive": "flow run transition <work-id> archive",
-    "flow-scout": "flow run transition <work-id> archive-scout",
+    "flow-scout": "flow run transition <work-id> start-scout-review",
     "flow-status": "flow run list",
     "flow-resume": "flow run verify",
 }
