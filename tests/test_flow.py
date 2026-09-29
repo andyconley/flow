@@ -1026,6 +1026,7 @@ class FlowCliTests(FlowCliHarness):
             ignore=shutil.ignore_patterns(
                 ".git", "*.pyc", "__pycache__", "fake_home", "fake-remote*"
             ),
+            ignore_dangling_symlinks=True,
         )
         env = _clean_env()
         env["GIT_AUTHOR_NAME"] = "test"
@@ -2790,6 +2791,7 @@ class FlowCliTests(FlowCliHarness):
             ignore=shutil.ignore_patterns(
                 ".git", "*.pyc", "__pycache__", "fake_home", "fake-remote*", "marker-repo"
             ),
+            ignore_dangling_symlinks=True,
         )
         (temp_repo / "FUTURE_FILE.md").write_text("Pretend-future top-level file.\n")
 
