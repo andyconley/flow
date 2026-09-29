@@ -75,7 +75,7 @@ class TokenContractTests(unittest.TestCase):
         charter = build_delivery_charter(build_shaper_contract("demo", SOURCES, intent_with(DEFAULT_TOKEN_BUDGET,
                                                                                             {"tokens": 2})))
         validate_delivery_charter(charter)
-        self.assertEqual(charter["charter_version"], 4)
+        self.assertEqual(charter["charter_version"], 5)
         self.assertEqual({key: charter["limits"][key] for key in DEFAULT_TOKEN_BUDGET}, DEFAULT_TOKEN_BUDGET)
         self.assertEqual(charter["limits"]["expansion_headroom"]["tokens"], 2)
         limits, headroom = project_envelope_limits(charter["limits"])

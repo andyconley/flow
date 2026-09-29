@@ -15,8 +15,8 @@ from runner_limits import (MAX_ACTIONS, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, M
 
 
 SCHEMA_VERSION = 1
-SHAPER_CONTRACT_VERSION = 4
-DELIVERY_CHARTER_VERSION = 4
+SHAPER_CONTRACT_VERSION = 5
+DELIVERY_CHARTER_VERSION = 5
 # v3 records predate the sealed lineage token budget (ADR 0020); v2 records
 # predate sealed expansion headroom; v1 records predate the verifier
 # allowance. All stay readable for already-sealed runs.
@@ -26,12 +26,19 @@ VERIFIER_SHAPER_CONTRACT_VERSION = 2
 VERIFIER_DELIVERY_CHARTER_VERSION = 2
 LEGACY_SHAPER_CONTRACT_VERSION = 1
 LEGACY_DELIVERY_CHARTER_VERSION = 1
+TOKEN_SHAPER_CONTRACT_VERSION = 4
+TOKEN_DELIVERY_CHARTER_VERSION = 4
 SHAPER_CONTRACT_VERSIONS = {LEGACY_SHAPER_CONTRACT_VERSION, VERIFIER_SHAPER_CONTRACT_VERSION,
-                            EXPANSION_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION}
+                            EXPANSION_SHAPER_CONTRACT_VERSION, TOKEN_SHAPER_CONTRACT_VERSION,
+                            SHAPER_CONTRACT_VERSION}
 DELIVERY_CHARTER_VERSIONS = {LEGACY_DELIVERY_CHARTER_VERSION, VERIFIER_DELIVERY_CHARTER_VERSION,
-                             EXPANSION_DELIVERY_CHARTER_VERSION, DELIVERY_CHARTER_VERSION}
+                             EXPANSION_DELIVERY_CHARTER_VERSION, TOKEN_DELIVERY_CHARTER_VERSION,
+                             DELIVERY_CHARTER_VERSION}
 # Contract versions that seal expansion headroom, and the one that also seals tokens.
-HEADROOM_VERSIONS = {EXPANSION_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION}
+HEADROOM_VERSIONS = {EXPANSION_SHAPER_CONTRACT_VERSION, TOKEN_SHAPER_CONTRACT_VERSION,
+                     SHAPER_CONTRACT_VERSION}
+TOKEN_VERSIONS = {TOKEN_SHAPER_CONTRACT_VERSION, SHAPER_CONTRACT_VERSION}
+LIFECYCLE_OPERATIONS = frozenset({"handoff_to_review"})
 
 CAPABILITY_TO_RUNTIME = {
     "scoped-edit": ["read", "edit"],
@@ -192,7 +199,7 @@ INTENT_FIELDS = {
     "assumptions", "acceptance_criteria", "risks", "open_decisions", "decision_owners",
     "allowed_specialists", "prohibited_capabilities", "delegation_matrix", "approval_matrix",
     "budget_safety_envelope", "boundaries", "amendment_lineage", "approval_history",
-    "next_lane_eligibility",
+    "next_lane_eligibility", "allowed_lifecycle_operations",
 }
 
 
@@ -202,11 +209,13 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
     V1 intent did not carry a verifier allowance.  New contracts preserve that
     input as an explicit default of two total verifier calls.
     """
-    if not isinstance(intent, dict) or not INTENT_FIELDS <= set(intent) <= INTENT_FIELDS | {"max_verifier_calls", "expansion_headroom"}:
+    required = INTENT_FIELDS - {"allowed_lifecycle_operations"}
+    if not isinstance(intent, dict) or not required <= set(intent) <= INTENT_FIELDS | {"max_verifier_calls", "expansion_headroom"}:
         raise DeliveryContractError("shaper_intent is invalid")
     intent = dict(intent)
     intent.setdefault("max_verifier_calls", 2)
     intent.setdefault("expansion_headroom", {})
+    intent.setdefault("allowed_lifecycle_operations", [])
     _text(intent["problem"], "problem")
     for name in ("intended_users", "outcomes", "scope", "exclusions", "constraints", "assumptions", "acceptance_criteria"):
         values = _list(intent[name], name, nonempty=True)
@@ -214,6 +223,9 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
             _text(value, name)
     for name in ("risks", "open_decisions", "decision_owners", "allowed_specialists", "prohibited_capabilities", "amendment_lineage", "approval_history", "next_lane_eligibility"):
         _list(intent[name], name, nonempty=name in {"risks", "allowed_specialists", "prohibited_capabilities", "approval_history", "next_lane_eligibility"})
+    lifecycle_operations = _list(intent["allowed_lifecycle_operations"], "allowed_lifecycle_operations")
+    if len(lifecycle_operations) != len(set(lifecycle_operations)) or not set(lifecycle_operations) <= LIFECYCLE_OPERATIONS:
+        raise DeliveryContractError("allowed_lifecycle_operations contains an unsupported or duplicate operation")
     for name in ("delegation_matrix", "approval_matrix", "budget_safety_envelope", "boundaries"):
         _mapping(intent[name], name)
     for specialist in intent["allowed_specialists"]:
@@ -274,6 +286,7 @@ def _intent(work_id: str, sources: dict[str, dict[str, str]], approved: dict[str
         **{name: approved[name] for name in ("risks", "open_decisions", "decision_owners", "allowed_specialists",
            "prohibited_capabilities", "delegation_matrix", "approval_matrix", "budget_safety_envelope", "max_verifier_calls",
            "expansion_headroom", "boundaries", "amendment_lineage", "approval_history", "next_lane_eligibility")},
+        "allowed_lifecycle_operations": approved["allowed_lifecycle_operations"],
     }
 
 
@@ -326,6 +339,7 @@ def build_delivery_charter(shaper: dict[str, Any]) -> dict[str, Any]:
         "validation": {"flow_observed_diff_and_test_before_verifier": True}, "recovery": {"unknown_action_blocks_successor": True, "takeover": "explicit_resume_or_supersede"},
         "escalation_stop_cancellation": {"scope_expansion": "halt_for_shaper", "cancellation": "Flow_only"},
         "boundaries": shaper["boundaries"], "handback": ["receipt", "diff", "test", "verifier_evidence"],
+        "allowed_lifecycle_operations": shaper["allowed_lifecycle_operations"],
         "approver": {"identity": "engineer", "event": shaper["approval_event"]}, "amendment_lineage": shaper["amendment_lineage"], "compatibility_version": 7,
     }
     return _seal(record, validate_delivery_charter)
@@ -351,6 +365,12 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
     _mapping(record.get("problem"), "problem", keys={"value", "provenance"})
     for name in required_lists:
         _list(record.get(name), name, nonempty=name not in {"open_decisions", "decision_owners", "amendment_lineage"})
+    if record["version"] == SHAPER_CONTRACT_VERSION:
+        operations = _list(record.get("allowed_lifecycle_operations"), "allowed_lifecycle_operations")
+        if len(operations) != len(set(operations)) or not set(operations) <= LIFECYCLE_OPERATIONS:
+            raise DeliveryContractError("Shaper Contract lifecycle authority is invalid")
+    elif "allowed_lifecycle_operations" in record:
+        raise DeliveryContractError("legacy Shaper Contract cannot carry lifecycle authority")
     roles: set[str] = set()
     for specialist in record["allowed_specialists"]:
         specialist = _mapping(specialist, "allowed specialist", keys={"role", "capabilities", "definition_digest", "maximum_instances"})
@@ -375,7 +395,7 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
         raise DeliveryContractError("legacy Shaper Contract cannot carry max_verifier_calls")
     if record["version"] in HEADROOM_VERSIONS:
         delegation = record["delegation_matrix"]
-        tokens = record["version"] == SHAPER_CONTRACT_VERSION
+        tokens = record["version"] in TOKEN_VERSIONS
         enforceable = _mapping(record["budget_safety_envelope"].get("enforceable"), "budget_safety_envelope enforceable",
                                keys=ENFORCEABLE_LIMIT_FIELDS if tokens else ENFORCEABLE_LIMIT_FIELDS - set(TOKEN_LIMIT_FIELDS))
         headroom = validate_expansion_headroom(record.get("expansion_headroom"), _expansion_base(
@@ -425,7 +445,7 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
         limit_keys.add("max_verifier_calls")
     if record["charter_version"] in HEADROOM_VERSIONS:
         limit_keys.add("expansion_headroom")
-    if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+    if record["charter_version"] in TOKEN_VERSIONS:
         limit_keys.update(TOKEN_LIMIT_FIELDS)
     limits = _mapping(record.get("limits"), "limits", keys=limit_keys)
     if not all(type(limits[key]) is int and limits[key] >= 0 for key in ("delegations", "concurrency", "replans", "runtime_seconds", "retries", "max_manager_calls", "max_manager_rounds", "max_paid_worker_calls")):
@@ -437,15 +457,21 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
         if record["charter_version"] in HEADROOM_VERSIONS and validate_expansion_headroom(limits["expansion_headroom"], _expansion_base(
                 limits["delegations"], limits["max_paid_worker_calls"], limits["max_verifier_calls"],
                 limits["max_manager_calls"], limits["max_manager_rounds"]),
-                names=None if record["charter_version"] == DELIVERY_CHARTER_VERSION else PRE_TOKEN_EXPANSION_NAMES
+                names=None if record["charter_version"] in TOKEN_VERSIONS else PRE_TOKEN_EXPANSION_NAMES
                 ) != limits["expansion_headroom"]:
             raise DeliveryContractError("Delivery Charter expansion headroom is invalid")
-        if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+        if record["charter_version"] in TOKEN_VERSIONS:
             validate_token_budget({name: limits[name] for name in TOKEN_LIMIT_FIELDS}, limits["expansion_headroom"]["tokens"])
     elif "max_verifier_calls" in limits:
         raise DeliveryContractError("legacy Delivery Charter cannot carry max_verifier_calls")
     for name in ("approval_matrix", "producer_verifier_rules", "validation", "recovery", "escalation_stop_cancellation", "boundaries", "approver"):
         _mapping(record.get(name), name)
+    if record["charter_version"] == DELIVERY_CHARTER_VERSION:
+        operations = _list(record.get("allowed_lifecycle_operations"), "allowed_lifecycle_operations")
+        if len(operations) != len(set(operations)) or not set(operations) <= LIFECYCLE_OPERATIONS:
+            raise DeliveryContractError("Delivery Charter lifecycle authority is invalid")
+    elif "allowed_lifecycle_operations" in record:
+        raise DeliveryContractError("legacy Delivery Charter cannot carry lifecycle authority")
     if record["approval_matrix"].get("provider_dispatch") != "Flow_grant":
         raise DeliveryContractError("provider dispatch must require a Flow grant")
     if record["compatibility_version"] != 7:

@@ -46,13 +46,15 @@ Implementation must enter and leave the lane through the CLI:
 
 ```bash
 flow run transition <work-id> start-implementation
-flow run transition <work-id> mark-handback-ready \
-  --artifact implementation_evidence=.flow/runs/<work-id>/validation-results.md \
-  --artifact handback=.flow/runs/<work-id>/HANDOFF.md
+flow run handoff-to-review <work-id> \
+  --attempt-id <accepted-v8-attempt-id> \
+  --expected-generation <active-delivery-lead-generation>
 ```
 
-Do not begin implementation until `start-implementation` succeeds. Do not route
-to `flow-review` until `mark-handback-ready` succeeds.
+Do not begin implementation until `start-implementation` succeeds. The compound
+handoff verifies the sealed receipt, records the ordinary handback event, and
+enters review without accepting it. Legacy or manually managed runs may still
+use `mark-handback-ready` followed by `start-review`.
 
 ## Orchestration safety
 

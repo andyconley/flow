@@ -51,6 +51,7 @@ from plugin_usage import (  # noqa: E402
 from runstate import (  # noqa: E402
     cmd_amend_orchestration as run_amend_orchestration_command,
     cmd_history as run_history_command,
+    cmd_handoff_to_review as run_handoff_to_review_command,
     cmd_list as run_list_command,
     cmd_status as run_status_command,
     cmd_transition as run_transition_command,
@@ -543,6 +544,16 @@ def main() -> int:
     )
     run_transition_parser.add_argument("--note", help="next action or transition note")
     run_transition_parser.add_argument("--json", action="store_true", help="emit JSON")
+
+    run_handoff_parser = run_sub.add_parser(
+        "handoff-to-review",
+        help="finish an authorized implementation handback and enter review",
+        description="Verify sealed Delivery evidence, preserve the handback checkpoint, and enter review without accepting it.",
+    )
+    run_handoff_parser.add_argument("work_id")
+    run_handoff_parser.add_argument("--attempt-id", required=True)
+    run_handoff_parser.add_argument("--expected-generation", required=True, type=int)
+    run_handoff_parser.add_argument("--json", action="store_true", help="emit JSON")
 
     run_amend_parser = run_sub.add_parser(
         "amend-orchestration",
@@ -1067,6 +1078,8 @@ def main() -> int:
             from archive_service import archive_transition
             return archive_transition(args)
         return run_transition_command(args)
+    if args.command == "run" and args.run_target == "handoff-to-review":
+        return run_handoff_to_review_command(args)
     if args.command == "run" and args.run_target == "amend-orchestration":
         return run_amend_orchestration_command(args)
     if args.command == "run" and args.run_target == "validate-orchestration":
