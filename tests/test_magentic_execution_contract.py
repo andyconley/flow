@@ -262,6 +262,29 @@ class MagenticContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ContractError, "changed"):
                 ledger.read_magentic_checkpoint(env["attempt_id"], "worker", worker["action_id"])
 
+    def test_worker_checkpoint_accepts_accumulated_history_over_64_kib(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env = {**envelope(), "checkpoint_dir": str(root)}
+            ledger = ExecutionLedger(root / "ledger.sqlite")
+            ledger.create_attempt(env)
+            worker = action(env, 1, env["roster"][0])
+            self.assertTrue(ledger.decide(env, worker, generation=1)["allowed"])
+            checkpoint = root / "checkpoint.json"
+            checkpoint.write_text(json.dumps({
+                "checkpoint_id": "cp-large",
+                "workflow_name": "flow-magentic-delivery-v5",
+                "pending_request_info_events": {"flow-magentic-action-1": {"request": "x" * 70000}},
+            }))
+            high_water = ledger.snapshot(env["attempt_id"])["events"][-1]["seq"]
+            bound = ledger.bind_magentic_checkpoint(
+                env["attempt_id"], "cp-large", "worker", worker["action_id"],
+                high_water, str(checkpoint), generation=1,
+            )
+            self.assertGreater(bound["file_size"], 65536)
+            self.assertEqual(checkpoint.read_bytes(), ledger.read_magentic_checkpoint(
+                env["attempt_id"], "worker", worker["action_id"])["bytes"])
+
     def test_terminal_v5_attempt_continues_only_after_observed_resolution(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

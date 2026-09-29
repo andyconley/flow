@@ -56,6 +56,11 @@ from delivery_recovery import (ATTEMPT_NOT_PAUSED, ATTEMPT_NOT_STARTED, ATTEMPT_
 # calls and token tranches) come from execution_contracts; the other three are
 # per-attempt counters, so their grants raise only the granting attempt (ADR 0017).
 MAX_EXPANSION_RATIONALE = 512
+# Magentic checkpoints include the accumulated manager conversation and can
+# legitimately cross the historical 64 KiB ceiling on multi-finding jobs.
+# Keep a hard one-megabyte resource bound while allowing normal v8 recovery
+# evidence to be linked instead of failing after a successful specialist edit.
+MAX_MAGENTIC_CHECKPOINT_BYTES = 1024 * 1024
 
 
 def utc_now() -> str:
@@ -2307,7 +2312,7 @@ class ExecutionLedger:
 
     def bind_magentic_checkpoint(self, attempt_id: str, checkpoint_id: str, pending_kind: str,
                                  pending_id: str, ledger_seq: int, path: str, *, generation: int,
-                                 max_bytes: int = 65536) -> dict[str, Any]:
+                                 max_bytes: int = MAX_MAGENTIC_CHECKPOINT_BYTES) -> dict[str, Any]:
         """Link a v5 or v6 MAF snapshot to a Flow proposal, without granting restore authority."""
         if pending_kind not in {"manager", "worker"} or not isinstance(pending_id, str) or not pending_id or not isinstance(checkpoint_id, str) or not checkpoint_id or type(ledger_seq) is not int or ledger_seq < 0:
             raise ContractError("Magentic checkpoint identity is invalid")
@@ -2364,7 +2369,7 @@ class ExecutionLedger:
             return {**record, "bound_at": bound_at, "replayed": False}
 
     def read_magentic_checkpoint(self, attempt_id: str, pending_kind: str, pending_id: str,
-                                 *, max_bytes: int = 65536) -> dict[str, Any]:
+                                 *, max_bytes: int = MAX_MAGENTIC_CHECKPOINT_BYTES) -> dict[str, Any]:
         with self._db() as db:
             attempt = db.execute("SELECT envelope_json,execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
             row = db.execute("SELECT checkpoint_id,ledger_seq,path,file_sha256,file_size,bound_at,owner_generation FROM magentic_checkpoint_links WHERE attempt_id=? AND pending_kind=? AND pending_id=?", (attempt_id, pending_kind, pending_id)).fetchone()
