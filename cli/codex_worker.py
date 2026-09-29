@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import selectors
+import shutil
 import subprocess
 import tempfile
 import time
@@ -128,9 +129,19 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
             "--model", model, "--cd", str(workspace),
             "--config", 'approval_policy="never"',
             "--config", "features.multi_agent=false", "-"]
-    # Auth is read from CODEX_HOME (or HOME/.codex). Do not inherit unrelated
-    # credentials, cloud configuration, proxy variables, or project secrets.
+    # Codex writes runtime state even with --ephemeral. Give the nested sandbox
+    # a private writable home containing only the installed login, rather than
+    # exposing the user's normal state database to writes.
     env = {key: os.environ[key] for key in CODEX_ENV_KEYS if key in os.environ}
+    source_home = Path(os.environ.get("CODEX_HOME", str(Path(os.environ.get("HOME", "")) / ".codex")))
+    isolated_home = tempfile.TemporaryDirectory(prefix="flow-codex-home-")
+    isolated_home_path = Path(isolated_home.name)
+    auth_path = source_home / "auth.json"
+    if auth_path.is_file() and not auth_path.is_symlink():
+        isolated_auth = isolated_home_path / "auth.json"
+        shutil.copyfile(auth_path, isolated_auth)
+        isolated_auth.chmod(0o600)
+    env["CODEX_HOME"] = str(isolated_home_path)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, cwd=workspace, env=env,
@@ -208,3 +219,4 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
             process.stdin.close()
         process.stdout.close()
         process.stderr.close()
+        isolated_home.cleanup()
