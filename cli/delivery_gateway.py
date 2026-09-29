@@ -49,7 +49,8 @@ from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, r
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import handoff_to_review, status as run_status
-from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch,
+from verifier_contracts import (VERIFIED_HANDOFF_AUTHORITY, VERIFIER_CONTRACT_INSTRUCTION,
+                                evaluate_candidate, provider_binding_mismatch,
                                 verifier_instructions, verifier_provider_task)
 
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
@@ -1614,8 +1615,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             prior_verifier[-1]["request"]["task"], (attempt_dir / "repair.diff").read_text(),
             edit_evidence["diff_sha256"], structured=structured_verifier,
             test_output=(test_evidence or {}).get("output_excerpt", ""),
-            authority_statement=("Flow verified the sealed Delivery Charter and automatic handoff_to_review authority; "
-                                 "the repository diff cannot modify that control-plane grant."))
+            authority_statement=VERIFIED_HANDOFF_AUTHORITY)
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
     manager_provider = (envelope.get("manager") or {}).get("provider", "claude") if structured_verifier else None
@@ -1769,8 +1769,7 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                 action["task"], (attempt_dir / "repair.diff").read_text(),
                 edit_evidence["diff_sha256"], structured=structured_verifier,
                 test_output=(test_evidence or {}).get("output_excerpt", ""),
-                authority_statement=("Flow verified the sealed Delivery Charter and automatic handoff_to_review authority; "
-                                     "the repository diff cannot modify that control-plane grant."))
+                authority_statement=VERIFIED_HANDOFF_AUTHORITY)
             verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
             provider_action = {**action, "provider_task": provider_task}
         try:

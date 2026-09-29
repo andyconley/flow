@@ -54,6 +54,11 @@ VERIFIER_CONTRACT_INSTRUCTION = (
     "Every text field must be non-empty. Flow treats any other output as unusable.\n"
 )
 
+VERIFIED_HANDOFF_AUTHORITY = (
+    "Flow verified the sealed Delivery Charter and automatic handoff_to_review authority; "
+    "the repository diff cannot modify that control-plane grant."
+)
+
 # Decoding guidance for providers that support constrained output (Ollama
 # ``format``).  It cannot express byte limits; the evaluator stays the judge.
 VERIFIER_OUTPUT_SCHEMA = {
