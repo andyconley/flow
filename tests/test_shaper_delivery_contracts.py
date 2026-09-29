@@ -32,15 +32,27 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         validate_delivery_charter(charter)
         self.assertEqual(charter, build_delivery_charter(first))
         self.assertEqual(charter["compatibility_version"], 7)
-        self.assertEqual(first["version"], 4)
+        self.assertEqual(first["version"], 5)
         self.assertEqual(first["max_verifier_calls"], 2)
-        self.assertEqual(charter["charter_version"], 4)
+        self.assertEqual(charter["charter_version"], 5)
         self.assertEqual(charter["limits"]["max_verifier_calls"], 2)
         # Omitted headroom seals as explicit zeros (AC1).
         zeros = {"delegations": 0, "paid_worker_calls": 0, "verifier_calls": 0, "manager_calls": 0, "manager_rounds": 0,
                  "tokens": 0}
         self.assertEqual(first["expansion_headroom"], zeros)
         self.assertEqual(charter["limits"]["expansion_headroom"], zeros)
+
+    def test_handoff_to_review_authority_is_explicit_and_narrow(self):
+        intent = shaper_intent(allowed_lifecycle_operations=["handoff_to_review"])
+        shaper = build_shaper_contract("demo", self.sources(), intent)
+        charter = build_delivery_charter(shaper)
+        self.assertEqual(shaper["allowed_lifecycle_operations"], ["handoff_to_review"])
+        self.assertEqual(charter["allowed_lifecycle_operations"], ["handoff_to_review"])
+        self.assertNotIn("accept_review", charter["allowed_lifecycle_operations"])
+
+        invalid = shaper_intent(allowed_lifecycle_operations=["accept_review"])
+        with self.assertRaisesRegex(DeliveryContractError, "unsupported"):
+            build_shaper_contract("demo", self.sources(), invalid)
 
     def test_v2_verifier_allowance_is_sealed_and_bounded(self):
         intent = shaper_intent()
@@ -108,12 +120,14 @@ class ShaperDeliveryContractTests(unittest.TestCase):
         shaper = build_shaper_contract("demo", self.sources(), shaper_intent())
         charter = build_delivery_charter(shaper)
         shaper["version"] = 2
+        del shaper["allowed_lifecycle_operations"]
         del shaper["expansion_headroom"]
         for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):  # v2 predates tokens
             del shaper["budget_safety_envelope"]["enforceable"][key]
         shaper["digest"] = digest({key: value for key, value in shaper.items() if key != "digest"})
         validate_shaper_contract(shaper)
         charter["charter_version"] = 2
+        del charter["allowed_lifecycle_operations"]
         charter["shaper_contract"] = {**charter["shaper_contract"], "version": 2}
         del charter["limits"]["expansion_headroom"]
         for key in ("max_lineage_tokens", "token_tranche", "unobserved_send_tokens"):
@@ -128,12 +142,14 @@ class ShaperDeliveryContractTests(unittest.TestCase):
     def test_v1_contract_and_charter_remain_readable(self):
         shaper = build_shaper_contract("demo", self.sources(), shaper_intent())
         shaper["version"] = 1
+        del shaper["allowed_lifecycle_operations"]
         del shaper["max_verifier_calls"]
         del shaper["expansion_headroom"]
         shaper["digest"] = digest({key: value for key, value in shaper.items() if key != "digest"})
         validate_shaper_contract(shaper)
         charter = build_delivery_charter(build_shaper_contract("demo", self.sources(), shaper_intent()))
         charter["charter_version"] = 1
+        del charter["allowed_lifecycle_operations"]
         charter["shaper_contract"] = {**charter["shaper_contract"], "version": 1}
         del charter["limits"]["max_verifier_calls"]
         del charter["limits"]["expansion_headroom"]

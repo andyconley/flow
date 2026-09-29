@@ -17,8 +17,9 @@ from typing import Any
 from fsutil import ensure_dir, repo_root, write_atomic
 from delivery_contracts import (DEFAULT_TOKEN_BUDGET, DeliveryContractError,
                                 build_delivery_charter, build_shaper_contract,
-                                digest as delivery_digest, validate_shaper_intent)
-from delivery_control import start_plan as seal_delivery_start_plan
+                                digest as delivery_digest, validate_delivery_charter,
+                                validate_shaper_intent)
+from delivery_control import run_lock, start_plan as seal_delivery_start_plan
 from orchestration import manifest_path, valid_work_id, validate_manifest, validate_orchestration
 
 
@@ -507,6 +508,7 @@ def apply_transition(
     dispositions: dict[str, str] | None = None,
     note: str | None = None,
     root: Path | None = None,
+    _lock_held: bool = False,
 ) -> tuple[bool, dict[str, Any], list[str]]:
     if not valid_work_id(work_id):
         return False, {}, [
@@ -540,6 +542,12 @@ def apply_transition(
             return seal_delivery_start_plan(work_id, root=active_root)
         if current_state in {STATE_DEFINITION_APPROVED, STATE_SOLUTION_APPROVED} and revision == PROTOCOL_REVISION_CURRENT:
             return seal_delivery_start_plan(work_id, root=active_root)
+    if not _lock_held:
+        with run_lock(_run_dir(work_id, root)):
+            return apply_transition(
+                work_id, event_name, artifacts=artifacts, dispositions=dispositions,
+                note=note, root=root, _lock_held=True,
+            )
     transition = TRANSITIONS[event_name]
     current = _load_run(work_id, root)
     current_state = current.get("state") if current else None
@@ -650,6 +658,144 @@ def apply_transition(
     _write_run(work_id, payload, root)
     _append_event(work_id, event, root)
     return True, payload, []
+
+
+def handoff_to_review(
+    work_id: str,
+    attempt_id: str,
+    expected_generation: int,
+    *,
+    root: Path | None = None,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    """Enter review through the existing handback and review gates.
+
+    This is deliberately a recoverable two-step operation: after the handback
+    commit, a retry continues from ``handback_ready`` without duplicating it.
+    """
+    from delivery_projection import lead_claim_active
+    from receipt_verify import VerifyRefused, verify_receipt
+
+    project_root = (root or repo_root()).resolve()
+    if not valid_work_id(work_id) or not valid_work_id(attempt_id):
+        return False, {}, ["work and attempt ids must be safe directory names"]
+    run_dir = _run_dir(work_id, project_root)
+    with run_lock(run_dir):
+        current = _load_run(work_id, project_root) or {}
+        state = current.get("state")
+        if state == STATE_REVIEWING:
+            _reconcile_lifecycle_event(work_id, current, project_root)
+            return True, current, []
+        if state not in {STATE_IMPLEMENTING, STATE_HANDBACK_READY}:
+            return False, current, [
+                "handoff-to-review requires implementing, handback_ready, or reviewing"
+            ]
+
+        delivery = current.get("delivery")
+        if not isinstance(delivery, dict) or delivery.get("owner_status") != "active" \
+                or delivery.get("owner_generation") != expected_generation:
+            return False, current, ["delivery owner generation is stale"]
+        charter_digest = delivery.get("charter_digest")
+        expected_delivery_dir = f"delivery/{charter_digest}"
+        if delivery.get("delivery_artifact_dir") != expected_delivery_dir:
+            return False, current, ["delivery artifact directory is not canonical"]
+        delivery_dir = run_dir / expected_delivery_dir
+        charter_path = delivery_dir / "delivery-charter.json"
+        envelope_path = run_dir / "execution" / attempt_id / "envelope.json"
+        try:
+            if (delivery_dir.is_symlink() or charter_path.is_symlink() or envelope_path.is_symlink()
+                    or not charter_path.resolve().is_relative_to(run_dir)
+                    or not envelope_path.resolve().is_relative_to(run_dir)):
+                raise DeliveryContractError("sealed authority paths may not be symlinks")
+            charter = json.loads(charter_path.read_text())
+            validate_delivery_charter(charter)
+            envelope = json.loads(envelope_path.read_text())
+        except (OSError, json.JSONDecodeError, DeliveryContractError) as exc:
+            return False, current, [f"sealed handoff authority is unavailable: {exc}"]
+        if "handoff_to_review" not in charter.get("allowed_lifecycle_operations", []):
+            return False, current, ["Delivery Charter does not authorize handoff_to_review"]
+        if (charter.get("digest") != charter_digest or charter.get("run_id") != work_id
+                or envelope.get("delivery_charter_digest") != charter_digest):
+            return False, current, ["sealed charter does not match active delivery authority"]
+        if not lead_claim_active(delivery, envelope):
+            return False, current, ["delivery owner generation is stale"]
+        try:
+            latest_report = verify_receipt(work_id, root=project_root)
+        except VerifyRefused as exc:
+            return False, current, [f"execution receipt is ineligible: {exc}"]
+        if latest_report.get("attempt_id") != attempt_id:
+            return False, current, ["handoff requires the latest sealed execution attempt"]
+        report = latest_report
+        if report.get("exit_code") != 0 or report.get("status") != "completed":
+            return False, current, ["execution receipt must be a verified completed v8 receipt"]
+
+        if state == STATE_IMPLEMENTING:
+            if current.get("dispositions", {}).get("handoff_attempt") == attempt_id:
+                return False, current, ["refinement requires a fresh execution attempt"]
+            receipt_path = envelope_path.parent / "receipt.json"
+            receipt_sha = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+            evidence_dir = run_dir / "handoff"
+            ensure_dir(evidence_dir)
+            common = {
+                "schema_version": 1,
+                "work_id": work_id,
+                "attempt_id": attempt_id,
+                "receipt": receipt_path.relative_to(project_root).as_posix(),
+                "receipt_sha256": receipt_sha,
+                "delivery_charter_digest": delivery.get("charter_digest"),
+                "lead_generation": expected_generation,
+            }
+            evidence_path = evidence_dir / "implementation-evidence.json"
+            handback_path = evidence_dir / "handback.json"
+            review_inputs_path = evidence_dir / "review-inputs.json"
+            write_atomic(evidence_path, json.dumps({**common, "receipt_verification": report}, indent=2, sort_keys=True) + "\n")
+            write_atomic(handback_path, json.dumps({**common, "state": "accepted_execution_handback"}, indent=2, sort_keys=True) + "\n")
+            review_sources = {
+                name: path for name, path in current.get("artifacts", {}).items()
+                if name in {"requirements", "acceptance_criteria", "plan", "validation_plan", "orchestration_manifest"}
+            }
+            write_atomic(review_inputs_path, json.dumps({**common, "sources": review_sources}, indent=2, sort_keys=True) + "\n")
+            ok, current, errors = apply_transition(
+                work_id,
+                "mark-handback-ready",
+                artifacts={
+                    "implementation_evidence": evidence_path.relative_to(project_root).as_posix(),
+                    "handback": handback_path.relative_to(project_root).as_posix(),
+                    "review_inputs": review_inputs_path.relative_to(project_root).as_posix(),
+                },
+                dispositions={"handoff_attempt": attempt_id},
+                root=project_root, _lock_held=True,
+            )
+            if not ok:
+                return False, current, errors
+
+        else:
+            _reconcile_lifecycle_event(work_id, current, project_root)
+        return apply_transition(work_id, "start-review", root=project_root, _lock_held=True)
+
+
+def _reconcile_lifecycle_event(work_id: str, payload: dict[str, Any], root: Path) -> None:
+    """Repair the narrow crash window after run projection but before event append."""
+    events = _load_events(work_id, root)
+    if events and events[-1].get("to") == payload.get("state"):
+        return
+    event_name = payload.get("last_event")
+    if event_name not in {"mark-handback-ready", "start-review"}:
+        return
+    transition = TRANSITIONS[event_name]
+    event = {
+        "at": payload.get("gates", {}).get(event_name) or payload.get("updated_at") or _now(),
+        "event": event_name,
+        "from": transition.from_states[0],
+        "to": payload.get("state"),
+        "artifacts": ({
+            name: payload.get("artifacts", {}).get(name)
+            for name in transition.required_artifacts
+            if payload.get("artifacts", {}).get(name)
+        }),
+        "dispositions": {},
+        "reconciled": True,
+    }
+    _append_event(work_id, event, root)
 
 
 def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dict[str, Any]]:
@@ -1025,6 +1171,22 @@ def cmd_transition(args) -> int:
     print(f"transition accepted: {args.event}")
     print(f"state: {payload.get('state')}")
     return 0
+
+
+def cmd_handoff_to_review(args) -> int:
+    ok, payload, errors = handoff_to_review(
+        args.work_id, args.attempt_id, args.expected_generation
+    )
+    if args.json:
+        print(json.dumps({"ok": ok, "errors": errors, "run": payload}, indent=2, sort_keys=True))
+    elif ok:
+        print("handoff-to-review accepted")
+        print(f"state: {payload.get('state')}")
+    else:
+        print("handoff-to-review refused")
+        for error in errors:
+            print(f"- {error}")
+    return 0 if ok else 1
 
 
 def cmd_amend_orchestration(args) -> int:

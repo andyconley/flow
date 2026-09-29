@@ -4,7 +4,8 @@
 TEST_TOKEN_BUDGET = {"max_lineage_tokens": 2_000_000, "token_tranche": 1_000, "unobserved_send_tokens": 1_000}
 
 
-def shaper_intent(definition_digests=None, *, limits=None, expansion_headroom=None, max_delegations=6):
+def shaper_intent(definition_digests=None, *, limits=None, expansion_headroom=None, max_delegations=6,
+                  allowed_lifecycle_operations=None):
     """Return a valid intent; ``limits`` overrides enforceable values.
 
     The default base limits sit at the runner ceilings, so expansion tests
@@ -51,6 +52,7 @@ def shaper_intent(definition_digests=None, *, limits=None, expansion_headroom=No
         "amendment_lineage": [],
         "approval_history": [{"event": "approve-definition", "authority": "engineer"}],
         "next_lane_eligibility": ["delivery"],
+        "allowed_lifecycle_operations": list(allowed_lifecycle_operations or []),
     }
     intent["delegation_matrix"]["max_delegations"] = max_delegations
     intent["budget_safety_envelope"]["enforceable"].update(limits or {})

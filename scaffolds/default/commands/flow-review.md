@@ -39,7 +39,10 @@ Use this command when:
 Review must enter and leave the lane through the CLI:
 
 ```bash
+flow run status <work-id> --json
+# If state is handback_ready:
 flow run transition <work-id> start-review
+# If state is reviewing, continue without writing another transition.
 flow run transition <work-id> accept-review \
   --artifact review=.flow/runs/<work-id>/review.md
 ```

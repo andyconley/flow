@@ -143,13 +143,43 @@ def _path_exists(
 
 
 def _output_exists(
-    findings: list[Finding], root: Path, output: dict[str, Any], field: str, subject: str
+    findings: list[Finding], root: Path, output: dict[str, Any], field: str, subject: str,
+    *, work_id: str | None = None, role: str | None = None,
 ) -> Path | None:
     path = _safe_repo_path(output.get("path"), root)
     if path is None:
         _finding(findings, field, subject, "safe-repository-path",
                  "the declared path is empty, absolute, or escapes the repository",
                  "use a repository-relative path without parent traversal")
+    elif output.get("kind") == "receipt-backed":
+        if not work_id:
+            _finding(findings, field, subject, "receipt-backed-run", "receipt-backed output has no run identity", "validate it within a canonical run")
+        else:
+            try:
+                from receipt_verify import VerifyRefused, verify_receipt
+                report = verify_receipt(work_id, root=root)
+                if report.get("exit_code") != 0 or report.get("status") != "completed":
+                    _finding(findings, field, subject, "verified-receipt-output", "latest sealed receipt is not a verified completed handback", "complete a v8 execution with valid_pass evidence")
+                else:
+                    receipt_path = root / ".flow" / "runs" / work_id / "execution" / str(report.get("attempt_id")) / "receipt.json"
+                    receipt = json.loads(receipt_path.read_text())
+                    binding = output.get("receipt_assignment_id")
+                    completed_actions = [
+                        item for item in receipt.get("actions", [])
+                        if isinstance(item, dict) and item.get("status") == "completed"
+                        and isinstance(item.get("request"), dict)
+                        and binding in {item["request"].get("assignment_id"), item["request"].get("instance_id")}
+                    ]
+                    completed_manager_calls = [
+                        item for item in receipt.get("manager_calls", [])
+                        if isinstance(item, dict) and item.get("status") == "completed"
+                    ]
+                    bound = bool(completed_manager_calls) if role == "delivery-lead" and subject == "magentic-manager" else bool(completed_actions)
+                    if binding != subject or not bound:
+                        _finding(findings, field, subject, "receipt-assignment-binding", "receipt-backed output is not bound to a completed result for this assignment", "declare receipt_assignment_id equal to the assignment id and complete that bound action")
+            except (VerifyRefused, OSError, ValueError, json.JSONDecodeError) as exc:
+                _finding(findings, field, subject, "verified-receipt-output", f"receipt-backed output is unavailable: {exc}", "seal and verify an eligible v8 execution receipt")
+        return path
     elif output.get("format") == "code" and path.is_dir():
         return path
     elif not path.is_file():
@@ -422,11 +452,16 @@ def _validate_dispatch(
         output_path = _safe_repo_path(output.get("path"), root)
         if output_path is None or not _nonempty(output.get("format")):
             _finding(findings, f"{field}.output", subject, "declared-output", "output requires a safe path and format", "declare the output path and format")
-        elif read_only:
+        output_kind = output.get("kind", "artifact")
+        if output_kind not in {"artifact", "receipt-backed"}:
+            _finding(findings, f"{field}.output.kind", subject, "output-evidence-kind", "output evidence kind is unsupported", "use artifact or receipt-backed")
+        elif output_kind == "receipt-backed" and output.get("receipt_assignment_id") != subject:
+            _finding(findings, f"{field}.output.receipt_assignment_id", subject, "receipt-assignment-binding", "receipt-backed output is not bound to its assignment", "set receipt_assignment_id to the assignment id")
+        elif output_path is not None and read_only:
             run_output_root = root / ".flow" / "runs" / str(data.get("work_id"))
             if not _path_within(output_path, run_output_root):
                 _finding(findings, f"{field}.output.path", subject, "read-only-run-output", "read-only assignment output is outside its run artifact directory", "write the report under the containing run")
-        elif not any(_path_within(output_path, scope) for scope in scope_paths):
+        elif output_path is not None and not any(_path_within(output_path, scope) for scope in scope_paths):
             _finding(findings, f"{field}.output.path", subject, "output-within-write-scope", "output is not inside a declared write scope", "expand the write scope explicitly or move the output")
         if not _list(item.get("success_criteria")):
             _finding(findings, f"{field}.success_criteria", subject, "success-criteria", "success criteria are missing", "add one or more observable success criteria")
@@ -520,7 +555,8 @@ def _validate_handback(
         item = _dict(raw)
         subject = item.get("id", f"assignments[{index}]")
         output = _dict(item.get("output"))
-        _output_exists(findings, root, output, f"assignments[{index}].output.path", subject)
+        _output_exists(findings, root, output, f"assignments[{index}].output.path", subject,
+                       work_id=data.get("work_id"), role=item.get("role"))
 
     reconciliation = _dict(data.get("reconciliation"))
     _path_exists(findings, root, reconciliation.get("artifact_path"), "reconciliation.artifact_path", "reconciliation")
