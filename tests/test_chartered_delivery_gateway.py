@@ -1423,6 +1423,18 @@ class CharteredEvidenceScopeTests(unittest.TestCase):
                 "timeout_seconds": 120}
         self.assertEqual(_job_test(test), test)
 
+    def test_repository_acceptance_probe_is_a_safe_chartered_test(self):
+        test = {"argv": ["/opt/homebrew/bin/python3.12", "tests/acceptance_probe.py"],
+                "timeout_seconds": 600}
+        self.assertEqual(_job_test(test), test)
+
+    def test_repository_probe_rejects_traversal_and_extra_arguments(self):
+        for argv in (["python3.12", "tests/../acceptance_probe.py"],
+                     ["python3.12", "tests/acceptance_probe.py", "--unsafe"],
+                     ["python3.12", "tests/acceptance.py"]):
+            with self.subTest(argv=argv), self.assertRaisesRegex(ContractError, "unsupported"):
+                _job_test({"argv": argv, "timeout_seconds": 600})
+
     def test_changed_files_may_descend_from_approved_roots(self):
         self.assertTrue(_paths_within_scopes(
             ["README.md", "src/hardware_watcher/domain/models.py", "tests/test_foundation.py"],
