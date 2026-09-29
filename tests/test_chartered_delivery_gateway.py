@@ -1296,6 +1296,16 @@ class CharteredEditVerificationTests(CharteredFixture):
 
         self.assertEqual(result["changed_files"], ["large.py"])
 
+    def test_untracked_python_cache_is_not_chartered_edit_evidence(self):
+        cache = self.worktree / "__pycache__"
+        cache.mkdir()
+        (cache / "target.cpython-312.pyc").write_bytes(b"\x00\xffbinary-cache")
+        (self.worktree / "target.py").write_text("fixed\n")
+
+        result = self._verify({"target.py": self._sha("old\n")})
+
+        self.assertEqual(result["changed_files"], ["target.py"])
+
     def test_out_of_scope_file_names_scope(self):
         (self.worktree / "other.py").write_text("x\n")
         with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):

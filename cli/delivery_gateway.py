@@ -715,6 +715,14 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
         raise ContractError("editor changed the pinned source commit")
     allowed = tuple(Path(path) for path in job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
+    # Interpreter caches are execution residue, not source edits or verifier
+    # evidence. Ignore them only while untracked; a tracked cache remains a
+    # normal governed file and cannot evade scope or tamper checks.
+    status = [line for line in status if not (
+        line[:2] == "??" and (
+            "__pycache__" in Path(line[3:]).parts or Path(line[3:]).suffix == ".pyc"
+        )
+    )]
     changed = [line[3:] for line in status]
     untracked = {path for line, path in zip(status, changed) if line[:2] == "??"}
     if not changed:
