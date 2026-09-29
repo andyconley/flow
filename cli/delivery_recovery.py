@@ -184,7 +184,9 @@ def recovery_eligibility(envelope: dict[str, Any], snapshot: dict[str, Any], *, 
                                                   "evidence_needed": EVIDENCE_NEEDED[LEAD_GENERATION_INACTIVE]}])
     observed = {item["action_id"] for item in snapshot.get("response_observations", [])}
     job = envelope.get("job_contract") or {}
-    reconcilable = set(job.get("producer_instance_ids", [])) | set(job.get("verifier_instance_ids", []))
+    reconcilable = (set(job.get("producer_instance_ids", []))
+                    | set(job.get("evidence_collector_instance_ids", []))
+                    | set(job.get("verifier_instance_ids", [])))
 
     def action_route(item: dict[str, Any]) -> str:
         eligible = item["action_id"] in observed and (item.get("request") or {}).get("instance_id") in reconcilable

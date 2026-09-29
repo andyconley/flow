@@ -503,7 +503,8 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
         errors.append("job_charter must be valid run-local JSON")
         return errors
     required = {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}
-    if not isinstance(charter, dict) or set(charter) != required:
+    optional = {"evidence_collector_instance_ids"}
+    if not isinstance(charter, dict) or not required.issubset(charter) or set(charter) - required - optional:
         errors.append("job_charter fields are incomplete")
         return errors
     baseline = charter.get("baseline")
@@ -524,6 +525,18 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
                 errors.append(f"producer assignment {instance_id} is read-only")
             elif not writable and assignment.get("read_only") is not True:
                 errors.append(f"verifier assignment {instance_id} is writable")
+    collectors = charter.get("evidence_collector_instance_ids", [])
+    if not isinstance(collectors, list) or len(collectors) != len(set(collectors)):
+        errors.append("job_charter evidence_collector_instance_ids is invalid")
+    else:
+        for instance_id in collectors:
+            assignment = ids.get(instance_id)
+            if assignment is None:
+                errors.append(f"job_charter evidence collector names unknown assignment {instance_id}")
+            elif assignment.get("read_only") is not True:
+                errors.append(f"evidence collector assignment {instance_id} is writable")
+            if instance_id in set(charter.get("producer_instance_ids", [])) | set(charter.get("verifier_instance_ids", [])):
+                errors.append(f"evidence collector assignment {instance_id} is not distinct")
     return errors
 
 

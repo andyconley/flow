@@ -329,7 +329,8 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
     job = envelope.get("job_contract")
     required = {"task", "baseline", "read_paths", "write_paths", "test",
                 "producer_instance_ids", "verifier_instance_ids"}
-    if not isinstance(job, dict) or set(job) != required:
+    optional = {"evidence_collector_instance_ids"}
+    if not isinstance(job, dict) or not required.issubset(job) or set(job) - required - optional:
         raise ContractError("chartered job contract fields are invalid")
     if not isinstance(job["task"], str) or not job["task"].strip() or len(job["task"].encode()) > MAX_TASK_BYTES:
         raise ContractError("chartered job task is invalid")
@@ -362,6 +363,13 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
             raise ContractError(f"chartered job {kind} capabilities differ from roster")
     if set(job["producer_instance_ids"]) & set(job["verifier_instance_ids"]):
         raise ContractError("chartered job producer and verifier overlap")
+    evidence_collectors = job.get("evidence_collector_instance_ids", [])
+    bindings = {item["instance_id"]: item for item in envelope["roster"]}
+    if (not isinstance(evidence_collectors, list) or len(evidence_collectors) != len(set(evidence_collectors))
+            or any(instance not in bindings or bindings[instance]["provider"] not in {"ollama", "local-stub", "codex"}
+                   or bindings[instance]["capabilities"] != ["read"] for instance in evidence_collectors)
+            or set(evidence_collectors) & (set(job["producer_instance_ids"]) | set(job["verifier_instance_ids"]))):
+        raise ContractError("chartered job evidence collector differs from roster")
 
 
 def _validate_delivery_projection(envelope: dict[str, Any]) -> None:
@@ -951,6 +959,8 @@ def _validate_magentic_action(envelope: dict[str, Any], action: dict[str, Any]) 
         bindings = {item["instance_id"]: item for item in envelope["roster"]}
         group = (envelope["job_contract"]["producer_instance_ids"]
                  if action["instance_id"] in envelope["job_contract"]["producer_instance_ids"]
+                 else envelope["job_contract"].get("evidence_collector_instance_ids", [])
+                 if action["instance_id"] in envelope["job_contract"].get("evidence_collector_instance_ids", [])
                  else envelope["job_contract"]["verifier_instance_ids"]
                  if action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"] else [])
         expected_candidates = [{key: bindings[instance][key] for key in

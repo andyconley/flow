@@ -340,7 +340,9 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     source_paths = (charter_path, manifest_path, requirements, acceptance)
     source_bytes = {path: (manifest_bytes if path == manifest_path else path.read_bytes()) for path in source_paths}
     charter = json.loads(source_bytes[charter_path])
-    if not isinstance(charter, dict) or set(charter) != {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}:
+    required_charter_fields = {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}
+    if (not isinstance(charter, dict) or not required_charter_fields.issubset(charter)
+            or set(charter) - required_charter_fields != {"evidence_collector_instance_ids"} and set(charter) != required_charter_fields):
         raise ContractError("job charter fields are invalid")
     task = charter["task"]
     if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
@@ -383,17 +385,25 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                        "model": model, "instructions": instructions,
                        "capabilities": ["read"] if read_only else ["read", "edit"]})
     by_id = {item["instance_id"]: item for item in roster}
-    producers, verifiers = charter["producer_instance_ids"], charter["verifier_instance_ids"]
+    producers = charter["producer_instance_ids"]
+    evidence_collectors = charter.get("evidence_collector_instance_ids", [])
+    verifiers = charter["verifier_instance_ids"]
     if any(item not in by_id or "edit" not in by_id[item]["capabilities"] for item in producers):
         raise ContractError("producer is not an approved editor")
     if any(item not in by_id or by_id[item]["capabilities"] != ["read"] for item in verifiers) or set(producers) & set(verifiers):
         raise ContractError("verifier is not an independent read-only specialist")
+    if (len(evidence_collectors) != len(set(evidence_collectors))
+            or any(item not in by_id or by_id[item]["capabilities"] != ["read"] for item in evidence_collectors)
+            or set(evidence_collectors) & (set(producers) | set(verifiers))):
+        raise ContractError("evidence collector is not a distinct read-only specialist")
     verification = manifest.get("verification") or {}
     designated_verifier = verification.get("verifier_assignment")
     evidence_collector = verification.get("evidence_collector_assignment")
     if (designated_verifier not in verifiers or evidence_collector in verifiers
             or evidence_collector == designated_verifier):
         raise ContractError("job verifier set conflicts with independent orchestration roles")
+    if evidence_collectors and evidence_collector not in evidence_collectors:
+        raise ContractError("job evidence collector differs from orchestration role")
     # The execution projection may narrow the canonical Charter, never widen
     # it. Provider, role cardinality, limits, and producer/verifier separation
     # are proven before an attempt or grant exists.
@@ -492,7 +502,9 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                for name, path in (("requirements", requirements), ("acceptance", acceptance))}
     job_contract = {"task": task, "baseline": job_baseline,
                     "read_paths": charter["read_paths"], "write_paths": charter["write_paths"],
-                    "test": charter["test"], "producer_instance_ids": producers, "verifier_instance_ids": verifiers}
+                    "test": charter["test"], "producer_instance_ids": producers,
+                    "evidence_collector_instance_ids": evidence_collectors,
+                    "verifier_instance_ids": verifiers}
     # One projection, shared with verify-receipt (ADR 0020).
     limits, headroom = project_envelope_limits(canonical_limits)
     envelope = {"schema_version": 1, "execution_protocol_version": 8, "work_id": work_id, "attempt_id": attempt_id,

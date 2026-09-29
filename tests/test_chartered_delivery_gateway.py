@@ -302,12 +302,26 @@ class CharteredPreparationTests(CharteredFixture):
     def test_evidence_collector_cannot_enter_independent_verifier_set(self):
         evidence = copy.deepcopy(self.manifest["assignments"][2])
         evidence["id"] = "evidence"
+        evidence["role"] = "quality-reviewer"
+        evidence["execution"] = {"provider": "codex", "model": "review-model"}
         self.manifest["assignments"].append(evidence)
         self.manifest["verification"]["evidence_collector_assignment"] = "evidence"
         self.charter["verifier_instance_ids"] = ["evidence", "verifier"]
         self._write_inputs()
         with self.assertRaisesRegex(ContractError, "independent orchestration roles"):
             self.prepare()
+
+    def test_distinct_evidence_collector_is_projected_into_job_contract(self):
+        evidence = copy.deepcopy(self.manifest["assignments"][2])
+        evidence["id"] = "evidence"
+        evidence["role"] = "quality-reviewer"
+        evidence["execution"] = {"provider": "codex", "model": "review-model"}
+        self.manifest["assignments"].append(evidence)
+        self.manifest["verification"]["evidence_collector_assignment"] = "evidence"
+        self.charter["evidence_collector_instance_ids"] = ["evidence"]
+        self._write_inputs()
+        envelope, _, _, _ = self.prepare()
+        self.assertEqual(["evidence"], envelope["job_contract"]["evidence_collector_instance_ids"])
 
     def test_v8_prepare_refuses_a_worktree_containing_project_flow(self):
         for label, worktree in (("project root", self.root), ("inside .flow", self.run)):
