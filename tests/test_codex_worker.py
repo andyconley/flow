@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from codex_worker import CodexWorkerError, _parse_events, call_codex
+from codex_worker import CodexWorkerError, _failure_category, _parse_events, call_codex
 
 
 def stream(*events):
@@ -154,6 +154,22 @@ class CodexWorkerTests(unittest.TestCase):
                 call_codex(instructions="Charter", task="Task", workspace=root,
                            model="gpt-test", timeout_seconds=5, codex_bin=str(fake))
             self.assertNotIn("do-not-record", str(error.exception))
+
+    def test_failure_category_uses_structured_stdout_without_retaining_text(self):
+        stdout = stream({"type": "error", "message": "Your usage limit has been reached; secret=do-not-record"})
+        self.assertEqual("usage_limit_reached", _failure_category(b"", stdout))
+
+    def test_failure_category_covers_current_cli_and_provider_failures(self):
+        cases = {
+            b"error: unexpected argument '--legacy'": "unsupported_cli_option",
+            b"selected model is not supported": "model_unavailable",
+            b"prompt exceeds the context window": "context_limit_exceeded",
+            b"network is unreachable": "network_unavailable",
+            b"service unavailable": "provider_unavailable",
+        }
+        for evidence, expected in cases.items():
+            with self.subTest(evidence=evidence):
+                self.assertEqual(expected, _failure_category(evidence))
 
     def test_timeout_includes_prompt_write(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -32,9 +32,16 @@ class CodexWorkerError(RuntimeError):
     """Codex may have acted, but Flow did not observe a valid completed turn."""
 
 
-def _failure_category(stderr: bytes) -> str:
-    """Return a fixed diagnostic label without retaining provider text."""
-    evidence = stderr[:MAX_STDERR_BYTES].decode("utf-8", errors="replace").lower()
+def _failure_category(stderr: bytes, stdout: bytes = b"") -> str:
+    """Return a fixed diagnostic label without retaining provider text.
+
+    Codex reports some terminal failures as JSON events on stdout rather than
+    stderr. Inspect both bounded streams so Flow does not collapse actionable
+    provider failures into ``unclassified`` while still retaining no provider
+    message text.
+    """
+    evidence = (stderr[:MAX_STDERR_BYTES] + b"\n" + stdout[:MAX_STDERR_BYTES]).decode(
+        "utf-8", errors="replace").lower()
     if any(marker in evidence for marker in (
         "not logged in", "not authenticated", "authentication required", "please log in",
     )):
@@ -43,12 +50,34 @@ def _failure_category(stderr: bytes) -> str:
         "operation not permitted", "permission denied", "readonly database", "read-only database",
     )):
         return "filesystem_access_denied"
-    if any(marker in evidence for marker in ("unknown option", "unknown argument", "unrecognized option")):
+    if any(marker in evidence for marker in (
+        "unknown option", "unknown argument", "unrecognized option", "unexpected argument",
+    )):
         return "unsupported_cli_option"
     if any(marker in evidence for marker in ("rate limit", "rate_limit")):
         return "rate_limited"
-    if any(marker in evidence for marker in ("model not found", "invalid model", "model unavailable")):
+    if any(marker in evidence for marker in (
+        "model not found", "invalid model", "model unavailable", "model is not supported",
+        "model isn't supported", "unsupported model",
+    )):
         return "model_unavailable"
+    if any(marker in evidence for marker in (
+        "usage limit", "usage_limit", "quota exceeded", "insufficient quota",
+    )):
+        return "usage_limit_reached"
+    if any(marker in evidence for marker in (
+        "context window", "context length", "too many tokens", "prompt is too long",
+    )):
+        return "context_limit_exceeded"
+    if any(marker in evidence for marker in (
+        "connection refused", "connection reset", "failed to connect", "dns error",
+        "network is unreachable",
+    )):
+        return "network_unavailable"
+    if any(marker in evidence for marker in (
+        "service unavailable", "temporarily unavailable", "internal server error",
+    )):
+        return "provider_unavailable"
     return "unclassified"
 
 
@@ -199,7 +228,8 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                     raise CodexWorkerError("Codex turn timed out")
                 exit_code = process.wait(timeout=remaining)
                 if exit_code != 0:
-                    category = _failure_category(b"".join(stderr_chunks))
+                    event_file.seek(0)
+                    category = _failure_category(b"".join(stderr_chunks), event_file.read(MAX_STDERR_BYTES))
                     raise CodexWorkerError(
                         f"Codex exited without a successful turn (status {exit_code}; category {category})"
                     )
