@@ -70,6 +70,13 @@ def _clean_env(home: Path | None = None) -> dict[str, str]:
     return env
 
 
+# Managed MAF wheels exist only for macOS arm64 CPython 3.12. Tests that
+# provision the managed runtime need the locked local wheelhouse and skip on
+# hosts without it, such as the Linux release runner.
+requires_managed_wheelhouse = unittest.skipUnless(
+    managed_wheelhouse().is_dir(), "managed runtime wheelhouse is not available on this test host")
+
+
 class FlowCliHarness(unittest.TestCase):
     """Temp repo, subprocess runner, and fake HOME — the parts every CLI test
     needs and none of the assertions.
@@ -1026,6 +1033,7 @@ class FlowCliTests(FlowCliHarness):
             ignore=shutil.ignore_patterns(
                 ".git", "*.pyc", "__pycache__", "fake_home", "fake-remote*"
             ),
+            ignore_dangling_symlinks=True,
         )
         env = _clean_env()
         env["GIT_AUTHOR_NAME"] = "test"
@@ -1505,6 +1513,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn('model = "gpt-5.6-luna"', tech_writer_content)
         self.assertIn('model_reasoning_effort = "low"', tech_writer_content)
 
+    @requires_managed_wheelhouse
     def test_runtime_smoke_checks_generated_surfaces(self) -> None:
         fake_home = self.use_fake_home()
         # Smoke is deliberately diagnostic-only. Provision the real locked
@@ -2790,6 +2799,7 @@ class FlowCliTests(FlowCliHarness):
             ignore=shutil.ignore_patterns(
                 ".git", "*.pyc", "__pycache__", "fake_home", "fake-remote*", "marker-repo"
             ),
+            ignore_dangling_symlinks=True,
         )
         (temp_repo / "FUTURE_FILE.md").write_text("Pretend-future top-level file.\n")
 
@@ -2931,6 +2941,7 @@ class FlowCliTests(FlowCliHarness):
         install_section = result.stdout.split("-- install --")[1].split("-- user-level")[0]
         self.assertIn("source target:", install_section)
 
+    @requires_managed_wheelhouse
     def test_install_command_release_converts_from_develop(self) -> None:
         fake_home = self.do_install_develop()
         source = fake_home / ".flow" / "source"
@@ -2945,6 +2956,7 @@ class FlowCliTests(FlowCliHarness):
         # Clone preserved
         self.assertTrue((REPO_ROOT / "cli" / "flow.py").is_file())
 
+    @requires_managed_wheelhouse
     def test_install_release_cleans_up_source_old_symlink_leftover(self) -> None:
         """Regression test for the shutil.rmtree-doesn't-delete-symlinks bug.
 
@@ -2971,6 +2983,7 @@ class FlowCliTests(FlowCliHarness):
             f"{source_old} must not exist after the develop→release conversion cleanup",
         )
 
+    @requires_managed_wheelhouse
     def test_install_command_develop_converts_from_release(self) -> None:
         fake_home = self.do_install_release()
         source = fake_home / ".flow" / "source"
