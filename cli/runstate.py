@@ -833,6 +833,21 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
     return ok, messages, payload
 
 
+def _apply_authority_amendment(intent: dict[str, Any], replacement: dict[str, Any]) -> dict[str, Any]:
+    """Apply the narrow user-approved successor-charter authority projection."""
+    authority = replacement.get("authority_amendment")
+    if authority is None:
+        return intent
+    if not isinstance(authority, dict) or set(authority) != {"allowed_lifecycle_operations"}:
+        raise DeliveryContractError("authority_amendment must contain only allowed_lifecycle_operations")
+    operations = authority["allowed_lifecycle_operations"]
+    if not isinstance(operations, list):
+        raise DeliveryContractError("authority_amendment allowed_lifecycle_operations must be a list")
+    amended = dict(intent)
+    amended["allowed_lifecycle_operations"] = list(operations)
+    return validate_shaper_intent(amended)
+
+
 def approve_orchestration_amendment(
     work_id: str,
     replacement: str,
@@ -921,6 +936,10 @@ def approve_orchestration_amendment(
             amended_intent = json.loads(intent_path.read_text())
         except (OSError, json.JSONDecodeError):
             return False, current, ["approved Shaper intent is unavailable for authority amendment"]
+        try:
+            amended_intent = _apply_authority_amendment(amended_intent, replacement_data)
+        except DeliveryContractError as exc:
+            return False, current, [f"authority amendment is invalid: {exc}"]
         allowed = {item.get("role"): dict(item) for item in amended_intent.get("allowed_specialists", [])
                    if isinstance(item, dict) and isinstance(item.get("role"), str)}
         roles = {item.get("role") for item in replacement_data.get("assignments", [])
