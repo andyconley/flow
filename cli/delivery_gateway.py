@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from execution_contracts import (MANAGER_IDENTITY_FIELDS, TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical,
+                                 chartered_test_argv_supported,
                                  digest, envelope_digest, handback_supported, validate_manager_identity,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
@@ -169,21 +170,12 @@ def _job_test(test: Any) -> dict[str, Any]:
     if not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}:
         raise ContractError("targeted test specification is invalid")
     argv, timeout = test["argv"], test["timeout_seconds"]
-    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-    focused = (isinstance(argv, list) and len(argv) == 8
-               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-               and argv[6] == "-p")
-    probe = (isinstance(argv, list) and len(argv) == 2
-             and argv[1].startswith("tests/") and argv[1].endswith("_probe.py")
-             and argv[1][len("tests/"):-len("_probe.py")].replace("_", "").isalnum())
     if (not isinstance(argv, list)
             or any(not isinstance(arg, str) or not arg or len(arg) > 256 or "\x00" in arg for arg in argv)
             or argv[0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or not (full_discovery or focused or probe)
+            or not chartered_test_argv_supported(argv)
             or type(timeout) is not int or not 1 <= timeout <= 3600):
         raise ContractError("targeted test argv or deadline is unsupported")
-    if focused and (not argv[7].startswith("test_") or not argv[7].endswith(".py") or not argv[7][5:-3].replace("_", "").isalnum()):
-        raise ContractError("targeted test pattern is unsafe")
     return test
 
 

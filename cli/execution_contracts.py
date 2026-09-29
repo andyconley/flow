@@ -312,6 +312,19 @@ def _paths_within_scopes(paths: Any, scopes: Any) -> bool:
                for path in paths)
 
 
+def chartered_test_argv_supported(argv: Any) -> bool:
+    """One canonical command-shape policy shared by sealing and dispatch."""
+    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+    focused = (isinstance(argv, list) and len(argv) == 8
+               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+               and argv[6] == "-p" and argv[7].startswith("test_") and argv[7].endswith(".py")
+               and argv[7][5:-3].replace("_", "").isalnum())
+    probe = (isinstance(argv, list) and len(argv) == 2
+             and argv[1].startswith("tests/") and argv[1].endswith("_probe.py")
+             and argv[1][len("tests/"):-len("_probe.py")].replace("_", "").isalnum())
+    return bool(full_discovery or focused or probe)
+
+
 def _validate_chartered_job(envelope: dict[str, Any]) -> None:
     job = envelope.get("job_contract")
     required = {"task", "baseline", "read_paths", "write_paths", "test",
@@ -329,16 +342,11 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
         raise ContractError("chartered job path scope is invalid")
     test = job["test"]
     argv = test.get("argv") if isinstance(test, dict) else None
-    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-    focused = (isinstance(argv, list) and len(argv) == 8
-               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-               and argv[6] == "-p" and argv[7].startswith("test_") and argv[7].endswith(".py")
-               and argv[7][5:-3].replace("_", "").isalnum())
     if (not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}
             or not isinstance(test["argv"], list) or not test["argv"]
             or any(not isinstance(arg, str) or not arg or "\x00" in arg or "\n" in arg for arg in test["argv"])
             or test["argv"][0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or not (full_discovery or focused)
+            or not chartered_test_argv_supported(argv)
             or type(test["timeout_seconds"]) is not int or not 1 <= test["timeout_seconds"] <= 3600):
         raise ContractError("chartered job test command is invalid")
     for kind, providers in (("producer_instance_ids", {"claude", "codex"}),
