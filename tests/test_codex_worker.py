@@ -47,6 +47,9 @@ class CodexWorkerTests(unittest.TestCase):
     def test_invocation_is_sandboxed_and_one_turn(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            source_home = root / "source-codex-home"
+            source_home.mkdir()
+            (source_home / "auth.json").write_text('{"token":"fixture"}')
             workspace = root / "fixture"
             workspace.mkdir()
             fake = root / "codex-fake"
@@ -56,13 +59,15 @@ class CodexWorkerTests(unittest.TestCase):
                             "Path('argv.json').write_text(json.dumps(sys.argv[1:]))\n"
                             "Path('prompt.txt').write_text(sys.stdin.read())\n"
                             "Path('env.json').write_text(json.dumps(dict(os.environ)))\n"
+                            "Path('auth.txt').write_text((Path(os.environ['CODEX_HOME']) / 'auth.json').read_text())\n"
                             "print(json.dumps({'type':'thread.started','thread_id':'test-thread'}))\n"
                             "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'changed fixture'}}))\n"
                             "print(json.dumps({'type':'turn.completed','usage':{'input_tokens':5}}))\n")
             fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
             with patch.dict(os.environ, {"FLOW_UNRELATED_SECRET": "do-not-pass",
                                         "OPENAI_API_KEY": "do-not-pass",
-                                        "CODEX_API_KEY": "do-not-pass"}):
+                                        "CODEX_API_KEY": "do-not-pass",
+                                        "CODEX_HOME": str(source_home)}):
                 result = call_codex(instructions="Follow charter", task="Make a tiny change",
                                     workspace=workspace, model="gpt-test", timeout_seconds=5,
                                     codex_bin=str(fake))
@@ -79,6 +84,10 @@ class CodexWorkerTests(unittest.TestCase):
             self.assertNotIn("OPENAI_API_KEY", child_env)
             self.assertNotIn("CODEX_API_KEY", child_env)
             self.assertIn("HOME", child_env)
+            self.assertNotEqual(child_env["CODEX_HOME"], str(source_home))
+            self.assertTrue(child_env["CODEX_HOME"].startswith(tempfile.gettempdir()))
+            self.assertEqual((workspace / "auth.txt").read_text(), '{"token":"fixture"}')
+            self.assertFalse(Path(child_env["CODEX_HOME"]).exists())
             self.assertEqual(child_env["PYTHONDONTWRITEBYTECODE"], "1")
             call_codex(instructions="Manager", task="Return a plan", workspace=workspace,
                        model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="read-only")
