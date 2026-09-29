@@ -63,13 +63,22 @@ def manager_call(env: dict, sequence: int, phase: str = "facts", replan_sequence
 
 
 class MagenticContractTests(unittest.TestCase):
-    def test_manager_accepts_verified_progress_prompt_within_claude_limit(self) -> None:
+    def test_manager_accepts_accumulated_progress_prompt_over_32_kib(self) -> None:
         env = envelope()
-        messages = [{"role": "user", "contents": [{"type": "text", "text": "x" * 24000}]}]
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "x" * 70000}]}]
         request = manager_call(env, 1, "progress")
         request["prompt_digest"] = digest(messages)
         request["call_id"] = expected_manager_call_id(request)
         self.assertEqual(_normalized_manager_request(env, {**request, "messages": messages}), request)
+
+    def test_manager_rejects_unbounded_accumulated_progress_prompt(self) -> None:
+        env = envelope()
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "x" * (256 * 1024)}]}]
+        request = manager_call(env, 1, "progress")
+        request["prompt_digest"] = digest(messages)
+        request["call_id"] = expected_manager_call_id(request)
+        with self.assertRaisesRegex(ContractError, "messages are invalid"):
+            _normalized_manager_request(env, {**request, "messages": messages})
 
     def test_claude_edit_result_matches_v5_worker_contract(self) -> None:
         env = envelope()

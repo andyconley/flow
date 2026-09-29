@@ -57,6 +57,7 @@ APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
 MAX_CHARTERED_DIFF_BYTES = 1024 * 1024
+MAX_MANAGER_MESSAGES_BYTES = 256 * 1024
 
 
 def _stream_sha256(path: Path) -> str:
@@ -531,7 +532,8 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
 
 def _normalized_manager_request(envelope: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
     messages = message.get("messages")
-    if not isinstance(messages, list) or not messages or len(canonical(messages).encode()) > 32000:
+    if (not isinstance(messages, list) or not messages
+            or len(canonical(messages).encode()) > MAX_MANAGER_MESSAGES_BYTES):
         raise ContractError("Magentic manager messages are invalid")
     request = {key: message.get(key) for key in ("schema_version", "call_id", "attempt_id", "envelope_digest",
                                                 "sequence", "phase", "manager_round", "prompt_digest")}
@@ -2004,7 +2006,8 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
         result = call_codex(instructions="Respond to the stock Magentic manager request only. Return the requested response text without editing files.",
                             task=prompt, workspace=workspace, model=envelope["manager"]["model"],
                             timeout_seconds=timeout_seconds, sandbox="read-only",
-                            max_prompt_bytes=32768, max_output_bytes=32768, on_process_group=on_process_group)
+                            max_prompt_bytes=MAX_MANAGER_MESSAGES_BYTES,
+                            max_output_bytes=32768, on_process_group=on_process_group)
     else:
         raise ContractError("approved manager provider has no adapter")
     output = result["output"]
