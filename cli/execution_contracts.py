@@ -643,10 +643,17 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
         counters = lambda value, keys: (isinstance(value, dict) and set(value) == keys
                                         and all(type(item) is int and item >= 0 for item in value.values()))
         predecessors = envelope.get("predecessors", [])
-        lineage_id = predecessors[0]["attempt_id"] if predecessors else envelope["attempt_id"]
+        # The ledger scopes expansion spend to predecessors sealed by the same
+        # Delivery Charter. The compact predecessor links do not carry that
+        # charter digest, so the pure receipt validator can prove only that
+        # the declared authority-lineage root is one of the sealed linked
+        # predecessors (or the current attempt when there are none). The seal
+        # separately compares this entire block with the ledger-built block.
+        lineage_ids = ({item["attempt_id"] for item in predecessors}
+                       if predecessors else {envelope["attempt_id"]})
         if (not isinstance(block, dict)
                 or set(block) != {"lineage_id", "headroom", "predecessor_headroom_spent", "predecessor_lineage_grants", "requests"}
-                or block["lineage_id"] != lineage_id or block["headroom"] != expansion_headroom(envelope)
+                or block["lineage_id"] not in lineage_ids or block["headroom"] != expansion_headroom(envelope)
                 or not counters(block["predecessor_headroom_spent"], names)
                 or not counters(block["predecessor_lineage_grants"], set(LINEAGE_SCOPED_LIMITS))
                 or not isinstance(block["requests"], list)

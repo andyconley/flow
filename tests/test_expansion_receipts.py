@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from execution_contracts import ContractError, validate_receipt  # noqa: E402
+from execution_contracts import ContractError, _validate_expansion, validate_receipt  # noqa: E402
 from execution_ledger import ExecutionLedger  # noqa: E402
 from tests.test_expansion_gateway import ExpansionGatewayFixture  # noqa: E402
 from tests.test_expansion_ledger import v8  # noqa: E402
@@ -72,6 +72,19 @@ class ReceiptExpansionValidationTests(ExpansionGatewayFixture):
 
     def test_receipt_rejects_foreign_lineage(self):
         self.assertRejected(lambda receipt: receipt["expansion"].update(lineage_id="another-attempt"), "evidence is invalid")
+
+    def test_receipt_accepts_authority_lineage_root_after_older_predecessor(self):
+        envelope = copy.deepcopy(self.envelope)
+        envelope["predecessors"] = [
+            {"attempt_id": "older-authority", "terminal_status": "failed",
+             "receipt_sha256": "a" * 64, "lead_generation": 1},
+            {"attempt_id": "current-authority", "terminal_status": "failed",
+             "receipt_sha256": "b" * 64, "lead_generation": 1},
+        ]
+        receipt = copy.deepcopy(self.receipt)
+        receipt["expansion"]["lineage_id"] = "current-authority"
+
+        _validate_expansion(envelope, receipt)
 
     def test_receipt_rejects_foreign_generation(self):
         self.assertRejected(lambda receipt: self.grant(receipt).update(owner_generation=7), "grant is invalid")
