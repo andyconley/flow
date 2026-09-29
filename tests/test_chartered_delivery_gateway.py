@@ -541,6 +541,7 @@ class CharteredPreparationTests(CharteredFixture):
                 return self._result("codex", "editor-model", "Edited target")
             self.assertIn("Flow-verified complete bounded diff", action["provider_task"])
             self.assertIn("Targeted test: passed", action["provider_task"])
+            self.assertIn("automatic handoff_to_review authority", action["provider_task"])
             return self._result("ollama", "local-model", '{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}')
 
         with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):

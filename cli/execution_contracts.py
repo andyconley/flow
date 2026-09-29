@@ -1532,7 +1532,12 @@ def _validate_chartered_completion(envelope: dict[str, Any], evidence: dict[str,
         raise ContractError("chartered edit evidence is invalid")
     if (not isinstance(tests, dict) or tests.get("status") != "passed"
             or tests.get("command") != job["test"]["argv"]
-            or not _hex_digest(tests.get("output_sha256"))):
+            or not _hex_digest(tests.get("output_sha256"))
+            or ("output_excerpt" in tests and (
+                not isinstance(tests["output_excerpt"], str)
+                or len(tests["output_excerpt"].encode()) > 8192
+                or hashlib.sha256(tests["output_excerpt"].encode()).hexdigest() != tests["output_sha256"]
+            ))):
         raise ContractError("chartered test evidence is invalid")
 
 

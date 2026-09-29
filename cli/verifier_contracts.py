@@ -306,8 +306,13 @@ def validate_structured_verifier_result(result: object) -> dict[str, Any]:
     return result
 
 
-def verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structured: bool) -> str:
+def verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structured: bool,
+                           test_output: str = "", authority_statement: str = "") -> str:
     """Build the exact evidence-bearing verifier input Flow sends and digests."""
     text = (task + "\n\nFlow-verified complete bounded diff for this review:\n"
             + diff + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
+    if test_output:
+        text += "\nFlow-retained targeted-test output (bound by the receipt test digest):\n" + test_output
+    if authority_statement:
+        text += "\nFlow-verified control-plane authority:\n" + authority_statement
     return text + VERIFIER_CONTRACT_INSTRUCTION if structured else text

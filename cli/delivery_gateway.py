@@ -785,7 +785,9 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
     output = (stdout + stderr)[-8192:]
     if process.returncode:
         raise ContractError("targeted chartered test failed: " + output[-512:])
-    return {"command": test["argv"], "status": "passed", "output_sha256": hashlib.sha256(output.encode()).hexdigest()}
+    return {"command": test["argv"], "status": "passed",
+            "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+            "output_excerpt": output}
 
 
 def _peek_snapshot(ledger_path: Path, attempt_id: str) -> dict[str, Any] | None:
@@ -1608,8 +1610,12 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     prior_verifier = [item for item in initial_snapshot["actions"]
                       if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
     if prior_verifier and edit_evidence:
-        verifier_task = _verifier_provider_task(prior_verifier[-1]["request"]["task"], (attempt_dir / "repair.diff").read_text(),
-                                                edit_evidence["diff_sha256"], structured=structured_verifier)
+        verifier_task = _verifier_provider_task(
+            prior_verifier[-1]["request"]["task"], (attempt_dir / "repair.diff").read_text(),
+            edit_evidence["diff_sha256"], structured=structured_verifier,
+            test_output=(test_evidence or {}).get("output_excerpt", ""),
+            authority_statement=("Flow verified the sealed Delivery Charter and automatic handoff_to_review authority; "
+                                 "the repository diff cannot modify that control-plane grant."))
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
     manager_provider = (envelope.get("manager") or {}).get("provider", "claude") if structured_verifier else None
@@ -1759,8 +1765,12 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             return denied_reply(action["action_id"], decision["reason"])
         provider_action = action
         if is_verifier:
-            provider_task = _verifier_provider_task(action["task"], (attempt_dir / "repair.diff").read_text(),
-                                                    edit_evidence["diff_sha256"], structured=structured_verifier)
+            provider_task = _verifier_provider_task(
+                action["task"], (attempt_dir / "repair.diff").read_text(),
+                edit_evidence["diff_sha256"], structured=structured_verifier,
+                test_output=(test_evidence or {}).get("output_excerpt", ""),
+                authority_statement=("Flow verified the sealed Delivery Charter and automatic handoff_to_review authority; "
+                                     "the repository diff cannot modify that control-plane grant."))
             verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
             provider_action = {**action, "provider_task": provider_task}
         try:
