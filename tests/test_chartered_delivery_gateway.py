@@ -221,6 +221,29 @@ class CharteredFixture(unittest.TestCase):
 
 
 class CharteredPreparationTests(CharteredFixture):
+    def test_completed_authorized_job_automatically_enters_review(self):
+        self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+        with patch("delivery_gateway.handoff_to_review",
+                   return_value=(True, {"state": "reviewing"}, [])) as handoff:
+            result, _, _, _ = self._run_v8([self.PASS])
+        handoff.assert_called_once_with("sample", result["attempt_id"], 1, root=self.root.resolve())
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["review_handoff"], {"status": "completed", "state": "reviewing"})
+
+    def test_authorized_handoff_failure_is_not_reported_as_completed(self):
+        self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+        with patch("delivery_gateway.handoff_to_review",
+                   return_value=(False, self.state, ["receipt mismatch"])):
+            result, _, _, _ = self._run_v8([self.PASS])
+        self.assertEqual(result["status"], "handoff_failed")
+        self.assertEqual(result["reason"], "receipt mismatch")
+        self.assertEqual(result["review_handoff"],
+                         {"status": "failed", "errors": ["receipt mismatch"]})
+
     def test_unready_runtime_refuses_before_any_attempt_side_effect(self):
         diagnostic = {"state": "package_missing", "source": "managed", "remedy": "repair"}
         with patch("delivery_gateway.require_ready", side_effect=MafRuntimeUnready(diagnostic)):
