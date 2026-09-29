@@ -387,6 +387,12 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
         raise ContractError("producer is not an approved editor")
     if any(item not in by_id or by_id[item]["capabilities"] != ["read"] for item in verifiers) or set(producers) & set(verifiers):
         raise ContractError("verifier is not an independent read-only specialist")
+    verification = manifest.get("verification") or {}
+    designated_verifier = verification.get("verifier_assignment")
+    evidence_collector = verification.get("evidence_collector_assignment")
+    if (designated_verifier not in verifiers or evidence_collector in verifiers
+            or evidence_collector == designated_verifier):
+        raise ContractError("job verifier set conflicts with independent orchestration roles")
     # The execution projection may narrow the canonical Charter, never widen
     # it. Provider, role cardinality, limits, and producer/verifier separation
     # are proven before an attempt or grant exists.

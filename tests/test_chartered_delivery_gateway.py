@@ -67,7 +67,9 @@ class CharteredFixture(unittest.TestCase):
         self.manifest = {"assignments": [
             {"id": "magentic-manager", "lane": "implement", "role": "delivery-lead", "execution": {"provider": "claude", "model": "manager"}},
             {"id": "editor", "lane": "implement", "role": "lead-developer", "execution": {"provider": "codex", "model": "editor-model"}, "read_only": False, "write_scopes": ["target.py"]},
-            {"id": "verifier", "lane": "implement", "role": "test-engineer", "execution": {"provider": "ollama", "model": "local-model"}, "read_only": True, "write_scopes": []}]}
+            {"id": "verifier", "lane": "implement", "role": "test-engineer", "execution": {"provider": "ollama", "model": "local-model"}, "read_only": True, "write_scopes": []}],
+            "verification": {"producer_assignments": ["editor"], "evidence_collector_assignment": "editor",
+                             "verifier_assignment": "verifier", "independent": True}}
         (self.run / "requirements.md").write_text("requirements")
         (self.run / "acceptance.md").write_text("acceptance")
         definition_digests = {
@@ -296,6 +298,16 @@ class CharteredPreparationTests(CharteredFixture):
         self.assertEqual([r["capabilities"] for r in envelope["roster"]], [["read", "edit"], ["read"]])
         self.assertTrue((attempt_dir / "job-charter.snapshot.json").is_file())
         self.assertEqual(ledger.snapshot(envelope["attempt_id"])["status"], "started")
+
+    def test_evidence_collector_cannot_enter_independent_verifier_set(self):
+        evidence = copy.deepcopy(self.manifest["assignments"][2])
+        evidence["id"] = "evidence"
+        self.manifest["assignments"].append(evidence)
+        self.manifest["verification"]["evidence_collector_assignment"] = "evidence"
+        self.charter["verifier_instance_ids"] = ["evidence", "verifier"]
+        self._write_inputs()
+        with self.assertRaisesRegex(ContractError, "independent orchestration roles"):
+            self.prepare()
 
     def test_v8_prepare_refuses_a_worktree_containing_project_flow(self):
         for label, worktree in (("project root", self.root), ("inside .flow", self.run)):

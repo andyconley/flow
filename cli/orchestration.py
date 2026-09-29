@@ -174,25 +174,7 @@ def _output_exists(
                         item for item in receipt.get("manager_calls", [])
                         if isinstance(item, dict) and item.get("status") == "completed"
                     ]
-                    alternative_verifier_bound = False
-                    if role in {"quality-reviewer", "test-engineer"}:
-                        envelope_path = receipt_path.parent / "envelope.json"
-                        envelope = json.loads(envelope_path.read_text())
-                        verifier_ids = set((envelope.get("job_contract") or {}).get("verifier_instance_ids") or [])
-                        passed_action_ids = {
-                            item.get("action_id") for item in receipt.get("verifier_evaluations", [])
-                            if isinstance(item, dict) and item.get("outcome") == "valid_pass"
-                        }
-                        alternative_verifier_bound = binding in verifier_ids and any(
-                            item.get("action_id") in passed_action_ids
-                            and item.get("status") == "completed"
-                            and isinstance(item.get("request"), dict)
-                            and item["request"].get("instance_id") in verifier_ids
-                            for item in receipt.get("actions", []) if isinstance(item, dict)
-                        )
-                    bound = (bool(completed_manager_calls)
-                             if role == "delivery-lead" and subject == "magentic-manager"
-                             else bool(completed_actions) or alternative_verifier_bound)
+                    bound = bool(completed_manager_calls) if role == "delivery-lead" and subject == "magentic-manager" else bool(completed_actions)
                     if binding != subject or not bound:
                         _finding(findings, field, subject, "receipt-assignment-binding", "receipt-backed output is not bound to a completed result for this assignment", "declare receipt_assignment_id equal to the assignment id and complete that bound action")
             except (VerifyRefused, OSError, ValueError, json.JSONDecodeError) as exc:
