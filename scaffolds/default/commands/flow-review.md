@@ -42,13 +42,22 @@ Review must enter and leave the lane through the CLI:
 flow run status <work-id> --json
 # If state is handback_ready:
 flow run transition <work-id> start-review
-# If state is reviewing, continue without writing another transition.
+# A completed scout enters reviewing through start-scout-review; in either
+# reviewing case, continue without writing another transition.
 flow run transition <work-id> accept-review \
   --artifact review=.flow/runs/<work-id>/review.md
 ```
 
+For a scout review, the registered `scout_summary` is the approved scope,
+acceptance intent, implementation handback, and validation inventory. Read it
+as the original intent source required by this command's hard gate.
+
 Do not produce an archive-ready acceptance claim until `accept-review`
 succeeds. If review requests changes, do not advance the run to archive.
+For a scout review, use `request-scout-refinement` rather than
+`request-refinement`; the corrected scout writes a fresh Scout Summary and
+uses `start-scout-review` again. If the work no longer meets the Scout-Size
+Criteria, escalate it to `flow-plan` instead.
 
 ## Orchestration safety
 

@@ -41,19 +41,21 @@ flow run transition <work-id> start-definition \
   --artifact scout_summary=.flow/runs/<work-id>/scout-summary.md
 ```
 
-If scout work completes and is archived without escalation, create only the
-minimal closure envelope:
+If scout work completes, hand it directly to structured review by creating the
+minimal review envelope:
 
 ```bash
-flow run transition <work-id> archive-scout \
-  --artifact scout_summary=.flow/runs/<work-id>/scout-summary.md \
-  --disposition capability_gaps=<recorded|n/a> \
-  --disposition memory=<updated|n/a>
+flow run transition <work-id> start-scout-review \
+  --artifact scout_summary=.flow/runs/<work-id>/scout-summary.md
 ```
+
+Then invoke `flow-review` immediately. Do not stop at the Scout Summary and do
+not accept or archive the review automatically. `archive-scout` remains a
+legacy compatibility transition, not the normal scout completion path.
 
 ## Orchestration safety
 
-Ordinary scouts remain lightweight. If a scout delegates or mutates shared external state, follow `standards/orchestration.md`, create the canonical manifest, run `flow run validate-orchestration <work-id> --stage dispatch` before the action, and pass `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` to `archive-scout`; closure conditionally validates acceptance.
+Ordinary scouts remain lightweight. If a scout delegates or mutates shared external state, follow `standards/orchestration.md`, create the canonical manifest, run `flow run validate-orchestration <work-id> --stage dispatch` before the action, and pass `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` to `start-scout-review`; review acceptance validates it.
 
 ## Scout-Size Criteria
 
@@ -76,7 +78,8 @@ If any criterion fails, do not start scout. Escalate to `flow-plan` to shape the
 4. **Mid-flight check:** if any Scout-Size Criterion stops holding (e.g., the change is touching a second primary file, a new abstraction is forming, validation is running long), stop and route to `flow-plan` with what you've learned. Do not silently continue.
 5. Validate at the smallest sufficient level.
 6. **Commit per Conventional Commits.** A scout change is a single logical commit; use the message format defined in `standards/git-commits.md` (type prefix required; `fix`/`docs`/`test`/`refactor`/`chore` are the most common types in scout mode).
-7. Return concise handback.
+7. Write the concise Scout Summary to `.flow/runs/<work-id>/scout-summary.md`.
+8. Run `start-scout-review` with that artifact and immediately invoke `flow-review`.
 
 ## Rules
 
@@ -94,6 +97,9 @@ If any criterion fails, do not start scout. Escalate to `flow-plan` to shape the
 
 ### Scope
 - [What changed]
+
+### Acceptance
+- [The requested observable behavior this scout must satisfy]
 
 ### Validation
 - [What was checked]
@@ -132,4 +138,5 @@ Before leaving `flow-scout`, confirm:
 
 ## Finish Criteria
 
-`flow-scout` is done when a narrow change is completed, validated, and handed back without accumulating hidden complexity.
+`flow-scout` is done when a narrow change is completed, validated, recorded in
+the review envelope, and control has passed immediately to `flow-review`.

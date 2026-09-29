@@ -603,6 +603,35 @@ class OrchestrationCliTests(FlowCliHarness):
         self.assertEqual(invalid.returncode, 1)
         self.assertEqual(json.loads(invalid.stdout)["findings"][0]["rule"], "valid-json")
 
+    def test_manifest_backed_scout_review_still_validates_acceptance(self) -> None:
+        self.setup_project()
+        work_id = "scout-manifest"
+        self._write_valid_manifest(work_id)
+        run_dir = self.repo / ".flow" / "runs" / work_id
+        (run_dir / "scout-summary.md").write_text("# Scout Summary\n")
+        (run_dir / "review.md").write_text("# Review\n\nAccepted.\n")
+        manifest = run_dir / "orchestration.json"
+        manifest.write_text("{broken")
+        self.assert_ok(self.run_flow(
+            "run", "transition", work_id, "start-scout-review",
+            "--artifact", f"scout_summary=.flow/runs/{work_id}/scout-summary.md",
+            "--artifact", f"orchestration_manifest=.flow/runs/{work_id}/orchestration.json",
+        ))
+        before = ((run_dir / "run.json").read_bytes(), (run_dir / "events.jsonl").read_bytes())
+        refused = self.run_flow(
+            "run", "transition", work_id, "accept-review",
+            "--artifact", f"review=.flow/runs/{work_id}/review.md",
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertEqual(before, ((run_dir / "run.json").read_bytes(),
+                                  (run_dir / "events.jsonl").read_bytes()))
+
+        self._write_valid_manifest(work_id)
+        self.assert_ok(self.run_flow(
+            "run", "transition", work_id, "accept-review",
+            "--artifact", f"review=.flow/runs/{work_id}/review.md",
+        ))
+
     def test_work_id_traversal_is_refused_without_writing(self) -> None:
         self.setup_project()
         escaped = self.repo.parent / "escaped-run"
@@ -1278,6 +1307,101 @@ class FlowCliTests(FlowCliHarness):
         self.assertEqual(payload["state"], "archived")
         self.assertEqual(payload["lane"], "scout")
 
+    def test_run_scout_completion_enters_review_and_requires_acceptance(self) -> None:
+        self.setup_project()
+
+        refused_entry = self.run_flow(
+            "run", "transition", "missing-summary", "start-scout-review",
+        )
+        self.assertEqual(refused_entry.returncode, 1)
+
+        missing_file = self.run_flow(
+            "run", "transition", "missing-summary-file", "start-scout-review",
+            "--artifact", "scout_summary=.flow/runs/missing-summary-file/scout-summary.md",
+        )
+        self.assertEqual(missing_file.returncode, 1)
+
+        run_dir = self.repo / ".flow" / "runs" / "scout-fix"
+        run_dir.mkdir(parents=True)
+        (run_dir / "scout-summary.md").write_text("# Scout Summary\n")
+
+        entered = self.run_flow(
+            "run", "transition", "scout-fix", "start-scout-review",
+            "--artifact", "scout_summary=.flow/runs/scout-fix/scout-summary.md",
+        )
+
+        self.assert_ok(entered)
+        payload = json.loads(self.run_flow("run", "status", "scout-fix", "--json").stdout)
+        self.assertEqual(payload["state"], "reviewing")
+        self.assertEqual(payload["lane"], "review")
+        self.assertEqual(payload["artifacts"]["scout_summary"],
+                         ".flow/runs/scout-fix/scout-summary.md")
+        refused = self.run_flow(
+            "run", "transition", "scout-fix", "archive",
+            "--disposition", "capability_gaps=n/a", "--disposition", "memory=n/a",
+        )
+        self.assertEqual(refused.returncode, 1)
+        before = ((run_dir / "run.json").read_bytes(), (run_dir / "events.jsonl").read_bytes())
+        missing_review = self.run_flow(
+            "run", "transition", "scout-fix", "accept-review",
+            "--artifact", "review=.flow/runs/scout-fix/review.md",
+        )
+        self.assertEqual(missing_review.returncode, 1)
+        self.assertEqual(before, ((run_dir / "run.json").read_bytes(),
+                                  (run_dir / "events.jsonl").read_bytes()))
+        (run_dir / "review.md").write_text("# Review\n\nAccepted.\n")
+        self.assert_ok(self.run_flow(
+            "run", "transition", "scout-fix", "accept-review",
+            "--artifact", "review=.flow/runs/scout-fix/review.md",
+        ))
+        self.assert_ok(self.run_flow("run", "verify", "scout-fix"))
+
+    def test_scout_review_refinement_returns_to_scout_and_reenters_review(self) -> None:
+        self.setup_project()
+        work_id = "scout-refinement"
+        run_dir = self.repo / ".flow" / "runs" / work_id
+        run_dir.mkdir(parents=True)
+        summary = run_dir / "scout-summary.md"
+        summary.write_text("# Scout Summary\n\nFirst handback.\n")
+        entry = (
+            "run", "transition", work_id, "start-scout-review",
+            "--artifact", f"scout_summary=.flow/runs/{work_id}/scout-summary.md",
+        )
+        self.assert_ok(self.run_flow(*entry))
+        events_path = run_dir / "events.jsonl"
+        before_retry = events_path.read_bytes()
+        self.assert_ok(self.run_flow(*entry))
+        self.assertEqual(before_retry, events_path.read_bytes())
+        refused_amendment = self.run_flow(
+            *entry,
+            "--artifact", f"orchestration_manifest=.flow/runs/{work_id}/orchestration.json",
+        )
+        self.assertEqual(refused_amendment.returncode, 1)
+        self.assertEqual(before_retry, events_path.read_bytes())
+
+        wrong_refinement = self.run_flow(
+            "run", "transition", work_id, "request-refinement",
+        )
+        self.assertEqual(wrong_refinement.returncode, 1)
+        (run_dir / "review.md").write_text("# Review\n\nNeeds refinement.\n")
+        self.assert_ok(self.run_flow(
+            "run", "transition", work_id, "request-scout-refinement",
+            "--artifact", f"review=.flow/runs/{work_id}/review.md",
+        ))
+        payload = json.loads(self.run_flow("run", "status", work_id, "--json").stdout)
+        self.assertEqual((payload["state"], payload["lane"]), ("scouting", "scout"))
+        self.assertNotIn("review", payload["artifacts"])
+        self.assertNotIn("scout_summary", payload["artifacts"])
+
+        summary.write_text("# Scout Summary\n\nCorrected handback.\n")
+        self.assert_ok(self.run_flow(*entry))
+        payload = json.loads(self.run_flow("run", "status", work_id, "--json").stdout)
+        self.assertEqual((payload["state"], payload["lane"]), ("reviewing", "review"))
+        events = [json.loads(line)["event"] for line in events_path.read_text().splitlines()]
+        self.assertEqual(events, [
+            "start-scout-review", "request-scout-refinement", "start-scout-review",
+        ])
+
     def test_run_pause_and_resume_returns_to_prior_state(self) -> None:
         self.setup_project()
         self.assert_ok(self.run_flow("run", "transition", "demo", "start-definition"))
@@ -1306,7 +1430,7 @@ class FlowCliTests(FlowCliHarness):
             "flow-implement.md": "flow run transition <work-id> start-implementation",
             "flow-review.md": "flow run transition <work-id> start-review",
             "flow-archive.md": "flow run transition <work-id> archive",
-            "flow-scout.md": "flow run transition <work-id> archive-scout",
+            "flow-scout.md": "flow run transition <work-id> start-scout-review",
             "flow-status.md": "flow run list",
             "flow-resume.md": "flow run verify",
         }

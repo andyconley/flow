@@ -289,7 +289,9 @@ For revision-2 runs, `approve-definition` must record `requirements`, `acceptanc
 - `start-implementation`
 - `mark-handback-ready` — requires `--artifact implementation_evidence=...` and `--artifact handback=...`
 - `start-review`
+- `start-scout-review` — creates the minimal scout review envelope, requires a current-run regular Scout Summary via `--artifact scout_summary=...`, and enters `reviewing`
 - `request-refinement` — returns a run from review to implementation when findings require changes
+- `request-scout-refinement` — returns a scout review to `scouting`; a fresh Scout Summary can then re-enter review through `start-scout-review`
 - `accept-review` — requires `--artifact review=...`
 - `archive` — requires `--disposition capability_gaps=...` and `--disposition memory=...`
 
@@ -298,13 +300,13 @@ Support events:
 - `pause`
 - `block`
 - `resume`
-- `archive-scout` — creates the minimal scout closure envelope and requires `--artifact scout_summary=...`, `--disposition capability_gaps=...`, and `--disposition memory=...`
+- `archive-scout` — legacy compatibility path that creates a minimal scout closure envelope without review
 
 `flow run transition` is the only command that writes lifecycle state. `/flow-*` commands call it when they cross gates; they do not hand-edit `run.json`.
 
 `flow run amend-orchestration <work-id> --replacement <run-local-json> --reason <text> --approved-by-user` replaces a sealed orchestration manifest only after explicit user approval. It preserves the prior bytes and an append-only digest-linked amendment record, validates the replacement before activation, and leaves the run in its current lifecycle state.
 
-New runs are protocol revision 2 while `run.json` remains schema 1. Their definition, solution, and plan approvals require `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` and dispatch validation. Handback and review acceptance re-run the later stages. Runs without `protocol_revision` are revision 1 and retain the previous behavior. A scout remains lightweight unless it supplies an orchestration manifest, in which case `archive-scout` validates acceptance.
+New runs are protocol revision 2 while `run.json` remains schema 1. Their definition, solution, and plan approvals require `--artifact orchestration_manifest=.flow/runs/<work-id>/orchestration.json` and dispatch validation. Handback and review acceptance re-run the later stages. Runs without `protocol_revision` are revision 1 and retain the previous behavior. A scout remains lightweight, enters review through `start-scout-review`, and relies on `accept-review` for orchestration acceptance when it supplies a manifest.
 
 ### `flow model context`
 

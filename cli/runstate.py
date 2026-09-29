@@ -37,6 +37,7 @@ STATE_PLANNING = "planning"
 STATE_PLAN_APPROVED = "plan_approved"
 STATE_IMPLEMENTING = "implementing"
 STATE_HANDBACK_READY = "handback_ready"
+STATE_SCOUTING = "scouting"
 STATE_REVIEWING = "reviewing"
 STATE_REVIEW_ACCEPTED = "review_accepted"
 STATE_ARCHIVED = "archived"
@@ -54,6 +55,7 @@ STATE_LANES = {
     STATE_PLAN_APPROVED: "plan",
     STATE_IMPLEMENTING: "implement",
     STATE_HANDBACK_READY: "implement",
+    STATE_SCOUTING: "scout",
     STATE_REVIEWING: "review",
     STATE_REVIEW_ACCEPTED: "review",
     STATE_ARCHIVED: "archive",
@@ -136,12 +138,27 @@ TRANSITIONS: dict[str, Transition] = {
         "review",
         gate="implementation handback before review",
     ),
+    "start-scout-review": Transition(
+        "start-scout-review",
+        (None, STATE_SCOUTING),
+        STATE_REVIEWING,
+        "review",
+        required_artifacts=("scout_summary",),
+        gate="scout handback before review",
+    ),
     "request-refinement": Transition(
         "request-refinement",
         (STATE_REVIEWING,),
         STATE_IMPLEMENTING,
         "implement",
         gate="review findings before implementation refinement",
+    ),
+    "request-scout-refinement": Transition(
+        "request-scout-refinement",
+        (STATE_REVIEWING,),
+        STATE_SCOUTING,
+        "scout",
+        gate="review findings before scout refinement",
     ),
     "accept-review": Transition(
         "accept-review",
@@ -179,6 +196,7 @@ TRANSITIONS: dict[str, Transition] = {
             STATE_PLAN_APPROVED,
             STATE_IMPLEMENTING,
             STATE_HANDBACK_READY,
+            STATE_SCOUTING,
             STATE_REVIEWING,
             STATE_REVIEW_ACCEPTED,
         ),
@@ -196,6 +214,7 @@ TRANSITIONS: dict[str, Transition] = {
             STATE_PLAN_APPROVED,
             STATE_IMPLEMENTING,
             STATE_HANDBACK_READY,
+            STATE_SCOUTING,
             STATE_REVIEWING,
             STATE_REVIEW_ACCEPTED,
         ),
@@ -401,6 +420,14 @@ def _orchestration_gate_errors(
 
     stage = ORCHESTRATION_STAGES.get(event_name)
     if revision == PROTOCOL_REVISION_CURRENT and stage:
+        lightweight_scout_review = (
+            event_name == "accept-review"
+            and "start-scout-review" in payload.get("gates", {})
+            and payload.get("artifacts", {}).get("scout_summary")
+            and not declared
+        )
+        if lightweight_scout_review:
+            return []
         if not declared:
             return [f"missing for orchestration {stage}: artifact:orchestration_manifest"]
         if declared != expected_relative:
@@ -500,6 +527,28 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
     return errors
 
 
+def _scout_artifact_errors(
+    work_id: str, event_name: str, payload: dict[str, Any], *, root: Path | None = None,
+) -> list[str]:
+    artifact = None
+    if event_name == "start-scout-review":
+        artifact = "scout_summary"
+    elif event_name == "accept-review" and "start-scout-review" in payload.get("gates", {}):
+        artifact = "review"
+    if artifact is None:
+        return []
+    project_root = (root or repo_root()).resolve()
+    relative = payload.get("artifacts", {}).get(artifact)
+    expected_prefix = f".flow/runs/{work_id}/"
+    if not isinstance(relative, str) or not relative.startswith(expected_prefix):
+        return [f"scout {artifact} must use a current-run artifact"]
+    path = project_root / relative
+    if (not path.is_file() or path.is_symlink()
+            or not path.resolve().is_relative_to(project_root / ".flow" / "runs" / work_id)):
+        return [f"scout {artifact} must be a current-run regular file"]
+    return []
+
+
 def apply_transition(
     work_id: str,
     event_name: str,
@@ -551,6 +600,26 @@ def apply_transition(
     transition = TRANSITIONS[event_name]
     current = _load_run(work_id, root)
     current_state = current.get("state") if current else None
+    is_scout_review = bool(current and "start-scout-review" in current.get("gates", {}))
+    if event_name == "start-scout-review" and current_state == STATE_REVIEWING and is_scout_review:
+        scout_names = {"scout_summary", "orchestration_manifest"}
+        expected = {name: value for name, value in current.get("artifacts", {}).items()
+                    if name in scout_names}
+        requested = {name: value for name, value in (artifacts or {}).items()
+                     if name in scout_names}
+        if requested == expected:
+            errors = _scout_artifact_errors(
+                work_id, event_name, {**current, "artifacts": {**current.get("artifacts", {}),
+                                                                **(artifacts or {})}}, root=root
+            )
+            if errors:
+                return False, current, errors
+            return True, current, []
+        return False, current, ["start-scout-review retry cannot amend registered scout artifacts"]
+    if event_name == "request-refinement" and is_scout_review:
+        return False, current, ["scout review must use request-scout-refinement"]
+    if event_name == "request-scout-refinement" and not is_scout_review:
+        return False, current or {}, ["request-scout-refinement requires scout review provenance"]
     if current_state not in transition.from_states:
         expected = ", ".join(state or "<new>" for state in transition.from_states)
         actual = current_state or "<new>"
@@ -574,6 +643,9 @@ def apply_transition(
         return False, current or {}, ["orchestration_manifest cannot be replaced after it is recorded"]
     payload["artifacts"].update(artifacts or {})
     payload["dispositions"].update(dispositions or {})
+    if event_name == "request-scout-refinement":
+        payload["artifacts"].pop("review", None)
+        payload["artifacts"].pop("scout_summary", None)
 
     if event_name in {"approve-definition", "approve-solution"} and _protocol_revision(payload) == PROTOCOL_REVISION_CURRENT:
         active_root = (root or repo_root()).resolve()
@@ -603,6 +675,12 @@ def apply_transition(
     if missing:
         gate = f" for {transition.gate}" if transition.gate else ""
         return False, current or {}, [f"missing{gate}: {item}" for item in missing]
+
+    scout_review_errors = _scout_artifact_errors(
+        work_id, event_name, payload, root=root
+    )
+    if scout_review_errors:
+        return False, current or {}, scout_review_errors
 
     if event_name == "approve-plan" and _protocol_revision(payload) == PROTOCOL_REVISION_CURRENT:
         plan_errors = _delivery_plan_errors(work_id, payload, root=root)
