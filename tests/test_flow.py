@@ -3073,6 +3073,7 @@ class FlowCliTests(FlowCliHarness):
         self.assert_ok(result)
         self.assertIn("already at the latest tag", result.stdout)
 
+    @requires_managed_wheelhouse
     def test_update_apply_in_release_mode_swaps_and_records_version(self) -> None:
         fake_home = self.do_install_release()
         remote = self.make_fake_remote_with_tags(["v9.9.9"])
