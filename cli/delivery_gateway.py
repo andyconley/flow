@@ -47,7 +47,7 @@ from codex_worker import call_codex
 from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, run_maf_delivery
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
-from runstate import status as run_status
+from runstate import handoff_to_review, status as run_status
 from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch,
                                 verifier_instructions, verifier_provider_task)
 
@@ -628,11 +628,28 @@ def execute_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                                supervisor: Callable[..., dict[str, Any]] | None = None,
                                seal_hook: Callable[[str], None] | None = None) -> dict[str, Any]:
     envelope, task, attempt_dir, ledger = prepare_chartered_delivery(work_id, worktree, source_commit, root=root)
-    return _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
-                                      manager_adapter=manager_adapter, worker_adapter=worker_adapter,
-                                      supervisor=supervisor, test_runner=None, python_path=None,
-                                      generation=envelope["delivery_lead_claim"]["generation"],
-                                      seal_hook=seal_hook)
+    result = _execute_prepared_delivery(envelope, task, attempt_dir, ledger,
+                                        manager_adapter=manager_adapter, worker_adapter=worker_adapter,
+                                        supervisor=supervisor, test_runner=None, python_path=None,
+                                        generation=envelope["delivery_lead_claim"]["generation"],
+                                        seal_hook=seal_hook)
+    if result.get("status") == "completed":
+        project_root = (root or repo_root()).resolve()
+        state = run_status(work_id, root=project_root)
+        authority = _sealed_delivery_authority(project_root / ".flow" / "runs" / work_id,
+                                               state.get("delivery", {}))
+        if "handoff_to_review" in authority["charter"].get("allowed_lifecycle_operations", []):
+            ok, payload, errors = handoff_to_review(
+                work_id,
+                result["attempt_id"],
+                envelope["delivery_lead_claim"]["generation"],
+                root=project_root,
+            )
+            if not ok:
+                return {**result, "status": "handoff_failed", "reason": "; ".join(errors),
+                        "review_handoff": {"status": "failed", "errors": errors}}
+            result = {**result, "review_handoff": {"status": "completed", "state": payload["state"]}}
+    return result
 
 
 def recover_runtime_startup(work_id: str, attempt_id: str, worktree: Path, source_commit: str, *,
