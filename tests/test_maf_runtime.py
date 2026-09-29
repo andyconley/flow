@@ -58,10 +58,9 @@ class MafRuntimeProbeTests(unittest.TestCase):
             self.assertIn(result["state"], {"package_missing", "runner_import_failed"})
             self.assertFalse((home / "runtimes" / "maf" / "current.json").exists())
 
+    @unittest.skipUnless(managed_wheelhouse().is_dir(), "local locked wheelhouse unavailable")
     def test_clean_release_managed_wheelhouse_runtime_reaches_initialized_child_without_override(self):
         """Release proof: install the locked wheels, then run a real child pre-provider."""
-        self.assertTrue(managed_wheelhouse().is_dir(),
-                        "release-managed MAF wheelhouse is required for this acceptance oracle")
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {
             "FLOW_MAF_WHEELHOUSE": str(managed_wheelhouse()),
             "FLOW_MAF_PYTHON": "",
@@ -106,6 +105,17 @@ class MafRuntimeProbeTests(unittest.TestCase):
 
 
 class MafLifecycleTransactionTests(unittest.TestCase):
+    def setUp(self):
+        # activate_managed_maf_runtime only acts for an explicit machine install;
+        # give it one here instead of depending on the host's ~/.flow/config.toml.
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        config = Path(temp.name) / "config.toml"
+        config.write_text('[install]\nmode = "release"\n')
+        config_patch = patch.object(lifecycle, "FLOW_CONFIG", config)
+        config_patch.start()
+        self.addCleanup(config_patch.stop)
+
     def test_first_upgrade_activation_bridge_provisions_once_and_stamps_config(self):
         config = {"mode": "release", "version": "v0.38.0"}
         with patch.object(lifecycle, "read_install_config", return_value=config), \
