@@ -181,3 +181,32 @@ class AutomaticReviewHandoffTests(unittest.TestCase):
         assignment["output"]["receipt_assignment_id"] = "magentic-manager"
         findings = validate_manifest(manifest, self.work_id, "handback", root=self.root)
         self.assertEqual([], findings)
+
+    @unittest.mock.patch("receipt_verify.verify_receipt")
+    def test_alternative_chartered_verifier_valid_pass_satisfies_verifier_outputs(self, verify):
+        verify.return_value = {"attempt_id": self.attempt_id, "exit_code": 0, "status": "completed", "checks": []}
+        manifest_path = self.run_dir / "orchestration.json"
+        manifest = json.loads(manifest_path.read_text())
+        template = manifest["assignments"][0]
+        alternatives = []
+        for verifier_id, role in (("evidence", "test-engineer"), ("verifier", "quality-reviewer")):
+            assignment = json.loads(json.dumps(template))
+            assignment.update({"id": verifier_id, "role": role, "read_only": True, "write_scopes": []})
+            assignment["provider"]["id"] = verifier_id
+            assignment["output"] = {"kind": "receipt-backed", "receipt_assignment_id": verifier_id,
+                                    "path": f".flow/runs/demo/{verifier_id}.md", "format": "markdown"}
+            alternatives.append(assignment)
+        manifest["assignments"].extend(alternatives)
+        manifest["verification"].update({"evidence_collector_assignment": "evidence",
+                                         "verifier_assignment": "verifier", "independent": True})
+        attempt_dir = self.run_dir / "execution" / self.attempt_id
+        envelope = json.loads((attempt_dir / "envelope.json").read_text())
+        envelope["job_contract"] = {"verifier_instance_ids": ["evidence", "verifier"]}
+        (attempt_dir / "envelope.json").write_text(json.dumps(envelope) + "\n")
+        receipt = json.loads((attempt_dir / "receipt.json").read_text())
+        receipt["actions"].append({"action_id": "valid-action", "status": "completed",
+                                   "request": {"assignment_id": "evidence", "instance_id": "evidence"}})
+        receipt["verifier_evaluations"] = [{"action_id": "valid-action", "outcome": "valid_pass"}]
+        (attempt_dir / "receipt.json").write_text(json.dumps(receipt) + "\n")
+        findings = validate_manifest(manifest, self.work_id, "handback", root=self.root)
+        self.assertNotIn("receipt-assignment-binding", {finding.rule for finding in findings})
