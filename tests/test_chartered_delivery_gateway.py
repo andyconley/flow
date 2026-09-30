@@ -1510,6 +1510,24 @@ class ProviderRouteTests(unittest.TestCase):
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "ollama")
                 self.assertEqual(ollama.call_args.kwargs["timeout_seconds"], 45)
 
+    def test_protocol_8_codex_evidence_collector_uses_read_only_sandbox(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            workspace = Path(dirname)
+            envelope = {
+                "execution_protocol_version": 8,
+                "attempt_id": "attempt",
+                "roster": [{"assignment_id": "evidence", "instructions": "collect", "model": "gpt-test",
+                            "provider": "codex"}],
+                "job_contract": {"verifier_instance_ids": [],
+                                 "evidence_collector_instance_ids": ["evidence"]},
+                "limits": {"max_runtime_seconds": 45},
+            }
+            action = {"action_id": "action", "assignment_id": "evidence", "instance_id": "evidence",
+                      "provider": "codex", "task": "collect evidence"}
+            with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
+                self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "codex")
+                self.assertEqual(codex.call_args.kwargs["sandbox"], "read-only")
+
     def test_codex_worker_uses_supported_six_hundred_second_ceiling(self):
         with tempfile.TemporaryDirectory() as dirname:
             workspace = Path(dirname)

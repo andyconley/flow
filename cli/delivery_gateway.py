@@ -1716,11 +1716,14 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         action = _normalized_action(envelope, message)
         is_verifier = action["instance_id"] in job["verifier_instance_ids"] if chartered else action["assignment_id"] == "local-verifier"
         is_producer = action["instance_id"] in job["producer_instance_ids"] if chartered else action["assignment_id"] == "claude-implementer"
+        is_evidence_collector = (chartered
+                                 and action["instance_id"] in job.get("evidence_collector_instance_ids", []))
         if (chartered and action["provider"] in {"claude", "codex"} and not is_producer
+                and not is_evidence_collector
                 and not (structured_verifier and is_verifier and action["provider"] == "codex")):
             raise ContractError("selected editor is not eligible to produce this job")
-        if is_verifier and (edit_evidence is None or test_evidence is None):
-            raise ContractError("Magentic verifier selected before Flow verified Claude repair")
+        if (is_evidence_collector or is_verifier) and (edit_evidence is None or test_evidence is None):
+            raise ContractError("Magentic read-only specialist selected before Flow verified producer repair")
         with authority_guard():
             decision = ledger.decide(envelope, action, generation=generation)
             regranted = False
@@ -1844,6 +1847,17 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                     response_completed = True
                     if structured_verifier and is_verifier:
                         evaluation = _evaluate_verifier(ledger, action, result, verifier_binding, generation=generation)
+                    if is_evidence_collector:
+                        manifest = json.loads((attempt_dir / "manifest.snapshot.json").read_text())
+                        assignment = next(item for item in manifest["assignments"] if item["id"] == action["assignment_id"])
+                        relative = assignment["output"]["path"]
+                        project_root = attempt_dir.parents[4]
+                        run_dir = attempt_dir.parents[1]
+                        target = project_root / relative
+                        if (target.is_symlink() or target.resolve().parent != run_dir.resolve()
+                                or Path(relative).name != target.name):
+                            raise ContractError("evidence collector output path escapes the run")
+                        write_atomic(target, result["output"].rstrip() + "\n", mode=0o600)
                 if is_producer:
                     edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
@@ -2063,9 +2077,12 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7, 8}:
         is_verifier = (envelope["execution_protocol_version"] == 8
                        and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
+        is_evidence_collector = (envelope["execution_protocol_version"] == 8
+                                 and action["instance_id"] in envelope["job_contract"].get(
+                                     "evidence_collector_instance_ids", []))
         return call_codex(instructions=assignment["instructions"],
                           task=action.get("provider_task", action["task"]),
                           workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,
-                          sandbox="read-only" if is_verifier else "workspace-write",
+                          sandbox="read-only" if is_verifier or is_evidence_collector else "workspace-write",
                           on_process_group=on_process_group)
     raise ContractError("selected specialist provider has no approved adapter")
