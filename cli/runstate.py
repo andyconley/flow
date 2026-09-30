@@ -817,7 +817,7 @@ def handoff_to_review(
             return False, current, ["handoff requires the latest sealed execution attempt"]
         report = latest_report
         if report.get("exit_code") != 0 or report.get("status") != "completed":
-            return False, current, ["execution receipt must be a verified completed v8 receipt"]
+            return False, current, ["execution receipt must be verified and completed"]
 
         if state == STATE_IMPLEMENTING:
             if current.get("dispositions", {}).get("handoff_attempt") == attempt_id:

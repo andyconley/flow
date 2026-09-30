@@ -627,7 +627,7 @@ invocation = "flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PAT
 summary = "Create a linked successor only for a sealed zero-send MAF startup failure"
 
 [[help.cli_commands]]
-invocation = "flow run inspect-execution WORK_ID ATTEMPT_ID"
+invocation = "flow run inspect-execution WORK_ID ATTEMPT_ID [--project-root PATH] [--json]"
 summary = "Inspect durable local execution evidence without dispatch"
 
 [[help.cli_commands]]

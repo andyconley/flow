@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -148,11 +149,49 @@ class OllamaEditTests(unittest.TestCase):
             "files": [{"path": "src/value.txt",
                        "old_base64": base64.b64encode(b"before\n").decode("ascii")}],
         }
-        (self.root / ".flow-ollama-edit-journal.json").write_text(json.dumps(journal))
+        journal_path = Path(tempfile.gettempdir()) / (
+            "flow-ollama-edit-" + hashlib.sha256(str(self.root.resolve()).encode()).hexdigest() + ".journal")
+        journal_path.write_text(json.dumps(journal))
         result = self.apply(self.proposal())
         self.assertEqual(target.read_text(), "after\n")
         self.assertEqual(result["changed_paths"], ["src/value.txt"])
-        self.assertFalse((self.root / ".flow-ollama-edit-journal.json").exists())
+        self.assertFalse(journal_path.exists())
+
+    def test_recovery_journal_cannot_escape_current_bundle_and_scope(self) -> None:
+        protected = self.root / "protected.txt"
+        protected.write_text("protected\n")
+        journal_path = Path(tempfile.gettempdir()) / (
+            "flow-ollama-edit-" + hashlib.sha256(str(self.root.resolve()).encode()).hexdigest() + ".journal")
+        journal_path.write_text(json.dumps({
+            "schema_version": 1, "state": "prepared",
+            "files": [{"path": "protected.txt",
+                       "old_base64": base64.b64encode(b"forged\n").decode("ascii")}],
+        }))
+        self.addCleanup(journal_path.unlink, missing_ok=True)
+        with self.assertRaisesRegex(ContractError, "exceeds the current grant"):
+            self.apply(self.proposal())
+        self.assertEqual(protected.read_text(), "protected\n")
+
+    def test_parent_swap_during_commit_rolls_back_through_held_directory(self) -> None:
+        original_parent = self.root / "src-original"
+        escaped_parent = self.root / "escaped"
+        real_replace = __import__("os").replace
+        swapped = False
+
+        def swap_then_replace(source, destination, *args, **kwargs):
+            nonlocal swapped
+            if not swapped and kwargs.get("src_dir_fd") is not None:
+                swapped = True
+                (self.root / "src").rename(original_parent)
+                escaped_parent.mkdir()
+                (self.root / "src").symlink_to(escaped_parent, target_is_directory=True)
+            return real_replace(source, destination, *args, **kwargs)
+
+        with patch("ollama_edit_worker.os.replace", side_effect=swap_then_replace):
+            with self.assertRaisesRegex(ContractError, "parent changed"):
+                self.apply(self.proposal())
+        self.assertEqual((original_parent / "value.txt").read_text(), "before\n")
+        self.assertFalse((escaped_parent / "value.txt").exists())
 
 
 if __name__ == "__main__":

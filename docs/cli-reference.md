@@ -188,8 +188,10 @@ flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [-
 ```
 
 New executions use protocol v9: the approved charter is provider-neutral,
-Flow seals policy/catalog/readiness, MAF nominates logical work, and Flow
-recomputes and durably fences the concrete adapter send. A positive pre-send
+Flow seals policy/catalog/readiness, selects and send-fences the logical manager
+before MAF starts, then MAF nominates logical specialist work and Flow
+recomputes and durably fences that concrete adapter send. Both selections are
+preserved in the ledger and receipt. A positive pre-send
 readiness refusal may select the next eligible candidate; an attempted or
 uncertain send enters recovery and is never automatically replayed.
 
@@ -205,29 +207,13 @@ requires exact local model discovery. Claude and Codex readiness establishes
 only that their bounded CLI adapter is installed; authentication is not read or
 tested by the probe.
 
-The run must be revision 2 and `implementing`, with a valid dispatch-stage `orchestration.json`. The approved `job-charter.json` must be linked through that orchestration manifest — the `magentic-manager` assignment's `input_evidence` must name the charter, or the run's declared `job_charter` artifact must match it. The charter pins the task, read/write paths, test, baseline, and the producer and verifier instance IDs drawn from the manifest's roster.
-
-Direct Claude and Codex edits are Flow-gated: only specialists the charter names as producers may hold edit capability, and their write scope must equal the charter's declared `write_paths`. Ollama performs read-only verification only — an Ollama-backed specialist must be read-only, and every declared verifier must be an independent read-only specialist disjoint from the producers. Native subagents are disabled; the roster runs only the Flow-approved specialists bound in the orchestration manifest.
-
-Provider event volume is not a semantic failure. Flow drains Codex JSONL through a file-backed parser and records Claude event traces as streamed, digest-bound evidence, so a completed valid call is not rejected merely because its event stream crosses a fixed byte threshold. Runtime deadlines, bounded final messages, malformed or ambiguous terminal events, process cleanup, and unknown-send fencing remain enforced.
-
-The gateway checks the managed MAF interpreter after read-only authority and worktree validation, before it creates an attempt. An unavailable runtime returns `maf_runtime_unready` without consuming execution authority. Use `flow runtime install-maf` to repair it; `FLOW_MAF_PYTHON` is an explicit validated override and never silently falls back.
-
-Use `flow runtime readiness --json` for the strict pre-attempt check. A healthy
-result reports the selected interpreter, package/runner identity, protocol
-compatibility, and the runtime digest. A failed result is diagnostic only: no
-execution directory, attempt, grant, receipt, or provider process is created.
-`flow doctor` reports the same missing optional runtime as a warning because
-base Flow remains usable without MAF. `flow runtime smoke --target maf` is the
-strict release/readiness check; `flow runtime smoke --target all` includes it.
-
 ### `flow run recover-runtime-startup <work-id> <attempt-id>`
 
 Create a fresh linked successor only after a sealed v8 MAF startup failure with no manager, worker, verifier, observed, or uncertain send. The original receipt remains immutable. The successor performs normal authority, clean-worktree, and MAF readiness checks; it is not a replay of the predecessor.
 
-### `flow run inspect-execution <work-id> <attempt-id>`
+### `flow run inspect-execution <work-id> <attempt-id> [--project-root <path>] [--json]`
 
-Read the original envelope, action, ordered ledger events, source snapshot checks, checkpoint link, receipt, and missing evidence without creating a new attempt or calling a provider. Use `--json` for structured output. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that Ollama did not receive the request.
+Read the original envelope, actions, ordered ledger events, source snapshot checks, checkpoint links, receipt, and missing evidence without creating a new attempt or calling a provider. `--project-root` selects the project containing `.flow`; otherwise the current repository is used. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that a provider did not receive the request.
 
 ### `flow run inspect-delivery <work-id> [--attempt-id <id>]`
 

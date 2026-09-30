@@ -107,9 +107,8 @@ def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, A
 
 def _validate_and_apply_locked(root: Path, bundle: dict[str, Any], proposal: dict[str, Any], *,
                                write_scopes: list[str], expected_model: str) -> dict[str, Any]:
-    journal = root / ".flow-ollama-edit-journal.json"
-    if journal.exists():
-        _recover_journal(root, journal)
+    key = hashlib.sha256(str(root).encode()).hexdigest()
+    journal = Path(tempfile.gettempdir()) / f"flow-ollama-edit-{key}.journal"
     if set(proposal) != {"schema_version", "model", "bundle_digest", "edits"}:
         raise ContractError("Ollama edit proposal fields are invalid")
     if proposal.get("schema_version") != 1 or proposal.get("bundle_digest") != bundle.get("bundle_digest"):
@@ -121,6 +120,8 @@ def _validate_and_apply_locked(root: Path, bundle: dict[str, Any], proposal: dic
         raise ContractError("Ollama edit count is invalid")
     bundle_files = {item["path"]: item for item in bundle.get("files", [])}
     scopes = [PurePosixPath(item) for item in write_scopes]
+    if journal.exists():
+        _recover_journal(root, journal, bundle_files=bundle_files, scopes=scopes)
     prepared: list[tuple[Path, str, bytes, tuple[int, int, int], tuple[int, int]]] = []
     seen: set[str] = set()
     total = 0
@@ -155,7 +156,7 @@ def _validate_and_apply_locked(root: Path, bundle: dict[str, Any], proposal: dic
     # inode immediately before each replace so a path cannot be swapped for a
     # symlink between validation and application. A failed commit is rolled
     # back from the already captured bytes.
-    staged: list[tuple[Path, Path, bytes, tuple[int, int, int], tuple[int, int]]] = []
+    staged: list[tuple[Path, Path, bytes, tuple[int, int, int], tuple[int, int], int]] = []
     for target, content, old, identity, parent_identity in prepared:
         fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.flow-edit-", suffix=".tmp")
         temp = Path(name)
@@ -165,58 +166,74 @@ def _validate_and_apply_locked(root: Path, bundle: dict[str, Any], proposal: dic
                 handle.flush()
                 os.fsync(handle.fileno())
             os.chmod(temp, identity[2] & 0o7777)
-            staged.append((target, temp, old, identity, parent_identity))
+            parent_fd = os.open(target.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                                | getattr(os, "O_NOFOLLOW", 0))
+            if (os.fstat(parent_fd).st_dev, os.fstat(parent_fd).st_ino) != parent_identity:
+                os.close(parent_fd)
+                raise ContractError("Ollama edit parent changed during staging")
+            staged.append((target, temp, old, identity, parent_identity, parent_fd))
         except BaseException:
             temp.unlink(missing_ok=True)
-            for _target, staged_temp, _old, _identity, _parent_identity in staged:
+            for _target, staged_temp, _old, _identity, _parent_identity, staged_parent_fd in staged:
                 staged_temp.unlink(missing_ok=True)
+                os.close(staged_parent_fd)
             raise
 
     journal_record = {
         "schema_version": 1,
         "state": "prepared",
         "files": [{"path": target.relative_to(root).as_posix(),
-                   "old_base64": base64.b64encode(old).decode("ascii")}
-                  for target, _temp, old, _identity, _parent_identity in staged],
+                  "old_base64": base64.b64encode(old).decode("ascii")}
+                  for target, _temp, old, _identity, _parent_identity, _parent_fd in staged],
     }
     write_atomic(journal, json.dumps(journal_record, sort_keys=True, separators=(",", ":")) + "\n",
                  mode=0o600)
-    _fsync_directory(root)
+    _fsync_directory(journal.parent)
 
-    changed: list[tuple[Path, bytes]] = []
+    changed: list[tuple[Path, bytes, int, int]] = []
+    result_digests: dict[str, str] = {}
     try:
-        for target, temp, old, identity, parent_identity in staged:
+        for target, temp, old, identity, parent_identity, parent_fd in staged:
             parent_stat = target.parent.stat(follow_symlinks=False)
-            stat = target.stat(follow_symlinks=False)
+            stat = os.stat(target.name, dir_fd=parent_fd, follow_symlinks=False)
             if target.parent.is_symlink() or (parent_stat.st_dev, parent_stat.st_ino) != parent_identity \
-                    or target.is_symlink() or (stat.st_dev, stat.st_ino, stat.st_mode) != identity \
-                    or hashlib.sha256(target.read_bytes()).hexdigest() != hashlib.sha256(old).hexdigest():
+                    or (stat.st_dev, stat.st_ino, stat.st_mode) != identity \
+                    or hashlib.sha256(_read_at(parent_fd, target.name)).hexdigest() != hashlib.sha256(old).hexdigest():
                 raise ContractError("Ollama edit target changed during application")
-            os.replace(temp, target)
-            _fsync_directory(target.parent)
-            changed.append((target, old))
+            os.replace(temp.name, target.name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+            os.fsync(parent_fd)
+            changed.append((target, old, parent_fd, identity[2]))
+            result_digests[target.relative_to(root).as_posix()] = hashlib.sha256(
+                _read_at(parent_fd, target.name)).hexdigest()
+            after_parent = target.parent.stat(follow_symlinks=False)
+            if target.parent.is_symlink() or (after_parent.st_dev, after_parent.st_ino) != parent_identity:
+                raise ContractError("Ollama edit parent changed during application")
     except BaseException:
-        for target, old in reversed(changed):
-            write_atomic(target, old.decode("utf-8"))
+        for target, old, parent_fd, mode in reversed(changed):
+            _replace_at(parent_fd, target.name, old, mode)
         journal.unlink(missing_ok=True)
-        _fsync_directory(root)
+        _fsync_directory(journal.parent)
         raise
     finally:
-        for _target, temp, _old, _identity, _parent_identity in staged:
-            temp.unlink(missing_ok=True)
+        for _target, temp, _old, _identity, _parent_identity, parent_fd in staged:
+            try:
+                os.unlink(temp.name, dir_fd=parent_fd)
+            except FileNotFoundError:
+                pass
+            os.close(parent_fd)
     journal.unlink(missing_ok=True)
-    _fsync_directory(root)
+    _fsync_directory(journal.parent)
     return {
         "schema_version": 1,
         "bundle_digest": bundle["bundle_digest"],
         "proposal_digest": digest(proposal),
         "changed_paths": [path.relative_to(root).as_posix() for path, _content, _old, _identity, _parent_identity in prepared],
-        "result_digests": {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                           for path, _content, _old, _identity, _parent_identity in prepared},
+        "result_digests": result_digests,
     }
 
 
-def _recover_journal(root: Path, journal: Path) -> None:
+def _recover_journal(root: Path, journal: Path, *, bundle_files: dict[str, Any],
+                     scopes: list[PurePosixPath]) -> None:
     if journal.is_symlink():
         raise ContractError("Ollama edit recovery journal is unsafe")
     try:
@@ -230,16 +247,62 @@ def _recover_journal(root: Path, journal: Path) -> None:
     for item in record["files"]:
         if not isinstance(item, dict) or set(item) != {"path", "old_base64"}:
             raise ContractError("Ollama edit recovery journal is invalid")
+        raw = item["path"]
+        path = PurePosixPath(raw) if isinstance(raw, str) else PurePosixPath(".")
+        if raw not in bundle_files or not any(path == scope or scope in path.parents for scope in scopes):
+            raise ContractError("Ollama edit recovery journal exceeds the current grant")
         target = _safe_target(root, item["path"], must_exist=True)
         try:
             old = base64.b64decode(item["old_base64"], validate=True)
             old.decode("utf-8")
         except (ValueError, UnicodeDecodeError) as exc:
             raise ContractError("Ollama edit recovery journal is invalid") from exc
-        write_atomic(target, old.decode("utf-8"))
-        _fsync_directory(target.parent)
+        if hashlib.sha256(old).hexdigest() != bundle_files[raw]["sha256"]:
+            raise ContractError("Ollama edit recovery journal is not bound to the source bundle")
+        parent_stat = target.parent.stat(follow_symlinks=False)
+        parent_fd = os.open(target.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                            | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            if ((os.fstat(parent_fd).st_dev, os.fstat(parent_fd).st_ino)
+                    != (parent_stat.st_dev, parent_stat.st_ino)):
+                raise ContractError("Ollama edit recovery parent changed")
+            target_stat = os.stat(target.name, dir_fd=parent_fd, follow_symlinks=False)
+            _replace_at(parent_fd, target.name, old, target_stat.st_mode)
+            after_parent = target.parent.stat(follow_symlinks=False)
+            if (target.parent.is_symlink()
+                    or (after_parent.st_dev, after_parent.st_ino)
+                    != (parent_stat.st_dev, parent_stat.st_ino)):
+                raise ContractError("Ollama edit recovery parent changed")
+        finally:
+            os.close(parent_fd)
     journal.unlink()
-    _fsync_directory(root)
+    _fsync_directory(journal.parent)
+
+
+def _read_at(parent_fd: int, name: str) -> bytes:
+    fd = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent_fd)
+    try:
+        chunks = []
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+
+
+def _replace_at(parent_fd: int, name: str, data: bytes, mode: int) -> None:
+    temp_name = f".{name}.flow-rollback-{os.getpid()}-{os.urandom(8).hex()}"
+    fd = os.open(temp_name, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
+                 mode & 0o7777, dir_fd=parent_fd)
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(temp_name, name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+    os.fsync(parent_fd)
 
 
 def _fsync_directory(path: Path) -> None:

@@ -3347,6 +3347,9 @@ class ExecutionLedger:
         continuations = [ExecutionLedger._continuation_snapshot_locked(db, epoch_id) for (epoch_id,) in continuation_rows]
         envelope = json.loads(a[2])
         snapshot = {"attempt_id": a[0], "work_id": a[1], "envelope": envelope, "status": a[3], "reason": a[4], "receipt_path": a[5],
+                "sealed_receipt_sha256": (db.execute("SELECT sealed_receipt_sha256 FROM attempts WHERE attempt_id=?",
+                                                     (attempt_id,)).fetchone()[0]
+                                           if "sealed_receipt_sha256" in attempt_columns else None),
                 "recovery_version": a[6] if recovery_columns else 1, "owner_generation": a[7] if recovery_columns else 0, "owner_actor": a[8] if recovery_columns else None,
                 "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
                 "failure_class": a[(10 if recovery_columns else 7) if protocol_column else (9 if recovery_columns else 6)] if failure_column else None,

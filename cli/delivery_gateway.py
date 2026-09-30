@@ -2148,10 +2148,16 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         raise ContractError("logical v9 delivery attempt is absent or closed")
     generation = snapshot["owner_generation"]
 
-    def on_action(proposal: dict[str, Any]) -> dict[str, Any]:
+    def dispatch(proposal: dict[str, Any]) -> dict[str, Any]:
+        assignment = next((item for item in envelope["logical_assignments"]
+                           if item["assignment_id"] == proposal["assignment_id"]), None)
+        if assignment is None:
+            raise ContractError("logical v9 proposal names an unknown assignment")
+        sequence = proposal["sequence"] if assignment["requirements"]["operation"] == "manage" \
+            else proposal["sequence"] + 1
         action = make_v9_action(
             envelope, proposal["assignment_id"], proposal["task"],
-            sequence=proposal["sequence"], manager_turn=proposal["manager_turn"],
+            sequence=sequence, manager_turn=proposal["manager_turn"],
         )
         predecessor_selection_id = None
         # A refused readiness check is the sole automatic retry case: it is
@@ -2171,7 +2177,7 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             predecessor_selection_id = action["selection_id"]
             action = make_v9_action(
                 envelope, proposal["assignment_id"], proposal["task"],
-                sequence=proposal["sequence"], manager_turn=proposal["manager_turn"],
+                sequence=sequence, manager_turn=proposal["manager_turn"],
                 decision=successor,
             )
         # The child only needs Flow's outcome. The complete binding/action
@@ -2179,9 +2185,22 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         return {"status": result["status"], "provider_action_id": action["action_id"],
                 "selection_id": action["selection_id"]}
 
-    outcome = (supervisor or run_maf_v9_delivery)(envelope, task, on_action,
+    managers = [item for item in envelope["logical_assignments"]
+                if item["requirements"].get("operation") == "manage"]
+    if len(managers) != 1:
+        raise ContractError("protocol v9 requires exactly one logical manager assignment")
+    manager = managers[0]
+    # Bootstrap the manager through the exact same Flow-owned selection and
+    # send fence before a MAF process exists. The child receives neither the
+    # binding nor provider credentials; the durable receipt carries the proof.
+    dispatch({"assignment_id": manager["assignment_id"],
+              "task": "Bootstrap the bounded provider-neutral delivery workflow.",
+              "sequence": 1, "manager_turn": 0})
+
+    outcome = (supervisor or run_maf_v9_delivery)(envelope, task, dispatch,
                                                     python_path=python_path)
-    # A normal bounded v9 run has exactly one closed action. Seal the receipt
+    # A normal bounded v9 run has the manager bootstrap and one logical edit.
+    # Seal the receipt
     # from the ledger while it is still the source of truth; uncertain sends
     # refuse here and remain in explicit recovery instead.
     attempt_dir = Path(envelope["checkpoint_dir"]).parent
@@ -2256,6 +2275,12 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
                              "acceptance": sources["acceptance"]["sha256"]})
     manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
     generation = 1
+    delivery = state.get("delivery")
+    if (not isinstance(delivery, dict) or delivery.get("owner_status") != "active"
+            or delivery.get("owner_generation") != generation
+            or not isinstance(delivery.get("charter_digest"), str)
+            or not isinstance(delivery.get("lead_claim_digest"), str)):
+        raise ContractError("v9 delivery authority is absent or stale")
     envelope = {
         "schema_version": 1, "execution_protocol_version": 9, "work_id": work_id,
         "attempt_id": attempt_id, "charter_digest": charter_digest,
@@ -2264,8 +2289,11 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         "selection_inputs": {"policy": policy, "catalog": catalog, "availability": normalized_availability},
         "selection_input_digests": {"policy": digest(policy), "catalog": digest(catalog),
                                     "availability": digest(normalized_availability)},
-        "limits": {"max_actions": 1}, "checkpoint_dir": str(attempt_dir / "checkpoints"),
+        "limits": {"max_actions": 2}, "checkpoint_dir": str(attempt_dir / "checkpoints"),
         "charter_sources": sources, "source_commit": source_commit, "worktree": str(worktree),
+        "delivery_charter_digest": delivery["charter_digest"],
+        "delivery_lead_claim_digest": delivery["lead_claim_digest"],
+        "delivery_lead_claim": {"generation": generation},
     }
     envelope["selection_authority"] = seal_selection_authority(
         work_id=work_id, attempt_id=attempt_id, charter_digest=charter_digest,
@@ -2406,7 +2434,13 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
         # from the Shaper-facing manifest.
         requirements_rel = state.get("artifacts", {}).get("requirements")
         _run_file(root, run_dir, requirements_rel or "")
-    return [{"assignment_id": "logical-editor", "role": "lead-developer",
+    return [{"assignment_id": "logical-manager", "role": "delivery-lead",
+             "instructions": "Bootstrap and bound the provider-neutral delivery workflow.",
+             "requirements": {"operation": "manage", "minimum_tier": "working",
+                              "required_capabilities": ["structured_output"], "locality": "any",
+                              "input_bytes": 32768, "output_bytes": 8192, "context_tokens": 32768,
+                              "risk_class": "standard", "independence_required": False}},
+            {"assignment_id": "logical-editor", "role": "lead-developer",
              "instructions": "Apply only the approved charter edit scope and report the result.",
              "requirements": {"operation": "edit", "minimum_tier": "working",
                               "required_capabilities": ["structured_edit"], "locality": "any",

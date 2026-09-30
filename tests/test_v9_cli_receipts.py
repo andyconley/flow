@@ -91,6 +91,21 @@ class V9CliReceiptTests(unittest.TestCase):
         self.assertEqual((code, verified["exit_code"]), (1, 1))
         self.assertIn("digest differs", verified["checks"][0]["detail"])
 
+    def test_inspection_rejects_receipt_rehashed_after_seal(self) -> None:
+        receipt_path = self.attempt_dir / "receipt.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt["termination"] = {"schema_version": 1, "status": "abandoned", "actor": "forged",
+                                  "explanation": "not ledger state", "cause": "forged",
+                                  "owner_generation": 1}
+        from provider_selection import digest
+        receipt["receipt_digest"] = digest({key: value for key, value in receipt.items()
+                                             if key != "receipt_digest"})
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
+        code, result = self._cli("inspect-execution", self.work_id, self.attempt_id,
+                                 "--project-root", str(self.root), "--json")
+        self.assertEqual(code, 2)
+        self.assertIn("ledger-sealed digest", result["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

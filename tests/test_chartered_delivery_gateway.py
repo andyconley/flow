@@ -1573,13 +1573,19 @@ class V9CharteredRouteTests(CharteredFixture):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
-                    "operations": ["edit"], "capabilities": ["structured_edit"],
+                    "operations": ["manage", "edit"],
+                    "capabilities": ["structured_output", "structured_edit"],
                     "cost_class": 0, "enabled": True}]
         availability = [{"candidate_id": "local", "state": "ready",
                          "observed_at": (now - timedelta(seconds=1)).isoformat(),
                          "expires_at": (now + timedelta(minutes=1)).isoformat(),
                          "evidence_code": "model_present", "probe_version": "availability-v1"}]
-        assignments = [{"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit scope.",
+        assignments = [{"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
+                        "requirements": {"operation": "manage", "minimum_tier": "working",
+                                         "required_capabilities": ["structured_output"], "locality": "any",
+                                         "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
+                                         "risk_class": "standard", "independence_required": False}},
+                       {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit scope.",
                         "requirements": {"operation": "edit", "minimum_tier": "working",
                                          "required_capabilities": ["structured_edit"], "locality": "any",
                                          "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
@@ -1601,8 +1607,10 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(result["status"], "completed")
         snapshot = ledger.snapshot(envelope["attempt_id"])
         self.assertEqual(snapshot["execution_protocol_version"], 9)
-        self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
-        self.assertEqual(snapshot["actions"][0]["status"], "completed")
+        self.assertEqual([item["state"] for item in snapshot["provider_selections"]],
+                         ["consumed", "consumed"])
+        self.assertEqual([item["status"] for item in snapshot["actions"]],
+                         ["completed", "completed"])
 
     def test_flow_owned_selection_probe_uses_flow_candidates_and_local_discovery(self):
         overlay = self.root / "user-overlay"
@@ -1611,7 +1619,8 @@ class V9CharteredRouteTests(CharteredFixture):
             "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
             "[[provider_candidates]]\ncandidate_id = \"local\"\nprovider = \"ollama\"\n"
             "model = \"local-model\"\nprovider_family = \"local\"\ntier = \"working\"\n"
-            "locality = \"local\"\noperations = [\"edit\"]\ncapabilities = [\"structured_edit\"]\n"
+            "locality = \"local\"\noperations = [\"manage\", \"edit\"]\n"
+            "capabilities = [\"structured_output\", \"structured_edit\"]\n"
             "cost_class = 0\nenabled = true\n"
         )
         with patch("delivery_gateway.run_status", return_value=self.state), \

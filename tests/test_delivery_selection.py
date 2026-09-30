@@ -318,10 +318,10 @@ class DeliverySelectionTests(unittest.TestCase):
                 return {"status": "completed", "outcome": outcome}
 
             def adapter(binding, action):
-                seen["binding"], seen["action"] = binding, action
+                seen[action["assignment_id"]] = binding
                 snapshot = ledger.snapshot(envelope["attempt_id"])
-                self.assertEqual(snapshot["actions"][0]["status"], "started")
-                self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
+                self.assertEqual(snapshot["actions"][-1]["status"], "started")
+                self.assertEqual(snapshot["provider_selections"][-1]["state"], "consumed")
                 return {"output": "applied"}
 
             outcome = execute_v9_logical_delivery(
@@ -330,8 +330,10 @@ class DeliverySelectionTests(unittest.TestCase):
                 supervisor=supervisor,
             )
             self.assertEqual(outcome["status"], "completed")
-            self.assertEqual(seen["binding"]["candidate_id"], "local")
-            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "completed")
+            self.assertEqual({name: item["candidate_id"] for name, item in seen.items()},
+                             {"manager": "local", "producer": "local"})
+            self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
+                             ["completed", "completed"])
 
     def test_logical_v9_pre_send_refusal_falls_to_hosted_candidate_once(self) -> None:
         """Only a no-I/O local refusal may advance to the next binding."""
@@ -359,9 +361,10 @@ class DeliverySelectionTests(unittest.TestCase):
                 readiness_recheck=readiness, supervisor=supervisor,
             )
             self.assertEqual(outcome["outcome"]["status"], "completed")
-            self.assertEqual(sends, ["claude"])
+            self.assertEqual(sends, ["claude", "claude"])
             selections = ledger.snapshot(envelope["attempt_id"])["provider_selections"]
-            self.assertEqual([item["state"] for item in selections], ["superseded", "consumed"])
+            self.assertEqual([item["state"] for item in selections],
+                             ["superseded", "consumed", "superseded", "consumed"])
 
     def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
         envelope = _envelope()
@@ -380,16 +383,19 @@ class DeliverySelectionTests(unittest.TestCase):
                             "evidence_code": "model_absent"}
                 return {**binding, "state": "ready"}
 
-            def uncertain_hosted(binding, _action):
+            def uncertain_hosted(binding, action):
                 sends.append(binding["candidate_id"])
+                if action["assignment_id"] == "manager":
+                    return {"output": "manager ready"}
                 raise TimeoutError("hosted send outcome unknown")
 
             with self.assertRaises(RecoveryRequired):
                 execute_v9_logical_delivery(envelope, "Implement.", ledger, uncertain_hosted,
                                             readiness_recheck=readiness, supervisor=supervisor)
-            self.assertEqual(sends, ["claude"])
+            self.assertEqual(sends, ["claude", "claude"])
             selections = ledger.snapshot(envelope["attempt_id"])["provider_selections"]
-            self.assertEqual([item["state"] for item in selections], ["superseded", "consumed"])
+            self.assertEqual([item["state"] for item in selections],
+                             ["superseded", "consumed", "superseded", "consumed"])
             self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][-1]["status"], "unknown")
 
     def test_logical_v9_route_runs_the_credentialless_maf_child(self) -> None:
@@ -404,7 +410,26 @@ class DeliverySelectionTests(unittest.TestCase):
                 python_path=sys.executable,
             )
             self.assertEqual(outcome["attempt_id"], envelope["attempt_id"])
-            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "completed")
+            self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
+                             ["completed", "completed"])
+
+    def test_logical_v9_manager_uncertain_send_stops_before_maf(self) -> None:
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            supervisor_calls = []
+            with self.assertRaises(RecoveryRequired):
+                execute_v9_logical_delivery(
+                    envelope, "Implement.", ledger,
+                    lambda _binding, _action: (_ for _ in ()).throw(TimeoutError("unknown")),
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                    supervisor=lambda *_args, **_kwargs: supervisor_calls.append(True),
+                )
+            self.assertEqual(supervisor_calls, [])
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual(snapshot["actions"][0]["request"]["assignment_id"], "manager")
+            self.assertEqual(snapshot["actions"][0]["status"], "unknown")
 
 
 if __name__ == "__main__":

@@ -214,6 +214,16 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
         raise ContractError("protocol v9 requires run protocol revision 2")
     if not _hex_digest(envelope["charter_digest"]) or not _hex_digest(envelope["manifest_digest"]):
         raise ContractError("protocol v9 authority digest is invalid")
+    delivery_fields = ("delivery_charter_digest", "delivery_lead_claim_digest", "delivery_lead_claim")
+    present_delivery_fields = [field in envelope for field in delivery_fields]
+    if any(present_delivery_fields):
+        claim = envelope.get("delivery_lead_claim")
+        if (not all(present_delivery_fields)
+                or not _hex_digest(envelope.get("delivery_charter_digest"))
+                or not _hex_digest(envelope.get("delivery_lead_claim_digest"))
+                or not isinstance(claim, dict) or set(claim) != {"generation"}
+                or type(claim["generation"]) is not int or claim["generation"] < 1):
+            raise ContractError("protocol v9 delivery authority is invalid")
     assignments = envelope["logical_assignments"]
     if not isinstance(assignments, list) or not assignments:
         raise ContractError("protocol v9 requires logical assignments")

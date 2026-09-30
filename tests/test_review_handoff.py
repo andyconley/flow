@@ -111,6 +111,21 @@ class AutomaticReviewHandoffTests(unittest.TestCase):
         self.assertEqual(payload["state"], "implementing")
         self.assertIn("fresh execution attempt", errors[0])
 
+    @unittest.mock.patch("receipt_verify.verify_receipt")
+    def test_protocol_v9_receipt_uses_delivery_authority_for_handoff(self, verify):
+        envelope_path = self.run_dir / "execution" / self.attempt_id / "envelope.json"
+        envelope = json.loads(envelope_path.read_text())
+        envelope["execution_protocol_version"] = 9
+        envelope_path.write_text(json.dumps(envelope) + "\n")
+        verify.return_value = {
+            "attempt_id": self.attempt_id, "exit_code": 0, "status": "completed", "checks": []
+        }
+        ok, payload, errors = handoff_to_review(
+            self.work_id, self.attempt_id, 1, root=self.root
+        )
+        self.assertTrue(ok, errors)
+        self.assertEqual(payload["state"], "reviewing")
+
     def test_missing_charter_authority_refuses_without_lifecycle_write(self):
         charter = dict(self.charter)
         charter["allowed_lifecycle_operations"] = []

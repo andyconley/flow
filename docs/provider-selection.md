@@ -37,15 +37,22 @@ after base eligibility for high-risk verification.
 New chartered jobs use protocol v9. The Shaper supplies a logical assignment;
 Flow loads the administrator-authorized candidate catalog, takes a bounded
 credential-free readiness snapshot, and seals both with the effective policy.
-The supervised MAF child can nominate only the logical assignment and task.
-Flow independently recomputes the concrete binding, reserves it in the ledger,
-rechecks readiness, claims the send durably, and only then calls the adapter.
+Before MAF starts, Flow selects the sealed logical manager, rechecks readiness,
+reserves and claims its send, and records the completed manager action. The
+supervised MAF child then can nominate only the logical specialist assignment
+and task. Flow independently recomputes that concrete binding, reserves it in
+the ledger, rechecks readiness, claims the send durably, and only then calls
+the adapter. The receipt therefore carries both manager and specialist
+selection lineage without exposing either concrete binding to the child.
 
 ```text
 approved logical charter
         |
         v
 Flow policy + catalog + readiness seal
+        |
+        v
+manager selection + atomic send claim
         |
         v
 MAF logical nomination -> Flow recomputation -> ledger reservation
@@ -82,7 +89,7 @@ uncertain and cannot fall forward automatically.
 
 - `flow run execute-chartered-job` starts a new v9 chartered job.
 - `--legacy-v8` is an explicit compatibility route for historical v8 execution contracts.
-- `flow run verify-receipt`, `trace`, and `inspect-delivery` dispatch by receipt protocol and expose v9 selection lineage.
+- `flow run verify-receipt`, `trace`, `inspect-execution`, and `inspect-delivery` dispatch by receipt protocol and expose v9 manager and specialist selection lineage.
 - `cancel-delivery` and `abandon-delivery` seal v9 terminal evidence without replaying an uncertain send.
 - V9 recovery never resends a claimed call. Inspection reports the unresolved action that must be reconciled or terminated.
 

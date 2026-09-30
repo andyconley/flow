@@ -216,7 +216,7 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]` | Run a new provider-neutral v9 charter through Flow-gated Magentic; --legacy-v8 preserves an existing historical v8 contract |
 | `flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]` | Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending |
 | `flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Create a linked successor only for a sealed zero-send MAF startup failure |
-| `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
+| `flow run inspect-execution WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect durable local execution evidence without dispatch |
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
 | `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny a pending v8 expansion request for a paused attempt |
 | `flow run stuck [--json]` | List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only) |
