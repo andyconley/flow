@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "cli"))
 
 from execution_contracts import ContractError  # noqa: E402
 from ollama_edit_worker import _extract_json_object, source_bundle, validate_and_apply  # noqa: E402
-from ollama_manager import call_ollama_manager  # noqa: E402
+from ollama_manager import MANAGER_RESPONSE_SCHEMA, call_ollama_manager  # noqa: E402
 
 
 PROGRESS = {
@@ -40,6 +40,19 @@ class OllamaManagerTests(unittest.TestCase):
         )
         self.assertEqual(result["manager_response"], PROGRESS)
         self.assertEqual(json.loads(result["output"]), PROGRESS)
+
+    @patch("ollama_manager.call_local")
+    def test_live_call_constrains_ollama_to_exact_progress_schema(self, local) -> None:
+        local.return_value = {"output": json.dumps(PROGRESS)}
+        call_ollama_manager([{"role": "user", "content": "coordinate"}],
+                            model="local-model", attempt_id="a")
+        self.assertEqual(local.call_args.kwargs["response_schema"], MANAGER_RESPONSE_SCHEMA)
+        self.assertFalse(MANAGER_RESPONSE_SCHEMA["additionalProperties"])
+        self.assertEqual(
+            set(MANAGER_RESPONSE_SCHEMA["required"]),
+            {"is_request_satisfied", "is_in_loop", "is_progress_being_made",
+             "next_speaker", "instruction_or_question"},
+        )
 
     def test_malformed_or_wrong_model_response_fails_closed(self) -> None:
         with self.assertRaisesRegex(ContractError, "not exact Magentic progress"):

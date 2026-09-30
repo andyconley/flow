@@ -11,6 +11,44 @@ from runner_progress import parse_progress
 
 
 MAX_MANAGER_PROMPT_BYTES = 64 * 1024
+MANAGER_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "is_request_satisfied",
+        "is_in_loop",
+        "is_progress_being_made",
+        "next_speaker",
+        "instruction_or_question",
+    ],
+    "properties": {
+        "is_request_satisfied": {
+            "type": "object", "additionalProperties": False,
+            "required": ["answer"], "properties": {"answer": {"type": "boolean"}},
+        },
+        "is_in_loop": {
+            "type": "object", "additionalProperties": False,
+            "required": ["answer"], "properties": {"answer": {"type": "boolean"}},
+        },
+        "is_progress_being_made": {
+            "type": "object", "additionalProperties": False,
+            "required": ["answer"], "properties": {"answer": {"type": "boolean"}},
+        },
+        "next_speaker": {
+            "type": "object", "additionalProperties": False,
+            "required": ["answer", "reason"],
+            "properties": {
+                "answer": {"type": "string", "minLength": 1},
+                "reason": {"type": "string", "minLength": 1},
+            },
+        },
+        "instruction_or_question": {
+            "type": "object", "additionalProperties": False,
+            "required": ["answer"],
+            "properties": {"answer": {"type": "string", "minLength": 1}},
+        },
+    },
+}
 
 
 def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_id: str,
@@ -32,7 +70,7 @@ def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_i
         "task": serialized,
     }
     result = call_local(envelope, transport=transport, correlation_id=f"{attempt_id}-manager",
-                        timeout_seconds=timeout_seconds)
+                        timeout_seconds=timeout_seconds, response_schema=MANAGER_RESPONSE_SCHEMA)
     output = result["output"]
     parsed = parse_progress(output)
     if parsed.value is None or parsed.canonical is None:
