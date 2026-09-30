@@ -1642,11 +1642,13 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "local")
 
     def test_probe_can_choose_credential_free_hosted_adapter_after_local_refusal(self):
+        empty_overlay = self.root / "empty-user-overlay"
         (self.root / ".flow" / "flow.toml").write_text(
             "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
             "[[provider_candidates]]\ncandidate_id = \"ollama-local\"\nenabled = false\n"
         )
         with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.USER_OVERLAY_DIR", empty_overlay), \
                 patch("delivery_gateway.discover_ollama_models", return_value=set()), \
                 patch("delivery_gateway._hosted_adapter_available", side_effect=lambda provider: provider == "claude"):
             probe = provider_selection_probe("sample", root=self.root)
