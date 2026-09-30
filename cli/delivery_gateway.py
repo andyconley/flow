@@ -2237,6 +2237,8 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     state = run_status(work_id, root=project_root)
     if state.get("state") != "implementing" or state.get("protocol_revision") != 2:
         raise ContractError("v9 delivery requires an implementing revision-2 run")
+    delivery = state.get("delivery")
+    authority = _sealed_delivery_authority(run_dir, delivery)
     valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
     if not valid:
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
@@ -2274,10 +2276,9 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     charter_digest = digest({"requirements": sources["requirements"]["sha256"],
                              "acceptance": sources["acceptance"]["sha256"]})
     manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
-    generation = 1
-    delivery = state.get("delivery")
+    generation = delivery.get("owner_generation") if isinstance(delivery, dict) else None
     if (not isinstance(delivery, dict) or delivery.get("owner_status") != "active"
-            or delivery.get("owner_generation") != generation
+            or type(generation) is not int or generation < 1
             or not isinstance(delivery.get("charter_digest"), str)
             or not isinstance(delivery.get("lead_claim_digest"), str)):
         raise ContractError("v9 delivery authority is absent or stale")
@@ -2305,7 +2306,8 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     # attempt exists. A malformed configuration must leave no send-capable run.
     envelope_digest(envelope)
     ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
-    ledger.create_attempt(envelope)
+    with delivery_authority_guard(run_dir, envelope):
+        ledger.create_attempt(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     return envelope, task, attempt_dir, ledger
 

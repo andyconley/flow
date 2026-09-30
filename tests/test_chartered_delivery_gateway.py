@@ -1590,6 +1590,15 @@ class V9CharteredRouteTests(CharteredFixture):
                                          "required_capabilities": ["structured_edit"], "locality": "any",
                                          "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
                                          "risk_class": "standard", "independence_required": False}}]
+        claim_path = self.run / self.state["delivery"]["lead_claim_path"]
+        claim = json.loads(claim_path.read_text())
+        claim.pop("digest")
+        claim["generation"] = 2
+        claim["digest"] = delivery_digest(claim)
+        claim_path.write_text(json.dumps(claim))
+        self.state["delivery"]["owner_generation"] = 2
+        self.state["delivery"]["lead_claim_digest"] = claim["digest"]
+        (self.run / "run.json").write_text(json.dumps(self.state))
         with patch("delivery_gateway.run_status", return_value=self.state), \
                 patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
             envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
@@ -1607,6 +1616,7 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(result["status"], "completed")
         snapshot = ledger.snapshot(envelope["attempt_id"])
         self.assertEqual(snapshot["execution_protocol_version"], 9)
+        self.assertEqual(envelope["selection_authority"]["generation"], 2)
         self.assertEqual([item["state"] for item in snapshot["provider_selections"]],
                          ["consumed", "consumed"])
         self.assertEqual([item["status"] for item in snapshot["actions"]],
