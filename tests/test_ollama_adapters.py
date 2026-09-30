@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "cli"))
 
 from execution_contracts import ContractError  # noqa: E402
-from ollama_edit_worker import source_bundle, validate_and_apply  # noqa: E402
+from ollama_edit_worker import _extract_json_object, source_bundle, validate_and_apply  # noqa: E402
 from ollama_manager import call_ollama_manager  # noqa: E402
 
 
@@ -111,6 +111,33 @@ class OllamaEditTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "symlink"):
             source_bundle(self.root, ["src/link.txt"])
         self.assertEqual(referent.read_text(), "secret\n")
+
+    def test_surrounding_text_is_not_treated_as_a_structured_proposal(self) -> None:
+        with self.assertRaisesRegex(ContractError, "exactly one JSON object"):
+            _extract_json_object('commentary {"schema_version": 1}')
+        with self.assertRaisesRegex(ContractError, "exactly one JSON object"):
+            _extract_json_object('{"schema_version": 1} trailing')
+
+    def test_multi_file_validation_happens_before_any_workspace_mutation(self) -> None:
+        second = self.root / "src" / "second.txt"
+        second.write_text("second-before\n")
+        bundle = source_bundle(self.root, ["src/value.txt", "src/second.txt"])
+        proposal = {
+            "schema_version": 1,
+            "model": "local-model",
+            "bundle_digest": bundle["bundle_digest"],
+            "edits": [
+                {"path": "src/value.txt", "base_sha256": bundle["files"][1]["sha256"],
+                 "content": "after\n"},
+                {"path": "src/second.txt", "base_sha256": "0" * 64,
+                 "content": "second-after\n"},
+            ],
+        }
+        with self.assertRaisesRegex(ContractError, "stale"):
+            validate_and_apply(self.root, bundle, proposal, write_scopes=["src"],
+                               expected_model="local-model")
+        self.assertEqual((self.root / "src" / "value.txt").read_text(), "before\n")
+        self.assertEqual(second.read_text(), "second-before\n")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
+import tempfile
 from typing import Any, Callable
 
 from execution_contracts import ContractError
@@ -78,17 +80,13 @@ def propose_edits(bundle: dict[str, Any], task: str, *, model: str, attempt_id: 
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
-    decoder = json.JSONDecoder()
-    for index, char in enumerate(text):
-        if char != "{":
-            continue
-        try:
-            value, _end = decoder.raw_decode(text[index:])
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            return value
-    raise ContractError("Ollama edit proposal is malformed JSON")
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ContractError("Ollama edit proposal must be exactly one JSON object") from exc
+    if not isinstance(value, dict):
+        raise ContractError("Ollama edit proposal must be an object")
+    return value
 
 
 def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, Any], *,
@@ -105,7 +103,7 @@ def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, A
         raise ContractError("Ollama edit count is invalid")
     bundle_files = {item["path"]: item for item in bundle.get("files", [])}
     scopes = [PurePosixPath(item) for item in write_scopes]
-    prepared: list[tuple[Path, str, bytes]] = []
+    prepared: list[tuple[Path, str, bytes, tuple[int, int, int]]] = []
     seen: set[str] = set()
     total = 0
     for edit in edits:
@@ -130,24 +128,53 @@ def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, A
         total += len(encoded)
         if total > MAX_EDIT_BYTES:
             raise ContractError("Ollama edits exceed size limit")
-        prepared.append((target, content, current))
-    changed = []
+        stat = target.stat(follow_symlinks=False)
+        prepared.append((target, content, current, (stat.st_dev, stat.st_ino, stat.st_mode)))
+
+    # Stage every replacement before mutating the workspace. Recheck the exact
+    # inode immediately before each replace so a path cannot be swapped for a
+    # symlink between validation and application. A failed commit is rolled
+    # back from the already captured bytes.
+    staged: list[tuple[Path, Path, bytes, tuple[int, int, int]]] = []
+    for target, content, old, identity in prepared:
+        fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.flow-edit-", suffix=".tmp")
+        temp = Path(name)
+        try:
+            with os.fdopen(fd, "w") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(temp, identity[2] & 0o7777)
+            staged.append((target, temp, old, identity))
+        except BaseException:
+            temp.unlink(missing_ok=True)
+            for _target, staged_temp, _old, _identity in staged:
+                staged_temp.unlink(missing_ok=True)
+            raise
+
+    changed: list[tuple[Path, bytes]] = []
     try:
-        for target, content, _old in prepared:
-            write_atomic(target, content)
-            changed.append(target)
+        for target, temp, old, identity in staged:
+            stat = target.stat(follow_symlinks=False)
+            if target.is_symlink() or (stat.st_dev, stat.st_ino, stat.st_mode) != identity \
+                    or hashlib.sha256(target.read_bytes()).hexdigest() != hashlib.sha256(old).hexdigest():
+                raise ContractError("Ollama edit target changed during application")
+            os.replace(temp, target)
+            changed.append((target, old))
     except BaseException:
-        for target, _content, old in prepared:
-            if target in changed:
-                write_atomic(target, old.decode("utf-8"))
+        for target, old in reversed(changed):
+            write_atomic(target, old.decode("utf-8"))
         raise
+    finally:
+        for _target, temp, _old, _identity in staged:
+            temp.unlink(missing_ok=True)
     return {
         "schema_version": 1,
         "bundle_digest": bundle["bundle_digest"],
         "proposal_digest": digest(proposal),
-        "changed_paths": [path.relative_to(root).as_posix() for path, _content, _old in prepared],
+        "changed_paths": [path.relative_to(root).as_posix() for path, _content, _old, _identity in prepared],
         "result_digests": {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                           for path, _content, _old in prepared},
+                           for path, _content, _old, _identity in prepared},
     }
 
 
