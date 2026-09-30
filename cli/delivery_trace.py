@@ -21,6 +21,7 @@ from delivery_termination import control_view, next_command
 from execution_contracts import PAID_PROVIDERS, SENT_STATUSES, ContractError, charge, digest, handback_supported
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
+from selection_receipt import project_selection_trace
 
 TRACE_SCHEMA_VERSION = 1
 # The event that starts a send, and the one that observes its response, per row kind.

@@ -31,6 +31,7 @@ from manager_requests import REQUEST_DIR, list_request_files, render_manager_pro
 from receipt_compare import DERIVED_BLOCKS, ROW_BLOCKS, compare_receipt_rows, describe, expected_blocks
 from verifier_contracts import VERIFIED_HANDOFF_AUTHORITY, verifier_provider_task
 import process_identity
+from selection_receipt import verify_selection_receipt as verify_v9_selection_receipt
 
 SCHEMA_VERSION = 1
 # A v8 attempt never seals ``denied``; such a receipt is refused rather than judged against a missing column.

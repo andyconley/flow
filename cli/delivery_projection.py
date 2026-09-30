@@ -19,6 +19,7 @@ from execution_contracts import (ContractError, DELIVERY_PROTOCOL_VERSION, STRUC
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
 from legacy_delivery import inspect_legacy_delivery
+from selection_receipt import project_selection_trace
 
 
 COMMAND_ONLY_RECOVERY_CHECKS = ("live_run_fence", "worktree_drift", "envelope_file")
