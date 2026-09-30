@@ -347,6 +347,8 @@ class DeliverySelectionTests(unittest.TestCase):
                 supervisor=supervisor,
             )
             self.assertEqual(outcome["status"], "completed")
+            manager_task = ledger.snapshot(envelope["attempt_id"])["actions"][0]["request"]["task"]
+            self.assertIn("next_speaker.answer=logical-editor", manager_task)
             self.assertEqual({name: item["candidate_id"] for name, item in seen.items()},
                              {"manager": "local", "producer": "local"})
             self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],

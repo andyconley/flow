@@ -2196,7 +2196,10 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     # send fence before a MAF process exists. The child receives neither the
     # binding nor provider credentials; the durable receipt carries the proof.
     dispatch({"assignment_id": manager["assignment_id"],
-              "task": "Bootstrap the bounded provider-neutral delivery workflow.",
+              "task": ("Report the bootstrap progress decision: is_request_satisfied.answer=false; "
+                       "is_in_loop.answer=true; is_progress_being_made.answer=true; "
+                       "next_speaker.answer=logical-editor with a nonempty reason that approved work remains; "
+                       "instruction_or_question.answer=Proceed with the approved logical edit."),
               "sequence": 1, "manager_turn": 0})
 
     outcome = (supervisor or run_maf_v9_delivery)(envelope, task, dispatch,
