@@ -333,6 +333,65 @@ class DeliverySelectionTests(unittest.TestCase):
             self.assertEqual(seen["binding"]["candidate_id"], "local")
             self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "completed")
 
+    def test_logical_v9_pre_send_refusal_falls_to_hosted_candidate_once(self) -> None:
+        """Only a no-I/O local refusal may advance to the next binding."""
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            sends = []
+
+            def supervisor(_envelope, task, on_action, **_kwargs):
+                return {"status": "completed", "outcome": on_action({
+                    "attempt_id": envelope["attempt_id"], "assignment_id": "producer",
+                    "task": task, "sequence": 1, "manager_turn": 1,
+                })}
+
+            def readiness(binding):
+                if binding["candidate_id"] == "local":
+                    return {**binding, "state": "unavailable", "no_send_observed": True,
+                            "evidence_code": "model_absent"}
+                return {**binding, "state": "ready"}
+
+            outcome = execute_v9_logical_delivery(
+                envelope, "Implement.", ledger,
+                lambda binding, _action: sends.append(binding["candidate_id"]) or {"output": "done"},
+                readiness_recheck=readiness, supervisor=supervisor,
+            )
+            self.assertEqual(outcome["outcome"]["status"], "completed")
+            self.assertEqual(sends, ["claude"])
+            selections = ledger.snapshot(envelope["attempt_id"])["provider_selections"]
+            self.assertEqual([item["state"] for item in selections], ["superseded", "consumed"])
+
+    def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            sends = []
+
+            def supervisor(_envelope, task, on_action, **_kwargs):
+                return on_action({"attempt_id": envelope["attempt_id"], "assignment_id": "producer",
+                                  "task": task, "sequence": 1, "manager_turn": 1})
+
+            def readiness(binding):
+                if binding["candidate_id"] == "local":
+                    return {**binding, "state": "unavailable", "no_send_observed": True,
+                            "evidence_code": "model_absent"}
+                return {**binding, "state": "ready"}
+
+            def uncertain_hosted(binding, _action):
+                sends.append(binding["candidate_id"])
+                raise TimeoutError("hosted send outcome unknown")
+
+            with self.assertRaises(RecoveryRequired):
+                execute_v9_logical_delivery(envelope, "Implement.", ledger, uncertain_hosted,
+                                            readiness_recheck=readiness, supervisor=supervisor)
+            self.assertEqual(sends, ["claude"])
+            selections = ledger.snapshot(envelope["attempt_id"])["provider_selections"]
+            self.assertEqual([item["state"] for item in selections], ["superseded", "consumed"])
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][-1]["status"], "unknown")
+
     def test_logical_v9_route_runs_the_credentialless_maf_child(self) -> None:
         envelope = _envelope()
         with tempfile.TemporaryDirectory() as tmp:

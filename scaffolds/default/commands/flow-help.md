@@ -105,14 +105,15 @@ These are *lifecycle* commands: the things you do to install, sync, or check flo
 | `flow run execute-local WORK_ID --assignment ID --task-file PATH [--multi-turn]` | Run one guarded local specialist call, or the bounded v2 three-call MAF exercise |
 | `flow run execute-mixed WORK_ID --local-task-file PATH --codex-task-file PATH` | Run one guarded Ollama test-engineer and Codex lead-developer job through MAF |
 | `flow run execute-local-claude WORK_ID --local-task-file PATH --claude-task-file PATH` | Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter |
-| `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Run an approved charter-selected specialist roster through Flow-gated Magentic |
+| `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]` | Run a new provider-neutral v9 charter through Flow-gated Magentic; `--legacy-v8` preserves an existing historical v8 contract |
+| `flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]` | Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending |
 | `flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Create a linked successor only for a sealed zero-send MAF startup failure |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID` | Inspect durable local execution evidence without dispatch |
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
 | `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny a pending v8 expansion request for a paused attempt |
 | `flow run stuck [--json]` | List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only) |
-| `flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]` | Verify a sealed v8 receipt offline against the ledger, sealed authority, checkpoints and evidence; exits 1 on any failed check, 2 when it cannot run (read-only) |
-| `flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]` | Show each call's grant history, provider session, checkpoint, process group, timing and usage for a v8 attempt and its lineage, led by why it is stuck (read-only) |
+| `flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]` | Verify a sealed v8 or v9 receipt offline; v9 recomputes selection and exact ledger closure (read-only) |
+| `flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]` | Show protocol-specific call and selection lineage, including v9 fallback and recovery state (read-only) |
 | `flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME` | Recover a v8 attempt (after a decision, an interruption, or a pause) under a fenced claim; the actor is recorded |
 | `flow run cancel-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Ask a live v8 parent to stop; it kills its recorded processes and seals the attempt cancelled, or reports attempt_finished |
 | `flow run abandon-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Reap a stuck v8 attempt's recorded processes and seal it abandoned, keeping every uncertain send uncertain |

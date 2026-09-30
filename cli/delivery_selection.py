@@ -122,7 +122,16 @@ def authorize_and_dispatch(
     a durable send claim.
     """
     validate_action(envelope, action)
-    expected = compute_binding(envelope, action["assignment_id"])
+    # A pre-send refusal is a durable, no-I/O fact.  Its successor is still
+    # Flow-derived, but must exclude precisely the candidates already refused
+    # for this logical action.  Never accept an arbitrary child-supplied list.
+    prior_failures = action["selection_decision"].get("prior_no_send_failures", [])
+    if (not isinstance(prior_failures, list) or any(not isinstance(item, str) or not item
+                                                    for item in prior_failures)
+            or len(set(prior_failures)) != len(prior_failures)):
+        raise SelectionDenied("invalid predecessor no-send failures")
+    expected = compute_binding(envelope, action["assignment_id"],
+                               prior_no_send_failures=prior_failures)
     if canonical_bytes(action["selection_decision"]) != canonical_bytes(expected):
         raise SelectionDenied("child selection differs from Flow recomputation")
     binding = expected.get("selected_binding")

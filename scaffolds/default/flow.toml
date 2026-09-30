@@ -30,7 +30,7 @@ enabled = false
 [[provider_candidates]]
 candidate_id = "claude-hosted"
 provider = "claude"
-model = "configured-claude-model"
+model = "claude-sonnet-5"
 provider_family = "anthropic"
 tier = "judgment"
 locality = "hosted"
@@ -42,7 +42,7 @@ enabled = true
 [[provider_candidates]]
 candidate_id = "codex-hosted"
 provider = "codex"
-model = "configured-codex-model"
+model = "gpt-5.6-terra"
 provider_family = "openai"
 tier = "judgment"
 locality = "hosted"

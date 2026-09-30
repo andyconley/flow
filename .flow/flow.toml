@@ -5,3 +5,42 @@ kind = "project"
 
 # Project-specific standards and templates may be wired from the user overlay
 # with [[replaces]] entries. This project currently uses framework defaults.
+
+[provider_selection]
+provider_order = ["ollama", "claude", "codex"]
+
+[[provider_candidates]]
+candidate_id = "ollama-llama31-8b"
+provider = "ollama"
+model = "llama3.1:8b"
+provider_family = "ollama-local"
+tier = "working"
+locality = "local"
+operations = ["manage", "read", "edit", "verify", "collect"]
+capabilities = ["structured_output", "structured_edit", "evidence_collection"]
+cost_class = 0
+enabled = true
+
+[[provider_candidates]]
+candidate_id = "claude-sonnet-hosted"
+provider = "claude"
+model = "claude-sonnet-5"
+provider_family = "anthropic"
+tier = "working"
+locality = "hosted"
+operations = ["manage", "read", "edit", "verify", "collect"]
+capabilities = ["structured_output", "structured_edit", "evidence_collection"]
+cost_class = 1
+enabled = true
+
+[[provider_candidates]]
+candidate_id = "codex-terra-hosted"
+provider = "codex"
+model = "gpt-5.6-terra"
+provider_family = "openai"
+tier = "working"
+locality = "hosted"
+operations = ["manage", "read", "edit", "verify", "collect"]
+capabilities = ["structured_output", "structured_edit", "evidence_collection"]
+cost_class = 1
+enabled = true

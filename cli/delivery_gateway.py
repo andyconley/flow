@@ -6,11 +6,12 @@ import hashlib
 import json
 import os
 import signal
+import shutil
 import sqlite3
 import subprocess
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from contextlib import ExitStack, nullcontext, suppress
 from functools import partial
 from pathlib import Path
@@ -46,9 +47,14 @@ from local_worker import call_local
 from provider_availability import normalize_availability
 from provider_selection import merge_selection_policy
 from selection_authority import seal_selection_authority
+from provider_availability import discover_ollama_models, AvailabilityError
+from flowtoml import read_toml
+from paths import SCAFFOLD_DIR
 from delivery_selection import (authorize_and_dispatch as authorize_v9_and_dispatch,
                                 make_action as make_v9_action)
-from ollama_edit_worker import propose_edits as propose_ollama_edits, validate_and_apply as apply_ollama_edits
+from ollama_edit_worker import (propose_edits as propose_ollama_edits,
+                                source_bundle as ollama_source_bundle,
+                                validate_and_apply as apply_ollama_edits)
 from ollama_manager import call_ollama_manager
 from claude_worker import call_claude
 from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
@@ -2147,10 +2153,27 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             envelope, proposal["assignment_id"], proposal["task"],
             sequence=proposal["sequence"], manager_turn=proposal["manager_turn"],
         )
-        result = execute_v9_selected_action(
-            envelope, action, adapter_send, readiness_recheck=readiness_recheck,
-            ledger=ledger, generation=generation,
-        )
+        predecessor_selection_id = None
+        # A refused readiness check is the sole automatic retry case: it is
+        # positively evidenced to have happened before provider I/O.  Every
+        # adapter failure after a send claim becomes recovery-required instead.
+        while True:
+            result = execute_v9_selected_action(
+                envelope, action, adapter_send, readiness_recheck=readiness_recheck,
+                ledger=ledger, generation=generation,
+                predecessor_selection_id=predecessor_selection_id,
+            )
+            if result["status"] != "pre_send_refused":
+                break
+            successor = result["successor_decision"]
+            if successor.get("selected_binding") is None:
+                raise ContractError("all selected provider candidates refused before send")
+            predecessor_selection_id = action["selection_id"]
+            action = make_v9_action(
+                envelope, proposal["assignment_id"], proposal["task"],
+                sequence=proposal["sequence"], manager_turn=proposal["manager_turn"],
+                decision=successor,
+            )
         # The child only needs Flow's outcome. The complete binding/action
         # remains in the ledger and receipt, rather than echoing it back.
         return {"status": result["status"], "provider_action_id": action["action_id"],
@@ -2169,7 +2192,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         return outcome
     sealed = ledger.seal_v9_attempt(envelope["attempt_id"], "completed", "logical_action_completed",
                                     attempt_dir / "receipt.json", generation=generation)
-    return {**outcome, "receipt_path": sealed["receipt_path"],
+    return {**outcome, "attempt_id": envelope["attempt_id"], "status": "completed",
+            "reason": "logical_action_completed", "receipt_path": sealed["receipt_path"],
             "sealed_receipt_sha256": sealed["sealed_receipt_sha256"]}
 
 
@@ -2180,6 +2204,7 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
                                   administrator_policy: dict[str, Any] | None = None,
                                   project_policy: dict[str, Any] | None = None,
                                   run_policy: dict[str, Any] | None = None,
+                                  effective_policy: dict[str, Any] | None = None,
                                   independence_constraints: list[dict[str, Any]] | None = None,
                                   root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
     """Prepare a sealed, provider-neutral v9 charter attempt.
@@ -2226,7 +2251,7 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         _write_snapshot(attempt_dir / name, path.read_bytes())
     sealed_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     normalized_availability = [normalize_availability(item) for item in availability]
-    policy = merge_selection_policy(framework_policy or {}, administrator_policy, project_policy, run_policy)
+    policy = effective_policy or merge_selection_policy(framework_policy or {}, administrator_policy, project_policy, run_policy)
     charter_digest = digest({"requirements": sources["requirements"]["sha256"],
                              "acceptance": sources["acceptance"]["sha256"]})
     manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
@@ -2255,6 +2280,209 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     ledger.create_attempt(envelope)
     write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
     return envelope, task, attempt_dir, ledger
+
+
+def _hosted_adapter_available(provider: str) -> bool:
+    """Credential-free readiness: only a bounded local adapter executable.
+
+    This intentionally neither contacts a hosted provider nor reads login
+    material. Authentication, model entitlement, and send outcome remain
+    uncertain until the fenced adapter call and therefore cannot trigger a
+    fallback after the send claim.
+    """
+    executable = {"claude": "claude", "codex": "codex"}.get(provider)
+    return executable is not None and shutil.which(executable) is not None
+
+
+def _candidate_readiness(candidate: dict[str, Any], *, local_models: set[str],
+                         local_error: str | None, observed: str, expires: str,
+                         clock: datetime) -> dict[str, Any]:
+    provider, model = candidate.get("provider"), candidate.get("model")
+    enabled = candidate.get("enabled") is True
+    if provider == "ollama":
+        ready = enabled and model in local_models
+        state = "ready" if ready else ("unknown" if local_error else "unavailable")
+        code = "model_present" if ready else (local_error or "model_absent")
+    elif provider in {"claude", "codex"}:
+        ready = enabled and _hosted_adapter_available(provider)
+        state = "ready" if ready else "unavailable"
+        code = "adapter_ready" if ready else "adapter_unavailable"
+    else:
+        state, code = "unavailable", "adapter_unavailable"
+    return normalize_availability({
+        "candidate_id": candidate.get("candidate_id"), "state": state,
+        "observed_at": observed, "expires_at": expires, "evidence_code": code,
+        "probe_version": "availability-v1",
+    }, now=clock)
+
+
+def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None = None) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    """Load the administrator ceiling and bounded readiness facts for v9.
+
+    Project configuration may narrow/replace candidate declarations, while
+    the shipped framework supplies the default ceiling. Discovery never
+    invents candidates or enables a disabled one. Hosted readiness is limited
+    to an executable presence check and performs no credential or network I/O.
+    """
+    framework = read_toml(SCAFFOLD_DIR / "flow.toml")
+    project_path = project_root / ".flow" / "flow.toml"
+    project = read_toml(project_path) if project_path.is_file() else {}
+    raw_catalog = project.get("provider_candidates", framework.get("provider_candidates", []))
+    if not isinstance(raw_catalog, list) or not raw_catalog:
+        raise ContractError("Flow provider_candidates configuration is absent")
+    catalog = [dict(item) for item in raw_catalog if isinstance(item, dict)]
+    if len(catalog) != len(raw_catalog):
+        raise ContractError("Flow provider_candidates configuration is invalid")
+    policy = merge_selection_policy(framework.get("provider_selection", {}), None,
+                                    project.get("provider_selection"))
+    clock = now or datetime.now(timezone.utc)
+    try:
+        local_models = discover_ollama_models()
+        local_error = None
+    except AvailabilityError:
+        local_models, local_error = set(), "probe_failed"
+    observed = clock.isoformat().replace("+00:00", "Z")
+    expires = (clock + timedelta(minutes=2)).isoformat().replace("+00:00", "Z")
+    availability = []
+    for candidate in catalog:
+        availability.append(_candidate_readiness(candidate, local_models=local_models,
+                                                   local_error=local_error, observed=observed,
+                                                   expires=expires, clock=clock))
+    return catalog, policy, availability
+
+
+def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[str, Any]]:
+    """Derive one provider-neutral edit assignment from the approved charter."""
+    run_dir = root / ".flow" / "runs" / work_id
+    state = run_status(work_id, root=root)
+    charter_rel = state.get("artifacts", {}).get("job_charter")
+    if charter_rel:
+        charter = _run_file(root, run_dir, charter_rel)
+        raw = json.loads(charter.read_text())
+        if not isinstance(raw, dict) or not isinstance(raw.get("write_paths"), list) or not raw["write_paths"]:
+            raise ContractError("approved v9 job charter has no edit scope")
+    else:
+        # The diagnostic is useful before delivery preparation has written its
+        # charter. It remains read-only and derives no concrete provider facts
+        # from the Shaper-facing manifest.
+        requirements_rel = state.get("artifacts", {}).get("requirements")
+        _run_file(root, run_dir, requirements_rel or "")
+    return [{"assignment_id": "logical-editor", "role": "lead-developer",
+             "instructions": "Apply only the approved charter edit scope and report the result.",
+             "requirements": {"operation": "edit", "minimum_tier": "working",
+                              "required_capabilities": ["structured_edit"], "locality": "any",
+                              "input_bytes": 65536, "output_bytes": 16384, "context_tokens": 32768,
+                              "risk_class": "standard", "independence_required": False}}]
+
+
+def provider_selection_probe(work_id: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Read-only v9 candidate/readiness diagnostic; it creates no attempt."""
+    project_root = (root or repo_root()).resolve()
+    catalog, policy, availability = flow_owned_v9_selection_inputs(project_root)
+    assignments = logical_assignments_from_charter(work_id, root=project_root)
+    from provider_selection import select_candidate
+    decisions = [{"assignment_id": item["assignment_id"],
+                  "decision": select_candidate(item["requirements"], policy, catalog, availability)}
+                 for item in assignments]
+    return {"schema_version": 1, "work_id": work_id, "policy": policy,
+            "catalog": catalog, "availability": availability, "decisions": decisions}
+
+
+def _v9_readiness_recheck(catalog: list[dict[str, Any]], binding: dict[str, Any]) -> dict[str, Any]:
+    """Refresh only the already-selected adapter before its send claim."""
+    candidate = next((item for item in catalog if item.get("candidate_id") == binding["candidate_id"]), None)
+    if candidate is None:
+        raise ContractError("selected v9 candidate is absent from Flow catalog")
+    clock = datetime.now(timezone.utc)
+    observed = clock.isoformat().replace("+00:00", "Z")
+    expires = (clock + timedelta(minutes=2)).isoformat().replace("+00:00", "Z")
+    try:
+        local_models, local_error = discover_ollama_models(), None
+    except AvailabilityError:
+        local_models, local_error = set(), "probe_failed"
+    record = _candidate_readiness(candidate, local_models=local_models, local_error=local_error,
+                                  observed=observed, expires=expires, clock=clock)
+    # This check contains no adapter call: if it says unavailable, Flow has
+    # positive local evidence that the selected provider was not sent anything.
+    return {**record, "no_send_observed": record["state"] != "ready"}
+
+
+def _v9_adapter_for_operation(envelope: dict[str, Any], *, write_paths: list[str]) -> Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]:
+    """Return the bounded adapter for the selected binding and logical operation."""
+    workspace = Path(envelope["worktree"])
+    assignment_by_id = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
+
+    def send(binding: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+        assignment = assignment_by_id.get(action["assignment_id"])
+        if assignment is None:
+            raise ContractError("v9 action has no logical assignment")
+        operation = assignment["requirements"]["operation"]
+        provider, model = binding["provider"], binding["model"]
+        instructions, task = assignment["instructions"], action["task"]
+        timeout = 60
+        if provider == "ollama":
+            if operation == "edit":
+                bundle = ollama_source_bundle(workspace, write_paths)
+                proposal = propose_ollama_edits(bundle, task, model=model,
+                                                attempt_id=action["attempt_id"], timeout_seconds=timeout)
+                applied = apply_ollama_edits(workspace, bundle, proposal, write_scopes=write_paths,
+                                              expected_model=model)
+                return {"provider": provider, "model": model, "operation": operation, "applied": applied}
+            if operation == "manage":
+                return call_ollama_manager([{"role": "user", "content": task}], model=model,
+                                           attempt_id=action["attempt_id"], timeout_seconds=timeout)
+            return call_local({"provider": provider, "model": model, "attempt_id": action["attempt_id"],
+                               "instructions": instructions, "task": task},
+                              correlation_id=action["action_id"], timeout_seconds=timeout)
+        if provider == "claude":
+            if operation == "edit":
+                return call_claude_edit(instructions=instructions, task=task, workspace=workspace,
+                                        model=model, timeout_seconds=timeout)
+            return call_claude(instructions=instructions, task=task, workspace=workspace,
+                               model=model, timeout_seconds=timeout)
+        if provider == "codex":
+            return call_codex(instructions=instructions, task=task, workspace=workspace, model=model,
+                              timeout_seconds=timeout,
+                              sandbox="workspace-write" if operation == "edit" else "read-only")
+        raise ContractError("selected v9 provider has no bounded adapter")
+
+    return send
+
+
+def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Default live chartered-job route for new Flow work."""
+    project_root = (root or repo_root()).resolve()
+    catalog, policy, availability = flow_owned_v9_selection_inputs(project_root)
+    assignments = logical_assignments_from_charter(work_id, root=project_root)
+    state = run_status(work_id, root=project_root)
+    charter = _run_file(project_root, project_root / ".flow" / "runs" / work_id,
+                        state.get("artifacts", {}).get("job_charter", ""))
+    charter_data = json.loads(charter.read_text())
+    write_paths = charter_data.get("write_paths") if isinstance(charter_data, dict) else None
+    if not isinstance(write_paths, list) or not all(isinstance(path, str) and path for path in write_paths):
+        raise ContractError("approved v9 job charter has invalid edit scope")
+    envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+        work_id, worktree, source_commit, root=project_root, logical_assignments=assignments,
+        catalog=catalog, availability=availability, effective_policy=policy,
+    )
+    result = execute_v9_logical_delivery(
+        envelope, task, ledger, _v9_adapter_for_operation(envelope, write_paths=write_paths),
+        readiness_recheck=lambda binding: _v9_readiness_recheck(catalog, binding),
+    )
+    if result.get("status") != "completed":
+        return {"attempt_id": envelope["attempt_id"], "status": result.get("status", "refused"),
+                "reason": result.get("reason", "logical_delivery_not_completed"),
+                "receipt_path": result.get("receipt_path"), **result}
+    authority = _sealed_delivery_authority(project_root / ".flow" / "runs" / work_id,
+                                           state.get("delivery", {}))
+    if "handoff_to_review" not in authority["charter"].get("allowed_lifecycle_operations", []):
+        return result
+    ok, payload, errors = handoff_to_review(work_id, envelope["attempt_id"],
+                                            envelope["selection_authority"]["generation"], root=project_root)
+    if not ok:
+        return {**result, "status": "handoff_failed", "reason": "; ".join(errors),
+                "review_handoff": {"status": "failed", "errors": errors}}
+    return {**result, "review_handoff": {"status": "completed", "state": payload["state"]}}
 
 
 def v9_recovery_status(work_id: str, attempt_id: str, *, root: Path | None = None) -> dict[str, Any]:

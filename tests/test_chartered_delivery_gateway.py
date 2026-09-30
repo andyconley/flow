@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts, _job_test,
                               _execute_prepared_delivery, _verify_chartered_edit,
                               execute_chartered_delivery, execute_v9_logical_delivery,
-                              prepare_chartered_delivery, prepare_v9_chartered_delivery)
+                              execute_v9_chartered_job, prepare_chartered_delivery, prepare_v9_chartered_delivery,
+                              provider_selection_probe)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, _paths_within_scopes, validate_action, validate_envelope,
@@ -1549,6 +1550,25 @@ class ProviderRouteTests(unittest.TestCase):
 
 
 class V9CharteredRouteTests(CharteredFixture):
+    def test_completed_v9_job_hands_off_to_review_when_charter_authorizes_it(self):
+        self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+        assignments = [{"assignment_id": "logical-editor", "role": "lead-developer",
+                        "instructions": "Edit.", "requirements": {"operation": "edit"}}]
+        envelope = {"attempt_id": "v9-attempt", "worktree": str(self.worktree),
+                    "logical_assignments": assignments, "selection_authority": {"generation": 1}}
+        with patch("delivery_gateway.flow_owned_v9_selection_inputs", return_value=([], {}, [])), \
+                patch("delivery_gateway.logical_assignments_from_charter", return_value=assignments), \
+                patch("delivery_gateway.prepare_v9_chartered_delivery", return_value=(envelope, "task", self.run, None)), \
+                patch("delivery_gateway.execute_v9_logical_delivery", return_value={
+                    "attempt_id": "v9-attempt", "status": "completed", "reason": "done", "receipt_path": "receipt.json"}), \
+                patch("delivery_gateway.handoff_to_review", return_value=(True, {"state": "reviewing"}, [])) as handoff:
+            result = execute_v9_chartered_job("sample", self.worktree, self.commit, root=self.root)
+        handoff.assert_called_once_with("sample", "v9-attempt", 1, root=self.root.resolve())
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["review_handoff"], {"status": "completed", "state": "reviewing"})
+
     def test_prepared_charter_executes_one_logical_maf_action_through_flow_fence(self):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
@@ -1583,6 +1603,40 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(snapshot["execution_protocol_version"], 9)
         self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
         self.assertEqual(snapshot["actions"][0]["status"], "completed")
+
+    def test_flow_owned_selection_probe_uses_project_candidates_and_local_discovery(self):
+        (self.root / ".flow" / "flow.toml").write_text(
+            "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
+            "[[provider_candidates]]\ncandidate_id = \"local\"\nprovider = \"ollama\"\n"
+            "model = \"local-model\"\nprovider_family = \"local\"\ntier = \"working\"\n"
+            "locality = \"local\"\noperations = [\"edit\"]\ncapabilities = [\"structured_edit\"]\n"
+            "cost_class = 0\nenabled = true\n"
+        )
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.discover_ollama_models", return_value={"local-model"}):
+            probe = provider_selection_probe("sample", root=self.root)
+        self.assertEqual(probe["availability"][0]["state"], "ready")
+        self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "local")
+
+    def test_probe_can_choose_credential_free_hosted_adapter_after_local_refusal(self):
+        (self.root / ".flow" / "flow.toml").write_text(
+            "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
+            "[[provider_candidates]]\ncandidate_id = \"local\"\nprovider = \"ollama\"\n"
+            "model = \"missing-local\"\nprovider_family = \"local\"\ntier = \"working\"\n"
+            "locality = \"local\"\noperations = [\"edit\"]\ncapabilities = [\"structured_edit\"]\n"
+            "cost_class = 0\nenabled = true\n\n"
+            "[[provider_candidates]]\ncandidate_id = \"claude\"\nprovider = \"claude\"\n"
+            "model = \"claude-test\"\nprovider_family = \"anthropic\"\ntier = \"working\"\n"
+            "locality = \"hosted\"\noperations = [\"edit\"]\ncapabilities = [\"structured_edit\"]\n"
+            "cost_class = 1\nenabled = true\n"
+        )
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.discover_ollama_models", return_value=set()), \
+                patch("delivery_gateway._hosted_adapter_available", side_effect=lambda provider: provider == "claude"):
+            probe = provider_selection_probe("sample", root=self.root)
+        self.assertEqual([item["state"] for item in probe["availability"]], ["unavailable", "ready"])
+        self.assertEqual(probe["availability"][1]["evidence_code"], "adapter_ready")
+        self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "claude")
 
 
 if __name__ == "__main__":
