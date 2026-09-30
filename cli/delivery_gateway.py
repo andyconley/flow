@@ -43,6 +43,8 @@ from execution_gateway import _effective_specialist_for, _run_file, _write_snaps
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
 from delivery_selection import authorize_and_dispatch as authorize_v9_and_dispatch
+from ollama_edit_worker import propose_edits as propose_ollama_edits, validate_and_apply as apply_ollama_edits
+from ollama_manager import call_ollama_manager
 from claude_worker import call_claude
 from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex

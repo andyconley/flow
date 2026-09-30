@@ -3897,6 +3897,8 @@ class FlowCliTests(FlowCliHarness):
                 "model_advice",
                 "model_policy",
                 "normalize",
+                "ollama_edit_worker",
+                "ollama_manager",
                 "orchestration",
                 "overlay",
                 "paths",
