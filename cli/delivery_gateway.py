@@ -49,6 +49,7 @@ from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, r
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import handoff_to_review, status as run_status
+from runner_limits import MAX_MANAGER_MESSAGES_BYTES
 from verifier_contracts import (VERIFIED_HANDOFF_AUTHORITY, VERIFIER_CONTRACT_INSTRUCTION,
                                 evaluate_candidate, provider_binding_mismatch,
                                 verifier_instructions, verifier_provider_task)
@@ -57,7 +58,6 @@ APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
 MAX_CHARTERED_DIFF_BYTES = 1024 * 1024
-MAX_MANAGER_MESSAGES_BYTES = 256 * 1024
 
 
 def _stream_sha256(path: Path) -> str:

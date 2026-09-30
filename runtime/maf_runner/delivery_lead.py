@@ -16,7 +16,8 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
-from runtime.maf_runner.limits import MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS
+from runtime.maf_runner.limits import (MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGER_MESSAGES_BYTES,
+                                       MAX_MANAGER_ROUNDS, MAX_REPLANS)
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
@@ -24,7 +25,6 @@ SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
-MAX_MANAGER_MESSAGE_BYTES = 48000
 # One progress step gets its first reply plus two retries (ADR 0018).
 PROGRESS_ATTEMPTS = 3
 
@@ -239,7 +239,7 @@ async def _run(start: dict[str, Any]) -> None:
             if manager_round > MAX_MANAGER_ROUNDS:
                 raise PolicyAbort("manager round limit reached")
             serialized = [message.to_dict() for message in messages]
-            if len(json.dumps(serialized, ensure_ascii=False).encode()) > MAX_MANAGER_MESSAGE_BYTES:
+            if len(json.dumps(serialized, ensure_ascii=False).encode()) > MAX_MANAGER_MESSAGES_BYTES:
                 raise PolicyAbort("manager message exceeds transport cap")
             prompt_digest = _digest(serialized)
             request = {"protocol_version": protocol_version, "schema_version": 1,

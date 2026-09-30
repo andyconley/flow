@@ -8,6 +8,10 @@ by path, outside the MAF interpreter.
 
 MAX_MANAGER_CALLS = 12
 MAX_MANAGER_ROUNDS = 6
+# Manager history crosses both the child protocol and the provider adapter.
+# Keep one shared ceiling so the child cannot reject a prompt the parent is
+# explicitly prepared to validate and send.
+MAX_MANAGER_MESSAGES_BYTES = 256 * 1024
 # One Magentic action is one delegation; paid worker calls are a subset.
 MAX_ACTIONS = 6
 MAX_VERIFIER_CALLS = 2
