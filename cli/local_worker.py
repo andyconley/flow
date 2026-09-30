@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
+import socket
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 from typing import Any, Callable
 
-from delivery_cancel import interruptible
+from delivery_cancel import interruptible, run_interruptibly
 from execution_contracts import ContractError
 from verifier_contracts import VERIFIER_OUTPUT_SCHEMA
 
@@ -29,6 +31,25 @@ def _bounded_output(value: str, limit: int = 4096) -> str:
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, file_pointer, code, message, headers, new_url):
         raise RuntimeError("Ollama redirect refused")
+
+
+class _TrackedHTTPHandler(urllib.request.HTTPHandler):
+    """Keeps the request's connection so that a cancel can shut its socket."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.connection: http.client.HTTPConnection | None = None
+
+    def http_open(self, req):
+        def connect(host, **kwargs):
+            self.connection = http.client.HTTPConnection(host, **kwargs)
+            return self.connection
+        return self.do_open(connect, req)
+
+    def abort(self) -> None:
+        sock = self.connection.sock if self.connection is not None else None
+        if sock is not None:
+            sock.shutdown(socket.SHUT_RDWR)
 
 
 def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None = None,
@@ -80,15 +101,23 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
             "Content-Type": "application/json",
             "X-Flow-Correlation-Id": correlation_id or envelope["attempt_id"],
         })
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
-        try:
-            # A cancel breaks the request once; the client socket closes as it unwinds.
-            with interruptible(), opener.open(request, timeout=timeout_seconds) as response:
+        tracked = _TrackedHTTPHandler()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect(), tracked)
+
+        def exchange() -> bytes:
+            with opener.open(request, timeout=timeout_seconds) as response:
                 if response.status != 200:
                     raise RuntimeError(f"Ollama HTTP {response.status}")
-                raw = response.read(MAX_RESPONSE_BYTES + 1)
-                if len(raw) > MAX_RESPONSE_BYTES:
-                    raise RuntimeError("Ollama response exceeds size limit")
+                return response.read(MAX_RESPONSE_BYTES + 1)
+
+        try:
+            # A cancel breaks the request once and shuts its socket. The
+            # exchange runs on a helper thread under a live parent, because a
+            # socket read cannot watch the cancel wakeup pipe.
+            with interruptible():
+                raw = run_interruptibly(exchange, abort=tracked.abort)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise RuntimeError("Ollama response exceeds size limit")
             payload = json.loads(raw)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"local Ollama call failed: {exc}") from exc
