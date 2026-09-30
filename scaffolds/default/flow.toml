@@ -623,6 +623,14 @@ invocation = "flow run provider-selection-probe WORK_ID [--project-root PATH] [-
 summary = "Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending"
 
 [[help.cli_commands]]
+invocation = "flow run v9-recovery-status WORK_ID ATTEMPT_ID [--project-root PATH] [--json]"
+summary = "Inspect whether a protocol v9 attempt requires explicit reconciliation without dispatch"
+
+[[help.cli_commands]]
+invocation = "flow run terminate-v9-delivery WORK_ID ATTEMPT_ID --status cancelled|abandoned --actor ACTOR --explanation TEXT [--project-root PATH] [--json]"
+summary = "Seal an uncertain protocol v9 attempt without replaying provider I/O"
+
+[[help.cli_commands]]
 invocation = "flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]"
 summary = "Create a linked successor only for a sealed zero-send MAF startup failure"
 

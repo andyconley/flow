@@ -215,6 +215,8 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow run execute-local-claude WORK_ID --local-task-file PATH --claude-task-file PATH` | Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter |
 | `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]` | Run a new provider-neutral v9 charter through Flow-gated Magentic; --legacy-v8 preserves an existing historical v8 contract |
 | `flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]` | Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending |
+| `flow run v9-recovery-status WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect whether a protocol v9 attempt requires explicit reconciliation without dispatch |
+| `flow run terminate-v9-delivery WORK_ID ATTEMPT_ID --status cancelled\|abandoned --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Seal an uncertain protocol v9 attempt without replaying provider I/O |
 | `flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Create a linked successor only for a sealed zero-send MAF startup failure |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect durable local execution evidence without dispatch |
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |

@@ -61,7 +61,8 @@ from execution_gateway import continue_resolved_local, execute_local, execute_mu
 from claude_gateway import execute_claude  # noqa: E402
 from delivery_gateway import (decide_expansion, execute_chartered_delivery, execute_delivery,
                               execute_v9_chartered_job, provider_selection_probe, recover_delivery,
-                              recover_runtime_startup, resolve_execution, resume_delivery)  # noqa: E402
+                              recover_runtime_startup, resolve_execution, resume_delivery,
+                              terminate_v9_delivery, v9_recovery_status)  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
 from delivery_trace import TraceError, render_text as render_trace, trace as trace_delivery  # noqa: E402
@@ -644,6 +645,23 @@ def main() -> int:
     run_selection_probe.add_argument("--project-root", type=Path)
     run_selection_probe.add_argument("--json", action="store_true")
 
+    run_v9_status = run_sub.add_parser(
+        "v9-recovery-status", help="show whether a protocol v9 attempt requires explicit reconciliation")
+    run_v9_status.add_argument("work_id")
+    run_v9_status.add_argument("attempt_id")
+    run_v9_status.add_argument("--project-root", type=Path)
+    run_v9_status.add_argument("--json", action="store_true")
+
+    run_v9_terminate = run_sub.add_parser(
+        "terminate-v9-delivery", help="seal an uncertain protocol v9 attempt without replaying provider I/O")
+    run_v9_terminate.add_argument("work_id")
+    run_v9_terminate.add_argument("attempt_id")
+    run_v9_terminate.add_argument("--status", required=True, choices=("cancelled", "abandoned"))
+    run_v9_terminate.add_argument("--actor", required=True)
+    run_v9_terminate.add_argument("--explanation", required=True)
+    run_v9_terminate.add_argument("--project-root", type=Path)
+    run_v9_terminate.add_argument("--json", action="store_true")
+
     run_runtime_successor = run_sub.add_parser(
         "recover-runtime-startup", help="create a linked successor for a sealed zero-send MAF startup failure")
     run_runtime_successor.add_argument("work_id")
@@ -1163,6 +1181,30 @@ def main() -> int:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"provider selection probe refused: {exc}")
             return 2
         print(json.dumps(result, sort_keys=True) if args.json else json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "run" and args.run_target == "v9-recovery-status":
+        import json
+        try:
+            result = v9_recovery_status(args.work_id, args.attempt_id, root=args.project_root)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError, sqlite3.Error) as exc:
+            return _refusal(exc, as_json=args.json)
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"attempt: {result['attempt_id']}\nstatus: {result['status']}\n"
+              f"reconciliation required: {str(result['reconciliation_required']).lower()}\n"
+              f"next action: {result['next_action']}")
+        return 1 if result["reconciliation_required"] else 0
+    if args.command == "run" and args.run_target == "terminate-v9-delivery":
+        import json
+        try:
+            result = terminate_v9_delivery(
+                args.work_id, args.attempt_id, status=args.status, actor=args.actor,
+                explanation=args.explanation, root=args.project_root,
+            )
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError, sqlite3.Error) as exc:
+            return _refusal(exc, as_json=args.json)
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"attempt: {result['attempt_id']}\nstatus: {result['status']}\n"
+              f"receipt: {result['receipt_path']}\ncause: {result['cause']}")
         return 0
     if args.command == "run" and args.run_target == "recover-runtime-startup":
         import json

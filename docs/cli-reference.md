@@ -207,6 +207,18 @@ requires exact local model discovery. Claude and Codex readiness establishes
 only that their bounded CLI adapter is installed; authentication is not read or
 tested by the probe.
 
+### `flow run v9-recovery-status <work-id> <attempt-id>`
+
+Read whether a protocol v9 attempt has a consumed provider send whose outcome
+requires explicit reconciliation. This command is read-only and never retries
+provider I/O.
+
+### `flow run terminate-v9-delivery <work-id> <attempt-id> --status cancelled|abandoned --actor ACTOR --explanation TEXT`
+
+Seal an uncertain protocol v9 attempt without replaying provider I/O. The
+receipt preserves the consumed selection, unknown action, operator attribution,
+and terminal explanation so a fresh attempt can be prepared safely.
+
 ### `flow run recover-runtime-startup <work-id> <attempt-id>`
 
 Create a fresh linked successor only after a sealed v8 MAF startup failure with no manager, worker, verifier, observed, or uncertain send. The original receipt remains immutable. The successor performs normal authority, clean-worktree, and MAF readiness checks; it is not a replay of the predecessor.
