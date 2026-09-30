@@ -26,6 +26,7 @@ MAGENTIC_PROTOCOL_VERSION = 5
 CHARTERED_PROTOCOL_VERSION = 6
 DELIVERY_PROTOCOL_VERSION = 7
 STRUCTURED_VERIFIER_PROTOCOL_VERSION = 8
+PROVIDER_SELECTION_PROTOCOL_VERSION = 9
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
@@ -64,7 +65,7 @@ def supported_execution_protocol_versions() -> frozenset[int]:
     """Return all known protocol numbers, including dormant v8 capability."""
     return frozenset({1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION,
                       MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION, DELIVERY_PROTOCOL_VERSION,
-                      STRUCTURED_VERIFIER_PROTOCOL_VERSION})
+                      STRUCTURED_VERIFIER_PROTOCOL_VERSION, PROVIDER_SELECTION_PROTOCOL_VERSION})
 
 
 class ContractError(ValueError):
@@ -101,6 +102,9 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
     protocol_version = envelope.get("execution_protocol_version", 1)
     if protocol_version not in supported_execution_protocol_versions():
         raise ContractError("execution protocol version is unsupported")
+    if protocol_version == PROVIDER_SELECTION_PROTOCOL_VERSION:
+        _validate_v9_envelope(envelope)
+        return
     if is_magentic_protocol(protocol_version):
         _validate_magentic_envelope(envelope)
         if is_chartered_protocol(protocol_version):
@@ -186,6 +190,85 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
 
 def _hex_digest(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
+    required = (
+        "work_id", "attempt_id", "charter_digest", "manifest_digest", "run_protocol_revision",
+        "logical_assignments", "selection_inputs", "selection_input_digests", "limits", "checkpoint_dir",
+    )
+    require_fields(envelope, required, kind="protocol v9 envelope")
+    if envelope["run_protocol_revision"] != 2:
+        raise ContractError("protocol v9 requires run protocol revision 2")
+    if not _hex_digest(envelope["charter_digest"]) or not _hex_digest(envelope["manifest_digest"]):
+        raise ContractError("protocol v9 authority digest is invalid")
+    assignments = envelope["logical_assignments"]
+    if not isinstance(assignments, list) or not assignments:
+        raise ContractError("protocol v9 requires logical assignments")
+    seen: set[str] = set()
+    forbidden = {"provider", "model", "candidate_id", "eligible_candidates", "roster", "ranked_roster"}
+    for assignment in assignments:
+        if not isinstance(assignment, dict) or forbidden & set(assignment):
+            raise ContractError("protocol v9 logical assignment carries concrete provider authority")
+        for field in ("assignment_id", "role", "instructions", "requirements"):
+            if field not in assignment:
+                raise ContractError(f"protocol v9 logical assignment missing {field}")
+        if not isinstance(assignment["assignment_id"], str) or not assignment["assignment_id"] or assignment["assignment_id"] in seen:
+            raise ContractError("protocol v9 logical assignment identity is invalid")
+        seen.add(assignment["assignment_id"])
+        requirements = assignment["requirements"]
+        if not isinstance(requirements, dict) or requirements.get("operation") not in {"manage", "read", "edit", "verify", "collect"}:
+            raise ContractError("protocol v9 logical requirements are invalid")
+    inputs = envelope["selection_inputs"]
+    input_digests = envelope["selection_input_digests"]
+    if not isinstance(inputs, dict) or set(inputs) != {"policy", "catalog", "availability"}:
+        raise ContractError("protocol v9 selection inputs are invalid")
+    if not isinstance(input_digests, dict) or set(input_digests) != set(inputs):
+        raise ContractError("protocol v9 selection input digests are invalid")
+    for key, value in inputs.items():
+        if input_digests.get(key) != digest(value):
+            raise ContractError(f"protocol v9 {key} digest mismatch")
+
+
+def expected_v9_logical_action_id(action: dict[str, Any]) -> str:
+    return digest({key: action[key] for key in (
+        "attempt_id", "envelope_digest", "assignment_id", "sequence", "manager_turn", "task_digest"
+    )})
+
+
+def expected_v9_provider_action_id(action: dict[str, Any]) -> str:
+    return digest({
+        "logical_action_id": action["logical_action_id"],
+        "selection_id": action["selection_id"],
+        "selection_digest": action["selection_decision"]["decision_digest"],
+    })
+
+
+def _validate_v9_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
+    require_fields(action, (
+        "action_id", "logical_action_id", "selection_id", "selection_decision", "attempt_id",
+        "envelope_digest", "assignment_id", "role", "task", "task_digest", "sequence",
+        "manager_turn", "kind",
+    ), kind="protocol v9 action")
+    if action["kind"] != "delegate" or type(action["sequence"]) is not int or action["sequence"] < 1:
+        raise ContractError("protocol v9 action sequence is invalid")
+    assignment = next((item for item in envelope["logical_assignments"]
+                       if item["assignment_id"] == action["assignment_id"]), None)
+    if assignment is None or action["role"] != assignment["role"]:
+        raise ContractError("protocol v9 action selected an unlisted logical assignment")
+    if action["attempt_id"] != envelope["attempt_id"] or action["envelope_digest"] != envelope_digest(envelope):
+        raise ContractError("protocol v9 action envelope link mismatch")
+    if not isinstance(action["task"], str) or not action["task"].strip() or hashlib.sha256(action["task"].encode()).hexdigest() != action["task_digest"]:
+        raise ContractError("protocol v9 task is invalid")
+    if action["logical_action_id"] != expected_v9_logical_action_id(action):
+        raise ContractError("protocol v9 logical action identity mismatch")
+    decision = action["selection_decision"]
+    if not isinstance(decision, dict) or not _hex_digest(decision.get("decision_digest")):
+        raise ContractError("protocol v9 selection decision is invalid")
+    if not isinstance(action["selection_id"], str) or not action["selection_id"]:
+        raise ContractError("protocol v9 selection identity is invalid")
+    if action["action_id"] != expected_v9_provider_action_id(action):
+        raise ContractError("protocol v9 provider action identity mismatch")
 
 
 def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
@@ -889,8 +972,11 @@ def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
 
 
 def validate_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
-    require_fields(action, ("action_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind"), kind="action")
     protocol_version = execution_protocol_version(envelope)
+    if protocol_version == PROVIDER_SELECTION_PROTOCOL_VERSION:
+        _validate_v9_action(envelope, action)
+        return
+    require_fields(action, ("action_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind"), kind="action")
     if is_magentic_protocol(protocol_version):
         _validate_magentic_action(envelope, action)
         return

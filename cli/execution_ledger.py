@@ -102,6 +102,19 @@ class ExecutionLedger:
                 kind TEXT NOT NULL DEFAULT 'delegate', sequence INTEGER NOT NULL DEFAULT 1,
                 proposal_digest TEXT
             );
+            CREATE TABLE IF NOT EXISTS provider_selections (
+                selection_id TEXT PRIMARY KEY,
+                attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+                logical_action_id TEXT NOT NULL,
+                decision_json TEXT NOT NULL,
+                decision_digest TEXT NOT NULL,
+                candidate_id TEXT,
+                state TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                predecessor_selection_id TEXT REFERENCES provider_selections(selection_id),
+                provider_action_id TEXT UNIQUE,
+                UNIQUE(attempt_id, logical_action_id, decision_digest)
+            );
             CREATE TABLE IF NOT EXISTS replan_decisions (
                 replan_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
                 sequence INTEGER NOT NULL, request_json TEXT NOT NULL, proposal_digest TEXT NOT NULL,
@@ -422,6 +435,92 @@ class ExecutionLedger:
                     raise RecoveryRefused(PREDECESSOR_LINK_INVALID)
             db.execute("INSERT INTO attempts(attempt_id,work_id,envelope_json,status,reason,receipt_path,recovery_version,owner_generation,owner_actor,execution_protocol_version) VALUES(?,?,?,?,?,?,?,?,?,?)", (envelope["attempt_id"], envelope["work_id"], canonical(envelope), "started", "", None, 2, owner_generation, owner_actor, protocol_version))
             self._event(db, envelope["attempt_id"], None, "attempt_started", "")
+
+    def record_v9_selection(self, envelope: dict[str, Any], action: dict[str, Any], *,
+                            generation: int | None = None,
+                            predecessor_selection_id: str | None = None) -> None:
+        """Persist one immutable computed v9 decision before reservation."""
+        validate_action(envelope, action)
+        if execution_protocol_version(envelope) != 9:
+            raise ContractError("provider selection records require protocol v9")
+        decision = action["selection_decision"]
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, envelope["attempt_id"], generation)
+            stored = db.execute(
+                "SELECT envelope_json,status,execution_protocol_version FROM attempts WHERE attempt_id=?",
+                (envelope["attempt_id"],),
+            ).fetchone()
+            if stored is None or stored != (canonical(envelope), "started", 9):
+                raise ContractError("protocol v9 attempt is absent, changed, or closed")
+            if predecessor_selection_id is not None:
+                predecessor = db.execute(
+                    "SELECT state FROM provider_selections WHERE selection_id=? AND attempt_id=?",
+                    (predecessor_selection_id, envelope["attempt_id"]),
+                ).fetchone()
+                if predecessor != ("pre_send_refused",):
+                    raise ContractError("selection predecessor is not positively refused")
+            try:
+                db.execute(
+                    "INSERT INTO provider_selections(selection_id,attempt_id,logical_action_id,decision_json,decision_digest,candidate_id,state,predecessor_selection_id) VALUES(?,?,?,?,?,?,?,?)",
+                    (action["selection_id"], envelope["attempt_id"], action["logical_action_id"],
+                     canonical(decision), decision["decision_digest"], decision.get("selected_candidate_id"),
+                     "computed", predecessor_selection_id),
+                )
+            except sqlite3.IntegrityError as exc:
+                existing = db.execute(
+                    "SELECT decision_json,state FROM provider_selections WHERE selection_id=?",
+                    (action["selection_id"],),
+                ).fetchone()
+                if existing is None or existing[0] != canonical(decision):
+                    raise ContractError("selection identity reused with changed decision") from exc
+                return
+            if predecessor_selection_id is not None:
+                db.execute(
+                    "UPDATE provider_selections SET state='superseded' WHERE selection_id=?",
+                    (predecessor_selection_id,),
+                )
+            self._event(db, envelope["attempt_id"], action["logical_action_id"],
+                        "selection_computed", action["selection_id"])
+
+    def transition_v9_selection(self, selection_id: str, expected: str, target: str, *,
+                                generation: int, reason: str = "",
+                                provider_action_id: str | None = None) -> None:
+        allowed = {
+            ("computed", "reserved"),
+            ("reserved", "consumed"),
+            ("reserved", "pre_send_refused"),
+        }
+        if (expected, target) not in allowed:
+            raise ContractError("protocol v9 selection transition is invalid")
+        if target == "pre_send_refused" and not reason:
+            raise ContractError("pre-send refusal requires positive evidence code")
+        if target == "consumed" and not provider_action_id:
+            raise ContractError("consumed selection requires provider action identity")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT attempt_id FROM provider_selections WHERE selection_id=?",
+                (selection_id,),
+            ).fetchone()
+            if row is None:
+                raise ContractError("provider selection is absent")
+            self._assert_owner(db, row[0], generation)
+            try:
+                changed = db.execute(
+                    "UPDATE provider_selections SET state=?,reason=?,provider_action_id=? WHERE selection_id=? AND state=?",
+                    (target, reason, provider_action_id, selection_id, expected),
+                ).rowcount
+            except sqlite3.IntegrityError as exc:
+                raise ContractError("provider action already consumed a selection") from exc
+            if changed != 1:
+                raise ContractError("provider selection state changed or is not transitionable")
+            event = {
+                "reserved": "selection_reserved",
+                "consumed": "selection_consumed",
+                "pre_send_refused": "selection_pre_send_refused",
+            }[target]
+            self._event(db, row[0], provider_action_id, event, selection_id)
 
     @staticmethod
     def _v8_lineage_locked(db: sqlite3.Connection, work_id: str) -> tuple[list[dict[str, Any]], list[str]]:

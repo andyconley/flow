@@ -42,6 +42,7 @@ from delivery_contracts import (DELIVERY_CHARTER_VERSION, DeliveryContractError,
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot, resolve_attempt
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
+from delivery_selection import authorize_and_dispatch as authorize_v9_and_dispatch
 from claude_worker import call_claude
 from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
@@ -2086,3 +2087,12 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
                           sandbox="read-only" if is_verifier or is_evidence_collector else "workspace-write",
                           on_process_group=on_process_group)
     raise ContractError("selected specialist provider has no approved adapter")
+
+
+def execute_v9_selected_action(envelope: dict[str, Any], action: dict[str, Any],
+                               adapter_send: Callable[[dict[str, Any], dict[str, Any]], Any], *,
+                               readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any]:
+    """Test-only v9 gateway boundary; activation remains gated at checkpoint 5."""
+    return authorize_v9_and_dispatch(
+        envelope, action, adapter_send, readiness_recheck=readiness_recheck
+    )

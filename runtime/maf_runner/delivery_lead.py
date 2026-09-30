@@ -16,6 +16,8 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
+from cli.delivery_selection import compute_binding
+
 from runtime.maf_runner.limits import (MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGER_MESSAGES_BYTES,
                                        MAX_MANAGER_ROUNDS, MAX_REPLANS)
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
@@ -435,3 +437,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+def provider_neutral_binding(envelope: dict[str, Any], assignment_id: str) -> dict[str, Any]:
+    """Credentialless v9 child computation over Flow-sealed inputs."""
+    if envelope.get("execution_protocol_version") != 9:
+        raise PolicyAbort("provider-neutral binding requires protocol v9")
+    return compute_binding(envelope, assignment_id)
