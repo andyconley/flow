@@ -19,6 +19,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 import delivery_cancel  # noqa: E402
+import maf_supervisor  # noqa: E402
 import delivery_termination  # noqa: E402
 import process_identity  # noqa: E402
 from delivery_control import change_lead_claim  # noqa: E402
@@ -74,6 +75,68 @@ class ControllerTests(unittest.TestCase):
     def test_restore_puts_the_previous_handler_back(self):
         self.controller.restore()
         self.assertIs(signal.getsignal(signal.SIGTERM), signal.SIG_DFL)
+
+    def test_restore_puts_the_previous_wakeup_fd_back(self):
+        self.controller.restore()
+        self.assertEqual(signal.set_wakeup_fd(-1), -1)
+        self.assertIsNone(self.controller.wakeup_fd)
+
+    def test_a_signal_writes_the_wakeup_pipe(self):
+        os.kill(os.getpid(), signal.SIGTERM)
+        self.assertEqual(select.select([self.controller.wakeup_fd], [], [], 1)[0], [self.controller.wakeup_fd])
+
+
+class SupervisorWakeupTests(unittest.TestCase):
+    """A SIGTERM that lands just before a supervisor select blocks still breaks the wait.
+
+    The race is simulated: the C handler wrote the wakeup byte, but the
+    Python handler has not run yet, so nothing else would end the select
+    before its deadline.
+    """
+
+    def setUp(self):
+        self.controller = delivery_cancel.CancelController()
+        self.assertTrue(self.controller.install())
+        self.addCleanup(self.controller.restore)
+        patcher = patch.object(delivery_cancel, "_CURRENT", self.controller)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, read_fd)
+        self.addCleanup(os.close, write_fd)
+        self.read_fd, self.write_fd = read_fd, write_fd
+
+    def missed_signal(self):
+        self.controller.requested = True
+        os.write(self.controller._wakeup_write, b"\0")
+
+    def test_a_missed_signal_breaks_a_protocol_read(self):
+        started = time.monotonic()
+        with self.assertRaises(delivery_cancel.DeliveryCancelled):
+            with self.controller.interruptible():
+                self.missed_signal()
+                maf_supervisor._read_message(self.read_fd, time.monotonic() + 10, bytearray())
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_missed_signal_breaks_a_blocked_protocol_write(self):
+        os.set_blocking(self.write_fd, False)
+        with contextlib.suppress(BlockingIOError):
+            while True:
+                os.write(self.write_fd, b"x" * 65536)
+        started = time.monotonic()
+        with self.assertRaises(delivery_cancel.DeliveryCancelled):
+            with self.controller.interruptible():
+                self.missed_signal()
+                maf_supervisor._write_bounded(self.write_fd, {"type": "start"}, time.monotonic() + 10)
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_wakeup_after_disarm_keeps_waiting_for_the_child(self):
+        self.controller.disarm()
+        os.write(self.write_fd, b'{"protocol_version": 1, "type": "workflow_finished"}\n')
+        with self.controller.interruptible():
+            self.missed_signal()
+            message = maf_supervisor._read_message(self.read_fd, time.monotonic() + 10, bytearray())
+        self.assertEqual(message["type"], "workflow_finished")
 
 
 class CancelFixture(CharteredFixture):

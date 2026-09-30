@@ -7,6 +7,12 @@ around ledger writes or Flow's own evidence files (a provider's streamed trace
 output is the only file written inside one, and it is diagnostic only). Everywhere else the parent checks the flag at
 its next authorization boundary. Sealing happens in ordinary code after the
 stack has unwound.
+
+A signal that lands after Python's last pending-signal check but before a
+``select`` blocks does not interrupt it, so the handler would wait for the
+deadline. The controller therefore owns a wakeup pipe (``signal.set_wakeup_fd``)
+that Flow's own ``select`` waits include; a byte on it wakes the wait, which
+then calls ``wake()`` to raise the pending cancel.
 """
 
 from __future__ import annotations
@@ -35,6 +41,9 @@ class CancelController:
         self.depth = 0
         self.installed = False
         self._previous: Any = None
+        self._previous_wakeup = -1
+        self.wakeup_fd: int | None = None
+        self._wakeup_write: int | None = None
 
     def install(self) -> bool:
         """Install the SIGTERM handler; False when this thread cannot (then cancel is unsupported)."""
@@ -43,12 +52,27 @@ class CancelController:
         except (ValueError, OSError):
             return False
         self.installed = True
+        read_fd, write_fd = os.pipe()
+        os.set_blocking(read_fd, False)
+        os.set_blocking(write_fd, False)
+        try:
+            self._previous_wakeup = signal.set_wakeup_fd(write_fd, warn_on_full_buffer=False)
+        except (ValueError, OSError):
+            os.close(read_fd)
+            os.close(write_fd)
+        else:
+            self.wakeup_fd, self._wakeup_write = read_fd, write_fd
         return True
 
     def restore(self) -> None:
         if self.installed:
             signal.signal(signal.SIGTERM, self._previous if self._previous is not None else signal.SIG_DFL)
             self.installed = False
+        if self.wakeup_fd is not None:
+            signal.set_wakeup_fd(self._previous_wakeup)
+            os.close(self.wakeup_fd)
+            os.close(self._wakeup_write)  # type: ignore[arg-type]
+            self.wakeup_fd = self._wakeup_write = None
 
     def _fire(self) -> None:
         self.raised = True
@@ -70,6 +94,17 @@ class CancelController:
         finally:
             self.depth -= 1
 
+    def wake(self) -> None:
+        """A ``select`` woke on the wakeup pipe: drain it, then break the wait if a cancel is pending."""
+        if self.wakeup_fd is not None:
+            try:
+                while os.read(self.wakeup_fd, 512):
+                    pass
+            except BlockingIOError:
+                pass
+        if self.requested and self.depth > 0 and self.armed and not self.raised:
+            self._fire()
+
     def check(self) -> None:
         """At an authorization boundary: a pending cancel stops any new authorization."""
         if self.requested and self.armed:
@@ -85,6 +120,18 @@ _CURRENT: CancelController | None = None
 
 def current() -> CancelController | None:
     return _CURRENT
+
+
+def wakeup_fds() -> list[int]:
+    """The wakeup pipe for a ``select`` inside ``interruptible()``, or none."""
+    controller = _CURRENT
+    return [controller.wakeup_fd] if controller is not None and controller.wakeup_fd is not None else []
+
+
+def wake() -> None:
+    controller = _CURRENT
+    if controller is not None:
+        controller.wake()
 
 
 def interruptible() -> ContextManager[None]:
