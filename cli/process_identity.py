@@ -322,6 +322,26 @@ def parent_live(record: dict[str, Any]) -> str:
 
 
 def _uid(pid: int) -> int | None:
+    if sys.platform == "darwin":
+        try:
+            libproc = ctypes.CDLL(ctypes.util.find_library("proc"), use_errno=True)
+            buffer = ctypes.create_string_buffer(256)
+            # PROC_PIDTBSDINFO. pbi_uid is the sixth uint32 in proc_bsdinfo.
+            size = libproc.proc_pidinfo(pid, 3, 0, buffer, len(buffer))
+            if size >= 24:
+                return int(struct.unpack_from("I", buffer.raw, 20)[0])
+        except (OSError, TypeError, ValueError):
+            return None
+        return None
+    if sys.platform.startswith("linux"):
+        try:
+            for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+                if line.startswith("Uid:"):
+                    value = line.split()[1]
+                    return int(value) if value.isdigit() else None
+        except (OSError, IndexError, ValueError):
+            return None
+        return None
     try:
         owner = subprocess.run(["ps", "-o", "uid=", "-p", str(pid)], capture_output=True, text=True,
                                timeout=10, check=False).stdout.strip()
@@ -348,20 +368,39 @@ def group_alive(group: dict[str, Any], record: dict[str, Any] | None = None) -> 
 
 def _members(pgid: int, leader_start: Any) -> list[int]:
     """This user's pids still in ``pgid`` that started at or after the recorded leader."""
-    try:
-        listing = subprocess.run(["ps", "-A", "-o", "pid=,pgid=,uid="], capture_output=True, text=True,
-                                 timeout=10, check=False).stdout
-    except (OSError, subprocess.SubprocessError):
-        return []
     uid, members = os.getuid(), []
-    for line in listing.splitlines():
-        parts = line.split()
-        if len(parts) != 3 or not all(part.isdigit() for part in parts):
+    for pid in _all_pids():
+        if pid == os.getpid() or _uid(pid) != uid:
             continue
-        pid, group, owner = (int(part) for part in parts)
-        if group == pgid and owner == uid and pid != os.getpid() and started_at_or_after(start_time(pid), leader_start):
+        try:
+            group = os.getpgid(pid)
+        except (ProcessLookupError, PermissionError):
+            continue
+        if group == pgid and started_at_or_after(start_time(pid), leader_start):
             members.append(pid)
     return members
+
+
+def _all_pids() -> list[int]:
+    """Enumerate pids without shelling out to sandbox-sensitive process tools."""
+    if sys.platform == "darwin":
+        try:
+            libproc = ctypes.CDLL(ctypes.util.find_library("proc"), use_errno=True)
+            byte_count = libproc.proc_listpids(1, 0, None, 0)  # PROC_ALL_PIDS
+            if byte_count <= 0:
+                return []
+            count = byte_count // ctypes.sizeof(ctypes.c_int) + 16
+            values = (ctypes.c_int * count)()
+            written = libproc.proc_listpids(1, 0, values, ctypes.sizeof(values))
+            return [int(pid) for pid in values[:written // ctypes.sizeof(ctypes.c_int)] if pid > 0]
+        except (OSError, TypeError, ValueError):
+            return []
+    if sys.platform.startswith("linux"):
+        try:
+            return [int(item.name) for item in Path("/proc").iterdir() if item.name.isdigit()]
+        except OSError:
+            return []
+    return []
 
 
 def reap(attempt_dir: Path) -> list[dict[str, Any]]:
