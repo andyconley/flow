@@ -2,6 +2,16 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.39.1](https://github.com/andyconley/flow/compare/v0.39.0...v0.39.1) (2026-09-30)
+
+### Bug Fixes
+
+* **delivery:** wake every cancellable wait for a SIGTERM that races it ([73c033f](https://github.com/andyconley/flow/commit/73c033f0265f52a5482c46d29bae2efe4fc3dd43))
+
+### Tests
+
+* **maf:** make the MAF-gated tests pass with a real FLOW_MAF_PYTHON ([b3893de](https://github.com/andyconley/flow/commit/b3893ded969c85e4e8fe9439e5449d0625bd56e2))
+
 ## [0.39.0](https://github.com/andyconley/flow/compare/v0.38.3...v0.39.0) (2026-09-30)
 
 ### Features
