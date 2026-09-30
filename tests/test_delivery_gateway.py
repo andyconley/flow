@@ -18,7 +18,7 @@ from execution_contracts import digest, envelope_digest, expected_manager_call_i
 from execution_ledger import ExecutionLedger
 
 
-from maf_env import MAF_PYTHON, requires_maf  # noqa: E402
+from maf_env import MAF_PYTHON, requires_maf, sealed_runtime_identity  # noqa: E402
 
 
 def _result(provider: str, model: str, output: str) -> dict:
@@ -104,7 +104,10 @@ class DeliveryGatewayTests(unittest.TestCase):
                 roster.append({"assignment_id": assignment_id, "definition_digest": digest({"role": role, "instructions": instructions}),
                                "instance_id": assignment_id, "role": role, "provider": provider,
                                "model": "fake", "instructions": instructions})
+            # A real child proves its runtime before any callback, so the
+            # hand-built envelope seals the identity the child will compute.
             envelope = {"schema_version": 1, "execution_protocol_version": 5, "work_id": "test", "attempt_id": "gateway-probe",
+                        "maf_runtime": sealed_runtime_identity(),
                         "charter_digest": digest({"requirements": "a" * 64, "acceptance": "a" * 64}),
                         "charter_sources": charter_sources, "run_protocol_revision": 2, "manifest_digest": "b" * 64,
                         "checkpoint_dir": str(attempt_dir / "checkpoints"), "source_commit": source_commit,

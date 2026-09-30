@@ -2987,6 +2987,7 @@ class FlowCliTests(FlowCliHarness):
         base.write_text("#!/bin/sh\ncase \"$2\" in\n  *sys.platform*) echo 'linux|x86_64|3|12' ;;\n  *) echo '3.12.0' ;;\nesac\n")
         base.chmod(0o755)
         env = _clean_env(fake_home)
+        env.pop("FLOW_MAF_PYTHON", None)  # an override would make readiness pass
         env["FLOW_MAF_BASE_PYTHON"] = str(base)
         result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
                                 text=True, capture_output=True, env=env)
