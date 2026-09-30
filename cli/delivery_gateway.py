@@ -2164,11 +2164,13 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         # positively evidenced to have happened before provider I/O.  Every
         # adapter failure after a send claim becomes recovery-required instead.
         while True:
-            result = execute_v9_selected_action(
-                envelope, action, adapter_send, readiness_recheck=readiness_recheck,
-                ledger=ledger, generation=generation,
-                predecessor_selection_id=predecessor_selection_id,
-            )
+            run_dir = Path(envelope["checkpoint_dir"]).parents[2]
+            with delivery_authority_guard(run_dir, envelope):
+                result = execute_v9_selected_action(
+                    envelope, action, adapter_send, readiness_recheck=readiness_recheck,
+                    ledger=ledger, generation=generation,
+                    predecessor_selection_id=predecessor_selection_id,
+                )
             if result["status"] != "pre_send_refused":
                 break
             successor = result["successor_decision"]
@@ -2590,10 +2592,12 @@ def terminate_v9_delivery(work_id: str, attempt_id: str, *, status: str, actor: 
         raise ContractError("v9 termination target differs from the requested run")
     if snapshot["status"] != "started":
         raise ContractError("v9 attempt is already terminal")
-    sealed = ledger.terminate_v9_attempt(
-        attempt_id, status, generation=snapshot["owner_generation"], actor=actor,
-        explanation=explanation, cause="operator_" + status,
-        receipt_path=execution_dir / attempt_id / "receipt.json",
-    )
+    run_dir = execution_dir.parent
+    with delivery_authority_guard(run_dir, snapshot["envelope"]):
+        sealed = ledger.terminate_v9_attempt(
+            attempt_id, status, generation=snapshot["owner_generation"], actor=actor,
+            explanation=explanation, cause="operator_" + status,
+            receipt_path=execution_dir / attempt_id / "receipt.json",
+        )
     return {**sealed, "work_id": work_id, "cause": "operator_" + status,
             "owner_generation": snapshot["owner_generation"], "reaped": []}

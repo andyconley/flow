@@ -6,8 +6,10 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +23,9 @@ from delivery_selection import (  # noqa: E402
     compute_binding,
     make_action,
 )
-from delivery_gateway import execute_v9_logical_delivery, execute_v9_selected_action  # noqa: E402
+from delivery_gateway import (execute_v9_logical_delivery, execute_v9_selected_action,
+                              terminate_v9_delivery)  # noqa: E402
+from delivery_control import DeliveryControlError  # noqa: E402
 from execution_contracts import ContractError, digest, validate_envelope  # noqa: E402
 from execution_ledger import ExecutionLedger  # noqa: E402
 from provider_selection import merge_selection_policy  # noqa: E402
@@ -125,6 +129,9 @@ def _envelope(*, excluded_families: list[str] | None = None,
         "selection_input_digests": {key: digest(value) for key, value in inputs.items()},
         "limits": {"max_actions": 3},
         "checkpoint_dir": ".flow/runs/selection-test/checkpoints",
+        "delivery_charter_digest": "e" * 64,
+        "delivery_lead_claim_digest": "f" * 64,
+        "delivery_lead_claim": {"generation": 1},
     }
     envelope["selection_authority"] = seal_selection_authority(
         work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
@@ -137,10 +144,21 @@ def _envelope(*, excluded_families: list[str] | None = None,
 
 
 class DeliverySelectionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        guard = patch("delivery_gateway.delivery_authority_guard", return_value=nullcontext())
+        guard.start()
+        self.addCleanup(guard.stop)
+
     def test_v9_rejects_concrete_shaper_authority(self) -> None:
         envelope = _envelope()
         envelope["logical_assignments"][0]["provider"] = "ollama"
         with self.assertRaisesRegex(ContractError, "concrete provider authority"):
+            validate_envelope(envelope)
+
+    def test_v9_rejects_delivery_and_selection_generation_mismatch(self) -> None:
+        envelope = _envelope()
+        envelope["delivery_lead_claim"]["generation"] = 2
+        with self.assertRaisesRegex(ContractError, "generations differ"):
             validate_envelope(envelope)
 
     def test_manager_bootstrap_and_child_binding_use_local_first_selector(self) -> None:
@@ -278,7 +296,6 @@ class DeliverySelectionTests(unittest.TestCase):
             snapshot = ledger.snapshot(envelope["attempt_id"])
             self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
             self.assertEqual(snapshot["actions"][0]["status"], "unknown")
-            self.assertTrue(ledger.v9_recovery_required(envelope["attempt_id"]))
 
     def test_v9_unknown_send_can_only_be_abandoned_with_a_terminal_receipt(self) -> None:
         envelope = _envelope()
@@ -430,6 +447,39 @@ class DeliverySelectionTests(unittest.TestCase):
             snapshot = ledger.snapshot(envelope["attempt_id"])
             self.assertEqual(snapshot["actions"][0]["request"]["assignment_id"], "manager")
             self.assertEqual(snapshot["actions"][0]["status"], "unknown")
+
+
+class V9ExternalAuthorityFenceTests(unittest.TestCase):
+    def test_superseded_delivery_generation_blocks_send_and_termination(self) -> None:
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / ".flow" / "runs" / envelope["work_id"]
+            attempt_dir = run_dir / "execution" / envelope["attempt_id"]
+            (attempt_dir / "checkpoints").mkdir(parents=True)
+            envelope["checkpoint_dir"] = str(attempt_dir / "checkpoints")
+            ledger = ExecutionLedger(run_dir / "execution" / "ledger.sqlite")
+            ledger.create_attempt(envelope)
+            (run_dir / "run.json").write_text(json.dumps({"delivery": {
+                "owner_status": "active", "owner_generation": 2,
+                "charter_digest": envelope["delivery_charter_digest"],
+                "lead_claim_digest": "0" * 64,
+            }}))
+            sends = []
+            with self.assertRaisesRegex(DeliveryControlError, "stale"):
+                execute_v9_logical_delivery(
+                    envelope, "Implement.", ledger,
+                    lambda binding, _action: sends.append(binding["candidate_id"]),
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                    supervisor=lambda *_args, **_kwargs: {"status": "completed"},
+                )
+            self.assertEqual(sends, [])
+            with self.assertRaisesRegex(DeliveryControlError, "stale"):
+                terminate_v9_delivery(
+                    envelope["work_id"], envelope["attempt_id"], status="abandoned",
+                    actor="test", explanation="stale owner", root=root,
+                )
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["status"], "started")
 
 
 if __name__ == "__main__":

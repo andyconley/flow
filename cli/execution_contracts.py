@@ -207,23 +207,20 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
     required = (
         "work_id", "attempt_id", "charter_digest", "manifest_digest", "run_protocol_revision",
         "logical_assignments", "selection_inputs", "selection_input_digests", "selection_authority",
-        "limits", "checkpoint_dir",
+        "limits", "checkpoint_dir", "delivery_charter_digest", "delivery_lead_claim_digest",
+        "delivery_lead_claim",
     )
     require_fields(envelope, required, kind="protocol v9 envelope")
     if envelope["run_protocol_revision"] != 2:
         raise ContractError("protocol v9 requires run protocol revision 2")
     if not _hex_digest(envelope["charter_digest"]) or not _hex_digest(envelope["manifest_digest"]):
         raise ContractError("protocol v9 authority digest is invalid")
-    delivery_fields = ("delivery_charter_digest", "delivery_lead_claim_digest", "delivery_lead_claim")
-    present_delivery_fields = [field in envelope for field in delivery_fields]
-    if any(present_delivery_fields):
-        claim = envelope.get("delivery_lead_claim")
-        if (not all(present_delivery_fields)
-                or not _hex_digest(envelope.get("delivery_charter_digest"))
-                or not _hex_digest(envelope.get("delivery_lead_claim_digest"))
-                or not isinstance(claim, dict) or set(claim) != {"generation"}
-                or type(claim["generation"]) is not int or claim["generation"] < 1):
-            raise ContractError("protocol v9 delivery authority is invalid")
+    claim = envelope.get("delivery_lead_claim")
+    if (not _hex_digest(envelope.get("delivery_charter_digest"))
+            or not _hex_digest(envelope.get("delivery_lead_claim_digest"))
+            or not isinstance(claim, dict) or set(claim) != {"generation"}
+            or type(claim["generation"]) is not int or claim["generation"] < 1):
+        raise ContractError("protocol v9 delivery authority is invalid")
     assignments = envelope["logical_assignments"]
     if not isinstance(assignments, list) or not assignments:
         raise ContractError("protocol v9 requires logical assignments")
@@ -259,6 +256,8 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
         validate_selection_authority(envelope)
     except SelectionAuthorityError as exc:
         raise ContractError(f"protocol v9 selection authority is invalid: {exc}") from exc
+    if claim["generation"] != envelope["selection_authority"].get("generation"):
+        raise ContractError("protocol v9 delivery and selection generations differ")
 
 
 def expected_v9_logical_action_id(action: dict[str, Any]) -> str:

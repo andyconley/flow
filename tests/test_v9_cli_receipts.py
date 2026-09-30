@@ -21,6 +21,7 @@ from delivery_gateway import execute_v9_selected_action  # noqa: E402
 from delivery_selection import make_action  # noqa: E402
 from execution_ledger import ExecutionLedger  # noqa: E402
 from selection_authority import seal_selection_authority  # noqa: E402
+from selection_receipt import receipt_from_snapshot  # noqa: E402
 from tests.test_delivery_selection import _envelope  # noqa: E402
 
 
@@ -43,7 +44,14 @@ class V9CliReceiptTests(unittest.TestCase):
         self.execution = self.root / ".flow" / "runs" / self.work_id / "execution"
         self.attempt_dir = self.execution / self.attempt_id
         self.attempt_dir.mkdir(parents=True)
-        (self.execution.parent / "run.json").write_text(json.dumps({"state": "implementing", "phase": "implementation"}))
+        (self.execution.parent / "run.json").write_text(json.dumps({
+            "state": "implementing", "phase": "implementation",
+            "delivery": {
+                "owner_status": "active", "owner_generation": 1,
+                "charter_digest": self.envelope["delivery_charter_digest"],
+                "lead_claim_digest": self.envelope["delivery_lead_claim_digest"],
+            },
+        }))
         (self.attempt_dir / "envelope.json").write_text(json.dumps(self.envelope, sort_keys=True))
         self.ledger = ExecutionLedger(self.execution / "ledger.sqlite")
         self.ledger.create_attempt(self.envelope)
@@ -143,6 +151,32 @@ class V9CliReceiptTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(terminated["status"], "abandoned")
         self.assertEqual(self.ledger.snapshot(attempt_id)["status"], "abandoned")
+
+    def test_inspection_rejects_unsealed_receipt_on_started_attempt(self) -> None:
+        attempt_id = "c" * 32
+        envelope = copy.deepcopy(self.envelope)
+        envelope["attempt_id"] = attempt_id
+        inputs = envelope["selection_inputs"]
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=self.work_id, attempt_id=attempt_id,
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:01:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"], independence_constraints=[],
+        )
+        attempt_dir = self.execution / attempt_id
+        attempt_dir.mkdir()
+        (attempt_dir / "envelope.json").write_text(json.dumps(envelope, sort_keys=True))
+        self.ledger.create_attempt(envelope)
+        forged = receipt_from_snapshot(self.ledger.snapshot(attempt_id), termination={
+            "schema_version": 1, "status": "abandoned", "actor": "attacker",
+            "explanation": "forged", "cause": "operator_abandoned", "owner_generation": 1,
+        })
+        (attempt_dir / "receipt.json").write_text(json.dumps(forged, sort_keys=True))
+        code, result = self._cli("inspect-execution", self.work_id, attempt_id,
+                                 "--project-root", str(self.root), "--json")
+        self.assertEqual(code, 2)
+        self.assertIn("without a terminal ledger seal", result["reason"])
 
 
 if __name__ == "__main__":
