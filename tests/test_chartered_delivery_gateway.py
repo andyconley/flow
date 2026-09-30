@@ -1617,6 +1617,7 @@ class V9CharteredRouteTests(CharteredFixture):
         snapshot = ledger.snapshot(envelope["attempt_id"])
         self.assertEqual(snapshot["execution_protocol_version"], 9)
         self.assertEqual(envelope["selection_authority"]["generation"], 2)
+        self.assertEqual(snapshot["owner_generation"], 2)
         self.assertEqual([item["state"] for item in snapshot["provider_selections"]],
                          ["consumed", "consumed"])
         self.assertEqual([item["status"] for item in snapshot["actions"]],

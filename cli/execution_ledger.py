@@ -417,9 +417,9 @@ class ExecutionLedger:
         protocol_version = execution_protocol_version(envelope)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            claim = envelope.get("delivery_lead_claim") if protocol_version in {7, 8} else None
+            claim = envelope.get("delivery_lead_claim") if protocol_version in {7, 8, 9} else None
             owner_generation = claim["generation"] if isinstance(claim, dict) else 1
-            owner_actor = claim["lead_id"] if isinstance(claim, dict) else "initial"
+            owner_actor = claim.get("lead_id", "delivery-lead") if isinstance(claim, dict) else "initial"
             if protocol_version == 8 and not handback_supported(envelope):
                 # A pre-release v8 envelope stays readable and abandonable, but
                 # no new attempt may start without a sealed token budget (ADR 0020).
