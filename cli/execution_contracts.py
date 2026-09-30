@@ -662,11 +662,12 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
         # The ledger scopes expansion spend to predecessors sealed by the same
         # Delivery Charter. The compact predecessor links do not carry that
         # charter digest, so the pure receipt validator can prove only that
-        # the declared authority-lineage root is one of the sealed linked
-        # predecessors (or the current attempt when there are none). The seal
-        # separately compares this entire block with the ledger-built block.
-        lineage_ids = ({item["attempt_id"] for item in predecessors}
-                       if predecessors else {envelope["attempt_id"]})
+        # the declared authority-lineage root is either one of the sealed
+        # linked predecessors or the current attempt. The latter is required
+        # when a successor Delivery Charter starts a fresh budget while still
+        # retaining older attempts as provenance. The seal separately compares
+        # this entire block with the ledger-built block.
+        lineage_ids = {item["attempt_id"] for item in predecessors} | {envelope["attempt_id"]}
         if (not isinstance(block, dict)
                 or set(block) != {"lineage_id", "headroom", "predecessor_headroom_spent", "predecessor_lineage_grants", "requests"}
                 or block["lineage_id"] not in lineage_ids or block["headroom"] != expansion_headroom(envelope)

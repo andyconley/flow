@@ -86,6 +86,17 @@ class ReceiptExpansionValidationTests(ExpansionGatewayFixture):
 
         _validate_expansion(envelope, receipt)
 
+    def test_receipt_accepts_current_authority_root_with_retained_predecessors(self):
+        envelope = copy.deepcopy(self.envelope)
+        envelope["predecessors"] = [
+            {"attempt_id": "older-authority", "terminal_status": "failed",
+             "receipt_sha256": "a" * 64, "lead_generation": 1},
+        ]
+        receipt = copy.deepcopy(self.receipt)
+        receipt["expansion"]["lineage_id"] = envelope["attempt_id"]
+
+        _validate_expansion(envelope, receipt)
+
     def test_receipt_rejects_foreign_generation(self):
         self.assertRejected(lambda receipt: self.grant(receipt).update(owner_generation=7), "grant is invalid")
 
