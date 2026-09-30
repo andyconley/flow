@@ -72,6 +72,12 @@ class SelectionReceiptTests(unittest.TestCase):
         self.assertEqual(len(first["successors"]), 1)
         self.assertEqual(next(row for row in trace if row["state"] == "consumed")["candidate_id"], "claude")
 
+    def test_pre_send_refusal_without_provider_action_is_validated_from_successor(self) -> None:
+        receipt = _receipt()
+        receipt["actions"] = receipt["actions"][1:]
+        _reseal(receipt)
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
     def test_individual_decision_field_tampering_has_specific_failure(self) -> None:
         originals = _receipt()
         mutations = {

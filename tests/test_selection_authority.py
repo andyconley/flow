@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -32,6 +34,25 @@ def _reseal(envelope: dict) -> None:
 
 
 class SelectionAuthorityTests(unittest.TestCase):
+    def _approve_waiver(self, envelope: dict) -> None:
+        waiver = envelope["selection_inputs"]["policy"]["independence_waiver"]
+        scope = {key: value for key, value in waiver.items()
+                 if key not in {"approval_actor", "approval_event_digest", "approval_digest"}}
+        event = {"event": "approve-provider-family-waiver", "authority": "user",
+                 "explicit": True, "waiver_scope": scope, "at": "2026-09-29T12:00:00Z"}
+        waiver["approval_event_digest"] = digest(event)
+        waiver["approval_digest"] = digest({key: value for key, value in waiver.items()
+                                             if key != "approval_digest"})
+        envelope["selection_inputs"]["policy"] = merge_selection_policy(
+            {}, None, None, {"independence_waiver": waiver}
+        )
+        root = Path(tempfile.mkdtemp()) / envelope["work_id"]
+        checkpoints = root / "execution" / envelope["attempt_id"] / "checkpoints"
+        checkpoints.mkdir(parents=True)
+        (root / "events.jsonl").write_text(json.dumps(event) + "\n")
+        envelope["checkpoint_dir"] = str(checkpoints)
+        _reseal(envelope)
+
     def test_closed_flow_authority_accepts_normalized_inputs(self) -> None:
         envelope = _envelope(excluded_families=["local", "anthropic"])
         validate_envelope(envelope)
@@ -87,11 +108,8 @@ class SelectionAuthorityTests(unittest.TestCase):
         waiver["approval_digest"] = digest({key: value for key, value in waiver.items()
                                              if key != "approval_digest"})
         base = merge_selection_policy({})
-        envelope["selection_inputs"]["policy"] = merge_selection_policy(
-            {}, None, None, {"independence_waiver": waiver}
-        )
         self.assertEqual(waiver["prior_policy_digest"], base["policy_digest"])
-        _reseal(envelope)
+        self._approve_waiver(envelope)
         validate_envelope(envelope)
         self.assertEqual(effective_family_exclusions(envelope, "verifier"), ["anthropic"])
 
@@ -101,17 +119,20 @@ class SelectionAuthorityTests(unittest.TestCase):
         waiver["assignment_id"] = "producer"
         waiver["approval_digest"] = digest({key: value for key, value in waiver.items()
                                              if key != "approval_digest"})
-        envelope["selection_inputs"]["policy"] = merge_selection_policy(
-            {}, None, None, {"independence_waiver": waiver}
-        )
-        _reseal(envelope)
+        self._approve_waiver(envelope)
         with self.assertRaisesRegex(ContractError, "family scope mismatch"):
             validate_envelope(envelope)
 
         envelope = _envelope(excluded_families=["local"], waiver=True)
+        self._approve_waiver(envelope)
         envelope["selection_inputs"]["availability"][0]["evidence_code"] = "adapter_ready"
         _reseal(envelope)
         with self.assertRaisesRegex(ContractError, "successor authority binding mismatch"):
+            validate_envelope(envelope)
+
+    def test_forged_self_contained_waiver_is_rejected_without_flow_event(self) -> None:
+        envelope = _envelope(excluded_families=["local"], waiver=True)
+        with self.assertRaisesRegex(ContractError, "approval store"):
             validate_envelope(envelope)
 
 

@@ -101,8 +101,26 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
             raise V9ReceiptError("v9_selection_state_unsealed")
         compared += 4
     orphan_ids = set(rows) - action_selection_ids
-    if orphan_ids:
-        raise V9ReceiptError("v9_orphan_selection_row", sorted(orphan_ids)[0])
+    for selection_id in orphan_ids:
+        row = rows[selection_id]
+        successors = [item for item in selections if item.get("predecessor_selection_id") == selection_id]
+        if (row.get("state") != "superseded" or row.get("provider_action_id") is not None
+                or not row.get("reason") or len(successors) != 1
+                or successors[0].get("logical_action_id") != row.get("logical_action_id")
+                or row.get("candidate_id") not in successors[0].get("prior_no_send_failures", [])):
+            raise V9ReceiptError("v9_orphan_selection_row", selection_id)
+        successor_action = next((action for action in actions
+                                 if action.get("selection_id") == successors[0].get("selection_id")), None)
+        if successor_action is None:
+            raise V9ReceiptError("v9_orphan_selection_row", selection_id)
+        expected = compute_binding(
+            envelope, successor_action["assignment_id"],
+            prior_no_send_failures=row.get("prior_no_send_failures", []),
+        )
+        if row.get("decision_digest") != expected.get("decision_digest") \
+                or row.get("candidate_id") != expected.get("selected_candidate_id"):
+            raise V9ReceiptError("v9_orphan_selection_decision_mismatch", selection_id)
+        compared += 4
     consumed = [row for row in selections if row.get("state") == "consumed"]
     if len({row.get("provider_action_id") for row in consumed}) != len(consumed):
         raise V9ReceiptError("v9_duplicate_consumed_action")

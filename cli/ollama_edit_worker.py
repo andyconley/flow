@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import fcntl
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -92,6 +94,22 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, Any], *,
                        write_scopes: list[str], expected_model: str) -> dict[str, Any]:
     root = root.resolve()
+    lock_path = Path(tempfile.gettempdir()) / f"flow-ollama-edit-{hashlib.sha256(str(root).encode()).hexdigest()}.lock"
+    lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fcntl.flock(lock_fd, fcntl.LOCK_EX)
+    try:
+        return _validate_and_apply_locked(root, bundle, proposal, write_scopes=write_scopes,
+                                          expected_model=expected_model)
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
+
+
+def _validate_and_apply_locked(root: Path, bundle: dict[str, Any], proposal: dict[str, Any], *,
+                               write_scopes: list[str], expected_model: str) -> dict[str, Any]:
+    journal = root / ".flow-ollama-edit-journal.json"
+    if journal.exists():
+        _recover_journal(root, journal)
     if set(proposal) != {"schema_version", "model", "bundle_digest", "edits"}:
         raise ContractError("Ollama edit proposal fields are invalid")
     if proposal.get("schema_version") != 1 or proposal.get("bundle_digest") != bundle.get("bundle_digest"):
@@ -103,7 +121,7 @@ def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, A
         raise ContractError("Ollama edit count is invalid")
     bundle_files = {item["path"]: item for item in bundle.get("files", [])}
     scopes = [PurePosixPath(item) for item in write_scopes]
-    prepared: list[tuple[Path, str, bytes, tuple[int, int, int]]] = []
+    prepared: list[tuple[Path, str, bytes, tuple[int, int, int], tuple[int, int]]] = []
     seen: set[str] = set()
     total = 0
     for edit in edits:
@@ -129,14 +147,16 @@ def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, A
         if total > MAX_EDIT_BYTES:
             raise ContractError("Ollama edits exceed size limit")
         stat = target.stat(follow_symlinks=False)
-        prepared.append((target, content, current, (stat.st_dev, stat.st_ino, stat.st_mode)))
+        parent_stat = target.parent.stat(follow_symlinks=False)
+        prepared.append((target, content, current, (stat.st_dev, stat.st_ino, stat.st_mode),
+                         (parent_stat.st_dev, parent_stat.st_ino)))
 
     # Stage every replacement before mutating the workspace. Recheck the exact
     # inode immediately before each replace so a path cannot be swapped for a
     # symlink between validation and application. A failed commit is rolled
     # back from the already captured bytes.
-    staged: list[tuple[Path, Path, bytes, tuple[int, int, int]]] = []
-    for target, content, old, identity in prepared:
+    staged: list[tuple[Path, Path, bytes, tuple[int, int, int], tuple[int, int]]] = []
+    for target, content, old, identity, parent_identity in prepared:
         fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.flow-edit-", suffix=".tmp")
         temp = Path(name)
         try:
@@ -145,37 +165,89 @@ def validate_and_apply(root: Path, bundle: dict[str, Any], proposal: dict[str, A
                 handle.flush()
                 os.fsync(handle.fileno())
             os.chmod(temp, identity[2] & 0o7777)
-            staged.append((target, temp, old, identity))
+            staged.append((target, temp, old, identity, parent_identity))
         except BaseException:
             temp.unlink(missing_ok=True)
-            for _target, staged_temp, _old, _identity in staged:
+            for _target, staged_temp, _old, _identity, _parent_identity in staged:
                 staged_temp.unlink(missing_ok=True)
             raise
 
+    journal_record = {
+        "schema_version": 1,
+        "state": "prepared",
+        "files": [{"path": target.relative_to(root).as_posix(),
+                   "old_base64": base64.b64encode(old).decode("ascii")}
+                  for target, _temp, old, _identity, _parent_identity in staged],
+    }
+    write_atomic(journal, json.dumps(journal_record, sort_keys=True, separators=(",", ":")) + "\n",
+                 mode=0o600)
+    _fsync_directory(root)
+
     changed: list[tuple[Path, bytes]] = []
     try:
-        for target, temp, old, identity in staged:
+        for target, temp, old, identity, parent_identity in staged:
+            parent_stat = target.parent.stat(follow_symlinks=False)
             stat = target.stat(follow_symlinks=False)
-            if target.is_symlink() or (stat.st_dev, stat.st_ino, stat.st_mode) != identity \
+            if target.parent.is_symlink() or (parent_stat.st_dev, parent_stat.st_ino) != parent_identity \
+                    or target.is_symlink() or (stat.st_dev, stat.st_ino, stat.st_mode) != identity \
                     or hashlib.sha256(target.read_bytes()).hexdigest() != hashlib.sha256(old).hexdigest():
                 raise ContractError("Ollama edit target changed during application")
             os.replace(temp, target)
+            _fsync_directory(target.parent)
             changed.append((target, old))
     except BaseException:
         for target, old in reversed(changed):
             write_atomic(target, old.decode("utf-8"))
+        journal.unlink(missing_ok=True)
+        _fsync_directory(root)
         raise
     finally:
-        for _target, temp, _old, _identity in staged:
+        for _target, temp, _old, _identity, _parent_identity in staged:
             temp.unlink(missing_ok=True)
+    journal.unlink(missing_ok=True)
+    _fsync_directory(root)
     return {
         "schema_version": 1,
         "bundle_digest": bundle["bundle_digest"],
         "proposal_digest": digest(proposal),
-        "changed_paths": [path.relative_to(root).as_posix() for path, _content, _old, _identity in prepared],
+        "changed_paths": [path.relative_to(root).as_posix() for path, _content, _old, _identity, _parent_identity in prepared],
         "result_digests": {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                           for path, _content, _old, _identity in prepared},
+                           for path, _content, _old, _identity, _parent_identity in prepared},
     }
+
+
+def _recover_journal(root: Path, journal: Path) -> None:
+    if journal.is_symlink():
+        raise ContractError("Ollama edit recovery journal is unsafe")
+    try:
+        record = json.loads(journal.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ContractError("Ollama edit recovery journal is invalid") from exc
+    if not isinstance(record, dict) or set(record) != {"schema_version", "state", "files"} \
+            or record.get("schema_version") != 1 or record.get("state") != "prepared" \
+            or not isinstance(record.get("files"), list):
+        raise ContractError("Ollama edit recovery journal is invalid")
+    for item in record["files"]:
+        if not isinstance(item, dict) or set(item) != {"path", "old_base64"}:
+            raise ContractError("Ollama edit recovery journal is invalid")
+        target = _safe_target(root, item["path"], must_exist=True)
+        try:
+            old = base64.b64decode(item["old_base64"], validate=True)
+            old.decode("utf-8")
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise ContractError("Ollama edit recovery journal is invalid") from exc
+        write_atomic(target, old.decode("utf-8"))
+        _fsync_directory(target.parent)
+    journal.unlink()
+    _fsync_directory(root)
+
+
+def _fsync_directory(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _safe_target(root: Path, raw: Any, *, must_exist: bool) -> Path:

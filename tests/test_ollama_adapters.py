@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import base64
 import hashlib
 import json
 import sys
@@ -138,6 +139,20 @@ class OllamaEditTests(unittest.TestCase):
                                expected_model="local-model")
         self.assertEqual((self.root / "src" / "value.txt").read_text(), "before\n")
         self.assertEqual(second.read_text(), "second-before\n")
+
+    def test_durable_journal_is_recovered_before_next_edit(self) -> None:
+        target = self.root / "src" / "value.txt"
+        target.write_text("partially-applied\n")
+        journal = {
+            "schema_version": 1, "state": "prepared",
+            "files": [{"path": "src/value.txt",
+                       "old_base64": base64.b64encode(b"before\n").decode("ascii")}],
+        }
+        (self.root / ".flow-ollama-edit-journal.json").write_text(json.dumps(journal))
+        result = self.apply(self.proposal())
+        self.assertEqual(target.read_text(), "after\n")
+        self.assertEqual(result["changed_paths"], ["src/value.txt"])
+        self.assertFalse((self.root / ".flow-ollama-edit-journal.json").exists())
 
 
 if __name__ == "__main__":

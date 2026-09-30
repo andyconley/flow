@@ -1604,8 +1604,10 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
         self.assertEqual(snapshot["actions"][0]["status"], "completed")
 
-    def test_flow_owned_selection_probe_uses_project_candidates_and_local_discovery(self):
-        (self.root / ".flow" / "flow.toml").write_text(
+    def test_flow_owned_selection_probe_uses_flow_candidates_and_local_discovery(self):
+        overlay = self.root / "user-overlay"
+        overlay.mkdir()
+        (overlay / "flow.toml").write_text(
             "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
             "[[provider_candidates]]\ncandidate_id = \"local\"\nprovider = \"ollama\"\n"
             "model = \"local-model\"\nprovider_family = \"local\"\ntier = \"working\"\n"
@@ -1613,6 +1615,7 @@ class V9CharteredRouteTests(CharteredFixture):
             "cost_class = 0\nenabled = true\n"
         )
         with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.USER_OVERLAY_DIR", overlay), \
                 patch("delivery_gateway.discover_ollama_models", return_value={"local-model"}):
             probe = provider_selection_probe("sample", root=self.root)
         self.assertEqual(probe["availability"][0]["state"], "ready")
@@ -1621,22 +1624,22 @@ class V9CharteredRouteTests(CharteredFixture):
     def test_probe_can_choose_credential_free_hosted_adapter_after_local_refusal(self):
         (self.root / ".flow" / "flow.toml").write_text(
             "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
-            "[[provider_candidates]]\ncandidate_id = \"local\"\nprovider = \"ollama\"\n"
-            "model = \"missing-local\"\nprovider_family = \"local\"\ntier = \"working\"\n"
-            "locality = \"local\"\noperations = [\"edit\"]\ncapabilities = [\"structured_edit\"]\n"
-            "cost_class = 0\nenabled = true\n\n"
-            "[[provider_candidates]]\ncandidate_id = \"claude\"\nprovider = \"claude\"\n"
-            "model = \"claude-test\"\nprovider_family = \"anthropic\"\ntier = \"working\"\n"
-            "locality = \"hosted\"\noperations = [\"edit\"]\ncapabilities = [\"structured_edit\"]\n"
-            "cost_class = 1\nenabled = true\n"
+            "[[provider_candidates]]\ncandidate_id = \"ollama-local\"\nenabled = false\n"
         )
         with patch("delivery_gateway.run_status", return_value=self.state), \
                 patch("delivery_gateway.discover_ollama_models", return_value=set()), \
                 patch("delivery_gateway._hosted_adapter_available", side_effect=lambda provider: provider == "claude"):
             probe = provider_selection_probe("sample", root=self.root)
-        self.assertEqual([item["state"] for item in probe["availability"]], ["unavailable", "ready"])
+        self.assertEqual([item["state"] for item in probe["availability"]], ["unavailable", "ready", "unavailable"])
         self.assertEqual(probe["availability"][1]["evidence_code"], "adapter_ready")
-        self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "claude")
+        self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "claude-hosted")
+
+    def test_project_cannot_invent_provider_candidate(self):
+        (self.root / ".flow" / "flow.toml").write_text(
+            "[[provider_candidates]]\ncandidate_id = \"invented\"\nenabled = true\n"
+        )
+        with self.assertRaisesRegex(ContractError, "only narrow a known candidate"):
+            provider_selection_probe("sample", root=self.root)
 
 
 if __name__ == "__main__":

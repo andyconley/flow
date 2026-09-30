@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 from typing import Any, Iterable
 
 try:
@@ -237,6 +239,50 @@ def validate_independence_waiver(waiver: Any) -> None:
         raise SelectionAuthorityError("independence waiver approval digest mismatch")
 
 
+def _resolve_waiver_approval(envelope: dict[str, Any], waiver: dict[str, Any]) -> None:
+    """Resolve a waiver against the Flow-owned append-only run event store."""
+    checkpoints = Path(envelope.get("checkpoint_dir", ""))
+    try:
+        attempt_dir = checkpoints.resolve(strict=False).parent
+        execution_dir = attempt_dir.parent
+        run_dir = execution_dir.parent
+    except (OSError, RuntimeError) as exc:
+        raise SelectionAuthorityError("independence waiver approval store is unavailable") from exc
+    if (checkpoints.name != "checkpoints" or execution_dir.name != "execution"
+            or run_dir.name != envelope.get("work_id")):
+        raise SelectionAuthorityError("independence waiver approval store path is invalid")
+    events_path = run_dir / "events.jsonl"
+    try:
+        lines = events_path.read_text().splitlines()
+    except OSError as exc:
+        raise SelectionAuthorityError("independence waiver approval store is unavailable") from exc
+    matches: list[dict[str, Any]] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise SelectionAuthorityError("independence waiver approval store is invalid") from exc
+        if digest(event) == waiver["approval_event_digest"]:
+            matches.append(event)
+    if len(matches) != 1:
+        raise SelectionAuthorityError("independence waiver approval event was not uniquely resolved")
+    scope = {key: value for key, value in waiver.items()
+             if key not in {"approval_actor", "approval_event_digest", "approval_digest"}}
+    expected = {
+        "event": "approve-provider-family-waiver",
+        "authority": "user",
+        "explicit": True,
+        "waiver_scope": scope,
+    }
+    event = matches[0]
+    if not isinstance(event, dict) or {key: event.get(key) for key in expected} != expected \
+            or set(event) != set(expected) | {"at"}:
+        raise SelectionAuthorityError("independence waiver approval event scope is invalid")
+    _timestamp(event.get("at"), "independence waiver approval event at")
+
+
 def successor_authority_digest(
     *, work_id: str, attempt_id: str, charter_digest: str, manifest_digest: str,
     generation: int, sealed_at: str,
@@ -382,6 +428,7 @@ def validate_selection_authority(envelope: dict[str, Any]) -> None:
         raise SelectionAuthorityError("selection authority digest mismatch")
     waiver = inputs["policy"]["independence_waiver"]
     if waiver is not None:
+        _resolve_waiver_approval(envelope, waiver)
         prior_policy = deepcopy(inputs["policy"])
         prior_policy["independence_waiver"] = None
         prior_policy["provenance"].pop("independence_waiver", None)

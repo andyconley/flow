@@ -26,6 +26,11 @@ MAX_FUTURE_SKEW = timedelta(seconds=30)
 OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise AvailabilityError("ollama discovery redirect refused")
+
+
 class AvailabilityError(ValueError):
     """Raised when readiness evidence is not safe to use."""
 
@@ -79,7 +84,7 @@ def normalize_availability(record: dict[str, Any], *, now: datetime | None = Non
 
 
 def discover_ollama_models(
-    *, opener: Callable[..., Any] = urllib.request.urlopen, timeout: float = 2.0
+    *, opener: Callable[..., Any] | None = None, timeout: float = 2.0
 ) -> list[str]:
     """Discover installed model names from loopback only.
 
@@ -87,12 +92,15 @@ def discover_ollama_models(
     requiring the response URL to remain the exact loopback endpoint.
     """
     request = urllib.request.Request(OLLAMA_TAGS_URL, method="GET")
+    opener = opener or urllib.request.build_opener(_NoRedirect()).open
     try:
         response = opener(request, timeout=timeout)
         response_url = response.geturl() if hasattr(response, "geturl") else OLLAMA_TAGS_URL
         if response_url != OLLAMA_TAGS_URL:
             raise AvailabilityError("ollama discovery redirect refused")
         body = response.read(1_048_577)
+    except AvailabilityError:
+        raise
     except (OSError, urllib.error.URLError) as exc:
         raise AvailabilityError("ollama discovery unavailable") from exc
     if len(body) > 1_048_576:

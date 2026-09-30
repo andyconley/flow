@@ -49,7 +49,7 @@ from provider_selection import merge_selection_policy
 from selection_authority import seal_selection_authority
 from provider_availability import discover_ollama_models, AvailabilityError
 from flowtoml import read_toml
-from paths import SCAFFOLD_DIR
+from paths import SCAFFOLD_DIR, USER_OVERLAY_DIR
 from delivery_selection import (authorize_and_dispatch as authorize_v9_and_dispatch,
                                 make_action as make_v9_action)
 from ollama_edit_worker import (propose_edits as propose_ollama_edits,
@@ -2319,21 +2319,60 @@ def _candidate_readiness(candidate: dict[str, Any], *, local_models: set[str],
 def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None = None) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     """Load the administrator ceiling and bounded readiness facts for v9.
 
-    Project configuration may narrow/replace candidate declarations, while
-    the shipped framework supplies the default ceiling. Discovery never
+    Administrator configuration owns exact candidate declarations. Project
+    configuration may only disable or lower limits on known candidates. Discovery never
     invents candidates or enables a disabled one. Hosted readiness is limited
     to an executable presence check and performs no credential or network I/O.
     """
     framework = read_toml(SCAFFOLD_DIR / "flow.toml")
+    administrator_path = USER_OVERLAY_DIR / "flow.toml"
+    administrator = read_toml(administrator_path) if administrator_path.is_file() else {}
     project_path = project_root / ".flow" / "flow.toml"
     project = read_toml(project_path) if project_path.is_file() else {}
-    raw_catalog = project.get("provider_candidates", framework.get("provider_candidates", []))
+    raw_catalog = administrator.get("provider_candidates", framework.get("provider_candidates", []))
     if not isinstance(raw_catalog, list) or not raw_catalog:
         raise ContractError("Flow provider_candidates configuration is absent")
     catalog = [dict(item) for item in raw_catalog if isinstance(item, dict)]
     if len(catalog) != len(raw_catalog):
         raise ContractError("Flow provider_candidates configuration is invalid")
-    policy = merge_selection_policy(framework.get("provider_selection", {}), None,
+    adapter_ceilings = {
+        "ollama": ({"manage", "read", "edit", "verify", "collect"},
+                   {"structured_output", "structured_edit", "evidence_collection"}),
+        "claude": ({"manage", "read", "edit", "verify", "collect"},
+                   {"structured_output", "structured_edit", "evidence_collection"}),
+        "codex": ({"manage", "read", "edit", "verify", "collect"},
+                  {"structured_output", "structured_edit", "evidence_collection"}),
+    }
+    identities: dict[str, dict[str, Any]] = {}
+    for candidate in catalog:
+        candidate_id, provider = candidate.get("candidate_id"), candidate.get("provider")
+        ceiling = adapter_ceilings.get(provider)
+        if (not isinstance(candidate_id, str) or not candidate_id or candidate_id in identities
+                or ceiling is None or not set(candidate.get("operations", [])).issubset(ceiling[0])
+                or not set(candidate.get("capabilities", [])).issubset(ceiling[1])):
+            raise ContractError("administrator provider candidate exceeds Flow adapter ceiling")
+        identities[candidate_id] = candidate
+    overrides = project.get("provider_candidates", [])
+    if not isinstance(overrides, list):
+        raise ContractError("project provider_candidates must be an array")
+    allowed_override_fields = {"candidate_id", "enabled", "max_input_bytes", "max_output_bytes", "max_context_tokens"}
+    for override in overrides:
+        if not isinstance(override, dict) or not set(override).issubset(allowed_override_fields) \
+                or override.get("candidate_id") not in identities:
+            raise ContractError("project provider candidate may only narrow a known candidate")
+        target = identities[override["candidate_id"]]
+        if override.get("enabled") is True and target.get("enabled") is not True:
+            raise ContractError("project provider candidate cannot enable an administrator-disabled candidate")
+        if "enabled" in override:
+            target["enabled"] = override["enabled"]
+        for field in ("max_input_bytes", "max_output_bytes", "max_context_tokens"):
+            if field in override:
+                value = override[field]
+                if type(value) is not int or value < 0 or (field in target and value > target[field]):
+                    raise ContractError("project provider candidate limit may only narrow")
+                target[field] = value
+    policy = merge_selection_policy(framework.get("provider_selection", {}),
+                                    administrator.get("provider_selection"),
                                     project.get("provider_selection"))
     clock = now or datetime.now(timezone.utc)
     try:
