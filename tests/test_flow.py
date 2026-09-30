@@ -2963,6 +2963,7 @@ class FlowCliTests(FlowCliHarness):
         fake_bin = self._make_fake_python_bin(include_compatible=False)
         env = _clean_env(fake_home)
         env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+        env.pop("FLOW_PYTHON", None)  # the release job pins it; this test controls selection
         env["FLOW_PYTHON_CANDIDATES"] = str(fake_bin / "python3")
 
         result = subprocess.run(
@@ -3004,6 +3005,7 @@ class FlowCliTests(FlowCliHarness):
         fake_bin = self._make_fake_python_bin(include_compatible=True)
         env = _clean_env(fake_home)
         env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+        env.pop("FLOW_PYTHON", None)  # the release job pins it; this test controls selection
         env["FLOW_PYTHON_CANDIDATES"] = f"{fake_bin / 'python3'}:{fake_bin / f'python{sys.version_info.major}.{sys.version_info.minor}'}"
         env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
 
