@@ -1300,7 +1300,8 @@ def main() -> int:
     if args.command == "run" and args.run_target == "inspect-delivery":
         import json
         try:
-            result = inspect_delivery(args.work_id, args.attempt_id, root=args.project_root)
+            result = (inspect_delivery(args.work_id, args.attempt_id, root=args.project_root)
+                      if args.project_root is not None else inspect_delivery(args.work_id, args.attempt_id))
         except (ContractError, FileNotFoundError, ValueError, OSError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery inspection refused: {exc}")
             return 2

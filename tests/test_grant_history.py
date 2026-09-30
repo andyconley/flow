@@ -82,6 +82,17 @@ SITES = {
                                  "WHERE call_id=?"): ("exempt", "not a grant change: only from started or unknown"),
     ("regrant_not_dispatched", "UPDATE actions SET status='allowed',reason='regranted_after_no_dispatch',grant_id=? "
                                "WHERE action_id=?"): ("exempt", "v8-unreachable: refuses protocol 8"),
+    ("v9_send_fence", "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,"
+                      "sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)"):
+        ("exempt", "v9 uses the selection/send fence instead of v8 grants"),
+    ("v9_send_fence", "UPDATE actions SET status='unknown',reason='v9_provider_send_uncertain' "
+                      "WHERE action_id=? AND status='started'"):
+        ("exempt", "v9 send outcome became uncertain"),
+    ("v9_send_fence", "UPDATE actions SET status='unknown',reason='v9_provider_result_unrecorded' "
+                      "WHERE action_id=? AND status='started'"):
+        ("exempt", "v9 send result was not durably closed"),
+    ("_complete_v9_send_locked", "UPDATE actions SET status='completed',result_json=?,reason='' WHERE action_id=?"):
+        ("exempt", "v9 result closure occurs only after the durable send claim"),
 }
 
 

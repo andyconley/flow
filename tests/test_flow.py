@@ -3913,6 +3913,7 @@ class FlowCliTests(FlowCliHarness):
                 "runner_progress",
                 "runstate",
                 "runtime_smoke",
+                "selection_authority",
                 "selection_receipt",
                 "session_lookup",
                 "setup",

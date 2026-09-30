@@ -1,8 +1,4 @@
-"""Protocol-v9 application boundary for logical provider binding.
-
-V9 remains test-only until the activation gate. This module proves the exact
-child-proposal/Flow-recomputation/grant boundary without altering v8 dispatch.
-"""
+"""Protocol-v9 application boundary for logical provider binding."""
 
 from __future__ import annotations
 

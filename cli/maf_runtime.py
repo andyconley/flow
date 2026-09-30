@@ -37,7 +37,7 @@ RESOLVED_PACKAGES = {
     "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
     "pyyaml": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
 }
-SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
+SUPPORTED_PROTOCOLS = [5, 6, 7, 8, 9]
 READY = "ready"
 UNREADY_STATES = {
     "not_installed", "interpreter_missing", "identity_mismatch", "lock_mismatch",

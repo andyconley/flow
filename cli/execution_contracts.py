@@ -7,9 +7,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from runner_limits import (MAX_ACTIONS, MAX_CONCURRENT, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS,
-                           MAX_TOKEN_TRANCHES, MAX_VERIFIER_CALLS)
-from runner_progress import classify as classify_progress
+try:
+    from runner_limits import (MAX_ACTIONS, MAX_CONCURRENT, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS,
+                               MAX_TOKEN_TRANCHES, MAX_VERIFIER_CALLS)
+    from runner_progress import classify as classify_progress
+except ModuleNotFoundError:  # Package import used by the managed MAF child.
+    from .runner_limits import (MAX_ACTIONS, MAX_CONCURRENT, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS,
+                                MAX_TOKEN_TRANCHES, MAX_VERIFIER_CALLS)
+    from .runner_progress import classify as classify_progress
 
 try:
     from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
@@ -42,7 +47,8 @@ CLAUDE_ASSIGNMENTS = (("test-engineer", "ollama"), ("quality-reviewer", "claude"
 def is_magentic_protocol(protocol_version: int) -> bool:
     """Whether an execution protocol uses the supervised Magentic boundary."""
     return protocol_version in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION,
-                                DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION}
+                                DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION,
+                                PROVIDER_SELECTION_PROTOCOL_VERSION}
 
 
 def is_chartered_protocol(protocol_version: int) -> bool:

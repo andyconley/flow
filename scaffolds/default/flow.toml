@@ -615,8 +615,12 @@ invocation = "flow run execute-local-claude WORK_ID --local-task-file PATH --cla
 summary = "Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter"
 
 [[help.cli_commands]]
-invocation = "flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]"
-summary = "Run an approved charter-selected specialist roster through Flow-gated Magentic"
+invocation = "flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]"
+summary = "Run a new provider-neutral v9 charter through Flow-gated Magentic; --legacy-v8 preserves an existing historical v8 contract"
+
+[[help.cli_commands]]
+invocation = "flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]"
+summary = "Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending"
 
 [[help.cli_commands]]
 invocation = "flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]"
@@ -640,11 +644,11 @@ summary = "List every started v8 attempt with liveness, lead status, uncertain r
 
 [[help.cli_commands]]
 invocation = "flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]"
-summary = "Verify a sealed v8 receipt offline against the ledger, sealed authority, checkpoints and evidence; exits 1 on any failed check, 2 when it cannot run (read-only)"
+summary = "Verify a sealed v8 or v9 receipt offline; v9 recomputes selection and exact ledger closure (read-only)"
 
 [[help.cli_commands]]
 invocation = "flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]"
-summary = "Show each call's grant history, provider session, checkpoint, process group, timing and usage for a v8 attempt and its lineage, led by why it is stuck (read-only)"
+summary = "Show protocol-specific call and selection lineage, including v9 fallback and recovery state (read-only)"
 
 [[help.cli_commands]]
 invocation = "flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME"
