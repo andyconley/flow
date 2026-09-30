@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from delivery_cancel import interruptible
+from delivery_cancel import CancellableSelector, interruptible
 
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
@@ -167,7 +167,7 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
             size = 0
             stderr_size = 0
             written = 0
-            selector = selectors.DefaultSelector()
+            selector = CancellableSelector()
             os.set_blocking(process.stdin.fileno(), False)
             selector.register(process.stdin, selectors.EVENT_WRITE)
             selector.register(process.stdout, selectors.EVENT_READ)

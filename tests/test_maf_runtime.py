@@ -20,7 +20,9 @@ import lifecycle
 
 class MafRuntimeProbeTests(unittest.TestCase):
     def test_absent_managed_selection_is_not_installed(self):
-        with tempfile.TemporaryDirectory() as temp:
+        # FLOW_MAF_PYTHON is an override that probe() honours; this case has none.
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ):
+            os.environ.pop("FLOW_MAF_PYTHON", None)
             result = probe(home=Path(temp))
         self.assertEqual(result["state"], "not_installed")
         self.assertEqual(result["source"], "managed")

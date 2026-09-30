@@ -8,11 +8,29 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cli.execution_contracts import expected_magentic_action_id, expected_manager_call_id
-
-
+# execution_contracts imports its siblings (runner_limits) by bare name, so cli/
+# must be importable whatever ran first.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from execution_contracts import expected_magentic_action_id, expected_manager_call_id  # noqa: E402
 from maf_env import MAF_PYTHON, requires_maf  # noqa: E402
+
+
+# The child proves its runtime before the first manager request. The
+# supervisor and handshake tests cover those messages; these tests drive the
+# manager bridge, so they read past them.
+RUNTIME_HANDSHAKE = {"runtime_ready", "runtime_initialized"}
+
+
+def next_event(stream) -> dict:
+    """The child's next protocol message after the runtime handshake."""
+    while True:
+        line = stream.readline()
+        if not line:
+            raise AssertionError("child exited before its next protocol message")
+        event = json.loads(line)
+        if event.get("type") not in RUNTIME_HANDSHAKE:
+            return event
 
 
 @requires_maf
@@ -52,9 +70,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             manager_requests: list[dict] = []
             terminal = {}
             for _ in range(24):
-                line = child.stdout.readline()
-                self.assertTrue(line, "child exited before terminal message")
-                event = json.loads(line)
+                event = next_event(child.stdout)
                 kind = event["type"]
                 if kind == "manager_request":
                     self.assertEqual(event["call_id"], expected_manager_call_id(event))
@@ -258,7 +274,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
                               "task": "Analyze fixture"})
             assert initial.stdout
             for _ in range(4):
-                event = json.loads(initial.stdout.readline())
+                event = next_event(initial.stdout)
                 if event["type"] == "manager_request":
                     answer_manager(initial, event)
                 else:
@@ -279,7 +295,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             assert restored.stdout
             seen = []
             for _ in range(4):
-                event = json.loads(restored.stdout.readline())
+                event = next_event(restored.stdout)
                 seen.append(event["type"])
                 if event["type"] == "manager_request":
                     answer_manager(restored, event)
@@ -334,7 +350,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             initial = launch({"protocol_version": 8, "type": "start", "envelope": envelope, "task": "Analyze fixture"})
             manager_calls = 0
             for _ in range(6):
-                event = json.loads(initial.stdout.readline())
+                event = next_event(initial.stdout)
                 if event["type"] == "manager_request":
                     manager_calls += 1
                     answer_manager(initial, event)
@@ -352,13 +368,13 @@ class StockDeliveryLeadTest(unittest.TestCase):
 
             wrong = launch({"protocol_version": 8, "type": "resume", "envelope": envelope, "task": "Analyze fixture",
                             "resume": {**resume, "result": {"summary": "answered on Flow's behalf"}}})
-            self.assertEqual(json.loads(wrong.stdout.readline())["type"], "error")
+            self.assertEqual(next_event(wrong.stdout)["type"], "error")
             wrong.wait(timeout=10)
             close(wrong)
 
             restored = launch({"protocol_version": 8, "type": "resume", "envelope": envelope,
                                "task": "Analyze fixture", "resume": resume})
-            first = json.loads(restored.stdout.readline())
+            first = next_event(restored.stdout)
             self.assertEqual(first["type"], "propose_action", first)
             self.assertEqual((first["action_id"], first["checkpoint_id"], first["sequence"]),
                              (proposal["action_id"], proposal["checkpoint_id"], 1))
@@ -368,7 +384,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             restored.stdin.flush()
             seen = []
             for _ in range(4):
-                event = json.loads(restored.stdout.readline())
+                event = next_event(restored.stdout)
                 seen.append(event["type"])
                 if event["type"] == "manager_request":
                     self.assertGreater(event["sequence"], manager_calls)
@@ -411,7 +427,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             manager_calls = 0
             replan_requests = []
             for _ in range(20):
-                event = json.loads(initial.stdout.readline())
+                event = next_event(initial.stdout)
                 if event["type"] == "manager_request":
                     manager_calls += 1
                     if event["phase"].startswith("replan_"):
@@ -448,7 +464,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             wrong = launch({"protocol_version": 5, "type": "resume", "envelope": envelope,
                             "task": "Analyze fixture", "resume": {**resume, "replans_committed": 0}})
             assert wrong.stdout
-            denied = json.loads(wrong.stdout.readline())
+            denied = next_event(wrong.stdout)
             close(wrong)
             self.assertEqual(denied["type"], "error")
             self.assertIn("replan position differs", denied["message"])
@@ -456,7 +472,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
             restored = launch({"protocol_version": 5, "type": "resume", "envelope": envelope,
                                "task": "Analyze fixture", "resume": {**resume, "replans_committed": 1}})
             assert restored.stdout and restored.stdin
-            progress = json.loads(restored.stdout.readline())
+            progress = next_event(restored.stdout)
             self.assertEqual((progress["type"], progress["phase"], progress["sequence"]),
                              ("manager_request", "progress", 10))
             complete = json.dumps({"is_request_satisfied": {"reason": "done", "answer": True},
@@ -467,12 +483,12 @@ class StockDeliveryLeadTest(unittest.TestCase):
             restored.stdin.write(json.dumps({"protocol_version": 5, "type": "manager_response",
                                              "call_id": progress["call_id"], "text": complete}) + "\n")
             restored.stdin.flush()
-            final = json.loads(restored.stdout.readline())
+            final = next_event(restored.stdout)
             self.assertEqual((final["type"], final["phase"]), ("manager_request", "final"))
             restored.stdin.write(json.dumps({"protocol_version": 5, "type": "manager_response",
                                              "call_id": final["call_id"], "text": "Done"}) + "\n")
             restored.stdin.flush()
-            finished = json.loads(restored.stdout.readline())
+            finished = next_event(restored.stdout)
             close(restored)
             self.assertEqual(finished["type"], "workflow_finished")
 
