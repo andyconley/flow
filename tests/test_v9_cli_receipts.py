@@ -78,6 +78,12 @@ class V9CliReceiptTests(unittest.TestCase):
         self.assertEqual(inspected["attempt"]["execution_protocol_version"], 9)
         self.assertEqual(inspected["attempt"]["selection_trace"][0]["state"], "consumed")
 
+        code, execution = self._cli("inspect-execution", self.work_id, self.attempt_id,
+                                    "--project-root", str(self.root), "--json")
+        self.assertEqual(code, 0)
+        self.assertEqual(execution["snapshot"]["execution_protocol_version"], 9)
+        self.assertNotIn("receipt:ledger-mismatch", execution["missing_evidence"])
+
     def test_resealed_or_edited_receipt_fails_before_cli_reports_valid(self) -> None:
         receipt = self.attempt_dir / "receipt.json"
         receipt.write_bytes(receipt.read_bytes() + b" ")

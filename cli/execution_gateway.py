@@ -22,6 +22,7 @@ from maf_supervisor import PINNED_MAF_CORE_VERSION, run_maf, run_maf_multiturn, 
 from orchestration import validate_orchestration
 from paths import SCAFFOLD_DIR
 from runstate import status as run_status
+from selection_receipt import verify_selection_receipt_snapshot
 from sync import agent_body, merge_user_overlay
 
 
@@ -616,18 +617,25 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
     if not attempt_dir.is_dir() or attempt_dir.is_symlink():
         raise ContractError("attempt evidence directory is absent")
     sources = {}
+    charter_sources = envelope.get("charter_sources") if isinstance(envelope.get("charter_sources"), dict) else {}
+    requirements_source = charter_sources.get("requirements") if isinstance(charter_sources.get("requirements"), dict) else {}
+    acceptance_source = charter_sources.get("acceptance") if isinstance(charter_sources.get("acceptance"), dict) else {}
     for name, expected in (("manifest.snapshot.json", envelope["manifest_digest"]),
-                           ("requirements.snapshot.md", envelope["charter_sources"]["requirements"]["sha256"]),
-                           ("acceptance.snapshot.md", envelope["charter_sources"]["acceptance"]["sha256"])):
+                           ("requirements.snapshot.md", requirements_source.get("sha256")),
+                           ("acceptance.snapshot.md", acceptance_source.get("sha256"))):
         path = attempt_dir / name
         sources[name] = {"present": path.is_file() and not path.is_symlink(),
-                         "matches": path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == expected}
+                         "matches": isinstance(expected, str) and path.is_file() and not path.is_symlink()
+                         and hashlib.sha256(path.read_bytes()).hexdigest() == expected}
     receipt_path = attempt_dir / "receipt.json"
     receipt = None
     if receipt_path.is_file() and not receipt_path.is_symlink():
         try:
             receipt = json.loads(receipt_path.read_text())
-            validate_receipt(envelope, receipt)
+            if snapshot.get("execution_protocol_version") == 9:
+                verify_selection_receipt_snapshot(receipt, snapshot)
+            else:
+                validate_receipt(envelope, receipt)
         except (ValueError, OSError) as exc:
             raise ContractError(f"receipt is invalid: {exc}") from exc
     missing_evidence = [name for name, state in sources.items() if not state["matches"]]

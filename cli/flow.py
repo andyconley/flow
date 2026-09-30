@@ -735,6 +735,8 @@ def main() -> int:
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
+    run_inspect_parser.add_argument("--project-root", type=Path,
+                                    help="project root containing .flow (read-only)")
     run_inspect_parser.add_argument("--json", action="store_true")
 
     run_inspect_delivery_parser = run_sub.add_parser(
@@ -1291,7 +1293,7 @@ def main() -> int:
     if args.command == "run" and args.run_target == "inspect-execution":
         import json
         try:
-            result = inspect_attempt(args.work_id, args.attempt_id)
+            result = inspect_attempt(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"inspection refused: {exc}")
             return 2
