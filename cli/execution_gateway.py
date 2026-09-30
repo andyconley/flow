@@ -632,12 +632,15 @@ def inspect_attempt(work_id: str, attempt_id: str, *, root: Path | None = None) 
     if receipt_path.is_file() and not receipt_path.is_symlink():
         try:
             receipt_bytes = receipt_path.read_bytes()
-            if snapshot.get("sealed_receipt_sha256") is None or snapshot.get("status") == "started":
+            protocol = snapshot.get("execution_protocol_version")
+            if (protocol == 9 and (snapshot.get("sealed_receipt_sha256") is None
+                                   or snapshot.get("status") == "started")):
                 raise ContractError("receipt file exists without a terminal ledger seal")
-            if hashlib.sha256(receipt_bytes).hexdigest() != snapshot["sealed_receipt_sha256"]:
+            if (snapshot.get("sealed_receipt_sha256") is not None
+                    and hashlib.sha256(receipt_bytes).hexdigest() != snapshot["sealed_receipt_sha256"]):
                 raise ContractError("receipt bytes differ from the ledger-sealed digest")
             receipt = json.loads(receipt_bytes)
-            if snapshot.get("execution_protocol_version") == 9:
+            if protocol == 9:
                 verify_selection_receipt_snapshot(receipt, snapshot)
             else:
                 validate_receipt(envelope, receipt)
