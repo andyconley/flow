@@ -18,6 +18,11 @@ except ModuleNotFoundError:  # Package import used by isolated tests.
     from .verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
                                      provider_binding_mismatch, validate_evaluation, validate_structured_verifier_result)
 
+try:
+    from selection_authority import SelectionAuthorityError, validate_selection_authority
+except ModuleNotFoundError:  # Package import used by isolated tests.
+    from .selection_authority import SelectionAuthorityError, validate_selection_authority
+
 SCHEMA_VERSION = 1
 EXECUTION_PROTOCOL_VERSION = 2
 MIXED_PROTOCOL_VERSION = 3
@@ -195,7 +200,8 @@ def _hex_digest(value: Any) -> bool:
 def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
     required = (
         "work_id", "attempt_id", "charter_digest", "manifest_digest", "run_protocol_revision",
-        "logical_assignments", "selection_inputs", "selection_input_digests", "limits", "checkpoint_dir",
+        "logical_assignments", "selection_inputs", "selection_input_digests", "selection_authority",
+        "limits", "checkpoint_dir",
     )
     require_fields(envelope, required, kind="protocol v9 envelope")
     if envelope["run_protocol_revision"] != 2:
@@ -208,16 +214,21 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
     seen: set[str] = set()
     forbidden = {"provider", "model", "candidate_id", "eligible_candidates", "roster", "ranked_roster"}
     for assignment in assignments:
-        if not isinstance(assignment, dict) or forbidden & set(assignment):
+        if (not isinstance(assignment, dict) or set(assignment) != {
+                "assignment_id", "role", "instructions", "requirements"
+        } or forbidden & set(assignment)):
             raise ContractError("protocol v9 logical assignment carries concrete provider authority")
         for field in ("assignment_id", "role", "instructions", "requirements"):
             if field not in assignment:
                 raise ContractError(f"protocol v9 logical assignment missing {field}")
         if not isinstance(assignment["assignment_id"], str) or not assignment["assignment_id"] or assignment["assignment_id"] in seen:
             raise ContractError("protocol v9 logical assignment identity is invalid")
+        if (not isinstance(assignment["role"], str) or not assignment["role"]
+                or not isinstance(assignment["instructions"], str) or not assignment["instructions"].strip()):
+            raise ContractError("protocol v9 logical assignment text is invalid")
         seen.add(assignment["assignment_id"])
         requirements = assignment["requirements"]
-        if not isinstance(requirements, dict) or requirements.get("operation") not in {"manage", "read", "edit", "verify", "collect"}:
+        if not isinstance(requirements, dict):
             raise ContractError("protocol v9 logical requirements are invalid")
     inputs = envelope["selection_inputs"]
     input_digests = envelope["selection_input_digests"]
@@ -228,6 +239,10 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
     for key, value in inputs.items():
         if input_digests.get(key) != digest(value):
             raise ContractError(f"protocol v9 {key} digest mismatch")
+    try:
+        validate_selection_authority(envelope)
+    except SelectionAuthorityError as exc:
+        raise ContractError(f"protocol v9 selection authority is invalid: {exc}") from exc
 
 
 def expected_v9_logical_action_id(action: dict[str, Any]) -> str:

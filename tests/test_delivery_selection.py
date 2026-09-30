@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import copy
+import json
 import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -19,10 +21,15 @@ from delivery_selection import (  # noqa: E402
     compute_binding,
     make_action,
 )
-from delivery_gateway import execute_v9_selected_action  # noqa: E402
+from delivery_gateway import execute_v9_logical_delivery, execute_v9_selected_action  # noqa: E402
 from execution_contracts import ContractError, digest, validate_envelope  # noqa: E402
 from execution_ledger import ExecutionLedger  # noqa: E402
 from provider_selection import merge_selection_policy  # noqa: E402
+from provider_availability import normalize_availability  # noqa: E402
+from selection_authority import (  # noqa: E402
+    seal_selection_authority,
+    successor_authority_digest,
+)
 
 
 def _candidate(candidate_id: str, provider: str, family: str) -> dict:
@@ -42,19 +49,25 @@ def _candidate(candidate_id: str, provider: str, family: str) -> dict:
 
 def _envelope(*, excluded_families: list[str] | None = None,
               waiver: bool = False) -> dict:
-    policy = merge_selection_policy({}, None, None, ({
-        "independence_waiver": {"approved": True, "approval_digest": "a" * 64}
-    } if waiver else None))
+    policy = merge_selection_policy({})
     catalog = [
         _candidate("local", "ollama", "local"),
         _candidate("claude", "claude", "anthropic"),
         _candidate("codex", "codex", "openai"),
     ]
-    availability = [{"candidate_id": item["candidate_id"], "state": "ready"}
-                    for item in catalog]
+    sealed = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
+    availability = [normalize_availability({
+        "candidate_id": item["candidate_id"],
+        "state": "ready",
+        "observed_at": (sealed - timedelta(seconds=5)).isoformat().replace("+00:00", "Z"),
+        "expires_at": (sealed + timedelta(minutes=2)).isoformat().replace("+00:00", "Z"),
+        "evidence_code": "model_present",
+        "probe_version": "availability-v1",
+    }, now=sealed) for item in catalog]
     common = {
         "minimum_tier": "working", "required_capabilities": ["structured_output"],
         "locality": "any", "input_bytes": 100, "output_bytes": 100, "context_tokens": 100,
+        "risk_class": "standard", "independence_required": False,
     }
     assignments = [
         {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Coordinate logical work.",
@@ -63,10 +76,43 @@ def _envelope(*, excluded_families: list[str] | None = None,
          "requirements": {**common, "operation": "edit", "required_capabilities": ["structured_edit"]}},
         {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify independently.",
          "requirements": {**common, "operation": "verify",
-                          "excluded_provider_families": excluded_families or []}},
+                          "risk_class": "high" if excluded_families else "standard",
+                          "independence_required": bool(excluded_families)}},
     ]
+    constraints = ([{
+        "assignment_id": "verifier",
+        "risk_class": "high",
+        "excluded_provider_families": excluded_families,
+        "producer_assignment_ids": ["producer"],
+        "evidence_collector_assignment_ids": [],
+        "source_binding_digests": ["d" * 64],
+    }] if excluded_families else [])
+    successor = successor_authority_digest(
+        work_id="selection-test", attempt_id="attempt-v9", charter_digest="b" * 64,
+        manifest_digest="c" * 64, generation=1,
+        sealed_at="2026-09-29T12:00:00Z", logical_assignments=assignments,
+        catalog=catalog, availability=availability, independence_constraints=constraints,
+        prior_authority_digest=None,
+    )
+    if waiver:
+        amendment = {
+            "schema_version": 1,
+            "decision": "approve",
+            "work_id": "selection-test",
+            "attempt_id": "attempt-v9",
+            "assignment_id": "verifier",
+            "risk_class": "high",
+            "excluded_provider_families": excluded_families,
+            "waived_provider_families": excluded_families,
+            "prior_policy_digest": policy["policy_digest"],
+            "successor_authority_digest": successor,
+            "approval_actor": "user",
+            "approval_event_digest": "a" * 64,
+        }
+        amendment["approval_digest"] = digest(amendment)
+        policy = merge_selection_policy({}, None, None, {"independence_waiver": amendment})
     inputs = {"policy": policy, "catalog": catalog, "availability": availability}
-    return {
+    envelope = {
         "schema_version": 1,
         "execution_protocol_version": 9,
         "work_id": "selection-test",
@@ -80,6 +126,14 @@ def _envelope(*, excluded_families: list[str] | None = None,
         "limits": {"max_actions": 3},
         "checkpoint_dir": ".flow/runs/selection-test/checkpoints",
     }
+    envelope["selection_authority"] = seal_selection_authority(
+        work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+        charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"], generation=1,
+        sealed_at="2026-09-29T12:00:00Z", logical_assignments=assignments,
+        policy=policy, catalog=catalog, availability=availability,
+        independence_constraints=constraints,
+    )
+    return envelope
 
 
 class DeliverySelectionTests(unittest.TestCase):
@@ -180,6 +234,118 @@ class DeliverySelectionTests(unittest.TestCase):
                 states = dict(db.execute("SELECT selection_id,state FROM provider_selections"))
             self.assertEqual(states[first["selection_id"]], "superseded")
             self.assertEqual(states[successor["selection_id"]], "consumed")
+
+    def test_gateway_v9_send_is_ledger_claimed_before_adapter_and_closed_after_result(self) -> None:
+        envelope = _envelope()
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            seen = []
+
+            def send(binding, sent_action):
+                snapshot = ledger.snapshot(envelope["attempt_id"])
+                seen.append((binding["candidate_id"], sent_action["action_id"], snapshot))
+                self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
+                self.assertEqual(snapshot["provider_selections"][0]["provider_action_id"], action["action_id"])
+                self.assertEqual(snapshot["actions"][0]["status"], "started")
+                return {"output": "done"}
+
+            result = execute_v9_selected_action(
+                envelope, action, send,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(seen[0][0], "local")
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual(snapshot["actions"][0]["status"], "completed")
+            self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
+            self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
+
+    def test_gateway_v9_uncertain_send_is_durable_and_cannot_fall_forward(self) -> None:
+        envelope = _envelope()
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            with self.assertRaises(RecoveryRequired):
+                execute_v9_selected_action(
+                    envelope, action, lambda *_: (_ for _ in ()).throw(TimeoutError()),
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                    ledger=ledger, generation=1,
+                )
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
+            self.assertEqual(snapshot["actions"][0]["status"], "unknown")
+            self.assertTrue(ledger.v9_recovery_required(envelope["attempt_id"]))
+
+    def test_v9_unknown_send_can_only_be_abandoned_with_a_terminal_receipt(self) -> None:
+        envelope = _envelope()
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger = ExecutionLedger(root / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            with self.assertRaises(RecoveryRequired):
+                execute_v9_selected_action(
+                    envelope, action, lambda *_: (_ for _ in ()).throw(TimeoutError()),
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"}, ledger=ledger, generation=1,
+                )
+            with self.assertRaisesRegex(ContractError, "recovery or selection closure"):
+                ledger.seal_v9_attempt(envelope["attempt_id"], "completed", "done", root / "receipt.json", generation=1)
+            terminal = ledger.terminate_v9_attempt(
+                envelope["attempt_id"], "abandoned", generation=1, actor="operator",
+                explanation="provider outcome remained unknown", cause="operator_abandoned",
+                receipt_path=root / "receipt.json",
+            )
+            self.assertEqual(terminal["status"], "abandoned")
+            receipt = json.loads((root / "receipt.json").read_text())
+            self.assertEqual(receipt["termination"]["status"], "abandoned")
+            self.assertEqual(receipt["selections"][0]["state"], "consumed")
+
+    def test_logical_v9_route_passes_maf_proposal_through_flow_fence_to_adapter(self) -> None:
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            seen = {}
+
+            def supervisor(sent_envelope, task, on_action, **_kwargs):
+                self.assertEqual(sent_envelope, envelope)
+                outcome = on_action({"attempt_id": envelope["attempt_id"], "assignment_id": "producer",
+                                     "task": task, "sequence": 1, "manager_turn": 1})
+                return {"status": "completed", "outcome": outcome}
+
+            def adapter(binding, action):
+                seen["binding"], seen["action"] = binding, action
+                snapshot = ledger.snapshot(envelope["attempt_id"])
+                self.assertEqual(snapshot["actions"][0]["status"], "started")
+                self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
+                return {"output": "applied"}
+
+            outcome = execute_v9_logical_delivery(
+                envelope, "Implement the approved change.", ledger, adapter,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=supervisor,
+            )
+            self.assertEqual(outcome["status"], "completed")
+            self.assertEqual(seen["binding"]["candidate_id"], "local")
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "completed")
+
+    def test_logical_v9_route_runs_the_credentialless_maf_child(self) -> None:
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            outcome = execute_v9_logical_delivery(
+                envelope, "Implement the approved change.", ledger,
+                lambda binding, _action: {"provider": binding["provider"], "output": "applied"},
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                python_path=sys.executable,
+            )
+            self.assertEqual(outcome["attempt_id"], envelope["attempt_id"])
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "completed")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
+from datetime import datetime, timezone
 from contextlib import ExitStack, nullcontext, suppress
 from functools import partial
 from pathlib import Path
@@ -42,13 +43,18 @@ from delivery_contracts import (DELIVERY_CHARTER_VERSION, DeliveryContractError,
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot, resolve_attempt
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
-from delivery_selection import authorize_and_dispatch as authorize_v9_and_dispatch
+from provider_availability import normalize_availability
+from provider_selection import merge_selection_policy
+from selection_authority import seal_selection_authority
+from delivery_selection import (authorize_and_dispatch as authorize_v9_and_dispatch,
+                                make_action as make_v9_action)
 from ollama_edit_worker import propose_edits as propose_ollama_edits, validate_and_apply as apply_ollama_edits
 from ollama_manager import call_ollama_manager
 from claude_worker import call_claude
 from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
-from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, run_maf_delivery
+from maf_supervisor import (MafChildError, MafProtocolError, MafTransportError, run_maf_delivery,
+                            run_maf_v9_delivery)
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import handoff_to_review, status as run_status
@@ -1103,6 +1109,10 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
     if not attempt_dir.is_dir() or attempt_dir.is_symlink():
         raise ContractError("Magentic attempt directory is absent")
     peek = _peek_snapshot(run_dir / "execution" / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] == 9:
+        # A provider send claim is never replayed by resume. Operators receive
+        # the durable reconciliation state instead of a second dispatch.
+        return v9_recovery_status(work_id, attempt_id, root=project_root)
     if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
         if continuation_epoch_id:
             raise RecoveryRefused(CONTINUATION_EPOCHS_V5_ONLY)
@@ -1300,6 +1310,8 @@ def recover_delivery(work_id: str, attempt_id: str, *, actor: str, root: Path | 
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
     attempt_dir = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id
     peek = _peek_snapshot(attempt_dir.parent / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] == 9:
+        return v9_recovery_status(work_id, attempt_id, root=project_root)
     if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
         # Chunk 1 needs no operator evidence, so v8 recover equals resume.
         return _resume_chartered(work_id, attempt_id, root=project_root, manager_adapter=manager_adapter,
@@ -2093,8 +2105,192 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
 
 def execute_v9_selected_action(envelope: dict[str, Any], action: dict[str, Any],
                                adapter_send: Callable[[dict[str, Any], dict[str, Any]], Any], *,
-                               readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any]:
-    """Test-only v9 gateway boundary; activation remains gated at checkpoint 5."""
+                               readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]],
+                               ledger: ExecutionLedger | None = None,
+                               generation: int | None = None,
+                               predecessor_selection_id: str | None = None) -> dict[str, Any]:
+    """Execute one v9 provider action through Flow's durable send fence.
+
+    The caller is responsible for constructing the sealed v9 envelope and
+    logical action.  Once an ``ExecutionLedger`` is supplied this is a live
+    adapter boundary: selection reservation, provider-send claim, and result
+    closure are ledger-owned.  Existing v8 dispatch never reaches this path.
+    """
     return authorize_v9_and_dispatch(
-        envelope, action, adapter_send, readiness_recheck=readiness_recheck
+        envelope, action, adapter_send, readiness_recheck=readiness_recheck,
+        ledger=ledger, generation=generation,
+        predecessor_selection_id=predecessor_selection_id,
     )
+
+
+def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: ExecutionLedger,
+                                adapter_send: Callable[[dict[str, Any], dict[str, Any]], Any], *,
+                                readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]],
+                                supervisor: Callable[..., dict[str, Any]] | None = None,
+                                python_path: str | None = None) -> dict[str, Any]:
+    """Run a sealed v9 logical assignment through MAF, Flow, and one adapter.
+
+    MAF proposes only the logical assignment/task.  Flow creates the action,
+    recomputes the sealed binding, owns reservation and send claim, then calls
+    the selected adapter.  No MAF process receives provider credentials or a
+    concrete model/provider route.
+    """
+    if envelope.get("execution_protocol_version") != 9:
+        raise ContractError("logical v9 delivery requires a protocol v9 envelope")
+    snapshot = ledger.snapshot(envelope["attempt_id"])
+    if snapshot["envelope"] != envelope or snapshot["status"] != "started":
+        raise ContractError("logical v9 delivery attempt is absent or closed")
+    generation = snapshot["owner_generation"]
+
+    def on_action(proposal: dict[str, Any]) -> dict[str, Any]:
+        action = make_v9_action(
+            envelope, proposal["assignment_id"], proposal["task"],
+            sequence=proposal["sequence"], manager_turn=proposal["manager_turn"],
+        )
+        result = execute_v9_selected_action(
+            envelope, action, adapter_send, readiness_recheck=readiness_recheck,
+            ledger=ledger, generation=generation,
+        )
+        # The child only needs Flow's outcome. The complete binding/action
+        # remains in the ledger and receipt, rather than echoing it back.
+        return {"status": result["status"], "provider_action_id": action["action_id"],
+                "selection_id": action["selection_id"]}
+
+    outcome = (supervisor or run_maf_v9_delivery)(envelope, task, on_action,
+                                                    python_path=python_path)
+    # A normal bounded v9 run has exactly one closed action. Seal the receipt
+    # from the ledger while it is still the source of truth; uncertain sends
+    # refuse here and remain in explicit recovery instead.
+    attempt_dir = Path(envelope["checkpoint_dir"]).parent
+    if not attempt_dir.is_absolute() or not attempt_dir.is_dir() or attempt_dir.is_symlink():
+        # Pure embedding callers can exercise the MAF/Flow adapter boundary
+        # with an in-memory-style ledger fixture. A charter-prepared live
+        # attempt always has this private absolute directory and is sealed.
+        return outcome
+    sealed = ledger.seal_v9_attempt(envelope["attempt_id"], "completed", "logical_action_completed",
+                                    attempt_dir / "receipt.json", generation=generation)
+    return {**outcome, "receipt_path": sealed["receipt_path"],
+            "sealed_receipt_sha256": sealed["sealed_receipt_sha256"]}
+
+
+def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *,
+                                  logical_assignments: list[dict[str, Any]],
+                                  catalog: list[dict[str, Any]], availability: list[dict[str, Any]],
+                                  framework_policy: dict[str, Any] | None = None,
+                                  administrator_policy: dict[str, Any] | None = None,
+                                  project_policy: dict[str, Any] | None = None,
+                                  run_policy: dict[str, Any] | None = None,
+                                  independence_constraints: list[dict[str, Any]] | None = None,
+                                  root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
+    """Prepare a sealed, provider-neutral v9 charter attempt.
+
+    Inputs are Flow configuration/probe DTOs, never a Shaper-selected provider
+    roster.  They are closed and sealed by ``validate_envelope`` before the
+    attempt is created. The old v8 preparer remains a separate entry point.
+    """
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    state = run_status(work_id, root=project_root)
+    if state.get("state") != "implementing" or state.get("protocol_revision") != 2:
+        raise ContractError("v9 delivery requires an implementing revision-2 run")
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    artifacts = state.get("artifacts", {})
+    requirements = _run_file(project_root, run_dir, artifacts.get("requirements", ""))
+    acceptance = _run_file(project_root, run_dir, artifacts.get("acceptance_criteria", ""))
+    manifest = _run_file(project_root, run_dir, artifacts.get("orchestration_manifest", ""))
+    charter = _run_file(project_root, run_dir, artifacts.get("job_charter", ""))
+    task = json.loads(charter.read_text()).get("task") if charter.suffix == ".json" else charter.read_text()
+    if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
+        raise ContractError("v9 job charter task is absent or oversized")
+    raw_worktree = Path(worktree)
+    if raw_worktree.is_symlink():
+        raise ContractError("isolated worktree path is a symlink")
+    worktree = raw_worktree.resolve(strict=True)
+    _refuse_project_flow_in_worktree(worktree, project_root)
+    if _git(worktree, "rev-parse", "HEAD") != source_commit:
+        raise ContractError("isolated worktree does not match pinned source commit")
+    sources = {name: {"path": str(path.relative_to(project_root)),
+                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+               for name, path in (("requirements", requirements), ("acceptance", acceptance))}
+    execution_dir = run_dir / "execution"
+    execution_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(execution_dir, 0o700)
+    attempt_id = uuid.uuid4().hex
+    attempt_dir = execution_dir / attempt_id
+    attempt_dir.mkdir(mode=0o700)
+    (attempt_dir / "checkpoints").mkdir(mode=0o700)
+    for path, name in ((requirements, "requirements.snapshot.md"), (acceptance, "acceptance.snapshot.md"),
+                       (manifest, "manifest.snapshot.json"), (charter, "job-charter.snapshot.json")):
+        _write_snapshot(attempt_dir / name, path.read_bytes())
+    sealed_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    normalized_availability = [normalize_availability(item) for item in availability]
+    policy = merge_selection_policy(framework_policy or {}, administrator_policy, project_policy, run_policy)
+    charter_digest = digest({"requirements": sources["requirements"]["sha256"],
+                             "acceptance": sources["acceptance"]["sha256"]})
+    manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    generation = 1
+    envelope = {
+        "schema_version": 1, "execution_protocol_version": 9, "work_id": work_id,
+        "attempt_id": attempt_id, "charter_digest": charter_digest,
+        "manifest_digest": manifest_digest, "run_protocol_revision": 2,
+        "logical_assignments": logical_assignments,
+        "selection_inputs": {"policy": policy, "catalog": catalog, "availability": normalized_availability},
+        "selection_input_digests": {"policy": digest(policy), "catalog": digest(catalog),
+                                    "availability": digest(normalized_availability)},
+        "limits": {"max_actions": 1}, "checkpoint_dir": str(attempt_dir / "checkpoints"),
+        "charter_sources": sources, "source_commit": source_commit, "worktree": str(worktree),
+    }
+    envelope["selection_authority"] = seal_selection_authority(
+        work_id=work_id, attempt_id=attempt_id, charter_digest=charter_digest,
+        manifest_digest=manifest_digest, generation=generation, sealed_at=sealed_at,
+        logical_assignments=logical_assignments, policy=policy, catalog=catalog,
+        availability=normalized_availability, independence_constraints=independence_constraints,
+    )
+    # The ledger validator is the final authority check before any on-disk
+    # attempt exists. A malformed configuration must leave no send-capable run.
+    envelope_digest(envelope)
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    ledger.create_attempt(envelope)
+    write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
+    return envelope, task, attempt_dir, ledger
+
+
+def v9_recovery_status(work_id: str, attempt_id: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Return the explicit reconciliation state for a v9 attempt.
+
+    V9 never replays a claimed provider call. A caller must reconcile an
+    unknown result from Flow-owned observation, or cancel/abandon it with a
+    receipt that preserves the consumed selection.
+    """
+    project_root = (root or repo_root()).resolve()
+    ledger = ExecutionLedger(project_root / ".flow" / "runs" / work_id / "execution" / "ledger.sqlite", read_only=True)
+    snapshot = ledger.snapshot(attempt_id)
+    if snapshot["execution_protocol_version"] != 9 or snapshot["work_id"] != work_id:
+        raise ContractError("v9 recovery target differs from the requested run")
+    unresolved = [item["action_id"] for item in snapshot["actions"] if item["status"] in {"started", "unknown"}]
+    return {"work_id": work_id, "attempt_id": attempt_id, "status": snapshot["status"],
+            "reconciliation_required": bool(unresolved), "unresolved_action_ids": unresolved,
+            "resume_allowed": False,
+            "next_action": "reconcile-observed-result-or-cancel-abandon" if unresolved else "attempt-terminal-or-seal"}
+
+
+def terminate_v9_delivery(work_id: str, attempt_id: str, *, status: str, actor: str,
+                          explanation: str, root: Path | None = None) -> dict[str, Any]:
+    """Receipt-seal a v9 cancellation or abandonment without replaying I/O."""
+    project_root = (root or repo_root()).resolve()
+    execution_dir = project_root / ".flow" / "runs" / work_id / "execution"
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    snapshot = ledger.snapshot(attempt_id)
+    if snapshot["execution_protocol_version"] != 9 or snapshot["work_id"] != work_id:
+        raise ContractError("v9 termination target differs from the requested run")
+    if snapshot["status"] != "started":
+        raise ContractError("v9 attempt is already terminal")
+    sealed = ledger.terminate_v9_attempt(
+        attempt_id, status, generation=snapshot["owner_generation"], actor=actor,
+        explanation=explanation, cause="operator_" + status,
+        receipt_path=execution_dir / attempt_id / "receipt.json",
+    )
+    return {**sealed, "work_id": work_id, "cause": "operator_" + status,
+            "owner_generation": snapshot["owner_generation"], "reaped": []}

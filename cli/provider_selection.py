@@ -104,8 +104,7 @@ def merge_selection_policy(
             if layer_name != "run":
                 raise SelectionPolicyError("independence waiver is run-local only")
             waiver = layer["independence_waiver"]
-            if not isinstance(waiver, dict) or waiver.get("approved") is not True or not waiver.get("approval_digest"):
-                raise SelectionPolicyError("independence waiver requires sealed explicit approval")
+            _validate_waiver_shape(waiver)
             effective["independence_waiver"] = deepcopy(waiver)
             effective["provenance"]["independence_waiver"] = "run"
     effective["allowed_candidates"] = sorted(allowed) if allowed is not None else None
@@ -214,3 +213,30 @@ def _strings(value: Any, field: str) -> list[str]:
     if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
         raise SelectionPolicyError(f"{field} must be an array of nonblank strings")
     return list(value)
+
+
+def _validate_waiver_shape(waiver: Any) -> None:
+    fields = {
+        "schema_version", "decision", "work_id", "attempt_id", "assignment_id",
+        "risk_class", "excluded_provider_families", "waived_provider_families",
+        "prior_policy_digest", "successor_authority_digest", "approval_actor",
+        "approval_event_digest", "approval_digest",
+    }
+    if not isinstance(waiver, dict) or set(waiver) != fields:
+        raise SelectionPolicyError("independence waiver requires a closed sealed approval")
+    if (waiver["schema_version"] != 1 or waiver["decision"] != "approve"
+            or waiver["risk_class"] != "high" or waiver["approval_actor"] != "user"):
+        raise SelectionPolicyError("independence waiver requires explicit scoped user approval")
+    for field in ("work_id", "attempt_id", "assignment_id"):
+        if not isinstance(waiver[field], str) or not waiver[field]:
+            raise SelectionPolicyError(f"independence waiver {field} must be nonblank")
+    excluded = _strings(waiver["excluded_provider_families"], "excluded_provider_families")
+    waived = _strings(waiver["waived_provider_families"], "waived_provider_families")
+    if len(set(excluded)) != len(excluded) or len(set(waived)) != len(waived) or not waived or not set(waived).issubset(excluded):
+        raise SelectionPolicyError("independence waiver family scope is invalid")
+    for field in ("prior_policy_digest", "successor_authority_digest", "approval_event_digest", "approval_digest"):
+        value = waiver[field]
+        if not isinstance(value, str) or len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+            raise SelectionPolicyError(f"independence waiver {field} must be a sha256 digest")
+    if waiver["approval_digest"] != digest({key: value for key, value in waiver.items() if key != "approval_digest"}):
+        raise SelectionPolicyError("independence waiver approval digest mismatch")

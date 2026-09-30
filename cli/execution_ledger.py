@@ -522,6 +522,163 @@ class ExecutionLedger:
             }[target]
             self._event(db, row[0], provider_action_id, event, selection_id)
 
+    def prepare_v9_selection(self, envelope: dict[str, Any], action: dict[str, Any], *,
+                             generation: int, predecessor_selection_id: str | None = None) -> None:
+        """Persist and reserve the exact Flow-recomputed decision before a probe.
+
+        This is intentionally a separate durable phase: a readiness probe is
+        allowed to refuse a *reserved* binding, but it must never happen after
+        the provider-send claim.  Replays are idempotent only for the exact
+        action/decision pair.
+        """
+        self.record_v9_selection(envelope, action, generation=generation,
+                                 predecessor_selection_id=predecessor_selection_id)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, envelope["attempt_id"], generation)
+            row = db.execute(
+                "SELECT state,attempt_id FROM provider_selections WHERE selection_id=?",
+                (action["selection_id"],),
+            ).fetchone()
+            if row is None or row[1] != envelope["attempt_id"]:
+                raise ContractError("provider selection is absent")
+            if row[0] == "computed":
+                db.execute("UPDATE provider_selections SET state='reserved' WHERE selection_id=?",
+                           (action["selection_id"],))
+                self._event(db, envelope["attempt_id"], action["logical_action_id"],
+                            "selection_reserved", action["selection_id"])
+            elif row[0] != "reserved":
+                raise ContractError("provider selection is not reservable")
+
+    @contextmanager
+    def v9_send_fence(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int):
+        """Claim one provider send before I/O and retain the physical-send lock.
+
+        There is no transaction that can include a remote HTTP/CLI call.  The
+        safety boundary is therefore a durable, atomic *pre-send claim* under
+        the same interprocess lock used by recovery.  A process loss after the
+        yield is conservatively represented as a started/unknown action and
+        cannot authorize fallback.
+        """
+        validate_action(envelope, action)
+        if execution_protocol_version(envelope) != 9:
+            raise ContractError("provider send fence requires protocol v9")
+        action_json = canonical(action)
+        with self.send_lock():
+            with self._db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                self._assert_owner(db, envelope["attempt_id"], generation)
+                attempt = db.execute(
+                    "SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?",
+                    (envelope["attempt_id"],),
+                ).fetchone()
+                selection = db.execute(
+                    "SELECT state,attempt_id FROM provider_selections WHERE selection_id=?",
+                    (action["selection_id"],),
+                ).fetchone()
+                if attempt != ("started", 9) or selection != ("reserved", envelope["attempt_id"]):
+                    raise ContractError("provider send fence is not ready")
+                existing = db.execute(
+                    "SELECT attempt_id,request_json,status FROM actions WHERE action_id=?",
+                    (action["action_id"],),
+                ).fetchone()
+                if existing is not None:
+                    if existing[0] != envelope["attempt_id"] or existing[1] != action_json:
+                        raise ContractError("provider action identity reused with changed request")
+                    raise ContractError("provider send was already claimed")
+                try:
+                    db.execute(
+                        "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (action["action_id"], envelope["attempt_id"], action_json, "started", "v9_send_claimed",
+                         None, None, "delegate", action["sequence"], hashlib.sha256(action_json.encode()).hexdigest()),
+                    )
+                    db.execute(
+                        "UPDATE provider_selections SET state='consumed',provider_action_id=? "
+                        "WHERE selection_id=? AND state='reserved'",
+                        (action["action_id"], action["selection_id"]),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    raise ContractError("provider action or selection was already consumed") from exc
+                self._event(db, envelope["attempt_id"], action["action_id"],
+                            "selection_consumed", action["selection_id"])
+                self._event(db, envelope["attempt_id"], action["action_id"],
+                            "adapter_send_started", "flow_v9_send_fence")
+            finished = False
+
+            def finish(result: Any) -> None:
+                nonlocal finished
+                if finished:
+                    raise ContractError("provider action was already completed")
+                self._complete_v9_send_locked(envelope, action, result, generation=generation)
+                finished = True
+
+            try:
+                yield finish
+            except BaseException:
+                # This update is deliberately attempted while the send lock is
+                # retained.  If the process dies before it, the durable
+                # ``started`` state remains equally conservative on restart.
+                with self._db() as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    self._assert_owner(db, envelope["attempt_id"], generation)
+                    db.execute("UPDATE actions SET status='unknown',reason='v9_provider_send_uncertain' "
+                               "WHERE action_id=? AND status='started'", (action["action_id"],))
+                    self._event(db, envelope["attempt_id"], action["action_id"],
+                                "worker_unknown", "v9_provider_send_uncertain")
+                raise
+            if not finished:
+                # A caller that crossed the send boundary but lost its result
+                # before persisting it is indistinguishable from a crash.
+                with self._db() as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    self._assert_owner(db, envelope["attempt_id"], generation)
+                    db.execute("UPDATE actions SET status='unknown',reason='v9_provider_result_unrecorded' "
+                               "WHERE action_id=? AND status='started'", (action["action_id"],))
+                    self._event(db, envelope["attempt_id"], action["action_id"],
+                                "worker_unknown", "v9_provider_result_unrecorded")
+                raise ContractError("v9 provider result was not closed inside the send fence")
+
+    def _complete_v9_send_locked(self, envelope: dict[str, Any], action: dict[str, Any], result: Any, *, generation: int) -> None:
+        """Persist a normal v9 send result while the caller owns ``send_lock``."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, envelope["attempt_id"], generation)
+            row = db.execute("SELECT status,attempt_id FROM actions WHERE action_id=?", (action["action_id"],)).fetchone()
+            if row != ("started", envelope["attempt_id"]):
+                raise ContractError("provider action is not an active v9 send")
+            result_json = canonical({"result": result})
+            db.execute("UPDATE actions SET status='completed',result_json=?,reason='' WHERE action_id=?",
+                       (result_json, action["action_id"]))
+            self._event(db, envelope["attempt_id"], action["action_id"], "worker_completed",
+                        hashlib.sha256(result_json.encode()).hexdigest())
+
+    def complete_v9_send(self, envelope: dict[str, Any], action: dict[str, Any], result: Any, *, generation: int) -> None:
+        """Close a claimed v9 send for a recovery-owned result observation.
+
+        Ordinary dispatch must use the callback yielded by ``v9_send_fence``
+        so the result close remains serialized with physical I/O.
+        """
+        with self.send_lock():
+            self._complete_v9_send_locked(envelope, action, result, generation=generation)
+
+    def refuse_v9_pre_send(self, envelope: dict[str, Any], action: dict[str, Any], *,
+                            generation: int, evidence_code: str) -> None:
+        """Close a reserved selection only when a pre-send probe proved no I/O."""
+        if not isinstance(evidence_code, str) or not evidence_code or len(evidence_code) > 128:
+            raise ContractError("pre-send evidence code is invalid")
+        self.transition_v9_selection(action["selection_id"], "reserved", "pre_send_refused",
+                                     generation=generation, reason=evidence_code)
+
+    def v9_recovery_required(self, attempt_id: str) -> bool:
+        """Whether a v9 attempt has a claimed send whose outcome is unresolved."""
+        with self._db() as db:
+            row = db.execute("SELECT execution_protocol_version FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is None or row[0] != 9:
+                raise ContractError("protocol v9 attempt is absent")
+            return db.execute("SELECT 1 FROM actions WHERE attempt_id=? AND status IN ('started','unknown') LIMIT 1",
+                              (attempt_id,)).fetchone() is not None
+
     @staticmethod
     def _v8_lineage_locked(db: sqlite3.Connection, work_id: str) -> tuple[list[dict[str, Any]], list[str]]:
         columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
@@ -2604,6 +2761,83 @@ class ExecutionLedger:
                            (status, reason, receipt_path, failure_class, attempt_id))
             self._event(db, attempt_id, None, "attempt_" + status, reason)
 
+    def seal_v9_attempt(self, attempt_id: str, status: str, reason: str, receipt_path: Path, *,
+                        generation: int, actor: str | None = None, explanation: str | None = None,
+                        cause: str | None = None) -> dict[str, Any]:
+        """Atomically seal a terminal v9 selection receipt from ledger state.
+
+        A claimed send with an unknown outcome is deliberately not sealable:
+        recovery owns that state and must resolve it before a terminal receipt
+        can claim closure.  The receipt is rendered and verified from the same
+        transaction snapshot used to update the ledger seal.
+        """
+        if status not in {"completed", "failed", "cancelled", "abandoned"} or not isinstance(reason, str):
+            raise ContractError("protocol v9 terminal seal is invalid")
+        terminal = status in {"cancelled", "abandoned"}
+        if terminal and (not isinstance(actor, str) or not actor.strip() or not isinstance(explanation, str)
+                         or not explanation.strip() or not isinstance(cause, str) or not cause):
+            raise ContractError("protocol v9 terminal attribution is invalid")
+        receipt_path = Path(receipt_path)
+        if receipt_path.is_symlink() or receipt_path.parent.is_symlink():
+            raise ContractError("protocol v9 receipt path is unsafe")
+        from selection_receipt import receipt_from_snapshot, verify_selection_receipt_snapshot
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            row = db.execute("SELECT status,execution_protocol_version FROM attempts WHERE attempt_id=?",
+                             (attempt_id,)).fetchone()
+            if row != ("started", 9):
+                raise ContractError("protocol v9 attempt is not active")
+            unresolved = db.execute(
+                "SELECT 1 FROM actions WHERE attempt_id=? AND status IN ('started','unknown') LIMIT 1",
+                (attempt_id,),
+            ).fetchone()
+            unsealed = db.execute(
+                "SELECT 1 FROM provider_selections WHERE attempt_id=? AND state IN ('computed','reserved') LIMIT 1",
+                (attempt_id,),
+            ).fetchone()
+            if unsealed or (unresolved and not terminal):
+                raise ContractError("protocol v9 recovery or selection closure is required before sealing")
+            snapshot = self._snapshot_locked(db, attempt_id)
+            termination = ({"schema_version": 1, "status": status, "actor": actor.strip(),
+                            "explanation": explanation.strip(), "cause": cause,
+                            "owner_generation": generation} if terminal else None)
+            receipt = receipt_from_snapshot(snapshot, termination=termination)
+            verify_selection_receipt_snapshot(receipt, snapshot)
+            receipt_bytes = canonical(receipt).encode("utf-8")
+            temporary = receipt_path.with_name(f".{receipt_path.name}.{uuid.uuid4().hex}")
+            try:
+                fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(receipt_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, receipt_path)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+            receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest()
+            db.execute("UPDATE attempts SET status=?,reason=?,receipt_path=?,sealed_receipt_sha256=? WHERE attempt_id=?",
+                       (status, reason, str(receipt_path), receipt_sha256, attempt_id))
+            self._event(db, attempt_id, None, "attempt_" + status, reason)
+            return {"attempt_id": attempt_id, "status": status, "receipt_path": str(receipt_path),
+                    "sealed_receipt_sha256": receipt_sha256}
+
+    def terminate_v9_attempt(self, attempt_id: str, status: str, *, generation: int,
+                             actor: str, explanation: str, cause: str, receipt_path: Path) -> dict[str, Any]:
+        """Cancel or abandon v9 without reclassifying a claimed provider send.
+
+        Taking the physical-send lock before the terminal seal means a cancel
+        either occurs before the claim or observes a fully durable claim.  It
+        never creates a window in which an unknown send becomes fallback-safe.
+        """
+        if status not in {"cancelled", "abandoned"}:
+            raise ContractError("protocol v9 termination status is invalid")
+        with self.send_lock():
+            return self.seal_v9_attempt(attempt_id, status, status, receipt_path,
+                                        generation=generation, actor=actor, explanation=explanation,
+                                        cause=cause)
+
     @staticmethod
     def _record_interruption_locked(db: sqlite3.Connection, attempt_id: str, cause: str, detail: str,
                                     owner_generation: int) -> dict[str, Any]:
@@ -3087,6 +3321,10 @@ class ExecutionLedger:
         if not a:
             raise ContractError("attempt missing")
         actions = db.execute("SELECT action_id,request_json,status,reason,grant_id,result_json FROM actions WHERE attempt_id=? ORDER BY rowid", (attempt_id,)).fetchall()
+        selections = db.execute(
+            "SELECT selection_id,logical_action_id,decision_json,decision_digest,candidate_id,state,reason,predecessor_selection_id,provider_action_id "
+            "FROM provider_selections WHERE attempt_id=? ORDER BY rowid", (attempt_id,)
+        ).fetchall() if "provider_selections" in {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")} else []
         events = db.execute("SELECT seq,at,action_id,event,detail FROM events WHERE attempt_id=? ORDER BY seq", (attempt_id,)).fetchall()
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         observations = db.execute("SELECT action_id,observed_at,result_json,result_digest,owner_generation FROM response_observations WHERE action_id IN (SELECT action_id FROM actions WHERE attempt_id=?) ORDER BY observed_at", (attempt_id,)).fetchall() if "response_observations" in tables else []
@@ -3113,6 +3351,9 @@ class ExecutionLedger:
                 "execution_protocol_version": a[9 if recovery_columns else 6] if protocol_column else 1,
                 "failure_class": a[(10 if recovery_columns else 7) if protocol_column else (9 if recovery_columns else 6)] if failure_column else None,
                 "actions": [{"action_id": r[0], "request": json.loads(r[1]), "status": r[2], "reason": r[3], "grant_id": r[4], "result": json.loads(r[5]) if r[5] else None} for r in actions],
+                "provider_selections": [{"selection_id": r[0], "logical_action_id": r[1], "decision": json.loads(r[2]),
+                                         "decision_digest": r[3], "candidate_id": r[4], "state": r[5], "reason": r[6],
+                                         "predecessor_selection_id": r[7], "provider_action_id": r[8]} for r in selections],
                 "replans": [{"replan_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "proposal_digest": r[3], "status": r[4], "reason": r[5]} for r in replans],
                 "manager_calls": [{"call_id": r[0], "sequence": r[1], "request": json.loads(r[2]), "status": r[3], "reason": r[4], "grant_id": r[5], "result": json.loads(r[6]) if r[6] else None, "observed_at": r[7]} for r in manager_calls],
                 "magentic_checkpoints": [{"pending_kind": r[0], "pending_id": r[1], "checkpoint_id": r[2], "ledger_seq": r[3], "path": r[4], "file_sha256": r[5], "file_size": r[6], "bound_at": r[7], "owner_generation": r[8],

@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "cli"))
 from provider_selection import (  # noqa: E402
     SelectionPolicyError,
     canonical_bytes,
+    digest,
     merge_selection_policy,
     select_candidate,
 )
@@ -120,9 +121,15 @@ class ProviderSelectionTests(unittest.TestCase):
     def test_waiver_requires_explicit_run_approval(self) -> None:
         with self.assertRaisesRegex(SelectionPolicyError, "run-local only"):
             merge_selection_policy({"independence_waiver": {"approved": True, "approval_digest": "x"}})
-        policy = merge_selection_policy({}, None, None, {
-            "independence_waiver": {"approved": True, "approval_digest": "abc"}
-        })
+        waiver = {
+            "schema_version": 1, "decision": "approve", "work_id": "work",
+            "attempt_id": "attempt", "assignment_id": "verify", "risk_class": "high",
+            "excluded_provider_families": ["local"], "waived_provider_families": ["local"],
+            "prior_policy_digest": "a" * 64, "successor_authority_digest": "b" * 64,
+            "approval_actor": "user", "approval_event_digest": "c" * 64,
+        }
+        waiver["approval_digest"] = digest(waiver)
+        policy = merge_selection_policy({}, None, None, {"independence_waiver": waiver})
         self.assertEqual(policy["provenance"]["independence_waiver"], "run")
 
 

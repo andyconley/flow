@@ -57,6 +57,11 @@ def _receipt() -> dict:
     return seal_selection_receipt(envelope, [first, successor], selections)
 
 
+def _reseal(receipt: dict) -> None:
+    receipt["receipt_digest"] = digest({key: item for key, item in receipt.items()
+                                         if key != "receipt_digest"})
+
+
 class SelectionReceiptTests(unittest.TestCase):
     def test_offline_recomputation_and_structured_fallback_trace(self) -> None:
         receipt = _receipt()
@@ -83,8 +88,7 @@ class SelectionReceiptTests(unittest.TestCase):
             with self.subTest(field=field):
                 receipt = copy.deepcopy(originals)
                 receipt["actions"][0]["selection_decision"][field] = value
-                receipt["receipt_digest"] = digest({key: item for key, item in receipt.items()
-                                                    if key != "receipt_digest"})
+                _reseal(receipt)
                 with self.assertRaises(V9ReceiptError) as raised:
                     verify_selection_receipt(receipt)
                 self.assertEqual(raised.exception.code, f"v9_{field}_mismatch")
@@ -92,13 +96,47 @@ class SelectionReceiptTests(unittest.TestCase):
     def test_fallback_lineage_tampering_is_rejected(self) -> None:
         receipt = _receipt()
         receipt["selections"][1]["prior_no_send_failures"] = []
-        receipt["receipt_digest"] = digest({key: item for key, item in receipt.items()
-                                            if key != "receipt_digest"})
+        _reseal(receipt)
         with self.assertRaises(V9ReceiptError) as raised:
             verify_selection_receipt(receipt)
         self.assertIn(raised.exception.code, {
             "v9_prior_no_send_failures_mismatch", "v9_fallback_lineage_invalid"
         })
+
+    def test_orphan_selection_row_is_rejected_even_when_resealed(self) -> None:
+        receipt = _receipt()
+        orphan = copy.deepcopy(receipt["selections"][0])
+        orphan["selection_id"] = "f" * 64
+        orphan["logical_action_id"] = "e" * 64
+        receipt["selections"].append(orphan)
+        _reseal(receipt)
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_orphan_selection_row")
+
+    def test_duplicate_action_cannot_reuse_one_selection_row(self) -> None:
+        receipt = _receipt()
+        receipt["actions"].append(copy.deepcopy(receipt["actions"][0]))
+        _reseal(receipt)
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_duplicate_selection_action")
+
+    def test_nonconsumed_selection_requires_no_send_closure(self) -> None:
+        receipt = _receipt()
+        receipt["selections"][0]["reason"] = ""
+        _reseal(receipt)
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_unconsumed_selection_closure_invalid")
+
+    def test_duplicate_prior_no_send_failure_is_rejected(self) -> None:
+        receipt = _receipt()
+        receipt["selections"][1]["prior_no_send_failures"] = ["local", "local"]
+        _reseal(receipt)
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_prior_no_send_failures_invalid")
 
 
 if __name__ == "__main__":

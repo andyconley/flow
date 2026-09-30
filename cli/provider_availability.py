@@ -5,11 +5,24 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 
 AVAILABILITY_STATES = frozenset({"ready", "unavailable", "unknown", "stale"})
+AVAILABILITY_EVIDENCE_CODES = frozenset({
+    "model_present", "adapter_ready", "authentication_ready",
+    "model_absent", "adapter_unavailable", "authentication_unavailable",
+    "probe_failed", "observation_expired",
+})
+AVAILABILITY_EVIDENCE_BY_STATE = {
+    "ready": frozenset({"model_present", "adapter_ready", "authentication_ready"}),
+    "unavailable": frozenset({"model_absent", "adapter_unavailable", "authentication_unavailable"}),
+    "unknown": frozenset({"probe_failed"}),
+    "stale": frozenset({"observation_expired"}),
+}
+MAX_AVAILABILITY_TTL = timedelta(minutes=5)
+MAX_FUTURE_SKEW = timedelta(seconds=30)
 OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"
 
 
@@ -33,15 +46,24 @@ def normalize_availability(record: dict[str, Any], *, now: datetime | None = Non
         raise AvailabilityError("availability candidate_id must be nonblank")
     if state not in AVAILABILITY_STATES:
         raise AvailabilityError("availability state is unsupported")
-    if not isinstance(evidence_code, str) or not evidence_code:
-        raise AvailabilityError("availability evidence_code must be nonblank")
-    if not isinstance(probe_version, str) or not probe_version:
-        raise AvailabilityError("availability probe_version must be nonblank")
+    if evidence_code not in AVAILABILITY_EVIDENCE_CODES:
+        raise AvailabilityError("availability evidence_code is unsupported")
+    if probe_version != "availability-v1":
+        raise AvailabilityError("availability probe_version is unsupported")
+    if evidence_code not in AVAILABILITY_EVIDENCE_BY_STATE[state]:
+        raise AvailabilityError("availability evidence contradicts state")
     observed = _timestamp(observed_at, "observed_at")
     expires = _timestamp(expires_at, "expires_at")
     clock = now or datetime.now(timezone.utc)
     if clock.tzinfo is None:
         clock = clock.replace(tzinfo=timezone.utc)
+    clock = clock.astimezone(timezone.utc)
+    observed = observed.astimezone(timezone.utc)
+    expires = expires.astimezone(timezone.utc)
+    if expires <= observed or expires - observed > MAX_AVAILABILITY_TTL:
+        raise AvailabilityError("availability freshness window is invalid")
+    if observed > clock + MAX_FUTURE_SKEW:
+        raise AvailabilityError("availability observation is from the future")
     if expires <= clock:
         state = "stale"
         evidence_code = "observation_expired"

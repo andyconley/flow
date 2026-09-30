@@ -555,6 +555,71 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
         process.stdout.close()
 
 
+def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
+                        on_action: Callable[[dict[str, Any]], dict[str, Any]], *,
+                        timeout_s: float = 120, python_path: str | None = None,
+                        on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
+    """Run one credentialless logical v9 MAF proposal behind Flow dispatch.
+
+    The child cannot send to a provider and its proposal has no model or
+    provider fields.  The callback is required to construct the canonical v9
+    action and cross the ledger-owned send fence.
+    """
+    if (envelope.get("execution_protocol_version") != 9 or not isinstance(task, str) or not task.strip()
+            or not callable(on_action) or not 0 < timeout_s <= 900):
+        raise MafProtocolError("v9 delivery inputs are invalid")
+    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    root = Path(__file__).resolve().parents[1]
+    process = subprocess.Popen(
+        [executable, "-m", "runtime.maf_runner.delivery_lead"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        cwd=root, env={"PYTHONPATH": os.pathsep.join((str(root), str(root / "cli")))}, bufsize=0, start_new_session=True,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    deadline, pending, proposed = time.monotonic() + timeout_s, bytearray(), False
+    try:
+        if on_process_group is not None:
+            on_process_group(process.pid, "maf")
+        _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "start",
+                                                  "envelope": envelope, "task": task}, deadline)
+        while True:
+            message = _read_message(process.stdout.fileno(), deadline, pending, 9)
+            kind = message["type"]
+            if kind == "runtime_initialized":
+                continue
+            if kind == "propose_v9_action":
+                if proposed or message.get("attempt_id") != envelope["attempt_id"]:
+                    raise MafProtocolError("MAF v9 proposal is duplicated or mismatched")
+                if (not isinstance(message.get("assignment_id"), str) or not isinstance(message.get("task"), str)
+                        or message.get("sequence") != 1 or message.get("manager_turn") != 1):
+                    raise MafProtocolError("MAF v9 proposal is malformed")
+                result = on_action(dict(message))
+                if not isinstance(result, dict):
+                    raise MafProtocolError("Flow v9 action callback returned invalid result")
+                _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "action_result",
+                                                          "action_id": result.get("provider_action_id"), "result": result}, deadline)
+                proposed = True
+                continue
+            if kind == "workflow_finished":
+                if not proposed or message.get("attempt_id") != envelope["attempt_id"]:
+                    raise MafProtocolError("MAF v9 workflow finished without a bound action")
+                if process.wait(timeout=max(0.1, deadline - time.monotonic())) != 0:
+                    raise MafProtocolError("MAF v9 child failed after workflow_finished")
+                return message
+            if kind == "error":
+                raise MafChildError("MAF v9 child failed: " + str(message.get("message", "unknown"))[:512])
+            raise MafProtocolError("MAF v9 child sent an unexpected message")
+    finally:
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+        process.stdin.close()
+        process.stdout.close()
+
+
 def run_maf_action3_continuation(
     envelope: dict[str, Any],
     resume: dict[str, Any],

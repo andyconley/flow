@@ -183,6 +183,20 @@ def _attempt(work_id: str, run_dir: Path, ledger: ExecutionLedger, entry: dict[s
     snapshot = entry["snapshot"]
     token_state = entry.get("token_state")
     attempt_id = entry["attempt_id"]
+    if entry["execution_protocol_version"] == 9:
+        selections = snapshot.get("provider_selections", [])
+        return {
+            "attempt_id": attempt_id, "execution_protocol_version": 9, "supported": True,
+            "status": entry["status"], "owner_generation": snapshot.get("owner_generation"),
+            "owner_actor": snapshot.get("owner_actor"),
+            "selection_trace": project_selection_trace({"selections": selections}),
+            "recovery_required": ledger.v9_recovery_required(attempt_id),
+            "entries": [{"action_id": item["action_id"], "status": item["status"],
+                         "selection_id": item["request"].get("selection_id")}
+                        for item in snapshot.get("actions", [])],
+            "totals": {"paid_calls": 0, "verifier_calls": 0, "unobserved_sends": 0,
+                       "charged_tokens": None, "cache_read_tokens": None},
+        }
     if entry["execution_protocol_version"] != 8:
         return {"attempt_id": attempt_id, "execution_protocol_version": entry["execution_protocol_version"],
                 "status": entry["status"], "supported": False, "detail": "unsupported_protocol"}
@@ -263,6 +277,13 @@ def render_text(view: dict[str, Any]) -> str:
     """A terminal rendering: the banner of the target attempt first, then each attempt's rows."""
     lines = []
     target = view["attempts"][-1]
+    if target.get("execution_protocol_version") == 9:
+        lines.append(f"V9 {target['attempt_id']} {target['status']}: "
+                     f"recovery_required={target['recovery_required']}")
+        for row in target["selection_trace"]:
+            lines.append(f"  {row['selection_id'][:12]} {row['candidate_id']} {row['state']}"
+                         + (f" <- {row['predecessor_selection_id'][:12]}" if row.get("predecessor_selection_id") else ""))
+        return "\n".join(lines)
     banner = target.get("banner")
     if banner is None:
         lines.append(f"{target['attempt_id']}: {target.get('detail')}")

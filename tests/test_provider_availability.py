@@ -50,6 +50,23 @@ class ProviderAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(discover_ollama_models(opener=opener), ["alpha", "zeta"])
 
+    def test_invalid_freshness_and_uncontrolled_evidence_are_rejected(self) -> None:
+        base = {
+            "candidate_id": "local", "state": "ready",
+            "observed_at": "2026-09-29T10:00:00Z",
+            "expires_at": "2026-09-29T10:06:00Z",
+            "evidence_code": "model_present",
+        }
+        with self.assertRaisesRegex(AvailabilityError, "freshness window"):
+            normalize_availability(base, now=datetime(2026, 9, 29, 10, tzinfo=timezone.utc))
+        base["expires_at"] = "2026-09-29T10:01:00Z"
+        base["evidence_code"] = "raw_exception_text"
+        with self.assertRaisesRegex(AvailabilityError, "evidence_code is unsupported"):
+            normalize_availability(base, now=datetime(2026, 9, 29, 10, tzinfo=timezone.utc))
+        base["evidence_code"] = "model_absent"
+        with self.assertRaisesRegex(AvailabilityError, "contradicts state"):
+            normalize_availability(base, now=datetime(2026, 9, 29, 10, tzinfo=timezone.utc))
+
     def test_redirect_is_refused(self) -> None:
         def opener(_request, **_kwargs):
             return Response({"models": []}, "http://example.invalid/api/tags")

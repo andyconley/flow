@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from copy import deepcopy
-from typing import Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 
 try:
     from execution_contracts import (
@@ -19,6 +19,7 @@ try:
         validate_action,
     )
     from provider_selection import canonical_bytes, digest, select_candidate
+    from selection_authority import effective_family_exclusions
 except ModuleNotFoundError:  # Package import used by the MAF child.
     from .execution_contracts import (
         ContractError,
@@ -28,6 +29,13 @@ except ModuleNotFoundError:  # Package import used by the MAF child.
         validate_action,
     )
     from .provider_selection import canonical_bytes, digest, select_candidate
+    from .selection_authority import effective_family_exclusions
+
+if TYPE_CHECKING:
+    try:
+        from execution_ledger import ExecutionLedger
+    except ModuleNotFoundError:
+        from .execution_ledger import ExecutionLedger
 
 
 class SelectionDenied(ContractError):
@@ -51,9 +59,7 @@ def compute_binding(envelope: dict[str, Any], assignment_id: str, *,
     assignment = assignment_for(envelope, assignment_id)
     inputs = envelope["selection_inputs"]
     requirements = assignment["requirements"]
-    excluded_families = requirements.get("excluded_provider_families", [])
-    if inputs["policy"].get("independence_waiver"):
-        excluded_families = []
+    excluded_families = effective_family_exclusions(envelope, assignment_id)
     return select_candidate(
         requirements,
         inputs["policy"],
@@ -104,8 +110,17 @@ def authorize_and_dispatch(
     envelope: dict[str, Any], action: dict[str, Any],
     adapter_send: Callable[[dict[str, Any], dict[str, Any]], Any],
     *, readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]],
+    ledger: "ExecutionLedger | None" = None,
+    generation: int | None = None,
+    predecessor_selection_id: str | None = None,
 ) -> dict[str, Any]:
-    """Recompute, fence readiness, and invoke exactly one selected adapter."""
+    """Recompute, fence readiness, and invoke exactly one selected adapter.
+
+    Supplying a ledger is the production v9 boundary.  Legacy helper callers
+    remain usable for unit construction, but runtime dispatch must supply the
+    Flow-owned ledger and owner generation so no provider I/O can occur before
+    a durable send claim.
+    """
     validate_action(envelope, action)
     expected = compute_binding(envelope, action["assignment_id"])
     if canonical_bytes(action["selection_decision"]) != canonical_bytes(expected):
@@ -113,12 +128,20 @@ def authorize_and_dispatch(
     binding = expected.get("selected_binding")
     if binding is None:
         raise SelectionDenied("no eligible provider candidate")
+    if (ledger is None) != (generation is None):
+        raise SelectionDenied("v9 send fence requires both ledger and generation")
+    if ledger is not None:
+        ledger.prepare_v9_selection(envelope, action, generation=generation,
+                                    predecessor_selection_id=predecessor_selection_id)
     observed = readiness_recheck(deepcopy(binding))
     if not isinstance(observed, dict) or observed.get("candidate_id") != binding["candidate_id"]:
         raise SelectionDenied("readiness recheck is not bound to the selected candidate")
     if observed.get("state") != "ready":
         if observed.get("no_send_observed") is not True:
             raise RecoveryRequired("readiness failure lacks positive no-send evidence")
+        if ledger is not None:
+            ledger.refuse_v9_pre_send(envelope, action, generation=generation,
+                                      evidence_code=observed.get("evidence_code", "pre_send_unavailable"))
         successor = compute_binding(
             envelope, action["assignment_id"],
             prior_no_send_failures=[binding["candidate_id"]],
@@ -131,7 +154,12 @@ def authorize_and_dispatch(
             "successor_decision": successor,
         }
     try:
-        result = adapter_send(deepcopy(binding), deepcopy(action))
+        if ledger is None:
+            result = adapter_send(deepcopy(binding), deepcopy(action))
+        else:
+            with ledger.v9_send_fence(envelope, action, generation=generation) as finish_send:
+                result = adapter_send(deepcopy(binding), deepcopy(action))
+                finish_send(result)
     except BaseException as exc:
         raise RecoveryRequired("provider send started or became uncertain") from exc
     return {

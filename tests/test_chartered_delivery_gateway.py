@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts, _job_test,
                               _execute_prepared_delivery, _verify_chartered_edit,
-                              execute_chartered_delivery, prepare_chartered_delivery)
+                              execute_chartered_delivery, execute_v9_logical_delivery,
+                              prepare_chartered_delivery, prepare_v9_chartered_delivery)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, _paths_within_scopes, validate_action, validate_envelope,
@@ -1544,6 +1546,43 @@ class ProviderRouteTests(unittest.TestCase):
             with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
                 _default_worker_adapter(action, envelope=envelope, workspace=workspace)
                 self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 600)
+
+
+class V9CharteredRouteTests(CharteredFixture):
+    def test_prepared_charter_executes_one_logical_maf_action_through_flow_fence(self):
+        now = datetime.now(timezone.utc)
+        catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
+                    "provider_family": "local", "tier": "judgment", "locality": "local",
+                    "operations": ["edit"], "capabilities": ["structured_edit"],
+                    "cost_class": 0, "enabled": True}]
+        availability = [{"candidate_id": "local", "state": "ready",
+                         "observed_at": (now - timedelta(seconds=1)).isoformat(),
+                         "expires_at": (now + timedelta(minutes=1)).isoformat(),
+                         "evidence_code": "model_present", "probe_version": "availability-v1"}]
+        assignments = [{"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit scope.",
+                        "requirements": {"operation": "edit", "minimum_tier": "working",
+                                         "required_capabilities": ["structured_edit"], "locality": "any",
+                                         "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
+                                         "risk_class": "standard", "independence_required": False}}]
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
+            envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+                "sample", self.worktree, self.commit, root=self.root,
+                logical_assignments=assignments, catalog=catalog, availability=availability,
+            )
+            result = execute_v9_logical_delivery(
+                envelope, task, ledger, lambda binding, _action: {"model": binding["model"]},
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=lambda _envelope, sent_task, on_action, **_kwargs: on_action({
+                    "attempt_id": envelope["attempt_id"], "assignment_id": "editor", "task": sent_task,
+                    "sequence": 1, "manager_turn": 1,
+                }),
+            )
+        self.assertEqual(result["status"], "completed")
+        snapshot = ledger.snapshot(envelope["attempt_id"])
+        self.assertEqual(snapshot["execution_protocol_version"], 9)
+        self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
+        self.assertEqual(snapshot["actions"][0]["status"], "completed")
 
 
 if __name__ == "__main__":

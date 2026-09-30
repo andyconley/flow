@@ -731,6 +731,8 @@ def main() -> int:
         "inspect-delivery", help="inspect sealed Shaper-to-Delivery authority and execution evidence")
     run_inspect_delivery_parser.add_argument("work_id")
     run_inspect_delivery_parser.add_argument("--attempt-id", help="specific execution attempt; defaults to the newest recorded attempt")
+    run_inspect_delivery_parser.add_argument("--project-root", type=Path,
+                                            help="project root containing .flow (read-only)")
     run_inspect_delivery_parser.add_argument("--json", action="store_true", help="emit JSON")
 
     run_resume_parser = run_sub.add_parser("resume-execution", help="fence and safely reopen one execution attempt")
@@ -1275,7 +1277,7 @@ def main() -> int:
     if args.command == "run" and args.run_target == "inspect-delivery":
         import json
         try:
-            result = inspect_delivery(args.work_id, args.attempt_id)
+            result = inspect_delivery(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError, OSError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery inspection refused: {exc}")
             return 2

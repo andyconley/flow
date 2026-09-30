@@ -23,7 +23,7 @@ from runtime.maf_runner.limits import (MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAG
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
-SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
+SUPPORTED_PROTOCOLS = [5, 6, 7, 8, 9]
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
@@ -77,7 +77,7 @@ def _read() -> dict[str, Any]:
     if not line or len(line) > MAX_LINE_BYTES or not line.endswith(b"\n"):
         raise RuntimeError("invalid or missing parent protocol line")
     value = json.loads(line)
-    if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6, 7, 8}:
+    if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6, 7, 8, 9}:
         raise RuntimeError("unsupported parent protocol message")
     if _active_protocol_version is None:
         _active_protocol_version = value["protocol_version"]
@@ -123,6 +123,44 @@ def _maf_reads_canonical(canonical: str, value: dict[str, Any]) -> bool:
 
 
 async def _run(start: dict[str, Any]) -> None:
+    envelope = start.get("envelope")
+    protocol_version = _active_protocol_version
+    if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != protocol_version:
+        raise RuntimeError("Delivery Lead envelope and transport protocol differ")
+    if protocol_version == 9:
+        # Protocol v9 keeps the stock MAF process credentialless and does not
+        # let it choose a concrete provider.  It may nominate one logical
+        # assignment and task; Flow recomputes the sealed provider binding and
+        # is the only process that can cross the adapter boundary.
+        task = start.get("task")
+        assignments = envelope.get("logical_assignments")
+        if (not isinstance(task, str) or not task.strip() or not isinstance(assignments, list)):
+            raise RuntimeError("protocol v9 logical delivery inputs are invalid")
+        eligible = [item for item in assignments if isinstance(item, dict)
+                    and item.get("requirements", {}).get("operation") != "manage"]
+        # The bounded first route performs the charter's edit before later
+        # logical verification work. It chooses only a *logical* operation;
+        # Flow still decides the provider/model for it.
+        editors = [item for item in eligible if item.get("requirements", {}).get("operation") == "edit"]
+        if len(editors) != 1:
+            raise RuntimeError("protocol v9 bounded MAF route requires exactly one logical editor")
+        assignment = editors[0]
+        # A child-side computation is advisory only.  The proposal never
+        # carries its concrete result; gateway equality checking remains the
+        # mandatory authority boundary.
+        if compute_binding(envelope, assignment.get("assignment_id", "")).get("selected_binding") is None:
+            raise PolicyAbort("no eligible provider for logical MAF assignment")
+        _write({"protocol_version": 9, "type": "runtime_initialized"})
+        _write({"protocol_version": 9, "type": "propose_v9_action",
+                "attempt_id": envelope.get("attempt_id"),
+                "assignment_id": assignment.get("assignment_id"), "task": task,
+                "sequence": 1, "manager_turn": 1})
+        reply = _read()
+        if reply.get("type") != "action_result" or not isinstance(reply.get("result"), dict):
+            raise PolicyAbort("Flow v9 action reply is invalid")
+        _write({"protocol_version": 9, "type": "workflow_finished",
+                "attempt_id": envelope.get("attempt_id"), "summary": reply["result"].get("status", "completed")})
+        return
     # Prove that the real runner surface imports before asserting readiness.
     # The parent still receives no manager/action callback until it validates
     # the computed identity below.
@@ -131,10 +169,6 @@ async def _run(start: dict[str, Any]) -> None:
         GroupChatParticipantMessage, GroupChatRequestMessage, GroupChatResponseMessage,
         MagenticBuilder, StandardMagenticManager,
     )
-    envelope = start.get("envelope")
-    protocol_version = _active_protocol_version
-    if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != protocol_version:
-        raise RuntimeError("Delivery Lead envelope and transport protocol differ")
     runtime = envelope.get("maf_runtime")
     if runtime is not None:
         if not isinstance(runtime, dict) or not isinstance(runtime.get("runtime_digest"), str):
