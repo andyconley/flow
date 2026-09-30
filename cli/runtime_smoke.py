@@ -14,7 +14,7 @@ from typing import Any
 
 from model_policy import runtime_policy_for_agent
 from paths import HOME, SCAFFOLD_DIR
-from render import codex_skill_dir, manifest_ref_for
+from render import SHAPER_COMMANDS, codex_skill_dir, manifest_ref_for
 from sync import (
     desired_outputs_for_target,
     merge_user_overlay,
@@ -130,7 +130,16 @@ def _check_target(root: Path, manifest_path: Path, manifest: dict[str, Any], tar
             static.append(_check(f"command {name}", "failed", "generated skill missing", skill_path))
             continue
         text = skill_path.read_text()
-        if "Flow Agent Routing" in text:
+        if name in SHAPER_COMMANDS:
+            if "Flow Agent Routing" in text:
+                static.append(_check(
+                    f"command {name}", "failed", "Shaper command carries concrete routing", skill_path
+                ))
+            else:
+                static.append(_check(
+                    f"command {name}", "passed", "provider-neutral Shaper surface present", skill_path
+                ))
+        elif "Flow Agent Routing" in text:
             static.append(_check(f"command {name}", "passed", "generated skill and routing table present", skill_path))
             missing_rows = []
             for agent in shared_agents(manifest):

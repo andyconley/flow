@@ -9,6 +9,48 @@ source_of_truth = ".flow"
 [expertise_advisory]
 enabled = true
 
+# Delivery selection is independent from the shaping/session runtime. Presence
+# discovery never grants capability; candidate declarations below are the
+# administrator-authorized ceiling used by protocol v9.
+[provider_selection]
+provider_order = ["ollama", "claude", "codex"]
+
+[[provider_candidates]]
+candidate_id = "ollama-local"
+provider = "ollama"
+model = "configured-local-model"
+provider_family = "ollama-local"
+tier = "working"
+locality = "local"
+operations = ["manage", "read", "edit", "verify", "collect"]
+capabilities = ["structured_output", "structured_edit"]
+cost_class = 0
+enabled = false
+
+[[provider_candidates]]
+candidate_id = "claude-hosted"
+provider = "claude"
+model = "configured-claude-model"
+provider_family = "anthropic"
+tier = "judgment"
+locality = "hosted"
+operations = ["manage", "read", "edit", "verify", "collect"]
+capabilities = ["structured_output", "structured_edit"]
+cost_class = 1
+enabled = true
+
+[[provider_candidates]]
+candidate_id = "codex-hosted"
+provider = "codex"
+model = "configured-codex-model"
+provider_family = "openai"
+tier = "judgment"
+locality = "hosted"
+operations = ["manage", "read", "edit", "verify", "collect"]
+capabilities = ["structured_output", "structured_edit"]
+cost_class = 1
+enabled = true
+
 # Semantic agent capability intent is resolved once, after the framework and
 # user agent inventory is merged, then translated by each runtime adapter.
 [agent_capabilities.web_research]
