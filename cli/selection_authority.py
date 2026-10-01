@@ -373,6 +373,21 @@ def _validate_constraints(constraints: Any, assignment_ids: set[str]) -> None:
             _hex(source_digest, "source binding digest")
 
 
+def _validate_required_constraints(constraints: list[dict[str, Any]], assignments: list[dict[str, Any]]) -> None:
+    required = {item["assignment_id"] for item in assignments
+                if item["requirements"]["operation"] == "verify"
+                and item["requirements"]["risk_class"] == "high"
+                and item["requirements"]["independence_required"]}
+    counts = {assignment_id: 0 for assignment_id in required}
+    for constraint in constraints:
+        assignment_id = constraint["assignment_id"]
+        if assignment_id not in required:
+            raise SelectionAuthorityError("independence constraint targets a verifier that does not require it")
+        counts[assignment_id] += 1
+    if any(count != 1 for count in counts.values()):
+        raise SelectionAuthorityError("each independent high-risk verifier requires exactly one constraint")
+
+
 def validate_selection_authority(envelope: dict[str, Any]) -> None:
     assignments = envelope["logical_assignments"]
     inputs = envelope["selection_inputs"]
@@ -410,6 +425,7 @@ def validate_selection_authority(envelope: dict[str, Any]) -> None:
     if catalog_ids != availability_ids:
         raise SelectionAuthorityError("availability must contain exactly one record per candidate")
     _validate_constraints(authority["independence_constraints"], assignment_ids)
+    _validate_required_constraints(authority["independence_constraints"], assignments)
     if authority["policy_digest"] != inputs["policy"]["policy_digest"]:
         raise SelectionAuthorityError("selection authority policy digest mismatch")
     if authority["catalog_digest"] != digest(inputs["catalog"]) or authority["availability_digest"] != digest(inputs["availability"]):

@@ -17,7 +17,8 @@ from delivery_gateway import (ContractError, _default_worker_adapter, _execution
                               _execute_prepared_delivery, _verify_chartered_edit,
                               execute_chartered_delivery, execute_v9_logical_delivery,
                               execute_v9_chartered_job, prepare_chartered_delivery, prepare_v9_chartered_delivery,
-                              provider_selection_probe)
+                              provider_selection_probe, logical_assignments_from_charter,
+                              independence_constraints_from_assignments)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, _paths_within_scopes, validate_action, validate_envelope,
@@ -1550,6 +1551,22 @@ class ProviderRouteTests(unittest.TestCase):
 
 
 class V9CharteredRouteTests(CharteredFixture):
+    def test_v9_projection_includes_all_approved_logical_job_roles(self):
+        self.charter["evidence_collector_instance_ids"] = ["evidence"]
+        self.charter["verifier_instance_ids"] = ["verifier"]
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        assignments = logical_assignments_from_charter("sample", root=self.root)
+        operations = {item["assignment_id"]: item["requirements"]["operation"]
+                      for item in assignments}
+        self.assertEqual(operations, {"logical-manager": "manage", "editor": "edit",
+                                      "evidence": "collect", "verifier": "verify"})
+        self.assertTrue(next(item for item in assignments
+                             if item["assignment_id"] == "verifier")["requirements"]["independence_required"])
+        self.assertTrue(all("provider" not in item and "model" not in item for item in assignments))
+        constraints = independence_constraints_from_assignments(assignments)
+        self.assertEqual(constraints[0]["producer_assignment_ids"], ["editor"])
+        self.assertEqual(constraints[0]["evidence_collector_assignment_ids"], ["evidence"])
+
     def test_completed_v9_job_hands_off_to_review_when_charter_authorizes_it(self):
         self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
         (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))

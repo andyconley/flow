@@ -58,6 +58,13 @@ class SelectionAuthorityTests(unittest.TestCase):
         validate_envelope(envelope)
         self.assertEqual(compute_binding(envelope, "verifier")["selected_candidate_id"], "codex")
 
+    def test_independent_high_risk_verifier_requires_exactly_one_constraint(self) -> None:
+        envelope = _envelope(excluded_families=["local"])
+        envelope["selection_authority"]["independence_constraints"] = []
+        _reseal(envelope)
+        with self.assertRaisesRegex(ContractError, "exactly one constraint"):
+            validate_envelope(envelope)
+
     def test_credential_bearing_availability_is_rejected_even_when_resealed(self) -> None:
         envelope = _envelope()
         envelope["selection_inputs"]["availability"][0]["authorization"] = "secret-canary"

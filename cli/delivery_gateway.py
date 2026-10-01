@@ -2457,7 +2457,7 @@ def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None =
 
 
 def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[str, Any]]:
-    """Derive one provider-neutral edit assignment from the approved charter."""
+    """Project the approved job topology into provider-neutral v9 assignments."""
     run_dir = root / ".flow" / "runs" / work_id
     state = run_status(work_id, root=root)
     charter_rel = state.get("artifacts", {}).get("job_charter")
@@ -2472,18 +2472,59 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
         # from the Shaper-facing manifest.
         requirements_rel = state.get("artifacts", {}).get("requirements")
         _run_file(root, run_dir, requirements_rel or "")
-    return [{"assignment_id": "logical-manager", "role": "delivery-lead",
+    common = {"minimum_tier": "working", "locality": "any",
+              "input_bytes": 65536, "output_bytes": 16384, "context_tokens": 32768}
+    assignments = [{"assignment_id": "logical-manager", "role": "delivery-lead",
              "instructions": "Bootstrap and bound the provider-neutral delivery workflow.",
              "requirements": {"operation": "manage", "minimum_tier": "working",
                               "required_capabilities": ["structured_output"], "locality": "any",
                               "input_bytes": 32768, "output_bytes": 8192, "context_tokens": 32768,
-                              "risk_class": "standard", "independence_required": False}},
-            {"assignment_id": "logical-editor", "role": "lead-developer",
-             "instructions": "Apply only the approved charter edit scope and report the result.",
-             "requirements": {"operation": "edit", "minimum_tier": "working",
-                              "required_capabilities": ["structured_edit"], "locality": "any",
-                              "input_bytes": 65536, "output_bytes": 16384, "context_tokens": 32768,
                               "risk_class": "standard", "independence_required": False}}]
+    classifications = (
+        ("producer_instance_ids", "lead-developer", "edit", ["structured_edit"], False),
+        ("evidence_collector_instance_ids", "test-engineer", "collect", ["evidence_collection"], False),
+        ("verifier_instance_ids", "quality-reviewer", "verify", ["evidence_collection"], True),
+    )
+    seen = {"logical-manager"}
+    for field, role, operation, capabilities, independent in classifications:
+        values = raw.get(field, [])
+        if not isinstance(values, list) or any(not isinstance(item, str) or not item for item in values):
+            raise ContractError(f"approved v9 job charter has invalid {field}")
+        for assignment_id in values:
+            if assignment_id in seen:
+                raise ContractError("approved v9 job charter logical assignment IDs overlap")
+            seen.add(assignment_id)
+            assignments.append({
+                "assignment_id": assignment_id, "role": role,
+                "instructions": f"Perform the approved {operation} operation within the chartered scope.",
+                "requirements": {**common, "operation": operation,
+                                 "required_capabilities": capabilities,
+                                 "risk_class": "high" if independent else "standard",
+                                 "independence_required": independent},
+            })
+    if not any(item["requirements"]["operation"] == "edit" for item in assignments):
+        raise ContractError("approved v9 job charter has no producer assignment")
+    if not any(item["requirements"]["operation"] == "verify" for item in assignments):
+        raise ContractError("approved v9 job charter has no verifier assignment")
+    return assignments
+
+
+def independence_constraints_from_assignments(assignments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Seal high-risk verifier topology; concrete families resolve from consumed selections."""
+    producers = [item["assignment_id"] for item in assignments
+                 if item["requirements"]["operation"] == "edit"]
+    collectors = [item["assignment_id"] for item in assignments
+                  if item["requirements"]["operation"] == "collect"]
+    source_digests = [digest(item["requirements"]) for item in assignments
+                      if item["assignment_id"] in producers + collectors]
+    return [{"assignment_id": item["assignment_id"], "risk_class": "high",
+             "excluded_provider_families": [], "producer_assignment_ids": producers,
+             "evidence_collector_assignment_ids": collectors,
+             "source_binding_digests": source_digests}
+            for item in assignments
+            if item["requirements"]["operation"] == "verify"
+            and item["requirements"]["risk_class"] == "high"
+            and item["requirements"]["independence_required"]]
 
 
 def provider_selection_probe(work_id: str, *, root: Path | None = None) -> dict[str, Any]:
@@ -2491,6 +2532,7 @@ def provider_selection_probe(work_id: str, *, root: Path | None = None) -> dict[
     project_root = (root or repo_root()).resolve()
     catalog, policy, availability = flow_owned_v9_selection_inputs(project_root)
     assignments = logical_assignments_from_charter(work_id, root=project_root)
+    independence_constraints = independence_constraints_from_assignments(assignments)
     from provider_selection import select_candidate
     decisions = [{"assignment_id": item["assignment_id"],
                   "decision": select_candidate(item["requirements"], policy, catalog, availability)}
@@ -2565,6 +2607,7 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
     project_root = (root or repo_root()).resolve()
     catalog, policy, availability = flow_owned_v9_selection_inputs(project_root)
     assignments = logical_assignments_from_charter(work_id, root=project_root)
+    independence_constraints = independence_constraints_from_assignments(assignments)
     state = run_status(work_id, root=project_root)
     charter = _run_file(project_root, project_root / ".flow" / "runs" / work_id,
                         state.get("artifacts", {}).get("job_charter", ""))
@@ -2575,6 +2618,7 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
     envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
         work_id, worktree, source_commit, root=project_root, logical_assignments=assignments,
         catalog=catalog, availability=availability, effective_policy=policy,
+        independence_constraints=independence_constraints,
     )
     result = execute_v9_logical_delivery(
         envelope, task, ledger, _v9_adapter_for_operation(envelope, write_paths=write_paths),
