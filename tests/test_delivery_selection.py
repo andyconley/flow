@@ -61,6 +61,11 @@ def _manager_result(assignment_id: str = "producer", task: str = "Implement the 
     }}
 
 
+def _manager_result_for_action(action: dict, task: str = "Complete the approved stage.") -> dict:
+    assignment_id = "verifier" if '"verifier"' in action["task"] else "producer"
+    return _manager_result(assignment_id, task)
+
+
 def _envelope(*, excluded_families: list[str] | None = None,
               waiver: bool = False) -> dict:
     policy = merge_selection_policy({})
@@ -359,10 +364,12 @@ class DeliverySelectionTests(unittest.TestCase):
             ledger.create_attempt(envelope)
             seen = {}
 
-            def supervisor(sent_envelope, task, on_action, **_kwargs):
+            def supervisor(sent_envelope, task, on_action, *, manager_decision, **_kwargs):
                 self.assertEqual(sent_envelope, envelope)
-                outcome = on_action({"attempt_id": envelope["attempt_id"], "assignment_id": "producer",
-                                     "task": task, "sequence": 1, "manager_turn": 1})
+                outcome = on_action({"attempt_id": envelope["attempt_id"],
+                                     "assignment_id": manager_decision["assignment_id"],
+                                     "task": manager_decision["task"], "sequence": 1,
+                                     "manager_turn": manager_decision["manager_turn"]})
                 return {"status": "completed", "outcome": outcome}
 
             def adapter(binding, action):
@@ -370,7 +377,7 @@ class DeliverySelectionTests(unittest.TestCase):
                 snapshot = ledger.snapshot(envelope["attempt_id"])
                 self.assertEqual(snapshot["actions"][-1]["status"], "started")
                 self.assertEqual(snapshot["provider_selections"][-1]["state"], "consumed")
-                return (_manager_result(task="Implement the approved change.")
+                return (_manager_result_for_action(action, task="Implement the approved change.")
                         if action["assignment_id"] == "manager" else {"output": "applied"})
 
             outcome = execute_v9_logical_delivery(
@@ -382,11 +389,11 @@ class DeliverySelectionTests(unittest.TestCase):
             manager_task = ledger.snapshot(envelope["attempt_id"])["actions"][0]["request"]["task"]
             self.assertIn('"producer"', manager_task)
             self.assertEqual({name: item["candidate_id"] for name, item in seen.items()},
-                             {"manager": "local", "producer": "local"})
+                             {"manager": "local", "producer": "local", "verifier": "local"})
             self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
-                             ["completed", "completed"])
+                             ["completed", "completed", "completed", "completed"])
 
-    def test_logical_v9_manager_decision_selects_non_editor_assignment(self) -> None:
+    def test_logical_v9_manager_decision_drives_verifier_stage(self) -> None:
         envelope = _envelope()
         with tempfile.TemporaryDirectory() as tmp:
             ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
@@ -396,11 +403,11 @@ class DeliverySelectionTests(unittest.TestCase):
             def adapter(binding, action):
                 seen.append(action["assignment_id"])
                 if action["assignment_id"] == "manager":
-                    return _manager_result("verifier", "Verify the approved change.")
+                    return _manager_result_for_action(action)
                 return {"output": "verified"}
 
             def supervisor(_envelope, _task, on_action, *, manager_decision, **_kwargs):
-                self.assertEqual(manager_decision["assignment_id"], "verifier")
+                self.assertIn(manager_decision["assignment_id"], {"producer", "verifier"})
                 return on_action({"attempt_id": envelope["attempt_id"],
                                   "assignment_id": manager_decision["assignment_id"],
                                   "task": manager_decision["task"], "sequence": 1,
@@ -412,7 +419,7 @@ class DeliverySelectionTests(unittest.TestCase):
                 supervisor=supervisor,
             )
             self.assertEqual(outcome["status"], "completed")
-            self.assertEqual(seen, ["manager", "verifier"])
+            self.assertEqual(seen, ["manager", "producer", "manager", "verifier"])
 
     def test_logical_v9_rejects_proposal_that_differs_from_manager_decision(self) -> None:
         envelope = _envelope()
@@ -422,7 +429,7 @@ class DeliverySelectionTests(unittest.TestCase):
 
             def adapter(_binding, action):
                 if action["assignment_id"] == "manager":
-                    return _manager_result("verifier", "Verify the approved change.")
+                    return _manager_result_for_action(action)
                 self.fail("worker adapter must not be called")
 
             with self.assertRaisesRegex(ContractError, "differs from the bounded manager decision"):
@@ -443,10 +450,11 @@ class DeliverySelectionTests(unittest.TestCase):
             ledger.create_attempt(envelope)
             sends = []
 
-            def supervisor(_envelope, task, on_action, **_kwargs):
+            def supervisor(_envelope, task, on_action, *, manager_decision, **_kwargs):
                 return {"status": "completed", "outcome": on_action({
-                    "attempt_id": envelope["attempt_id"], "assignment_id": "producer",
-                    "task": task, "sequence": 1, "manager_turn": 1,
+                    "attempt_id": envelope["attempt_id"], "assignment_id": manager_decision["assignment_id"],
+                    "task": manager_decision["task"], "sequence": 1,
+                    "manager_turn": manager_decision["manager_turn"],
                 })}
 
             def readiness(binding):
@@ -458,15 +466,48 @@ class DeliverySelectionTests(unittest.TestCase):
             outcome = execute_v9_logical_delivery(
                 envelope, "Implement.", ledger,
                 lambda binding, action: sends.append(binding["candidate_id"]) or (
-                    _manager_result(task="Implement.") if action["assignment_id"] == "manager"
+                    _manager_result_for_action(action, task="Implement.") if action["assignment_id"] == "manager"
                     else {"output": "done"}),
                 readiness_recheck=readiness, supervisor=supervisor,
             )
             self.assertEqual(outcome["outcome"]["status"], "completed")
-            self.assertEqual(sends, ["claude", "claude"])
+            self.assertEqual(sends, ["claude", "claude", "claude", "claude"])
             selections = ledger.snapshot(envelope["attempt_id"])["provider_selections"]
             self.assertEqual([item["state"] for item in selections],
-                             ["superseded", "consumed", "superseded", "consumed"])
+                             ["superseded", "consumed", "superseded", "consumed",
+                              "superseded", "consumed", "superseded", "consumed"])
+
+    def test_verifier_family_exclusions_use_final_consumed_producer_after_fallback(self) -> None:
+        envelope = _envelope(excluded_families=["local"])
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            sends = []
+
+            def readiness(binding):
+                if binding["candidate_id"] == "local":
+                    return {**binding, "state": "unavailable", "no_send_observed": True,
+                            "evidence_code": "model_absent"}
+                return {**binding, "state": "ready"}
+
+            def adapter(binding, action):
+                sends.append((action["assignment_id"], binding["candidate_id"]))
+                return (_manager_result_for_action(action) if action["assignment_id"] == "manager"
+                        else {"output": "done"})
+
+            execute_v9_logical_delivery(
+                envelope, "Complete.", ledger, adapter, readiness_recheck=readiness,
+                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                    on_action({"attempt_id": envelope["attempt_id"],
+                               "assignment_id": manager_decision["assignment_id"],
+                               "task": manager_decision["task"], "sequence": 1,
+                               "manager_turn": manager_decision["manager_turn"]}),
+            )
+            self.assertIn(("producer", "claude"), sends)
+            self.assertIn(("verifier", "codex"), sends)
+            verifier_action = next(item["request"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]
+                                   if item["request"]["assignment_id"] == "verifier")
+            self.assertEqual(verifier_action["selection_decision"]["excluded_families"], ["anthropic"])
 
     def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
         envelope = _envelope()
@@ -488,7 +529,7 @@ class DeliverySelectionTests(unittest.TestCase):
             def uncertain_hosted(binding, action):
                 sends.append(binding["candidate_id"])
                 if action["assignment_id"] == "manager":
-                    return _manager_result(task="Implement.")
+                    return _manager_result_for_action(action, task="Implement.")
                 raise TimeoutError("hosted send outcome unknown")
 
             with self.assertRaises(RecoveryRequired):
@@ -507,7 +548,7 @@ class DeliverySelectionTests(unittest.TestCase):
             ledger.create_attempt(envelope)
             outcome = execute_v9_logical_delivery(
                 envelope, "Implement the approved change.", ledger,
-                lambda binding, action: (_manager_result(task="Implement the approved change.")
+                lambda binding, action: (_manager_result_for_action(action, task="Implement the approved change.")
                                          if action["assignment_id"] == "manager"
                                          else {"provider": binding["provider"], "output": "applied"}),
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
@@ -515,7 +556,7 @@ class DeliverySelectionTests(unittest.TestCase):
             )
             self.assertEqual(outcome["attempt_id"], envelope["attempt_id"])
             self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
-                             ["completed", "completed"])
+                             ["completed", "completed", "completed", "completed"])
 
     def test_logical_v9_manager_uncertain_send_stops_before_maf(self) -> None:
         envelope = _envelope()

@@ -594,7 +594,8 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                 if proposed or message.get("attempt_id") != envelope["attempt_id"]:
                     raise MafProtocolError("MAF v9 proposal is duplicated or mismatched")
                 if (not isinstance(message.get("assignment_id"), str) or not isinstance(message.get("task"), str)
-                        or message.get("sequence") != 1 or message.get("manager_turn") != 1):
+                        or message.get("sequence") != 1
+                        or message.get("manager_turn") != manager_decision.get("manager_turn")):
                     raise MafProtocolError("MAF v9 proposal is malformed")
                 if (message.get("assignment_id") != manager_decision.get("assignment_id")
                         or message.get("task") != manager_decision.get("task")):

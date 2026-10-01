@@ -37,16 +37,20 @@ after base eligibility for high-risk verification.
 
 ## Runtime path
 
-New chartered jobs use protocol v9. The Shaper supplies a logical assignment;
+New chartered jobs use protocol v9. The approved job charter supplies a
+provider-neutral producer, optional evidence-collector, and verifier topology;
 Flow loads the administrator-authorized candidate catalog, takes a bounded
 credential-free readiness snapshot, and seals both with the effective policy.
-Before MAF starts, Flow selects the sealed logical manager, rechecks readiness,
-reserves and claims its send, and records the completed manager action. The
-supervised MAF child then can nominate only the logical specialist assignment
-and task. Flow independently recomputes that concrete binding, reserves it in
+For each eligible stage, Flow selects the sealed logical manager, rechecks
+readiness, reserves and claims its send, and validates its bounded logical
+assignment decision. The supervised MAF child may relay only that assignment
+and task. Flow independently recomputes the concrete binding, reserves it in
 the ledger, rechecks readiness, claims the send durably, and only then calls
-the adapter. The receipt therefore carries both manager and specialist
-selection lineage without exposing either concrete binding to the child.
+the adapter. Producer fallback settles before Flow derives a high-risk
+verifier's excluded provider families from the actual consumed producer and
+collector bindings. The receipt therefore carries manager, specialist,
+fallback, and runtime independence lineage without exposing a concrete binding
+to the manager or child.
 
 ```text
 approved logical charter

@@ -51,11 +51,13 @@ def assignment_for(envelope: dict[str, Any], assignment_id: str) -> dict[str, An
 
 
 def compute_binding(envelope: dict[str, Any], assignment_id: str, *,
-                    prior_no_send_failures: list[str] | None = None) -> dict[str, Any]:
+                    prior_no_send_failures: list[str] | None = None,
+                    runtime_excluded_families: list[str] | None = None) -> dict[str, Any]:
     assignment = assignment_for(envelope, assignment_id)
     inputs = envelope["selection_inputs"]
     requirements = assignment["requirements"]
-    excluded_families = effective_family_exclusions(envelope, assignment_id)
+    excluded_families = (runtime_excluded_families if runtime_excluded_families is not None
+                         else effective_family_exclusions(envelope, assignment_id))
     return select_candidate(
         requirements,
         inputs["policy"],
@@ -76,9 +78,11 @@ def bootstrap_manager(envelope: dict[str, Any]) -> dict[str, Any]:
 
 def make_action(envelope: dict[str, Any], assignment_id: str, task: str, *,
                 sequence: int, manager_turn: int, decision: dict[str, Any] | None = None,
-                selection_id: str | None = None) -> dict[str, Any]:
+                selection_id: str | None = None,
+                runtime_excluded_families: list[str] | None = None) -> dict[str, Any]:
     assignment = assignment_for(envelope, assignment_id)
-    proposed = deepcopy(decision or compute_binding(envelope, assignment_id))
+    proposed = deepcopy(decision or compute_binding(
+        envelope, assignment_id, runtime_excluded_families=runtime_excluded_families))
     task_digest = hashlib.sha256(task.encode()).hexdigest()
     action = {
         "schema_version": 1,
@@ -126,8 +130,11 @@ def authorize_and_dispatch(
                                                     for item in prior_failures)
             or len(set(prior_failures)) != len(prior_failures)):
         raise SelectionDenied("invalid predecessor no-send failures")
+    runtime_families = (_runtime_family_exclusions(envelope, action["assignment_id"], ledger)
+                        if ledger is not None else None)
     expected = compute_binding(envelope, action["assignment_id"],
-                               prior_no_send_failures=prior_failures)
+                               prior_no_send_failures=prior_failures,
+                               runtime_excluded_families=runtime_families)
     if canonical_bytes(action["selection_decision"]) != canonical_bytes(expected):
         raise SelectionDenied("child selection differs from Flow recomputation")
     binding = expected.get("selected_binding")
@@ -150,6 +157,7 @@ def authorize_and_dispatch(
         successor = compute_binding(
             envelope, action["assignment_id"],
             prior_no_send_failures=[*prior_failures, binding["candidate_id"]],
+            runtime_excluded_families=runtime_families,
         )
         return {
             "status": "pre_send_refused",
@@ -174,3 +182,29 @@ def authorize_and_dispatch(
         "provider_action_id": action["action_id"],
         "result": result,
     }
+
+
+def _runtime_family_exclusions(envelope: dict[str, Any], assignment_id: str,
+                               ledger: "ExecutionLedger") -> list[str] | None:
+    constraints = [item for item in envelope["selection_authority"]["independence_constraints"]
+                   if item["assignment_id"] == assignment_id]
+    if not constraints:
+        return None
+    if len(constraints) != 1:
+        raise SelectionDenied("independent verifier requires exactly one constraint")
+    constraint = constraints[0]
+    required = constraint["producer_assignment_ids"] + constraint["evidence_collector_assignment_ids"]
+    snapshot = ledger.snapshot(envelope["attempt_id"])
+    families: list[str] = []
+    for source_id in required:
+        matches = [item for item in snapshot["actions"]
+                   if item["request"].get("assignment_id") == source_id and item["status"] == "completed"]
+        if len(matches) != 1:
+            raise SelectionDenied("independent verifier lineage is incomplete")
+        binding = matches[0]["request"].get("selection_decision", {}).get("selected_binding")
+        family = binding.get("provider_family") if isinstance(binding, dict) else None
+        if not isinstance(family, str) or not family:
+            raise SelectionDenied("independent verifier lineage has no consumed provider family")
+        if family not in families:
+            families.append(family)
+    return families

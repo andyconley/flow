@@ -51,7 +51,8 @@ from provider_availability import discover_ollama_models, AvailabilityError
 from flowtoml import read_toml
 from paths import SCAFFOLD_DIR, USER_OVERLAY_DIR
 from delivery_selection import (authorize_and_dispatch as authorize_v9_and_dispatch,
-                                make_action as make_v9_action)
+                                make_action as make_v9_action,
+                                _runtime_family_exclusions)
 from ollama_edit_worker import (propose_edits as propose_ollama_edits,
                                 source_bundle as ollama_source_bundle,
                                 validate_and_apply as apply_ollama_edits)
@@ -2149,6 +2150,7 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         raise ContractError("logical v9 delivery attempt is absent or closed")
     generation = snapshot["owner_generation"]
     manager_decision: dict[str, Any] | None = None
+    dispatch_sequence_base = 1
 
     def dispatch(proposal: dict[str, Any]) -> dict[str, Any]:
         if manager_decision is not None and proposal["assignment_id"] != manager_decision["assignment_id"]:
@@ -2159,11 +2161,14 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                            if item["assignment_id"] == proposal["assignment_id"]), None)
         if assignment is None:
             raise ContractError("logical v9 proposal names an unknown assignment")
-        sequence = proposal["sequence"] if assignment["requirements"]["operation"] == "manage" \
-            else proposal["sequence"] + 1
+        sequence = dispatch_sequence_base if assignment["requirements"]["operation"] == "manage" \
+            else dispatch_sequence_base + 1
+        runtime_families = (_runtime_family_exclusions(envelope, proposal["assignment_id"], ledger)
+                            if assignment["requirements"]["operation"] == "verify" else None)
         action = make_v9_action(
             envelope, proposal["assignment_id"], proposal["task"],
             sequence=sequence, manager_turn=proposal["manager_turn"],
+            runtime_excluded_families=runtime_families,
         )
         predecessor_selection_id = None
         # A refused readiness check is the sole automatic retry case: it is
@@ -2203,38 +2208,45 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     manager = managers[0]
     workers = [item for item in envelope["logical_assignments"]
                if item["requirements"].get("operation") != "manage"]
-    worker_ids = [item["assignment_id"] for item in workers]
-    if not worker_ids:
+    if not workers:
         raise ContractError("protocol v9 requires at least one logical worker assignment")
     # Bootstrap the manager through the exact same Flow-owned selection and
     # send fence before a MAF process exists. The child receives neither the
     # binding nor provider credentials; the durable receipt carries the proof.
-    manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
-              "task": ("Choose the next logical assignment for the approved task. "
-                       f"next_speaker.answer must be exactly one of {json.dumps(worker_ids)}. "
-                       "Set is_request_satisfied.answer=false while required work remains and provide "
-                       "a nonempty reason and bounded instruction_or_question.answer."),
-              "sequence": 1, "manager_turn": 0})
-    raw_manager = manager_outcome.get("manager_result")
-    progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
-    if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
-        progress = parse_progress(raw_manager["output"]).value
-    if not isinstance(progress, dict):
-        raise ContractError("logical v9 manager returned no exact progress decision")
-    selected = progress.get("next_speaker", {}).get("answer")
-    selected_task = progress.get("instruction_or_question", {}).get("answer")
-    reason = progress.get("next_speaker", {}).get("reason")
-    if (selected not in worker_ids or progress.get("is_request_satisfied", {}).get("answer") is not False
-            or not isinstance(selected_task, str) or not selected_task.strip()
-            or not isinstance(reason, str) or not reason.strip()
-            or len(selected_task.encode()) > MAX_TASK_BYTES or len(reason.encode()) > MAX_TASK_BYTES):
-        raise ContractError("logical v9 manager decision is outside the approved logical roster")
-    manager_decision = {"assignment_id": selected, "task": selected_task,
-                        "reason": reason, "manager_turn": 1}
-
-    outcome = (supervisor or run_maf_v9_delivery)(envelope, task, dispatch,
-                                                    python_path=python_path,
-                                                    manager_decision=manager_decision)
+    outcomes = []
+    operation_order = {"edit": 0, "collect": 1, "verify": 2}
+    pending = sorted(workers, key=lambda item: (operation_order[item["requirements"]["operation"]],
+                                                item["assignment_id"]))
+    for stage, expected_assignment in enumerate(pending, start=1):
+        dispatch_sequence_base = stage * 2 - 1
+        allowed_ids = [expected_assignment["assignment_id"]]
+        manager_decision = None
+        manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
+                  "task": ("Choose the next logical assignment for the approved task. "
+                           f"next_speaker.answer must be exactly one of {json.dumps(allowed_ids)}. "
+                           "Set is_request_satisfied.answer=false while required work remains and provide "
+                           "a nonempty reason and bounded instruction_or_question.answer."),
+                  "sequence": dispatch_sequence_base, "manager_turn": stage - 1})
+        raw_manager = manager_outcome.get("manager_result")
+        progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
+        if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
+            progress = parse_progress(raw_manager["output"]).value
+        if not isinstance(progress, dict):
+            raise ContractError("logical v9 manager returned no exact progress decision")
+        selected = progress.get("next_speaker", {}).get("answer")
+        selected_task = progress.get("instruction_or_question", {}).get("answer")
+        reason = progress.get("next_speaker", {}).get("reason")
+        if (selected not in allowed_ids or progress.get("is_request_satisfied", {}).get("answer") is not False
+                or not isinstance(selected_task, str) or not selected_task.strip()
+                or not isinstance(reason, str) or not reason.strip()
+                or len(selected_task.encode()) > MAX_TASK_BYTES or len(reason.encode()) > MAX_TASK_BYTES):
+            raise ContractError("logical v9 manager decision is outside the approved logical frontier")
+        manager_decision = {"assignment_id": selected, "task": selected_task,
+                            "reason": reason, "manager_turn": stage}
+        outcomes.append((supervisor or run_maf_v9_delivery)(
+            envelope, task, dispatch, python_path=python_path,
+            manager_decision=manager_decision))
+    outcome = outcomes[-1]
     # A normal bounded v9 run has the manager bootstrap and one logical edit.
     # Seal the receipt
     # from the ledger while it is still the source of truth; uncertain sends
@@ -2326,7 +2338,8 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         "selection_inputs": {"policy": policy, "catalog": catalog, "availability": normalized_availability},
         "selection_input_digests": {"policy": digest(policy), "catalog": digest(catalog),
                                     "availability": digest(normalized_availability)},
-        "limits": {"max_actions": 2}, "checkpoint_dir": str(attempt_dir / "checkpoints"),
+        "limits": {"max_actions": 2 * (len(logical_assignments) - 1)},
+        "checkpoint_dir": str(attempt_dir / "checkpoints"),
         "charter_sources": sources, "source_commit": source_commit, "worktree": str(worktree),
         "delivery_charter_digest": delivery["charter_digest"],
         "delivery_lead_claim_digest": delivery["lead_claim_digest"],

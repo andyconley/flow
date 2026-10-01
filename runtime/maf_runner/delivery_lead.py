@@ -143,7 +143,8 @@ async def _run(start: dict[str, Any]) -> None:
         assignment = next((item for item in eligible
                            if item.get("assignment_id") == decision.get("assignment_id")), None)
         if (assignment is None or not isinstance(decision.get("task"), str)
-                or not decision["task"].strip() or decision.get("manager_turn") != 1):
+                or not decision["task"].strip() or type(decision.get("manager_turn")) is not int
+                or decision["manager_turn"] < 1):
             raise PolicyAbort("manager selected an unlisted logical assignment")
         # A child-side computation is advisory only.  The proposal never
         # carries its concrete result; gateway equality checking remains the
@@ -154,7 +155,7 @@ async def _run(start: dict[str, Any]) -> None:
         _write({"protocol_version": 9, "type": "propose_v9_action",
                 "attempt_id": envelope.get("attempt_id"),
                 "assignment_id": assignment.get("assignment_id"), "task": decision["task"],
-                "sequence": 1, "manager_turn": 1})
+                "sequence": 1, "manager_turn": decision["manager_turn"]})
         reply = _read()
         if reply.get("type") != "action_result" or not isinstance(reply.get("result"), dict):
             raise PolicyAbort("Flow v9 action reply is invalid")
