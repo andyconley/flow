@@ -84,6 +84,26 @@ class ProviderSelectionTests(unittest.TestCase):
             {"candidate_id": "local", "reason_codes": ["availability_unavailable"]}
         ])
 
+    def test_rank_prefers_smallest_sufficient_tier_then_configured_candidate_priority(self) -> None:
+        catalog = [
+            candidate("z-working", "ollama", "local", tier="working", cost_class=9),
+            candidate("a-demanding", "ollama", "local", tier="demanding", cost_class=0),
+        ]
+        ready = [{"candidate_id": item["candidate_id"], "state": "ready"} for item in catalog]
+        policy = merge_selection_policy({"candidate_priority": ["a-demanding", "z-working"]})
+        decision = select_candidate(REQUIREMENTS, policy, catalog, ready)
+        self.assertEqual(decision["selected_candidate_id"], "z-working")
+        self.assertEqual(decision["ordered_candidates"][0]["rank_tuple"], [0, 0, 1, 9, "z-working"])
+
+        equal_tier = [dict(item, tier="working") for item in catalog]
+        decision = select_candidate(REQUIREMENTS, policy, equal_tier, ready)
+        self.assertEqual(decision["selected_candidate_id"], "a-demanding")
+        self.assertEqual(decision["ordered_candidates"][0]["rank_tuple"], [0, 0, 0, 0, "a-demanding"])
+
+    def test_candidate_priority_requires_unique_nonblank_ids(self) -> None:
+        with self.assertRaisesRegex(SelectionPolicyError, "unique candidate IDs"):
+            merge_selection_policy({"candidate_priority": ["local", "local"]})
+
     def test_project_can_reorder_hosted_candidates_but_not_displace_local(self) -> None:
         policy = merge_selection_policy(
             {"provider_order": ["ollama", "claude", "codex"]}, None,

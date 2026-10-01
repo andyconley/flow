@@ -149,7 +149,7 @@ def authorize_and_dispatch(
                                       evidence_code=observed.get("evidence_code", "pre_send_unavailable"))
         successor = compute_binding(
             envelope, action["assignment_id"],
-            prior_no_send_failures=[binding["candidate_id"]],
+            prior_no_send_failures=[*prior_failures, binding["candidate_id"]],
         )
         return {
             "status": "pre_send_refused",

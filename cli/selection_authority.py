@@ -113,7 +113,7 @@ def validate_requirements(requirements: Any) -> None:
 
 def validate_effective_policy(policy: Any) -> None:
     fields = {
-        "schema_version", "allowed_candidates", "disabled_candidates", "provider_order",
+        "schema_version", "allowed_candidates", "disabled_candidates", "provider_order", "candidate_priority",
         "max_cost_class", "max_input_bytes", "max_output_bytes", "max_context_tokens",
         "independence_waiver", "provenance", "policy_digest",
     }
@@ -126,6 +126,7 @@ def validate_effective_policy(policy: Any) -> None:
     order = _unique_strings(value["provider_order"], "provider_order", allowed=frozenset(PROVIDERS))
     if tuple(order) not in (("ollama", "claude", "codex"), ("ollama", "codex", "claude")):
         raise SelectionAuthorityError("provider_order must keep Ollama first and contain each provider once")
+    _unique_strings(value["candidate_priority"], "candidate_priority")
     for field in ("max_cost_class", "max_input_bytes", "max_output_bytes", "max_context_tokens"):
         if value[field] is not None:
             _uint(value[field], field)
@@ -133,7 +134,7 @@ def validate_effective_policy(policy: Any) -> None:
         raise SelectionAuthorityError("effective selection policy provenance is invalid")
     layers = frozenset({"framework", "administrator", "project", "run"})
     for field, source in value["provenance"].items():
-        if field in {"provider_order", "independence_waiver"}:
+        if field in {"provider_order", "candidate_priority", "independence_waiver"}:
             if source not in layers:
                 raise SelectionAuthorityError("effective selection policy provenance source is invalid")
         elif (not isinstance(source, list) or not source or len(set(source)) != len(source)

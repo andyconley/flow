@@ -128,8 +128,10 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         predecessor = row.get("predecessor_selection_id")
         if predecessor is not None:
             prior = rows.get(predecessor)
+            expected_history = ([*prior.get("prior_no_send_failures", []), prior.get("candidate_id")]
+                                if prior is not None else None)
             if prior is None or prior.get("state") != "superseded" \
-                    or not prior.get("reason") or prior.get("candidate_id") not in row.get("prior_no_send_failures", []):
+                    or not prior.get("reason") or row.get("prior_no_send_failures") != expected_history:
                 raise V9ReceiptError("v9_fallback_lineage_invalid")
             compared += 1
     expected_digest = digest({key: value for key, value in receipt.items() if key != "receipt_digest"})

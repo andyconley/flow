@@ -57,6 +57,7 @@ def merge_selection_policy(
         "allowed_candidates": None,
         "disabled_candidates": [],
         "provider_order": list(PROVIDERS),
+        "candidate_priority": [],
         "max_cost_class": None,
         "max_input_bytes": None,
         "max_output_bytes": None,
@@ -70,7 +71,7 @@ def merge_selection_policy(
         if not isinstance(layer, dict):
             raise SelectionPolicyError(f"{layer_name} selection policy must be a mapping")
         unknown = set(layer) - {
-            "allowed_candidates", "disabled_candidates", "provider_order", "max_cost_class",
+            "allowed_candidates", "disabled_candidates", "provider_order", "candidate_priority", "max_cost_class",
             "max_input_bytes", "max_output_bytes", "max_context_tokens", "independence_waiver",
         }
         if unknown:
@@ -91,6 +92,12 @@ def merge_selection_policy(
                 raise SelectionPolicyError("provider_order must keep ollama first")
             effective["provider_order"] = order
             effective["provenance"]["provider_order"] = layer_name
+        if "candidate_priority" in layer:
+            priority = _strings(layer["candidate_priority"], f"{layer_name}.candidate_priority")
+            if len(set(priority)) != len(priority):
+                raise SelectionPolicyError("candidate_priority must contain unique candidate IDs")
+            effective["candidate_priority"] = priority
+            effective["provenance"]["candidate_priority"] = layer_name
         for field in ("max_cost_class", "max_input_bytes", "max_output_bytes", "max_context_tokens"):
             if field not in layer:
                 continue
@@ -121,10 +128,20 @@ def select_candidate(
     """Select the first eligible candidate using a total deterministic order."""
     candidates = sorted((deepcopy(item) for item in catalog), key=lambda item: item.get("candidate_id", ""))
     readiness = {item.get("candidate_id"): item for item in availability}
-    failures = set(prior_no_send_failures)
+    failure_history = list(prior_no_send_failures)
+    if (any(not isinstance(item, str) or not item for item in failure_history)
+            or len(set(failure_history)) != len(failure_history)):
+        raise SelectionPolicyError("prior_no_send_failures must contain unique nonblank candidate IDs")
+    failures = set(failure_history)
     family_exclusions = set(excluded_families)
     provider_order = policy.get("provider_order", list(PROVIDERS))
     provider_rank = {provider: index for index, provider in enumerate(provider_order)}
+    configured_priority = policy.get("candidate_priority", [])
+    if (not isinstance(configured_priority, list)
+            or any(not isinstance(item, str) or not item for item in configured_priority)
+            or len(set(configured_priority)) != len(configured_priority)):
+        raise SelectionPolicyError("candidate_priority must contain unique nonblank candidate IDs")
+    candidate_rank = {candidate_id: index for index, candidate_id in enumerate(configured_priority)}
     allowed = policy.get("allowed_candidates")
     disabled = set(policy.get("disabled_candidates", []))
     exclusions: list[dict[str, Any]] = []
@@ -142,6 +159,8 @@ def select_candidate(
             continue
         rank = (
             provider_rank.get(candidate.get("provider"), len(provider_rank)),
+            TIER_RANK[candidate["tier"]] - TIER_RANK[requirements.get("minimum_tier", "mechanical")],
+            candidate_rank.get(candidate_id, len(candidate_rank)),
             int(candidate.get("cost_class", 0)),
             candidate_id,
         )
@@ -156,7 +175,7 @@ def select_candidate(
         "policy_digest": policy.get("policy_digest") or digest(policy),
         "catalog_digest": digest(candidates),
         "availability_digest": digest(sorted(readiness.values(), key=lambda item: item.get("candidate_id", ""))),
-        "prior_no_send_failures": sorted(failures),
+        "prior_no_send_failures": failure_history,
         "excluded_families": sorted(family_exclusions),
         "exclusions": exclusions,
         "ordered_candidates": ordered,

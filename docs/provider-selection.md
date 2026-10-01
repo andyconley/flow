@@ -25,8 +25,11 @@ Ollama `/api/tags` never grants a capability.
 The selector excludes candidates using controlled reason codes, then assigns a
 total rank tuple to every survivor. A qualifying local Ollama candidate comes
 first. Hosted candidates follow the configured order, Claude then Codex by
-default, followed by cost class and stable candidate ID. Input ordering has no
-effect on canonical output or the decision digest.
+default, followed by the smallest sufficient capability tier, configured
+stable-candidate priority, cost class, and stable candidate ID. Candidate
+priority represents an exact provider/model catalog binding; it never infers
+capability from a model name. Input ordering has no effect on canonical output
+or the decision digest.
 
 Unknown, stale, or unavailable readiness is ineligible. Previous candidates may
 be excluded only by positive no-send evidence. Provider-family filtering occurs

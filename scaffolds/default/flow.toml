@@ -14,6 +14,9 @@ enabled = true
 # administrator-authorized ceiling used by protocol v9.
 [provider_selection]
 provider_order = ["ollama", "claude", "codex"]
+# Optional stable candidate IDs, in administrator/project preference order.
+# Provider order and smallest-sufficient tier still take precedence.
+candidate_priority = []
 
 [[provider_candidates]]
 candidate_id = "ollama-local"

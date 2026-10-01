@@ -201,6 +201,27 @@ class DeliverySelectionTests(unittest.TestCase):
         self.assertEqual(result["successor_decision"]["selected_candidate_id"], "claude")
         self.assertEqual(sends, [])
 
+    def test_repeated_pre_send_refusals_accumulate_without_candidate_reuse(self) -> None:
+        envelope = _envelope()
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        selected = []
+        for expected_id in ("local", "claude", "codex"):
+            self.assertEqual(action["selection_decision"]["selected_candidate_id"], expected_id)
+            result = authorize_and_dispatch(
+                envelope, action, lambda *_: self.fail("adapter must not be called"),
+                readiness_recheck=lambda binding: {
+                    **binding, "state": "unavailable", "no_send_observed": True,
+                    "evidence_code": "connection_refused_before_send",
+                },
+            )
+            selected.append(result["candidate_id"])
+            action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1,
+                                 decision=result["successor_decision"])
+        self.assertEqual(selected, ["local", "claude", "codex"])
+        self.assertEqual(action["selection_decision"]["prior_no_send_failures"],
+                         ["local", "claude", "codex"])
+        self.assertIsNone(action["selection_decision"]["selected_binding"])
+
     def test_uncertain_recheck_and_started_send_require_recovery(self) -> None:
         envelope = _envelope()
         action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
