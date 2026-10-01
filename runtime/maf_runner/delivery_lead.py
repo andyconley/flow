@@ -134,17 +134,17 @@ async def _run(start: dict[str, Any]) -> None:
         # is the only process that can cross the adapter boundary.
         task = start.get("task")
         assignments = envelope.get("logical_assignments")
-        if (not isinstance(task, str) or not task.strip() or not isinstance(assignments, list)):
+        decision = start.get("manager_decision")
+        if (not isinstance(task, str) or not task.strip() or not isinstance(assignments, list)
+                or not isinstance(decision, dict)):
             raise RuntimeError("protocol v9 logical delivery inputs are invalid")
         eligible = [item for item in assignments if isinstance(item, dict)
                     and item.get("requirements", {}).get("operation") != "manage"]
-        # The bounded first route performs the charter's edit before later
-        # logical verification work. It chooses only a *logical* operation;
-        # Flow still decides the provider/model for it.
-        editors = [item for item in eligible if item.get("requirements", {}).get("operation") == "edit"]
-        if len(editors) != 1:
-            raise RuntimeError("protocol v9 bounded MAF route requires exactly one logical editor")
-        assignment = editors[0]
+        assignment = next((item for item in eligible
+                           if item.get("assignment_id") == decision.get("assignment_id")), None)
+        if (assignment is None or not isinstance(decision.get("task"), str)
+                or not decision["task"].strip() or decision.get("manager_turn") != 1):
+            raise PolicyAbort("manager selected an unlisted logical assignment")
         # A child-side computation is advisory only.  The proposal never
         # carries its concrete result; gateway equality checking remains the
         # mandatory authority boundary.
@@ -153,7 +153,7 @@ async def _run(start: dict[str, Any]) -> None:
         _write({"protocol_version": 9, "type": "runtime_initialized"})
         _write({"protocol_version": 9, "type": "propose_v9_action",
                 "attempt_id": envelope.get("attempt_id"),
-                "assignment_id": assignment.get("assignment_id"), "task": task,
+                "assignment_id": assignment.get("assignment_id"), "task": decision["task"],
                 "sequence": 1, "manager_turn": 1})
         reply = _read()
         if reply.get("type") != "action_result" or not isinstance(reply.get("result"), dict):

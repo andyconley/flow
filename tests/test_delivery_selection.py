@@ -51,6 +51,16 @@ def _candidate(candidate_id: str, provider: str, family: str) -> dict:
     }
 
 
+def _manager_result(assignment_id: str = "producer", task: str = "Implement the approved change.") -> dict:
+    return {"manager_response": {
+        "is_request_satisfied": {"answer": False},
+        "is_in_loop": {"answer": True},
+        "is_progress_being_made": {"answer": True},
+        "next_speaker": {"answer": assignment_id, "reason": "approved work remains"},
+        "instruction_or_question": {"answer": task},
+    }}
+
+
 def _envelope(*, excluded_families: list[str] | None = None,
               waiver: bool = False) -> dict:
     policy = merge_selection_policy({})
@@ -360,7 +370,8 @@ class DeliverySelectionTests(unittest.TestCase):
                 snapshot = ledger.snapshot(envelope["attempt_id"])
                 self.assertEqual(snapshot["actions"][-1]["status"], "started")
                 self.assertEqual(snapshot["provider_selections"][-1]["state"], "consumed")
-                return {"output": "applied"}
+                return (_manager_result(task="Implement the approved change.")
+                        if action["assignment_id"] == "manager" else {"output": "applied"})
 
             outcome = execute_v9_logical_delivery(
                 envelope, "Implement the approved change.", ledger, adapter,
@@ -369,11 +380,60 @@ class DeliverySelectionTests(unittest.TestCase):
             )
             self.assertEqual(outcome["status"], "completed")
             manager_task = ledger.snapshot(envelope["attempt_id"])["actions"][0]["request"]["task"]
-            self.assertIn("next_speaker.answer=logical-editor", manager_task)
+            self.assertIn('"producer"', manager_task)
             self.assertEqual({name: item["candidate_id"] for name, item in seen.items()},
                              {"manager": "local", "producer": "local"})
             self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
                              ["completed", "completed"])
+
+    def test_logical_v9_manager_decision_selects_non_editor_assignment(self) -> None:
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            seen = []
+
+            def adapter(binding, action):
+                seen.append(action["assignment_id"])
+                if action["assignment_id"] == "manager":
+                    return _manager_result("verifier", "Verify the approved change.")
+                return {"output": "verified"}
+
+            def supervisor(_envelope, _task, on_action, *, manager_decision, **_kwargs):
+                self.assertEqual(manager_decision["assignment_id"], "verifier")
+                return on_action({"attempt_id": envelope["attempt_id"],
+                                  "assignment_id": manager_decision["assignment_id"],
+                                  "task": manager_decision["task"], "sequence": 1,
+                                  "manager_turn": manager_decision["manager_turn"]})
+
+            outcome = execute_v9_logical_delivery(
+                envelope, "Complete the approved work.", ledger, adapter,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=supervisor,
+            )
+            self.assertEqual(outcome["status"], "completed")
+            self.assertEqual(seen, ["manager", "verifier"])
+
+    def test_logical_v9_rejects_proposal_that_differs_from_manager_decision(self) -> None:
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+
+            def adapter(_binding, action):
+                if action["assignment_id"] == "manager":
+                    return _manager_result("verifier", "Verify the approved change.")
+                self.fail("worker adapter must not be called")
+
+            with self.assertRaisesRegex(ContractError, "differs from the bounded manager decision"):
+                execute_v9_logical_delivery(
+                    envelope, "Complete the approved work.", ledger, adapter,
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                    supervisor=lambda _envelope, _task, on_action, **_kwargs: on_action({
+                        "attempt_id": envelope["attempt_id"], "assignment_id": "producer",
+                        "task": "Implement instead.", "sequence": 1, "manager_turn": 1,
+                    }),
+                )
 
     def test_logical_v9_pre_send_refusal_falls_to_hosted_candidate_once(self) -> None:
         """Only a no-I/O local refusal may advance to the next binding."""
@@ -397,7 +457,9 @@ class DeliverySelectionTests(unittest.TestCase):
 
             outcome = execute_v9_logical_delivery(
                 envelope, "Implement.", ledger,
-                lambda binding, _action: sends.append(binding["candidate_id"]) or {"output": "done"},
+                lambda binding, action: sends.append(binding["candidate_id"]) or (
+                    _manager_result(task="Implement.") if action["assignment_id"] == "manager"
+                    else {"output": "done"}),
                 readiness_recheck=readiness, supervisor=supervisor,
             )
             self.assertEqual(outcome["outcome"]["status"], "completed")
@@ -426,7 +488,7 @@ class DeliverySelectionTests(unittest.TestCase):
             def uncertain_hosted(binding, action):
                 sends.append(binding["candidate_id"])
                 if action["assignment_id"] == "manager":
-                    return {"output": "manager ready"}
+                    return _manager_result(task="Implement.")
                 raise TimeoutError("hosted send outcome unknown")
 
             with self.assertRaises(RecoveryRequired):
@@ -445,7 +507,9 @@ class DeliverySelectionTests(unittest.TestCase):
             ledger.create_attempt(envelope)
             outcome = execute_v9_logical_delivery(
                 envelope, "Implement the approved change.", ledger,
-                lambda binding, _action: {"provider": binding["provider"], "output": "applied"},
+                lambda binding, action: (_manager_result(task="Implement the approved change.")
+                                         if action["assignment_id"] == "manager"
+                                         else {"provider": binding["provider"], "output": "applied"}),
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
                 python_path=sys.executable,
             )

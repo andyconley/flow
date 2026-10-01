@@ -1606,7 +1606,14 @@ class V9CharteredRouteTests(CharteredFixture):
                 logical_assignments=assignments, catalog=catalog, availability=availability,
             )
             result = execute_v9_logical_delivery(
-                envelope, task, ledger, lambda binding, _action: {"model": binding["model"]},
+                envelope, task, ledger, lambda binding, action: ({"model": binding["model"],
+                    "manager_response": {
+                        "is_request_satisfied": {"answer": False},
+                        "is_in_loop": {"answer": True},
+                        "is_progress_being_made": {"answer": True},
+                        "next_speaker": {"answer": "editor", "reason": "approved work remains"},
+                        "instruction_or_question": {"answer": task},
+                    }} if action["assignment_id"] == "manager" else {"model": binding["model"]}),
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
                 supervisor=lambda _envelope, sent_task, on_action, **_kwargs: on_action({
                     "attempt_id": envelope["attempt_id"], "assignment_id": "editor", "task": sent_task,

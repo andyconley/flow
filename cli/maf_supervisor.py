@@ -558,6 +558,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
 def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                         on_action: Callable[[dict[str, Any]], dict[str, Any]], *,
                         timeout_s: float = 120, python_path: str | None = None,
+                        manager_decision: dict[str, Any] | None = None,
                         on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Run one credentialless logical v9 MAF proposal behind Flow dispatch.
 
@@ -566,7 +567,8 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
     action and cross the ledger-owned send fence.
     """
     if (envelope.get("execution_protocol_version") != 9 or not isinstance(task, str) or not task.strip()
-            or not callable(on_action) or not 0 < timeout_s <= 900):
+            or not callable(on_action) or not isinstance(manager_decision, dict)
+            or not 0 < timeout_s <= 900):
         raise MafProtocolError("v9 delivery inputs are invalid")
     executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
     root = Path(__file__).resolve().parents[1]
@@ -581,7 +583,8 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
         if on_process_group is not None:
             on_process_group(process.pid, "maf")
         _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "start",
-                                                  "envelope": envelope, "task": task}, deadline)
+                                                  "envelope": envelope, "task": task,
+                                                  "manager_decision": manager_decision}, deadline)
         while True:
             message = _read_message(process.stdout.fileno(), deadline, pending, 9)
             kind = message["type"]
@@ -593,6 +596,9 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                 if (not isinstance(message.get("assignment_id"), str) or not isinstance(message.get("task"), str)
                         or message.get("sequence") != 1 or message.get("manager_turn") != 1):
                     raise MafProtocolError("MAF v9 proposal is malformed")
+                if (message.get("assignment_id") != manager_decision.get("assignment_id")
+                        or message.get("task") != manager_decision.get("task")):
+                    raise MafProtocolError("MAF v9 proposal differs from the manager decision")
                 result = on_action(dict(message))
                 if not isinstance(result, dict):
                     raise MafProtocolError("Flow v9 action callback returned invalid result")

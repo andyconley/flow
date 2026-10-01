@@ -56,6 +56,7 @@ from ollama_edit_worker import (propose_edits as propose_ollama_edits,
                                 source_bundle as ollama_source_bundle,
                                 validate_and_apply as apply_ollama_edits)
 from ollama_manager import call_ollama_manager
+from runner_progress import parse_progress
 from claude_worker import call_claude
 from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
@@ -2147,8 +2148,13 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     if snapshot["envelope"] != envelope or snapshot["status"] != "started":
         raise ContractError("logical v9 delivery attempt is absent or closed")
     generation = snapshot["owner_generation"]
+    manager_decision: dict[str, Any] | None = None
 
     def dispatch(proposal: dict[str, Any]) -> dict[str, Any]:
+        if manager_decision is not None and proposal["assignment_id"] != manager_decision["assignment_id"]:
+            raise ContractError("logical v9 proposal differs from the bounded manager decision")
+        if manager_decision is not None and proposal["task"] != manager_decision["task"]:
+            raise ContractError("logical v9 task differs from the bounded manager decision")
         assignment = next((item for item in envelope["logical_assignments"]
                            if item["assignment_id"] == proposal["assignment_id"]), None)
         if assignment is None:
@@ -2184,26 +2190,51 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             )
         # The child only needs Flow's outcome. The complete binding/action
         # remains in the ledger and receipt, rather than echoing it back.
-        return {"status": result["status"], "provider_action_id": action["action_id"],
-                "selection_id": action["selection_id"]}
+        response = {"status": result["status"], "provider_action_id": action["action_id"],
+                    "selection_id": action["selection_id"]}
+        if assignment["requirements"]["operation"] == "manage":
+            response["manager_result"] = result.get("result")
+        return response
 
     managers = [item for item in envelope["logical_assignments"]
                 if item["requirements"].get("operation") == "manage"]
     if len(managers) != 1:
         raise ContractError("protocol v9 requires exactly one logical manager assignment")
     manager = managers[0]
+    workers = [item for item in envelope["logical_assignments"]
+               if item["requirements"].get("operation") != "manage"]
+    worker_ids = [item["assignment_id"] for item in workers]
+    if not worker_ids:
+        raise ContractError("protocol v9 requires at least one logical worker assignment")
     # Bootstrap the manager through the exact same Flow-owned selection and
     # send fence before a MAF process exists. The child receives neither the
     # binding nor provider credentials; the durable receipt carries the proof.
-    dispatch({"assignment_id": manager["assignment_id"],
-              "task": ("Report the bootstrap progress decision: is_request_satisfied.answer=false; "
-                       "is_in_loop.answer=true; is_progress_being_made.answer=true; "
-                       "next_speaker.answer=logical-editor with a nonempty reason that approved work remains; "
-                       "instruction_or_question.answer=Proceed with the approved logical edit."),
+    manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
+              "task": ("Choose the next logical assignment for the approved task. "
+                       f"next_speaker.answer must be exactly one of {json.dumps(worker_ids)}. "
+                       "Set is_request_satisfied.answer=false while required work remains and provide "
+                       "a nonempty reason and bounded instruction_or_question.answer."),
               "sequence": 1, "manager_turn": 0})
+    raw_manager = manager_outcome.get("manager_result")
+    progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
+    if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
+        progress = parse_progress(raw_manager["output"]).value
+    if not isinstance(progress, dict):
+        raise ContractError("logical v9 manager returned no exact progress decision")
+    selected = progress.get("next_speaker", {}).get("answer")
+    selected_task = progress.get("instruction_or_question", {}).get("answer")
+    reason = progress.get("next_speaker", {}).get("reason")
+    if (selected not in worker_ids or progress.get("is_request_satisfied", {}).get("answer") is not False
+            or not isinstance(selected_task, str) or not selected_task.strip()
+            or not isinstance(reason, str) or not reason.strip()
+            or len(selected_task.encode()) > MAX_TASK_BYTES or len(reason.encode()) > MAX_TASK_BYTES):
+        raise ContractError("logical v9 manager decision is outside the approved logical roster")
+    manager_decision = {"assignment_id": selected, "task": selected_task,
+                        "reason": reason, "manager_turn": 1}
 
     outcome = (supervisor or run_maf_v9_delivery)(envelope, task, dispatch,
-                                                    python_path=python_path)
+                                                    python_path=python_path,
+                                                    manager_decision=manager_decision)
     # A normal bounded v9 run has the manager bootstrap and one logical edit.
     # Seal the receipt
     # from the ledger while it is still the source of truth; uncertain sends
