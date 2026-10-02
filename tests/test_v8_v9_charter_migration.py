@@ -14,9 +14,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from delivery_gateway import provider_selection_probe  # noqa: E402
+from delivery_gateway import logical_assignments_from_charter, provider_selection_probe  # noqa: E402
+from execution_contracts import ContractError  # noqa: E402
 import flow  # noqa: E402
-from runstate import approve_job_charter_v9_migration  # noqa: E402
+import runstate  # noqa: E402
 from tests.test_chartered_delivery_gateway import CharteredFixture  # noqa: E402
 from tests.test_delivery_selection import _envelope  # noqa: E402
 
@@ -77,7 +78,7 @@ class V8V9JobCharterMigrationTests(CharteredFixture):
         return successor
 
     def _migrate(self, replacement: str | None = None, *, approved: bool = True):
-        return approve_job_charter_v9_migration(
+        return runstate.approve_job_charter_v9_migration(
             "sample", replacement or self.replacement.relative_to(self.root).as_posix(),
             "explicit user approval for deterministic v9 selection",
             approved_by_user=approved, root=self.root,
@@ -164,7 +165,7 @@ class V8V9JobCharterMigrationTests(CharteredFixture):
         outside = self.root / "outside-successor.json"
         outside.write_text(self._json(self._successor_charter()))
         before = self._tree()
-        ok, _payload, errors = approve_job_charter_v9_migration(
+        ok, _payload, errors = runstate.approve_job_charter_v9_migration(
             "sample", outside.relative_to(self.root).as_posix(), "explicit approval",
             approved_by_user=True, root=self.root,
         )
@@ -216,12 +217,18 @@ class V8V9JobCharterMigrationTests(CharteredFixture):
         self._assert_refused_atomically("started execution attempt")
 
     def test_event_projection_failure_reports_committed_success_for_idempotent_repair(self) -> None:
-        with patch("runstate._append_event", side_effect=OSError("injected event failure")):
+        with patch.object(runstate, "_append_event", side_effect=OSError("injected event failure")):
             ok, payload, warnings = self._migrate()
         self.assertTrue(ok)
         self.assertEqual(payload["delivery"]["owner_generation"], 2)
         self.assertIn("pending_lifecycle_event", payload)
         self.assertTrue(any("migration committed" in warning for warning in warnings), warnings)
+        transitioned, _, transition_errors = runstate.apply_transition(
+            "sample", "pause", root=self.root)
+        self.assertFalse(transitioned)
+        self.assertTrue(any("projection repair" in error for error in transition_errors))
+        with self.assertRaisesRegex(ContractError, "projection repair"):
+            logical_assignments_from_charter("sample", root=self.root)
         ok, repaired, errors = self._migrate()
         self.assertTrue(ok, errors)
         self.assertEqual(repaired["delivery"]["owner_generation"], 2)
