@@ -2025,7 +2025,7 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(probe["availability"][0]["state"], "ready")
         self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "local")
 
-    def test_probe_can_choose_credential_free_hosted_adapter_after_local_refusal(self):
+    def test_probe_can_choose_authenticated_hosted_adapter_after_local_refusal(self):
         self._write_v9_logical_charter()
         empty_overlay = self.root / "empty-user-overlay"
         (self.root / ".flow" / "flow.toml").write_text(
@@ -2038,8 +2038,23 @@ class V9CharteredRouteTests(CharteredFixture):
                 patch("delivery_gateway._hosted_adapter_available", side_effect=lambda provider: provider == "claude"):
             probe = provider_selection_probe("sample", root=self.root)
         self.assertEqual([item["state"] for item in probe["availability"]], ["unavailable", "ready", "unavailable"])
-        self.assertEqual(probe["availability"][1]["evidence_code"], "adapter_ready")
+        self.assertEqual(probe["availability"][1]["evidence_code"], "authentication_ready")
         self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "claude-hosted")
+
+    def test_hosted_adapter_readiness_requires_local_authentication_status(self):
+        completed = subprocess.CompletedProcess
+        with patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+                patch("delivery_gateway.subprocess.run", return_value=completed(
+                    ["claude", "auth", "status"], 0, '{"loggedIn": false}', "")):
+            self.assertFalse(delivery_gateway._hosted_adapter_available("claude"))
+        with patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+                patch("delivery_gateway.subprocess.run", return_value=completed(
+                    ["claude", "auth", "status"], 0, '{"loggedIn": true}', "")):
+            self.assertTrue(delivery_gateway._hosted_adapter_available("claude"))
+        with patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+                patch("delivery_gateway.subprocess.run", return_value=completed(
+                    ["codex", "login", "status"], 0, "Logged in using ChatGPT\n", "")):
+            self.assertTrue(delivery_gateway._hosted_adapter_available("codex"))
 
     def test_project_cannot_invent_provider_candidate(self):
         (self.root / ".flow" / "flow.toml").write_text(

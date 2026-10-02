@@ -2523,15 +2523,29 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
 
 
 def _hosted_adapter_available(provider: str) -> bool:
-    """Credential-free readiness: only a bounded local adapter executable.
+    """Whether the local adapter exists and reports an authenticated session.
 
-    This intentionally neither contacts a hosted provider nor reads login
-    material. Authentication, model entitlement, and send outcome remain
-    uncertain until the fenced adapter call and therefore cannot trigger a
-    fallback after the send claim.
+    The status commands are bounded local CLI observations. They do not send
+    the chartered task or expose credential material, so an authentication
+    refusal remains safe evidence for pre-send candidate selection.
     """
     executable = {"claude": "claude", "codex": "codex"}.get(provider)
-    return executable is not None and shutil.which(executable) is not None
+    if executable is None or shutil.which(executable) is None:
+        return False
+    command = [executable, "auth", "status"] if provider == "claude" else [executable, "login", "status"]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    if provider == "claude":
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return False
+        return isinstance(payload, dict) and payload.get("loggedIn") is True
+    return result.stdout.strip().startswith("Logged in")
 
 
 def _candidate_readiness(candidate: dict[str, Any], *, local_models: set[str],
@@ -2546,7 +2560,7 @@ def _candidate_readiness(candidate: dict[str, Any], *, local_models: set[str],
     elif provider in {"claude", "codex"}:
         ready = enabled and _hosted_adapter_available(provider)
         state = "ready" if ready else "unavailable"
-        code = "adapter_ready" if ready else "adapter_unavailable"
+        code = "authentication_ready" if ready else "authentication_unavailable"
     else:
         state, code = "unavailable", "adapter_unavailable"
     return normalize_availability({
