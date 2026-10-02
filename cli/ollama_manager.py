@@ -53,7 +53,8 @@ MANAGER_RESPONSE_SCHEMA = {
 
 def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_id: str,
                         transport: Callable[..., Any] | None = None,
-                        timeout_seconds: int = 60) -> dict[str, Any]:
+                        timeout_seconds: int = 60,
+                        preserve_observed_invalid: bool = False) -> dict[str, Any]:
     if not isinstance(messages, list) or not messages:
         raise ContractError("Ollama manager messages are absent")
     serialized = canonical(messages)
@@ -74,5 +75,7 @@ def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_i
     output = result["output"]
     parsed = parse_progress(output)
     if parsed.value is None or parsed.canonical is None:
+        if preserve_observed_invalid:
+            return {**result, "manager_response": None, "observed_invalid": True}
         raise ContractError("Ollama manager response is not exact Magentic progress")
     return {**result, "output": parsed.canonical, "manager_response": parsed.value}

@@ -2255,6 +2255,18 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
             progress = parse_progress(raw_manager["output"]).value
         if not isinstance(progress, dict):
+            if live_attempt:
+                manager_action = next(item["request"] for item in reversed(
+                    ledger.snapshot(envelope["attempt_id"])["actions"])
+                    if item["request"]["assignment_id"] == manager["assignment_id"])
+                ledger.record_v9_evidence_failure(
+                    envelope["attempt_id"], manager_action["action_id"], "manager_evaluation",
+                    "logical v9 manager returned no exact progress decision", generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "manager_evaluation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "manager_evaluation_failed", **sealed}
             raise ContractError("logical v9 manager returned no exact progress decision")
         selected = progress.get("next_speaker", {}).get("answer")
         selected_task = progress.get("instruction_or_question", {}).get("answer")
@@ -2855,7 +2867,8 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                 return {"provider": provider, "model": model, "operation": operation, "applied": applied}
             if operation == "manage":
                 return call_ollama_manager([{"role": "user", "content": task}], model=model,
-                                           attempt_id=action["attempt_id"], timeout_seconds=timeout)
+                                           attempt_id=action["attempt_id"], timeout_seconds=timeout,
+                                           preserve_observed_invalid=True)
             return call_local({"provider": provider, "model": model, "attempt_id": action["attempt_id"],
                                "instructions": instructions, "task": task},
                               correlation_id=action["action_id"], timeout_seconds=timeout)

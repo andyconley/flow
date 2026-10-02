@@ -54,7 +54,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
             or any(not isinstance(item, dict)
                    or set(item) != {"action_id", "stage", "detail"}
                    or not isinstance(item["action_id"], str)
-                   or item["stage"] not in {"edit_scope", "chartered_test", "verifier_evaluation"}
+                   or item["stage"] not in {"manager_evaluation", "edit_scope", "chartered_test", "verifier_evaluation"}
                    or not isinstance(item["detail"], str) or not item["detail"]
                    for item in evidence_failures)):
         raise V9ReceiptError("v9_evidence_failures_invalid")
@@ -156,7 +156,8 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         action = actions_by_id.get(failure["action_id"])
         operation = (assignments[action["assignment_id"]]["requirements"].get("operation")
                      if action is not None else None)
-        expected_operation = "verify" if failure["stage"] == "verifier_evaluation" else "edit"
+        expected_operation = ("manage" if failure["stage"] == "manager_evaluation" else
+                              "verify" if failure["stage"] == "verifier_evaluation" else "edit")
         key = (failure["action_id"], failure["stage"])
         if action is None or operation != expected_operation or key in failure_keys:
             raise V9ReceiptError("v9_evidence_failure_binding_invalid")

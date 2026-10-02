@@ -1573,7 +1573,8 @@ class V9CharteredRouteTests(CharteredFixture):
         (self.run / "job-charter.json").write_text(json.dumps(self.charter))
 
     def _execute_semantic_v9(self, verifier_output: str | None,
-                             second_verifier_output: str | None = None):
+                             second_verifier_output: str | None = None,
+                             manager_invalid: bool = False):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
@@ -1619,6 +1620,9 @@ class V9CharteredRouteTests(CharteredFixture):
             def adapter(_binding, action):
                 nonlocal manager_turn
                 if action["assignment_id"] == "manager":
+                    if manager_invalid:
+                        return {"output": "observed invalid manager output",
+                                "manager_response": None, "observed_invalid": True}
                     manager_turn += 1
                     return {"manager_response": {
                         "is_request_satisfied": {"answer": False},
@@ -1661,6 +1665,15 @@ class V9CharteredRouteTests(CharteredFixture):
         with self.assertRaises(V9ReceiptError) as raised:
             verify_selection_receipt(receipt)
         self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
+
+    def test_v9_observed_invalid_manager_output_seals_failed_not_unknown(self):
+        result, snapshot = self._execute_semantic_v9("unused", manager_invalid=True)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "manager_evaluation_failed")
+        self.assertEqual(snapshot["actions"][0]["status"], "completed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["evidence_failures"][0]["stage"], "manager_evaluation")
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
 
     def test_v9_evidence_bound_valid_pass_is_required_for_completion(self):
         result, snapshot = self._execute_semantic_v9(json.dumps({

@@ -62,6 +62,15 @@ class OllamaManagerTests(unittest.TestCase):
             call_ollama_manager([{"role": "user", "content": "x"}], model="local-model",
                                 attempt_id="a", transport=transport(json.dumps(PROGRESS), "other"))
 
+    def test_observed_invalid_progress_can_be_preserved_for_durable_failure(self) -> None:
+        result = call_ollama_manager(
+            [{"role": "user", "content": "x"}], model="local-model", attempt_id="a",
+            transport=transport("not json"), preserve_observed_invalid=True,
+        )
+        self.assertEqual(result["output"], "not json")
+        self.assertIsNone(result["manager_response"])
+        self.assertTrue(result["observed_invalid"])
+
 
 class OllamaEditTests(unittest.TestCase):
     def setUp(self) -> None:

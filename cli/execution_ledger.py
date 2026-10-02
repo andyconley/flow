@@ -719,7 +719,7 @@ class ExecutionLedger:
     def record_v9_evidence_failure(self, attempt_id: str, action_id: str, stage: str,
                                    detail: str, *, generation: int) -> None:
         """Persist a typed post-send evidence failure before terminal sealing."""
-        if stage not in {"edit_scope", "chartered_test", "verifier_evaluation"}:
+        if stage not in {"manager_evaluation", "edit_scope", "chartered_test", "verifier_evaluation"}:
             raise ContractError("v9 evidence failure stage is invalid")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
