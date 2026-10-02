@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -1675,7 +1676,8 @@ class V9CharteredRouteTests(CharteredFixture):
     def _execute_semantic_v9(self, verifier_output: str | None,
                              second_verifier_output: str | None = None,
                              manager_invalid: bool = False,
-                             manager_outside: bool = False):
+                             manager_outside: bool = False,
+                             producer_test_failures: int = 0):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
@@ -1732,13 +1734,17 @@ class V9CharteredRouteTests(CharteredFixture):
                             "next_speaker": {"answer": "not-approved", "reason": "bad choice"},
                             "instruction_or_question": {"answer": "work"},
                         }}
+                    frontier = re.search(
+                        r"next_speaker\.answer must be exactly one of (\[[^\n]+\])",
+                        action["task"],
+                    )
+                    allowed = json.loads(frontier.group(1))
                     manager_turn += 1
                     return {"manager_response": {
                         "is_request_satisfied": {"answer": False},
                         "is_in_loop": {"answer": True},
                         "is_progress_being_made": {"answer": True},
-                        "next_speaker": {"answer": ("editor" if manager_turn == 1 else
-                                                     "verifier" if manager_turn == 2 else "verifier-two"),
+                        "next_speaker": {"answer": allowed[0],
                                          "reason": "approved work remains"},
                         "instruction_or_question": {"answer": "bounded note"},
                     }}
@@ -1748,15 +1754,26 @@ class V9CharteredRouteTests(CharteredFixture):
                 return {"output": (second_verifier_output
                                     if action["assignment_id"] == "verifier-two" else verifier_output)}
 
-            result = execute_v9_logical_delivery(
-                envelope, task, ledger, adapter,
-                readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
-                    on_action({"attempt_id": envelope["attempt_id"],
-                               "assignment_id": manager_decision["assignment_id"],
-                               "task": manager_decision["task"], "sequence": 1,
-                               "manager_turn": manager_decision["manager_turn"]}),
-            )
+            real_chartered_test = delivery_gateway._run_chartered_test
+            test_runs = 0
+
+            def chartered_test(*args, **kwargs):
+                nonlocal test_runs
+                test_runs += 1
+                if test_runs <= producer_test_failures:
+                    raise ContractError("targeted chartered test failed: retained evidence is stale")
+                return real_chartered_test(*args, **kwargs)
+
+            with patch("delivery_gateway._run_chartered_test", side_effect=chartered_test):
+                result = execute_v9_logical_delivery(
+                    envelope, task, ledger, adapter,
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                    supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                        on_action({"attempt_id": envelope["attempt_id"],
+                                   "assignment_id": manager_decision["assignment_id"],
+                                   "task": manager_decision["task"], "sequence": 1,
+                                   "manager_turn": manager_decision["manager_turn"]}),
+                )
         return result, ledger.snapshot(envelope["attempt_id"])
 
     def test_v9_plain_prose_verifier_cannot_complete_attempt(self):
@@ -1774,6 +1791,32 @@ class V9CharteredRouteTests(CharteredFixture):
         with self.assertRaises(V9ReceiptError) as raised:
             verify_selection_receipt(receipt)
         self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
+
+    def test_v9_chartered_test_failure_gets_one_bounded_producer_repair_turn(self):
+        valid = json.dumps({"schema_version": 1, "decision": "pass",
+                            "summary": "Diff and test evidence pass.", "findings": []})
+        result, snapshot = self._execute_semantic_v9(valid, producer_test_failures=1)
+        self.assertEqual(result["status"], "completed")
+        editor_actions = [item["request"] for item in snapshot["actions"]
+                          if item["request"]["assignment_id"] == "editor"]
+        self.assertEqual(len(editor_actions), 2)
+        self.assertIn("retained evidence is stale", editor_actions[1]["task"])
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["evidence_failures"][0]["stage"], "chartered_test")
+
+    def test_v9_second_chartered_test_failure_seals_without_another_retry(self):
+        valid = json.dumps({"schema_version": 1, "decision": "pass",
+                            "summary": "Diff and test evidence pass.", "findings": []})
+        result, snapshot = self._execute_semantic_v9(valid, producer_test_failures=2)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "chartered_test_failed")
+        editor_actions = [item["request"] for item in snapshot["actions"]
+                          if item["request"]["assignment_id"] == "editor"]
+        self.assertEqual(len(editor_actions), 2)
+        self.assertFalse(any(item["request"]["assignment_id"] == "verifier"
+                             for item in snapshot["actions"]))
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(len(receipt["evidence_failures"]), 2)
 
     def test_v9_ollama_producer_and_collector_bind_independent_hosted_verifier(self):
         result, snapshot, receipt = self._execute_v9_topology(

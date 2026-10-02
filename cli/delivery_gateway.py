@@ -2261,6 +2261,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     outcomes = []
     pending = {item["assignment_id"]: item for item in workers}
     completed: set[str] = set()
+    repair_feedback: dict[str, str] = {}
+    repair_counts: dict[str, int] = {}
     stage = 0
     while pending:
         frontier = sorted(
@@ -2326,6 +2328,11 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         bounded_task = (f"Approved job:\n{task.strip()}\n\n"
                         f"Logical assignment: {selected}\n"
                         f"Sealed instructions:\n{selected_assignment['instructions'].strip()}")
+        if selected in repair_feedback:
+            bounded_task += ("\n\nFlow validation feedback from the prior producer turn:\n"
+                             f"{repair_feedback[selected]}\n"
+                             "Correct this failure, rerun the chartered test, and leave the final "
+                             "retained evidence consistent with the final diff.")
         operation = selected_assignment["requirements"]["operation"]
         if live_attempt and operation == "verify":
             if edit_evidence is None or test_evidence is None:
@@ -2374,6 +2381,12 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             except ContractError as exc:
                 ledger.record_v9_evidence_failure(envelope["attempt_id"], worker_action["action_id"],
                                                   "chartered_test", str(exc), generation=generation)
+                if repair_counts.get(selected, 0) == 0:
+                    repair_counts[selected] = 1
+                    repair_feedback[selected] = str(exc)[:512]
+                    edit_evidence = None
+                    test_evidence = None
+                    continue
                 sealed = ledger.seal_v9_attempt(
                     envelope["attempt_id"], "failed", "chartered_test_failed",
                     attempt_dir / "receipt.json", generation=generation)
@@ -2543,7 +2556,10 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         "selection_inputs": {"policy": policy, "catalog": catalog, "availability": normalized_availability},
         "selection_input_digests": {"policy": digest(policy), "catalog": digest(catalog),
                                     "availability": digest(normalized_availability)},
-        "limits": {"max_actions": 2 * (len(logical_assignments) - 1)},
+        # Reserve one bounded manager/producer repair pair for a recoverable
+        # chartered-test failure. The retry remains subject to the same sealed
+        # assignment, provider selection, scope, and test contracts.
+        "limits": {"max_actions": 2 * (len(logical_assignments) - 1) + 2},
         "checkpoint_dir": str(attempt_dir / "checkpoints"),
         "charter_sources": sources, "source_commit": source_commit, "worktree": str(worktree),
         "delivery_charter_digest": delivery["charter_digest"],
