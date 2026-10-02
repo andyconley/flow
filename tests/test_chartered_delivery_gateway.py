@@ -1972,6 +1972,7 @@ class V9CharteredRouteTests(CharteredFixture):
 
         def edit_in_staging(**kwargs):
             self.assertEqual(kwargs["sandbox"], "workspace-write")
+            self.assertEqual(kwargs["timeout_seconds"], 600)
             self.assertNotEqual(kwargs["workspace"], self.worktree)
             (kwargs["workspace"] / "target.py").write_text("codex edit\n")
             return {"output": "applied"}
