@@ -191,12 +191,29 @@ New executions use protocol v9: the approved charter is provider-neutral,
 Flow seals policy/catalog/readiness, selects and send-fences the logical manager
 before MAF starts, then MAF nominates logical specialist work and Flow
 recomputes and durably fences that concrete adapter send. Both selections are
-preserved in the ledger and receipt. A positive pre-send
-readiness refusal may select the next eligible candidate; an attempted or
-uncertain send enters recovery and is never automatically replayed.
+preserved in the ledger and receipt. A positive pre-send readiness refusal, or
+a receipt-bound capacity refusal proving no turn executed, may select the next
+eligible candidate. Every uncertain send enters recovery and is never
+automatically replayed.
 
 `--legacy-v8` is reserved for an already approved historical v8 contract. It
 does not migrate, rewrite, or re-rank prior attempts.
+
+### `flow run migrate-job-charter-v9 <work-id>`
+
+Explicitly approve and register a provider-neutral protocol-v9 successor for a
+legacy manifest-linked job charter without rewriting historical attempts or
+receipts.
+
+```bash
+flow run migrate-job-charter-v9 WORK_ID --replacement .flow/runs/WORK_ID/job-charter.v9.json --reason TEXT --approved-by-user [--json]
+```
+
+`--replacement` may be omitted only when the canonical manifest-linked charter
+already contains complete v9 logical assignments. The operation is idempotent,
+requires active sealed Delivery authority, rejects unsafe paths, symlinks,
+digest drift, active attempts, and authority expansion, and records predecessor
+and successor lineage plus a new owner generation.
 
 ### `flow run provider-selection-probe <work-id> [--json]`
 

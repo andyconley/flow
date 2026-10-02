@@ -21,6 +21,7 @@ from typing import Any, Callable
 from delivery_cancel import CancellableSelector, interruptible
 from execution_contracts import usage_values_valid
 from macos_sandbox import confined_argv
+from provider_outcomes import ObservedNotExecuted
 
 MAX_PROMPT_BYTES = 1024 * 1024
 MAX_OUTPUT_BYTES = 4096
@@ -76,10 +77,46 @@ def _failure_category(stderr: bytes, stdout: bytes = b"") -> str:
     )):
         return "network_unavailable"
     if any(marker in evidence for marker in (
+        "selected model is at capacity", "model is at capacity", "model at capacity",
+    )):
+        return "model_capacity"
+    if any(marker in evidence for marker in (
         "service unavailable", "temporarily unavailable", "internal server error",
     )):
         return "provider_unavailable"
     return "unclassified"
+
+
+def _capacity_refusal_observation(stderr: bytes, stdout: bytes) -> str | None:
+    """Return a digest only for a structured terminal refusal with no turn items."""
+    if _failure_category(stderr, stdout) != "model_capacity" or not stdout.strip():
+        return None
+    refusal: dict[str, Any] | None = None
+    for line in stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(event, dict):
+            return None
+        event_type = event.get("type")
+        if event_type in {"turn.completed", "item.started", "item.completed"}:
+            return None
+        if event_type in {"turn.failed", "error"}:
+            if refusal is not None or _failure_category(b"", json.dumps(event).encode()) != "model_capacity":
+                return None
+            refusal = event
+        elif event_type != "thread.started":
+            return None
+    if refusal is None:
+        return None
+    return hashlib.sha256(json.dumps(refusal, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _capacity_refusal_is_observed_not_executed(stderr: bytes, stdout: bytes) -> bool:
+    return _capacity_refusal_observation(stderr, stdout) is not None
 
 
 def _parse_event_lines(lines, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
@@ -234,7 +271,13 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                 exit_code = process.wait(timeout=remaining)
                 if exit_code != 0:
                     event_file.seek(0)
-                    category = _failure_category(b"".join(stderr_chunks), event_file.read(MAX_STDERR_BYTES))
+                    stdout = event_file.read(MAX_STDERR_BYTES)
+                    stderr = b"".join(stderr_chunks)
+                    category = _failure_category(stderr, stdout)
+                    observation = _capacity_refusal_observation(stderr, stdout)
+                    if observation is not None:
+                        raise ObservedNotExecuted(provider="codex", category=category,
+                                                  observation_sha256=observation)
                     raise CodexWorkerError(
                         f"Codex exited without a successful turn (status {exit_code}; category {category})"
                     )

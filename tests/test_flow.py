@@ -3910,6 +3910,7 @@ class FlowCliTests(FlowCliHarness):
                 "plugin_usage",
                 "process_identity",
                 "project",
+                "provider_outcomes",
                 "provider_selection",
                 "receipt_compare",
                 "receipt_verify",

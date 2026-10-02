@@ -22,7 +22,7 @@ EXCLUSION_CODES = frozenset({
     "tier_insufficient", "capability_missing", "privacy_incompatible",
     "input_limit_exceeded", "output_limit_exceeded", "context_limit_exceeded",
     "cost_class_exceeded", "availability_unavailable", "availability_unknown",
-    "availability_stale", "prior_no_send_failure", "provider_family_conflict",
+    "availability_stale", "prior_no_send_failure", "prior_retryable_failure", "provider_family_conflict",
 })
 
 
@@ -123,6 +123,7 @@ def merge_selection_policy(
 def select_candidate(
     requirements: dict[str, Any], policy: dict[str, Any], catalog: Iterable[dict[str, Any]],
     availability: Iterable[dict[str, Any]], *, prior_no_send_failures: Iterable[str] = (),
+    prior_retryable_failures: Iterable[str] = (),
     excluded_families: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Select the first eligible candidate using a total deterministic order."""
@@ -133,6 +134,12 @@ def select_candidate(
             or len(set(failure_history)) != len(failure_history)):
         raise SelectionPolicyError("prior_no_send_failures must contain unique nonblank candidate IDs")
     failures = set(failure_history)
+    retryable_history = list(prior_retryable_failures)
+    if (any(not isinstance(item, str) or not item for item in retryable_history)
+            or len(set(retryable_history)) != len(retryable_history)
+            or set(retryable_history) & failures):
+        raise SelectionPolicyError("prior_retryable_failures must be unique, nonblank, and disjoint")
+    retryable = set(retryable_history)
     family_exclusions = set(excluded_families)
     provider_order = policy.get("provider_order", list(PROVIDERS))
     provider_rank = {provider: index for index, provider in enumerate(provider_order)}
@@ -153,7 +160,7 @@ def select_candidate(
             raise SelectionPolicyError("catalog candidate_id values must be unique and nonblank")
         seen.add(candidate_id)
         reasons = _candidate_exclusions(candidate, requirements, policy, readiness.get(candidate_id),
-                                        allowed, disabled, failures, family_exclusions)
+                                        allowed, disabled, failures, retryable, family_exclusions)
         if reasons:
             exclusions.append({"candidate_id": candidate_id, "reason_codes": sorted(reasons)})
             continue
@@ -176,6 +183,7 @@ def select_candidate(
         "catalog_digest": digest(candidates),
         "availability_digest": digest(sorted(readiness.values(), key=lambda item: item.get("candidate_id", ""))),
         "prior_no_send_failures": failure_history,
+        "prior_retryable_failures": retryable_history,
         "excluded_families": sorted(family_exclusions),
         "exclusions": exclusions,
         "ordered_candidates": ordered,
@@ -189,7 +197,8 @@ def select_candidate(
 
 def _candidate_exclusions(candidate: dict[str, Any], requirements: dict[str, Any], policy: dict[str, Any],
                           availability: dict[str, Any] | None, allowed: list[str] | None,
-                          disabled: set[str], failures: set[str], family_exclusions: set[str]) -> set[str]:
+                          disabled: set[str], failures: set[str], retryable: set[str],
+                          family_exclusions: set[str]) -> set[str]:
     candidate_id = candidate["candidate_id"]
     reasons: set[str] = set()
     if allowed is not None and candidate_id not in allowed:
@@ -221,6 +230,8 @@ def _candidate_exclusions(candidate: dict[str, Any], requirements: dict[str, Any
         reasons.add(f"availability_{state}" if state in {"unavailable", "unknown", "stale"} else "availability_unknown")
     if candidate_id in failures:
         reasons.add("prior_no_send_failure")
+    if candidate_id in retryable:
+        reasons.add("prior_retryable_failure")
     if candidate.get("provider_family") in family_exclusions:
         reasons.add("provider_family_conflict")
     if not reasons.issubset(EXCLUSION_CODES):

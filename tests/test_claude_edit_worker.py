@@ -11,7 +11,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from claude_edit_worker import ClaudeEditError, _result, _stream_result, call_claude_edit
+from claude_edit_worker import (ClaudeEditError, _capacity_edit_observation, _result,
+                                _stream_result, call_claude_edit)
+from provider_outcomes import ObservedNotExecuted
 
 
 class ClaudeEditWorkerTests(unittest.TestCase):
@@ -62,6 +64,29 @@ class ClaudeEditWorkerTests(unittest.TestCase):
                        {"result": "x" * 9000}):
             with self.subTest(change=change), self.assertRaises(ClaudeEditError):
                 _result(json.dumps({**good, **change}).encode(), "claude-test")
+
+    def test_structured_zero_turn_capacity_refusal_is_typed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "sys.stdin.read()\n"
+                            "print(json.dumps({'type':'result','subtype':'capacity','num_turns':0,"
+                            "'message':'Selected model is at capacity'}))\n"
+                            "sys.exit(1)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaises(ObservedNotExecuted):
+                call_claude_edit(instructions="Fix", task="Edit", workspace=workspace,
+                                 model="claude-test", timeout_seconds=5, claude_bin=str(fake))
+
+    def test_capacity_after_edit_event_remains_uncertain(self):
+        raw = (b'{"type":"assistant","tool":"Edit"}\n'
+               b'{"type":"result","subtype":"capacity","num_turns":0,'
+               b'"message":"Selected model is at capacity"}\n')
+        self.assertIsNone(_capacity_edit_observation(raw))
 
     def test_cli_has_only_file_tools_and_no_ambient_secret(self):
         with tempfile.TemporaryDirectory() as temporary:

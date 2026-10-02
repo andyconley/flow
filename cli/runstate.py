@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
+import sqlite3
+import stat
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +24,7 @@ from delivery_contracts import (DEFAULT_TOKEN_BUDGET, DeliveryContractError,
                                 validate_shaper_intent)
 from delivery_control import run_lock, start_plan as seal_delivery_start_plan
 from orchestration import manifest_path, valid_work_id, validate_manifest, validate_orchestration
+from selection_authority import SelectionAuthorityError, validate_requirements
 
 
 SCHEMA_VERSION = 1
@@ -28,6 +32,7 @@ PROTOCOL_REVISION_CURRENT = 2
 RUNS_DIR = Path(".flow") / "runs"
 RUN_FILE = "run.json"
 EVENTS_FILE = "events.jsonl"
+MAX_JOB_CHARTER_BYTES = 1024 * 1024
 
 STATE_DEFINING = "defining"
 STATE_DEFINITION_APPROVED = "definition_approved"
@@ -614,6 +619,11 @@ def apply_transition(
     if not valid_work_id(work_id):
         return False, {}, [
             "invalid work id: use a non-empty single directory name without path separators"
+        ]
+    current_for_repair = _load_run(work_id, (root or repo_root()).resolve())
+    if (current_for_repair or {}).get("pending_lifecycle_event"):
+        return False, current_for_repair, [
+            "lifecycle event projection repair is required; rerun migrate-job-charter-v9 before transitioning"
         ]
     if event_name not in TRANSITIONS:
         return False, {}, [f"unknown event: {event_name}"]
@@ -1205,6 +1215,462 @@ def approve_orchestration_amendment(
            if successor_delivery is not None else {}),
     }, project_root)
     return True, payload, []
+
+
+def _bounded_regular_file(path: Path, run_dir: Path, label: str) -> bytes:
+    """Read one run-local regular file without following a symlink."""
+    try:
+        trusted_root = run_dir.parents[2]
+        relative = path.relative_to(trusted_root)
+    except (IndexError, ValueError) as exc:
+        raise ValueError(f"{label} must be a bounded current-run regular file") from exc
+    current = trusted_root
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise ValueError(f"{label} must be a bounded current-run regular file (symlinked path component)")
+    try:
+        resolved = path.resolve(strict=True)
+        info = path.lstat()
+    except OSError as exc:
+        raise ValueError(f"{label} is unavailable") from exc
+    if (path.is_symlink() or not path.is_file() or not resolved.is_relative_to(run_dir.resolve())
+            or info.st_size > MAX_JOB_CHARTER_BYTES):
+        raise ValueError(f"{label} must be a bounded current-run regular file")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    fd = os.open(path, flags)
+    try:
+        opened = os.fstat(fd)
+        if (not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino)
+                or opened.st_size > MAX_JOB_CHARTER_BYTES):
+            raise ValueError(f"{label} must be a bounded current-run regular file")
+        with os.fdopen(fd, "rb", closefd=False) as handle:
+            content = handle.read(MAX_JOB_CHARTER_BYTES + 1)
+    finally:
+        os.close(fd)
+    if len(content) > MAX_JOB_CHARTER_BYTES:
+        raise ValueError(f"{label} exceeds the size limit")
+    return content
+
+
+def _write_immutable_text(path: Path, content: str, created: list[Path]) -> None:
+    """Stage one migration artifact and remember only names this call created."""
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() or not path.is_file() or path.read_text() != content:
+            raise ValueError(f"migration artifact conflicts: {path.name}")
+        return
+    write_atomic(path, content)
+    created.append(path)
+
+
+def _migration_event_exists(work_id: str, successor_digest: str, generation: int,
+                            root: Path) -> bool:
+    try:
+        events = _load_events(work_id, root)
+    except ValueError:
+        return False
+    return any(item.get("event") == "approve-job-charter-v9-migration"
+               and item.get("approved_artifact_digests", {}).get("job_charter") == successor_digest
+               and item.get("owner_generation") == generation for item in events)
+
+
+def _job_charter_migration_event(record: dict[str, Any], *, prior_state: str | None,
+                                  next_state: str | None) -> dict[str, Any]:
+    return {
+        "at": record["approval"]["at"], "event": "approve-job-charter-v9-migration",
+        "from": prior_state, "to": next_state,
+        "artifacts": {"job_charter": record["successor_path"],
+                      "migration": record["record_path"]},
+        "approved_artifact_digests": {"job_charter": record["successor_digest"]},
+        "dispositions": {"approval": "explicit-user-approval"},
+        "predecessor_digest": record["predecessor_digest"],
+        "delivery_charter_digest": record["delivery_charter_digest"],
+        "owner_generation": record["owner_generation"], "reason": record["reason"],
+    }
+
+
+def _json_mapping(content: bytes, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{label} is invalid JSON") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
+
+
+def _started_execution_exists(run_dir: Path) -> bool:
+    ledger = run_dir / "execution" / "ledger.sqlite"
+    if not ledger.exists():
+        return False
+    if ledger.is_symlink() or not ledger.is_file():
+        raise ValueError("execution ledger is unsafe")
+    try:
+        db = sqlite3.connect(f"file:{ledger}?mode=ro", uri=True)
+        try:
+            row = db.execute("SELECT 1 FROM attempts WHERE status='started' LIMIT 1").fetchone()
+        finally:
+            db.close()
+    except sqlite3.Error as exc:
+        raise ValueError("execution ledger is unreadable") from exc
+    return row is not None
+
+
+def _validate_v9_successor_charter(
+    predecessor: dict[str, Any], successor: dict[str, Any], manifest: dict[str, Any],
+    delivery_charter: dict[str, Any],
+) -> None:
+    """Prove that a v9 charter adds logical authority without widening v8 scope."""
+    required = {"task", "read_paths", "write_paths", "test", "producer_instance_ids",
+                "verifier_instance_ids", "baseline"}
+    optional = {"evidence_collector_instance_ids", "logical_assignments"}
+    if not required.issubset(predecessor) or set(predecessor) - required - optional:
+        raise ValueError("predecessor job charter schema is invalid")
+    if not required.issubset(successor) or set(successor) - required - optional:
+        raise ValueError("successor job charter schema is invalid")
+    if not isinstance(predecessor.get("task"), str) or not predecessor["task"].strip():
+        raise ValueError("predecessor job charter task is invalid")
+    test = predecessor.get("test")
+    if (not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}
+            or not isinstance(test.get("argv"), list) or not test["argv"]
+            or any(not isinstance(item, str) or not item for item in test["argv"])
+            or type(test.get("timeout_seconds")) is not int
+            or not 1 <= test["timeout_seconds"] <= 3600):
+        raise ValueError("predecessor job charter test is invalid")
+    baseline = predecessor.get("baseline")
+    if (not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}
+            or baseline.get("kind") not in {"clean", "declared_regression"}
+            or not isinstance(baseline.get("diff_sha256"), str)
+            or len(baseline["diff_sha256"]) != 64
+            or any(character not in "0123456789abcdef" for character in baseline["diff_sha256"])):
+        raise ValueError("predecessor job charter baseline is invalid")
+    for field in ("read_paths", "write_paths", "producer_instance_ids", "verifier_instance_ids"):
+        values = predecessor.get(field)
+        if (not isinstance(values, list) or not values
+                or any(not isinstance(value, str) or not value for value in values)
+                or len(values) != len(set(values))):
+            raise ValueError(f"predecessor job charter {field} is invalid")
+        if field in {"read_paths", "write_paths"} and any(
+                Path(value).is_absolute() or ".." in Path(value).parts for value in values):
+            raise ValueError(f"predecessor job charter {field} contains an unsafe path")
+    collectors = predecessor.get("evidence_collector_instance_ids", [])
+    if (not isinstance(collectors, list)
+            or any(not isinstance(value, str) or not value for value in collectors)
+            or len(collectors) != len(set(collectors))):
+        raise ValueError("predecessor job charter evidence_collector_instance_ids is invalid")
+    for field in required | {"evidence_collector_instance_ids"}:
+        before = predecessor.get(field, [] if field == "evidence_collector_instance_ids" else None)
+        after = successor.get(field, [] if field == "evidence_collector_instance_ids" else None)
+        if before != after:
+            raise ValueError(f"successor job charter changes approved v8 field: {field}")
+    logical = successor.get("logical_assignments")
+    if not isinstance(logical, list) or not logical:
+        raise ValueError("successor job charter requires complete logical_assignments")
+    assignments = manifest.get("assignments")
+    if not isinstance(assignments, list):
+        raise ValueError("approved orchestration assignments are invalid")
+    implementation = {item.get("id"): item for item in assignments
+                      if isinstance(item, dict) and item.get("lane") == "implement"
+                      and isinstance(item.get("id"), str)}
+    managers = [item for item in implementation.values() if item.get("id") == "magentic-manager"]
+    if len(managers) != 1 or managers[0].get("role") != "delivery-lead":
+        raise ValueError("approved orchestration manager is absent")
+    allowed_roles = delivery_charter.get("eligible_specialists")
+    if not isinstance(allowed_roles, dict):
+        raise ValueError("sealed Delivery Charter specialist authority is invalid")
+    seen: set[str] = set()
+    operations: dict[str, set[str]] = {name: set() for name in ("manage", "edit", "collect", "verify")}
+    by_id: dict[str, dict[str, Any]] = {}
+    expected_capabilities = {
+        "manage": ["structured_output"], "edit": ["structured_edit"],
+        "collect": ["evidence_collection"], "verify": ["evidence_collection"],
+    }
+    for item in logical:
+        allowed_fields = {"assignment_id", "role", "instructions", "requirements", "depends_on"}
+        if (not isinstance(item, dict) or not {"assignment_id", "role", "instructions", "requirements"}.issubset(item)
+                or not set(item).issubset(allowed_fields)):
+            raise ValueError("logical assignment fields are invalid")
+        assignment_id, role = item["assignment_id"], item["role"]
+        if (not isinstance(assignment_id, str) or not assignment_id or assignment_id in seen
+                or not isinstance(role, str) or not role
+                or not isinstance(item["instructions"], str) or not item["instructions"].strip()):
+            raise ValueError("logical assignment identity or text is invalid")
+        seen.add(assignment_id)
+        dependencies = item.get("depends_on", [])
+        if (not isinstance(dependencies, list) or len(dependencies) != len(set(dependencies))
+                or any(not isinstance(value, str) or not value for value in dependencies)
+                or assignment_id in dependencies):
+            raise ValueError("logical assignment dependencies are invalid")
+        try:
+            validate_requirements(item["requirements"])
+        except SelectionAuthorityError as exc:
+            raise ValueError(f"logical assignment requirements are invalid: {exc}") from exc
+        operation = item["requirements"]["operation"]
+        if operation not in operations:
+            raise ValueError("logical assignment operation is unsupported for charter migration")
+        if item["requirements"]["required_capabilities"] != expected_capabilities[operation]:
+            raise ValueError("logical assignment capabilities expand the approved operation")
+        if operation == "manage":
+            if role != "delivery-lead":
+                raise ValueError("logical manager role is invalid")
+        else:
+            manifest_item = implementation.get(assignment_id)
+            if manifest_item is None or manifest_item.get("role") != role or role not in allowed_roles:
+                raise ValueError("logical assignment exceeds sealed role authority")
+        operations[operation].add(assignment_id)
+        by_id[assignment_id] = item
+    if len(operations["manage"]) != 1 or len(operations["edit"]) != 1 or not operations["verify"]:
+        raise ValueError("logical assignment topology is incomplete")
+    expected = {
+        "edit": set(predecessor["producer_instance_ids"]),
+        "collect": set(predecessor.get("evidence_collector_instance_ids", [])),
+        "verify": set(predecessor["verifier_instance_ids"]),
+    }
+    if any(operations[name] != values for name, values in expected.items()):
+        raise ValueError("logical assignments change the approved v8 topology")
+    if any(set(item.get("depends_on", [])) - seen for item in logical):
+        raise ValueError("logical assignment dependency is unknown")
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(identity: str) -> None:
+        if identity in visiting:
+            raise ValueError("logical assignment dependencies contain a cycle")
+        if identity in visited:
+            return
+        visiting.add(identity)
+        for dependency in by_id[identity].get("depends_on", []):
+            visit(dependency)
+        visiting.remove(identity)
+        visited.add(identity)
+
+    for identity in seen:
+        visit(identity)
+    for identity in operations["collect"]:
+        if not operations["edit"].issubset(set(by_id[identity].get("depends_on", []))):
+            raise ValueError("logical evidence collector lacks producer dependency")
+    required_verifier_dependencies = operations["edit"] | operations["collect"]
+    for identity in operations["verify"]:
+        item = by_id[identity]
+        if (not required_verifier_dependencies.issubset(set(item.get("depends_on", [])))
+                or item["requirements"]["risk_class"] != "high"
+                or item["requirements"]["independence_required"] is not True):
+            raise ValueError("logical verifier weakens approved dependency or independence authority")
+
+
+def approve_job_charter_v9_migration(
+    work_id: str, replacement: str | None, reason: str, *, approved_by_user: bool,
+    root: Path | None = None,
+) -> tuple[bool, dict[str, Any], list[str]]:
+    """Register an approved provider-neutral successor without rewriting v8 evidence."""
+    if not approved_by_user:
+        return False, {}, ["explicit user approval is required"]
+    if not valid_work_id(work_id):
+        return False, {}, ["invalid work id"]
+    if not isinstance(reason, str) or not reason.strip():
+        return False, {}, ["migration reason is required"]
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / RUNS_DIR / work_id
+    with run_lock(run_dir):
+        current = _load_run(work_id, project_root)
+        if not current or _protocol_revision(current) != PROTOCOL_REVISION_CURRENT:
+            return False, current or {}, ["migration requires a revision-2 run"]
+        if current.get("state") not in {STATE_IMPLEMENTING, STATE_HANDBACK_READY, STATE_REVIEWING, STATE_REVIEW_ACCEPTED}:
+            return False, current, ["migration requires an implementation or review state"]
+        if replacement is not None and (not isinstance(replacement, str) or Path(replacement).is_absolute()
+                                        or not replacement.startswith(f".flow/runs/{work_id}/")):
+            return False, current, ["replacement must be a current-run relative path"]
+        delivery = current.get("delivery")
+        if (not isinstance(delivery, dict) or delivery.get("owner_status") != "active"
+                or type(delivery.get("owner_generation")) is not int):
+            return False, current, ["active sealed Delivery authority is required"]
+        artifacts = current.get("artifacts") or {}
+        approved = current.get("approved_artifact_digests") or {}
+        existing_rel = artifacts.get("job_charter")
+        existing_digest = approved.get("job_charter")
+        if isinstance(existing_rel, str) and isinstance(existing_digest, str):
+            try:
+                registered = _bounded_regular_file(project_root / existing_rel, run_dir, "registered job charter")
+            except ValueError as exc:
+                return False, current, [str(exc)]
+            if hashlib.sha256(registered).hexdigest() != existing_digest:
+                return False, current, ["registered job charter differs from its approved digest"]
+            migration = next((item for item in reversed(current.get("job_charter_migrations") or [])
+                              if item.get("successor_digest") == existing_digest), None)
+            if migration is not None and not _migration_event_exists(
+                    work_id, existing_digest, migration["owner_generation"], project_root):
+                try:
+                    _append_event(work_id, _job_charter_migration_event(
+                        migration, prior_state=migration.get("prior_state"),
+                        next_state=current.get("state")), project_root)
+                except OSError as exc:
+                    return False, current, [f"migration authority is committed but history repair failed: {exc}"]
+            if current.get("pending_lifecycle_event"):
+                repaired = dict(current)
+                repaired.pop("pending_lifecycle_event", None)
+                _write_run(work_id, repaired, project_root)
+                current = repaired
+            if replacement is None:
+                return True, current, []
+            try:
+                requested = _bounded_regular_file(project_root / replacement, run_dir, "replacement job charter")
+            except ValueError as exc:
+                return False, current, [str(exc)]
+            if hashlib.sha256(requested).hexdigest() == existing_digest:
+                return True, current, []
+            return False, current, ["run already has a different approved v9 job charter"]
+        try:
+            if _started_execution_exists(run_dir):
+                return False, current, ["a started execution attempt must be terminated before migration"]
+            manifest_rel = artifacts.get("orchestration_manifest")
+            if not isinstance(manifest_rel, str):
+                raise ValueError("approved orchestration manifest is absent")
+            manifest_bytes = _bounded_regular_file(project_root / manifest_rel, run_dir, "orchestration manifest")
+            if hashlib.sha256(manifest_bytes).hexdigest() != approved.get("orchestration_manifest"):
+                raise ValueError("orchestration manifest differs from its approved digest")
+            manifest = _json_mapping(manifest_bytes, "orchestration manifest")
+            canonical_rel = f".flow/runs/{work_id}/job-charter.json"
+            manager_links = [item for item in manifest.get("assignments", [])
+                             if isinstance(item, dict) and item.get("lane") == "implement"
+                             and item.get("id") == "magentic-manager"
+                             and canonical_rel in (item.get("input_evidence") or [])]
+            if len(manager_links) != 1:
+                raise ValueError("approved manifest does not uniquely link the canonical job charter")
+            canonical = project_root / canonical_rel
+            predecessor_bytes = _bounded_regular_file(canonical, run_dir, "canonical predecessor job charter")
+            predecessor = _json_mapping(predecessor_bytes, "canonical predecessor job charter")
+            source_path = canonical if replacement is None else project_root / replacement
+            successor_bytes = _bounded_regular_file(source_path, run_dir, "successor job charter")
+            successor = _json_mapping(successor_bytes, "successor job charter")
+            delivery_dir_rel = delivery.get("delivery_artifact_dir")
+            if not isinstance(delivery_dir_rel, str):
+                raise ValueError("sealed Delivery Charter path is invalid")
+            charter_path = run_dir / delivery_dir_rel / "delivery-charter.json"
+            charter_bytes = _bounded_regular_file(charter_path, run_dir, "sealed Delivery Charter")
+            delivery_charter = _json_mapping(charter_bytes, "sealed Delivery Charter")
+            validate_delivery_charter(delivery_charter)
+            if delivery_charter.get("digest") != delivery.get("charter_digest"):
+                raise ValueError("sealed Delivery Charter digest differs from run authority")
+            claim_rel = delivery.get("lead_claim_path")
+            if not isinstance(claim_rel, str):
+                raise ValueError("active Delivery Lead claim path is invalid")
+            claim_bytes = _bounded_regular_file(run_dir / claim_rel, run_dir, "active Delivery Lead claim")
+            claim = _json_mapping(claim_bytes, "active Delivery Lead claim")
+            if (claim.get("digest") != delivery.get("lead_claim_digest")
+                    or delivery_digest({key: value for key, value in claim.items() if key != "digest"}) != claim.get("digest")
+                    or claim.get("kind") != "delivery_lead_claim" or claim.get("status") != "active"
+                    or claim.get("owner") != "delivery-lead"
+                    or claim.get("generation") != delivery.get("owner_generation")
+                    or claim.get("charter_digest") != delivery.get("charter_digest")
+                    or claim.get("logical_delivery_attempt_id") != delivery.get("logical_delivery_attempt_id")):
+                raise ValueError("active Delivery Lead claim differs from sealed run authority")
+            _validate_v9_successor_charter(predecessor, successor, manifest, delivery_charter)
+        except (ValueError, DeliveryContractError) as exc:
+            return False, current, [str(exc)]
+
+        predecessor_digest = hashlib.sha256(predecessor_bytes).hexdigest()
+        successor_digest = hashlib.sha256(successor_bytes).hexdigest()
+        migrations = list(current.get("job_charter_migrations") or [])
+        sequence = len(migrations) + 1
+        migration_dir = run_dir / "charter-migrations"
+        ensure_dir(migration_dir)
+        snapshot = migration_dir / f"{sequence:04d}-predecessor.json"
+        successor_path = (canonical if successor_digest == predecessor_digest else
+                          migration_dir / f"{sequence:04d}-job-charter.v9.json")
+        record_path = migration_dir / f"{sequence:04d}.json"
+        now = _now()
+        generation = delivery["owner_generation"] + 1
+        claim = {
+            "schema_version": 1, "kind": "delivery_lead_claim",
+            "logical_delivery_attempt_id": delivery["logical_delivery_attempt_id"],
+            "owner": "delivery-lead", "generation": generation, "status": "active",
+            "charter_digest": delivery["charter_digest"],
+            "supersedes": delivery.get("lead_claim_digest"),
+        }
+        claim["digest"] = delivery_digest(claim)
+        claim_path = run_dir / delivery["delivery_artifact_dir"] / f"lead-claim-generation-{generation}.json"
+        successor_relative = successor_path.relative_to(project_root).as_posix()
+        record = {
+            "schema_version": 1, "sequence": sequence, "kind": "job_charter_v9_migration",
+            "predecessor_path": canonical_rel, "predecessor_digest": predecessor_digest,
+            "predecessor_snapshot": snapshot.relative_to(project_root).as_posix(),
+            "successor_path": successor_relative, "successor_digest": successor_digest,
+            "delivery_charter_digest": delivery["charter_digest"],
+            "prior_owner_generation": delivery["owner_generation"], "owner_generation": generation,
+            "reason": reason.strip(), "approval": {"authority": "user", "explicit": True, "at": now},
+            "record_path": record_path.relative_to(project_root).as_posix(),
+            "prior_state": current.get("state"),
+        }
+        # Stage immutable evidence first. run.json remains the sole authority commit point.
+        payload = dict(current)
+        prior_state = payload.get("state")
+        payload["artifacts"] = dict(payload.get("artifacts") or {})
+        payload["artifacts"]["job_charter"] = successor_relative
+        payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
+        payload["approved_artifact_digests"]["job_charter"] = successor_digest
+        payload["delivery"] = dict(delivery)
+        payload["delivery"].update({
+            "owner_generation": generation, "lead_claim_digest": claim["digest"],
+            "lead_claim_path": claim_path.relative_to(run_dir).as_posix(),
+        })
+        payload["job_charter_migrations"] = migrations + [record]
+        if prior_state in {STATE_HANDBACK_READY, STATE_REVIEWING, STATE_REVIEW_ACCEPTED}:
+            payload["state"] = STATE_IMPLEMENTING
+            payload["phase"] = STATE_IMPLEMENTING
+            payload["lane"] = STATE_LANES[STATE_IMPLEMENTING]
+        payload["updated_at"] = now
+        payload["last_event"] = "approve-job-charter-v9-migration"
+        event = _job_charter_migration_event(record, prior_state=prior_state,
+                                             next_state=payload.get("state"))
+        payload["pending_lifecycle_event"] = event
+        created: list[Path] = []
+        try:
+            _write_immutable_text(snapshot, predecessor_bytes.decode("utf-8"), created)
+            if successor_path != canonical:
+                _write_immutable_text(successor_path, successor_bytes.decode("utf-8"), created)
+            _write_immutable_text(claim_path, json.dumps(claim, indent=2, sort_keys=True) + "\n", created)
+            _write_immutable_text(record_path, json.dumps(record, indent=2, sort_keys=True) + "\n", created)
+            _write_run(work_id, payload, project_root)
+        except (OSError, ValueError, UnicodeDecodeError) as exc:
+            for staged in reversed(created):
+                try:
+                    staged.unlink()
+                except FileNotFoundError:
+                    pass
+            return False, current, [f"migration staging failed without changing run authority: {exc}"]
+        try:
+            _append_event(work_id, event, project_root)
+        except OSError as exc:
+            # run.json is already the authority commit point. A replay repairs
+            # this projection without advancing generation or rewriting artifacts.
+            # The migration record inside run.json is the durable audit fact, so
+            # never report an ordinary refusal after authority has committed.
+            return True, payload, [f"migration committed; rerun to repair lifecycle event projection: {exc}"]
+        payload = dict(payload)
+        payload.pop("pending_lifecycle_event", None)
+        _write_run(work_id, payload, project_root)
+        return True, payload, []
+
+
+def cmd_migrate_job_charter_v9(args) -> int:
+    ok, payload, errors = approve_job_charter_v9_migration(
+        args.work_id, args.replacement, args.reason,
+        approved_by_user=args.approved_by_user,
+    )
+    if args.json:
+        print(json.dumps({"ok": ok, "errors": errors, "run": payload}, indent=2, sort_keys=True))
+        return 0 if ok else 1
+    if not ok:
+        print("job charter v9 migration refused")
+        for error in errors:
+            print(f"- {error}")
+        return 1
+    print("job charter v9 migration approved")
+    print(f"state: {payload.get('state')}")
+    print(f"job charter: {payload.get('artifacts', {}).get('job_charter')}")
+    for warning in errors:
+        print(f"warning: {warning}")
+    return 0
 
 
 def _print_run(payload: dict[str, Any]) -> None:

@@ -30,11 +30,12 @@ from execution_contracts import ContractError, digest, validate_envelope  # noqa
 from execution_ledger import ExecutionLedger  # noqa: E402
 from provider_selection import merge_selection_policy  # noqa: E402
 from provider_availability import normalize_availability  # noqa: E402
+from provider_outcomes import ObservedNotExecuted  # noqa: E402
 from selection_authority import (  # noqa: E402
     seal_selection_authority,
     successor_authority_digest,
 )
-from selection_receipt import receipt_from_snapshot, verify_selection_receipt  # noqa: E402
+from selection_receipt import V9ReceiptError, receipt_from_snapshot, verify_selection_receipt  # noqa: E402
 from verifier_contracts import evaluate_candidate  # noqa: E402
 
 
@@ -338,6 +339,58 @@ class DeliverySelectionTests(unittest.TestCase):
             self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
             self.assertEqual(snapshot["actions"][0]["status"], "unknown")
 
+    def test_gateway_v9_observed_capacity_refusal_is_failed_and_can_select_successor(self) -> None:
+        """A bounded terminal capacity refusal is not an uncertain paid send."""
+        envelope = _envelope()
+        inputs = envelope["selection_inputs"]
+        # The ordinary fixture ranks Ollama first.  This focused provider
+        # refusal test begins with Claude and leaves Codex as the only
+        # deterministic successor.
+        inputs["catalog"] = [item for item in inputs["catalog"]
+                             if item["candidate_id"] in {"claude", "codex"}]
+        inputs["availability"] = [item for item in inputs["availability"]
+                                  if item["candidate_id"] in {"claude", "codex"}]
+        envelope["selection_input_digests"] = {key: digest(value) for key, value in inputs.items()}
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        self.assertEqual(action["selection_decision"]["selected_candidate_id"], "claude")
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            result = execute_v9_selected_action(
+                envelope, action,
+                lambda _binding, _action: (_ for _ in ()).throw(
+                    ObservedNotExecuted(provider="claude", category="model_capacity",
+                                        observation_sha256="a" * 64)),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            self.assertEqual(result["status"], "observed_not_executed")
+            self.assertEqual(result["evidence_code"], "model_capacity")
+            self.assertEqual(result["successor_decision"]["selected_candidate_id"], "codex")
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual(snapshot["actions"][0]["status"], "observed_not_executed")
+            self.assertEqual(snapshot["actions"][0]["reason"], "model_capacity")
+            self.assertEqual(snapshot["provider_selections"][0]["state"], "observed_not_executed")
+            self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
+            receipt = receipt_from_snapshot(
+                snapshot, outcome={"status": "abandoned", "reason": "fixture_capacity_refusal"})
+            self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+            self.assertEqual(receipt["provider_refusals"][0]["diagnostic_sha256"], "a" * 64)
+            tampered = copy.deepcopy(receipt)
+            tampered["provider_refusals"][0]["observation_sha256"] = "b" * 64
+            tampered["receipt_digest"] = digest({key: value for key, value in tampered.items()
+                                                  if key != "receipt_digest"})
+            with self.assertRaisesRegex(V9ReceiptError, "v9_provider_refusal_invalid|v9_observed_refusal_invalid|v9_receipt"):
+                verify_selection_receipt(tampered)
+
     def test_v9_unknown_send_can_only_be_abandoned_with_a_terminal_receipt(self) -> None:
         envelope = _envelope()
         action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
@@ -617,6 +670,122 @@ class DeliverySelectionTests(unittest.TestCase):
             verifier_selections = [item for item in receipt["selections"]
                                    if item["logical_action_id"] == verifier_action["logical_action_id"]]
             self.assertEqual([item["candidate_id"] for item in verifier_selections], ["claude", "codex"])
+
+    def test_refusal_only_exhaustion_seals_a_normal_failed_receipt(self) -> None:
+        envelope = _envelope()
+        inputs = envelope["selection_inputs"]
+        inputs["catalog"] = [item for item in inputs["catalog"] if item["candidate_id"] == "claude"]
+        inputs["availability"] = [item for item in inputs["availability"] if item["candidate_id"] == "claude"]
+        envelope["selection_input_digests"] = {key: digest(value) for key, value in inputs.items()}
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger = ExecutionLedger(root / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            result = execute_v9_selected_action(
+                envelope, action,
+                lambda _binding, _action: (_ for _ in ()).throw(
+                    ObservedNotExecuted(provider="claude", category="model_capacity",
+                                        observation_sha256="a" * 64)),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            self.assertIsNone(result["successor_decision"]["selected_binding"])
+            sealed = ledger.seal_v9_attempt(
+                envelope["attempt_id"], "failed", "provider_candidates_exhausted",
+                root / "receipt.json", generation=1)
+            receipt = json.loads(Path(sealed["receipt_path"]).read_text())
+            self.assertEqual(receipt["outcome"], {
+                "status": "failed", "reason": "provider_candidates_exhausted"})
+            self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+            self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
+
+    def test_refusal_only_failure_is_rejected_while_a_successor_remains(self) -> None:
+        envelope = _envelope()
+        inputs = envelope["selection_inputs"]
+        inputs["catalog"] = [item for item in inputs["catalog"]
+                             if item["candidate_id"] in {"claude", "codex"}]
+        inputs["availability"] = [item for item in inputs["availability"]
+                                  if item["candidate_id"] in {"claude", "codex"}]
+        envelope["selection_input_digests"] = {key: digest(value) for key, value in inputs.items()}
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            result = execute_v9_selected_action(
+                envelope, action,
+                lambda _binding, _action: (_ for _ in ()).throw(
+                    ObservedNotExecuted(provider="claude", category="model_capacity",
+                                        observation_sha256="a" * 64)),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            self.assertEqual(result["successor_decision"]["selected_candidate_id"], "codex")
+            with self.assertRaisesRegex(V9ReceiptError, "v9_failed_outcome_evidence_missing"):
+                ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "provider_candidates_exhausted",
+                    Path(tmp) / "receipt.json", generation=1)
+
+    def test_capacity_fallback_dispatches_successor_at_same_logical_sequence(self) -> None:
+        envelope = _envelope()
+        inputs = envelope["selection_inputs"]
+        inputs["catalog"] = [item for item in inputs["catalog"]
+                             if item["candidate_id"] in {"claude", "codex"}]
+        inputs["availability"] = [item for item in inputs["availability"]
+                                  if item["candidate_id"] in {"claude", "codex"}]
+        envelope["selection_input_digests"] = {key: digest(value) for key, value in inputs.items()}
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        first = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            first_result = execute_v9_selected_action(
+                envelope, first,
+                lambda _binding, _action: (_ for _ in ()).throw(
+                    ObservedNotExecuted(provider="claude", category="model_capacity",
+                                        observation_sha256="a" * 64)),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            successor = make_action(
+                envelope, "producer", "Implement.", sequence=1, manager_turn=1,
+                decision=first_result["successor_decision"],
+            )
+            sent = []
+            result = execute_v9_selected_action(
+                envelope, successor,
+                lambda binding, _action: sent.append(binding["candidate_id"]) or {"output": "done"},
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+                predecessor_selection_id=first["selection_id"],
+            )
+            self.assertEqual(sent, ["codex"])
+            self.assertEqual(result["status"], "completed")
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual([item["request"]["sequence"] for item in snapshot["actions"]], [1, 1])
 
     def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
         envelope = _envelope()

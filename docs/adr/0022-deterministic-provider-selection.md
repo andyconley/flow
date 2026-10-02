@@ -89,3 +89,23 @@ Direct hosted-workspace access followed by rollback was rejected because it
 cannot prevent out-of-scope reads. A new protocol number was also rejected:
 v9 remains pre-release and can accept this additive contract refinement while
 historical v8 bytes and behavior remain unchanged.
+
+## 2026-10-02 refinement: observed capacity and successor charters
+
+A claimed provider send may fall forward only when the provider adapter
+observes a terminal capacity refusal and the bounded transcript proves that no
+agent or tool turn executed. Flow closes that action as
+`observed_not_executed`, binds the fixed `model_capacity` evidence to the
+ledger and receipt, charges zero tokens, excludes that candidate for the
+current logical assignment, and recomputes the next binding from the already
+sealed catalog and policy. Timeouts, malformed output, transport loss,
+unclassified exits, and capacity text after an execution event remain
+`unknown`, charged conservatively, and reconciliation-blocking.
+
+Historical v8 authority becomes v9-eligible only through
+`flow run migrate-job-charter-v9`. The lifecycle operation requires explicit
+user approval, validates a manifest-linked canonical predecessor and a
+complete provider-neutral successor, forbids path escape, symlinks, digest
+drift, topology changes, and authority expansion, snapshots lineage, bumps the
+Delivery owner generation, and registers the successor digest atomically. It
+never infers logical assignment bodies or rewrites v8 attempts and receipts.

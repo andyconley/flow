@@ -11,7 +11,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from claude_worker import ClaudeWorkerError, _parse_result, call_claude
+from claude_worker import (ClaudeWorkerError, _capacity_refusal_is_observed_not_executed,
+                           _failure_category, _parse_result, call_claude)
+from provider_outcomes import ObservedNotExecuted
 
 
 def result_json(**overrides):
@@ -207,6 +209,52 @@ class ClaudeWorkerTests(unittest.TestCase):
                 call_claude(instructions="Charter", task="Review", workspace=root,
                             model="claude-test", timeout_seconds=5, claude_bin=str(fake))
             self.assertNotIn("do-not-record", str(error.exception))
+
+    def test_selected_model_at_capacity_is_a_named_retryable_category(self):
+        """Provider capacity is actionable evidence, not an unknown exit."""
+        for stdout, stderr in (
+            (b"", b"Selected model is at capacity; secret=do-not-record"),
+            (b'{"type":"error","message":"selected model is at capacity"}', b""),
+        ):
+            with self.subTest(stdout=stdout, stderr=stderr):
+                self.assertEqual("model_capacity", _failure_category(stdout, stderr))
+
+    def test_nonzero_capacity_exit_exposes_only_the_named_category(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "claude-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "print(json.dumps({'type':'error','subtype':'capacity','num_turns':0,"
+                            "'message':'Selected model is at capacity; secret=do-not-record'}))\n"
+                            "sys.exit(1)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaises(ObservedNotExecuted) as error:
+                call_claude(instructions="Charter", task="Review", workspace=root,
+                            model="claude-test", timeout_seconds=5, claude_bin=str(fake))
+            self.assertEqual(error.exception.provider, "claude")
+            self.assertEqual(error.exception.category, "model_capacity")
+            result = error.exception.receipt_result()
+            self.assertEqual({key: result[key] for key in (
+                "schema_version", "kind", "disposition", "adapter_schema_version", "provider", "category")}, {
+                "schema_version": 1, "kind": "observed_not_executed",
+                "disposition": "observed_not_executed", "adapter_schema_version": 1,
+                "provider": "claude", "category": "model_capacity"})
+            self.assertRegex(result["observation_sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotIn("do-not-record", str(error.exception))
+
+    def test_unstructured_capacity_stderr_remains_uncertain(self):
+        self.assertFalse(_capacity_refusal_is_observed_not_executed(
+            b"", b"Selected model is at capacity"))
+
+    def test_structured_unrelated_failure_plus_capacity_stderr_remains_uncertain(self):
+        stdout = b'{"type":"error","subtype":"transport","num_turns":0,"message":"unrelated"}'
+        self.assertFalse(_capacity_refusal_is_observed_not_executed(
+            stdout, b"Selected model is at capacity"))
+
+    def test_capacity_phrase_after_a_reported_turn_remains_uncertain(self):
+        transcript = b'{"type":"result","subtype":"error","num_turns":1,"error":"model at capacity"}'
+        self.assertFalse(_capacity_refusal_is_observed_not_executed(transcript, b""))
 
     def test_timeout_is_uncertain(self):
         with tempfile.TemporaryDirectory() as temporary:

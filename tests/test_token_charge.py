@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 from execution_contracts import (attempt_token_charges, charge, normalized_charge, token_gate,  # noqa: E402
                                  token_maximum, token_usage_block, usage_values_valid)
+from provider_outcomes import ObservedNotExecuted  # noqa: E402
 
 U = 100_000
 CLAUDE_EDITOR = {"input_tokens": 20, "output_tokens": 4024, "cache_creation_input_tokens": 78332,
@@ -51,6 +52,9 @@ class ChargeTableTests(unittest.TestCase):
             ("allowed", "allowed", "claude", None, (0, 0, True)),
             ("denied", "denied", "codex", None, (0, 0, True)),
             ("not_dispatched", "not_dispatched", "claude", None, (0, 0, True)),
+            ("observed provider capacity refusal", "observed_not_executed", "claude",
+             {"result": ObservedNotExecuted(provider="claude", category="model_capacity",
+                                             observation_sha256="a" * 64).receipt_result()}, (0, 0, True)),
             ("ollama is never charged", "completed", "ollama", {"usage": {"prompt_eval_count": 3533, "eval_count": 153}},
              (0, 0, True)),
         ]
@@ -92,6 +96,26 @@ class AttemptChargeTests(unittest.TestCase):
         envelope = {**ENVELOPE, "manager": {"provider": "ollama"}}
         actions, calls = self.rows()
         self.assertEqual(attempt_token_charges(envelope, [], calls)["charged"], 0)
+
+    def test_observed_capacity_refusal_has_no_unobserved_send_charge(self):
+        totals = attempt_token_charges(
+            ENVELOPE,
+            [{"status": "observed_not_executed", "request": {"provider": "claude"},
+              "result": {"result": ObservedNotExecuted(provider="claude", category="model_capacity",
+                                                          observation_sha256="a" * 64).receipt_result()}}],
+            [],
+        )
+        self.assertEqual(totals["unobserved_sends"], 0)
+        self.assertEqual(totals["unobserved_charged"], 0)
+        self.assertEqual(totals["charged"], 0)
+
+    def test_forged_or_missing_capacity_evidence_is_conservatively_charged(self):
+        for result in (None, {"forged": True}, {"result": {"kind": "observed_not_executed"}}):
+            with self.subTest(result=result):
+                item = charge("observed_not_executed", "claude", result, U)
+                self.assertEqual(item["charged"], U)
+                self.assertTrue(item["unobserved"])
+                self.assertFalse(item["recognised"])
 
     def test_the_v8_live_validation_3_lineage_charges_133898(self):
         managers = [{"cache_creation_input_tokens": w, "cache_read_input_tokens": r, "input_tokens": 2, "output_tokens": o}

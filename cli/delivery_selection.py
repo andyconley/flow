@@ -16,6 +16,7 @@ try:
     )
     from provider_selection import canonical_bytes, digest, select_candidate
     from selection_authority import effective_family_exclusions
+    from provider_outcomes import ObservedNotExecuted
 except ModuleNotFoundError:  # Package import used by the MAF child.
     from .execution_contracts import (
         ContractError,
@@ -26,6 +27,7 @@ except ModuleNotFoundError:  # Package import used by the MAF child.
     )
     from .provider_selection import canonical_bytes, digest, select_candidate
     from .selection_authority import effective_family_exclusions
+    from .provider_outcomes import ObservedNotExecuted
 
 if TYPE_CHECKING:
     try:
@@ -52,6 +54,7 @@ def assignment_for(envelope: dict[str, Any], assignment_id: str) -> dict[str, An
 
 def compute_binding(envelope: dict[str, Any], assignment_id: str, *,
                     prior_no_send_failures: list[str] | None = None,
+                    prior_retryable_failures: list[str] | None = None,
                     runtime_excluded_families: list[str] | None = None) -> dict[str, Any]:
     assignment = assignment_for(envelope, assignment_id)
     inputs = envelope["selection_inputs"]
@@ -64,6 +67,7 @@ def compute_binding(envelope: dict[str, Any], assignment_id: str, *,
         inputs["catalog"],
         inputs["availability"],
         prior_no_send_failures=prior_no_send_failures or [],
+        prior_retryable_failures=prior_retryable_failures or [],
         excluded_families=excluded_families,
     )
 
@@ -130,10 +134,17 @@ def authorize_and_dispatch(
                                                     for item in prior_failures)
             or len(set(prior_failures)) != len(prior_failures)):
         raise SelectionDenied("invalid predecessor no-send failures")
+    prior_retryable = action["selection_decision"].get("prior_retryable_failures", [])
+    if (not isinstance(prior_retryable, list) or any(not isinstance(item, str) or not item
+                                                     for item in prior_retryable)
+            or len(set(prior_retryable)) != len(prior_retryable)
+            or set(prior_retryable) & set(prior_failures)):
+        raise SelectionDenied("invalid predecessor retryable failures")
     runtime_families = (_runtime_family_exclusions(envelope, action["assignment_id"], ledger)
                         if ledger is not None else None)
     expected = compute_binding(envelope, action["assignment_id"],
                                prior_no_send_failures=prior_failures,
+                               prior_retryable_failures=prior_retryable,
                                runtime_excluded_families=runtime_families)
     if canonical_bytes(action["selection_decision"]) != canonical_bytes(expected):
         raise SelectionDenied("child selection differs from Flow recomputation")
@@ -157,6 +168,7 @@ def authorize_and_dispatch(
         successor = compute_binding(
             envelope, action["assignment_id"],
             prior_no_send_failures=[*prior_failures, binding["candidate_id"]],
+            prior_retryable_failures=prior_retryable,
             runtime_excluded_families=runtime_families,
         )
         return {
@@ -166,15 +178,40 @@ def authorize_and_dispatch(
             "evidence_code": observed.get("evidence_code", "pre_send_unavailable"),
             "successor_decision": successor,
         }
+    observed_refusal: ObservedNotExecuted | None = None
     try:
         if ledger is None:
-            result = adapter_send(deepcopy(binding), deepcopy(action))
+            try:
+                result = adapter_send(deepcopy(binding), deepcopy(action))
+            except ObservedNotExecuted as exc:
+                observed_refusal = exc
         else:
             with ledger.v9_send_fence(envelope, action, generation=generation) as finish_send:
-                result = adapter_send(deepcopy(binding), deepcopy(action))
-                finish_send(result)
+                try:
+                    result = adapter_send(deepcopy(binding), deepcopy(action))
+                except ObservedNotExecuted as exc:
+                    if exc.provider != binding["provider"]:
+                        raise SelectionDenied("observed refusal provider differs from selected binding") from exc
+                    finish_send.observed_not_executed(exc.receipt_result())  # type: ignore[attr-defined]
+                    observed_refusal = exc
+                else:
+                    finish_send(result)
     except BaseException as exc:
         raise RecoveryRequired("provider send started or became uncertain") from exc
+    if observed_refusal is not None:
+        successor = compute_binding(
+            envelope, action["assignment_id"],
+            prior_no_send_failures=prior_failures,
+            prior_retryable_failures=[*prior_retryable, binding["candidate_id"]],
+            runtime_excluded_families=runtime_families,
+        )
+        return {
+            "status": "observed_not_executed",
+            "selection_id": action["selection_id"],
+            "candidate_id": binding["candidate_id"],
+            "evidence_code": observed_refusal.category,
+            "successor_decision": successor,
+        }
     return {
         "status": "completed",
         "selection_id": action["selection_id"],

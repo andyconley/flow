@@ -53,6 +53,7 @@ from runstate import (  # noqa: E402
     cmd_history as run_history_command,
     cmd_handoff_to_review as run_handoff_to_review_command,
     cmd_list as run_list_command,
+    cmd_migrate_job_charter_v9 as run_migrate_job_charter_v9_command,
     cmd_status as run_status_command,
     cmd_transition as run_transition_command,
     cmd_verify as run_verify_command,
@@ -567,6 +568,19 @@ def main() -> int:
     run_amend_parser.add_argument("--reason", required=True)
     run_amend_parser.add_argument("--approved-by-user", action="store_true")
     run_amend_parser.add_argument("--json", action="store_true", help="emit JSON")
+
+    run_charter_migration_parser = run_sub.add_parser(
+        "migrate-job-charter-v9",
+        help="approve and register a provider-neutral v9 successor for a legacy job charter",
+    )
+    run_charter_migration_parser.add_argument("work_id")
+    run_charter_migration_parser.add_argument(
+        "--replacement",
+        help="current-run successor charter; omit when the manifest-linked charter is already v9 complete",
+    )
+    run_charter_migration_parser.add_argument("--reason", required=True)
+    run_charter_migration_parser.add_argument("--approved-by-user", action="store_true")
+    run_charter_migration_parser.add_argument("--json", action="store_true", help="emit JSON")
 
     run_orchestration_parser = run_sub.add_parser(
         "validate-orchestration",
@@ -1114,6 +1128,8 @@ def main() -> int:
         return run_handoff_to_review_command(args)
     if args.command == "run" and args.run_target == "amend-orchestration":
         return run_amend_orchestration_command(args)
+    if args.command == "run" and args.run_target == "migrate-job-charter-v9":
+        return run_migrate_job_charter_v9_command(args)
     if args.command == "run" and args.run_target == "validate-orchestration":
         return orchestration_validate_command(args)
     if args.command == "run" and args.run_target == "execute-local":
