@@ -621,7 +621,7 @@ def apply_transition(
             "invalid work id: use a non-empty single directory name without path separators"
         ]
     current_for_repair = _load_run(work_id, (root or repo_root()).resolve())
-    if current_for_repair.get("pending_lifecycle_event"):
+    if (current_for_repair or {}).get("pending_lifecycle_event"):
         return False, current_for_repair, [
             "lifecycle event projection repair is required; rerun migrate-job-charter-v9 before transitioning"
         ]

@@ -247,6 +247,28 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                     or row.get("prior_retryable_failures", []) != expected_retryable:
                 raise V9ReceiptError("v9_fallback_lineage_invalid")
             compared += 1
+    terminal_refusal_exhaustions: list[str] = []
+    for row in selections:
+        if row.get("state") != "observed_not_executed":
+            continue
+        successors = [item for item in selections
+                      if item.get("predecessor_selection_id") == row.get("selection_id")]
+        if successors:
+            continue
+        action = next((item for item in actions
+                       if item.get("selection_id") == row.get("selection_id")), None)
+        if action is None:
+            raise V9ReceiptError("v9_terminal_refusal_action_missing")
+        retryable = list(row.get("prior_retryable_failures", []))
+        retryable.append(row.get("candidate_id"))
+        successor = compute_binding(
+            envelope, action["assignment_id"],
+            prior_no_send_failures=row.get("prior_no_send_failures", []),
+            prior_retryable_failures=retryable,
+            runtime_excluded_families=runtime_families_for(action["assignment_id"]),
+        )
+        if successor.get("selected_binding") is None:
+            terminal_refusal_exhaustions.append(row["selection_id"])
     verifier_actions = [action for action in actions
                         if assignments[action["assignment_id"]]["requirements"].get("operation") == "verify"]
     semantic_by_action = {item.get("action_id"): item for item in semantic}
@@ -298,9 +320,11 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if (outcome["status"] == "completed") != all_required_pass:
             raise V9ReceiptError("v9_outcome_semantic_mismatch")
         if outcome["status"] == "failed" and not evidence_failures \
-                and not provider_refusals \
                 and not any(item != "valid_pass" for item in semantic_dispositions):
-            raise V9ReceiptError("v9_failed_outcome_evidence_missing")
+            refusal_exhaustion = (outcome["reason"] == "provider_candidates_exhausted"
+                                  and bool(terminal_refusal_exhaustions))
+            if not refusal_exhaustion:
+                raise V9ReceiptError("v9_failed_outcome_evidence_missing")
     expected_digest = digest({key: value for key, value in receipt.items() if key != "receipt_digest"})
     if receipt.get("receipt_digest") != expected_digest:
         raise V9ReceiptError("v9_receipt_digest_mismatch")

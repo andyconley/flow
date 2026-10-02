@@ -112,6 +112,12 @@ class ArchiveAcceptanceRepairTests(unittest.TestCase):
         self.assertEqual(result["state"], "complete")
         self.assertEqual([hit["work_id"] for hit in result["hits"]], ["closed"])
 
+    def test_first_transition_without_existing_run_does_not_require_projection_repair(self):
+        ok, run, errors = runstate.apply_transition(
+            "new-definition", "start-definition", root=self.root)
+        self.assertTrue(ok, errors)
+        self.assertEqual(run["state"], "defining")
+
     def test_new_archived_run_and_archived_run_removal_stale_the_projection(self):
         self.archived_run("existing")
         self.indexed()
