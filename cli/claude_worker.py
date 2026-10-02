@@ -56,7 +56,7 @@ def _failure_category(stdout: bytes, stderr: bytes) -> str:
 
 def _capacity_refusal_observation(stdout: bytes, stderr: bytes) -> str | None:
     """Return a digest only for a structured refusal explicitly reporting zero turns."""
-    if _failure_category(stdout, stderr) != "model_capacity" or not stdout.strip():
+    if not stdout.strip() or stderr.strip() or _failure_category(stdout, b"") != "model_capacity":
         return None
     try:
         payload = json.loads(stdout)

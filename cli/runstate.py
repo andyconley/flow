@@ -620,6 +620,11 @@ def apply_transition(
         return False, {}, [
             "invalid work id: use a non-empty single directory name without path separators"
         ]
+    current_for_repair = _load_run(work_id, (root or repo_root()).resolve())
+    if current_for_repair.get("pending_lifecycle_event"):
+        return False, current_for_repair, [
+            "lifecycle event projection repair is required; rerun migrate-job-charter-v9 before transitioning"
+        ]
     if event_name not in TRANSITIONS:
         return False, {}, [f"unknown event: {event_name}"]
     # ``start-plan`` has a stronger authority contract than an ordinary state
@@ -1500,6 +1505,11 @@ def approve_job_charter_v9_migration(
                         next_state=current.get("state")), project_root)
                 except OSError as exc:
                     return False, current, [f"migration authority is committed but history repair failed: {exc}"]
+            if current.get("pending_lifecycle_event"):
+                repaired = dict(current)
+                repaired.pop("pending_lifecycle_event", None)
+                _write_run(work_id, repaired, project_root)
+                current = repaired
             if replacement is None:
                 return True, current, []
             try:
@@ -1610,6 +1620,9 @@ def approve_job_charter_v9_migration(
             payload["lane"] = STATE_LANES[STATE_IMPLEMENTING]
         payload["updated_at"] = now
         payload["last_event"] = "approve-job-charter-v9-migration"
+        event = _job_charter_migration_event(record, prior_state=prior_state,
+                                             next_state=payload.get("state"))
+        payload["pending_lifecycle_event"] = event
         created: list[Path] = []
         try:
             _write_immutable_text(snapshot, predecessor_bytes.decode("utf-8"), created)
@@ -1625,8 +1638,6 @@ def approve_job_charter_v9_migration(
                 except FileNotFoundError:
                     pass
             return False, current, [f"migration staging failed without changing run authority: {exc}"]
-        event = _job_charter_migration_event(record, prior_state=prior_state,
-                                             next_state=payload.get("state"))
         try:
             _append_event(work_id, event, project_root)
         except OSError as exc:
@@ -1635,6 +1646,9 @@ def approve_job_charter_v9_migration(
             # The migration record inside run.json is the durable audit fact, so
             # never report an ordinary refusal after authority has committed.
             return True, payload, [f"migration committed; rerun to repair lifecycle event projection: {exc}"]
+        payload = dict(payload)
+        payload.pop("pending_lifecycle_event", None)
+        _write_run(work_id, payload, project_root)
         return True, payload, []
 
 
@@ -1654,6 +1668,8 @@ def cmd_migrate_job_charter_v9(args) -> int:
     print("job charter v9 migration approved")
     print(f"state: {payload.get('state')}")
     print(f"job charter: {payload.get('artifacts', {}).get('job_charter')}")
+    for warning in errors:
+        print(f"warning: {warning}")
     return 0
 
 

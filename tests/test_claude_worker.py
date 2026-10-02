@@ -247,6 +247,11 @@ class ClaudeWorkerTests(unittest.TestCase):
         self.assertFalse(_capacity_refusal_is_observed_not_executed(
             b"", b"Selected model is at capacity"))
 
+    def test_structured_unrelated_failure_plus_capacity_stderr_remains_uncertain(self):
+        stdout = b'{"type":"error","subtype":"transport","num_turns":0,"message":"unrelated"}'
+        self.assertFalse(_capacity_refusal_is_observed_not_executed(
+            stdout, b"Selected model is at capacity"))
+
     def test_capacity_phrase_after_a_reported_turn_remains_uncertain(self):
         transcript = b'{"type":"result","subtype":"error","num_turns":1,"error":"model at capacity"}'
         self.assertFalse(_capacity_refusal_is_observed_not_executed(transcript, b""))

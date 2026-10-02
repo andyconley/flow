@@ -220,10 +220,12 @@ class V8V9JobCharterMigrationTests(CharteredFixture):
             ok, payload, warnings = self._migrate()
         self.assertTrue(ok)
         self.assertEqual(payload["delivery"]["owner_generation"], 2)
+        self.assertIn("pending_lifecycle_event", payload)
         self.assertTrue(any("migration committed" in warning for warning in warnings), warnings)
         ok, repaired, errors = self._migrate()
         self.assertTrue(ok, errors)
         self.assertEqual(repaired["delivery"]["owner_generation"], 2)
+        self.assertNotIn("pending_lifecycle_event", repaired)
 
     def test_cli_help_exposes_explicit_approval_and_successor_contract(self) -> None:
         output = io.StringIO()

@@ -2680,6 +2680,8 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
     """Project the approved provider-neutral v9 assignments without invention."""
     run_dir = root / ".flow" / "runs" / work_id
     state = run_status(work_id, root=root)
+    if state.get("pending_lifecycle_event"):
+        raise ContractError("lifecycle event projection repair is required before v9 execution")
     charter_rel = state.get("artifacts", {}).get("job_charter")
     if not charter_rel:
         raise ContractError("approved v9 job charter artifact is absent")
