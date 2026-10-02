@@ -56,8 +56,8 @@ def compute_binding(envelope: dict[str, Any], assignment_id: str, *,
     assignment = assignment_for(envelope, assignment_id)
     inputs = envelope["selection_inputs"]
     requirements = assignment["requirements"]
-    excluded_families = (runtime_excluded_families if runtime_excluded_families is not None
-                         else effective_family_exclusions(envelope, assignment_id))
+    excluded_families = effective_family_exclusions(
+        envelope, assignment_id, runtime_families=runtime_excluded_families)
     return select_candidate(
         requirements,
         inputs["policy"],

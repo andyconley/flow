@@ -65,6 +65,28 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     action_ids: set[str] = set()
     compared = 0
     completed_bindings: dict[str, list[dict[str, Any]]] = {}
+
+    def runtime_families_for(assignment_id: str) -> list[str] | None:
+        constraints = [item for item in envelope["selection_authority"]["independence_constraints"]
+                       if item["assignment_id"] == assignment_id]
+        if not constraints:
+            return None
+        if len(constraints) != 1:
+            raise V9ReceiptError("v9_independence_constraint_invalid")
+        families: list[str] = []
+        source_ids = (constraints[0]["producer_assignment_ids"]
+                      + constraints[0]["evidence_collector_assignment_ids"])
+        for source_id in source_ids:
+            bindings = completed_bindings.get(source_id, [])
+            if len(bindings) != 1:
+                raise V9ReceiptError("v9_independence_lineage_incomplete")
+            family = bindings[0].get("provider_family")
+            if not isinstance(family, str) or not family:
+                raise V9ReceiptError("v9_independence_family_invalid")
+            if family not in families:
+                families.append(family)
+        return families
+
     for action in actions:
         try:
             validate_action(envelope, action)
@@ -85,24 +107,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(prior, list) or any(not isinstance(item, str) for item in prior) \
                 or len(set(prior)) != len(prior):
             raise V9ReceiptError("v9_prior_no_send_failures_invalid")
-        runtime_families = None
-        constraints = [item for item in envelope["selection_authority"]["independence_constraints"]
-                       if item["assignment_id"] == action["assignment_id"]]
-        if constraints:
-            if len(constraints) != 1:
-                raise V9ReceiptError("v9_independence_constraint_invalid")
-            runtime_families = []
-            source_ids = (constraints[0]["producer_assignment_ids"]
-                          + constraints[0]["evidence_collector_assignment_ids"])
-            for source_id in source_ids:
-                bindings = completed_bindings.get(source_id, [])
-                if len(bindings) != 1:
-                    raise V9ReceiptError("v9_independence_lineage_incomplete")
-                family = bindings[0].get("provider_family")
-                if not isinstance(family, str) or not family:
-                    raise V9ReceiptError("v9_independence_family_invalid")
-                if family not in runtime_families:
-                    runtime_families.append(family)
+        runtime_families = runtime_families_for(action["assignment_id"])
         expected = compute_binding(
             envelope, action["assignment_id"], prior_no_send_failures=prior,
             runtime_excluded_families=runtime_families,
@@ -143,6 +148,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         expected = compute_binding(
             envelope, successor_action["assignment_id"],
             prior_no_send_failures=row.get("prior_no_send_failures", []),
+            runtime_excluded_families=runtime_families_for(successor_action["assignment_id"]),
         )
         if row.get("decision_digest") != expected.get("decision_digest") \
                 or row.get("candidate_id") != expected.get("selected_candidate_id"):

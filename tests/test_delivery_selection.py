@@ -34,6 +34,8 @@ from selection_authority import (  # noqa: E402
     seal_selection_authority,
     successor_authority_digest,
 )
+from selection_receipt import receipt_from_snapshot, verify_selection_receipt  # noqa: E402
+from verifier_contracts import evaluate_candidate  # noqa: E402
 
 
 def _candidate(candidate_id: str, provider: str, family: str) -> dict:
@@ -563,6 +565,55 @@ class DeliverySelectionTests(unittest.TestCase):
             verifier_action = next(item["request"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]
                                    if item["request"]["assignment_id"] == "verifier")
             self.assertEqual(verifier_action["selection_decision"]["excluded_families"], ["anthropic"])
+
+    def test_verifier_fallback_receipt_replays_runtime_family_exclusions(self) -> None:
+        envelope = _envelope(excluded_families=["local"])
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+
+            def readiness(binding):
+                if binding["candidate_id"] == "claude":
+                    return {**binding, "state": "unavailable", "no_send_observed": True,
+                            "evidence_code": "connection_refused_before_send"}
+                return {**binding, "state": "ready"}
+
+            def adapter(_binding, action):
+                if action["assignment_id"] == "manager":
+                    return _manager_result_for_action(action)
+                if action["assignment_id"] == "verifier":
+                    return {"output": json.dumps({"schema_version": 1, "decision": "pass",
+                                                   "summary": "Evidence passes.", "findings": []})}
+                return {"output": "done"}
+
+            execute_v9_logical_delivery(
+                envelope, "Complete.", ledger, adapter, readiness_recheck=readiness,
+                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                    on_action({"attempt_id": envelope["attempt_id"],
+                               "assignment_id": manager_decision["assignment_id"],
+                               "task": manager_decision["task"], "sequence": 1,
+                               "manager_turn": manager_decision["manager_turn"]}),
+            )
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            verifier_row = next(item for item in snapshot["actions"]
+                                if item["request"]["assignment_id"] == "verifier")
+            verifier_action = verifier_row["request"]
+            result = verifier_row["result"]["result"]
+            verifier_input = {"provider_task": verifier_action["task"], "assignment_id": "verifier"}
+            evaluation = evaluate_candidate(
+                action_id=verifier_action["action_id"], verifier_input_digest=digest(verifier_input),
+                raw_output=result["output"], diff_digest="d" * 64,
+                test_evidence_digest="e" * 64,
+            )
+            ledger.record_v9_verifier_evaluation(
+                verifier_action["action_id"], verifier_input, result, evaluation,
+                "d" * 64, "e" * 64, generation=1,
+            )
+            receipt = receipt_from_snapshot(ledger.snapshot(envelope["attempt_id"]))
+            self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+            verifier_selections = [item for item in receipt["selections"]
+                                   if item["logical_action_id"] == verifier_action["logical_action_id"]]
+            self.assertEqual([item["candidate_id"] for item in verifier_selections], ["claude", "codex"])
 
     def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
         envelope = _envelope()

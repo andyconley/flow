@@ -99,6 +99,16 @@ class SelectionReceiptTests(unittest.TestCase):
                     verify_selection_receipt(receipt)
                 self.assertEqual(raised.exception.code, f"v9_{field}_mismatch")
 
+    def test_rank_tuple_only_tamper_is_rejected_after_reseal(self) -> None:
+        receipt = _receipt()
+        ranked = receipt["actions"][0]["selection_decision"]["ordered_candidates"]
+        self.assertTrue(ranked and isinstance(ranked[0].get("rank_tuple"), list))
+        ranked[0]["rank_tuple"][0] += 1
+        _reseal(receipt)
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_ordered_candidates_mismatch")
+
     def test_fallback_lineage_tampering_is_rejected(self) -> None:
         receipt = _receipt()
         receipt["selections"][1]["prior_no_send_failures"] = []

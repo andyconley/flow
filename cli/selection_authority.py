@@ -458,20 +458,32 @@ def validate_selection_authority(envelope: dict[str, Any]) -> None:
             raise SelectionAuthorityError("independence waiver successor authority binding mismatch")
         matching = [item for item in authority["independence_constraints"]
                     if item["assignment_id"] == waiver["assignment_id"]]
-        if (len(matching) != 1 or matching[0]["risk_class"] != waiver["risk_class"]
-                or matching[0]["excluded_provider_families"] != waiver["excluded_provider_families"]):
+        if len(matching) != 1 or matching[0]["risk_class"] != waiver["risk_class"]:
             raise SelectionAuthorityError("independence waiver family scope mismatch")
+        sealed_families = matching[0]["excluded_provider_families"]
+        if sealed_families:
+            if sealed_families != waiver["excluded_provider_families"]:
+                raise SelectionAuthorityError("independence waiver family scope mismatch")
+        else:
+            catalog_families = {item["provider_family"] for item in inputs["catalog"]}
+            if not set(waiver["excluded_provider_families"]).issubset(catalog_families):
+                raise SelectionAuthorityError("dynamic independence waiver names an unknown provider family")
 
 
-def effective_family_exclusions(envelope: dict[str, Any], assignment_id: str) -> list[str]:
-    """Return sealed exclusions minus only an exactly scoped approved exception."""
+def effective_family_exclusions(envelope: dict[str, Any], assignment_id: str, *,
+                                runtime_families: list[str] | None = None) -> list[str]:
+    """Return sealed/runtime exclusions minus one exactly scoped exception."""
     constraints = [item for item in envelope["selection_authority"]["independence_constraints"]
                    if item["assignment_id"] == assignment_id]
     if not constraints:
         return []
-    excluded = list(constraints[0]["excluded_provider_families"])
+    excluded = list(dict.fromkeys(runtime_families if runtime_families is not None
+                                  else constraints[0]["excluded_provider_families"]))
     waiver = envelope["selection_inputs"]["policy"]["independence_waiver"]
     if waiver is None or waiver["assignment_id"] != assignment_id:
+        return excluded
+    if runtime_families is not None and not set(waiver["excluded_provider_families"]).issubset(
+            set(runtime_families) | set(constraints[0]["excluded_provider_families"])):
         return excluded
     waived = set(waiver["waived_provider_families"])
     return [family for family in excluded if family not in waived]
