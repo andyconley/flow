@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.1](https://github.com/andyconley/flow/compare/v0.40.0...v0.40.1) (2026-10-02)
+
+### Bug Fixes
+
+* recover from provider capacity and migrate v9 charters ([18f588b](https://github.com/andyconley/flow/commit/18f588b85ecdbf0bf760ac76e263e3020d39c584))
+
 ## [0.40.0](https://github.com/andyconley/flow/compare/v0.39.1...v0.40.0) (2026-10-02)
 
 ### Features
