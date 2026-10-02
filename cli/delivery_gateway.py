@@ -2545,7 +2545,7 @@ def _hosted_adapter_available(provider: str) -> bool:
         except json.JSONDecodeError:
             return False
         return isinstance(payload, dict) and payload.get("loggedIn") is True
-    return result.stdout.strip().startswith("Logged in")
+    return (result.stdout + result.stderr).strip().startswith("Logged in")
 
 
 def _candidate_readiness(candidate: dict[str, Any], *, local_models: set[str],

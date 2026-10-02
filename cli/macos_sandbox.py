@@ -29,11 +29,16 @@ def confined_argv(argv: list[str], *, workspace: Path, private_home: Path) -> li
     # workspace or isolated credential home. Metadata alone is not source
     # disclosure and remains available for executable/runtime discovery.
     allowed = (workspace.resolve(), private_home.resolve())
+    try:
+        executable_path = Path(executable).resolve(strict=True)
+    except OSError as exc:
+        raise ProcessSandboxError("hosted provider executable cannot be resolved") from exc
     protected_roots = (Path("/Users"), Path("/Volumes"), Path("/private/tmp"),
                        Path("/tmp"), Path("/private/var/folders"))
     exceptions = " ".join(
         f"(require-not (subpath {json.dumps(str(path))}))" for path in allowed
     )
+    exceptions += f" (require-not (literal {json.dumps(str(executable_path))}))"
     denied = " ".join(
         f"(deny file-read-data file-write* "
         f"(require-all (subpath {json.dumps(str(root))}) {exceptions}))"

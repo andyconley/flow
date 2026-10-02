@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +54,20 @@ class MacOSSandboxTests(unittest.TestCase):
             self.assertIn(str(workspace), profile)
             self.assertIn(str(private_home), profile)
             self.assertNotIn(str(root) + '\")', profile)
+
+    def test_profile_allows_only_the_resolved_provider_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace, private_home = root / "workspace", root / "home"
+            workspace.mkdir()
+            private_home.mkdir()
+            executable = root / "provider"
+            executable.write_bytes(b"provider")
+            with patch("macos_sandbox.shutil.which", return_value=str(executable)):
+                argv = confined_argv(["provider"], workspace=workspace, private_home=private_home)
+            profile = argv[2]
+            self.assertIn(f'(require-not (literal "{executable.resolve()}"))', profile)
+            self.assertNotIn(f'(require-not (subpath "{root}"))', profile)
 
 
 if __name__ == "__main__":

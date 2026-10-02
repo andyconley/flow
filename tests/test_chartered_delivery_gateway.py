@@ -2053,7 +2053,7 @@ class V9CharteredRouteTests(CharteredFixture):
             self.assertTrue(delivery_gateway._hosted_adapter_available("claude"))
         with patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
                 patch("delivery_gateway.subprocess.run", return_value=completed(
-                    ["codex", "login", "status"], 0, "Logged in using ChatGPT\n", "")):
+                    ["codex", "login", "status"], 0, "", "Logged in using ChatGPT\n")):
             self.assertTrue(delivery_gateway._hosted_adapter_available("codex"))
 
     def test_project_cannot_invent_provider_candidate(self):
