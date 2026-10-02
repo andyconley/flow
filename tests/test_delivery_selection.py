@@ -706,6 +706,7 @@ class DeliverySelectionTests(unittest.TestCase):
             self.assertEqual(receipt["outcome"], {
                 "status": "failed", "reason": "provider_candidates_exhausted"})
             self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+            self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
 
     def test_refusal_only_failure_is_rejected_while_a_successor_remains(self) -> None:
         envelope = _envelope()
@@ -740,6 +741,51 @@ class DeliverySelectionTests(unittest.TestCase):
                 ledger.seal_v9_attempt(
                     envelope["attempt_id"], "failed", "provider_candidates_exhausted",
                     Path(tmp) / "receipt.json", generation=1)
+
+    def test_capacity_fallback_dispatches_successor_at_same_logical_sequence(self) -> None:
+        envelope = _envelope()
+        inputs = envelope["selection_inputs"]
+        inputs["catalog"] = [item for item in inputs["catalog"]
+                             if item["candidate_id"] in {"claude", "codex"}]
+        inputs["availability"] = [item for item in inputs["availability"]
+                                  if item["candidate_id"] in {"claude", "codex"}]
+        envelope["selection_input_digests"] = {key: digest(value) for key, value in inputs.items()}
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        first = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            first_result = execute_v9_selected_action(
+                envelope, first,
+                lambda _binding, _action: (_ for _ in ()).throw(
+                    ObservedNotExecuted(provider="claude", category="model_capacity",
+                                        observation_sha256="a" * 64)),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            successor = make_action(
+                envelope, "producer", "Implement.", sequence=1, manager_turn=1,
+                decision=first_result["successor_decision"],
+            )
+            sent = []
+            result = execute_v9_selected_action(
+                envelope, successor,
+                lambda binding, _action: sent.append(binding["candidate_id"]) or {"output": "done"},
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+                predecessor_selection_id=first["selection_id"],
+            )
+            self.assertEqual(sent, ["codex"])
+            self.assertEqual(result["status"], "completed")
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual([item["request"]["sequence"] for item in snapshot["actions"]], [1, 1])
 
     def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
         envelope = _envelope()

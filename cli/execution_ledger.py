@@ -254,15 +254,14 @@ class ExecutionLedger:
             ):
                 if name not in action_columns:
                     db.execute(f"ALTER TABLE actions ADD COLUMN {name} {definition}")
-            # Older databases may already contain duplicate historical action
-            # positions.  Do not make those receipts unreadable merely to add
-            # a new lookup constraint. New writes are fenced by ``decide``'s
-            # transactional slot check; retain a non-unique lookup index when
-            # a legacy unique-index migration cannot be applied.
-            try:
-                db.execute("CREATE UNIQUE INDEX IF NOT EXISTS actions_attempt_kind_sequence ON actions(attempt_id, kind, sequence)")
-            except sqlite3.IntegrityError:
-                db.execute("CREATE INDEX IF NOT EXISTS actions_attempt_kind_sequence_lookup ON actions(attempt_id, kind, sequence)")
+            # Protocol-v9 provider fallback deliberately records multiple
+            # physical sends at one logical action position. Protocol-v8
+            # writes remain fenced by ``decide``'s transactional slot check,
+            # so the cross-protocol database index must be a lookup index,
+            # not a uniqueness constraint. Drop the historical unique index
+            # when opening an existing ledger before enabling v9 fallback.
+            db.execute("DROP INDEX IF EXISTS actions_attempt_kind_sequence")
+            db.execute("CREATE INDEX IF NOT EXISTS actions_attempt_kind_sequence_lookup ON actions(attempt_id, kind, sequence)")
             continuation_columns = {row[1] for row in db.execute("PRAGMA table_info(continuation_epochs)")}
             if "sealed_receipt_sha256" not in continuation_columns:
                 db.execute("ALTER TABLE continuation_epochs ADD COLUMN sealed_receipt_sha256 TEXT")
