@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.7](https://github.com/andyconley/flow/compare/v0.40.6...v0.40.7) (2026-10-02)
+
+### Bug Fixes
+
+* retry recoverable chartered test failures ([2bb4229](https://github.com/andyconley/flow/commit/2bb4229ad7b941cece575345206ae43cc5f1d8c6))
+
 ## [0.40.6](https://github.com/andyconley/flow/compare/v0.40.5...v0.40.6) (2026-10-02)
 
 ### Bug Fixes
