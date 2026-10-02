@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.8](https://github.com/andyconley/flow/compare/v0.40.7...v0.40.8) (2026-10-02)
+
+### Bug Fixes
+
+* preserve failed repair turn diffs ([ac3b8e9](https://github.com/andyconley/flow/commit/ac3b8e96c205ff2d27447edcd8c7414d4c941098))
+
 ## [0.40.7](https://github.com/andyconley/flow/compare/v0.40.6...v0.40.7) (2026-10-02)
 
 ### Bug Fixes
