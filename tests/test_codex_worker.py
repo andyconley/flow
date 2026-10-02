@@ -13,7 +13,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
-from codex_worker import CodexWorkerError, _failure_category, _parse_events, call_codex
+from codex_worker import (CodexWorkerError, _capacity_refusal_is_observed_not_executed,
+                          _failure_category, _parse_events, call_codex)
+from provider_outcomes import ObservedNotExecuted
 
 
 def stream(*events):
@@ -172,6 +174,50 @@ class CodexWorkerTests(unittest.TestCase):
         for evidence, expected in cases.items():
             with self.subTest(evidence=evidence):
                 self.assertEqual(expected, _failure_category(evidence))
+
+    def test_selected_model_at_capacity_is_a_named_retryable_category(self):
+        """The user-visible capacity error must not collapse to ``unclassified``.
+
+        The adapter intentionally exposes only a fixed label: the provider's
+        full diagnostic can contain account or request details that receipt
+        surfaces must not retain.
+        """
+        cases = (
+            b"Selected model is at capacity. Please try a different model.",
+            b"SELECTED MODEL IS AT CAPACITY; secret=do-not-record",
+            stream({"type": "error", "message": "Selected model is at capacity; secret=do-not-record"}),
+        )
+        for evidence in cases:
+            with self.subTest(evidence=evidence):
+                self.assertEqual("model_capacity", _failure_category(b"", evidence))
+
+    def test_nonzero_capacity_exit_exposes_only_the_named_category(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "codex-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import sys\n"
+                            "sys.stderr.write('Selected model is at capacity; secret=do-not-record\\n')\n"
+                            "sys.exit(1)\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with self.assertRaises(ObservedNotExecuted) as error:
+                call_codex(instructions="Charter", task="Task", workspace=root,
+                           model="gpt-test", timeout_seconds=5, codex_bin=str(fake))
+            self.assertEqual(error.exception.provider, "codex")
+            self.assertEqual(error.exception.category, "model_capacity")
+            self.assertEqual(error.exception.receipt_result(), {
+                "schema_version": 1, "kind": "observed_not_executed",
+                "provider": "codex", "category": "model_capacity",
+            })
+            self.assertNotIn("do-not-record", str(error.exception))
+
+    def test_capacity_phrase_after_execution_event_remains_uncertain(self):
+        transcript = stream(
+            {"type": "thread.started", "thread_id": "thread-1"},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "acted"}},
+            {"type": "error", "message": "Selected model is at capacity"},
+        )
+        self.assertFalse(_capacity_refusal_is_observed_not_executed(b"", transcript))
 
     def test_timeout_includes_prompt_write(self):
         with tempfile.TemporaryDirectory() as temporary:

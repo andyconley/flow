@@ -16,6 +16,7 @@ try:
     )
     from provider_selection import canonical_bytes, digest, select_candidate
     from selection_authority import effective_family_exclusions
+    from provider_outcomes import ObservedNotExecuted
 except ModuleNotFoundError:  # Package import used by the MAF child.
     from .execution_contracts import (
         ContractError,
@@ -26,6 +27,7 @@ except ModuleNotFoundError:  # Package import used by the MAF child.
     )
     from .provider_selection import canonical_bytes, digest, select_candidate
     from .selection_authority import effective_family_exclusions
+    from .provider_outcomes import ObservedNotExecuted
 
 if TYPE_CHECKING:
     try:
@@ -166,15 +168,39 @@ def authorize_and_dispatch(
             "evidence_code": observed.get("evidence_code", "pre_send_unavailable"),
             "successor_decision": successor,
         }
+    observed_refusal: ObservedNotExecuted | None = None
     try:
         if ledger is None:
-            result = adapter_send(deepcopy(binding), deepcopy(action))
+            try:
+                result = adapter_send(deepcopy(binding), deepcopy(action))
+            except ObservedNotExecuted as exc:
+                observed_refusal = exc
         else:
             with ledger.v9_send_fence(envelope, action, generation=generation) as finish_send:
-                result = adapter_send(deepcopy(binding), deepcopy(action))
-                finish_send(result)
+                try:
+                    result = adapter_send(deepcopy(binding), deepcopy(action))
+                except ObservedNotExecuted as exc:
+                    if exc.provider != binding["provider"]:
+                        raise SelectionDenied("observed refusal provider differs from selected binding") from exc
+                    finish_send.observed_not_executed(exc.receipt_result())  # type: ignore[attr-defined]
+                    observed_refusal = exc
+                else:
+                    finish_send(result)
     except BaseException as exc:
         raise RecoveryRequired("provider send started or became uncertain") from exc
+    if observed_refusal is not None:
+        successor = compute_binding(
+            envelope, action["assignment_id"],
+            prior_no_send_failures=[*prior_failures, binding["candidate_id"]],
+            runtime_excluded_families=runtime_families,
+        )
+        return {
+            "status": "observed_not_executed",
+            "selection_id": action["selection_id"],
+            "candidate_id": binding["candidate_id"],
+            "evidence_code": observed_refusal.category,
+            "successor_decision": successor,
+        }
     return {
         "status": "completed",
         "selection_id": action["selection_id"],

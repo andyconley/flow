@@ -21,6 +21,7 @@ from typing import Any, Callable
 
 from delivery_cancel import CancellableSelector, interruptible
 from macos_sandbox import confined_argv
+from provider_outcomes import ObservedNotExecuted
 
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
@@ -44,9 +45,29 @@ def _failure_category(stdout: bytes, stderr: bytes) -> str:
         return "unsupported_cli_option"
     if any(marker in evidence for marker in ("rate limit", "rate_limit")):
         return "rate_limited"
+    if any(marker in evidence for marker in (
+        "selected model is at capacity", "model is at capacity", "model at capacity",
+    )):
+        return "model_capacity"
     if any(marker in evidence for marker in ("model not found", "invalid model", "model unavailable")):
         return "model_unavailable"
     return "unclassified"
+
+
+def _capacity_refusal_is_observed_not_executed(stdout: bytes, stderr: bytes) -> bool:
+    """Accept capacity only when a structured result does not show a turn ran."""
+    if _failure_category(stdout, stderr) != "model_capacity":
+        return False
+    if not stdout.strip():
+        return True
+    try:
+        payload = json.loads(stdout)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict) or payload.get("type") not in {"error", "result"}:
+        return False
+    turns = payload.get("num_turns", 0)
+    return type(turns) is int and turns == 0 and payload.get("subtype") != "success"
 
 
 def _normalized_usage(usage: Any) -> dict[str, int] | None:
@@ -228,6 +249,8 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
             exit_code = process.wait(timeout=remaining)
             if exit_code != 0:
                 category = _failure_category(b"".join(chunks), b"".join(stderr_chunks))
+                if _capacity_refusal_is_observed_not_executed(b"".join(chunks), b"".join(stderr_chunks)):
+                    raise ObservedNotExecuted(provider="claude", category=category)
                 raise ClaudeWorkerError(f"Claude exited without a successful turn (status {exit_code}; category {category})")
             return {**_parse_result(b"".join(chunks), model, max_output_bytes=max_output_bytes),
                     "input_sha256": hashlib.sha256(prompt_bytes).hexdigest()}

@@ -2214,7 +2214,7 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                     ledger=ledger, generation=generation,
                     predecessor_selection_id=predecessor_selection_id,
                 )
-            if result["status"] != "pre_send_refused":
+            if result["status"] not in {"pre_send_refused", "observed_not_executed"}:
                 break
             successor = result["successor_decision"]
             if successor.get("selected_binding") is None:
@@ -2450,6 +2450,10 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     acceptance = _run_file(project_root, run_dir, artifacts.get("acceptance_criteria", ""))
     manifest = _run_file(project_root, run_dir, artifacts.get("orchestration_manifest", ""))
     charter = _run_file(project_root, run_dir, artifacts.get("job_charter", ""))
+    approved_charter_digest = (state.get("approved_artifact_digests") or {}).get("job_charter")
+    if (state.get("job_charter_migrations") and (not isinstance(approved_charter_digest, str)
+            or hashlib.sha256(charter.read_bytes()).hexdigest() != approved_charter_digest)):
+        raise ContractError("approved v9 job charter digest is absent or stale")
     task = json.loads(charter.read_text()).get("task") if charter.suffix == ".json" else charter.read_text()
     if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
         raise ContractError("v9 job charter task is absent or oversized")
@@ -2680,6 +2684,10 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
     if not charter_rel:
         raise ContractError("approved v9 job charter artifact is absent")
     charter = _run_file(root, run_dir, charter_rel)
+    approved_charter_digest = (state.get("approved_artifact_digests") or {}).get("job_charter")
+    if (state.get("job_charter_migrations") and (not isinstance(approved_charter_digest, str)
+            or hashlib.sha256(charter.read_bytes()).hexdigest() != approved_charter_digest)):
+        raise ContractError("approved v9 job charter digest is absent or stale")
     raw = json.loads(charter.read_text())
     if not isinstance(raw, dict) or not isinstance(raw.get("write_paths"), list) or not raw["write_paths"]:
         raise ContractError("approved v9 job charter has no edit scope")

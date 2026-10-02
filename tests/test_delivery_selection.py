@@ -30,6 +30,7 @@ from execution_contracts import ContractError, digest, validate_envelope  # noqa
 from execution_ledger import ExecutionLedger  # noqa: E402
 from provider_selection import merge_selection_policy  # noqa: E402
 from provider_availability import normalize_availability  # noqa: E402
+from provider_outcomes import ObservedNotExecuted  # noqa: E402
 from selection_authority import (  # noqa: E402
     seal_selection_authority,
     successor_authority_digest,
@@ -337,6 +338,50 @@ class DeliverySelectionTests(unittest.TestCase):
             snapshot = ledger.snapshot(envelope["attempt_id"])
             self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
             self.assertEqual(snapshot["actions"][0]["status"], "unknown")
+
+    def test_gateway_v9_observed_capacity_refusal_is_failed_and_can_select_successor(self) -> None:
+        """A bounded terminal capacity refusal is not an uncertain paid send."""
+        envelope = _envelope()
+        inputs = envelope["selection_inputs"]
+        # The ordinary fixture ranks Ollama first.  This focused provider
+        # refusal test begins with Claude and leaves Codex as the only
+        # deterministic successor.
+        inputs["catalog"] = [item for item in inputs["catalog"]
+                             if item["candidate_id"] in {"claude", "codex"}]
+        inputs["availability"] = [item for item in inputs["availability"]
+                                  if item["candidate_id"] in {"claude", "codex"}]
+        envelope["selection_input_digests"] = {key: digest(value) for key, value in inputs.items()}
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        self.assertEqual(action["selection_decision"]["selected_candidate_id"], "claude")
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            result = execute_v9_selected_action(
+                envelope, action,
+                lambda _binding, _action: (_ for _ in ()).throw(
+                    ObservedNotExecuted(provider="claude", category="model_capacity")),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            self.assertEqual(result["status"], "observed_not_executed")
+            self.assertEqual(result["evidence_code"], "model_capacity")
+            self.assertEqual(result["successor_decision"]["selected_candidate_id"], "codex")
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual(snapshot["actions"][0]["status"], "observed_not_executed")
+            self.assertEqual(snapshot["actions"][0]["reason"], "model_capacity")
+            self.assertEqual(snapshot["provider_selections"][0]["state"], "observed_not_executed")
+            self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
+            receipt = receipt_from_snapshot(
+                snapshot, outcome={"status": "abandoned", "reason": "fixture_capacity_refusal"})
+            self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
 
     def test_v9_unknown_send_can_only_be_abandoned_with_a_terminal_receipt(self) -> None:
         envelope = _envelope()

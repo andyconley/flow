@@ -458,7 +458,7 @@ class ExecutionLedger:
                     "SELECT state FROM provider_selections WHERE selection_id=? AND attempt_id=?",
                     (predecessor_selection_id, envelope["attempt_id"]),
                 ).fetchone()
-                if predecessor != ("pre_send_refused",):
+                if predecessor not in {("pre_send_refused",), ("observed_not_executed",)}:
                     raise ContractError("selection predecessor is not positively refused")
             try:
                 db.execute(
@@ -475,7 +475,7 @@ class ExecutionLedger:
                 if existing is None or existing[0] != canonical(decision):
                     raise ContractError("selection identity reused with changed decision") from exc
                 return
-            if predecessor_selection_id is not None:
+            if predecessor_selection_id is not None and predecessor == ("pre_send_refused",):
                 db.execute(
                     "UPDATE provider_selections SET state='superseded' WHERE selection_id=?",
                     (predecessor_selection_id,),
@@ -490,6 +490,7 @@ class ExecutionLedger:
             ("computed", "reserved"),
             ("reserved", "consumed"),
             ("reserved", "pre_send_refused"),
+            ("consumed", "observed_not_executed"),
         }
         if (expected, target) not in allowed:
             raise ContractError("protocol v9 selection transition is invalid")
@@ -497,6 +498,8 @@ class ExecutionLedger:
             raise ContractError("pre-send refusal requires positive evidence code")
         if target == "consumed" and not provider_action_id:
             raise ContractError("consumed selection requires provider action identity")
+        if target == "observed_not_executed" and (not provider_action_id or not reason):
+            raise ContractError("observed refusal requires action identity and fixed category")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
@@ -519,6 +522,7 @@ class ExecutionLedger:
                 "reserved": "selection_reserved",
                 "consumed": "selection_consumed",
                 "pre_send_refused": "selection_pre_send_refused",
+                "observed_not_executed": "selection_observed_not_executed",
             }[target]
             self._event(db, row[0], provider_action_id, event, selection_id)
 
@@ -613,6 +617,19 @@ class ExecutionLedger:
                 self._complete_v9_send_locked(envelope, action, result, generation=generation)
                 finished = True
 
+            def finish_observed_not_executed(result: dict[str, Any]) -> None:
+                """Close a fixed terminal refusal before the context can mark it unknown."""
+                nonlocal finished
+                if finished:
+                    raise ContractError("provider action was already completed")
+                self._close_v9_observed_not_executed_locked(
+                    envelope, action, result, generation=generation)
+                finished = True
+
+            # Keep the established callable context-manager surface while
+            # exposing the one typed closure that is safe after a send claim.
+            finish.observed_not_executed = finish_observed_not_executed  # type: ignore[attr-defined]
+
             try:
                 yield finish
             except BaseException:
@@ -652,6 +669,47 @@ class ExecutionLedger:
                        (result_json, action["action_id"]))
             self._event(db, envelope["attempt_id"], action["action_id"], "worker_completed",
                         hashlib.sha256(result_json.encode()).hexdigest())
+
+    def _close_v9_observed_not_executed_locked(self, envelope: dict[str, Any], action: dict[str, Any],
+                                               result: dict[str, Any], *, generation: int) -> None:
+        """Persist a terminal, provider-observed non-execution without a charge.
+
+        This runs under ``v9_send_fence``'s physical-send lock.  Its closed
+        result shape is intentionally revalidated here: an adapter cannot
+        relabel an ambiguous failure as an uncharged refusal.
+        """
+        if (not isinstance(result, dict) or result.get("schema_version") != 1
+                or result.get("kind") != "observed_not_executed"
+                or result.get("provider") not in {"codex", "claude"}
+                or result.get("category") != "model_capacity"
+                or set(result) != {"schema_version", "kind", "provider", "category"}):
+            raise ContractError("observed provider refusal is invalid")
+        request = action["selection_decision"].get("selected_binding")
+        if not isinstance(request, dict) or request.get("provider") != result["provider"]:
+            raise ContractError("observed provider refusal does not match selected binding")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, envelope["attempt_id"], generation)
+            row = db.execute("SELECT status,attempt_id FROM actions WHERE action_id=?", (action["action_id"],)).fetchone()
+            if row != ("started", envelope["attempt_id"]):
+                raise ContractError("provider action is not an active v9 send")
+            result_json = canonical({"result": result})
+            changed = db.execute(
+                "UPDATE actions SET status='observed_not_executed',result_json=?,reason=? "
+                "WHERE action_id=? AND status='started'",
+                (result_json, result["category"], action["action_id"]),
+            ).rowcount
+            if changed != 1:
+                raise ContractError("provider action refusal was not recorded")
+            selection = db.execute(
+                "UPDATE provider_selections SET state='observed_not_executed',reason=?,provider_action_id=? "
+                "WHERE selection_id=? AND state='consumed'",
+                (result["category"], action["action_id"], action["selection_id"]),
+            ).rowcount
+            if selection != 1:
+                raise ContractError("provider selection refusal was not recorded")
+            self._event(db, envelope["attempt_id"], action["action_id"], "provider_observed_not_executed",
+                        result["category"])
 
     def complete_v9_send(self, envelope: dict[str, Any], action: dict[str, Any], result: Any, *, generation: int) -> None:
         """Close a claimed v9 send for a recovery-owned result observation.

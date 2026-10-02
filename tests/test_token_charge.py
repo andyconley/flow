@@ -51,6 +51,9 @@ class ChargeTableTests(unittest.TestCase):
             ("allowed", "allowed", "claude", None, (0, 0, True)),
             ("denied", "denied", "codex", None, (0, 0, True)),
             ("not_dispatched", "not_dispatched", "claude", None, (0, 0, True)),
+            ("observed provider capacity refusal", "observed_not_executed", "claude",
+             {"result": {"schema_version": 1, "kind": "observed_not_executed",
+                         "provider": "claude", "category": "model_capacity"}}, (0, 0, True)),
             ("ollama is never charged", "completed", "ollama", {"usage": {"prompt_eval_count": 3533, "eval_count": 153}},
              (0, 0, True)),
         ]
@@ -92,6 +95,18 @@ class AttemptChargeTests(unittest.TestCase):
         envelope = {**ENVELOPE, "manager": {"provider": "ollama"}}
         actions, calls = self.rows()
         self.assertEqual(attempt_token_charges(envelope, [], calls)["charged"], 0)
+
+    def test_observed_capacity_refusal_has_no_unobserved_send_charge(self):
+        totals = attempt_token_charges(
+            ENVELOPE,
+            [{"status": "observed_not_executed", "request": {"provider": "claude"},
+              "result": {"result": {"schema_version": 1, "kind": "observed_not_executed",
+                                    "provider": "claude", "category": "model_capacity"}}}],
+            [],
+        )
+        self.assertEqual(totals["unobserved_sends"], 0)
+        self.assertEqual(totals["unobserved_charged"], 0)
+        self.assertEqual(totals["charged"], 0)
 
     def test_the_v8_live_validation_3_lineage_charges_133898(self):
         managers = [{"cache_creation_input_tokens": w, "cache_read_input_tokens": r, "input_tokens": 2, "output_tokens": o}

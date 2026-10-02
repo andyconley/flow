@@ -93,6 +93,10 @@ SITES = {
         ("exempt", "v9 send result was not durably closed"),
     ("_complete_v9_send_locked", "UPDATE actions SET status='completed',result_json=?,reason='' WHERE action_id=?"):
         ("exempt", "v9 result closure occurs only after the durable send claim"),
+    ("_close_v9_observed_not_executed_locked",
+     "UPDATE actions SET status='observed_not_executed',result_json=?,reason=? "
+     "WHERE action_id=? AND status='started'"):
+        ("exempt", "v9 provider positively refused execution after the durable send claim"),
 }
 
 

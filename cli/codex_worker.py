@@ -21,6 +21,7 @@ from typing import Any, Callable
 from delivery_cancel import CancellableSelector, interruptible
 from execution_contracts import usage_values_valid
 from macos_sandbox import confined_argv
+from provider_outcomes import ObservedNotExecuted
 
 MAX_PROMPT_BYTES = 1024 * 1024
 MAX_OUTPUT_BYTES = 4096
@@ -76,10 +77,35 @@ def _failure_category(stderr: bytes, stdout: bytes = b"") -> str:
     )):
         return "network_unavailable"
     if any(marker in evidence for marker in (
+        "selected model is at capacity", "model is at capacity", "model at capacity",
+    )):
+        return "model_capacity"
+    if any(marker in evidence for marker in (
         "service unavailable", "temporarily unavailable", "internal server error",
     )):
         return "provider_unavailable"
     return "unclassified"
+
+
+def _capacity_refusal_is_observed_not_executed(stderr: bytes, stdout: bytes) -> bool:
+    """Accept capacity only when bounded events show that no turn item ran."""
+    if _failure_category(stderr, stdout) != "model_capacity":
+        return False
+    for line in stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        if not isinstance(event, dict):
+            return False
+        event_type = event.get("type")
+        if event_type in {"turn.completed", "item.started", "item.completed"}:
+            return False
+        if event_type not in {"thread.started", "turn.failed", "error"}:
+            return False
+    return True
 
 
 def _parse_event_lines(lines, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
@@ -234,7 +260,11 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                 exit_code = process.wait(timeout=remaining)
                 if exit_code != 0:
                     event_file.seek(0)
-                    category = _failure_category(b"".join(stderr_chunks), event_file.read(MAX_STDERR_BYTES))
+                    stdout = event_file.read(MAX_STDERR_BYTES)
+                    stderr = b"".join(stderr_chunks)
+                    category = _failure_category(stderr, stdout)
+                    if _capacity_refusal_is_observed_not_executed(stderr, stdout):
+                        raise ObservedNotExecuted(provider="codex", category=category)
                     raise CodexWorkerError(
                         f"Codex exited without a successful turn (status {exit_code}; category {category})"
                     )

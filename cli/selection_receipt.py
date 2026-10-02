@@ -139,12 +139,14 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if row.get("candidate_id") != actual["selected_candidate_id"]:
             raise V9ReceiptError("v9_selection_row_candidate_mismatch")
         state = row.get("state")
-        if state == "consumed" and row.get("provider_action_id") != action["action_id"]:
+        if state in {"consumed", "observed_not_executed"} and row.get("provider_action_id") != action["action_id"]:
             raise V9ReceiptError("v9_consumed_action_mismatch")
         if state in {"superseded", "pre_send_refused"} and \
                 (row.get("provider_action_id") is not None or not row.get("reason")):
             raise V9ReceiptError("v9_unconsumed_selection_closure_invalid")
-        if state not in {"consumed", "superseded", "pre_send_refused"}:
+        if state == "observed_not_executed" and (not row.get("reason") or row.get("reason") != "model_capacity"):
+            raise V9ReceiptError("v9_observed_refusal_invalid")
+        if state not in {"consumed", "observed_not_executed", "superseded", "pre_send_refused"}:
             raise V9ReceiptError("v9_selection_state_unsealed")
         if state == "consumed" and actual.get("selected_binding") is not None:
             completed_bindings.setdefault(action["assignment_id"], []).append(actual["selected_binding"])
@@ -193,7 +195,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
             prior = rows.get(predecessor)
             expected_history = ([*prior.get("prior_no_send_failures", []), prior.get("candidate_id")]
                                 if prior is not None else None)
-            if prior is None or prior.get("state") != "superseded" \
+            if prior is None or prior.get("state") not in {"superseded", "observed_not_executed"} \
                     or not prior.get("reason") or row.get("prior_no_send_failures") != expected_history:
                 raise V9ReceiptError("v9_fallback_lineage_invalid")
             compared += 1
