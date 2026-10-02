@@ -790,6 +790,44 @@ class DeliverySelectionTests(unittest.TestCase):
             snapshot = ledger.snapshot(envelope["attempt_id"])
             self.assertEqual([item["request"]["sequence"] for item in snapshot["actions"]], [1, 1])
 
+    def test_independent_verifier_pre_send_fallback_survives_transient_selection_row(self) -> None:
+        envelope = _envelope(excluded_families=["local"])
+        producer = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        verifier = make_action(
+            envelope, "verifier", "Verify.", sequence=2, manager_turn=2,
+            runtime_excluded_families=["local"],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            execute_v9_selected_action(
+                envelope, producer, lambda _binding, _action: {"output": "done"},
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            first = execute_v9_selected_action(
+                envelope, verifier, lambda _binding, _action: self.fail("refused candidate sent"),
+                readiness_recheck=lambda binding: {
+                    **binding, "state": "unavailable", "no_send_observed": True,
+                    "evidence_code": "probe_failed",
+                },
+                ledger=ledger, generation=1,
+            )
+            successor = make_action(
+                envelope, "verifier", "Verify.", sequence=2, manager_turn=2,
+                decision=first["successor_decision"],
+            )
+            sent = []
+            result = execute_v9_selected_action(
+                envelope, successor,
+                lambda binding, _action: sent.append(binding["candidate_id"]) or {"output": "pass"},
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+                predecessor_selection_id=verifier["selection_id"],
+            )
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(sent, ["codex"])
+
     def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
         envelope = _envelope()
         with tempfile.TemporaryDirectory() as tmp:

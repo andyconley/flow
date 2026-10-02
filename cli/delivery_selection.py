@@ -231,10 +231,10 @@ def _runtime_family_exclusions(envelope: dict[str, Any], assignment_id: str,
         raise SelectionDenied("independent verifier requires exactly one constraint")
     constraint = constraints[0]
     required = constraint["producer_assignment_ids"] + constraint["evidence_collector_assignment_ids"]
-    snapshot = ledger.snapshot(envelope["attempt_id"])
+    completed_actions = ledger.completed_v9_actions(envelope["attempt_id"])
     families: list[str] = []
     for source_id in required:
-        matches = [item for item in snapshot["actions"]
+        matches = [item for item in completed_actions
                    if item["request"].get("assignment_id") == source_id and item["status"] == "completed"]
         if len(matches) != 1:
             raise SelectionDenied("independent verifier lineage is incomplete")
