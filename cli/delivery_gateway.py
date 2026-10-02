@@ -2532,6 +2532,16 @@ def _hosted_adapter_available(provider: str) -> bool:
     executable = {"claude": "claude", "codex": "codex"}.get(provider)
     if executable is None or shutil.which(executable) is None:
         return False
+    if provider == "claude":
+        credential = Path(os.environ.get("HOME", "")) / ".claude" / ".credentials.json"
+    else:
+        credential = Path(os.environ.get(
+            "CODEX_HOME", str(Path(os.environ.get("HOME", "")) / ".codex")
+        )) / "auth.json"
+    # Hosted workers run with isolated homes. A host login that cannot be
+    # copied into that home is not usable readiness evidence.
+    if not credential.is_file() or credential.is_symlink():
+        return False
     command = [executable, "auth", "status"] if provider == "claude" else [executable, "login", "status"]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)

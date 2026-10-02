@@ -94,10 +94,12 @@ consumed -> unknown -> reconciliation required -> cancel or abandon
 catalog, bounded readiness facts, exclusions, ordering, and selected binding.
 It is read-only and never creates an attempt or calls a provider. Local Ollama
 readiness requires the exact configured model to be discovered. Hosted
-readiness requires both the bounded local CLI adapter and a successful local
-authentication-status check. Model entitlement and send failures remain
-unknown until after the durable send claim and therefore enter recovery rather
-than automatic fallback.
+readiness requires the bounded local CLI adapter, a successful local
+authentication-status check, and a regular non-symlink credential artifact
+that Flow can copy into the worker's isolated home. A host login that depends
+on broader Keychain or home-directory access is unavailable to the confined
+worker. Model entitlement and send failures remain unknown until after the
+durable send claim and therefore enter recovery rather than automatic fallback.
 
 Only an availability refusal proven before the send claim advances to the next
 eligible candidate. Once any adapter call starts, a failure or lost response is

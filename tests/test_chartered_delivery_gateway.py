@@ -2060,18 +2060,33 @@ class V9CharteredRouteTests(CharteredFixture):
 
     def test_hosted_adapter_readiness_requires_local_authentication_status(self):
         completed = subprocess.CompletedProcess
-        with patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+        credential = self.root / "auth.json"
+        credential.write_text("{}")
+        with patch.dict(os.environ, {"HOME": str(self.root)}), \
+                patch("delivery_gateway.Path.is_file", return_value=True), \
+                patch("delivery_gateway.Path.is_symlink", return_value=False), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
                 patch("delivery_gateway.subprocess.run", return_value=completed(
                     ["claude", "auth", "status"], 0, '{"loggedIn": false}', "")):
             self.assertFalse(delivery_gateway._hosted_adapter_available("claude"))
-        with patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+        with patch.dict(os.environ, {"HOME": str(self.root)}), \
+                patch("delivery_gateway.Path.is_file", return_value=True), \
+                patch("delivery_gateway.Path.is_symlink", return_value=False), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
                 patch("delivery_gateway.subprocess.run", return_value=completed(
                     ["claude", "auth", "status"], 0, '{"loggedIn": true}', "")):
             self.assertTrue(delivery_gateway._hosted_adapter_available("claude"))
-        with patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+        with patch.dict(os.environ, {"CODEX_HOME": str(self.root)}), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
                 patch("delivery_gateway.subprocess.run", return_value=completed(
                     ["codex", "login", "status"], 0, "", "Logged in using ChatGPT\n")):
             self.assertTrue(delivery_gateway._hosted_adapter_available("codex"))
+
+    def test_hosted_adapter_readiness_rejects_nonprojectable_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(os.environ, {"HOME": temporary}, clear=True), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/claude"):
+            self.assertFalse(delivery_gateway._hosted_adapter_available("claude"))
 
     def test_project_cannot_invent_provider_candidate(self):
         (self.root / ".flow" / "flow.toml").write_text(
