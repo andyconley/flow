@@ -2915,7 +2915,14 @@ def _hosted_scoped_edit(
         _git(staging, "add", "--all")
         _git(staging, "commit", "-qm", "Flow scoped baseline")
         result = invoke(staging)
-        applied = _apply_scoped_hosted_edit(workspace, staging, write_paths)
+        try:
+            applied = _apply_scoped_hosted_edit(workspace, staging, write_paths)
+        except ContractError as exc:
+            # Once the hosted adapter has returned, a rejected or empty staging
+            # diff is observed provider evidence. Preserve that distinction so
+            # the execution can seal a normal evidence failure instead of
+            # falsely requiring uncertain-send reconciliation.
+            return {**result, "observed_invalid": True, "detail": str(exc)[:512]}
         return {**result, "scoped_edit": applied}
 
 

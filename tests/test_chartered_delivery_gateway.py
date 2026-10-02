@@ -1935,14 +1935,32 @@ class V9CharteredRouteTests(CharteredFixture):
             (staging / "unauthorized.txt").write_text("escape\n")
             return {"output": "applied"}
 
-        with patch("delivery_gateway.call_claude_edit", side_effect=hostile_edit), \
-                self.assertRaisesRegex(ContractError, "outside the approved staging scope"):
-            adapter(
+        with patch("delivery_gateway.call_claude_edit", side_effect=hostile_edit):
+            result = adapter(
                 {"provider": "claude", "model": "claude-model"},
                 {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
             )
+        self.assertTrue(result["observed_invalid"])
+        self.assertIn("outside the approved staging scope", result["detail"])
         self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
         self.assertFalse((self.worktree / "unauthorized.txt").exists())
+
+    def test_hosted_v9_editor_no_edit_is_observed_invalid_not_uncertain(self):
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+        with patch("delivery_gateway.call_codex", return_value={"output": "No edit applied."}):
+            result = adapter(
+                {"provider": "codex", "model": "codex-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertTrue(result["observed_invalid"])
+        self.assertEqual(result["detail"],
+                         "hosted editor made no edit in the scoped staging workspace")
+        self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
 
     def test_codex_v9_editor_also_uses_scoped_staging_workspace(self):
         envelope = {"worktree": str(self.worktree), "logical_assignments": [{
@@ -1992,12 +2010,13 @@ class V9CharteredRouteTests(CharteredFixture):
             return real_replace(source, target)
 
         with patch("delivery_gateway.call_claude_edit", side_effect=edit_two), \
-                patch("delivery_gateway.os.replace", side_effect=fail_second), \
-                self.assertRaisesRegex(ContractError, "was rolled back"):
-            adapter(
+                patch("delivery_gateway.os.replace", side_effect=fail_second):
+            result = adapter(
                 {"provider": "claude", "model": "claude-model"},
                 {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit files."},
             )
+        self.assertTrue(result["observed_invalid"])
+        self.assertIn("was rolled back", result["detail"])
         self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
         self.assertEqual((self.worktree / "other.py").read_text(), "other old\n")
         self.assertEqual(stat.S_IMODE((self.worktree / "target.py").stat().st_mode), 0o755)
