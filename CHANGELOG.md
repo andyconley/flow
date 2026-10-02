@@ -2,6 +2,157 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.39.1](https://github.com/andyconley/flow/compare/v0.39.0...v0.39.1) (2026-09-30)
+
+### Bug Fixes
+
+* **delivery:** wake every cancellable wait for a SIGTERM that races it ([73c033f](https://github.com/andyconley/flow/commit/73c033f0265f52a5482c46d29bae2efe4fc3dd43))
+
+### Tests
+
+* **maf:** make the MAF-gated tests pass with a real FLOW_MAF_PYTHON ([b3893de](https://github.com/andyconley/flow/commit/b3893ded969c85e4e8fe9439e5449d0625bd56e2))
+
+## [0.39.0](https://github.com/andyconley/flow/compare/v0.38.3...v0.39.0) (2026-09-30)
+
+### Features
+
+* **contracts:** seal a lineage token budget and charge usage ([f246839](https://github.com/andyconley/flow/commit/f2468392965ef3d91c942ae9b353b0084fa7991a))
+* **delivery:** add flow run trace ([d629b59](https://github.com/andyconley/flow/commit/d629b59c68fef0808b65c31fad0d56952015e07f))
+* **delivery:** correlate manager identity, request files, grant history and process groups ([a51f4f1](https://github.com/andyconley/flow/commit/a51f4f1c0111620977789b0f1d6ec19d02fd6c0b))
+* **delivery:** recover zero-send runtime failures ([b5080ca](https://github.com/andyconley/flow/commit/b5080ca596d86a04275239c1af836878ce996d29))
+* **delivery:** seal token usage with a full-row comparison ([7ca8506](https://github.com/andyconley/flow/commit/7ca850692b667e1650904720047d3810adcccc7b))
+* **delivery:** verify sealed receipts offline ([9e1d123](https://github.com/andyconley/flow/commit/9e1d123087b198224823fab1aadacd32b67c349c))
+* **flow:** allow explicitly approved contract amendments ([2b63f48](https://github.com/andyconley/flow/commit/2b63f48838e4b63d0e6067c15b5ada416675b616))
+* **flow:** automate implementation review handoff ([0f883b5](https://github.com/andyconley/flow/commit/0f883b529232c216b8616c5f6d64685dce4d6c66))
+* **flow:** support read-only codex verifiers ([4faecf9](https://github.com/andyconley/flow/commit/4faecf9ce5df3fae3fa7f273b1b2c9de8ba282af))
+* **ledger:** check the token budget before every paid grant ([e8d8af4](https://github.com/andyconley/flow/commit/e8d8af47a84558b05e1fbbc62a7d2c54ef167f09))
+* **maf:** fence delivery on verified runtime ([af323b8](https://github.com/andyconley/flow/commit/af323b88915a2276c056e234ac53c3a46ac4b30a))
+* **maf:** provision runtime during lifecycle updates ([734d99b](https://github.com/andyconley/flow/commit/734d99b14372dfb8b0d54f77258e9d0467e4406d))
+* **maf:** require initialized child runtime ([cbadd46](https://github.com/andyconley/flow/commit/cbadd466bff077bcdd1dbcab95a92889d89a6d17))
+
+### Bug Fixes
+
+* **contracts:** charge unrecognised usage conservatively ([46cefbf](https://github.com/andyconley/flow/commit/46cefbf826c79bac781daa6d56ebab0284662df2))
+* **delivery:** address the acceptance review of verify-receipt ([dfdce82](https://github.com/andyconley/flow/commit/dfdce82fba6bb662df8833e71be690cb8c982ee0))
+* **delivery:** fence runtime startup successors ([a4a9485](https://github.com/andyconley/flow/commit/a4a9485444ab48c4f3ec819e1b9dfb99144b6e7c))
+* **delivery:** reconcile startup successor claims ([7f7451d](https://github.com/andyconley/flow/commit/7f7451db545d3d9c3ec4c045552babca94dfb830))
+* **delivery:** refine verify-receipt and seals after implementation review ([6106762](https://github.com/andyconley/flow/commit/610676298a3f42c37b4d18cd5ac5ed0c142501d4))
+* **delivery:** wake supervisor waits for a SIGTERM that races select ([b80ea0f](https://github.com/andyconley/flow/commit/b80ea0f55aab491108e2f2d658558bd8a0d199f3))
+* **flow:** accept code directory outputs ([88f2926](https://github.com/andyconley/flow/commit/88f2926182ae22810361d9cfb2204f6af2140944))
+* **flow:** accept staged regression edits ([53182d4](https://github.com/andyconley/flow/commit/53182d489803fb223fa29376cd1bd0dad63ec67f))
+* **flow:** allow approved lifecycle authority amendments ([8cafac9](https://github.com/andyconley/flow/commit/8cafac94b7ca4a45e041557fd80d6450bc04aca7))
+* **flow:** allow future outputs in amendments ([32f5886](https://github.com/andyconley/flow/commit/32f58867bb33ab60b6b5a1a76081977f1329e74d))
+* **flow:** automatically enter review after delivery ([e7a13ee](https://github.com/andyconley/flow/commit/e7a13ee3e532f04a315726e3a8191a868653e689))
+* **flow:** classify codex startup failures ([7adeb28](https://github.com/andyconley/flow/commit/7adeb28669ed965eb3430c4c32e69390b9c6b9d4))
+* **flow:** explain failed delivery receipts ([791da59](https://github.com/andyconley/flow/commit/791da59f73d540601d828d0b6c6a500a69f622f9))
+* **flow:** honor directory regression scopes ([a8d41ee](https://github.com/andyconley/flow/commit/a8d41eeec9230a1b5886136f6c6ae288ca01f806))
+* **flow:** honor specialist timeout ceiling ([5f76878](https://github.com/andyconley/flow/commit/5f76878e0fee98b0df8f4ef8da36f96a8467651d))
+* **flow:** isolate codex runtime state ([4305107](https://github.com/andyconley/flow/commit/4305107f856e3a6dbee5fe173bdace31c7a09010))
+* **flow:** own delivery handback commits ([6cb67e6](https://github.com/andyconley/flow/commit/6cb67e6288eaa24b15b0b30135f753f3df002c10))
+* **flow:** reconcile maf runtime state and acceptance ([0ac1943](https://github.com/andyconley/flow/commit/0ac194317feedcc89bb662ee030be84fb504184e))
+* **flow:** reopen amended successor delivery ([39db3fa](https://github.com/andyconley/flow/commit/39db3fa515121debaa8181b6ffd473d5e2a652c8))
+* **flow:** report recoverable delivery truth ([8756b2c](https://github.com/andyconley/flow/commit/8756b2c794e1f48e238897a9c46261da8ef5cf19))
+* **flow:** require verifier pass before handback ([7cabef4](https://github.com/andyconley/flow/commit/7cabef477d4b49af148d6bc3cb7e5f7878ada262))
+* **flow:** reseal delivery authority on amendment ([5d5a0db](https://github.com/andyconley/flow/commit/5d5a0db68aac90bc261d164f53b76ea2760e91e5))
+* **flow:** route scouts directly into review ([bfc5a05](https://github.com/andyconley/flow/commit/bfc5a053b2aea96ac81f221e9d7489a8969ff7fe))
+* **flow:** scope budgets to delivery authority ([0f4a1dc](https://github.com/andyconley/flow/commit/0f4a1dca3f8fbe56ea4403668092246a591382fd))
+* **flow:** stop exhausted producer loops ([31ce1d6](https://github.com/andyconley/flow/commit/31ce1d61e67adaaea2d2170013ab3b114e471217))
+* **flow:** stream provider evidence without size rejection ([94dac0c](https://github.com/andyconley/flow/commit/94dac0c6a94ea6672ec172b68ef8788a0e6767f2))
+* **flow:** support full chartered test suites ([faf6613](https://github.com/andyconley/flow/commit/faf661315dedb2b6e3e64c5892c60689bcb62353))
+* **flow:** support review refinement ([47c8719](https://github.com/andyconley/flow/commit/47c8719608b511c868c72e654c50eae3d6fd7ae6))
+* **flow:** validate delivery plans and manager turns ([b8fe726](https://github.com/andyconley/flow/commit/b8fe726b9861cea9323028b6bf43319c19bf478d))
+* **flow:** validate nested chartered edits ([9ff5372](https://github.com/andyconley/flow/commit/9ff5372a8e02d232094f9344c41fabad8edd6102))
+* **flow:** validate read-only codex verifiers ([d8cb61a](https://github.com/andyconley/flow/commit/d8cb61a31606fa8a64314790d36d29c0c43f08be))
+* **flow:** validate shaper intent and directory scopes ([790b169](https://github.com/andyconley/flow/commit/790b169464dfa58775c63a65d0b55fc47c6bb2fd))
+* **flow:** verify regression deltas ([f726eb7](https://github.com/andyconley/flow/commit/f726eb7516a8f57b231d9aabe127912f6c5c04cc))
+* **flow:** verify successor receipts by authority ([20f15df](https://github.com/andyconley/flow/commit/20f15df50e8262264ae5fc960935a31d62e91a18))
+* **lifecycle:** bridge managed runtime activation ([5d03ca4](https://github.com/andyconley/flow/commit/5d03ca443cd75703cb871561d60441d9d561a402))
+* **maf:** bind pointer to final runtime path ([f0ba438](https://github.com/andyconley/flow/commit/f0ba438966bcfdd5c49e1818905ca75386b441d6))
+* **maf:** bind runtime compatibility to readiness ([73f4b6b](https://github.com/andyconley/flow/commit/73f4b6b6ea30d67c5e70d1c8ff137fa6c2548b91))
+* **maf:** distinguish stale runtime locks ([4fa77a8](https://github.com/andyconley/flow/commit/4fa77a87cd32067b6a5468650f92c1d9ba85b587))
+* **maf:** enforce readiness and rollback boundaries ([6ac89c6](https://github.com/andyconley/flow/commit/6ac89c6a65079e8e78a0d24733597b6a0a8b72d0))
+* **maf:** harden runtime recovery and provisioning ([adc79ce](https://github.com/andyconley/flow/commit/adc79cef815499196547cf8e3e4d24d147000d49))
+* **maf:** preserve base install on unsupported hosts ([1ca2695](https://github.com/andyconley/flow/commit/1ca2695085306af6e435ec8c441e443b5520b4f0))
+* **maf:** preserve optional runtime compatibility ([e1c6b2d](https://github.com/andyconley/flow/commit/e1c6b2d2fc2317ef1ea714e5cad5e9c178c431d5))
+* **maf:** separate runtime overrides from provisioning ([9aafc9d](https://github.com/andyconley/flow/commit/9aafc9dd6f33d4bf82496a5343831b60118ef242))
+* **maf:** verify imports before readiness ([4099e9e](https://github.com/andyconley/flow/commit/4099e9ec26c54c0d1d89ccb36a3c08bc26a19376))
+* **maf:** verify installed runtime contents ([eea7bd4](https://github.com/andyconley/flow/commit/eea7bd43bb0717a46d6e238806511902e324dafb))
+* **runstate:** separate delivery control from lifecycle history ([2fdf6b1](https://github.com/andyconley/flow/commit/2fdf6b1da6b860fecc8309b194f39752045f774e))
+* **tests:** restore the release candidate suite ([60c2d1f](https://github.com/andyconley/flow/commit/60c2d1ff8e8fab3db94eb280f295604d4ff07516))
+
+### Documentation
+
+* **backlog:** promote solution-amends-approved-definition gap ([744b2d8](https://github.com/andyconley/flow/commit/744b2d89a50f703c0554b8b0188f3bc35ae6deac))
+* **delivery:** record ADR 0020 and operational handback ([d1bcc5f](https://github.com/andyconley/flow/commit/d1bcc5f6c1f463a09122bdba96b82d285ee7856d))
+* **flow:** plan codex-led provenance refinement ([e53c5bb](https://github.com/andyconley/flow/commit/e53c5bb4b81ef67b07c69c1fe32d7e6527bfd5e1))
+* **flow:** plan executable provenance refinement ([a5c9d1d](https://github.com/andyconley/flow/commit/a5c9d1d135ea16ba3ca2631ced8a0d560606490e))
+* **flow:** plan hybrid provenance refinement ([30b61b1](https://github.com/andyconley/flow/commit/30b61b1067d29ceb8b73511148d6450d277bfa0d))
+* **flow:** plan review provenance core ([0a9ea2a](https://github.com/andyconley/flow/commit/0a9ea2af329afe8ae480c0a492dba440d56192d5))
+* **flow:** plan review provenance refinement ([f384104](https://github.com/andyconley/flow/commit/f38410455951e5fb7585179910a38e57357c653e))
+* **flow:** plan runner-compatible provenance refinement ([33d7961](https://github.com/andyconley/flow/commit/33d79617200bd14929c4d4051b192622ec496af5))
+* **flow:** plan shaper intent approval validation ([d829717](https://github.com/andyconley/flow/commit/d82971767bf3422192cfdb1ed2dfb58aaf32f35a))
+* **flow:** record delivery envelope refusal ([3d465dc](https://github.com/andyconley/flow/commit/3d465dc909202c5c3dff43325706fdf63380b30a))
+* **flow:** record delivery lead dispatch refusal ([abe6e1c](https://github.com/andyconley/flow/commit/abe6e1ccd1234f2d5d09a77bca85b941fe541e0f))
+* **flow:** record maf readiness review findings ([4b5b41e](https://github.com/andyconley/flow/commit/4b5b41ed12583b91ed21e2b29ec5947b26d80c6a))
+* **flow:** record maf runtime handback ([3c9d959](https://github.com/andyconley/flow/commit/3c9d95995ca87afcff261cf1369195a63c1b9e87))
+* **flow:** record recovered scope refusal ([e9a0e19](https://github.com/andyconley/flow/commit/e9a0e19dc500cfbdfbda9e697ad4cc164b65641e))
+* **flow:** seal bounded producer timeout ([72be002](https://github.com/andyconley/flow/commit/72be002e0477d1106377d7e6790c5f44734a4b70))
+* **flow:** seal claude delivery interruption ([b8821a3](https://github.com/andyconley/flow/commit/b8821a31f99245a5b3a751284517020c787b1f86))
+* **flow:** seal claude edit timeout ([f449eeb](https://github.com/andyconley/flow/commit/f449eeb0cd376213735ad4bd89885991080c26d6))
+* **flow:** seal codex stream interruption ([a675374](https://github.com/andyconley/flow/commit/a67537423fa36954ae401c84ba53c8c53d08ffbf))
+* **flow:** start codex-led implementation ([62dda0f](https://github.com/andyconley/flow/commit/62dda0fff69781a0fecaec6e88d8a36ab7c7a841))
+* **flow:** start executable provenance implementation ([9f3aebe](https://github.com/andyconley/flow/commit/9f3aebed57c5c2b861aca20ff744fd565019baf9))
+* **flow:** start hybrid provenance implementation ([b8420d4](https://github.com/andyconley/flow/commit/b8420d440804ad1c72a6300013e520964aa0cf06))
+* **flow:** start review provenance core ([5ac4334](https://github.com/andyconley/flow/commit/5ac43343b83e2b1c9168508ebd3609ad40251771))
+* **flow:** start review provenance implementation ([12f46e6](https://github.com/andyconley/flow/commit/12f46e691b12d0bfccbf1199bb6406a8d74ce77f))
+* **flow:** start runner-compatible implementation ([e6ee20c](https://github.com/andyconley/flow/commit/e6ee20c3d4828b8dfecd738cb66036da379350a6))
+* **flow:** start shaper intent validation ([76136c2](https://github.com/andyconley/flow/commit/76136c28eda6162f6a7e42aca23ce19279e09ee1))
+* **maf:** align runtime readiness guidance ([ba5e947](https://github.com/andyconley/flow/commit/ba5e9479192814bb0b6532d305ef2cc7ecd36994))
+* **maf:** record runtime readiness boundary ([6c0414d](https://github.com/andyconley/flow/commit/6c0414dddc07bde02cf83c85c127eedb3a2230d0))
+* **maf:** synchronize runtime recovery help ([d1b6f36](https://github.com/andyconley/flow/commit/d1b6f36616096923f25f6d13bb728dfb756c11bc))
+* **run:** accept step5-operational-handback review ([87b99ba](https://github.com/andyconley/flow/commit/87b99ba259ca6b6b3b85177169a81e9361eda58a))
+* **run:** approve step5-operational-handback plan ([be5937b](https://github.com/andyconley/flow/commit/be5937bd4ca10823c49d43b9098785942eee3507))
+* **run:** archive step5-operational-handback ([ffc4ffd](https://github.com/andyconley/flow/commit/ffc4ffd41f57e17944eb37b205b4a30d0a9ad2d8))
+* **run:** define step5-operational-handback ([e370449](https://github.com/andyconley/flow/commit/e37044938137956f237f78be1faa49befc11fc62))
+* **run:** hand back step5-operational-handback ([2d44392](https://github.com/andyconley/flow/commit/2d44392e8ff75ac260c5763d586d076baa44bc86))
+* **state:** record the RS1 resolution ([a90b6e4](https://github.com/andyconley/flow/commit/a90b6e496d649a250ae1e5a49aa4655dc830675d))
+* **state:** step5-operational-handback ready for review ([a7006fa](https://github.com/andyconley/flow/commit/a7006fa5f61a97387b8100ac00f4a71448acd440))
+
+### Tests
+
+* capture delivery owner projection defect ([d1a929c](https://github.com/andyconley/flow/commit/d1a929cfbf209f9ac8a46a6c85d3ea23fe7eb486))
+* **codex:** keep the fixture CODEX_HOME for the later worker calls ([be924bd](https://github.com/andyconley/flow/commit/be924bd1d537d97a27ae4a0a1e312d2733170792))
+* **delivery:** cover later startup successor lineage ([8450b93](https://github.com/andyconley/flow/commit/8450b93356d0384e939783708431f3fdce521b0c))
+* **delivery:** cover runtime startup successor fence ([30738d3](https://github.com/andyconley/flow/commit/30738d3786078009ba1bfe359eab09662dfab662))
+* **flow:** isolate legacy overlays from host installs ([faa830b](https://github.com/andyconley/flow/commit/faa830beeab4d2db8b801980553fb54e7bcd1dc4))
+* **flow:** keep an inherited FLOW_PYTHON out of installer selection tests ([7d74d02](https://github.com/andyconley/flow/commit/7d74d02a545a42a108a96c069ba52b311836cf12))
+* **flow:** skip managed runtime installs without wheelhouse ([18338ba](https://github.com/andyconley/flow/commit/18338bad0475400644cd82fff4aef7a33439d4f2))
+* **flow:** skip release-mode update apply without managed wheels ([f1fecd2](https://github.com/andyconley/flow/commit/f1fecd28332e7bd35ea2d59e6bee5c49612e1851)), closes [#72](https://github.com/andyconley/flow/issues/72)
+* **maf:** centralize managed wheelhouse fixture ([1b5696b](https://github.com/andyconley/flow/commit/1b5696b675d89fc97c48242af8a59fb7e667d501))
+* **maf:** cover runtime-aware install surfaces ([0241c31](https://github.com/andyconley/flow/commit/0241c3133d66c610d81c23d1d4ecf0b50779d32f))
+* **maf:** cover strict readiness diagnostics ([e5ea9c1](https://github.com/andyconley/flow/commit/e5ea9c18266317994958ac41e3d2eb1c4c59ffdc))
+* **maf:** inject offline runtime into install fixtures ([27491f6](https://github.com/andyconley/flow/commit/27491f6a2d8e020e59f7b22a0989b091e2836713))
+* **maf:** make managed runtime tests hold on hosts without wheels ([b3df651](https://github.com/andyconley/flow/commit/b3df651028800252c517178c4edd05452d0bb0d5))
+* **maf:** prove hermetic child identity handshake ([61ffb9e](https://github.com/andyconley/flow/commit/61ffb9e2e0dff3223a3b7a1adda4f5296daf5606))
+* **maf:** prove optional runtime recovery boundaries ([a789124](https://github.com/andyconley/flow/commit/a78912455b29aeb08b3b522c8b215fa33ff94cb9))
+* **maf:** provision managed runtime in lifecycle fixtures ([c09f247](https://github.com/andyconley/flow/commit/c09f247a2e19ec277d4d5c661d7d7735aaee7c93))
+* **maf:** record readiness fence mutation proof ([c6466fe](https://github.com/andyconley/flow/commit/c6466fe1cdcdecd943c302544e3283639e6b14fd))
+* **runtime:** provision maf before all-target smoke ([2e39aa3](https://github.com/andyconley/flow/commit/2e39aa3956baad76ba1a438514962a1277125b31))
+
+### Build System
+
+* **maf:** enforce locked wheel artifacts ([33057c7](https://github.com/andyconley/flow/commit/33057c74eceab9b2269ecd617cdaa19dc40a498c))
+* **maf:** lock resolved runtime inventory ([ff3d531](https://github.com/andyconley/flow/commit/ff3d531ce5c492fe96661fc12b877db4d58a424b))
+
+### Continuous Integration
+
+* **release:** pin Flow to the setup-python 3.12 on macOS release jobs ([8ef00bc](https://github.com/andyconley/flow/commit/8ef00bc9cf2ee6d9264e3d2f83ef63c6e7da7917)), closes [#80](https://github.com/andyconley/flow/issues/80)
+* **release:** validate candidates and published releases on macOS arm64 ([54cd270](https://github.com/andyconley/flow/commit/54cd270788a188a9b5bb7990592b0c94aeac326e))
+
+### Maintenance
+
+* merge current main into review handoff fix ([5e18e68](https://github.com/andyconley/flow/commit/5e18e68c2e40a3650b591691bf9e8b41ee6f8bc4))
+
 ## [0.38.3](https://github.com/andyconley/flow/compare/v0.38.2...v0.38.3) (2026-09-28)
 
 ### Documentation

@@ -52,6 +52,13 @@ def workflow_contract_findings(text: str) -> set[str]:
     run_lines = [line for line in text.splitlines() if line.lstrip().startswith("run:")]
     if any("new_release_notes" in line for line in run_lines):
         findings.add("notes-shell-interpolation")
+    for job in (candidate, verify):
+        if ("runs-on: macos-15" not in job or 'python-version: "3.12"' not in job
+                or "--require-hashes" not in job or "FLOW_MAF_WHEELHOUSE=" not in job
+                or "FLOW_TEST_MAF_WHEELHOUSE=" not in job):
+            findings.add("managed-maf-host")
+        if 'echo "FLOW_PYTHON=' not in job:
+            findings.add("managed-maf-python")
     uses = [line.split("uses:", 1)[1].strip().split()[0] for line in text.splitlines() if "uses:" in line]
     if any(not __import__("re").search(r"@[0-9a-f]{40}$", value) for value in uses):
         findings.add("mutable-action-ref")
@@ -98,6 +105,8 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             "no-release-publish": lambda text: text.replace("needs.analyze.outputs.release_required == 'true'", "needs.analyze.outputs.release_required == 'false'", 1),
             "public-failure-classification": lambda text: text.replace("published verification failed", "publication prevented", 1),
             "notes-shell-interpolation": lambda text: text.replace("run: python3 scripts/release_gate.py compare-analysis", "run: echo \"${{ steps.preview.outputs.new_release_notes }}\"", 1),
+            "managed-maf-host": lambda text: text.replace("runs-on: macos-15", "runs-on: ubuntu-latest", 1),
+            "managed-maf-python": lambda text: text.replace('echo "FLOW_PYTHON=', 'echo "UNUSED_PYTHON=', 1),
         }
         for expected, mutate in mutations.items():
             with self.subTest(expected=expected):

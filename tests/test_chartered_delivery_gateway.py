@@ -30,6 +30,7 @@ from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
 from maf_runtime import MafRuntimeUnready
 from tests.shaper_intent_fixture import shaper_intent
+from tests.maf_env import sealed_runtime_identity
 from execution_ledger import ExecutionLedger
 from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier_digest, evaluate_candidate
 from provider_selection import digest as selection_digest
@@ -47,11 +48,7 @@ class CharteredFixture(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.runtime_patch = patch("delivery_gateway.require_ready", return_value={
-            "schema_version": 1, "interpreter": "/test/maf-python", "python": [3, 12, 0],
-            "packages": {"agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0"},
-            "lock_digest": "a" * 64, "protocols": [5, 6, 7, 8], "runtime_digest": "b" * 64,
-        })
+        self.runtime_patch = patch("delivery_gateway.require_ready", return_value=sealed_runtime_identity())
         self.runtime_patch.start()
         self.addCleanup(self.runtime_patch.stop)
         self.root = Path(self.tmp.name)

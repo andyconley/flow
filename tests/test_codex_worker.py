@@ -89,12 +89,14 @@ class CodexWorkerTests(unittest.TestCase):
             self.assertEqual((workspace / "auth.txt").read_text(), '{"token":"fixture"}')
             self.assertFalse(Path(child_env["CODEX_HOME"]).exists())
             self.assertEqual(child_env["PYTHONDONTWRITEBYTECODE"], "1")
-            call_codex(instructions="Manager", task="Return a plan", workspace=workspace,
-                       model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="read-only")
-            self.assertIn("read-only", json.loads((workspace / "argv.json").read_text()))
-            with self.assertRaises(ValueError):
+            # Without the fixture CODEX_HOME these calls would read the host's ~/.codex.
+            with patch.dict(os.environ, {"CODEX_HOME": str(source_home)}):
                 call_codex(instructions="Manager", task="Return a plan", workspace=workspace,
-                           model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="danger-full-access")
+                           model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="read-only")
+                self.assertIn("read-only", json.loads((workspace / "argv.json").read_text()))
+                with self.assertRaises(ValueError):
+                    call_codex(instructions="Manager", task="Return a plan", workspace=workspace,
+                               model="gpt-test", timeout_seconds=5, codex_bin=str(fake), sandbox="danger-full-access")
 
     def test_large_event_stream_completes_without_semantic_size_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -21,10 +21,10 @@ from typing import Any
 from runner_limits import MAX_ACTIONS, MAX_MANAGER_CALLS
 
 try:  # flow.py runs siblings directly; package imports use the second path.
-    from delivery_cancel import interruptible
+    from delivery_cancel import interruptible, wake, wakeup_fds
     from execution_contracts import validate_action, validate_replan
 except ModuleNotFoundError:  # pragma: no cover - exercised by package consumers
-    from cli.delivery_cancel import interruptible
+    from cli.delivery_cancel import interruptible, wake, wakeup_fds
     from cli.execution_contracts import validate_action, validate_replan
 
 
@@ -61,7 +61,11 @@ def _write_bounded(fd: int, value: dict[str, Any], deadline: float) -> None:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise MafTransportError("MAF child timed out while reading a protocol message")
-        _, ready, _ = select.select([], [fd], [], remaining)
+        wakeup = wakeup_fds()
+        readable, ready, _ = select.select(wakeup, [fd], [], remaining)
+        if readable:
+            wake()
+            continue
         if not ready:
             raise MafTransportError("MAF child timed out while reading a protocol message")
         try:
@@ -93,8 +97,13 @@ def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise MafTransportError("MAF child timed out before sending a protocol message")
-        ready, _, _ = select.select([fd], [], [], remaining)
-        if not ready:
+        wakeup = wakeup_fds()
+        ready, _, _ = select.select([fd, *wakeup], [], [], remaining)
+        if wakeup and wakeup[0] in ready:
+            wake()
+            if fd not in ready:
+                continue
+        elif not ready:
             raise MafTransportError("MAF child timed out before sending a protocol message")
         chunk = os.read(fd, min(65536, MAX_LINE_BYTES + 1 - len(pending)))
         if not chunk:

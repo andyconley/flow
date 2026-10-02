@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from claude_worker import CLAUDE_ENV_KEYS, _normalized_usage
-from delivery_cancel import interruptible
+from delivery_cancel import CancellableSelector, interruptible
 from macos_sandbox import confined_argv
 
 MAX_PROMPT_BYTES = 32768
@@ -147,7 +147,7 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
             chunks: list[bytes] = []
             size = written = 0
             event_file = event_path.open("ab") if event_path is not None else None
-            selector = selectors.DefaultSelector()
+            selector = CancellableSelector()
             os.set_blocking(process.stdin.fileno(), False)
             selector.register(process.stdin, selectors.EVENT_WRITE)
             selector.register(process.stdout, selectors.EVENT_READ)

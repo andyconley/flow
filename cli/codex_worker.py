@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from delivery_cancel import interruptible
+from delivery_cancel import CancellableSelector, interruptible
 from execution_contracts import usage_values_valid
 from macos_sandbox import confined_argv
 
@@ -190,7 +190,7 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
             written = 0
             stderr_chunks: list[bytes] = []
             stderr_size = 0
-            selector = selectors.DefaultSelector()
+            selector = CancellableSelector()
             with tempfile.TemporaryFile() as event_file:
                 try:
                     os.set_blocking(process.stdin.fileno(), False)

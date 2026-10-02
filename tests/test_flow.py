@@ -2963,6 +2963,7 @@ class FlowCliTests(FlowCliHarness):
         fake_bin = self._make_fake_python_bin(include_compatible=False)
         env = _clean_env(fake_home)
         env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+        env.pop("FLOW_PYTHON", None)  # the release job pins it; this test controls selection
         env["FLOW_PYTHON_CANDIDATES"] = str(fake_bin / "python3")
 
         result = subprocess.run(
@@ -2986,6 +2987,7 @@ class FlowCliTests(FlowCliHarness):
         base.write_text("#!/bin/sh\ncase \"$2\" in\n  *sys.platform*) echo 'linux|x86_64|3|12' ;;\n  *) echo '3.12.0' ;;\nesac\n")
         base.chmod(0o755)
         env = _clean_env(fake_home)
+        env.pop("FLOW_MAF_PYTHON", None)  # an override would make readiness pass
         env["FLOW_MAF_BASE_PYTHON"] = str(base)
         result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
                                 text=True, capture_output=True, env=env)
@@ -3004,6 +3006,7 @@ class FlowCliTests(FlowCliHarness):
         fake_bin = self._make_fake_python_bin(include_compatible=True)
         env = _clean_env(fake_home)
         env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+        env.pop("FLOW_PYTHON", None)  # the release job pins it; this test controls selection
         env["FLOW_PYTHON_CANDIDATES"] = f"{fake_bin / 'python3'}:{fake_bin / f'python{sys.version_info.major}.{sys.version_info.minor}'}"
         env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
 
@@ -3197,6 +3200,7 @@ class FlowCliTests(FlowCliHarness):
         self.assert_ok(result)
         self.assertIn("already at the latest tag", result.stdout)
 
+    @requires_managed_wheelhouse
     def test_update_apply_in_release_mode_swaps_and_records_version(self) -> None:
         fake_home = self.do_install_release()
         remote = self.make_fake_remote_with_tags(["v9.9.9"])

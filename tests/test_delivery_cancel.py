@@ -6,10 +6,13 @@ import contextlib
 import json
 import os
 import select
+import selectors
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import unittest.mock
@@ -19,6 +22,10 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 import delivery_cancel  # noqa: E402
+import maf_supervisor  # noqa: E402
+import codex_worker  # noqa: E402
+import delivery_gateway  # noqa: E402
+import local_worker  # noqa: E402
 import delivery_termination  # noqa: E402
 import process_identity  # noqa: E402
 from delivery_control import change_lead_claim  # noqa: E402
@@ -74,6 +81,206 @@ class ControllerTests(unittest.TestCase):
     def test_restore_puts_the_previous_handler_back(self):
         self.controller.restore()
         self.assertIs(signal.getsignal(signal.SIGTERM), signal.SIG_DFL)
+
+    def test_restore_puts_the_previous_wakeup_fd_back(self):
+        self.controller.restore()
+        self.assertEqual(signal.set_wakeup_fd(-1), -1)
+        self.assertIsNone(self.controller.wakeup_fd)
+
+    def test_a_signal_writes_the_wakeup_pipe(self):
+        os.kill(os.getpid(), signal.SIGTERM)
+        self.assertEqual(select.select([self.controller.wakeup_fd], [], [], 1)[0], [self.controller.wakeup_fd])
+
+
+class SupervisorWakeupTests(unittest.TestCase):
+    """A SIGTERM that lands just before a supervisor select blocks still breaks the wait.
+
+    The race is simulated: the C handler wrote the wakeup byte, but the
+    Python handler has not run yet, so nothing else would end the select
+    before its deadline.
+    """
+
+    def setUp(self):
+        self.controller = delivery_cancel.CancelController()
+        self.assertTrue(self.controller.install())
+        self.addCleanup(self.controller.restore)
+        patcher = patch.object(delivery_cancel, "_CURRENT", self.controller)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, read_fd)
+        self.addCleanup(os.close, write_fd)
+        self.read_fd, self.write_fd = read_fd, write_fd
+
+    def missed_signal(self):
+        self.controller.requested = True
+        os.write(self.controller._wakeup_write, b"\0")
+
+    def test_a_missed_signal_breaks_a_protocol_read(self):
+        started = time.monotonic()
+        with self.assertRaises(delivery_cancel.DeliveryCancelled):
+            with self.controller.interruptible():
+                self.missed_signal()
+                maf_supervisor._read_message(self.read_fd, time.monotonic() + 10, bytearray())
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_missed_signal_breaks_a_blocked_protocol_write(self):
+        os.set_blocking(self.write_fd, False)
+        with contextlib.suppress(BlockingIOError):
+            while True:
+                os.write(self.write_fd, b"x" * 65536)
+        started = time.monotonic()
+        with self.assertRaises(delivery_cancel.DeliveryCancelled):
+            with self.controller.interruptible():
+                self.missed_signal()
+                maf_supervisor._write_bounded(self.write_fd, {"type": "start"}, time.monotonic() + 10)
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_wakeup_after_disarm_keeps_waiting_for_the_child(self):
+        self.controller.disarm()
+        os.write(self.write_fd, b'{"protocol_version": 1, "type": "workflow_finished"}\n')
+        with self.controller.interruptible():
+            self.missed_signal()
+            message = maf_supervisor._read_message(self.read_fd, time.monotonic() + 10, bytearray())
+        self.assertEqual(message["type"], "workflow_finished")
+
+
+
+class ProviderWaitWakeupTests(unittest.TestCase):
+    """The provider, Ollama and targeted-test waits break for a SIGTERM that races their select.
+
+    As in ``SupervisorWakeupTests``, a missed signal is simulated: the cancel
+    is requested and the wakeup byte written, but no Python handler runs. The
+    helper-thread case sends a real SIGTERM.
+    """
+
+    def setUp(self):
+        self.controller = delivery_cancel.CancelController()
+        self.assertTrue(self.controller.install())
+        self.addCleanup(self.controller.restore)
+        patcher = patch.object(delivery_cancel, "_CURRENT", self.controller)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def missed_signal(self):
+        self.controller.requested = True
+        os.write(self.controller._wakeup_write, b"\0")
+
+    def later(self, action, delay=0.5):
+        timer = threading.Timer(delay, action)
+        timer.start()
+        self.addCleanup(timer.cancel)
+
+    def assert_cancelled_quickly(self, call):
+        started = time.monotonic()
+        with self.assertRaises(delivery_cancel.DeliveryCancelled):
+            with self.controller.interruptible():
+                call()
+        self.assertLess(time.monotonic() - started, 10)
+
+    def idle_pipe(self):
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, read_fd)
+        self.addCleanup(os.close, write_fd)
+        return read_fd
+
+    def silent_server(self):
+        """A loopback listener that accepts and never answers; it records when the client closes."""
+        server = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(server.close)
+        closed = threading.Event()
+
+        def serve():
+            connection, _ = server.accept()
+            with connection:
+                while connection.recv(65536):
+                    pass
+            closed.set()
+
+        threading.Thread(target=serve, daemon=True).start()
+        return server.getsockname()[1], closed
+
+    def ollama_call(self, port):
+        envelope = {"provider": "ollama", "model": "local-model", "instructions": "verify",
+                    "task": "check", "attempt_id": "attempt-wakeup"}
+        with patch.dict(os.environ, {"FLOW_OLLAMA_URL": f"http://127.0.0.1:{port}/api/chat",
+                                     "FLOW_OLLAMA_OBSERVER": "1"}):
+            local_worker.call_local(envelope, timeout_seconds=60)
+
+    def test_a_missed_signal_breaks_a_provider_selector(self):
+        selector = delivery_cancel.CancellableSelector()
+        self.addCleanup(selector.close)
+        selector.register(self.idle_pipe(), selectors.EVENT_READ)
+        self.later(self.missed_signal)
+        self.assert_cancelled_quickly(lambda: selector.select(30))
+
+    def test_the_selector_hides_the_wakeup_and_a_stray_byte_keeps_the_timeout(self):
+        selector = delivery_cancel.CancellableSelector()
+        self.addCleanup(selector.close)
+        read_fd = self.idle_pipe()
+        selector.register(read_fd, selectors.EVENT_READ)
+        self.assertEqual(list(selector.get_map()), [read_fd])
+        os.write(self.controller._wakeup_write, b"\0")  # a signal, but no cancel pending
+        started = time.monotonic()
+        with self.controller.interruptible():
+            self.assertEqual(selector.select(0.5), [])
+        self.assertGreaterEqual(time.monotonic() - started, 0.45)
+
+    def test_a_missed_signal_breaks_a_codex_turn(self):
+        fake = self.root / "codex-sleeps"
+        fake.write_text("#!/bin/sh\nexec sleep 30\n")
+        fake.chmod(0o700)
+        workspace = self.root / "workspace"
+        workspace.mkdir()
+        self.later(self.missed_signal)
+        with patch.dict(os.environ, {"CODEX_HOME": str(self.root / "codex-home")}):
+            self.assert_cancelled_quickly(lambda: codex_worker.call_codex(
+                instructions="Manager", task="Return a plan", workspace=workspace, model="gpt-test",
+                timeout_seconds=60, codex_bin=str(fake), sandbox="read-only"))
+
+    def test_a_missed_signal_breaks_an_ollama_request_and_shuts_its_socket(self):
+        port, closed = self.silent_server()
+        self.later(self.missed_signal)
+        self.assert_cancelled_quickly(lambda: self.ollama_call(port))
+        self.assertTrue(closed.wait(5), "the cancelled request's socket must be shut")
+
+    def test_a_real_sigterm_on_the_ollama_helper_thread_breaks_the_wait(self):
+        port, closed = self.silent_server()
+
+        def signal_the_helper():
+            helper = next(thread for thread in threading.enumerate() if thread.name == "flow-interruptible-call")
+            signal.pthread_kill(helper.ident, signal.SIGTERM)
+
+        self.later(signal_the_helper)
+        self.assert_cancelled_quickly(lambda: self.ollama_call(port))
+        self.assertTrue(self.controller.requested)
+        self.assertTrue(closed.wait(5))
+
+    def test_run_interruptibly_runs_inline_without_a_controller_and_reraises(self):
+        with patch.object(delivery_cancel, "_CURRENT", None):
+            self.assertIs(delivery_cancel.run_interruptibly(threading.current_thread), threading.current_thread())
+        with self.assertRaises(KeyError):
+            with self.controller.interruptible():
+                delivery_cancel.run_interruptibly(lambda: {}["missing"])
+
+    def test_a_missed_signal_breaks_the_targeted_test_wait(self):
+        worktree = self.root / "worktree"
+        (worktree / "tests").mkdir(parents=True)
+        (worktree / "tests" / "test_slow.py").write_text(
+            "import time, unittest\n\n\nclass Slow(unittest.TestCase):\n"
+            "    def test_slow(self):\n        time.sleep(30)\n")
+        job = {"test": {"argv": ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_slow.py"],
+                        "timeout_seconds": 60}}
+        groups = []
+        self.later(self.missed_signal, delay=1.0)
+        self.assert_cancelled_quickly(lambda: delivery_gateway._run_chartered_test(
+            worktree, job, on_process_group=lambda pid, kind: groups.append(pid)))
+        [pid] = groups
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(pid, 0)
 
 
 class CancelFixture(CharteredFixture):

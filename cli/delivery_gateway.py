@@ -13,6 +13,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
@@ -79,6 +80,8 @@ APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
 MAX_CHARTERED_DIFF_BYTES = 1024 * 1024
+# The missed-cancel bound for a wait that cannot watch the wakeup pipe.
+CANCEL_POLL_SECONDS = 0.25
 
 
 def _stream_sha256(path: Path) -> str:
@@ -813,8 +816,21 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
         if on_process_group is not None:
             on_process_group(process.pid, "test")
         try:
+            deadline = time.monotonic() + test["timeout_seconds"]
             with delivery_cancel.interruptible():  # test timeouts reach 3600 s
-                stdout, stderr = process.communicate(timeout=test["timeout_seconds"])
+                # communicate() cannot watch the cancel wakeup pipe, so wait in
+                # short slices and recheck between them: a SIGTERM that lands
+                # just before a slice's select blocks breaks the wait when the
+                # slice ends.
+                while True:
+                    try:
+                        stdout, stderr = process.communicate(
+                            timeout=max(0.0, min(CANCEL_POLL_SECONDS, deadline - time.monotonic())))
+                        break
+                    except subprocess.TimeoutExpired:
+                        if time.monotonic() >= deadline:
+                            raise
+                        delivery_cancel.wake()
         except subprocess.TimeoutExpired as exc:
             raise ContractError("targeted chartered test timed out") from exc
     finally:
