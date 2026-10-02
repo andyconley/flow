@@ -2887,11 +2887,17 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
         timeout = 60
         if provider == "ollama":
             if operation == "edit":
-                bundle = ollama_source_bundle(workspace, write_paths)
-                proposal = propose_ollama_edits(bundle, task, model=model,
-                                                attempt_id=action["attempt_id"], timeout_seconds=timeout)
-                applied = apply_ollama_edits(workspace, bundle, proposal, write_scopes=write_paths,
-                                              expected_model=model)
+                try:
+                    bundle = ollama_source_bundle(workspace, write_paths)
+                    proposal = propose_ollama_edits(bundle, task, model=model,
+                                                    attempt_id=action["attempt_id"], timeout_seconds=timeout)
+                    applied = apply_ollama_edits(workspace, bundle, proposal, write_scopes=write_paths,
+                                                  expected_model=model)
+                except ContractError as exc:
+                    # A structured response or a fully rolled-back application
+                    # failure is observed evidence, not an uncertain send.
+                    return {"provider": provider, "model": model, "operation": operation,
+                            "observed_invalid": True, "detail": str(exc)[:512]}
                 return {"provider": provider, "model": model, "operation": operation, "applied": applied}
             if operation == "manage":
                 match = re.search(r"next_speaker\.answer must be exactly one of (\[[^\n]+\])", task)

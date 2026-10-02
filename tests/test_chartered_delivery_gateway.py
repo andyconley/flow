@@ -1751,6 +1751,23 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(stat.S_IMODE((self.worktree / "target.py").stat().st_mode), 0o755)
         self.assertEqual(result["scoped_edit"]["scope_enforcement"], "isolated_staging")
 
+    def test_observed_invalid_ollama_edit_is_completed_evidence_not_uncertainty(self):
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+        with patch("delivery_gateway.propose_ollama_edits",
+                   side_effect=ContractError("observed proposal is invalid")):
+            result = adapter(
+                {"provider": "ollama", "model": "local-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertTrue(result["observed_invalid"])
+        self.assertEqual(result["detail"], "observed proposal is invalid")
+        self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
+
     def test_hosted_v9_editor_out_of_scope_staging_change_is_not_applied(self):
         envelope = {"worktree": str(self.worktree), "logical_assignments": [{
             "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
