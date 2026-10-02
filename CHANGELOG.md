@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.9](https://github.com/andyconley/flow/compare/v0.40.8...v0.40.9) (2026-10-02)
+
+### Bug Fixes
+
+* preserve hosted staging merge base ([e58bf06](https://github.com/andyconley/flow/commit/e58bf068d4cfb168e2936f678a3936f7c3d478bc))
+
 ## [0.40.8](https://github.com/andyconley/flow/compare/v0.40.7...v0.40.8) (2026-10-02)
 
 ### Bug Fixes
