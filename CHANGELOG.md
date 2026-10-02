@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.12](https://github.com/andyconley/flow/compare/v0.40.11...v0.40.12) (2026-10-02)
+
+### Bug Fixes
+
+* continue verifier fallback after no-send refusal ([f067f39](https://github.com/andyconley/flow/commit/f067f39e406c37a63bfde2ce3440c15993fe7a2c))
+
 ## [0.40.11](https://github.com/andyconley/flow/compare/v0.40.10...v0.40.11) (2026-10-02)
 
 ### Bug Fixes
