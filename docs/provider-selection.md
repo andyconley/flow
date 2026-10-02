@@ -54,8 +54,9 @@ to the manager or child.
 
 Hosted v9 workers run against a temporary tree containing only the chartered
 read and write paths. On macOS, Flow also launches the provider CLI through a
-deny-default process profile: file contents are readable only from system
-runtime roots, that staged tree, and an isolated credential home. Edits are
+process profile that denies reads and writes in user-controlled data roots
+outside that staged tree and an isolated credential home. OS runtime services
+remain available so signed provider CLIs can start normally. Edits are
 copied back only after scope validation; a multi-file apply is rolled back if
 any replacement fails. Local Ollama workers receive the same bounded task and
 do not gain hosted filesystem access.

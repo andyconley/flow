@@ -83,7 +83,7 @@ other by bare name.
   it against disk.
 - `setup.py` — machine, project, and user setup, plus project refresh.
 - `lifecycle.py` — two-mode install, release staging, and update.
-- `macos_sandbox.py` — deny-default process profile for hosted v9 workers over
+- `macos_sandbox.py` — user-data confinement profile for hosted v9 workers over
   staged charter paths and isolated credential homes.
 - `diagnostics.py` — `doctor`, `help`, `bootstrap`. Reports; doctor may refresh only its machine FTS5 capability receipt, never project state.
 - `archive_commands.py` — argparse registration and presentation for archive

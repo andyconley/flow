@@ -22,19 +22,22 @@ def confined_argv(argv: list[str], *, workspace: Path, private_home: Path) -> li
     executable = shutil.which(argv[0])
     if not executable:
         raise ProcessSandboxError("hosted provider executable is unavailable")
-    executable_root = Path(executable).resolve().parent
-    allowed_reads = [Path("/System"), Path("/usr"), Path("/bin"), Path("/sbin"),
-                     Path("/Library"), Path("/Applications"), Path("/opt/homebrew"),
-                     workspace.resolve(), private_home.resolve(), executable_root]
-    temp_root = Path("/private/var/folders")
-    clauses = " ".join(f"(subpath {json.dumps(str(path))})" for path in allowed_reads)
-    write_clauses = " ".join(
-        f"(subpath {json.dumps(str(path))})"
-        for path in (workspace.resolve(), private_home.resolve(), temp_root)
+    # A deny-default profile is not viable for general signed CLIs on current
+    # macOS: dyld, security services, and frameworks make undocumented reads
+    # that cause even /bin/cat to abort. Keep the OS runtime available, but
+    # deny data access in every user-controlled root unless it is the staged
+    # workspace or isolated credential home. Metadata alone is not source
+    # disclosure and remains available for executable/runtime discovery.
+    allowed = (workspace.resolve(), private_home.resolve())
+    protected_roots = (Path("/Users"), Path("/Volumes"), Path("/private/tmp"),
+                       Path("/tmp"), Path("/private/var/folders"))
+    exceptions = " ".join(
+        f"(require-not (subpath {json.dumps(str(path))}))" for path in allowed
     )
-    profile = (
-        "(version 1) (deny default) (allow process*) (allow sysctl-read) "
-        "(allow mach-lookup) (allow network*) (allow file-read-metadata) "
-        f"(allow file-read* {clauses}) (allow file-write* {write_clauses})"
+    denied = " ".join(
+        f"(deny file-read-data file-write* "
+        f"(require-all (subpath {json.dumps(str(root))}) {exceptions}))"
+        for root in protected_roots
     )
+    profile = f"(version 1) (allow default) {denied}"
     return [str(sandbox_exec), "-p", profile, *argv]
