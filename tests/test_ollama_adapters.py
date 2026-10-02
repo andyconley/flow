@@ -54,6 +54,17 @@ class OllamaManagerTests(unittest.TestCase):
              "next_speaker", "instruction_or_question"},
         )
 
+    @patch("ollama_manager.call_local")
+    def test_live_call_constrains_next_speaker_to_flow_frontier(self, local) -> None:
+        local.return_value = {"output": json.dumps(PROGRESS)}
+        call_ollama_manager([{"role": "user", "content": "coordinate"}],
+                            model="local-model", attempt_id="a",
+                            allowed_speakers=["logical-editor"])
+        schema = local.call_args.kwargs["response_schema"]
+        self.assertEqual(schema["properties"]["next_speaker"]["properties"]["answer"]["enum"],
+                         ["logical-editor"])
+        self.assertNotIn("enum", MANAGER_RESPONSE_SCHEMA["properties"]["next_speaker"]["properties"]["answer"])
+
     def test_malformed_or_wrong_model_response_fails_closed(self) -> None:
         with self.assertRaisesRegex(ContractError, "not exact Magentic progress"):
             call_ollama_manager([{"role": "user", "content": "x"}], model="local-model",

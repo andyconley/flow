@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from typing import Any, Callable
 
@@ -54,12 +55,19 @@ MANAGER_RESPONSE_SCHEMA = {
 def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_id: str,
                         transport: Callable[..., Any] | None = None,
                         timeout_seconds: int = 60,
-                        preserve_observed_invalid: bool = False) -> dict[str, Any]:
+                        preserve_observed_invalid: bool = False,
+                        allowed_speakers: list[str] | None = None) -> dict[str, Any]:
     if not isinstance(messages, list) or not messages:
         raise ContractError("Ollama manager messages are absent")
     serialized = canonical(messages)
     if len(serialized.encode()) > MAX_MANAGER_PROMPT_BYTES:
         raise ContractError("Ollama manager prompt exceeds size limit")
+    schema = deepcopy(MANAGER_RESPONSE_SCHEMA)
+    if allowed_speakers is not None:
+        if (not allowed_speakers or len(allowed_speakers) != len(set(allowed_speakers))
+                or any(not isinstance(item, str) or not item for item in allowed_speakers)):
+            raise ContractError("Ollama manager allowed speaker frontier is invalid")
+        schema["properties"]["next_speaker"]["properties"]["answer"]["enum"] = allowed_speakers
     envelope = {
         "provider": "ollama", "model": model, "attempt_id": attempt_id,
         "instructions": (
@@ -67,11 +75,13 @@ def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_i
             "is_request_satisfied, is_in_loop, is_progress_being_made, next_speaker, and "
             "instruction_or_question. Every value must be an object containing an answer field. "
             "next_speaker must also contain a nonempty reason. Boolean answers are JSON booleans."
+            + (f" next_speaker.answer must be one of {json.dumps(allowed_speakers)}."
+               if allowed_speakers is not None else "")
         ),
         "task": serialized,
     }
     result = call_local(envelope, transport=transport, correlation_id=f"{attempt_id}-manager",
-                        timeout_seconds=timeout_seconds, response_schema=MANAGER_RESPONSE_SCHEMA)
+                        timeout_seconds=timeout_seconds, response_schema=schema)
     output = result["output"]
     parsed = parse_progress(output)
     if parsed.value is None or parsed.canonical is None:

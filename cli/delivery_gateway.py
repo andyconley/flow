@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import signal
 import shutil
 import stat
@@ -2879,9 +2880,15 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                                               expected_model=model)
                 return {"provider": provider, "model": model, "operation": operation, "applied": applied}
             if operation == "manage":
+                match = re.search(r"next_speaker\.answer must be exactly one of (\[[^\n]+\])", task)
+                try:
+                    allowed_speakers = json.loads(match.group(1)) if match else None
+                except json.JSONDecodeError as exc:
+                    raise ContractError("logical manager task has an invalid speaker frontier") from exc
                 return call_ollama_manager([{"role": "user", "content": task}], model=model,
                                            attempt_id=action["attempt_id"], timeout_seconds=timeout,
-                                           preserve_observed_invalid=True)
+                                           preserve_observed_invalid=True,
+                                           allowed_speakers=allowed_speakers)
             return call_local({"provider": provider, "model": model, "attempt_id": action["attempt_id"],
                                "instructions": instructions, "task": task},
                               correlation_id=action["action_id"], timeout_seconds=timeout)
