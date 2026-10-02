@@ -1803,6 +1803,9 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertIn("retained evidence is stale", editor_actions[1]["task"])
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["evidence_failures"][0]["stage"], "chartered_test")
+        attempt_dir = Path(result["receipt_path"]).parent
+        self.assertTrue((attempt_dir / "repair-failed-turn-1.diff").is_file())
+        self.assertTrue((attempt_dir / "repair.diff").is_file())
 
     def test_v9_second_chartered_test_failure_seals_without_another_retry(self):
         valid = json.dumps({"schema_version": 1, "decision": "pass",

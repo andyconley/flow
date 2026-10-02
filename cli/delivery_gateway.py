@@ -2384,6 +2384,9 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 if repair_counts.get(selected, 0) == 0:
                     repair_counts[selected] = 1
                     repair_feedback[selected] = str(exc)[:512]
+                    failed_diff = attempt_dir / "repair.diff"
+                    if failed_diff.is_file() and not failed_diff.is_symlink():
+                        os.replace(failed_diff, attempt_dir / "repair-failed-turn-1.diff")
                     edit_evidence = None
                     test_evidence = None
                     continue
