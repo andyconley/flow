@@ -84,7 +84,7 @@ def normalize_availability(record: dict[str, Any], *, now: datetime | None = Non
 
 
 def discover_ollama_models(
-    *, opener: Callable[..., Any] | None = None, timeout: float = 2.0
+    *, opener: Callable[..., Any] | None = None, timeout: float | None = None
 ) -> list[str]:
     """Discover installed model names from loopback only.
 

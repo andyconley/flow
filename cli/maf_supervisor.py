@@ -612,6 +612,12 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                 result = on_action(dict(message))
                 if not isinstance(result, dict):
                     raise MafProtocolError("Flow v9 action callback returned invalid result")
+                # Provider execution is governed by its own adapter policy.
+                # In particular, local Ollama calls intentionally have no
+                # elapsed-time limit. Restart the coordination deadline after
+                # the callback so provider runtime is never misclassified as
+                # a stalled credentialless MAF child.
+                deadline = time.monotonic() + timeout_s
                 _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "action_result",
                                                           "action_id": result.get("provider_action_id"), "result": result}, deadline)
                 proposed = True

@@ -53,7 +53,7 @@ class _TrackedHTTPHandler(urllib.request.HTTPHandler):
 
 
 def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None = None,
-               correlation_id: str | None = None, timeout_seconds: int = 60,
+               correlation_id: str | None = None, timeout_seconds: int | None = None,
                structured_verifier: bool = False,
                response_schema: dict[str, Any] | None = None) -> dict[str, Any]:
     """Make one local call.
@@ -62,7 +62,7 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
     completed observation: empty content and a different reported model are
     facts for Flow's evaluator to judge, not transport failures.
     """
-    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 60:
+    if timeout_seconds is not None and (type(timeout_seconds) is not int or timeout_seconds < 1):
         raise ContractError("local worker timeout is invalid")
     provider = envelope["provider"]
     if provider == "local-stub":

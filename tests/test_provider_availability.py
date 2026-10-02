@@ -45,10 +45,14 @@ class ProviderAvailabilityTests(unittest.TestCase):
         self.assertNotIn("credential", normalized)
 
     def test_model_discovery_is_sorted_presence_only(self) -> None:
-        def opener(_request, **_kwargs):
+        observed = {}
+
+        def opener(_request, **kwargs):
+            observed.update(kwargs)
             return Response({"models": [{"name": "zeta"}, {"name": "alpha"}, {"name": "alpha"}]})
 
         self.assertEqual(discover_ollama_models(opener=opener), ["alpha", "zeta"])
+        self.assertIsNone(observed["timeout"])
 
     def test_invalid_freshness_and_uncontrolled_evidence_are_rejected(self) -> None:
         base = {
