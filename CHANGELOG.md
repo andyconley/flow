@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.4](https://github.com/andyconley/flow/compare/v0.40.3...v0.40.4) (2026-10-02)
+
+### Bug Fixes
+
+* bound v9 provider timeouts by operation ([7d1d68c](https://github.com/andyconley/flow/commit/7d1d68c2589bfaad860635e528a1bf8d3d232333))
+
 ## [0.40.3](https://github.com/andyconley/flow/compare/v0.40.2...v0.40.3) (2026-10-02)
 
 ### Bug Fixes
