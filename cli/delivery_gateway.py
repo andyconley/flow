@@ -2184,6 +2184,10 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     manager_decision: dict[str, Any] | None = None
     dispatch_sequence_base = 1
 
+    class ProviderCandidatesExhausted(Exception):
+        def __init__(self, result: dict[str, Any]) -> None:
+            self.result = result
+
     def dispatch(proposal: dict[str, Any]) -> dict[str, Any]:
         if manager_decision is not None and proposal["assignment_id"] != manager_decision["assignment_id"]:
             raise ContractError("logical v9 proposal differs from the bounded manager decision")
@@ -2218,7 +2222,16 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 break
             successor = result["successor_decision"]
             if successor.get("selected_binding") is None:
-                raise ContractError("all selected provider candidates refused before send")
+                if live_attempt:
+                    sealed = ledger.seal_v9_attempt(
+                        envelope["attempt_id"], "failed", "provider_candidates_exhausted",
+                        attempt_dir / "receipt.json", generation=generation)
+                    raise ProviderCandidatesExhausted({
+                        "attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "provider_candidates_exhausted", **sealed,
+                    })
+                return {"status": "failed", "reason": "provider_candidates_exhausted",
+                        "selection_id": action["selection_id"]}
             predecessor_selection_id = action["selection_id"]
             action = make_v9_action(
                 envelope, proposal["assignment_id"], proposal["task"],
@@ -2261,12 +2274,15 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         dispatch_sequence_base = stage * 2 - 1
         allowed_ids = [item["assignment_id"] for item in frontier]
         manager_decision = None
-        manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
-                  "task": ("Choose the next logical assignment for the approved task. "
-                           f"next_speaker.answer must be exactly one of {json.dumps(allowed_ids)}. "
-                           "Set is_request_satisfied.answer=false while required work remains and provide "
-                           "a nonempty reason and bounded instruction_or_question.answer."),
-                  "sequence": dispatch_sequence_base, "manager_turn": stage - 1})
+        try:
+            manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
+                      "task": ("Choose the next logical assignment for the approved task. "
+                               f"next_speaker.answer must be exactly one of {json.dumps(allowed_ids)}. "
+                               "Set is_request_satisfied.answer=false while required work remains and provide "
+                               "a nonempty reason and bounded instruction_or_question.answer."),
+                      "sequence": dispatch_sequence_base, "manager_turn": stage - 1})
+        except ProviderCandidatesExhausted as exhausted:
+            return exhausted.result
         raw_manager = manager_outcome.get("manager_result")
         progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
         if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
@@ -2324,9 +2340,12 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             raise ContractError("logical v9 sealed assignment task exceeds size limit")
         manager_decision = {"assignment_id": selected, "task": bounded_task,
                             "reason": reason, "manager_turn": stage}
-        outcomes.append((supervisor or run_maf_v9_delivery)(
-            envelope, task, dispatch, python_path=python_path,
-            manager_decision=manager_decision))
+        try:
+            outcomes.append((supervisor or run_maf_v9_delivery)(
+                envelope, task, dispatch, python_path=python_path,
+                manager_decision=manager_decision))
+        except ProviderCandidatesExhausted as exhausted:
+            return exhausted.result
         if live_attempt and operation == "edit":
             if job is None or baseline is None:
                 raise ContractError("logical v9 job evidence contract is absent")

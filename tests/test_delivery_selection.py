@@ -671,6 +671,42 @@ class DeliverySelectionTests(unittest.TestCase):
                                    if item["logical_action_id"] == verifier_action["logical_action_id"]]
             self.assertEqual([item["candidate_id"] for item in verifier_selections], ["claude", "codex"])
 
+    def test_refusal_only_exhaustion_seals_a_normal_failed_receipt(self) -> None:
+        envelope = _envelope()
+        inputs = envelope["selection_inputs"]
+        inputs["catalog"] = [item for item in inputs["catalog"] if item["candidate_id"] == "claude"]
+        inputs["availability"] = [item for item in inputs["availability"] if item["candidate_id"] == "claude"]
+        envelope["selection_input_digests"] = {key: digest(value) for key, value in inputs.items()}
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger = ExecutionLedger(root / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            result = execute_v9_selected_action(
+                envelope, action,
+                lambda _binding, _action: (_ for _ in ()).throw(
+                    ObservedNotExecuted(provider="claude", category="model_capacity",
+                                        observation_sha256="a" * 64)),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=ledger, generation=1,
+            )
+            self.assertIsNone(result["successor_decision"]["selected_binding"])
+            sealed = ledger.seal_v9_attempt(
+                envelope["attempt_id"], "failed", "provider_candidates_exhausted",
+                root / "receipt.json", generation=1)
+            receipt = json.loads(Path(sealed["receipt_path"]).read_text())
+            self.assertEqual(receipt["outcome"], {
+                "status": "failed", "reason": "provider_candidates_exhausted"})
+            self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
     def test_logical_v9_hosted_uncertain_send_fails_closed_without_next_fallback(self) -> None:
         envelope = _envelope()
         with tempfile.TemporaryDirectory() as tmp:

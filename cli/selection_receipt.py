@@ -298,6 +298,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if (outcome["status"] == "completed") != all_required_pass:
             raise V9ReceiptError("v9_outcome_semantic_mismatch")
         if outcome["status"] == "failed" and not evidence_failures \
+                and not provider_refusals \
                 and not any(item != "valid_pass" for item in semantic_dispositions):
             raise V9ReceiptError("v9_failed_outcome_evidence_missing")
     expected_digest = digest({key: value for key, value in receipt.items() if key != "receipt_digest"})
