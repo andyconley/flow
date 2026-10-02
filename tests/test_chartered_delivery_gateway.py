@@ -1807,6 +1807,16 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertTrue((attempt_dir / "repair-failed-turn-1.diff").is_file())
         self.assertTrue((attempt_dir / "repair.diff").is_file())
 
+    def test_v9_verifier_payload_uses_declared_input_budget_after_diff_embedding(self):
+        valid = json.dumps({"schema_version": 1, "decision": "pass",
+                            "summary": "Diff and test evidence pass.", "findings": []})
+        with patch("delivery_gateway.verifier_provider_task", return_value="v" * 5000):
+            result, snapshot = self._execute_semantic_v9(valid)
+        self.assertEqual(result["status"], "completed")
+        verifier = next(item["request"] for item in snapshot["actions"]
+                        if item["request"]["assignment_id"] == "verifier")
+        self.assertEqual(len(verifier["task"]), 5000)
+
     def test_v9_second_chartered_test_failure_seals_without_another_retry(self):
         valid = json.dumps({"schema_version": 1, "decision": "pass",
                             "summary": "Diff and test evidence pass.", "findings": []})

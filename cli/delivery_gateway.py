@@ -2334,6 +2334,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                              "Correct this failure, rerun the chartered test, and leave the final "
                              "retained evidence consistent with the final diff.")
         operation = selected_assignment["requirements"]["operation"]
+        if len(bounded_task.encode()) > MAX_TASK_BYTES:
+            raise ContractError("logical v9 sealed assignment task exceeds size limit")
         if live_attempt and operation == "verify":
             if edit_evidence is None or test_evidence is None:
                 raise ContractError("logical v9 verifier selected before Flow captured edit and test evidence")
@@ -2343,8 +2345,9 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 test_output=test_evidence["output_excerpt"],
                 authority_statement=VERIFIED_HANDOFF_AUTHORITY,
             )
-        if len(bounded_task.encode()) > MAX_TASK_BYTES:
-            raise ContractError("logical v9 sealed assignment task exceeds size limit")
+        input_limit = max(MAX_TASK_BYTES, selected_assignment["requirements"]["input_bytes"])
+        if len(bounded_task.encode()) > input_limit:
+            raise ContractError("logical v9 evidence-bearing task exceeds assignment input limit")
         manager_decision = {"assignment_id": selected, "task": bounded_task,
                             "reason": reason, "manager_turn": stage}
         try:
