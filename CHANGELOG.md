@@ -2,6 +2,13 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.5](https://github.com/andyconley/flow/compare/v0.40.4...v0.40.5) (2026-10-02)
+
+### Bug Fixes
+
+* align v9 maf and provider deadlines ([e5d714f](https://github.com/andyconley/flow/commit/e5d714f6964db7cfd33e79a4c47fd47e61905e60))
+* support approved v9 charter successors ([1cdf601](https://github.com/andyconley/flow/commit/1cdf6015c870c09d57a8edd7914c84d8a3c43319))
+
 ## [0.40.4](https://github.com/andyconley/flow/compare/v0.40.3...v0.40.4) (2026-10-02)
 
 ### Bug Fixes
