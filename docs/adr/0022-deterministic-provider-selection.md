@@ -62,3 +62,30 @@ receive no arbitrary shell or unrestricted filesystem authority.
 Revisit if Magentic gains a provider-neutral executable binding contract, the
 selector must be implemented across languages, or a provider supplies durable
 exactly-once request identity strong enough to revise uncertain-send recovery.
+
+## 2026-10-01 refinement: authority and semantic completion
+
+The first live protocol-v9 proof showed that internally consistent selection
+evidence is not sufficient proof of completed work. The manager had received a
+singleton roster, assignment bodies had been reconstructed from IDs, and a
+verifier turn that only announced an intention to inspect was accepted as
+successful verification.
+
+Protocol v9 therefore also applies these boundaries:
+
+- the approved job charter seals complete provider-neutral assignment bodies
+  and dependencies; runtime projection copies them without defaults;
+- Flow computes the complete dependency-valid unfinished frontier and Magentic
+  selects one member; manager prose is context, not executable authority;
+- Flow captures the scoped diff and chartered-test evidence, builds the exact
+  verifier input, evaluates the structured response under ADR 0015, and permits
+  successful completion only for `valid_pass`;
+- hosted editors operate through Flow-controlled scoped staging rather than
+  direct workspace-wide mutation; and
+- one runtime independence resolver supplies identical family and waiver facts
+  to initial selection, fallback, receipt construction, and offline replay.
+
+Direct hosted-workspace access followed by rollback was rejected because it
+cannot prevent out-of-scope reads. A new protocol number was also rejected:
+v9 remains pre-release and can accept this additive contract refinement while
+historical v8 bytes and behavior remain unchanged.

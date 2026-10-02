@@ -215,6 +215,8 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
         raise ContractError("protocol v9 requires run protocol revision 2")
     if not _hex_digest(envelope["charter_digest"]) or not _hex_digest(envelope["manifest_digest"]):
         raise ContractError("protocol v9 authority digest is invalid")
+    if "job_charter_digest" in envelope and not _hex_digest(envelope["job_charter_digest"]):
+        raise ContractError("protocol v9 job charter digest is invalid")
     claim = envelope.get("delivery_lead_claim")
     if (not _hex_digest(envelope.get("delivery_charter_digest"))
             or not _hex_digest(envelope.get("delivery_lead_claim_digest"))

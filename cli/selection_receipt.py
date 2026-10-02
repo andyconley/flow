@@ -8,10 +8,12 @@ try:
     from delivery_selection import compute_binding
     from execution_contracts import ContractError, validate_action, validate_envelope
     from provider_selection import canonical_bytes, digest
+    from verifier_contracts import evaluate_candidate, validate_evaluation
 except ModuleNotFoundError:  # Package import.
     from .delivery_selection import compute_binding
     from .execution_contracts import ContractError, validate_action, validate_envelope
     from .provider_selection import canonical_bytes, digest
+    from .verifier_contracts import evaluate_candidate, validate_evaluation
 
 
 DECISION_FIELDS = (
@@ -38,11 +40,14 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         raise V9ReceiptError("v9_envelope_invalid", str(exc)) from exc
     actions = receipt.get("actions")
     selections = receipt.get("selections")
+    semantic = receipt.get("semantic_verification", [])
     if not isinstance(actions, list) or not isinstance(selections, list):
         raise V9ReceiptError("v9_selection_rows_missing")
     if any(not isinstance(action, dict) for action in actions) \
             or any(not isinstance(row, dict) for row in selections):
         raise V9ReceiptError("v9_selection_rows_invalid")
+    if not isinstance(semantic, list) or any(not isinstance(item, dict) for item in semantic):
+        raise V9ReceiptError("v9_semantic_verification_invalid")
     termination = receipt.get("termination")
     if termination is not None:
         fields = {"schema_version", "status", "actor", "explanation", "cause", "owner_generation"}
@@ -156,6 +161,37 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                     or not prior.get("reason") or row.get("prior_no_send_failures") != expected_history:
                 raise V9ReceiptError("v9_fallback_lineage_invalid")
             compared += 1
+    assignments = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
+    verifier_actions = [action for action in actions
+                        if assignments[action["assignment_id"]]["requirements"].get("operation") == "verify"]
+    semantic_by_action = {item.get("action_id"): item for item in semantic}
+    if len(semantic_by_action) != len(semantic) or set(semantic_by_action) != {
+            action["action_id"] for action in verifier_actions}:
+        raise V9ReceiptError("v9_semantic_verification_missing")
+    for action in verifier_actions:
+        item = semantic_by_action[action["action_id"]]
+        required = {"action_id", "input", "input_digest", "diff_digest", "test_digest",
+                    "result", "evaluation"}
+        if set(item) != required or item["action_id"] != action["action_id"]:
+            raise V9ReceiptError("v9_semantic_verification_invalid")
+        if item["input"] != {"provider_task": action["task"], "assignment_id": action["assignment_id"]} \
+                or item["input_digest"] != digest(item["input"]):
+            raise V9ReceiptError("v9_verifier_input_mismatch")
+        output = item["result"].get("output") if isinstance(item["result"], dict) else None
+        if not isinstance(output, str):
+            raise V9ReceiptError("v9_verifier_result_invalid")
+        try:
+            evaluation = validate_evaluation(item["evaluation"])
+            expected_evaluation = evaluate_candidate(
+                action_id=action["action_id"], verifier_input_digest=item["input_digest"],
+                raw_output=output, diff_digest=item["diff_digest"],
+                test_evidence_digest=item["test_digest"],
+            )
+        except Exception as exc:
+            raise V9ReceiptError("v9_verifier_evaluation_invalid", str(exc)) from exc
+        if evaluation != expected_evaluation:
+            raise V9ReceiptError("v9_verifier_evaluation_mismatch")
+        compared += 7
     expected_digest = digest({key: value for key, value in receipt.items() if key != "receipt_digest"})
     if receipt.get("receipt_digest") != expected_digest:
         raise V9ReceiptError("v9_receipt_digest_mismatch")
@@ -164,13 +200,16 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
 
 
 def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any]],
-                           selections: list[dict[str, Any]], *, termination: dict[str, Any] | None = None) -> dict[str, Any]:
+                           selections: list[dict[str, Any]], *,
+                           semantic_verification: list[dict[str, Any]] | None = None,
+                           termination: dict[str, Any] | None = None) -> dict[str, Any]:
     receipt = {
         "schema_version": 1,
         "execution_protocol_version": 9,
         "envelope": envelope,
         "actions": actions,
         "selections": selections,
+        "semantic_verification": semantic_verification or [],
     }
     if termination is not None:
         receipt["termination"] = termination
@@ -208,14 +247,29 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
             "provider_action_id": item.get("provider_action_id"),
             "prior_no_send_failures": item["decision"].get("prior_no_send_failures"),
         })
-    return seal_selection_receipt(envelope, actions, rows, termination=termination)
+    action_results = {item["action_id"]: (item.get("result") or {}).get("result")
+                      for item in snapshot.get("actions", [])}
+    inputs = {item["action_id"]: item for item in snapshot.get("verifier_inputs", [])}
+    evaluations = {item["action_id"]: item for item in snapshot.get("verifier_evaluations", [])}
+    semantic = []
+    for action_id in sorted(set(inputs) | set(evaluations)):
+        binding, evaluation = inputs.get(action_id), evaluations.get(action_id)
+        if binding is None or evaluation is None:
+            raise V9ReceiptError("v9_snapshot_semantic_verification_incomplete")
+        semantic.append({
+            "action_id": action_id, "input": binding["input"], "input_digest": binding["input_digest"],
+            "diff_digest": binding["diff_digest"], "test_digest": binding["test_digest"],
+            "result": action_results.get(action_id), "evaluation": evaluation["evaluation"],
+        })
+    return seal_selection_receipt(envelope, actions, rows, semantic_verification=semantic,
+                                  termination=termination)
 
 
 def verify_selection_receipt_snapshot(receipt: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
     """Verify a v9 receipt and its exact ledger-derived closure."""
     result = verify_selection_receipt(receipt)
     expected = receipt_from_snapshot(snapshot)
-    for field in ("envelope", "actions", "selections"):
+    for field in ("envelope", "actions", "selections", "semantic_verification"):
         if canonical_bytes(receipt.get(field)) != canonical_bytes(expected.get(field)):
             raise V9ReceiptError(f"v9_ledger_{field}_mismatch")
     return result

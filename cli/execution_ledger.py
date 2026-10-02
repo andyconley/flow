@@ -662,6 +662,60 @@ class ExecutionLedger:
         with self.send_lock():
             self._complete_v9_send_locked(envelope, action, result, generation=generation)
 
+    def record_v9_verifier_evaluation(
+        self, action_id: str, verifier_input: dict[str, Any], result: dict[str, Any],
+        evaluation: dict[str, Any], diff_digest: str, test_digest: str, *, generation: int,
+    ) -> dict[str, Any]:
+        """Bind a completed v9 verifier result to Flow-captured evidence."""
+        validate_evaluation(evaluation)
+        encoded_input = canonical(verifier_input)
+        input_digest = hashlib.sha256(encoded_input.encode()).hexdigest()
+        output = result.get("output") if isinstance(result, dict) else None
+        if not isinstance(output, str) or evaluation["raw_output_digest"] != hashlib.sha256(output.encode()).hexdigest():
+            raise ContractError("v9 verifier result does not match its evaluation")
+        if (evaluation["action_id"] != action_id
+                or evaluation["verifier_input_digest"] != input_digest
+                or evaluation["diff_digest"] != diff_digest
+                or evaluation["test_evidence_digest"] != test_digest):
+            raise ContractError("v9 verifier evaluation evidence binding conflicts")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT actions.attempt_id,actions.request_json,actions.status,actions.result_json,"
+                "attempts.envelope_json,attempts.execution_protocol_version "
+                "FROM actions JOIN attempts USING(attempt_id) WHERE actions.action_id=?", (action_id,),
+            ).fetchone()
+            if row is None or row[2] != "completed" or row[5] != 9:
+                raise ContractError("v9 structured verifier action is absent or incomplete")
+            self._assert_owner(db, row[0], generation)
+            action, envelope = json.loads(row[1]), json.loads(row[4])
+            assignment = next((item for item in envelope["logical_assignments"]
+                               if item["assignment_id"] == action.get("assignment_id")), None)
+            if assignment is None or assignment["requirements"].get("operation") != "verify":
+                raise ContractError("v9 evaluation action is not an approved verifier")
+            stored = json.loads(row[3]) if row[3] else None
+            if stored != {"result": result} or verifier_input.get("provider_task") != action.get("task"):
+                raise ContractError("v9 verifier input or result differs from the provider action")
+            prior_input = db.execute("SELECT input_json FROM verifier_inputs WHERE action_id=?", (action_id,)).fetchone()
+            prior_evaluation = db.execute("SELECT evaluation_json FROM verifier_evaluations WHERE action_id=?", (action_id,)).fetchone()
+            if prior_input or prior_evaluation:
+                if (prior_input != (encoded_input,) or prior_evaluation != (canonical(evaluation),)):
+                    raise ContractError("v9 verifier evidence conflicts with durable evidence")
+                return {"evaluation": evaluation, "replayed": True}
+            now = utc_now()
+            db.execute(
+                "INSERT INTO verifier_inputs VALUES(?,?,?,?,?,?,?,?)",
+                (action_id, now, encoded_input, input_digest, diff_digest, test_digest, now, generation),
+            )
+            db.execute(
+                "INSERT INTO verifier_evaluations VALUES(?,?,?,?,?,?,?)",
+                (action_id, now, canonical(evaluation), evaluation["evaluation_digest"],
+                 evaluation["disposition"], evaluation["reason"], generation),
+            )
+            self._event(db, row[0], action_id, "verifier_input_recorded", input_digest)
+            self._event(db, row[0], action_id, "verifier_evaluated", evaluation["disposition"])
+            return {"evaluation": evaluation, "replayed": False}
+
     def refuse_v9_pre_send(self, envelope: dict[str, Any], action: dict[str, Any], *,
                             generation: int, evidence_code: str) -> None:
         """Close a reserved selection only when a pre-send probe proved no I/O."""

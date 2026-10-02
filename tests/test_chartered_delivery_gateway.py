@@ -1568,6 +1568,86 @@ class V9CharteredRouteTests(CharteredFixture):
         ]
         (self.run / "job-charter.json").write_text(json.dumps(self.charter))
 
+    def _execute_semantic_v9(self, verifier_output: str):
+        now = datetime.now(timezone.utc)
+        catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
+                    "provider_family": "local", "tier": "judgment", "locality": "local",
+                    "operations": ["manage", "edit", "verify"],
+                    "capabilities": ["structured_output", "structured_edit", "evidence_collection"],
+                    "cost_class": 0, "enabled": True}]
+        availability = [{"candidate_id": "local", "state": "ready",
+                         "observed_at": (now - timedelta(seconds=1)).isoformat(),
+                         "expires_at": (now + timedelta(minutes=1)).isoformat(),
+                         "evidence_code": "model_present", "probe_version": "availability-v1"}]
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 65536,
+                  "output_bytes": 16384, "context_tokens": 32768,
+                  "risk_class": "standard", "independence_required": False}
+        assignments = [
+            {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                                                   "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.py.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                                                   "required_capabilities": ["structured_edit"]}},
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify evidence.",
+             "depends_on": ["editor"], "requirements": {**common, "operation": "verify",
+                                                            "required_capabilities": ["evidence_collection"]}},
+        ]
+        self.charter["logical_assignments"] = assignments
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
+            envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+                "sample", self.worktree, self.commit, root=self.root,
+                logical_assignments=assignments, catalog=catalog, availability=availability,
+            )
+            manager_turn = 0
+
+            def adapter(_binding, action):
+                nonlocal manager_turn
+                if action["assignment_id"] == "manager":
+                    manager_turn += 1
+                    return {"manager_response": {
+                        "is_request_satisfied": {"answer": False},
+                        "is_in_loop": {"answer": True},
+                        "is_progress_being_made": {"answer": True},
+                        "next_speaker": {"answer": "editor" if manager_turn == 1 else "verifier",
+                                         "reason": "approved work remains"},
+                        "instruction_or_question": {"answer": "bounded note"},
+                    }}
+                if action["assignment_id"] == "editor":
+                    (self.worktree / "target.py").write_text("new\n")
+                    return {"output": "applied"}
+                return {"output": verifier_output}
+
+            result = execute_v9_logical_delivery(
+                envelope, task, ledger, adapter,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                    on_action({"attempt_id": envelope["attempt_id"],
+                               "assignment_id": manager_decision["assignment_id"],
+                               "task": manager_decision["task"], "sequence": 1,
+                               "manager_turn": manager_decision["manager_turn"]}),
+            )
+        return result, ledger.snapshot(envelope["attempt_id"])
+
+    def test_v9_plain_prose_verifier_cannot_complete_attempt(self):
+        result, snapshot = self._execute_semantic_v9("I'll inspect the repository now.")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "semantic_verifier_unusable")
+        self.assertEqual(snapshot["verifier_evaluations"][0]["outcome"], "unusable")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["semantic_verification"][0]["evaluation"]["disposition"], "unusable")
+
+    def test_v9_evidence_bound_valid_pass_is_required_for_completion(self):
+        result, snapshot = self._execute_semantic_v9(json.dumps({
+            "schema_version": 1, "decision": "pass", "summary": "Diff and test evidence pass.",
+            "findings": [],
+        }))
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["reason"], "semantic_verifier_valid_pass")
+        self.assertEqual(snapshot["verifier_evaluations"][0]["outcome"], "valid_pass")
+
     def test_v9_projection_includes_all_approved_logical_job_roles(self):
         self.charter["evidence_collector_instance_ids"] = ["evidence"]
         self.charter["verifier_instance_ids"] = ["verifier"]
@@ -1628,7 +1708,7 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["review_handoff"], {"status": "completed", "state": "reviewing"})
 
-    def test_prepared_charter_executes_one_logical_maf_action_through_flow_fence(self):
+    def test_prepared_v9_charter_refuses_completion_when_editor_makes_no_change(self):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
@@ -1664,22 +1744,22 @@ class V9CharteredRouteTests(CharteredFixture):
                 "sample", self.worktree, self.commit, root=self.root,
                 logical_assignments=assignments, catalog=catalog, availability=availability,
             )
-            result = execute_v9_logical_delivery(
-                envelope, task, ledger, lambda binding, action: ({"model": binding["model"],
-                    "manager_response": {
-                        "is_request_satisfied": {"answer": False},
-                        "is_in_loop": {"answer": True},
-                        "is_progress_being_made": {"answer": True},
-                        "next_speaker": {"answer": "editor", "reason": "approved work remains"},
-                        "instruction_or_question": {"answer": task},
-                    }} if action["assignment_id"] == "manager" else {"model": binding["model"]}),
-                readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                supervisor=lambda _envelope, _sent_task, on_action, *, manager_decision, **_kwargs: on_action({
-                    "attempt_id": envelope["attempt_id"], "assignment_id": "editor",
-                    "task": manager_decision["task"], "sequence": 1, "manager_turn": 1,
-                }),
-            )
-        self.assertEqual(result["status"], "completed")
+            with self.assertRaisesRegex(ContractError, "made no edit"):
+                execute_v9_logical_delivery(
+                    envelope, task, ledger, lambda binding, action: ({"model": binding["model"],
+                        "manager_response": {
+                            "is_request_satisfied": {"answer": False},
+                            "is_in_loop": {"answer": True},
+                            "is_progress_being_made": {"answer": True},
+                            "next_speaker": {"answer": "editor", "reason": "approved work remains"},
+                            "instruction_or_question": {"answer": task},
+                        }} if action["assignment_id"] == "manager" else {"model": binding["model"]}),
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                    supervisor=lambda _envelope, _sent_task, on_action, *, manager_decision, **_kwargs: on_action({
+                        "attempt_id": envelope["attempt_id"], "assignment_id": "editor",
+                        "task": manager_decision["task"], "sequence": 1, "manager_turn": 1,
+                    }),
+                )
         snapshot = ledger.snapshot(envelope["attempt_id"])
         self.assertEqual(snapshot["execution_protocol_version"], 9)
         self.assertEqual(envelope["selection_authority"]["generation"], 2)

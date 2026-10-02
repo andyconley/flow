@@ -2150,6 +2150,18 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     if snapshot["envelope"] != envelope or snapshot["status"] != "started":
         raise ContractError("logical v9 delivery attempt is absent or closed")
     generation = snapshot["owner_generation"]
+    attempt_dir = Path(envelope["checkpoint_dir"]).parent
+    live_attempt = (attempt_dir.is_absolute() and attempt_dir.is_dir() and not attempt_dir.is_symlink()
+                    and (attempt_dir / "job-charter.snapshot.json").is_file()
+                    and (attempt_dir / "baseline.json").is_file())
+    job: dict[str, Any] | None = None
+    baseline: dict[str, Any] | None = None
+    edit_evidence: dict[str, Any] | None = None
+    test_evidence: dict[str, Any] | None = None
+    final_evaluation: dict[str, Any] | None = None
+    if live_attempt:
+        job = json.loads((attempt_dir / "job-charter.snapshot.json").read_text())
+        baseline = json.loads((attempt_dir / "baseline.json").read_text())
     manager_decision: dict[str, Any] | None = None
     dispatch_sequence_base = 1
 
@@ -2254,6 +2266,16 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         bounded_task = (f"Approved job:\n{task.strip()}\n\n"
                         f"Logical assignment: {selected}\n"
                         f"Sealed instructions:\n{selected_assignment['instructions'].strip()}")
+        operation = selected_assignment["requirements"]["operation"]
+        if live_attempt and operation == "verify":
+            if edit_evidence is None or test_evidence is None:
+                raise ContractError("logical v9 verifier selected before Flow captured edit and test evidence")
+            bounded_task = verifier_provider_task(
+                bounded_task, (attempt_dir / "repair.diff").read_text(),
+                edit_evidence["diff_sha256"], structured=True,
+                test_output=test_evidence["output_excerpt"],
+                authority_statement=VERIFIED_HANDOFF_AUTHORITY,
+            )
         if len(bounded_task.encode()) > MAX_TASK_BYTES:
             raise ContractError("logical v9 sealed assignment task exceeds size limit")
         manager_decision = {"assignment_id": selected, "task": bounded_task,
@@ -2261,22 +2283,58 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         outcomes.append((supervisor or run_maf_v9_delivery)(
             envelope, task, dispatch, python_path=python_path,
             manager_decision=manager_decision))
+        if live_attempt and operation == "edit":
+            if job is None or baseline is None:
+                raise ContractError("logical v9 job evidence contract is absent")
+            edit_evidence = _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job)
+            test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
+            if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
+                raise ContractError("chartered test changed the verified v9 worktree diff")
+        if live_attempt and operation == "verify":
+            raw_result = outcomes[-1].get("outcome", {}).get("result") if isinstance(outcomes[-1], dict) else None
+            if raw_result is None:
+                action_rows = ledger.snapshot(envelope["attempt_id"])["actions"]
+                row = next((item for item in reversed(action_rows)
+                            if item["request"]["assignment_id"] == selected), None)
+                wrapped = row.get("result") if isinstance(row, dict) else None
+                raw_result = wrapped.get("result") if isinstance(wrapped, dict) else None
+            output = raw_result.get("output") if isinstance(raw_result, dict) else None
+            if not isinstance(output, str):
+                raise ContractError("logical v9 verifier returned no bounded output")
+            verifier_action = next(item["request"] for item in reversed(
+                ledger.snapshot(envelope["attempt_id"])["actions"])
+                if item["request"]["assignment_id"] == selected)
+            verifier_input = {"provider_task": verifier_action["task"], "assignment_id": selected}
+            input_digest = hashlib.sha256(canonical(verifier_input).encode()).hexdigest()
+            final_evaluation = evaluate_candidate(
+                action_id=verifier_action["action_id"], verifier_input_digest=input_digest,
+                raw_output=output, diff_digest=edit_evidence["diff_sha256"],
+                test_evidence_digest=test_evidence["output_sha256"],
+            )
+            ledger.record_v9_verifier_evaluation(
+                verifier_action["action_id"], verifier_input, raw_result, final_evaluation,
+                edit_evidence["diff_sha256"], test_evidence["output_sha256"],
+                generation=generation,
+            )
         completed.add(selected)
         pending.pop(selected)
     outcome = outcomes[-1]
     # Seal the receipt only after every dependency-valid logical assignment
     # completed. The ledger remains the source of truth; uncertain sends
     # refuse here and remain in explicit recovery instead.
-    attempt_dir = Path(envelope["checkpoint_dir"]).parent
-    if not attempt_dir.is_absolute() or not attempt_dir.is_dir() or attempt_dir.is_symlink():
+    if not live_attempt:
         # Pure embedding callers can exercise the MAF/Flow adapter boundary
         # with an in-memory-style ledger fixture. A charter-prepared live
         # attempt always has this private absolute directory and is sealed.
         return outcome
-    sealed = ledger.seal_v9_attempt(envelope["attempt_id"], "completed", "logical_action_completed",
+    terminal_status = "completed" if final_evaluation is not None \
+        and final_evaluation["disposition"] == "valid_pass" else "failed"
+    terminal_reason = ("semantic_verifier_valid_pass" if terminal_status == "completed" else
+                       "semantic_verifier_" + (final_evaluation or {}).get("disposition", "missing"))
+    sealed = ledger.seal_v9_attempt(envelope["attempt_id"], terminal_status, terminal_reason,
                                     attempt_dir / "receipt.json", generation=generation)
-    return {**outcome, "attempt_id": envelope["attempt_id"], "status": "completed",
-            "reason": "logical_action_completed", "receipt_path": sealed["receipt_path"],
+    return {**outcome, "attempt_id": envelope["attempt_id"], "status": terminal_status,
+            "reason": terminal_reason, "receipt_path": sealed["receipt_path"],
             "sealed_receipt_sha256": sealed["sealed_receipt_sha256"]}
 
 
@@ -2334,6 +2392,27 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     for path, name in ((requirements, "requirements.snapshot.md"), (acceptance, "acceptance.snapshot.md"),
                        (manifest, "manifest.snapshot.json"), (charter, "job-charter.snapshot.json")):
         _write_snapshot(attempt_dir / name, path.read_bytes())
+    charter_data = json.loads(charter.read_text())
+    baseline_contract = charter_data.get("baseline")
+    if (not isinstance(baseline_contract, dict)
+            or set(baseline_contract) != {"kind", "diff_sha256"}):
+        raise ContractError("v9 job baseline is invalid")
+    current_diff = _git(worktree, "diff", "HEAD", "--").encode()
+    if baseline_contract["kind"] == "clean":
+        if (_git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
+                or current_diff or baseline_contract["diff_sha256"] != hashlib.sha256(b"").hexdigest()):
+            raise ContractError("v9 isolated worktree baseline is not clean")
+    elif baseline_contract["kind"] != "declared_regression" \
+            or baseline_contract["diff_sha256"] != hashlib.sha256(current_diff).hexdigest():
+        raise ContractError("v9 declared baseline differs from the isolated worktree")
+    baseline_files = {}
+    for relative in charter_data.get("write_paths", []):
+        target = worktree / relative
+        if target.is_file() and not target.is_symlink():
+            baseline_files[relative] = hashlib.sha256(target.read_bytes()).hexdigest()
+    baseline = {"regression_diff_sha256": baseline_contract["diff_sha256"],
+                "source_commit": source_commit, "files": baseline_files}
+    write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
     sealed_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     normalized_availability = [normalize_availability(item) for item in availability]
     policy = effective_policy or merge_selection_policy(framework_policy or {}, administrator_policy, project_policy, run_policy)
@@ -2351,6 +2430,7 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         "attempt_id": attempt_id, "charter_digest": charter_digest,
         "manifest_digest": manifest_digest, "run_protocol_revision": 2,
         "logical_assignments": logical_assignments,
+        "job_charter_digest": hashlib.sha256(charter.read_bytes()).hexdigest(),
         "selection_inputs": {"policy": policy, "catalog": catalog, "availability": normalized_availability},
         "selection_input_digests": {"policy": digest(policy), "catalog": digest(catalog),
                                     "availability": digest(normalized_availability)},
