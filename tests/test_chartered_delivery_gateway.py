@@ -1555,6 +1555,109 @@ class ProviderRouteTests(unittest.TestCase):
 
 
 class V9CharteredRouteTests(CharteredFixture):
+    def _execute_v9_topology(self, *, with_collector: bool,
+                             independent_verifier: bool):
+        """Exercise the complete v9 route while replacing only provider I/O."""
+        now = datetime.now(timezone.utc)
+        common = {"minimum_tier": "working", "locality": "any",
+                  "input_bytes": 65536, "output_bytes": 16384,
+                  "context_tokens": 32768, "risk_class": "standard",
+                  "independence_required": False}
+        assignments = [
+            {"assignment_id": "manager", "role": "delivery-lead",
+             "instructions": "Manage the approved work.", "depends_on": [],
+             "requirements": {**common, "operation": "manage",
+                              "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer",
+             "instructions": "Edit target.py.", "depends_on": [],
+             "requirements": {**common, "operation": "edit",
+                              "required_capabilities": ["structured_edit"]}},
+        ]
+        if with_collector:
+            assignments.append({
+                "assignment_id": "evidence", "role": "test-engineer",
+                "instructions": "Collect the edit and test evidence.",
+                "depends_on": ["editor"],
+                "requirements": {**common, "operation": "collect",
+                                 "required_capabilities": ["evidence_collection"]},
+            })
+        verifier_dependencies = ["editor", *(("evidence",) if with_collector else ())]
+        assignments.append({
+            "assignment_id": "verifier", "role": "quality-reviewer",
+            "instructions": "Verify the bounded evidence.",
+            "depends_on": verifier_dependencies,
+            "requirements": {**common, "operation": "verify",
+                             "required_capabilities": ["evidence_collection"],
+                             "risk_class": "high" if independent_verifier else "standard",
+                             "independence_required": independent_verifier},
+        })
+        self.charter["logical_assignments"] = assignments
+        self.charter["evidence_collector_instance_ids"] = ["evidence"] if with_collector else []
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        catalog = [
+            {"candidate_id": "ollama-local", "provider": "ollama", "model": "local-model",
+             "provider_family": "ollama", "tier": "judgment", "locality": "local",
+             "operations": ["manage", "edit", "collect", "verify"],
+             "capabilities": ["structured_output", "structured_edit", "evidence_collection"],
+             "cost_class": 0, "enabled": True},
+            {"candidate_id": "codex-hosted", "provider": "codex", "model": "hosted-model",
+             "provider_family": "openai", "tier": "judgment", "locality": "hosted",
+             "operations": ["verify"], "capabilities": ["evidence_collection"],
+             "cost_class": 1, "enabled": True},
+        ]
+        availability = [{
+            "candidate_id": item["candidate_id"], "state": "ready",
+            "observed_at": (now - timedelta(seconds=1)).isoformat(),
+            "expires_at": (now + timedelta(minutes=1)).isoformat(),
+            "evidence_code": "model_present" if item["provider"] == "ollama"
+            else "authentication_ready", "probe_version": "availability-v1",
+        } for item in catalog]
+        constraints = independence_constraints_from_assignments(assignments)
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
+            envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+                "sample", self.worktree, self.commit, root=self.root,
+                logical_assignments=assignments, catalog=catalog, availability=availability,
+                independence_constraints=constraints,
+            )
+            manager_turn = 0
+            worker_order = ["editor", *(("evidence",) if with_collector else ()), "verifier"]
+
+            def transport(binding, action):
+                nonlocal manager_turn
+                assignment_id = action["assignment_id"]
+                if assignment_id == "manager":
+                    selected = worker_order[manager_turn]
+                    manager_turn += 1
+                    return {"provider": binding["provider"], "manager_response": {
+                        "is_request_satisfied": {"answer": False},
+                        "is_in_loop": {"answer": True},
+                        "is_progress_being_made": {"answer": True},
+                        "next_speaker": {"answer": selected, "reason": "approved work remains"},
+                        "instruction_or_question": {"answer": "complete the bounded assignment"},
+                    }}
+                if assignment_id == "editor":
+                    (self.worktree / "target.py").write_text("new\n")
+                    return {"provider": binding["provider"], "output": "applied"}
+                if assignment_id == "evidence":
+                    return {"provider": binding["provider"], "output": "evidence collected"}
+                return {"provider": binding["provider"], "output": json.dumps({
+                    "schema_version": 1, "decision": "pass",
+                    "summary": "Diff and test evidence pass.", "findings": [],
+                })}
+
+            result = execute_v9_logical_delivery(
+                envelope, task, ledger, transport,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                    on_action({"attempt_id": envelope["attempt_id"],
+                               "assignment_id": manager_decision["assignment_id"],
+                               "task": manager_decision["task"], "sequence": 1,
+                               "manager_turn": manager_decision["manager_turn"]}),
+            )
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        return result, ledger.snapshot(envelope["attempt_id"]), receipt
+
     def _write_v9_logical_charter(self) -> None:
         common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
                   "output_bytes": 100, "context_tokens": 100,
@@ -1674,6 +1777,59 @@ class V9CharteredRouteTests(CharteredFixture):
         with self.assertRaises(V9ReceiptError) as raised:
             verify_selection_receipt(receipt)
         self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
+
+    def test_v9_ollama_producer_and_collector_bind_independent_hosted_verifier(self):
+        result, snapshot, receipt = self._execute_v9_topology(
+            with_collector=True, independent_verifier=True)
+
+        self.assertEqual((result["status"], result["reason"]),
+                         ("completed", "semantic_verifier_valid_pass"))
+        actions = [row["request"] for row in snapshot["actions"]]
+        self.assertEqual([row["assignment_id"] for row in actions],
+                         ["manager", "editor", "manager", "evidence", "manager", "verifier"])
+        by_assignment = {row["assignment_id"]: row for row in actions if row["assignment_id"] != "manager"}
+        self.assertEqual(by_assignment["editor"]["selection_decision"]["selected_candidate_id"],
+                         "ollama-local")
+        self.assertEqual(by_assignment["editor"]["selection_decision"]["selected_binding"]["provider_family"],
+                         "ollama")
+        self.assertEqual(by_assignment["evidence"]["selection_decision"]["selected_candidate_id"],
+                         "ollama-local")
+        self.assertEqual(by_assignment["evidence"]["selection_decision"]["selected_binding"]["provider_family"],
+                         "ollama")
+        verifier_decision = by_assignment["verifier"]["selection_decision"]
+        self.assertEqual(verifier_decision["excluded_families"], ["ollama"])
+        self.assertEqual(verifier_decision["selected_candidate_id"], "codex-hosted")
+        self.assertEqual(verifier_decision["selected_binding"]["provider_family"], "openai")
+        constraint = receipt["envelope"]["selection_authority"]["independence_constraints"][0]
+        self.assertEqual(constraint["producer_assignment_ids"], ["editor"])
+        self.assertEqual(constraint["evidence_collector_assignment_ids"], ["evidence"])
+        dependencies = {row["assignment_id"]: row["depends_on"]
+                        for row in receipt["envelope"]["logical_assignments"]}
+        self.assertEqual(dependencies["evidence"], ["editor"])
+        self.assertEqual(dependencies["verifier"], ["editor", "evidence"])
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
+    def test_v9_standard_verifier_without_independence_selects_ollama(self):
+        result, snapshot, receipt = self._execute_v9_topology(
+            with_collector=False, independent_verifier=False)
+
+        self.assertEqual(result["status"], "completed")
+        actions = [row["request"] for row in snapshot["actions"]]
+        self.assertEqual([row["assignment_id"] for row in actions],
+                         ["manager", "editor", "manager", "verifier"])
+        verifier = next(row for row in actions if row["assignment_id"] == "verifier")
+        decision = verifier["selection_decision"]
+        self.assertEqual(decision["excluded_families"], [])
+        self.assertEqual(decision["selected_candidate_id"], "ollama-local")
+        self.assertEqual(decision["selected_binding"]["provider_family"], "ollama")
+        editor = next(row for row in actions if row["assignment_id"] == "editor")
+        self.assertEqual(editor["selection_decision"]["selected_candidate_id"], "ollama-local")
+        self.assertEqual(editor["selection_decision"]["selected_binding"]["provider_family"], "ollama")
+        dependencies = {row["assignment_id"]: row["depends_on"]
+                        for row in receipt["envelope"]["logical_assignments"]}
+        self.assertEqual(dependencies["verifier"], ["editor"])
+        self.assertEqual(receipt["envelope"]["selection_authority"]["independence_constraints"], [])
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
 
     def test_v9_observed_invalid_manager_output_seals_failed_not_unknown(self):
         result, snapshot = self._execute_semantic_v9("unused", manager_invalid=True)
