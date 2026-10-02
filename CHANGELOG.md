@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.2](https://github.com/andyconley/flow/compare/v0.40.1...v0.40.2) (2026-10-02)
+
+### Bug Fixes
+
+* seal invalid hosted edit results ([39bf7fc](https://github.com/andyconley/flow/commit/39bf7fc45b73f49b4944e5a1bffa1ac6e39a0d41))
+
 ## [0.40.1](https://github.com/andyconley/flow/compare/v0.40.0...v0.40.1) (2026-10-02)
 
 ### Bug Fixes
