@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.3](https://github.com/andyconley/flow/compare/v0.40.2...v0.40.3) (2026-10-02)
+
+### Bug Fixes
+
+* avoid nested codex sandbox failure ([aedbe3e](https://github.com/andyconley/flow/commit/aedbe3e80bc7883533ab3c92fd37b0fa84ee982f))
+
 ## [0.40.2](https://github.com/andyconley/flow/compare/v0.40.1...v0.40.2) (2026-10-02)
 
 ### Bug Fixes
