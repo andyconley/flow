@@ -1574,7 +1574,8 @@ class V9CharteredRouteTests(CharteredFixture):
 
     def _execute_semantic_v9(self, verifier_output: str | None,
                              second_verifier_output: str | None = None,
-                             manager_invalid: bool = False):
+                             manager_invalid: bool = False,
+                             manager_outside: bool = False):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
@@ -1623,6 +1624,14 @@ class V9CharteredRouteTests(CharteredFixture):
                     if manager_invalid:
                         return {"output": "observed invalid manager output",
                                 "manager_response": None, "observed_invalid": True}
+                    if manager_outside:
+                        return {"output": "observed", "manager_response": {
+                            "is_request_satisfied": {"answer": False},
+                            "is_in_loop": {"answer": True},
+                            "is_progress_being_made": {"answer": True},
+                            "next_speaker": {"answer": "not-approved", "reason": "bad choice"},
+                            "instruction_or_question": {"answer": "work"},
+                        }}
                     manager_turn += 1
                     return {"manager_response": {
                         "is_request_satisfied": {"answer": False},
@@ -1674,6 +1683,12 @@ class V9CharteredRouteTests(CharteredFixture):
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["evidence_failures"][0]["stage"], "manager_evaluation")
         self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
+    def test_v9_out_of_frontier_manager_decision_seals_failed_not_started(self):
+        result, snapshot = self._execute_semantic_v9("unused", manager_outside=True)
+        self.assertEqual((result["status"], result["reason"]),
+                         ("failed", "manager_evaluation_failed"))
+        self.assertEqual(snapshot["status"], "failed")
 
     def test_v9_evidence_bound_valid_pass_is_required_for_completion(self):
         result, snapshot = self._execute_semantic_v9(json.dumps({

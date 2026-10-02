@@ -2275,6 +2275,19 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 or not isinstance(selected_task, str) or not selected_task.strip()
                 or not isinstance(reason, str) or not reason.strip()
                 or len(selected_task.encode()) > MAX_TASK_BYTES or len(reason.encode()) > MAX_TASK_BYTES):
+            if live_attempt:
+                manager_action = next(item["request"] for item in reversed(
+                    ledger.snapshot(envelope["attempt_id"])["actions"])
+                    if item["request"]["assignment_id"] == manager["assignment_id"])
+                ledger.record_v9_evidence_failure(
+                    envelope["attempt_id"], manager_action["action_id"], "manager_evaluation",
+                    "logical v9 manager decision is outside the approved logical frontier",
+                    generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "manager_evaluation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "manager_evaluation_failed", **sealed}
             raise ContractError("logical v9 manager decision is outside the approved logical frontier")
         selected_assignment = pending[selected]
         bounded_task = (f"Approved job:\n{task.strip()}\n\n"
