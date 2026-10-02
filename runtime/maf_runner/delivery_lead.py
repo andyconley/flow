@@ -23,7 +23,12 @@ from runtime.maf_runner.limits import (MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAG
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
-SUPPORTED_PROTOCOLS = [5, 6, 7, 8, 9]
+# Readiness identity for the package-backed MAF orchestration path. Protocol
+# v9 is implemented below, but returns before importing that package surface;
+# its compatibility is bound by the runner digest and transport contract.
+# Keeping this list stable lets the immediately preceding updater validate and
+# atomically activate an additive v9-capable runner.
+SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TASK_BYTES = 4096
