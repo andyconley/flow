@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.6](https://github.com/andyconley/flow/compare/v0.40.5...v0.40.6) (2026-10-02)
+
+### Bug Fixes
+
+* preserve hosted regression baselines ([0ca3dab](https://github.com/andyconley/flow/commit/0ca3dab1a14708063d61be2eab671aeea4e9db08))
+
 ## [0.40.5](https://github.com/andyconley/flow/compare/v0.40.4...v0.40.5) (2026-10-02)
 
 ### Bug Fixes
