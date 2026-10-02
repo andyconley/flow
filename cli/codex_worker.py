@@ -193,10 +193,17 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
     if not instructions.strip() or not task.strip() or len(prompt_bytes) > max_prompt_bytes:
         raise ValueError("Codex prompt is empty or too large")
     argv = [codex_bin, "exec", "--json", "--ephemeral", "--ignore-user-config",
-            "--skip-git-repo-check", "--sandbox", sandbox,
-            "--model", model, "--cd", str(workspace),
-            "--config", 'approval_policy="never"',
-            "--config", "features.multi_agent=false", "-"]
+            "--skip-git-repo-check"]
+    if confine_workspace_reads:
+        # Flow already launches the CLI inside a deny-by-path sandbox-exec
+        # profile below. Asking Codex to apply its own Seatbelt profile inside
+        # that process fails on macOS with sandbox_apply EPERM. Disable only
+        # the nested CLI sandbox; the Flow-owned OS boundary remains active.
+        argv.append("--dangerously-bypass-approvals-and-sandbox")
+    else:
+        argv.extend(["--sandbox", sandbox, "--config", 'approval_policy="never"'])
+    argv.extend(["--model", model, "--cd", str(workspace),
+                 "--config", "features.multi_agent=false", "-"])
     # Codex writes runtime state even with --ephemeral. Give the nested sandbox
     # a private writable home containing only the installed login, rather than
     # exposing the user's normal state database to writes.

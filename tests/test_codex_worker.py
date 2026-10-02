@@ -117,6 +117,34 @@ class CodexWorkerTests(unittest.TestCase):
                                 model="gpt-test", timeout_seconds=20, codex_bin=str(fake))
             self.assertEqual(result["output"], "done")
 
+    def test_flow_confinement_disables_only_the_nested_codex_sandbox(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source_home = root / "source-codex-home"
+            source_home.mkdir()
+            (source_home / "auth.json").write_text('{"token":"fixture"}')
+            workspace = root / "fixture"
+            workspace.mkdir()
+            fake = root / "codex-fake"
+            fake.write_text("#!/usr/bin/env python3\n"
+                            "import json, sys\n"
+                            "from pathlib import Path\n"
+                            "Path('argv.json').write_text(json.dumps(sys.argv[1:]))\n"
+                            "sys.stdin.read()\n"
+                            "print(json.dumps({'type':'thread.started','thread_id':'confined'}))\n"
+                            "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'done'}}))\n"
+                            "print(json.dumps({'type':'turn.completed'}))\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            with patch.dict(os.environ, {"CODEX_HOME": str(source_home)}), \
+                    patch("codex_worker.confined_argv", side_effect=lambda argv, **_kwargs: argv) as confined:
+                call_codex(instructions="Charter", task="Task", workspace=workspace,
+                           model="gpt-test", timeout_seconds=5, codex_bin=str(fake),
+                           confine_workspace_reads=True)
+            argv = json.loads((workspace / "argv.json").read_text())
+            self.assertIn("--dangerously-bypass-approvals-and-sandbox", argv)
+            self.assertNotIn("--sandbox", argv)
+            confined.assert_called_once()
+
     def test_evidence_prompt_larger_than_legacy_limit_is_accepted(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
