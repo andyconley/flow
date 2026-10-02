@@ -819,6 +819,29 @@ class ExecutionLedger:
             return db.execute("SELECT 1 FROM actions WHERE attempt_id=? AND status IN ('started','unknown') LIMIT 1",
                               (attempt_id,)).fetchone() is not None
 
+    def completed_v9_actions(self, attempt_id: str) -> list[dict[str, Any]]:
+        """Read completed v9 actions without requiring a receipt-complete selection chain.
+
+        A positively refused pre-send selection is intentionally transient
+        until its successor is reserved. Independence routing still needs the
+        already completed producer families during that interval, so it must
+        not depend on the seal-oriented full snapshot validator.
+        """
+        with self._db() as db:
+            attempt = db.execute(
+                "SELECT execution_protocol_version,status FROM attempts WHERE attempt_id=?",
+                (attempt_id,),
+            ).fetchone()
+            if attempt is None or attempt[0] != 9 or attempt[1] != "started":
+                raise ContractError("protocol v9 active attempt is absent")
+            rows = db.execute(
+                "SELECT action_id,request_json,status FROM actions "
+                "WHERE attempt_id=? AND status='completed' ORDER BY rowid",
+                (attempt_id,),
+            ).fetchall()
+            return [{"action_id": row[0], "request": json.loads(row[1]), "status": row[2]}
+                    for row in rows]
+
     @staticmethod
     def _v8_lineage_locked(db: sqlite3.Connection, work_id: str) -> tuple[list[dict[str, Any]], list[str]]:
         columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)")}
