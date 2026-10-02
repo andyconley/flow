@@ -2948,7 +2948,17 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
         operation = assignment["requirements"]["operation"]
         provider, model = binding["provider"], binding["model"]
         instructions, task = assignment["instructions"], action["task"]
-        timeout = 60
+        # Coordination should fail quickly, while repository edits, evidence
+        # collection, and independent verification may legitimately run the
+        # charter's bounded test commands. Provider workers already enforce a
+        # hard 600-second ceiling.
+        timeout = {
+            "manage": 60,
+            "read": 120,
+            "edit": 600,
+            "collect": 600,
+            "verify": 600,
+        }[operation]
         if provider == "ollama":
             if operation == "edit":
                 try:
