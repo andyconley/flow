@@ -1977,6 +1977,48 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual((self.worktree / "target.py").read_text(), "provider correction\n")
         self.assertEqual(result["scoped_edit"]["changed_files"], ["target.py"])
 
+    def test_hosted_v9_editor_preserves_real_main_merge_base(self):
+        subprocess.run(["git", "-C", str(self.worktree), "switch", "-qc", "source-branch",
+                        self.commit], check=True)
+        subprocess.run(["git", "-C", str(self.worktree), "branch", "-f", "main", self.commit], check=True)
+        (self.worktree / "target.py").write_text("source branch\n")
+        subprocess.run(["git", "-C", str(self.worktree), "add", "target.py"], check=True)
+        subprocess.run(["git", "-C", str(self.worktree), "commit", "-qm", "source branch"], check=True)
+        source_commit = subprocess.check_output(
+            ["git", "-C", str(self.worktree), "rev-parse", "HEAD"], text=True).strip()
+        (self.worktree / "target.py").write_text("approved regression\n")
+        envelope = {"worktree": str(self.worktree), "source_commit": source_commit,
+                    "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def edit_in_staging(**kwargs):
+            staging = kwargs["workspace"]
+            merge_base = subprocess.check_output(
+                ["git", "-C", str(staging), "merge-base", "HEAD", "main"], text=True).strip()
+            main = subprocess.check_output(
+                ["git", "-C", str(staging), "rev-parse", "main"], text=True).strip()
+            head = subprocess.check_output(
+                ["git", "-C", str(staging), "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(merge_base, main)
+            self.assertNotEqual(head, main)
+            diff = subprocess.check_output(
+                ["git", "-C", str(staging), "diff", "main", "--", "target.py"], text=True)
+            self.assertIn("-old", diff)
+            self.assertIn("+approved regression", diff)
+            (staging / "target.py").write_text("provider correction\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_codex", side_effect=edit_in_staging):
+            adapter(
+                {"provider": "codex", "model": "codex-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "provider correction\n")
+
     def test_hosted_v9_editor_does_not_mistake_declared_regression_for_provider_edit(self):
         (self.worktree / "target.py").write_text("approved regression\n")
         envelope = {"worktree": str(self.worktree), "source_commit": self.commit,

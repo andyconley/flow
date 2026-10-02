@@ -2899,6 +2899,21 @@ def _staging_snapshot(staging: Path) -> dict[str, tuple[str, int]]:
     return snapshot
 
 
+def _clear_staging_worktree(staging: Path) -> None:
+    for child in staging.iterdir():
+        if child.name == ".git":
+            continue
+        shutil.rmtree(child) if child.is_dir() else child.unlink()
+
+
+def _source_merge_base(workspace: Path, source_commit: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(workspace), "merge-base", source_commit, "main"],
+        capture_output=True, text=True, timeout=15, check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else source_commit
+
+
 def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[str],
                               before: dict[str, tuple[str, int]]) -> dict[str, Any]:
     """Validate a hosted staging diff and atomically copy approved files back."""
@@ -2972,14 +2987,19 @@ def _hosted_scoped_edit(
         _git(staging, "init", "-q")
         _git(staging, "config", "user.email", "flow@local.invalid")
         _git(staging, "config", "user.name", "Flow")
-        _copy_scoped_commit_tree(workspace, staging, scopes, source_commit)
+        merge_base = _source_merge_base(workspace, source_commit)
+        _copy_scoped_commit_tree(workspace, staging, scopes, merge_base)
         _git(staging, "add", "--all")
-        _git(staging, "commit", "-qm", "Flow pinned source baseline")
+        _git(staging, "commit", "-qm", "Flow scoped merge base")
         _git(staging, "branch", "-M", "main")
-        for child in staging.iterdir():
-            if child.name == ".git":
-                continue
-            shutil.rmtree(child) if child.is_dir() else child.unlink()
+        _git(staging, "switch", "-qc", "flow-work")
+        if merge_base != source_commit:
+            _clear_staging_worktree(staging)
+            _copy_scoped_commit_tree(workspace, staging, scopes, source_commit)
+            _git(staging, "add", "--all")
+            if _git(staging, "status", "--porcelain"):
+                _git(staging, "commit", "-qm", "Flow pinned source commit")
+        _clear_staging_worktree(staging)
         _copy_scoped_tree(workspace, staging, scopes)
         before = _staging_snapshot(staging)
         result = invoke(staging)
