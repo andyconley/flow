@@ -63,6 +63,7 @@ from claude_gateway import execute_claude  # noqa: E402
 from delivery_gateway import (decide_expansion, execute_chartered_delivery, execute_delivery,
                               execute_v9_chartered_job, provider_selection_probe, recover_delivery,
                               recover_runtime_startup, resolve_execution, resume_delivery,
+                              resume_v9_chartered_job,
                               terminate_v9_delivery, v9_recovery_status)  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
@@ -666,6 +667,13 @@ def main() -> int:
     run_v9_status.add_argument("--project-root", type=Path)
     run_v9_status.add_argument("--json", action="store_true")
 
+    run_v9_resume = run_sub.add_parser(
+        "resume-chartered-job", help="continue a protocol v9 charter from a clean completed-action boundary")
+    run_v9_resume.add_argument("work_id")
+    run_v9_resume.add_argument("attempt_id")
+    run_v9_resume.add_argument("--project-root", type=Path)
+    run_v9_resume.add_argument("--json", action="store_true")
+
     run_v9_terminate = run_sub.add_parser(
         "terminate-v9-delivery", help="seal an uncertain protocol v9 attempt without replaying provider I/O")
     run_v9_terminate.add_argument("work_id")
@@ -1209,6 +1217,22 @@ def main() -> int:
               f"reconciliation required: {str(result['reconciliation_required']).lower()}\n"
               f"next action: {result['next_action']}")
         return 1 if result["reconciliation_required"] else 0
+    if args.command == "run" and args.run_target == "resume-chartered-job":
+        import json
+        try:
+            result = resume_v9_chartered_job(
+                args.work_id, args.attempt_id, root=args.project_root)
+        except MafRuntimeUnready as exc:
+            payload = {"status": "refused", "reason": "maf_runtime_unready", "diagnostic": exc.diagnostic}
+            print(json.dumps(payload, sort_keys=True) if args.json else f"chartered resume refused: maf_runtime_unready: {exc}")
+            return 2
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"chartered resume refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"attempt: {result.get('attempt_id', args.attempt_id)}\nstatus: {result.get('status', 'refused')}\n"
+              f"receipt: {result.get('receipt_path', 'not-created')}\nreason: {result.get('reason', 'not-recorded')}")
+        return 0 if result["status"] == "completed" else 1
     if args.command == "run" and args.run_target == "terminate-v9-delivery":
         import json
         try:

@@ -2263,7 +2263,52 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     completed: set[str] = set()
     repair_feedback: dict[str, str] = {}
     repair_counts: dict[str, int] = {}
-    stage = 0
+    # A process may stop after a fully observed action and before the next
+    # provider send (for example, a local contract refusal while constructing
+    # the verifier payload).  Reconstruct that clean boundary from the ledger
+    # instead of replaying completed provider work.  Unknown or started sends
+    # remain exclusively in the explicit reconciliation path.
+    prior_actions = snapshot["actions"]
+    if any(item["status"] != "completed" for item in prior_actions):
+        raise ContractError("logical v9 continuation requires a clean completed-action boundary")
+    prior_workers = [item for item in prior_actions
+                     if item["request"]["assignment_id"] != manager["assignment_id"]]
+    failed_action_ids = {item["action_id"] for item in snapshot.get("evidence_failures", [])}
+    for item in prior_workers:
+        if item["request"]["action_id"] not in failed_action_ids:
+            completed.add(item["request"]["assignment_id"])
+    for assignment_id in completed:
+        pending.pop(assignment_id, None)
+    prior_managers = [item for item in prior_actions
+                      if item["request"]["assignment_id"] == manager["assignment_id"]]
+    trailing_manager = (prior_managers[-1] if prior_actions and prior_managers
+                        and prior_actions[-1] is prior_managers[-1] else None)
+    stage = len(prior_managers) - (1 if trailing_manager is not None else 0)
+    if live_attempt and completed:
+        completed_assignments = {item["assignment_id"]: item for item in workers
+                                 if item["assignment_id"] in completed}
+        if any(item["requirements"]["operation"] == "edit"
+               for item in completed_assignments.values()):
+            if job is None or baseline is None:
+                raise ContractError("logical v9 continuation evidence contract is absent")
+            edit_evidence = _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job)
+            test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
+            if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
+                raise ContractError("chartered test changed the resumed v9 worktree diff")
+    action_by_id = {item["request"]["action_id"]: item["request"] for item in prior_actions}
+    for evaluation in snapshot.get("verifier_evaluations", []):
+        action = action_by_id.get(evaluation.get("action_id"))
+        if action is not None:
+            verifier_evaluations[action["assignment_id"]] = evaluation["evaluation"]
+
+    def manager_progress(row: dict[str, Any]) -> dict[str, Any] | None:
+        wrapped = row.get("result")
+        raw = wrapped.get("result") if isinstance(wrapped, dict) else None
+        progress = raw.get("manager_response") if isinstance(raw, dict) else None
+        if progress is None and isinstance(raw, dict) and isinstance(raw.get("output"), str):
+            progress = parse_progress(raw["output"]).value
+        return progress if isinstance(progress, dict) else None
+
     while pending:
         frontier = sorted(
             (item for item in pending.values()
@@ -2276,19 +2321,25 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         dispatch_sequence_base = stage * 2 - 1
         allowed_ids = [item["assignment_id"] for item in frontier]
         manager_decision = None
-        try:
-            manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
-                      "task": ("Choose the next logical assignment for the approved task. "
-                               f"next_speaker.answer must be exactly one of {json.dumps(allowed_ids)}. "
-                               "Set is_request_satisfied.answer=false while required work remains and provide "
-                               "a nonempty reason and bounded instruction_or_question.answer."),
-                      "sequence": dispatch_sequence_base, "manager_turn": stage - 1})
-        except ProviderCandidatesExhausted as exhausted:
-            return exhausted.result
-        raw_manager = manager_outcome.get("manager_result")
-        progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
-        if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
-            progress = parse_progress(raw_manager["output"]).value
+        if trailing_manager is not None:
+            if trailing_manager["request"]["sequence"] != dispatch_sequence_base:
+                raise ContractError("logical v9 continuation manager sequence is invalid")
+            progress = manager_progress(trailing_manager)
+            trailing_manager = None
+        else:
+            try:
+                manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
+                          "task": ("Choose the next logical assignment for the approved task. "
+                                   f"next_speaker.answer must be exactly one of {json.dumps(allowed_ids)}. "
+                                   "Set is_request_satisfied.answer=false while required work remains and provide "
+                                   "a nonempty reason and bounded instruction_or_question.answer."),
+                          "sequence": dispatch_sequence_base, "manager_turn": stage - 1})
+            except ProviderCandidatesExhausted as exhausted:
+                return exhausted.result
+            raw_manager = manager_outcome.get("manager_result")
+            progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
+            if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
+                progress = parse_progress(raw_manager["output"]).value
         if not isinstance(progress, dict):
             if live_attempt:
                 manager_action = next(item["request"] for item in reversed(
@@ -3156,6 +3207,55 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
     return {**result, "review_handoff": {"status": "completed", "state": payload["state"]}}
 
 
+def resume_v9_chartered_job(work_id: str, attempt_id: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Continue a v9 charter from a clean completed-action boundary."""
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    execution_dir = run_dir / "execution"
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    snapshot = ledger.snapshot(attempt_id)
+    if snapshot["execution_protocol_version"] != 9 or snapshot["work_id"] != work_id:
+        raise ContractError("v9 continuation target differs from the requested run")
+    if snapshot["status"] != "started":
+        raise ContractError("v9 continuation target is already terminal")
+    if any(item["status"] != "completed" for item in snapshot["actions"]):
+        raise ContractError("v9 continuation requires explicit reconciliation before resume")
+    envelope = snapshot["envelope"]
+    attempt_dir = execution_dir / attempt_id
+    charter_path = attempt_dir / "job-charter.snapshot.json"
+    if not charter_path.is_file() or charter_path.is_symlink():
+        raise ContractError("v9 continuation job charter snapshot is absent")
+    charter = json.loads(charter_path.read_text())
+    task = charter.get("task")
+    read_paths, write_paths = charter.get("read_paths"), charter.get("write_paths")
+    if not isinstance(task, str) or not task.strip():
+        raise ContractError("v9 continuation task is absent")
+    if not isinstance(read_paths, list) or not all(isinstance(path, str) and path for path in read_paths):
+        raise ContractError("v9 continuation read scope is invalid")
+    if not isinstance(write_paths, list) or not all(isinstance(path, str) and path for path in write_paths):
+        raise ContractError("v9 continuation edit scope is invalid")
+    catalog = envelope.get("selection_inputs", {}).get("catalog")
+    if not isinstance(catalog, list):
+        raise ContractError("v9 continuation selection catalog is absent")
+    result = execute_v9_logical_delivery(
+        envelope, task, ledger,
+        _v9_adapter_for_operation(envelope, read_paths=read_paths, write_paths=write_paths),
+        readiness_recheck=lambda binding: _v9_readiness_recheck(catalog, binding),
+    )
+    if result.get("status") != "completed":
+        return result
+    state = run_status(work_id, root=project_root)
+    authority = _sealed_delivery_authority(run_dir, state.get("delivery", {}))
+    if "handoff_to_review" not in authority["charter"].get("allowed_lifecycle_operations", []):
+        return result
+    ok, payload, errors = handoff_to_review(
+        work_id, attempt_id, envelope["selection_authority"]["generation"], root=project_root)
+    if not ok:
+        return {**result, "status": "handoff_failed", "reason": "; ".join(errors),
+                "review_handoff": {"status": "failed", "errors": errors}}
+    return {**result, "review_handoff": {"status": "completed", "state": payload["state"]}}
+
+
 def v9_recovery_status(work_id: str, attempt_id: str, *, root: Path | None = None) -> dict[str, Any]:
     """Return the explicit reconciliation state for a v9 attempt.
 
@@ -3169,10 +3269,12 @@ def v9_recovery_status(work_id: str, attempt_id: str, *, root: Path | None = Non
     if snapshot["execution_protocol_version"] != 9 or snapshot["work_id"] != work_id:
         raise ContractError("v9 recovery target differs from the requested run")
     unresolved = [item["action_id"] for item in snapshot["actions"] if item["status"] in {"started", "unknown"}]
+    resume_allowed = snapshot["status"] == "started" and bool(snapshot["actions"]) and not unresolved
     return {"work_id": work_id, "attempt_id": attempt_id, "status": snapshot["status"],
             "reconciliation_required": bool(unresolved), "unresolved_action_ids": unresolved,
-            "resume_allowed": False,
-            "next_action": "reconcile-observed-result-or-cancel-abandon" if unresolved else "attempt-terminal-or-seal"}
+            "resume_allowed": resume_allowed,
+            "next_action": ("reconcile-observed-result-or-cancel-abandon" if unresolved else
+                            "resume-chartered-job" if resume_allowed else "attempt-terminal-or-seal")}
 
 
 def terminate_v9_delivery(work_id: str, attempt_id: str, *, status: str, actor: str,
