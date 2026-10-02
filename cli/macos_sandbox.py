@@ -35,14 +35,22 @@ def confined_argv(argv: list[str], *, workspace: Path, private_home: Path) -> li
         raise ProcessSandboxError("hosted provider executable cannot be resolved") from exc
     protected_roots = (Path("/Users"), Path("/Volumes"), Path("/private/tmp"),
                        Path("/tmp"), Path("/private/var/folders"))
-    exceptions = " ".join(
+    allowed_exceptions = " ".join(
         f"(require-not (subpath {json.dumps(str(path))}))" for path in allowed
     )
-    exceptions += f" (require-not (literal {json.dumps(str(executable_path))}))"
-    denied = " ".join(
-        f"(deny file-read-data file-write* "
-        f"(require-all (subpath {json.dumps(str(root))}) {exceptions}))"
+    read_exceptions = (
+        f"{allowed_exceptions} "
+        f"(require-not (literal {json.dumps(str(executable_path))}))"
+    )
+    denied_reads = " ".join(
+        f"(deny file-read-data "
+        f"(require-all (subpath {json.dumps(str(root))}) {read_exceptions}))"
         for root in protected_roots
     )
-    profile = f"(version 1) (allow default) {denied}"
+    denied_writes = " ".join(
+        f"(deny file-write* "
+        f"(require-all (subpath {json.dumps(str(root))}) {allowed_exceptions}))"
+        for root in protected_roots
+    )
+    profile = f"(version 1) (allow default) {denied_reads} {denied_writes}"
     return [str(sandbox_exec), "-p", profile, *argv]
