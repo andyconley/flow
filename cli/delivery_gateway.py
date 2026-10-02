@@ -2843,14 +2843,51 @@ def _copy_scoped_tree(source: Path, target: Path, scopes: list[str]) -> None:
             shutil.copy2(path, destination)
 
 
-def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[str]) -> dict[str, Any]:
+def _copy_scoped_commit_tree(source: Path, target: Path, scopes: list[str], commit: str) -> None:
+    """Materialize the chartered portion of a pinned Git tree without copying .git."""
+    result = subprocess.run(
+        ["git", "-C", str(source), "ls-tree", "-rz", commit, "--", *scopes],
+        capture_output=True, timeout=15, check=False,
+    )
+    if result.returncode:
+        raise ContractError("hosted edit could not read the pinned source tree")
+    for record in filter(None, result.stdout.split(b"\0")):
+        metadata, raw_path = record.split(b"\t", 1)
+        mode, kind, object_id = metadata.decode().split()
+        relative = Path(raw_path.decode())
+        if kind != "blob" or mode == "120000" or not _path_within_scopes(str(relative), scopes):
+            raise ContractError("hosted edit source tree contains an unsafe scoped entry")
+        blob = subprocess.run(
+            ["git", "-C", str(source), "cat-file", "blob", object_id],
+            capture_output=True, timeout=15, check=False,
+        )
+        if blob.returncode:
+            raise ContractError("hosted edit could not read a scoped source blob")
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(blob.stdout)
+        destination.chmod(0o755 if mode == "100755" else 0o644)
+
+
+def _staging_snapshot(staging: Path) -> dict[str, tuple[str, int]]:
+    snapshot: dict[str, tuple[str, int]] = {}
+    for path in sorted(item for item in staging.rglob("*") if ".git" not in item.parts):
+        if path.is_symlink():
+            raise ContractError("hosted edit staging tree contains a symlink")
+        if path.is_file():
+            snapshot[str(path.relative_to(staging))] = (
+                hashlib.sha256(path.read_bytes()).hexdigest(), stat.S_IMODE(path.stat().st_mode))
+    return snapshot
+
+
+def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[str],
+                              before: dict[str, tuple[str, int]]) -> dict[str, Any]:
     """Validate a hosted staging diff and atomically copy approved files back."""
-    lines = _git(staging, "status", "--porcelain", "--untracked-files=all").splitlines()
-    if not lines:
+    after = _staging_snapshot(staging)
+    changed = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+    if not changed:
         raise ContractError("hosted editor made no edit in the scoped staging workspace")
-    changed = [line[3:] for line in lines]
-    if any(line[:2] not in {" M", "M ", "MM", "A ", "AM", "??"}
-           or not _path_within_scopes(path, write_paths) for line, path in zip(lines, changed)):
+    if any(path not in after or not _path_within_scopes(path, write_paths) for path in changed):
         raise ContractError("hosted editor changed files outside the approved staging scope")
     prepared: list[dict[str, Any]] = []
     for relative in changed:
@@ -2908,20 +2945,27 @@ def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[
 
 def _hosted_scoped_edit(
     workspace: Path, *, read_paths: list[str], write_paths: list[str],
-    invoke: Callable[[Path], dict[str, Any]],
+    source_commit: str, invoke: Callable[[Path], dict[str, Any]],
 ) -> dict[str, Any]:
     scopes = list(dict.fromkeys([*read_paths, *write_paths]))
     with tempfile.TemporaryDirectory(prefix="flow-v9-hosted-edit-") as temporary:
         staging = Path(temporary)
-        _copy_scoped_tree(workspace, staging, scopes)
         _git(staging, "init", "-q")
         _git(staging, "config", "user.email", "flow@local.invalid")
         _git(staging, "config", "user.name", "Flow")
+        _copy_scoped_commit_tree(workspace, staging, scopes, source_commit)
         _git(staging, "add", "--all")
-        _git(staging, "commit", "-qm", "Flow scoped baseline")
+        _git(staging, "commit", "-qm", "Flow pinned source baseline")
+        _git(staging, "branch", "-M", "main")
+        for child in staging.iterdir():
+            if child.name == ".git":
+                continue
+            shutil.rmtree(child) if child.is_dir() else child.unlink()
+        _copy_scoped_tree(workspace, staging, scopes)
+        before = _staging_snapshot(staging)
         result = invoke(staging)
         try:
-            applied = _apply_scoped_hosted_edit(workspace, staging, write_paths)
+            applied = _apply_scoped_hosted_edit(workspace, staging, write_paths, before)
         except ContractError as exc:
             # Once the hosted adapter has returned, a rejected or empty staging
             # diff is observed provider evidence. Preserve that distinction so
@@ -2944,6 +2988,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                               write_paths: list[str]) -> Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]:
     """Return the bounded adapter for the selected binding and logical operation."""
     workspace = Path(envelope["worktree"])
+    source_commit = envelope.get("source_commit") or _git(workspace, "rev-parse", "HEAD")
     assignment_by_id = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
 
     def send(binding: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
@@ -2995,6 +3040,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
             if operation == "edit":
                 return _hosted_scoped_edit(
                     workspace, read_paths=read_paths, write_paths=write_paths,
+                    source_commit=source_commit,
                     invoke=lambda staging: call_claude_edit(
                         instructions=instructions, task=task, workspace=staging,
                         model=model, timeout_seconds=timeout, confine_workspace_reads=True),
@@ -3009,6 +3055,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
             if operation == "edit":
                 return _hosted_scoped_edit(
                     workspace, read_paths=read_paths, write_paths=write_paths,
+                    source_commit=source_commit,
                     invoke=lambda staging: call_codex(
                         instructions=instructions, task=task, workspace=staging, model=model,
                         timeout_seconds=timeout, sandbox="workspace-write",

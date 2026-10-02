@@ -1904,6 +1904,52 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(stat.S_IMODE((self.worktree / "target.py").stat().st_mode), 0o755)
         self.assertEqual(result["scoped_edit"]["scope_enforcement"], "isolated_staging")
 
+    def test_hosted_v9_editor_preserves_declared_regression_git_semantics(self):
+        (self.worktree / "target.py").write_text("approved regression\n")
+        envelope = {"worktree": str(self.worktree), "source_commit": self.commit,
+                    "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def edit_in_staging(**kwargs):
+            staging = kwargs["workspace"]
+            diff = subprocess.check_output(
+                ["git", "-C", str(staging), "diff", "main", "--", "target.py"], text=True)
+            self.assertIn("-old", diff)
+            self.assertIn("+approved regression", diff)
+            (staging / "target.py").write_text("provider correction\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_codex", side_effect=edit_in_staging):
+            result = adapter(
+                {"provider": "codex", "model": "codex-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "provider correction\n")
+        self.assertEqual(result["scoped_edit"]["changed_files"], ["target.py"])
+
+    def test_hosted_v9_editor_does_not_mistake_declared_regression_for_provider_edit(self):
+        (self.worktree / "target.py").write_text("approved regression\n")
+        envelope = {"worktree": str(self.worktree), "source_commit": self.commit,
+                    "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+        with patch("delivery_gateway.call_codex", return_value={"output": "No edit applied."}):
+            result = adapter(
+                {"provider": "codex", "model": "codex-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertTrue(result["observed_invalid"])
+        self.assertEqual(result["detail"],
+                         "hosted editor made no edit in the scoped staging workspace")
+        self.assertEqual((self.worktree / "target.py").read_text(), "approved regression\n")
+
     def test_observed_invalid_ollama_edit_is_completed_evidence_not_uncertainty(self):
         envelope = {"worktree": str(self.worktree), "logical_assignments": [{
             "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
