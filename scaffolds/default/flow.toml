@@ -634,6 +634,10 @@ invocation = "flow run v9-recovery-status WORK_ID ATTEMPT_ID [--project-root PAT
 summary = "Inspect whether a protocol v9 attempt requires explicit reconciliation without dispatch"
 
 [[help.cli_commands]]
+invocation = "flow run resume-chartered-job WORK_ID ATTEMPT_ID [--project-root PATH] [--json]"
+summary = "Continue a started v9 charter from a clean completed-action boundary without replaying completed provider work"
+
+[[help.cli_commands]]
 invocation = "flow run terminate-v9-delivery WORK_ID ATTEMPT_ID --status cancelled|abandoned --actor ACTOR --explanation TEXT [--project-root PATH] [--json]"
 summary = "Seal an uncertain protocol v9 attempt without replaying provider I/O"
 
