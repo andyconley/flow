@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.10](https://github.com/andyconley/flow/compare/v0.40.9...v0.40.10) (2026-10-02)
+
+### Bug Fixes
+
+* honor verifier input budgets ([afa9f16](https://github.com/andyconley/flow/commit/afa9f16a10ec0d6238ebc49ca2a0be61efadd9e1))
+
 ## [0.40.9](https://github.com/andyconley/flow/compare/v0.40.8...v0.40.9) (2026-10-02)
 
 ### Bug Fixes
