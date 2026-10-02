@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
@@ -2672,7 +2673,77 @@ def _v9_readiness_recheck(catalog: list[dict[str, Any]], binding: dict[str, Any]
     return {**record, "no_send_observed": record["state"] != "ready"}
 
 
-def _v9_adapter_for_operation(envelope: dict[str, Any], *, write_paths: list[str]) -> Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]:
+def _copy_scoped_tree(source: Path, target: Path, scopes: list[str]) -> None:
+    """Copy only chartered readable files into a provider-isolated staging repo."""
+    copied: set[Path] = set()
+    for relative in scopes:
+        scope = Path(relative)
+        origin = source / scope
+        if origin.is_symlink() or not origin.exists() or not origin.resolve().is_relative_to(source.resolve()):
+            raise ContractError("hosted edit scope is absent, linked, or escapes the worktree")
+        paths = [origin] if origin.is_file() else sorted(path for path in origin.rglob("*") if path.is_file())
+        if any(path.is_symlink() for path in ([origin] if origin.is_file() else origin.rglob("*"))):
+            raise ContractError("hosted edit scope contains a symlink")
+        for path in paths:
+            relative_path = path.relative_to(source)
+            if relative_path in copied:
+                continue
+            copied.add(relative_path)
+            destination = target / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, destination)
+
+
+def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[str]) -> dict[str, Any]:
+    """Validate a hosted staging diff and atomically copy approved files back."""
+    lines = _git(staging, "status", "--porcelain", "--untracked-files=all").splitlines()
+    if not lines:
+        raise ContractError("hosted editor made no edit in the scoped staging workspace")
+    changed = [line[3:] for line in lines]
+    if any(line[:2] not in {" M", "M ", "MM", "A ", "AM", "??"}
+           or not _path_within_scopes(path, write_paths) for line, path in zip(lines, changed)):
+        raise ContractError("hosted editor changed files outside the approved staging scope")
+    applied = []
+    for relative in changed:
+        source = staging / relative
+        target = workspace / relative
+        if source.is_symlink() or not source.is_file() or target.is_symlink():
+            raise ContractError("hosted editor produced an unsafe scoped file")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(source.read_bytes())
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+        finally:
+            with suppress(FileNotFoundError):
+                os.unlink(temporary)
+        applied.append(relative)
+    return {"changed_files": applied, "scope_enforcement": "isolated_staging"}
+
+
+def _hosted_scoped_edit(
+    workspace: Path, *, read_paths: list[str], write_paths: list[str],
+    invoke: Callable[[Path], dict[str, Any]],
+) -> dict[str, Any]:
+    scopes = list(dict.fromkeys([*read_paths, *write_paths]))
+    with tempfile.TemporaryDirectory(prefix="flow-v9-hosted-edit-") as temporary:
+        staging = Path(temporary)
+        _copy_scoped_tree(workspace, staging, scopes)
+        _git(staging, "init", "-q")
+        _git(staging, "config", "user.email", "flow@local.invalid")
+        _git(staging, "config", "user.name", "Flow")
+        _git(staging, "add", "--all")
+        _git(staging, "commit", "-qm", "Flow scoped baseline")
+        result = invoke(staging)
+        applied = _apply_scoped_hosted_edit(workspace, staging, write_paths)
+        return {**result, "scoped_edit": applied}
+
+
+def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str],
+                              write_paths: list[str]) -> Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]:
     """Return the bounded adapter for the selected binding and logical operation."""
     workspace = Path(envelope["worktree"])
     assignment_by_id = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
@@ -2701,14 +2772,25 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, write_paths: list[str
                               correlation_id=action["action_id"], timeout_seconds=timeout)
         if provider == "claude":
             if operation == "edit":
-                return call_claude_edit(instructions=instructions, task=task, workspace=workspace,
-                                        model=model, timeout_seconds=timeout)
+                return _hosted_scoped_edit(
+                    workspace, read_paths=read_paths, write_paths=write_paths,
+                    invoke=lambda staging: call_claude_edit(
+                        instructions=instructions, task=task, workspace=staging,
+                        model=model, timeout_seconds=timeout),
+                )
             return call_claude(instructions=instructions, task=task, workspace=workspace,
                                model=model, timeout_seconds=timeout)
         if provider == "codex":
+            if operation == "edit":
+                return _hosted_scoped_edit(
+                    workspace, read_paths=read_paths, write_paths=write_paths,
+                    invoke=lambda staging: call_codex(
+                        instructions=instructions, task=task, workspace=staging, model=model,
+                        timeout_seconds=timeout, sandbox="workspace-write"),
+                )
             return call_codex(instructions=instructions, task=task, workspace=workspace, model=model,
                               timeout_seconds=timeout,
-                              sandbox="workspace-write" if operation == "edit" else "read-only")
+                              sandbox="read-only")
         raise ContractError("selected v9 provider has no bounded adapter")
 
     return send
@@ -2725,15 +2807,19 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
                         state.get("artifacts", {}).get("job_charter", ""))
     charter_data = json.loads(charter.read_text())
     write_paths = charter_data.get("write_paths") if isinstance(charter_data, dict) else None
+    read_paths = charter_data.get("read_paths") if isinstance(charter_data, dict) else None
     if not isinstance(write_paths, list) or not all(isinstance(path, str) and path for path in write_paths):
         raise ContractError("approved v9 job charter has invalid edit scope")
+    if not isinstance(read_paths, list) or not all(isinstance(path, str) and path for path in read_paths):
+        raise ContractError("approved v9 job charter has invalid read scope")
     envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
         work_id, worktree, source_commit, root=project_root, logical_assignments=assignments,
         catalog=catalog, availability=availability, effective_policy=policy,
         independence_constraints=independence_constraints,
     )
     result = execute_v9_logical_delivery(
-        envelope, task, ledger, _v9_adapter_for_operation(envelope, write_paths=write_paths),
+        envelope, task, ledger, _v9_adapter_for_operation(
+            envelope, read_paths=read_paths, write_paths=write_paths),
         readiness_recheck=lambda binding: _v9_readiness_recheck(catalog, binding),
     )
     if result.get("status") != "completed":

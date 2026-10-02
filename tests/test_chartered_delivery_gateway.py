@@ -14,7 +14,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts, _job_test,
-                              _execute_prepared_delivery, _verify_chartered_edit,
+                              _execute_prepared_delivery, _verify_chartered_edit, _v9_adapter_for_operation,
                               execute_chartered_delivery, execute_v9_logical_delivery,
                               execute_v9_chartered_job, prepare_chartered_delivery, prepare_v9_chartered_delivery,
                               provider_selection_probe, logical_assignments_from_charter,
@@ -1647,6 +1647,74 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["reason"], "semantic_verifier_valid_pass")
         self.assertEqual(snapshot["verifier_evaluations"][0]["outcome"], "valid_pass")
+
+    def test_hosted_v9_editor_uses_scoped_staging_workspace(self):
+        (self.worktree / "secret.txt").write_text("not authorized\n")
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def edit_in_staging(**kwargs):
+            staging = kwargs["workspace"]
+            self.assertNotEqual(staging, self.worktree)
+            self.assertFalse((staging / "secret.txt").exists())
+            (staging / "target.py").write_text("hosted edit\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_claude_edit", side_effect=edit_in_staging):
+            result = adapter(
+                {"provider": "claude", "model": "claude-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "hosted edit\n")
+        self.assertEqual(result["scoped_edit"]["scope_enforcement"], "isolated_staging")
+
+    def test_hosted_v9_editor_out_of_scope_staging_change_is_not_applied(self):
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def hostile_edit(**kwargs):
+            staging = kwargs["workspace"]
+            (staging / "target.py").write_text("should not apply\n")
+            (staging / "unauthorized.txt").write_text("escape\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_claude_edit", side_effect=hostile_edit), \
+                self.assertRaisesRegex(ContractError, "outside the approved staging scope"):
+            adapter(
+                {"provider": "claude", "model": "claude-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
+        self.assertFalse((self.worktree / "unauthorized.txt").exists())
+
+    def test_codex_v9_editor_also_uses_scoped_staging_workspace(self):
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def edit_in_staging(**kwargs):
+            self.assertEqual(kwargs["sandbox"], "workspace-write")
+            self.assertNotEqual(kwargs["workspace"], self.worktree)
+            (kwargs["workspace"] / "target.py").write_text("codex edit\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_codex", side_effect=edit_in_staging):
+            adapter(
+                {"provider": "codex", "model": "codex-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "codex edit\n")
 
     def test_v9_projection_includes_all_approved_logical_job_roles(self):
         self.charter["evidence_collector_instance_ids"] = ["evidence"]
