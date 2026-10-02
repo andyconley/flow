@@ -104,14 +104,22 @@ unavailable to the confined worker. Model entitlement and send failures remain
 unknown until after the durable send claim and therefore enter recovery rather
 than automatic fallback.
 
-Only an availability refusal proven before the send claim advances to the next
-eligible candidate. Once any adapter call starts, a failure or lost response is
-uncertain and cannot fall forward automatically.
+An availability refusal proven before the send claim advances to the next
+eligible candidate. After a claim, only a receipt-bound terminal
+`model_capacity` outcome with `observed_not_executed` proof may advance. Flow
+records that physical call as a failed, zero-charge attempt and deterministically
+recomputes from the sealed candidates. A timeout, lost response, malformed
+transcript, or any evidence that a turn executed remains uncertain and cannot
+fall forward automatically.
 
 ## Operator actions
 
 - `flow run execute-chartered-job` starts a new v9 chartered job.
 - `--legacy-v8` is an explicit compatibility route for historical v8 execution contracts.
+- `flow run migrate-job-charter-v9 WORK_ID --replacement PATH --reason TEXT --approved-by-user`
+  registers an explicitly approved provider-neutral successor for a legacy
+  manifest-linked charter. Omit `--replacement` only when the canonical charter
+  already contains complete v9 logical assignments.
 - `flow run verify-receipt`, `trace`, `inspect-execution`, and `inspect-delivery` dispatch by receipt protocol and expose v9 manager and specialist selection lineage.
 - `cancel-delivery` and `abandon-delivery` seal v9 terminal evidence without replaying an uncertain send.
 - V9 recovery never resends a claimed call. Inspection reports the unresolved action that must be reconciled or terminated.
@@ -147,7 +155,7 @@ For symptom-first diagnosis and safe remediation, follow the
 | Trace and inspection | existing call/grant lineage | logical action, decision, fallback, and provider action lineage |
 | Resume | existing checkpoint behavior | no replay of a claimed send; reconcile or terminate |
 | Cancel/abandon | existing process-control path | send-lock terminal seal preserving uncertain evidence |
-| Re-ranking | never | only before send from sealed inputs |
+| Re-ranking | never | before send, or after receipt-bound observed non-execution, from sealed inputs |
 
 ## Activation and rollback
 

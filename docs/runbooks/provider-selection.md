@@ -62,6 +62,39 @@ the provider did not receive the request.
 - Escalate when: Provider-side evidence conflicts with the ledger, reconciliation
   cannot establish an outcome, or duplicate execution is plausible.
 
+## A selected model is at capacity
+
+- Normal case: The hosted adapter records `model_capacity` with
+  `observed_not_executed`, charges zero, excludes that candidate for the current
+  logical assignment, and selects the next eligible sealed candidate.
+- Confirm it's a fault: Inspect `flow run trace` and verify the action and
+  selection both show `observed_not_executed`; the successor must name that
+  selection as its predecessor.
+- Diagnosis steps (if fault): Confirm the transcript contained no agent/tool
+  execution event, the candidate was attempted only once, and the successor
+  came from the sealed catalog and policy.
+- Remediation (if fault): If all candidates are exhausted, restore capacity or
+  change approved policy for a new attempt. Never relabel an unknown send as a
+  capacity refusal or hand-edit its charge.
+- Escalate to: Flow maintainer
+- Escalate when: Capacity is charged as an unobserved send, fallback repeats a
+  candidate, or any execution evidence coexists with `observed_not_executed`.
+
+## A legacy manifest-linked charter cannot enter v9
+
+- Normal case: Protocol v9 requires an approved `artifacts.job_charter` digest;
+  legacy compatibility alone does not create that authority.
+- Confirm it's a fault: Run the read-only provider-selection probe and preserve
+  its absent-charter refusal.
+- Remediation: Prepare a complete provider-neutral successor inside the same run,
+  then run `flow run migrate-job-charter-v9 WORK_ID --replacement PATH --reason TEXT --approved-by-user`.
+  Omit the replacement only if the canonical predecessor is already v9-complete.
+  Re-run the probe after the migration succeeds.
+- Escalate to: Delivery lead
+- Escalate when: The command reports path, symlink, digest, active-attempt,
+  schema, topology, or authority-expansion refusal. Do not bypass it by editing
+  `run.json` or historical receipts.
+
 ## Cancellation or abandonment does not seal the attempt
 
 - Normal case: Termination may wait while a live owner performs its fenced shutdown;

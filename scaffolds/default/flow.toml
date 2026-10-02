@@ -622,6 +622,10 @@ invocation = "flow run execute-chartered-job WORK_ID --worktree PATH --source-co
 summary = "Run a new provider-neutral v9 charter through Flow-gated Magentic; --legacy-v8 preserves an existing historical v8 contract"
 
 [[help.cli_commands]]
+invocation = "flow run migrate-job-charter-v9 WORK_ID [--replacement PATH] --reason TEXT --approved-by-user [--json]"
+summary = "Register an audited provider-neutral v9 successor for a legacy manifest-linked charter without rewriting historical evidence"
+
+[[help.cli_commands]]
 invocation = "flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]"
 summary = "Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending"
 

@@ -214,6 +214,7 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow run execute-mixed WORK_ID --local-task-file PATH --codex-task-file PATH` | Run one guarded Ollama test-engineer and Codex lead-developer job through MAF |
 | `flow run execute-local-claude WORK_ID --local-task-file PATH --claude-task-file PATH` | Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter |
 | `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]` | Run a new provider-neutral v9 charter through Flow-gated Magentic; --legacy-v8 preserves an existing historical v8 contract |
+| `flow run migrate-job-charter-v9 WORK_ID [--replacement PATH] --reason TEXT --approved-by-user [--json]` | Register an audited provider-neutral v9 successor for a legacy manifest-linked charter without rewriting historical evidence |
 | `flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]` | Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending |
 | `flow run v9-recovery-status WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect whether a protocol v9 attempt requires explicit reconciliation without dispatch |
 | `flow run terminate-v9-delivery WORK_ID ATTEMPT_ID --status cancelled\|abandoned --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Seal an uncertain protocol v9 attempt without replaying provider I/O |
