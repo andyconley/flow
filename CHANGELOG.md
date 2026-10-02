@@ -2,6 +2,88 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.0](https://github.com/andyconley/flow/compare/v0.39.1...v0.40.0) (2026-10-02)
+
+### Features
+
+* **delivery:** bind logical work through Flow selection ([3a8d809](https://github.com/andyconley/flow/commit/3a8d809311e107cc8326d8b9d83d22a564b5c89b))
+* **delivery:** integrate protocol v9 runtime ([05b7c48](https://github.com/andyconley/flow/commit/05b7c4831e841395fffe5cf92248f0ae23549cb0))
+* **flow:** allow bounded repository acceptance probes ([6c2afaa](https://github.com/andyconley/flow/commit/6c2afaa06fd651461955aa21e5adb0d64c96f432))
+* **ollama:** add managed local manager and editor ([5b04589](https://github.com/andyconley/flow/commit/5b045899ee7b91b6f432614a503414527b47b794))
+* **receipts:** seal and verify v9 selection evidence ([fd5b6c4](https://github.com/andyconley/flow/commit/fd5b6c4cf45e3012d365c0c619397541f435d4ac))
+* **runtime:** enable deterministic local-first delivery ([0111476](https://github.com/andyconley/flow/commit/0111476d332624e4582ce389754c32fcb328d60e))
+* **runtime:** expose v9 uncertainty termination ([b150422](https://github.com/andyconley/flow/commit/b150422c1548240689e422e71b0d584d3eeaa38c))
+* **selection:** add provider-neutral deterministic policy ([d9eb7b4](https://github.com/andyconley/flow/commit/d9eb7b41114bf64309161809bdabd99fb44e5479))
+
+### Bug Fixes
+
+* **adapters:** isolate hosted v9 edits by scope ([682ba21](https://github.com/andyconley/flow/commit/682ba219b3818f179838a18d152ba111d757d84b))
+* **authority:** project v9 verification topology ([4223e83](https://github.com/andyconley/flow/commit/4223e8399116b7fc94b203fe2ff709427a49f362))
+* **authority:** seal logical assignment frontier ([47e399c](https://github.com/andyconley/flow/commit/47e399c41255c00df181891f1347bde12606eeb6))
+* **delivery:** fail closed across v9 evidence boundaries ([61d364a](https://github.com/andyconley/flow/commit/61d364acc395900e581b99ad06d1fde1b9265b1d))
+* **flow:** accept alternate verifier handback ([21bd2b1](https://github.com/andyconley/flow/commit/21bd2b166e202abb69244714c91bef1e26e5936f))
+* **flow:** accept bounded evidence-scale diffs ([abf2df8](https://github.com/andyconley/flow/commit/abf2df808a525d6a260c044c6f413e743cee6c4a))
+* **flow:** accept fresh expansion authority roots ([caebf60](https://github.com/andyconley/flow/commit/caebf60041dd8b29b2697773c8614990137e635a))
+* **flow:** align manager transport limits ([310e2a1](https://github.com/andyconley/flow/commit/310e2a1607f7ae051c25a8bfc45de1a8e73a422d))
+* **flow:** allow bounded manager history ([4070dc2](https://github.com/andyconley/flow/commit/4070dc26f4b4289272bbe51be4ed2fe0afd56602))
+* **flow:** bind test output into verifier evidence ([1d60ee2](https://github.com/andyconley/flow/commit/1d60ee2a663fd8255e5846f988011d3cf6f05f0b))
+* **flow:** classify codex stdout failures ([4ef8ef5](https://github.com/andyconley/flow/commit/4ef8ef529839ce13558dd8cec003ffa0ca6ae1e1))
+* **flow:** distinguish tracked edits from new files ([7e1d531](https://github.com/andyconley/flow/commit/7e1d531a713dd21273ec2c87c52aea6cf095dca5))
+* **flow:** enforce independent verifier role ([a50f9ca](https://github.com/andyconley/flow/commit/a50f9ca909919769d9868b2c79f31aed2ad73b9e))
+* **flow:** exclude untracked interpreter caches ([625a75c](https://github.com/andyconley/flow/commit/625a75c8a23b848fee05bf37ca9243ecab829659))
+* **flow:** execute read-only evidence collector ([aaf748e](https://github.com/andyconley/flow/commit/aaf748ea7f7e6adae15275f8067a497a860dc4bc))
+* **flow:** model evidence collector separately ([239dbdd](https://github.com/andyconley/flow/commit/239dbdd50f9883a21b08df462a01211a5bfbdb69))
+* **flow:** raise magentic checkpoint bound ([2e63ba6](https://github.com/andyconley/flow/commit/2e63ba67e0e5f6cecf04dbe7207c19ef0a5b2001))
+* **flow:** replay retained verifier evidence ([98911ac](https://github.com/andyconley/flow/commit/98911acda2ee5c133bb6393edb6c796d11bc594d))
+* **flow:** route evidence collector in runtime ([ac614bc](https://github.com/andyconley/flow/commit/ac614bcba6d90ede493b5d77939047a19cc896db))
+* **flow:** share chartered test command policy ([28fc97a](https://github.com/andyconley/flow/commit/28fc97a18d9a88c1b0903da8dda2889c553ef3ac))
+* **flow:** validate authority-scoped expansion lineage ([5876374](https://github.com/andyconley/flow/commit/587637410a6c0ce51aee5582b400cd1bfe1da561))
+* **hosted:** permit confined provider executable ([d810e98](https://github.com/andyconley/flow/commit/d810e9877fcded90fb3c623673cd2a41e5cab17d))
+* **inspect:** preserve legacy ledger snapshots ([b117668](https://github.com/andyconley/flow/commit/b11766833d181ab1bb183a65f2e8726b34331e21))
+* **inspect:** preserve legacy receipt split repair ([bdbca43](https://github.com/andyconley/flow/commit/bdbca4376a4aa9a5b4ba2044e72f3b632e7a99d1))
+* **inspect:** validate protocol v9 execution evidence ([eba7286](https://github.com/andyconley/flow/commit/eba728682c25424440a0aeb497f47d713a488031))
+* **ollama:** constrain manager choice to Flow frontier ([28860d7](https://github.com/andyconley/flow/commit/28860d79b1a2da99d4934ffb313c6b0ca9710796))
+* **ollama:** harden structured edit application ([2d0cbc5](https://github.com/andyconley/flow/commit/2d0cbc51f95a8997bed0a36f773be54408997d0f))
+* **ollama:** seal observed invalid editor output ([e447918](https://github.com/andyconley/flow/commit/e447918e9e3abef57fc4c2c3011de6464a94d091))
+* **ollama:** seal observed invalid manager output ([0fe8574](https://github.com/andyconley/flow/commit/0fe8574564ab3230bd2f10d4f7b1d51150e42b1b))
+* **ollama:** seal out-of-frontier manager decisions ([bdcf9ee](https://github.com/andyconley/flow/commit/bdcf9eea4a76fad391234d722760d6439a4aa51a))
+* **receipts:** allow uncertain verifier termination ([c11aecf](https://github.com/andyconley/flow/commit/c11aecf221a8df58e609f40fbb5981b75afe33c4))
+* **receipts:** bind failed evidence to provider actions ([f7558f7](https://github.com/andyconley/flow/commit/f7558f730f4b542d6c9f83eadd665db3cf468887))
+* **release:** preserve predecessor runtime compatibility ([62bfc09](https://github.com/andyconley/flow/commit/62bfc09f1922559063bbb3d13799bb63195fc497))
+* **runtime:** avoid sandboxed process inspection ([fbd465c](https://github.com/andyconley/flow/commit/fbd465cc723bb8dbbbd902a88477a5d485eed4b4))
+* **runtime:** bind v9 ledger owner generation ([95c3106](https://github.com/andyconley/flow/commit/95c31069502a10bced0bbeff4d93825241d7c601))
+* **runtime:** close v9 release integration gaps ([80121aa](https://github.com/andyconley/flow/commit/80121aa9e05e5bbe2c6fa029f906614195c4905e))
+* **runtime:** constrain local manager output schema ([b90476d](https://github.com/andyconley/flow/commit/b90476dcefe6536c3033015c95109dc4b148115a))
+* **runtime:** execute complete v9 verification topology ([f552ff6](https://github.com/andyconley/flow/commit/f552ff6f8aa2c9f7189334cf0b4964f163db4233))
+* **runtime:** honor bounded manager assignment decisions ([7b59045](https://github.com/andyconley/flow/commit/7b5904597add0a39d1c0d08dea616150fe43946c))
+* **runtime:** honor resumed delivery generation ([971bdc8](https://github.com/andyconley/flow/commit/971bdc8ac6530a1109100d218392243d361f5ed7))
+* **runtime:** make v9 manager bootstrap deterministic ([a3d769a](https://github.com/andyconley/flow/commit/a3d769ad1630d694fc44296fdffd78c095f4fea0))
+* **runtime:** seal v9 manager and recovery authority ([ae61b1f](https://github.com/andyconley/flow/commit/ae61b1fb83c32d075f7d19462ac06b812d0e8f83))
+* **sandbox:** prevent provider self-modification ([f692c55](https://github.com/andyconley/flow/commit/f692c55bc1b72272013d9f30e3da04b8e6ec556c))
+* **security:** confine hosted user data access ([3f6c897](https://github.com/andyconley/flow/commit/3f6c89789456651fa285e8b17dfd08280c255308))
+* **security:** enforce v9 authority boundaries ([90df876](https://github.com/andyconley/flow/commit/90df8763d2e45448006ea34ab90bdb754af26a1b))
+* **security:** fence v9 live authority ([f4be5f4](https://github.com/andyconley/flow/commit/f4be5f491bd46ccba9e97cfcb606742a70672882))
+* **selection:** complete ranking and fallback lineage ([2cb3ca7](https://github.com/andyconley/flow/commit/2cb3ca70bec88991ef5875b0dae5131cd006d6f9))
+* **selection:** replay runtime independence facts ([7e3c4dc](https://github.com/andyconley/flow/commit/7e3c4dc09a653809dd9600dcc2192672822ad01c))
+* **selection:** require hosted authentication readiness ([bdb952f](https://github.com/andyconley/flow/commit/bdb952f7cef24d193a28aa0341210e025721df1c))
+* **selection:** require projectable hosted credentials ([419c12c](https://github.com/andyconley/flow/commit/419c12cbf697aa5b844563d745c303cddc1aeeea))
+* **verification:** derive v9 terminal truth from evidence ([5391f84](https://github.com/andyconley/flow/commit/5391f8474be5151a62a2ad8dcb7d54f0750cd01d))
+* **verification:** require evidence-bound v9 pass ([7df9abd](https://github.com/andyconley/flow/commit/7df9abd7f697ab5d1fae2bbddcdb3f005ad719a3))
+
+### Documentation
+
+* **selection:** add provider operations runbook ([3316c65](https://github.com/andyconley/flow/commit/3316c65c26b1c77abe0493c7097c49adbe2a163a))
+
+### Tests
+
+* **delivery:** exercise collector and local verifier ([2f75953](https://github.com/andyconley/flow/commit/2f75953843cd21fc97c0d296f7c2a5278960fb1b))
+* **runtime:** isolate provider overlay fixtures ([06604c8](https://github.com/andyconley/flow/commit/06604c8af1ed99f1d3d5af21e0bc2146f10b1fd0))
+* **trace:** compare rounded event durations ([9dcb1fc](https://github.com/andyconley/flow/commit/9dcb1fc2d86c45436a46fdf0cedce110ce4a5fe0))
+
+### Maintenance
+
+* **sync:** merge latest main ([b2adc9f](https://github.com/andyconley/flow/commit/b2adc9fffc68824834ab126c4d0e28a9b6387e28))
+
 ## [0.39.1](https://github.com/andyconley/flow/compare/v0.39.0...v0.39.1) (2026-09-30)
 
 ### Bug Fixes
