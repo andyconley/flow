@@ -95,6 +95,17 @@ class SelectionReceiptTests(unittest.TestCase):
             verify_selection_receipt(receipt)
         self.assertEqual(raised.exception.code, "v9_outcome_invalid")
 
+    def test_evidence_failure_must_bind_to_compatible_receipt_action(self) -> None:
+        for action_id, stage in (("not-an-action", "edit_scope"),
+                                 (_receipt()["actions"][-1]["action_id"], "verifier_evaluation")):
+            with self.subTest(action_id=action_id, stage=stage):
+                receipt = _receipt()
+                receipt["evidence_failures"][0].update({"action_id": action_id, "stage": stage})
+                _reseal(receipt)
+                with self.assertRaises(V9ReceiptError) as raised:
+                    verify_selection_receipt(receipt)
+                self.assertEqual(raised.exception.code, "v9_evidence_failure_binding_invalid")
+
     def test_pre_send_refusal_without_provider_action_is_validated_from_successor(self) -> None:
         receipt = _receipt()
         receipt["actions"] = receipt["actions"][1:]

@@ -149,6 +149,18 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if state == "consumed" and actual.get("selected_binding") is not None:
             completed_bindings.setdefault(action["assignment_id"], []).append(actual["selected_binding"])
         compared += 4
+    assignments = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
+    actions_by_id = {action["action_id"]: action for action in actions}
+    failure_keys: set[tuple[str, str]] = set()
+    for failure in evidence_failures:
+        action = actions_by_id.get(failure["action_id"])
+        operation = (assignments[action["assignment_id"]]["requirements"].get("operation")
+                     if action is not None else None)
+        expected_operation = "verify" if failure["stage"] == "verifier_evaluation" else "edit"
+        key = (failure["action_id"], failure["stage"])
+        if action is None or operation != expected_operation or key in failure_keys:
+            raise V9ReceiptError("v9_evidence_failure_binding_invalid")
+        failure_keys.add(key)
     orphan_ids = set(rows) - action_selection_ids
     for selection_id in orphan_ids:
         row = rows[selection_id]
@@ -184,7 +196,6 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                     or not prior.get("reason") or row.get("prior_no_send_failures") != expected_history:
                 raise V9ReceiptError("v9_fallback_lineage_invalid")
             compared += 1
-    assignments = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
     verifier_actions = [action for action in actions
                         if assignments[action["assignment_id"]]["requirements"].get("operation") == "verify"]
     semantic_by_action = {item.get("action_id"): item for item in semantic}

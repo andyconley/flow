@@ -1872,6 +1872,29 @@ class V9CharteredRouteTests(CharteredFixture):
         with self.assertRaisesRegex(ContractError, "collector must depend on every producer"):
             logical_assignments_from_charter("sample", root=self.root)
 
+    def test_v9_projection_rejects_multiple_producers(self):
+        self.charter["producer_instance_ids"] = ["editor", "editor-two"]
+        self.charter["verifier_instance_ids"] = ["verifier"]
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
+                  "output_bytes": 100, "context_tokens": 100,
+                  "risk_class": "standard", "independence_required": False}
+        self.charter["logical_assignments"] = [
+            {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                 "required_capabilities": ["structured_output"]}},
+            *[{"assignment_id": name, "role": "lead-developer", "instructions": "Edit.",
+               "depends_on": [], "requirements": {**common, "operation": "edit",
+                   "required_capabilities": ["structured_edit"]}}
+              for name in ("editor", "editor-two")],
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify.",
+             "depends_on": ["editor", "editor-two"],
+             "requirements": {**common, "operation": "verify",
+                 "required_capabilities": ["evidence_collection"]}},
+        ]
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        with self.assertRaisesRegex(ContractError, "exactly one producer assignment"):
+            logical_assignments_from_charter("sample", root=self.root)
+
     def test_completed_v9_job_hands_off_to_review_when_charter_authorizes_it(self):
         self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
         (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
