@@ -39,22 +39,27 @@ class _Response:
 
 class OllamaRequestBodyTests(unittest.TestCase):
     def sent_body(self, *, structured):
-        sent = []
+        sent, timeouts = [], []
 
         class Opener:
             def open(self, request, timeout):
                 sent.append(json.loads(request.data))
+                timeouts.append(timeout)
                 return _Response(json.dumps(payload("{}")).encode())
 
         with patch("local_worker.urllib.request.build_opener", return_value=Opener()), \
              patch.dict("os.environ", {}, clear=False):
             os.environ.pop("FLOW_OLLAMA_URL", None)
             call_local(ENVELOPE, structured_verifier=structured)
-        return sent[0]
+        return sent[0], timeouts[0]
 
     def test_only_a_structured_verifier_call_requests_constrained_json(self):
-        self.assertEqual(self.sent_body(structured=True)["format"], VERIFIER_OUTPUT_SCHEMA)
-        self.assertNotIn("format", self.sent_body(structured=False))
+        structured, structured_timeout = self.sent_body(structured=True)
+        ordinary, ordinary_timeout = self.sent_body(structured=False)
+        self.assertEqual(structured["format"], VERIFIER_OUTPUT_SCHEMA)
+        self.assertNotIn("format", ordinary)
+        self.assertIsNone(structured_timeout)
+        self.assertIsNone(ordinary_timeout)
 
 
 class StructuredVerifierAdapterTests(unittest.TestCase):

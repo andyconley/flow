@@ -1514,7 +1514,7 @@ class ProviderRouteTests(unittest.TestCase):
             action["provider"] = "ollama"
             with patch("delivery_gateway.call_local", return_value={"provider": "ollama"}) as ollama:
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "ollama")
-                self.assertEqual(ollama.call_args.kwargs["timeout_seconds"], 45)
+                self.assertIsNone(ollama.call_args.kwargs["timeout_seconds"])
 
     def test_protocol_8_codex_evidence_collector_uses_read_only_sandbox(self):
         with tempfile.TemporaryDirectory() as dirname:

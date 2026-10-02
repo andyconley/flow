@@ -62,7 +62,7 @@ def source_bundle(root: Path, paths: list[str]) -> dict[str, Any]:
 
 def propose_edits(bundle: dict[str, Any], task: str, *, model: str, attempt_id: str,
                   transport: Callable[..., Any] | None = None,
-                  timeout_seconds: int = 60) -> dict[str, Any]:
+                  timeout_seconds: int | None = None) -> dict[str, Any]:
     envelope = {
         "provider": "ollama", "model": model, "attempt_id": attempt_id,
         "instructions": (

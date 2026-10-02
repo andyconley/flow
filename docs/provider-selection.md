@@ -104,6 +104,11 @@ unavailable to the confined worker. Model entitlement and send failures remain
 unknown until after the durable send claim and therefore enter recovery rather
 than automatic fallback.
 
+Local Ollama discovery and inference have no elapsed-time deadline. They may
+run until completion or explicit cancellation; bounded payload, output, scope,
+and send-fence contracts still apply. Hosted adapters retain their configured
+deadlines.
+
 An availability refusal proven before the send claim advances to the next
 eligible candidate. After a claim, only a receipt-bound terminal
 `model_capacity` outcome with `observed_not_executed` proof may advance. Flow

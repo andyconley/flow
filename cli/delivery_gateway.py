@@ -2099,8 +2099,9 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
     if on_process_group is not None and isinstance(action.get("action_id"), str):
         on_process_group = partial(on_process_group, row_id=action["action_id"])
-    # Provider workers support up to 600 seconds. Do not silently halve a
-    # charter whose sealed runtime budget permits the full worker timeout.
+    # Hosted provider workers support up to 600 seconds. Ollama is local and
+    # user-owned, so it has no elapsed-time deadline; explicit cancellation
+    # remains available through the interruptible transport.
     timeout_seconds = min(600, envelope.get("limits", {}).get("max_runtime_seconds", 600))
     if action["provider"] == "ollama":
         structured = (envelope["execution_protocol_version"] == 8
@@ -2110,7 +2111,7 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
         instructions = verifier_instructions(assignment["instructions"]) if structured else assignment["instructions"]
         return call_local({**assignment, "instructions": instructions,
                            "task": action.get("provider_task", action["task"]), "attempt_id": envelope["attempt_id"]},
-                          correlation_id=action["action_id"], timeout_seconds=min(60, timeout_seconds),
+                          correlation_id=action["action_id"], timeout_seconds=None,
                           structured_verifier=structured)
     if action["provider"] == "claude":
         return call_claude_edit(instructions=assignment["instructions"], task=action["task"],
@@ -3091,10 +3092,9 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
         operation = assignment["requirements"]["operation"]
         provider, model = binding["provider"], binding["model"]
         instructions, task = assignment["instructions"], action["task"]
-        # Coordination should fail quickly, while repository edits, evidence
-        # collection, and independent verification may legitimately run the
-        # charter's bounded test commands. Provider workers already enforce a
-        # hard 600-second ceiling.
+        # Hosted provider workers remain bounded. Ollama is local and has no
+        # elapsed-time deadline; explicit cancellation still interrupts its
+        # socket through local_worker.
         timeout = {
             "manage": 60,
             "read": 120,
@@ -3107,7 +3107,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                 try:
                     bundle = ollama_source_bundle(workspace, write_paths)
                     proposal = propose_ollama_edits(bundle, task, model=model,
-                                                    attempt_id=action["attempt_id"], timeout_seconds=timeout)
+                                                    attempt_id=action["attempt_id"], timeout_seconds=None)
                     applied = apply_ollama_edits(workspace, bundle, proposal, write_scopes=write_paths,
                                                   expected_model=model)
                 except ContractError as exc:
@@ -3123,12 +3123,12 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                 except json.JSONDecodeError as exc:
                     raise ContractError("logical manager task has an invalid speaker frontier") from exc
                 return call_ollama_manager([{"role": "user", "content": task}], model=model,
-                                           attempt_id=action["attempt_id"], timeout_seconds=timeout,
+                                           attempt_id=action["attempt_id"], timeout_seconds=None,
                                            preserve_observed_invalid=True,
                                            allowed_speakers=allowed_speakers)
             return call_local({"provider": provider, "model": model, "attempt_id": action["attempt_id"],
                                "instructions": instructions, "task": task},
-                              correlation_id=action["action_id"], timeout_seconds=timeout)
+                              correlation_id=action["action_id"], timeout_seconds=None)
         if provider == "claude":
             if operation == "edit":
                 return _hosted_scoped_edit(

@@ -54,7 +54,7 @@ MANAGER_RESPONSE_SCHEMA = {
 
 def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_id: str,
                         transport: Callable[..., Any] | None = None,
-                        timeout_seconds: int = 60,
+                        timeout_seconds: int | None = None,
                         preserve_observed_invalid: bool = False,
                         allowed_speakers: list[str] | None = None) -> dict[str, Any]:
     if not isinstance(messages, list) or not messages:
