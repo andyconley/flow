@@ -54,7 +54,11 @@ def _receipt() -> dict:
             "prior_no_send_failures": ["local"],
         },
     ]
-    return seal_selection_receipt(envelope, [first, successor], selections)
+    return seal_selection_receipt(envelope, [first, successor], selections,
+                                  evidence_failures=[{"action_id": successor["action_id"],
+                                                      "stage": "edit_scope",
+                                                      "detail": "fixture failure"}],
+                                  outcome={"status": "failed", "reason": "verifier_missing"})
 
 
 def _reseal(receipt: dict) -> None:
@@ -74,10 +78,18 @@ class SelectionReceiptTests(unittest.TestCase):
 
     def test_terminal_outcome_is_digest_bound_and_validated(self) -> None:
         receipt = _receipt()
-        receipt["outcome"] = {"status": "completed", "reason": "semantic_verifier_valid_pass"}
+        receipt["outcome"] = {"status": "failed", "reason": "verifier_missing"}
         _reseal(receipt)
         self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
         receipt["outcome"]["status"] = "started"
+        _reseal(receipt)
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_outcome_invalid")
+
+    def test_terminal_outcome_is_required(self) -> None:
+        receipt = _receipt()
+        receipt.pop("outcome")
         _reseal(receipt)
         with self.assertRaises(V9ReceiptError) as raised:
             verify_selection_receipt(receipt)

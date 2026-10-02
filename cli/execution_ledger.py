@@ -2868,6 +2868,22 @@ class ExecutionLedger:
             if unsealed or (unresolved and not terminal):
                 raise ContractError("protocol v9 recovery or selection closure is required before sealing")
             snapshot = self._snapshot_locked(db, attempt_id)
+            if status in {"completed", "failed"}:
+                assignments = {item["assignment_id"]: item for item in snapshot["envelope"]["logical_assignments"]}
+                required = {assignment_id for assignment_id, item in assignments.items()
+                            if item["requirements"].get("operation") == "verify"}
+                verifier_actions = [item for item in snapshot["actions"]
+                                    if assignments[item["request"]["assignment_id"]]["requirements"].get("operation") == "verify"]
+                evaluations = {item["action_id"]: item["outcome"]
+                               for item in snapshot["verifier_evaluations"]}
+                observed = [item["request"]["assignment_id"] for item in verifier_actions]
+                all_required_pass = (bool(required)
+                                     and len(observed) == len(set(observed))
+                                     and set(observed) == required
+                                     and all(evaluations.get(item["action_id"]) == "valid_pass"
+                                             for item in verifier_actions))
+                if (status == "completed") != all_required_pass:
+                    raise ContractError("protocol v9 terminal status contradicts verifier evidence")
             termination = ({"schema_version": 1, "status": status, "actor": actor.strip(),
                             "explanation": explanation.strip(), "cause": cause,
                             "owner_generation": generation} if terminal else None)

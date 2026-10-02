@@ -564,6 +564,8 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
             if actual_by_operation != expected_by_operation:
                 errors.append("job_charter logical assignments conflict with topology IDs")
             producers = actual_by_operation["edit"]
+            if len(producers) != 1:
+                errors.append("job_charter requires exactly one logical producer assignment")
             collectors = actual_by_operation["collect"]
             for item in logical_assignments:
                 if not isinstance(item, dict) or not isinstance(item.get("requirements"), dict):

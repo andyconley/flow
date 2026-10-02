@@ -60,8 +60,11 @@ class V9CliReceiptTests(unittest.TestCase):
             self.envelope, action, lambda binding, _: {"candidate": binding["candidate_id"], "ok": True},
             readiness_recheck=lambda binding: {**binding, "state": "ready"}, ledger=self.ledger, generation=1,
         )
-        self.ledger.seal_v9_attempt(self.attempt_id, "completed", "proof complete",
-                                    self.attempt_dir / "receipt.json", generation=1)
+        self.ledger.terminate_v9_attempt(
+            self.attempt_id, "abandoned", generation=1, actor="fixture",
+            explanation="fixture closes an incomplete selection proof",
+            cause="fixture_incomplete", receipt_path=self.attempt_dir / "receipt.json",
+        )
 
     def tearDown(self) -> None:
         self.temp.cleanup()

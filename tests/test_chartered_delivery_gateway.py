@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,8 @@ from maf_runtime import MafRuntimeUnready
 from tests.shaper_intent_fixture import shaper_intent
 from execution_ledger import ExecutionLedger
 from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier_digest, evaluate_candidate
+from provider_selection import digest as selection_digest
+from selection_receipt import V9ReceiptError, verify_selection_receipt
 import delivery_gateway
 
 
@@ -1569,7 +1572,8 @@ class V9CharteredRouteTests(CharteredFixture):
         ]
         (self.run / "job-charter.json").write_text(json.dumps(self.charter))
 
-    def _execute_semantic_v9(self, verifier_output: str, second_verifier_output: str | None = None):
+    def _execute_semantic_v9(self, verifier_output: str | None,
+                             second_verifier_output: str | None = None):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
@@ -1650,6 +1654,14 @@ class V9CharteredRouteTests(CharteredFixture):
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["semantic_verification"][0]["evaluation"]["disposition"], "unusable")
 
+        receipt["outcome"] = {"status": "completed", "reason": "forged completion"}
+        receipt["receipt_digest"] = selection_digest(
+            {key: value for key, value in receipt.items() if key != "receipt_digest"}
+        )
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
+
     def test_v9_evidence_bound_valid_pass_is_required_for_completion(self):
         result, snapshot = self._execute_semantic_v9(json.dumps({
             "schema_version": 1, "decision": "pass", "summary": "Diff and test evidence pass.",
@@ -1658,6 +1670,14 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["reason"], "semantic_verifier_valid_pass")
         self.assertEqual(snapshot["verifier_evaluations"][0]["outcome"], "valid_pass")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        receipt["outcome"] = {"status": "failed", "reason": "forged failure"}
+        receipt["receipt_digest"] = selection_digest(
+            {key: value for key, value in receipt.items() if key != "receipt_digest"}
+        )
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
 
     def test_v9_every_required_verifier_must_pass(self):
         valid = json.dumps({"schema_version": 1, "decision": "pass",
@@ -1668,8 +1688,18 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual({item["outcome"] for item in snapshot["verifier_evaluations"]},
                          {"unusable", "valid_pass"})
 
+    def test_v9_missing_verifier_output_seals_typed_failed_receipt(self):
+        result, snapshot = self._execute_semantic_v9(None)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "verifier_evaluation_failed")
+        self.assertEqual(snapshot["status"], "failed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["evidence_failures"][0]["stage"], "verifier_evaluation")
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
     def test_hosted_v9_editor_uses_scoped_staging_workspace(self):
         (self.worktree / "secret.txt").write_text("not authorized\n")
+        (self.worktree / "target.py").chmod(0o755)
         envelope = {"worktree": str(self.worktree), "logical_assignments": [{
             "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
             "requirements": {"operation": "edit"},
@@ -1690,6 +1720,7 @@ class V9CharteredRouteTests(CharteredFixture):
                 {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
             )
         self.assertEqual((self.worktree / "target.py").read_text(), "hosted edit\n")
+        self.assertEqual(stat.S_IMODE((self.worktree / "target.py").stat().st_mode), 0o755)
         self.assertEqual(result["scoped_edit"]["scope_enforcement"], "isolated_staging")
 
     def test_hosted_v9_editor_out_of_scope_staging_change_is_not_applied(self):
@@ -1738,6 +1769,8 @@ class V9CharteredRouteTests(CharteredFixture):
 
     def test_multi_file_hosted_apply_rolls_back_after_mid_apply_failure(self):
         (self.worktree / "other.py").write_text("other old\n")
+        (self.worktree / "target.py").chmod(0o755)
+        (self.worktree / "other.py").chmod(0o640)
         envelope = {"worktree": str(self.worktree), "logical_assignments": [{
             "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit files.",
             "requirements": {"operation": "edit"},
@@ -1769,6 +1802,8 @@ class V9CharteredRouteTests(CharteredFixture):
             )
         self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
         self.assertEqual((self.worktree / "other.py").read_text(), "other old\n")
+        self.assertEqual(stat.S_IMODE((self.worktree / "target.py").stat().st_mode), 0o755)
+        self.assertEqual(stat.S_IMODE((self.worktree / "other.py").stat().st_mode), 0o640)
 
     def test_v9_projection_includes_all_approved_logical_job_roles(self):
         self.charter["evidence_collector_instance_ids"] = ["evidence"]
@@ -1811,8 +1846,8 @@ class V9CharteredRouteTests(CharteredFixture):
         with self.assertRaisesRegex(ContractError, "no sealed logical assignments"):
             logical_assignments_from_charter("sample", root=self.root)
 
-    def test_v9_projection_rejects_collector_without_all_producer_dependencies(self):
-        self.charter["producer_instance_ids"] = ["editor", "editor-two"]
+    def test_v9_projection_rejects_collector_without_producer_dependency(self):
+        self.charter["producer_instance_ids"] = ["editor"]
         self.charter["evidence_collector_instance_ids"] = ["evidence"]
         self.charter["verifier_instance_ids"] = ["verifier"]
         common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
@@ -1822,15 +1857,14 @@ class V9CharteredRouteTests(CharteredFixture):
             {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
              "depends_on": [], "requirements": {**common, "operation": "manage",
                  "required_capabilities": ["structured_output"]}},
-            *[{"assignment_id": name, "role": "lead-developer", "instructions": "Edit.",
-               "depends_on": [], "requirements": {**common, "operation": "edit",
-                   "required_capabilities": ["structured_edit"]}}
-              for name in ("editor", "editor-two")],
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                 "required_capabilities": ["structured_edit"]}},
             {"assignment_id": "evidence", "role": "test-engineer", "instructions": "Collect.",
-             "depends_on": ["editor"], "requirements": {**common, "operation": "collect",
+             "depends_on": [], "requirements": {**common, "operation": "collect",
                  "required_capabilities": ["evidence_collection"]}},
             {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify.",
-             "depends_on": ["editor", "editor-two", "evidence"],
+             "depends_on": ["editor", "evidence"],
              "requirements": {**common, "operation": "verify",
                  "required_capabilities": ["evidence_collection"]}},
         ]

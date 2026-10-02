@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import shutil
+import stat
 import sqlite3
 import subprocess
 import sys
@@ -2313,32 +2314,41 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 return {"attempt_id": envelope["attempt_id"], "status": "failed",
                         "reason": "chartered_test_failed", **sealed}
         if live_attempt and operation == "verify":
-            raw_result = outcomes[-1].get("outcome", {}).get("result") if isinstance(outcomes[-1], dict) else None
-            if raw_result is None:
-                action_rows = ledger.snapshot(envelope["attempt_id"])["actions"]
-                row = next((item for item in reversed(action_rows)
-                            if item["request"]["assignment_id"] == selected), None)
-                wrapped = row.get("result") if isinstance(row, dict) else None
-                raw_result = wrapped.get("result") if isinstance(wrapped, dict) else None
-            output = raw_result.get("output") if isinstance(raw_result, dict) else None
-            if not isinstance(output, str):
-                raise ContractError("logical v9 verifier returned no bounded output")
             verifier_action = next(item["request"] for item in reversed(
                 ledger.snapshot(envelope["attempt_id"])["actions"])
                 if item["request"]["assignment_id"] == selected)
-            verifier_input = {"provider_task": verifier_action["task"], "assignment_id": selected}
-            input_digest = hashlib.sha256(canonical(verifier_input).encode()).hexdigest()
-            final_evaluation = evaluate_candidate(
-                action_id=verifier_action["action_id"], verifier_input_digest=input_digest,
-                raw_output=output, diff_digest=edit_evidence["diff_sha256"],
-                test_evidence_digest=test_evidence["output_sha256"],
-            )
-            ledger.record_v9_verifier_evaluation(
-                verifier_action["action_id"], verifier_input, raw_result, final_evaluation,
-                edit_evidence["diff_sha256"], test_evidence["output_sha256"],
-                generation=generation,
-            )
-            verifier_evaluations[selected] = final_evaluation
+            try:
+                raw_result = outcomes[-1].get("outcome", {}).get("result") if isinstance(outcomes[-1], dict) else None
+                if raw_result is None:
+                    action_rows = ledger.snapshot(envelope["attempt_id"])["actions"]
+                    row = next((item for item in reversed(action_rows)
+                                if item["request"]["assignment_id"] == selected), None)
+                    wrapped = row.get("result") if isinstance(row, dict) else None
+                    raw_result = wrapped.get("result") if isinstance(wrapped, dict) else None
+                output = raw_result.get("output") if isinstance(raw_result, dict) else None
+                if not isinstance(output, str):
+                    raise ContractError("logical v9 verifier returned no bounded output")
+                verifier_input = {"provider_task": verifier_action["task"], "assignment_id": selected}
+                input_digest = hashlib.sha256(canonical(verifier_input).encode()).hexdigest()
+                final_evaluation = evaluate_candidate(
+                    action_id=verifier_action["action_id"], verifier_input_digest=input_digest,
+                    raw_output=output, diff_digest=edit_evidence["diff_sha256"],
+                    test_evidence_digest=test_evidence["output_sha256"],
+                )
+                ledger.record_v9_verifier_evaluation(
+                    verifier_action["action_id"], verifier_input, raw_result, final_evaluation,
+                    edit_evidence["diff_sha256"], test_evidence["output_sha256"],
+                    generation=generation,
+                )
+                verifier_evaluations[selected] = final_evaluation
+            except ContractError as exc:
+                ledger.record_v9_evidence_failure(envelope["attempt_id"], verifier_action["action_id"],
+                                                  "verifier_evaluation", str(exc), generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "verifier_evaluation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "verifier_evaluation_failed", **sealed}
         completed.add(selected)
         pending.pop(selected)
     outcome = outcomes[-1]
@@ -2643,8 +2653,8 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
         raise ContractError("approved v9 logical assignments conflict with charter topology")
     if len([item for item in assignments if item["requirements"].get("operation") == "manage"]) != 1:
         raise ContractError("approved v9 job charter requires exactly one logical manager")
-    if not any(item["requirements"]["operation"] == "edit" for item in assignments):
-        raise ContractError("approved v9 job charter has no producer assignment")
+    if len(by_operation["edit"]) != 1:
+        raise ContractError("approved v9 job charter requires exactly one producer assignment")
     if not any(item["requirements"]["operation"] == "verify" for item in assignments):
         raise ContractError("approved v9 job charter has no verifier assignment")
     producer_ids = by_operation["edit"]
@@ -2728,7 +2738,7 @@ def _copy_scoped_tree(source: Path, target: Path, scopes: list[str]) -> None:
             copied.add(relative_path)
             destination = target / relative_path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, destination)
+            shutil.copy2(path, destination)
 
 
 def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[str]) -> dict[str, Any]:
@@ -2747,12 +2757,16 @@ def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[
             raise ContractError("hosted editor produced an unsafe scoped file")
         target.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+        source_mode = stat.S_IMODE(source.stat().st_mode)
+        original_mode = stat.S_IMODE(target.stat().st_mode) if target.is_file() else None
         with os.fdopen(fd, "wb") as handle:
             handle.write(source.read_bytes())
             handle.flush()
             os.fsync(handle.fileno())
+            os.fchmod(handle.fileno(), source_mode)
         prepared.append({"relative": relative, "target": target, "temporary": Path(temporary),
-                         "original": target.read_bytes() if target.is_file() else None})
+                         "original": target.read_bytes() if target.is_file() else None,
+                         "original_mode": original_mode})
     applied: list[dict[str, Any]] = []
     try:
         for item in prepared:
@@ -2772,6 +2786,7 @@ def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[
                         handle.write(item["original"])
                         handle.flush()
                         os.fsync(handle.fileno())
+                        os.fchmod(handle.fileno(), item["original_mode"])
                     os.replace(restore, item["target"])
                 finally:
                     with suppress(FileNotFoundError):

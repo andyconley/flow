@@ -609,7 +609,10 @@ class DeliverySelectionTests(unittest.TestCase):
                 verifier_action["action_id"], verifier_input, result, evaluation,
                 "d" * 64, "e" * 64, generation=1,
             )
-            receipt = receipt_from_snapshot(ledger.snapshot(envelope["attempt_id"]))
+            receipt = receipt_from_snapshot(
+                ledger.snapshot(envelope["attempt_id"]),
+                outcome={"status": "completed", "reason": "semantic_verifier_valid_pass"},
+            )
             self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
             verifier_selections = [item for item in receipt["selections"]
                                    if item["logical_action_id"] == verifier_action["logical_action_id"]]
