@@ -1488,6 +1488,10 @@ def approve_job_charter_v9_migration(
         approved = current.get("approved_artifact_digests") or {}
         existing_rel = artifacts.get("job_charter")
         existing_digest = approved.get("job_charter")
+        registered_v9 = False
+        predecessor_rel: str | None = None
+        predecessor_bytes: bytes | None = None
+        successor_bytes: bytes | None = None
         if isinstance(existing_rel, str) and isinstance(existing_digest, str):
             try:
                 registered = _bounded_regular_file(project_root / existing_rel, run_dir, "registered job charter")
@@ -1518,7 +1522,10 @@ def approve_job_charter_v9_migration(
                 return False, current, [str(exc)]
             if hashlib.sha256(requested).hexdigest() == existing_digest:
                 return True, current, []
-            return False, current, ["run already has a different approved v9 job charter"]
+            registered_v9 = True
+            predecessor_rel = existing_rel
+            predecessor_bytes = registered
+            successor_bytes = requested
         try:
             if _started_execution_exists(run_dir):
                 return False, current, ["a started execution attempt must be terminated before migration"]
@@ -1530,17 +1537,21 @@ def approve_job_charter_v9_migration(
                 raise ValueError("orchestration manifest differs from its approved digest")
             manifest = _json_mapping(manifest_bytes, "orchestration manifest")
             canonical_rel = f".flow/runs/{work_id}/job-charter.json"
-            manager_links = [item for item in manifest.get("assignments", [])
-                             if isinstance(item, dict) and item.get("lane") == "implement"
-                             and item.get("id") == "magentic-manager"
-                             and canonical_rel in (item.get("input_evidence") or [])]
-            if len(manager_links) != 1:
-                raise ValueError("approved manifest does not uniquely link the canonical job charter")
             canonical = project_root / canonical_rel
-            predecessor_bytes = _bounded_regular_file(canonical, run_dir, "canonical predecessor job charter")
+            if not registered_v9:
+                manager_links = [item for item in manifest.get("assignments", [])
+                                 if isinstance(item, dict) and item.get("lane") == "implement"
+                                 and item.get("id") == "magentic-manager"
+                                 and canonical_rel in (item.get("input_evidence") or [])]
+                if len(manager_links) != 1:
+                    raise ValueError("approved manifest does not uniquely link the canonical job charter")
+                predecessor_rel = canonical_rel
+                predecessor_bytes = _bounded_regular_file(
+                    canonical, run_dir, "canonical predecessor job charter")
+                source_path = canonical if replacement is None else project_root / replacement
+                successor_bytes = _bounded_regular_file(source_path, run_dir, "successor job charter")
+            assert predecessor_bytes is not None and successor_bytes is not None
             predecessor = _json_mapping(predecessor_bytes, "canonical predecessor job charter")
-            source_path = canonical if replacement is None else project_root / replacement
-            successor_bytes = _bounded_regular_file(source_path, run_dir, "successor job charter")
             successor = _json_mapping(successor_bytes, "successor job charter")
             delivery_dir_rel = delivery.get("delivery_artifact_dir")
             if not isinstance(delivery_dir_rel, str):
@@ -1564,7 +1575,14 @@ def approve_job_charter_v9_migration(
                     or claim.get("charter_digest") != delivery.get("charter_digest")
                     or claim.get("logical_delivery_attempt_id") != delivery.get("logical_delivery_attempt_id")):
                 raise ValueError("active Delivery Lead claim differs from sealed run authority")
-            _validate_v9_successor_charter(predecessor, successor, manifest, delivery_charter)
+            # The first migration proves a provider-neutral v9 projection is a
+            # narrow successor to the approved v8 charter. Later explicitly
+            # user-approved successors may amend task/scope/test authority,
+            # but must still satisfy the complete v9 schema, sealed roles,
+            # dependency topology, and path-safety rules.
+            _validate_v9_successor_charter(
+                successor if registered_v9 else predecessor,
+                successor, manifest, delivery_charter)
         except (ValueError, DeliveryContractError) as exc:
             return False, current, [str(exc)]
 
@@ -1592,7 +1610,7 @@ def approve_job_charter_v9_migration(
         successor_relative = successor_path.relative_to(project_root).as_posix()
         record = {
             "schema_version": 1, "sequence": sequence, "kind": "job_charter_v9_migration",
-            "predecessor_path": canonical_rel, "predecessor_digest": predecessor_digest,
+            "predecessor_path": predecessor_rel, "predecessor_digest": predecessor_digest,
             "predecessor_snapshot": snapshot.relative_to(project_root).as_posix(),
             "successor_path": successor_relative, "successor_digest": successor_digest,
             "delivery_charter_digest": delivery["charter_digest"],

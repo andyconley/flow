@@ -2343,7 +2343,12 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         try:
             outcomes.append((supervisor or run_maf_v9_delivery)(
                 envelope, task, dispatch, python_path=python_path,
-                manager_decision=manager_decision))
+                manager_decision=manager_decision,
+                # The child waits while Flow performs the provider callback.
+                # Its protocol deadline must exceed the operation deadline or
+                # a completed worker result cannot be returned to MAF.
+                timeout_s={"read": 180, "edit": 660, "collect": 660,
+                           "verify": 660}[operation]))
         except ProviderCandidatesExhausted as exhausted:
             return exhausted.result
         if live_attempt and operation == "edit":

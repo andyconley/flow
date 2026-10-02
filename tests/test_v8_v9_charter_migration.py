@@ -139,6 +139,31 @@ class V8V9JobCharterMigrationTests(CharteredFixture):
         self.assertEqual(repeated, payload)
         self.assertEqual(self._tree(), before)
 
+    def test_explicitly_approved_v9_successor_preserves_chained_history(self) -> None:
+        ok, first, errors = self._migrate()
+        self.assertTrue(ok, errors)
+        amended = self._successor_charter()
+        amended["read_paths"].append("migrations")
+        amended["write_paths"].append("migrations")
+        successor = self.run / "amended-job-charter.json"
+        successor.write_text(self._json(amended))
+
+        ok, payload, errors = runstate.approve_job_charter_v9_migration(
+            "sample", successor.relative_to(self.root).as_posix(),
+            "explicit user approval for required migration mirror scope",
+            approved_by_user=True, root=self.root,
+        )
+
+        self.assertTrue(ok, errors)
+        self.assertEqual(payload["delivery"]["owner_generation"], 3)
+        self.assertEqual(len(payload["job_charter_migrations"]), 2)
+        second = payload["job_charter_migrations"][1]
+        self.assertEqual(second["predecessor_path"], first["artifacts"]["job_charter"])
+        self.assertEqual(second["predecessor_digest"],
+                         first["approved_artifact_digests"]["job_charter"])
+        self.assertEqual(second["successor_digest"], hashlib.sha256(successor.read_bytes()).hexdigest())
+        self.assertEqual(payload["artifacts"]["job_charter"], second["successor_path"])
+
     def test_missing_explicit_approval_is_refused_without_mutation(self) -> None:
         before = self._tree()
         ok, _payload, errors = self._migrate(approved=False)

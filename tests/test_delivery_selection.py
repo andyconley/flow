@@ -421,9 +421,11 @@ class DeliverySelectionTests(unittest.TestCase):
             ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
             ledger.create_attempt(envelope)
             seen = {}
+            supervisor_timeouts = []
 
             def supervisor(sent_envelope, task, on_action, *, manager_decision, **_kwargs):
                 self.assertEqual(sent_envelope, envelope)
+                supervisor_timeouts.append(_kwargs["timeout_s"])
                 outcome = on_action({"attempt_id": envelope["attempt_id"],
                                      "assignment_id": manager_decision["assignment_id"],
                                      "task": manager_decision["task"], "sequence": 1,
@@ -450,6 +452,7 @@ class DeliverySelectionTests(unittest.TestCase):
                              {"manager": "local", "producer": "local", "verifier": "local"})
             self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
                              ["completed", "completed", "completed", "completed"])
+            self.assertEqual(supervisor_timeouts, [660, 660])
 
     def test_logical_v9_manager_decision_drives_verifier_stage(self) -> None:
         envelope = _envelope()
