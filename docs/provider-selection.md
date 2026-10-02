@@ -94,12 +94,15 @@ consumed -> unknown -> reconciliation required -> cancel or abandon
 catalog, bounded readiness facts, exclusions, ordering, and selected binding.
 It is read-only and never creates an attempt or calls a provider. Local Ollama
 readiness requires the exact configured model to be discovered. Hosted
-readiness requires the bounded local CLI adapter, a successful local
-authentication-status check, and a regular non-symlink credential artifact
-that Flow can copy into the worker's isolated home. A host login that depends
-on broader Keychain or home-directory access is unavailable to the confined
-worker. Model entitlement and send failures remain unknown until after the
-durable send claim and therefore enter recovery rather than automatic fallback.
+readiness requires the bounded local CLI adapter, a regular non-symlink
+credential artifact eligible for projection into the worker's isolated home,
+and a bounded authenticated local CLI status observation. Flow reduces the
+observation to controlled readiness state and evidence codes; it does not
+persist credential material or raw status-command output in selection evidence.
+A host login that depends on broader Keychain or home-directory access is
+unavailable to the confined worker. Model entitlement and send failures remain
+unknown until after the durable send claim and therefore enter recovery rather
+than automatic fallback.
 
 Only an availability refusal proven before the send claim advances to the next
 eligible candidate. Once any adapter call starts, a failure or lost response is
@@ -114,6 +117,9 @@ uncertain and cannot fall forward automatically.
 - V9 recovery never resends a claimed call. Inspection reports the unresolved action that must be reconciled or terminated.
 
 ### Failure triage
+
+For symptom-first diagnosis and safe remediation, follow the
+[provider-selection runbook](runbooks/provider-selection.md).
 
 1. Run `flow run inspect-delivery WORK_ID --attempt-id ATTEMPT_ID --json` and
    `flow run trace WORK_ID --attempt ATTEMPT_ID --json`.

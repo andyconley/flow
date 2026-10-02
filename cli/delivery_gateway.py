@@ -2585,8 +2585,10 @@ def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None =
 
     Administrator configuration owns exact candidate declarations. Project
     configuration may only disable or lower limits on known candidates. Discovery never
-    invents candidates or enables a disabled one. Hosted readiness is limited
-    to an executable presence check and performs no credential or network I/O.
+    invents candidates or enables a disabled one. Hosted readiness requires an
+    eligible credential artifact plus a bounded, authenticated local CLI status
+    observation. Only controlled evidence codes are retained; credential material
+    and raw command output are never persisted in selection evidence.
     """
     framework = read_toml(SCAFFOLD_DIR / "flow.toml")
     administrator_path = USER_OVERLAY_DIR / "flow.toml"
