@@ -90,10 +90,13 @@ def _envelope(*, excluded_families: list[str] | None = None,
     }
     assignments = [
         {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Coordinate logical work.",
+         "depends_on": [],
          "requirements": {**common, "operation": "manage"}},
         {"assignment_id": "producer", "role": "lead-developer", "instructions": "Edit the approved scope.",
+         "depends_on": [],
          "requirements": {**common, "operation": "edit", "required_capabilities": ["structured_edit"]}},
         {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify independently.",
+         "depends_on": ["producer"],
          "requirements": {**common, "operation": "verify",
                           "risk_class": "high" if excluded_families else "standard",
                           "independence_required": bool(excluded_families)}},
@@ -421,6 +424,58 @@ class DeliverySelectionTests(unittest.TestCase):
             self.assertEqual(outcome["status"], "completed")
             self.assertEqual(seen, ["manager", "producer", "manager", "verifier"])
 
+    def test_manager_selects_one_of_multiple_dependency_valid_assignments(self) -> None:
+        envelope = _envelope()
+        producer_two = copy.deepcopy(next(item for item in envelope["logical_assignments"]
+                                           if item["assignment_id"] == "producer"))
+        producer_two["assignment_id"] = "producer-two"
+        producer_two["instructions"] = "Edit the second approved scope."
+        envelope["logical_assignments"].insert(2, producer_two)
+        verifier = next(item for item in envelope["logical_assignments"]
+                        if item["assignment_id"] == "verifier")
+        verifier["depends_on"] = ["producer", "producer-two"]
+        envelope["limits"]["max_actions"] = 6
+        inputs = envelope["selection_inputs"]
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=envelope["work_id"], attempt_id=envelope["attempt_id"],
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"],
+            independence_constraints=[],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            manager_turn = 0
+            worker_order = []
+
+            def adapter(_binding, action):
+                nonlocal manager_turn
+                if action["assignment_id"] == "manager":
+                    manager_turn += 1
+                    selected = ("producer-two" if manager_turn == 1 else
+                                "producer" if manager_turn == 2 else "verifier")
+                    return _manager_result(selected, "bounded note")
+                worker_order.append(action["assignment_id"])
+                return {"output": "done"}
+
+            execute_v9_logical_delivery(
+                envelope, "Complete approved work.", ledger, adapter,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                    on_action({"attempt_id": envelope["attempt_id"],
+                               "assignment_id": manager_decision["assignment_id"],
+                               "task": manager_decision["task"], "sequence": 1,
+                               "manager_turn": manager_decision["manager_turn"]}),
+            )
+            self.assertEqual(worker_order, ["producer-two", "producer", "verifier"])
+            prompts = [item["request"]["task"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]
+                       if item["request"]["assignment_id"] == "manager"]
+            self.assertIn('"producer-two"', prompts[0])
+            self.assertIn('"producer"', prompts[0])
+            self.assertNotIn('"verifier"', prompts[0])
+
     def test_logical_v9_rejects_proposal_that_differs_from_manager_decision(self) -> None:
         envelope = _envelope()
         with tempfile.TemporaryDirectory() as tmp:
@@ -516,9 +571,9 @@ class DeliverySelectionTests(unittest.TestCase):
             ledger.create_attempt(envelope)
             sends = []
 
-            def supervisor(_envelope, task, on_action, **_kwargs):
+            def supervisor(_envelope, _task, on_action, *, manager_decision, **_kwargs):
                 return on_action({"attempt_id": envelope["attempt_id"], "assignment_id": "producer",
-                                  "task": task, "sequence": 1, "manager_turn": 1})
+                                  "task": manager_decision["task"], "sequence": 1, "manager_turn": 1})
 
             def readiness(binding):
                 if binding["candidate_id"] == "local":

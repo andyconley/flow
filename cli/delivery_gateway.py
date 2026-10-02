@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from contextlib import ExitStack, nullcontext, suppress
 from functools import partial
@@ -22,7 +23,7 @@ from execution_contracts import (MANAGER_IDENTITY_FIELDS, TERMINAL_UNCERTAIN_STA
                                  digest, envelope_digest, handback_supported, validate_manager_identity,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
-                                 validate_result, validate_receipt)
+                                 validate_result, validate_receipt, validate_envelope)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
@@ -2214,12 +2215,20 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     # send fence before a MAF process exists. The child receives neither the
     # binding nor provider credentials; the durable receipt carries the proof.
     outcomes = []
-    operation_order = {"edit": 0, "collect": 1, "verify": 2}
-    pending = sorted(workers, key=lambda item: (operation_order[item["requirements"]["operation"]],
-                                                item["assignment_id"]))
-    for stage, expected_assignment in enumerate(pending, start=1):
+    pending = {item["assignment_id"]: item for item in workers}
+    completed: set[str] = set()
+    stage = 0
+    while pending:
+        frontier = sorted(
+            (item for item in pending.values()
+             if set(item.get("depends_on", [])) <= completed),
+            key=lambda item: item["assignment_id"],
+        )
+        if not frontier:
+            raise ContractError("logical v9 dependency frontier is empty before work completed")
+        stage += 1
         dispatch_sequence_base = stage * 2 - 1
-        allowed_ids = [expected_assignment["assignment_id"]]
+        allowed_ids = [item["assignment_id"] for item in frontier]
         manager_decision = None
         manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
                   "task": ("Choose the next logical assignment for the approved task. "
@@ -2241,15 +2250,22 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 or not isinstance(reason, str) or not reason.strip()
                 or len(selected_task.encode()) > MAX_TASK_BYTES or len(reason.encode()) > MAX_TASK_BYTES):
             raise ContractError("logical v9 manager decision is outside the approved logical frontier")
-        manager_decision = {"assignment_id": selected, "task": selected_task,
+        selected_assignment = pending[selected]
+        bounded_task = (f"Approved job:\n{task.strip()}\n\n"
+                        f"Logical assignment: {selected}\n"
+                        f"Sealed instructions:\n{selected_assignment['instructions'].strip()}")
+        if len(bounded_task.encode()) > MAX_TASK_BYTES:
+            raise ContractError("logical v9 sealed assignment task exceeds size limit")
+        manager_decision = {"assignment_id": selected, "task": bounded_task,
                             "reason": reason, "manager_turn": stage}
         outcomes.append((supervisor or run_maf_v9_delivery)(
             envelope, task, dispatch, python_path=python_path,
             manager_decision=manager_decision))
+        completed.add(selected)
+        pending.pop(selected)
     outcome = outcomes[-1]
-    # A normal bounded v9 run has the manager bootstrap and one logical edit.
-    # Seal the receipt
-    # from the ledger while it is still the source of truth; uncertain sends
+    # Seal the receipt only after every dependency-valid logical assignment
+    # completed. The ledger remains the source of truth; uncertain sends
     # refuse here and remain in explicit recovery instead.
     attempt_dir = Path(envelope["checkpoint_dir"]).parent
     if not attempt_dir.is_absolute() or not attempt_dir.is_dir() or attempt_dir.is_symlink():
@@ -2470,51 +2486,54 @@ def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None =
 
 
 def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[str, Any]]:
-    """Project the approved job topology into provider-neutral v9 assignments."""
+    """Project the approved provider-neutral v9 assignments without invention."""
     run_dir = root / ".flow" / "runs" / work_id
     state = run_status(work_id, root=root)
     charter_rel = state.get("artifacts", {}).get("job_charter")
-    if charter_rel:
-        charter = _run_file(root, run_dir, charter_rel)
-        raw = json.loads(charter.read_text())
-        if not isinstance(raw, dict) or not isinstance(raw.get("write_paths"), list) or not raw["write_paths"]:
-            raise ContractError("approved v9 job charter has no edit scope")
-    else:
-        # The diagnostic is useful before delivery preparation has written its
-        # charter. It remains read-only and derives no concrete provider facts
-        # from the Shaper-facing manifest.
-        requirements_rel = state.get("artifacts", {}).get("requirements")
-        _run_file(root, run_dir, requirements_rel or "")
-    common = {"minimum_tier": "working", "locality": "any",
-              "input_bytes": 65536, "output_bytes": 16384, "context_tokens": 32768}
-    assignments = [{"assignment_id": "logical-manager", "role": "delivery-lead",
-             "instructions": "Bootstrap and bound the provider-neutral delivery workflow.",
-             "requirements": {"operation": "manage", "minimum_tier": "working",
-                              "required_capabilities": ["structured_output"], "locality": "any",
-                              "input_bytes": 32768, "output_bytes": 8192, "context_tokens": 32768,
-                              "risk_class": "standard", "independence_required": False}}]
-    classifications = (
-        ("producer_instance_ids", "lead-developer", "edit", ["structured_edit"], False),
-        ("evidence_collector_instance_ids", "test-engineer", "collect", ["evidence_collection"], False),
-        ("verifier_instance_ids", "quality-reviewer", "verify", ["evidence_collection"], True),
-    )
-    seen = {"logical-manager"}
-    for field, role, operation, capabilities, independent in classifications:
-        values = raw.get(field, [])
-        if not isinstance(values, list) or any(not isinstance(item, str) or not item for item in values):
-            raise ContractError(f"approved v9 job charter has invalid {field}")
-        for assignment_id in values:
-            if assignment_id in seen:
-                raise ContractError("approved v9 job charter logical assignment IDs overlap")
-            seen.add(assignment_id)
-            assignments.append({
-                "assignment_id": assignment_id, "role": role,
-                "instructions": f"Perform the approved {operation} operation within the chartered scope.",
-                "requirements": {**common, "operation": operation,
-                                 "required_capabilities": capabilities,
-                                 "risk_class": "high" if independent else "standard",
-                                 "independence_required": independent},
-            })
+    if not charter_rel:
+        raise ContractError("approved v9 job charter artifact is absent")
+    charter = _run_file(root, run_dir, charter_rel)
+    raw = json.loads(charter.read_text())
+    if not isinstance(raw, dict) or not isinstance(raw.get("write_paths"), list) or not raw["write_paths"]:
+        raise ContractError("approved v9 job charter has no edit scope")
+    assignments = raw.get("logical_assignments")
+    if not isinstance(assignments, list) or not assignments:
+        raise ContractError("approved v9 job charter has no sealed logical assignments")
+    assignments = deepcopy(assignments)
+    # Reuse the envelope validator's closed assignment/DAG checks before any
+    # selection authority or provider send exists.
+    probe = {
+        "schema_version": 1, "execution_protocol_version": 9,
+        "work_id": work_id, "attempt_id": "projection-check",
+        "charter_digest": "0" * 64, "manifest_digest": "0" * 64,
+        "run_protocol_revision": 2, "logical_assignments": assignments,
+        "selection_inputs": {}, "selection_input_digests": {},
+        "selection_authority": {}, "limits": {}, "checkpoint_dir": "projection-check",
+        "delivery_charter_digest": "0" * 64, "delivery_lead_claim_digest": "0" * 64,
+        "delivery_lead_claim": {"generation": 1},
+    }
+    try:
+        validate_envelope(probe)
+    except ContractError as exc:
+        # The synthetic probe intentionally has no selection authority. Only
+        # assignment errors are useful here; real preparation validates the
+        # complete envelope.
+        if "logical assignment" in str(exc) or "logical requirements" in str(exc):
+            raise
+    by_operation = {
+        operation: {item["assignment_id"] for item in assignments
+                    if item["requirements"].get("operation") == operation}
+        for operation in ("edit", "collect", "verify")
+    }
+    expected = {
+        "edit": set(raw.get("producer_instance_ids", [])),
+        "collect": set(raw.get("evidence_collector_instance_ids", [])),
+        "verify": set(raw.get("verifier_instance_ids", [])),
+    }
+    if by_operation != expected:
+        raise ContractError("approved v9 logical assignments conflict with charter topology")
+    if len([item for item in assignments if item["requirements"].get("operation") == "manage"]) != 1:
+        raise ContractError("approved v9 job charter requires exactly one logical manager")
     if not any(item["requirements"]["operation"] == "edit" for item in assignments):
         raise ContractError("approved v9 job charter has no producer assignment")
     if not any(item["requirements"]["operation"] == "verify" for item in assignments):

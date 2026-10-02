@@ -1551,11 +1551,48 @@ class ProviderRouteTests(unittest.TestCase):
 
 
 class V9CharteredRouteTests(CharteredFixture):
+    def _write_v9_logical_charter(self) -> None:
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
+                  "output_bytes": 100, "context_tokens": 100,
+                  "risk_class": "standard", "independence_required": False}
+        self.charter["logical_assignments"] = [
+            {"assignment_id": "logical-manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                                                   "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                                                   "required_capabilities": ["structured_edit"]}},
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify.",
+             "depends_on": ["editor"], "requirements": {**common, "operation": "verify",
+                                                           "required_capabilities": ["evidence_collection"]}},
+        ]
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+
     def test_v9_projection_includes_all_approved_logical_job_roles(self):
         self.charter["evidence_collector_instance_ids"] = ["evidence"]
         self.charter["verifier_instance_ids"] = ["verifier"]
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
+                  "output_bytes": 100, "context_tokens": 100,
+                  "risk_class": "standard", "independence_required": False}
+        self.charter["logical_assignments"] = [
+            {"assignment_id": "logical-manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                                                   "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit exactly.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                                                   "required_capabilities": ["structured_edit"]}},
+            {"assignment_id": "evidence", "role": "test-engineer", "instructions": "Collect exactly.",
+             "depends_on": ["editor"], "requirements": {**common, "operation": "collect",
+                                                           "required_capabilities": ["evidence_collection"]}},
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify exactly.",
+             "depends_on": ["editor", "evidence"],
+             "requirements": {**common, "operation": "verify",
+                              "required_capabilities": ["evidence_collection"],
+                              "risk_class": "high", "independence_required": True}},
+        ]
         (self.run / "job-charter.json").write_text(json.dumps(self.charter))
         assignments = logical_assignments_from_charter("sample", root=self.root)
+        self.assertEqual(assignments, self.charter["logical_assignments"])
         operations = {item["assignment_id"]: item["requirements"]["operation"]
                       for item in assignments}
         self.assertEqual(operations, {"logical-manager": "manage", "editor": "edit",
@@ -1566,6 +1603,11 @@ class V9CharteredRouteTests(CharteredFixture):
         constraints = independence_constraints_from_assignments(assignments)
         self.assertEqual(constraints[0]["producer_assignment_ids"], ["editor"])
         self.assertEqual(constraints[0]["evidence_collector_assignment_ids"], ["evidence"])
+
+    def test_v9_projection_rejects_id_only_charter_instead_of_fabricating_bodies(self):
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        with self.assertRaisesRegex(ContractError, "no sealed logical assignments"):
+            logical_assignments_from_charter("sample", root=self.root)
 
     def test_completed_v9_job_hands_off_to_review_when_charter_authorizes_it(self):
         self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
@@ -1632,9 +1674,9 @@ class V9CharteredRouteTests(CharteredFixture):
                         "instruction_or_question": {"answer": task},
                     }} if action["assignment_id"] == "manager" else {"model": binding["model"]}),
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                supervisor=lambda _envelope, sent_task, on_action, **_kwargs: on_action({
-                    "attempt_id": envelope["attempt_id"], "assignment_id": "editor", "task": sent_task,
-                    "sequence": 1, "manager_turn": 1,
+                supervisor=lambda _envelope, _sent_task, on_action, *, manager_decision, **_kwargs: on_action({
+                    "attempt_id": envelope["attempt_id"], "assignment_id": "editor",
+                    "task": manager_decision["task"], "sequence": 1, "manager_turn": 1,
                 }),
             )
         self.assertEqual(result["status"], "completed")
@@ -1648,6 +1690,7 @@ class V9CharteredRouteTests(CharteredFixture):
                          ["completed", "completed"])
 
     def test_flow_owned_selection_probe_uses_flow_candidates_and_local_discovery(self):
+        self._write_v9_logical_charter()
         overlay = self.root / "user-overlay"
         overlay.mkdir()
         (overlay / "flow.toml").write_text(
@@ -1666,6 +1709,7 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "local")
 
     def test_probe_can_choose_credential_free_hosted_adapter_after_local_refusal(self):
+        self._write_v9_logical_charter()
         empty_overlay = self.root / "empty-user-overlay"
         (self.root / ".flow" / "flow.toml").write_text(
             "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"

@@ -227,9 +227,11 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
     seen: set[str] = set()
     forbidden = {"provider", "model", "candidate_id", "eligible_candidates", "roster", "ranked_roster"}
     for assignment in assignments:
-        if (not isinstance(assignment, dict) or set(assignment) != {
+        if (not isinstance(assignment, dict) or set(assignment) not in ({
                 "assignment_id", "role", "instructions", "requirements"
-        } or forbidden & set(assignment)):
+        }, {
+                "assignment_id", "role", "instructions", "requirements", "depends_on"
+        }) or forbidden & set(assignment)):
             raise ContractError("protocol v9 logical assignment carries concrete provider authority")
         for field in ("assignment_id", "role", "instructions", "requirements"):
             if field not in assignment:
@@ -243,6 +245,32 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
         requirements = assignment["requirements"]
         if not isinstance(requirements, dict):
             raise ContractError("protocol v9 logical requirements are invalid")
+        dependencies = assignment.get("depends_on", [])
+        if (not isinstance(dependencies, list)
+                or any(not isinstance(item, str) or not item for item in dependencies)
+                or len(dependencies) != len(set(dependencies))
+                or assignment["assignment_id"] in dependencies):
+            raise ContractError("protocol v9 logical assignment dependencies are invalid")
+    assignment_ids = {item["assignment_id"] for item in assignments}
+    if any(set(item.get("depends_on", [])) - assignment_ids for item in assignments):
+        raise ContractError("protocol v9 logical assignment dependency is unknown")
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    by_id = {item["assignment_id"]: item for item in assignments}
+
+    def visit(assignment_id: str) -> None:
+        if assignment_id in visiting:
+            raise ContractError("protocol v9 logical assignment dependencies contain a cycle")
+        if assignment_id in visited:
+            return
+        visiting.add(assignment_id)
+        for dependency in by_id[assignment_id].get("depends_on", []):
+            visit(dependency)
+        visiting.remove(assignment_id)
+        visited.add(assignment_id)
+
+    for assignment_id in assignment_ids:
+        visit(assignment_id)
     inputs = envelope["selection_inputs"]
     input_digests = envelope["selection_input_digests"]
     if not isinstance(inputs, dict) or set(inputs) != {"policy", "catalog", "availability"}:
