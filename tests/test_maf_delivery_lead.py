@@ -48,6 +48,10 @@ class StockDeliveryLeadTest(unittest.TestCase):
             {"assignment_id": "review", "definition_digest": "review-definition", "instance_id": "reviewer-1",
              "role": "quality-reviewer", "provider": "local-stub", "model": "fake"},
         ]
+        if "evidence-1" in target_sequence:
+            roster.append({"assignment_id": "evidence", "definition_digest": "evidence-definition",
+                           "instance_id": "evidence-1", "role": "security-reviewer",
+                           "provider": "local-stub", "model": "fake"})
         if protocol_version in {7, 8}:
             for item in roster:
                 item["capabilities"] = ["read"]
@@ -56,6 +60,7 @@ class StockDeliveryLeadTest(unittest.TestCase):
                         "roster": roster}
             if protocol_version in {7, 8}:
                 envelope["job_contract"] = {"producer_instance_ids": ["test-engineer-1"],
+                                            "evidence_collector_instance_ids": (["evidence-1"] if "evidence-1" in target_sequence else []),
                                             "verifier_instance_ids": ["reviewer-1"]}
             child = subprocess.Popen([MAF_PYTHON, "-m", "runtime.maf_runner.delivery_lead"],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -170,6 +175,12 @@ class StockDeliveryLeadTest(unittest.TestCase):
         self.assertEqual(actions, ["reviewer-1"])
         self.assertEqual(terminal["type"], "workflow_finished")
         self.assertEqual(terminal["protocol_version"], 8)
+
+    def test_stock_manager_routes_distinct_evidence_collector(self):
+        phases, actions, terminal = self._exercise("evidence-1", protocol_version=8)
+        self.assertEqual(phases, ["facts", "plan", "progress", "progress", "final"])
+        self.assertEqual(actions, ["evidence-1"])
+        self.assertEqual(terminal["type"], "workflow_finished")
 
     def test_stock_manager_accepts_retry_signal_and_selects_verifier_again(self):
         phases, actions, terminal = self._exercise(["reviewer-1", "reviewer-1"], protocol_version=8)

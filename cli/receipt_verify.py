@@ -29,8 +29,9 @@ from execution_ledger import ExecutionLedger
 from fsutil import repo_root
 from manager_requests import REQUEST_DIR, list_request_files, render_manager_prompt
 from receipt_compare import DERIVED_BLOCKS, ROW_BLOCKS, compare_receipt_rows, describe, expected_blocks
-from verifier_contracts import verifier_provider_task
+from verifier_contracts import VERIFIED_HANDOFF_AUTHORITY, verifier_provider_task
 import process_identity
+from selection_receipt import verify_selection_receipt_snapshot as verify_v9_selection_receipt_snapshot
 
 SCHEMA_VERSION = 1
 # A v8 attempt never seals ``denied``; such a receipt is refused rather than judged against a missing column.
@@ -533,8 +534,29 @@ def check_v11(ctx):
                          ("final evaluation diff_digest", final_evaluation.get("diff_digest"))):
         if value != sha:
             return "fail", 2, f"{label}: expected {sha[:16]} (repair.diff), found {str(value)[:16]}"
-    task = verifier_provider_task(final_input["input"]["task"], diff.decode(errors="replace"), sha, structured=True)
-    if final_input["input"].get("provider_task") != task:
+    tests = evidence.get("tests") or {}
+    retained_output = tests.get("output_excerpt")
+    actual_task = final_input["input"].get("provider_task")
+    output_marker = "\nFlow-retained targeted-test output (bound by the receipt test digest):\n"
+    authority_marker = "\nFlow-verified control-plane authority:\n"
+    if (not isinstance(retained_output, str) and isinstance(actual_task, str)
+            and output_marker in actual_task and authority_marker in actual_task):
+        candidate = actual_task.split(output_marker, 1)[1].split(authority_marker, 1)[0]
+        if hashlib.sha256(candidate.encode()).hexdigest() == tests.get("output_sha256"):
+            retained_output = candidate
+    task = verifier_provider_task(
+        final_input["input"]["task"], diff.decode(errors="replace"), sha, structured=True,
+        test_output=retained_output if isinstance(retained_output, str) else "",
+        authority_statement=VERIFIED_HANDOFF_AUTHORITY if isinstance(retained_output, str) else "")
+    acceptable_tasks = {task}
+    if not isinstance(retained_output, str):
+        # Receipts sealed while the retained-output contract was introduced can
+        # carry the new fixed authority statement with legacy digest-only test
+        # evidence. Older sealed receipts carry neither addition.
+        acceptable_tasks.add(verifier_provider_task(
+            final_input["input"]["task"], diff.decode(errors="replace"), sha, structured=True,
+            authority_statement=VERIFIED_HANDOFF_AUTHORITY))
+    if actual_task not in acceptable_tasks:
         return "fail", 3, "the final verifier input's provider_task differs from the one rebuilt from repair.diff"
     if not in_scope:
         return "fail", 4, "the diff changes files outside the job's write paths"
@@ -841,6 +863,42 @@ def verify_receipt(work_id: str, attempt_id: str | None = None, *, root: Path | 
         raise VerifyRefused("run_unreadable", f"ledger unreadable: {exc}") from exc
     entries = {entry["attempt_id"]: entry for entry in view["attempts"]}
     target = entries[view["attempt_id"]]
+    if target["execution_protocol_version"] == 9:
+        if target["sealed_receipt_sha256"] is None or target["status"] not in TERMINAL:
+            raise VerifyRefused("attempt_not_sealed", f"{view['attempt_id']} is {target['status']}")
+        attempt_dir = run_dir / "execution" / view["attempt_id"]
+        receipt_path = attempt_dir / "receipt.json"
+        stored_path = target["snapshot"].get("receipt_path")
+        try:
+            stored_is_canonical = (isinstance(stored_path, str)
+                                   and Path(stored_path).resolve() == receipt_path.resolve()
+                                   and Path(stored_path).resolve().is_relative_to(attempt_dir.resolve()))
+        except OSError:
+            stored_is_canonical = False
+        if not stored_is_canonical:
+            checks = [{"check": "S1", "name": "selection receipt closure", "status": "fail", "compared": 1,
+                       "detail": "the ledger receipt_path does not name the canonical v9 receipt"}]
+            return _report(work_id, view["attempt_id"], target["status"], checks, [])
+        receipt_bytes = _read(receipt_path, run_dir)
+        if receipt_bytes is None:
+            checks = [{"check": "S1", "name": "selection receipt closure", "status": "fail", "compared": 1,
+                       "detail": "the canonical v9 receipt is missing"}]
+            return _report(work_id, view["attempt_id"], target["status"], checks, [])
+        if _sha(receipt_bytes) != target["sealed_receipt_sha256"]:
+            checks = [{"check": "S1", "name": "selection receipt closure", "status": "fail", "compared": 1,
+                       "detail": "the canonical v9 receipt digest differs from the ledger seal"}]
+            return _report(work_id, view["attempt_id"], target["status"], checks, [])
+        try:
+            receipt = json.loads(receipt_bytes)
+            result = verify_v9_selection_receipt_snapshot(receipt, target["snapshot"])
+        except (ValueError, ContractError) as exc:
+            checks = [{"check": "S1", "name": "selection receipt closure", "status": "fail", "compared": 1,
+                       "detail": str(exc)}]
+            return _report(work_id, view["attempt_id"], target["status"], checks, [])
+        checks = [{"check": "S1", "name": "selection receipt closure", "status": "pass",
+                   "compared": result["compared"] + 3,
+                   "detail": "selection receipt recomputes and exactly matches the sealed ledger snapshot"}]
+        return _report(work_id, view["attempt_id"], target["status"], checks, [])
     if target["execution_protocol_version"] != 8:
         raise VerifyRefused("unsupported_receipt", "only protocol v8 receipts are verified")
     if target["status"] == "denied":

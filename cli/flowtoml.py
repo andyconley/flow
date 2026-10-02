@@ -11,6 +11,7 @@ fallback is live and covered by the test suite — flow supports interpreters
 older than 3.11.
 """
 
+import json
 from pathlib import Path
 
 try:
@@ -25,6 +26,14 @@ def parse_toml_value(raw: str):
         return raw[1:-1]
     if raw in {"true", "false"}:
         return raw == "true"
+    if raw.startswith("[") and raw.endswith("]"):
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"unsupported TOML value: {raw}") from exc
+        if not isinstance(value, list) or any(not isinstance(item, (str, int, bool)) for item in value):
+            raise ValueError(f"unsupported TOML value: {raw}")
+        return value
     if raw.isdigit():
         return int(raw)
     raise ValueError(f"unsupported TOML value: {raw}")

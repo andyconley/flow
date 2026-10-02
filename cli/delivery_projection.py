@@ -19,6 +19,7 @@ from execution_contracts import (ContractError, DELIVERY_PROTOCOL_VERSION, STRUC
 from execution_ledger import ExecutionLedger
 from fsutil import repo_root
 from legacy_delivery import inspect_legacy_delivery
+from selection_receipt import project_selection_trace
 
 
 COMMAND_ONLY_RECOVERY_CHECKS = ("live_run_fence", "worktree_drift", "envelope_file")
@@ -174,6 +175,25 @@ def inspect_delivery(work_id: str, attempt_id: str | None = None, *, root: Path 
         legacy = inspect_legacy_delivery(raw)
         result["attempt"] = legacy
         result["compatibility_diagnostics"] = legacy["diagnostics"]
+        return result
+    if protocol == 9:
+        ledger_path = execution_dir / "ledger.sqlite"
+        if not ledger_path.is_file() or ledger_path.is_symlink():
+            raise ContractError("delivery execution ledger is absent")
+        snapshot = ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
+        recovery_required = ExecutionLedger(ledger_path, read_only=True).v9_recovery_required(attempt_id)
+        result["attempt"] = {
+            "execution_protocol_version": 9,
+            "work_id": envelope.get("work_id"),
+            "attempt_id": attempt_id,
+            "status": snapshot["status"],
+            "executable": snapshot["status"] == "started" and not recovery_required,
+            "resumable": False,
+            "recovery_required": recovery_required,
+            "selection_trace": project_selection_trace({"selections": snapshot.get("provider_selections", [])}),
+            "pending_unknowns": [item["action_id"] for item in snapshot.get("actions", [])
+                                 if item["status"] in {"started", "unknown"}],
+        }
         return result
     if protocol not in {DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION}:
         result["attempt"] = {

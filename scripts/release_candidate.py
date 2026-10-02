@@ -72,11 +72,14 @@ def create_candidate_remote(plan: dict, destination: Path) -> str:
     _git("init", "--bare", str(destination))
     source_sha = plan["source_sha"]
     _git("push", str(destination), f"{source_sha}:refs/heads/main")
-    _git("push", str(destination), "--tags")
     candidate_tag = plan["predicted_release"]["tag"]
-    existing = _git("show-ref", "--verify", "--hash", f"refs/tags/{candidate_tag}") if _tag_exists(candidate_tag) else ""
-    if existing and existing != source_sha:
-        raise ContractError(f"candidate tag {candidate_tag} already exists at another commit")
+    # Copy historical tags, but construct the predicted candidate tag only in
+    # the isolated remote. A checkout may already contain that public tag at a
+    # prior commit while testing the next unreleased candidate.
+    historical = _git("for-each-ref", "--format=%(refname)", "refs/tags").splitlines()
+    for ref in historical:
+        if ref != f"refs/tags/{candidate_tag}":
+            _git("push", str(destination), f"{ref}:{ref}")
     _git(f"--git-dir={destination}", "update-ref", f"refs/tags/{candidate_tag}", source_sha)
     _git(f"--git-dir={destination}", "symbolic-ref", "HEAD", "refs/heads/main")
     main_sha = _git(f"--git-dir={destination}", "rev-parse", "refs/heads/main")

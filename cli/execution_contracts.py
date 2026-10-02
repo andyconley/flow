@@ -7,9 +7,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from runner_limits import (MAX_ACTIONS, MAX_CONCURRENT, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS,
-                           MAX_TOKEN_TRANCHES, MAX_VERIFIER_CALLS)
-from runner_progress import classify as classify_progress
+try:
+    from runner_limits import (MAX_ACTIONS, MAX_CONCURRENT, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS,
+                               MAX_TOKEN_TRANCHES, MAX_VERIFIER_CALLS)
+    from runner_progress import classify as classify_progress
+except ModuleNotFoundError:  # Package import used by the managed MAF child.
+    from .runner_limits import (MAX_ACTIONS, MAX_CONCURRENT, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_REPLANS,
+                                MAX_TOKEN_TRANCHES, MAX_VERIFIER_CALLS)
+    from .runner_progress import classify as classify_progress
 
 try:
     from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
@@ -17,6 +22,11 @@ try:
 except ModuleNotFoundError:  # Package import used by isolated tests.
     from .verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, VERIFIER_EVALUATION_SCHEMA_VERSION, evaluate_candidate,
                                      provider_binding_mismatch, validate_evaluation, validate_structured_verifier_result)
+
+try:
+    from selection_authority import SelectionAuthorityError, validate_selection_authority
+except ModuleNotFoundError:  # Package import used by isolated tests.
+    from .selection_authority import SelectionAuthorityError, validate_selection_authority
 
 SCHEMA_VERSION = 1
 EXECUTION_PROTOCOL_VERSION = 2
@@ -26,6 +36,7 @@ MAGENTIC_PROTOCOL_VERSION = 5
 CHARTERED_PROTOCOL_VERSION = 6
 DELIVERY_PROTOCOL_VERSION = 7
 STRUCTURED_VERIFIER_PROTOCOL_VERSION = 8
+PROVIDER_SELECTION_PROTOCOL_VERSION = 9
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
@@ -36,7 +47,8 @@ CLAUDE_ASSIGNMENTS = (("test-engineer", "ollama"), ("quality-reviewer", "claude"
 def is_magentic_protocol(protocol_version: int) -> bool:
     """Whether an execution protocol uses the supervised Magentic boundary."""
     return protocol_version in {MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION,
-                                DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION}
+                                DELIVERY_PROTOCOL_VERSION, STRUCTURED_VERIFIER_PROTOCOL_VERSION,
+                                PROVIDER_SELECTION_PROTOCOL_VERSION}
 
 
 def is_chartered_protocol(protocol_version: int) -> bool:
@@ -64,7 +76,7 @@ def supported_execution_protocol_versions() -> frozenset[int]:
     """Return all known protocol numbers, including dormant v8 capability."""
     return frozenset({1, EXECUTION_PROTOCOL_VERSION, MIXED_PROTOCOL_VERSION, CLAUDE_PROTOCOL_VERSION,
                       MAGENTIC_PROTOCOL_VERSION, CHARTERED_PROTOCOL_VERSION, DELIVERY_PROTOCOL_VERSION,
-                      STRUCTURED_VERIFIER_PROTOCOL_VERSION})
+                      STRUCTURED_VERIFIER_PROTOCOL_VERSION, PROVIDER_SELECTION_PROTOCOL_VERSION})
 
 
 class ContractError(ValueError):
@@ -101,6 +113,9 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
     protocol_version = envelope.get("execution_protocol_version", 1)
     if protocol_version not in supported_execution_protocol_versions():
         raise ContractError("execution protocol version is unsupported")
+    if protocol_version == PROVIDER_SELECTION_PROTOCOL_VERSION:
+        _validate_v9_envelope(envelope)
+        return
     if is_magentic_protocol(protocol_version):
         _validate_magentic_envelope(envelope)
         if is_chartered_protocol(protocol_version):
@@ -186,6 +201,134 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
 
 def _hex_digest(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
+    required = (
+        "work_id", "attempt_id", "charter_digest", "manifest_digest", "run_protocol_revision",
+        "logical_assignments", "selection_inputs", "selection_input_digests", "selection_authority",
+        "limits", "checkpoint_dir", "delivery_charter_digest", "delivery_lead_claim_digest",
+        "delivery_lead_claim",
+    )
+    require_fields(envelope, required, kind="protocol v9 envelope")
+    if envelope["run_protocol_revision"] != 2:
+        raise ContractError("protocol v9 requires run protocol revision 2")
+    if not _hex_digest(envelope["charter_digest"]) or not _hex_digest(envelope["manifest_digest"]):
+        raise ContractError("protocol v9 authority digest is invalid")
+    if "job_charter_digest" in envelope and not _hex_digest(envelope["job_charter_digest"]):
+        raise ContractError("protocol v9 job charter digest is invalid")
+    claim = envelope.get("delivery_lead_claim")
+    if (not _hex_digest(envelope.get("delivery_charter_digest"))
+            or not _hex_digest(envelope.get("delivery_lead_claim_digest"))
+            or not isinstance(claim, dict) or set(claim) != {"generation"}
+            or type(claim["generation"]) is not int or claim["generation"] < 1):
+        raise ContractError("protocol v9 delivery authority is invalid")
+    assignments = envelope["logical_assignments"]
+    if not isinstance(assignments, list) or not assignments:
+        raise ContractError("protocol v9 requires logical assignments")
+    seen: set[str] = set()
+    forbidden = {"provider", "model", "candidate_id", "eligible_candidates", "roster", "ranked_roster"}
+    for assignment in assignments:
+        if (not isinstance(assignment, dict) or set(assignment) not in ({
+                "assignment_id", "role", "instructions", "requirements"
+        }, {
+                "assignment_id", "role", "instructions", "requirements", "depends_on"
+        }) or forbidden & set(assignment)):
+            raise ContractError("protocol v9 logical assignment carries concrete provider authority")
+        for field in ("assignment_id", "role", "instructions", "requirements"):
+            if field not in assignment:
+                raise ContractError(f"protocol v9 logical assignment missing {field}")
+        if not isinstance(assignment["assignment_id"], str) or not assignment["assignment_id"] or assignment["assignment_id"] in seen:
+            raise ContractError("protocol v9 logical assignment identity is invalid")
+        if (not isinstance(assignment["role"], str) or not assignment["role"]
+                or not isinstance(assignment["instructions"], str) or not assignment["instructions"].strip()):
+            raise ContractError("protocol v9 logical assignment text is invalid")
+        seen.add(assignment["assignment_id"])
+        requirements = assignment["requirements"]
+        if not isinstance(requirements, dict):
+            raise ContractError("protocol v9 logical requirements are invalid")
+        dependencies = assignment.get("depends_on", [])
+        if (not isinstance(dependencies, list)
+                or any(not isinstance(item, str) or not item for item in dependencies)
+                or len(dependencies) != len(set(dependencies))
+                or assignment["assignment_id"] in dependencies):
+            raise ContractError("protocol v9 logical assignment dependencies are invalid")
+    assignment_ids = {item["assignment_id"] for item in assignments}
+    if any(set(item.get("depends_on", [])) - assignment_ids for item in assignments):
+        raise ContractError("protocol v9 logical assignment dependency is unknown")
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    by_id = {item["assignment_id"]: item for item in assignments}
+
+    def visit(assignment_id: str) -> None:
+        if assignment_id in visiting:
+            raise ContractError("protocol v9 logical assignment dependencies contain a cycle")
+        if assignment_id in visited:
+            return
+        visiting.add(assignment_id)
+        for dependency in by_id[assignment_id].get("depends_on", []):
+            visit(dependency)
+        visiting.remove(assignment_id)
+        visited.add(assignment_id)
+
+    for assignment_id in assignment_ids:
+        visit(assignment_id)
+    inputs = envelope["selection_inputs"]
+    input_digests = envelope["selection_input_digests"]
+    if not isinstance(inputs, dict) or set(inputs) != {"policy", "catalog", "availability"}:
+        raise ContractError("protocol v9 selection inputs are invalid")
+    if not isinstance(input_digests, dict) or set(input_digests) != set(inputs):
+        raise ContractError("protocol v9 selection input digests are invalid")
+    for key, value in inputs.items():
+        if input_digests.get(key) != digest(value):
+            raise ContractError(f"protocol v9 {key} digest mismatch")
+    try:
+        validate_selection_authority(envelope)
+    except SelectionAuthorityError as exc:
+        raise ContractError(f"protocol v9 selection authority is invalid: {exc}") from exc
+    if claim["generation"] != envelope["selection_authority"].get("generation"):
+        raise ContractError("protocol v9 delivery and selection generations differ")
+
+
+def expected_v9_logical_action_id(action: dict[str, Any]) -> str:
+    return digest({key: action[key] for key in (
+        "attempt_id", "envelope_digest", "assignment_id", "sequence", "manager_turn", "task_digest"
+    )})
+
+
+def expected_v9_provider_action_id(action: dict[str, Any]) -> str:
+    return digest({
+        "logical_action_id": action["logical_action_id"],
+        "selection_id": action["selection_id"],
+        "selection_digest": action["selection_decision"]["decision_digest"],
+    })
+
+
+def _validate_v9_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
+    require_fields(action, (
+        "action_id", "logical_action_id", "selection_id", "selection_decision", "attempt_id",
+        "envelope_digest", "assignment_id", "role", "task", "task_digest", "sequence",
+        "manager_turn", "kind",
+    ), kind="protocol v9 action")
+    if action["kind"] != "delegate" or type(action["sequence"]) is not int or action["sequence"] < 1:
+        raise ContractError("protocol v9 action sequence is invalid")
+    assignment = next((item for item in envelope["logical_assignments"]
+                       if item["assignment_id"] == action["assignment_id"]), None)
+    if assignment is None or action["role"] != assignment["role"]:
+        raise ContractError("protocol v9 action selected an unlisted logical assignment")
+    if action["attempt_id"] != envelope["attempt_id"] or action["envelope_digest"] != envelope_digest(envelope):
+        raise ContractError("protocol v9 action envelope link mismatch")
+    if not isinstance(action["task"], str) or not action["task"].strip() or hashlib.sha256(action["task"].encode()).hexdigest() != action["task_digest"]:
+        raise ContractError("protocol v9 task is invalid")
+    if action["logical_action_id"] != expected_v9_logical_action_id(action):
+        raise ContractError("protocol v9 logical action identity mismatch")
+    decision = action["selection_decision"]
+    if not isinstance(decision, dict) or not _hex_digest(decision.get("decision_digest")):
+        raise ContractError("protocol v9 selection decision is invalid")
+    if not isinstance(action["selection_id"], str) or not action["selection_id"]:
+        raise ContractError("protocol v9 selection identity is invalid")
+    if action["action_id"] != expected_v9_provider_action_id(action):
+        raise ContractError("protocol v9 provider action identity mismatch")
 
 
 def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
@@ -312,11 +455,25 @@ def _paths_within_scopes(paths: Any, scopes: Any) -> bool:
                for path in paths)
 
 
+def chartered_test_argv_supported(argv: Any) -> bool:
+    """One canonical command-shape policy shared by sealing and dispatch."""
+    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+    focused = (isinstance(argv, list) and len(argv) == 8
+               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+               and argv[6] == "-p" and argv[7].startswith("test_") and argv[7].endswith(".py")
+               and argv[7][5:-3].replace("_", "").isalnum())
+    probe = (isinstance(argv, list) and len(argv) == 2
+             and argv[1].startswith("tests/") and argv[1].endswith("_probe.py")
+             and argv[1][len("tests/"):-len("_probe.py")].replace("_", "").isalnum())
+    return bool(full_discovery or focused or probe)
+
+
 def _validate_chartered_job(envelope: dict[str, Any]) -> None:
     job = envelope.get("job_contract")
     required = {"task", "baseline", "read_paths", "write_paths", "test",
                 "producer_instance_ids", "verifier_instance_ids"}
-    if not isinstance(job, dict) or set(job) != required:
+    optional = {"evidence_collector_instance_ids"}
+    if not isinstance(job, dict) or not required.issubset(job) or set(job) - required - optional:
         raise ContractError("chartered job contract fields are invalid")
     if not isinstance(job["task"], str) or not job["task"].strip() or len(job["task"].encode()) > MAX_TASK_BYTES:
         raise ContractError("chartered job task is invalid")
@@ -329,16 +486,11 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
         raise ContractError("chartered job path scope is invalid")
     test = job["test"]
     argv = test.get("argv") if isinstance(test, dict) else None
-    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-    focused = (isinstance(argv, list) and len(argv) == 8
-               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-               and argv[6] == "-p" and argv[7].startswith("test_") and argv[7].endswith(".py")
-               and argv[7][5:-3].replace("_", "").isalnum())
     if (not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}
             or not isinstance(test["argv"], list) or not test["argv"]
             or any(not isinstance(arg, str) or not arg or "\x00" in arg or "\n" in arg for arg in test["argv"])
             or test["argv"][0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or not (full_discovery or focused)
+            or not chartered_test_argv_supported(argv)
             or type(test["timeout_seconds"]) is not int or not 1 <= test["timeout_seconds"] <= 3600):
         raise ContractError("chartered job test command is invalid")
     for kind, providers in (("producer_instance_ids", {"claude", "codex"}),
@@ -354,6 +506,13 @@ def _validate_chartered_job(envelope: dict[str, Any]) -> None:
             raise ContractError(f"chartered job {kind} capabilities differ from roster")
     if set(job["producer_instance_ids"]) & set(job["verifier_instance_ids"]):
         raise ContractError("chartered job producer and verifier overlap")
+    evidence_collectors = job.get("evidence_collector_instance_ids", [])
+    bindings = {item["instance_id"]: item for item in envelope["roster"]}
+    if (not isinstance(evidence_collectors, list) or len(evidence_collectors) != len(set(evidence_collectors))
+            or any(instance not in bindings or bindings[instance]["provider"] not in {"ollama", "local-stub", "codex"}
+                   or bindings[instance]["capabilities"] != ["read"] for instance in evidence_collectors)
+            or set(evidence_collectors) & (set(job["producer_instance_ids"]) | set(job["verifier_instance_ids"]))):
+        raise ContractError("chartered job evidence collector differs from roster")
 
 
 def _validate_delivery_projection(envelope: dict[str, Any]) -> None:
@@ -643,10 +802,18 @@ def _validate_expansion(envelope: dict[str, Any], receipt: dict[str, Any]) -> di
         counters = lambda value, keys: (isinstance(value, dict) and set(value) == keys
                                         and all(type(item) is int and item >= 0 for item in value.values()))
         predecessors = envelope.get("predecessors", [])
-        lineage_id = predecessors[0]["attempt_id"] if predecessors else envelope["attempt_id"]
+        # The ledger scopes expansion spend to predecessors sealed by the same
+        # Delivery Charter. The compact predecessor links do not carry that
+        # charter digest, so the pure receipt validator can prove only that
+        # the declared authority-lineage root is either one of the sealed
+        # linked predecessors or the current attempt. The latter is required
+        # when a successor Delivery Charter starts a fresh budget while still
+        # retaining older attempts as provenance. The seal separately compares
+        # this entire block with the ledger-built block.
+        lineage_ids = {item["attempt_id"] for item in predecessors} | {envelope["attempt_id"]}
         if (not isinstance(block, dict)
                 or set(block) != {"lineage_id", "headroom", "predecessor_headroom_spent", "predecessor_lineage_grants", "requests"}
-                or block["lineage_id"] != lineage_id or block["headroom"] != expansion_headroom(envelope)
+                or block["lineage_id"] not in lineage_ids or block["headroom"] != expansion_headroom(envelope)
                 or not counters(block["predecessor_headroom_spent"], names)
                 or not counters(block["predecessor_lineage_grants"], set(LINEAGE_SCOPED_LIMITS))
                 or not isinstance(block["requests"], list)
@@ -865,8 +1032,11 @@ def expected_action_id(envelope: dict[str, Any], sequence: int) -> str:
 
 
 def validate_action(envelope: dict[str, Any], action: dict[str, Any]) -> None:
-    require_fields(action, ("action_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind"), kind="action")
     protocol_version = execution_protocol_version(envelope)
+    if protocol_version == PROVIDER_SELECTION_PROTOCOL_VERSION:
+        _validate_v9_action(envelope, action)
+        return
+    require_fields(action, ("action_id", "attempt_id", "envelope_digest", "role", "instance_id", "provider", "model", "task_digest", "sequence", "kind"), kind="action")
     if is_magentic_protocol(protocol_version):
         _validate_magentic_action(envelope, action)
         return
@@ -936,6 +1106,8 @@ def _validate_magentic_action(envelope: dict[str, Any], action: dict[str, Any]) 
         bindings = {item["instance_id"]: item for item in envelope["roster"]}
         group = (envelope["job_contract"]["producer_instance_ids"]
                  if action["instance_id"] in envelope["job_contract"]["producer_instance_ids"]
+                 else envelope["job_contract"].get("evidence_collector_instance_ids", [])
+                 if action["instance_id"] in envelope["job_contract"].get("evidence_collector_instance_ids", [])
                  else envelope["job_contract"]["verifier_instance_ids"]
                  if action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"] else [])
         expected_candidates = [{key: bindings[instance][key] for key in
@@ -1517,7 +1689,12 @@ def _validate_chartered_completion(envelope: dict[str, Any], evidence: dict[str,
         raise ContractError("chartered edit evidence is invalid")
     if (not isinstance(tests, dict) or tests.get("status") != "passed"
             or tests.get("command") != job["test"]["argv"]
-            or not _hex_digest(tests.get("output_sha256"))):
+            or not _hex_digest(tests.get("output_sha256"))
+            or ("output_excerpt" in tests and (
+                not isinstance(tests["output_excerpt"], str)
+                or len(tests["output_excerpt"].encode()) > 8192
+                or hashlib.sha256(tests["output_excerpt"].encode()).hexdigest() != tests["output_sha256"]
+            ))):
         raise ContractError("chartered test evidence is invalid")
 
 

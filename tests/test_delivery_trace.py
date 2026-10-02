@@ -88,7 +88,8 @@ class TraceRowTests(TraceFixture):
             with self.subTest(row=row["row_id"]):
                 start = datetime.fromisoformat(row["timing"]["send_started_at"])
                 end = datetime.fromisoformat(row["timing"]["observed_at"])
-                self.assertAlmostEqual(row["timing"]["duration_seconds"], (end - start).total_seconds(), places=3)
+                self.assertEqual(row["timing"]["duration_seconds"],
+                                 round((end - start).total_seconds(), 3))
                 self.assertIn(row["timing"]["send_started_at"], {event["at"] for event in events})
 
     def test_totals_count_paid_and_verifier_sends(self):

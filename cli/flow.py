@@ -59,7 +59,10 @@ from runstate import (  # noqa: E402
 )
 from execution_gateway import continue_resolved_local, execute_local, execute_multiturn_local, execute_mixed, inspect_attempt, resume_local  # noqa: E402
 from claude_gateway import execute_claude  # noqa: E402
-from delivery_gateway import decide_expansion, execute_chartered_delivery, execute_delivery, recover_delivery, recover_runtime_startup, resolve_execution, resume_delivery  # noqa: E402
+from delivery_gateway import (decide_expansion, execute_chartered_delivery, execute_delivery,
+                              execute_v9_chartered_job, provider_selection_probe, recover_delivery,
+                              recover_runtime_startup, resolve_execution, resume_delivery,
+                              terminate_v9_delivery, v9_recovery_status)  # noqa: E402
 from delivery_projection import inspect_delivery  # noqa: E402
 from delivery_termination import abandon_delivery, cancel_delivery, stuck_attempts  # noqa: E402
 from delivery_trace import TraceError, render_text as render_trace, trace as trace_delivery  # noqa: E402
@@ -632,7 +635,32 @@ def main() -> int:
     run_chartered_parser.add_argument("--worktree", required=True, type=Path, help="isolated Git worktree pinned by the approved job")
     run_chartered_parser.add_argument("--source-commit", required=True, help="pinned source commit at the worktree HEAD")
     run_chartered_parser.add_argument("--project-root", type=Path, help="Flow project checkout containing the approved run overlay")
+    run_chartered_parser.add_argument("--legacy-v8", action="store_true",
+                                      help="use only for an existing historical v8 execution contract")
     run_chartered_parser.add_argument("--json", action="store_true", help="emit structured attempt result")
+
+    run_selection_probe = run_sub.add_parser(
+        "provider-selection-probe", help="show Flow-owned v9 candidate readiness and deterministic selection without sending")
+    run_selection_probe.add_argument("work_id")
+    run_selection_probe.add_argument("--project-root", type=Path)
+    run_selection_probe.add_argument("--json", action="store_true")
+
+    run_v9_status = run_sub.add_parser(
+        "v9-recovery-status", help="show whether a protocol v9 attempt requires explicit reconciliation")
+    run_v9_status.add_argument("work_id")
+    run_v9_status.add_argument("attempt_id")
+    run_v9_status.add_argument("--project-root", type=Path)
+    run_v9_status.add_argument("--json", action="store_true")
+
+    run_v9_terminate = run_sub.add_parser(
+        "terminate-v9-delivery", help="seal an uncertain protocol v9 attempt without replaying provider I/O")
+    run_v9_terminate.add_argument("work_id")
+    run_v9_terminate.add_argument("attempt_id")
+    run_v9_terminate.add_argument("--status", required=True, choices=("cancelled", "abandoned"))
+    run_v9_terminate.add_argument("--actor", required=True)
+    run_v9_terminate.add_argument("--explanation", required=True)
+    run_v9_terminate.add_argument("--project-root", type=Path)
+    run_v9_terminate.add_argument("--json", action="store_true")
 
     run_runtime_successor = run_sub.add_parser(
         "recover-runtime-startup", help="create a linked successor for a sealed zero-send MAF startup failure")
@@ -709,13 +737,13 @@ def main() -> int:
     run_stuck.add_argument("--project-root", type=Path)
     run_stuck.add_argument("--json", action="store_true")
 
-    run_trace = run_sub.add_parser("trace", help="show the per-call correlation chain of a v8 attempt and its lineage (read-only)")
+    run_trace = run_sub.add_parser("trace", help="show protocol-specific call and selection lineage (read-only)")
     run_trace.add_argument("work_id")
     run_trace.add_argument("--attempt", dest="attempt_id", help="attempt to trace (default: the latest)")
     run_trace.add_argument("--project-root", type=Path)
     run_trace.add_argument("--json", action="store_true")
 
-    run_verify = run_sub.add_parser("verify-receipt", help="verify a sealed v8 receipt offline against the ledger, authority and evidence (read-only)")
+    run_verify = run_sub.add_parser("verify-receipt", help="verify a sealed v8 or v9 receipt offline against ledger authority and evidence (read-only)")
     run_verify.add_argument("work_id")
     run_verify.add_argument("--attempt", dest="attempt_id", help="attempt to verify (default: the latest sealed)")
     run_verify.add_argument("--no-lineage", action="store_true", help="do not verify predecessor receipts recursively")
@@ -725,12 +753,16 @@ def main() -> int:
     run_inspect_parser = run_sub.add_parser("inspect-execution", help="read one durable execution attempt without dispatch")
     run_inspect_parser.add_argument("work_id")
     run_inspect_parser.add_argument("attempt_id")
+    run_inspect_parser.add_argument("--project-root", type=Path,
+                                    help="project root containing .flow (read-only)")
     run_inspect_parser.add_argument("--json", action="store_true")
 
     run_inspect_delivery_parser = run_sub.add_parser(
         "inspect-delivery", help="inspect sealed Shaper-to-Delivery authority and execution evidence")
     run_inspect_delivery_parser.add_argument("work_id")
     run_inspect_delivery_parser.add_argument("--attempt-id", help="specific execution attempt; defaults to the newest recorded attempt")
+    run_inspect_delivery_parser.add_argument("--project-root", type=Path,
+                                            help="project root containing .flow (read-only)")
     run_inspect_delivery_parser.add_argument("--json", action="store_true", help="emit JSON")
 
     run_resume_parser = run_sub.add_parser("resume-execution", help="fence and safely reopen one execution attempt")
@@ -1127,7 +1159,9 @@ def main() -> int:
     if args.command == "run" and args.run_target == "execute-chartered-job":
         import json
         try:
-            result = execute_chartered_delivery(args.work_id, args.worktree, args.source_commit, root=args.project_root)
+            result = (execute_chartered_delivery(args.work_id, args.worktree, args.source_commit, root=args.project_root)
+                      if args.legacy_v8 else execute_v9_chartered_job(args.work_id, args.worktree, args.source_commit,
+                                                                         root=args.project_root))
         except MafRuntimeUnready as exc:
             payload = {"status": "refused", "reason": "maf_runtime_unready", "diagnostic": exc.diagnostic}
             print(json.dumps(payload, sort_keys=True) if args.json else f"chartered execution refused: maf_runtime_unready: {exc}")
@@ -1135,8 +1169,43 @@ def main() -> int:
         except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"chartered execution refused: {exc}")
             return 2
-        print(json.dumps(result, sort_keys=True) if args.json else f"attempt: {result['attempt_id']}\nstatus: {result['status']}\nreceipt: {result['receipt_path']}\nreason: {result['reason']}")
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"attempt: {result.get('attempt_id', 'not-created')}\nstatus: {result.get('status', 'refused')}\n"
+              f"receipt: {result.get('receipt_path', 'not-created')}\nreason: {result.get('reason', 'not-recorded')}")
         return 0 if result["status"] == "completed" else 1
+    if args.command == "run" and args.run_target == "provider-selection-probe":
+        import json
+        try:
+            result = provider_selection_probe(args.work_id, root=args.project_root)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError) as exc:
+            print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"provider selection probe refused: {exc}")
+            return 2
+        print(json.dumps(result, sort_keys=True) if args.json else json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "run" and args.run_target == "v9-recovery-status":
+        import json
+        try:
+            result = v9_recovery_status(args.work_id, args.attempt_id, root=args.project_root)
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError, sqlite3.Error) as exc:
+            return _refusal(exc, as_json=args.json)
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"attempt: {result['attempt_id']}\nstatus: {result['status']}\n"
+              f"reconciliation required: {str(result['reconciliation_required']).lower()}\n"
+              f"next action: {result['next_action']}")
+        return 1 if result["reconciliation_required"] else 0
+    if args.command == "run" and args.run_target == "terminate-v9-delivery":
+        import json
+        try:
+            result = terminate_v9_delivery(
+                args.work_id, args.attempt_id, status=args.status, actor=args.actor,
+                explanation=args.explanation, root=args.project_root,
+            )
+        except (ContractError, FileNotFoundError, ValueError, RuntimeError, sqlite3.Error) as exc:
+            return _refusal(exc, as_json=args.json)
+        print(json.dumps(result, sort_keys=True) if args.json else
+              f"attempt: {result['attempt_id']}\nstatus: {result['status']}\n"
+              f"receipt: {result['receipt_path']}\ncause: {result['cause']}")
+        return 0
     if args.command == "run" and args.run_target == "recover-runtime-startup":
         import json
         try:
@@ -1266,7 +1335,7 @@ def main() -> int:
     if args.command == "run" and args.run_target == "inspect-execution":
         import json
         try:
-            result = inspect_attempt(args.work_id, args.attempt_id)
+            result = inspect_attempt(args.work_id, args.attempt_id, root=args.project_root)
         except (ContractError, FileNotFoundError, ValueError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"inspection refused: {exc}")
             return 2
@@ -1275,7 +1344,8 @@ def main() -> int:
     if args.command == "run" and args.run_target == "inspect-delivery":
         import json
         try:
-            result = inspect_delivery(args.work_id, args.attempt_id)
+            result = (inspect_delivery(args.work_id, args.attempt_id, root=args.project_root)
+                      if args.project_root is not None else inspect_delivery(args.work_id, args.attempt_id))
         except (ContractError, FileNotFoundError, ValueError, OSError) as exc:
             print(json.dumps({"status": "refused", "reason": str(exc)}) if args.json else f"delivery inspection refused: {exc}")
             return 2

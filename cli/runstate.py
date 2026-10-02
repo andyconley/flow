@@ -503,7 +503,8 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
         errors.append("job_charter must be valid run-local JSON")
         return errors
     required = {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}
-    if not isinstance(charter, dict) or set(charter) != required:
+    optional = {"evidence_collector_instance_ids", "logical_assignments"}
+    if not isinstance(charter, dict) or not required.issubset(charter) or set(charter) - required - optional:
         errors.append("job_charter fields are incomplete")
         return errors
     baseline = charter.get("baseline")
@@ -524,6 +525,57 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
                 errors.append(f"producer assignment {instance_id} is read-only")
             elif not writable and assignment.get("read_only") is not True:
                 errors.append(f"verifier assignment {instance_id} is writable")
+    collectors = charter.get("evidence_collector_instance_ids", [])
+    if not isinstance(collectors, list) or len(collectors) != len(set(collectors)):
+        errors.append("job_charter evidence_collector_instance_ids is invalid")
+    else:
+        for instance_id in collectors:
+            assignment = ids.get(instance_id)
+            if assignment is None:
+                errors.append(f"job_charter evidence collector names unknown assignment {instance_id}")
+            elif assignment.get("read_only") is not True:
+                errors.append(f"evidence collector assignment {instance_id} is writable")
+            if instance_id in set(charter.get("producer_instance_ids", [])) | set(charter.get("verifier_instance_ids", [])):
+                errors.append(f"evidence collector assignment {instance_id} is not distinct")
+    logical_assignments = charter.get("logical_assignments")
+    if logical_assignments is not None:
+        if not isinstance(logical_assignments, list) or not logical_assignments:
+            errors.append("job_charter logical_assignments is invalid")
+        else:
+            logical_ids = [item.get("assignment_id") for item in logical_assignments if isinstance(item, dict)]
+            if len(logical_ids) != len(logical_assignments) or len(logical_ids) != len(set(logical_ids)):
+                errors.append("job_charter logical assignment identities are invalid")
+            managers = [item for item in logical_assignments if isinstance(item, dict)
+                        and isinstance(item.get("requirements"), dict)
+                        and item["requirements"].get("operation") == "manage"]
+            if len(managers) != 1:
+                errors.append("job_charter requires exactly one logical manager assignment")
+            expected_by_operation = {
+                "edit": set(charter.get("producer_instance_ids", [])),
+                "collect": set(charter.get("evidence_collector_instance_ids", [])),
+                "verify": set(charter.get("verifier_instance_ids", [])),
+            }
+            actual_by_operation = {
+                operation: {item.get("assignment_id") for item in logical_assignments
+                            if isinstance(item, dict) and isinstance(item.get("requirements"), dict)
+                            and item["requirements"].get("operation") == operation}
+                for operation in expected_by_operation
+            }
+            if actual_by_operation != expected_by_operation:
+                errors.append("job_charter logical assignments conflict with topology IDs")
+            producers = actual_by_operation["edit"]
+            if len(producers) != 1:
+                errors.append("job_charter requires exactly one logical producer assignment")
+            collectors = actual_by_operation["collect"]
+            for item in logical_assignments:
+                if not isinstance(item, dict) or not isinstance(item.get("requirements"), dict):
+                    continue
+                operation = item["requirements"].get("operation")
+                dependencies = set(item.get("depends_on", [])) if isinstance(item.get("depends_on"), list) else set()
+                if operation == "collect" and not producers.issubset(dependencies):
+                    errors.append("logical evidence collectors must depend on every producer assignment")
+                if operation == "verify" and not (producers | collectors).issubset(dependencies):
+                    errors.append("logical verifiers must depend on every producer and evidence collector assignment")
     return errors
 
 
@@ -804,7 +856,7 @@ def handoff_to_review(
             return False, current, ["handoff requires the latest sealed execution attempt"]
         report = latest_report
         if report.get("exit_code") != 0 or report.get("status") != "completed":
-            return False, current, ["execution receipt must be a verified completed v8 receipt"]
+            return False, current, ["execution receipt must be verified and completed"]
 
         if state == STATE_IMPLEMENTING:
             if current.get("dispositions", {}).get("handoff_attempt") == attempt_id:

@@ -3,18 +3,24 @@
 import copy
 import hashlib
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 
 from delivery_gateway import (ContractError, _default_worker_adapter, _execution_facts, _job_test,
-                              _execute_prepared_delivery, _verify_chartered_edit,
-                              execute_chartered_delivery, prepare_chartered_delivery)
+                              _execute_prepared_delivery, _verify_chartered_edit, _v9_adapter_for_operation,
+                              execute_chartered_delivery, execute_v9_logical_delivery,
+                              execute_v9_chartered_job, prepare_chartered_delivery, prepare_v9_chartered_delivery,
+                              provider_selection_probe, logical_assignments_from_charter,
+                              independence_constraints_from_assignments)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, _paths_within_scopes, validate_action, validate_envelope,
@@ -27,6 +33,8 @@ from tests.shaper_intent_fixture import shaper_intent
 from tests.maf_env import sealed_runtime_identity
 from execution_ledger import ExecutionLedger
 from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier_digest, evaluate_candidate
+from provider_selection import digest as selection_digest
+from selection_receipt import V9ReceiptError, verify_selection_receipt
 import delivery_gateway
 
 
@@ -64,7 +72,9 @@ class CharteredFixture(unittest.TestCase):
         self.manifest = {"assignments": [
             {"id": "magentic-manager", "lane": "implement", "role": "delivery-lead", "execution": {"provider": "claude", "model": "manager"}},
             {"id": "editor", "lane": "implement", "role": "lead-developer", "execution": {"provider": "codex", "model": "editor-model"}, "read_only": False, "write_scopes": ["target.py"]},
-            {"id": "verifier", "lane": "implement", "role": "test-engineer", "execution": {"provider": "ollama", "model": "local-model"}, "read_only": True, "write_scopes": []}]}
+            {"id": "verifier", "lane": "implement", "role": "test-engineer", "execution": {"provider": "ollama", "model": "local-model"}, "read_only": True, "write_scopes": []}],
+            "verification": {"producer_assignments": ["editor"], "evidence_collector_assignment": "editor",
+                             "verifier_assignment": "verifier", "independent": True}}
         (self.run / "requirements.md").write_text("requirements")
         (self.run / "acceptance.md").write_text("acceptance")
         definition_digests = {
@@ -293,6 +303,30 @@ class CharteredPreparationTests(CharteredFixture):
         self.assertEqual([r["capabilities"] for r in envelope["roster"]], [["read", "edit"], ["read"]])
         self.assertTrue((attempt_dir / "job-charter.snapshot.json").is_file())
         self.assertEqual(ledger.snapshot(envelope["attempt_id"])["status"], "started")
+
+    def test_evidence_collector_cannot_enter_independent_verifier_set(self):
+        evidence = copy.deepcopy(self.manifest["assignments"][2])
+        evidence["id"] = "evidence"
+        evidence["role"] = "quality-reviewer"
+        evidence["execution"] = {"provider": "codex", "model": "review-model"}
+        self.manifest["assignments"].append(evidence)
+        self.manifest["verification"]["evidence_collector_assignment"] = "evidence"
+        self.charter["verifier_instance_ids"] = ["evidence", "verifier"]
+        self._write_inputs()
+        with self.assertRaisesRegex(ContractError, "independent orchestration roles"):
+            self.prepare()
+
+    def test_distinct_evidence_collector_is_projected_into_job_contract(self):
+        evidence = copy.deepcopy(self.manifest["assignments"][2])
+        evidence["id"] = "evidence"
+        evidence["role"] = "quality-reviewer"
+        evidence["execution"] = {"provider": "codex", "model": "review-model"}
+        self.manifest["assignments"].append(evidence)
+        self.manifest["verification"]["evidence_collector_assignment"] = "evidence"
+        self.charter["evidence_collector_instance_ids"] = ["evidence"]
+        self._write_inputs()
+        envelope, _, _, _ = self.prepare()
+        self.assertEqual(["evidence"], envelope["job_contract"]["evidence_collector_instance_ids"])
 
     def test_v8_prepare_refuses_a_worktree_containing_project_flow(self):
         for label, worktree in (("project root", self.root), ("inside .flow", self.run)):
@@ -538,6 +572,7 @@ class CharteredPreparationTests(CharteredFixture):
                 return self._result("codex", "editor-model", "Edited target")
             self.assertIn("Flow-verified complete bounded diff", action["provider_task"])
             self.assertIn("Targeted test: passed", action["provider_task"])
+            self.assertIn("automatic handoff_to_review authority", action["provider_task"])
             return self._result("ollama", "local-model", '{"schema_version":1,"decision":"pass","summary":"Verified target","findings":[]}')
 
         with patch("delivery_gateway.run_status", return_value=self.state), patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])), patch("delivery_gateway._effective_specialist_for", side_effect=lambda role: "instructions for " + role):
@@ -1257,6 +1292,52 @@ class CharteredEditVerificationTests(CharteredFixture):
         with self.assertRaisesRegex(ContractError, "^editor made no edit to the worktree$"):
             self._verify({"target.py": self._sha("old\n")})
 
+    def test_clean_baseline_does_not_append_full_tracked_file_as_new_evidence(self):
+        large = self.worktree / "large.py"
+        large.write_text("value = 1\n" + "# padding\n" * 5000)
+        subprocess.run(["git", "add", "large.py"], cwd=self.worktree, check=True)
+        subprocess.run(["git", "commit", "-qm", "large tracked fixture"], cwd=self.worktree, check=True)
+        self.commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=self.worktree, text=True).strip()
+        large.write_text(large.read_text().replace("value = 1", "value = 2", 1))
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+
+        result = _verify_chartered_edit(
+            self.worktree, {"source_commit": self.commit, "files": {}}, attempt_dir,
+            {"write_paths": ["large.py"]}, record=False,
+        )
+
+        self.assertEqual(result["changed_files"], ["large.py"])
+
+    def test_chartered_diff_larger_than_legacy_prompt_limit_is_accepted(self):
+        large = self.worktree / "large.py"
+        large.write_text("old\n")
+        subprocess.run(["git", "add", "large.py"], cwd=self.worktree, check=True)
+        subprocess.run(["git", "commit", "-qm", "large diff fixture"], cwd=self.worktree, check=True)
+        self.commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=self.worktree, text=True).strip()
+        large.write_text("new\n" + "# changed evidence\n" * 3000)
+        attempt_dir = self.root / "attempt"
+        attempt_dir.mkdir(exist_ok=True)
+
+        result = _verify_chartered_edit(
+            self.worktree, {"source_commit": self.commit, "files": {}}, attempt_dir,
+            {"write_paths": ["large.py"]}, record=False,
+        )
+
+        self.assertEqual(result["changed_files"], ["large.py"])
+
+    def test_untracked_python_cache_is_not_chartered_edit_evidence(self):
+        cache = self.worktree / "__pycache__"
+        cache.mkdir()
+        (cache / "target.cpython-312.pyc").write_bytes(b"\x00\xffbinary-cache")
+        (self.worktree / "target.py").write_text("fixed\n")
+
+        result = self._verify({"target.py": self._sha("old\n")})
+
+        self.assertEqual(result["changed_files"], ["target.py"])
+
     def test_out_of_scope_file_names_scope(self):
         (self.worktree / "other.py").write_text("x\n")
         with self.assertRaisesRegex(ContractError, "^editor changed files outside the approved job scope$"):
@@ -1374,6 +1455,18 @@ class CharteredEvidenceScopeTests(unittest.TestCase):
                 "timeout_seconds": 120}
         self.assertEqual(_job_test(test), test)
 
+    def test_repository_acceptance_probe_is_a_safe_chartered_test(self):
+        test = {"argv": ["/opt/homebrew/bin/python3.12", "tests/acceptance_probe.py"],
+                "timeout_seconds": 600}
+        self.assertEqual(_job_test(test), test)
+
+    def test_repository_probe_rejects_traversal_and_extra_arguments(self):
+        for argv in (["python3.12", "tests/../acceptance_probe.py"],
+                     ["python3.12", "tests/acceptance_probe.py", "--unsafe"],
+                     ["python3.12", "tests/acceptance.py"]):
+            with self.subTest(argv=argv), self.assertRaisesRegex(ContractError, "unsupported"):
+                _job_test({"argv": argv, "timeout_seconds": 600})
+
     def test_changed_files_may_descend_from_approved_roots(self):
         self.assertTrue(_paths_within_scopes(
             ["README.md", "src/hardware_watcher/domain/models.py", "tests/test_foundation.py"],
@@ -1422,6 +1515,24 @@ class ProviderRouteTests(unittest.TestCase):
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "ollama")
                 self.assertEqual(ollama.call_args.kwargs["timeout_seconds"], 45)
 
+    def test_protocol_8_codex_evidence_collector_uses_read_only_sandbox(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            workspace = Path(dirname)
+            envelope = {
+                "execution_protocol_version": 8,
+                "attempt_id": "attempt",
+                "roster": [{"assignment_id": "evidence", "instructions": "collect", "model": "gpt-test",
+                            "provider": "codex"}],
+                "job_contract": {"verifier_instance_ids": [],
+                                 "evidence_collector_instance_ids": ["evidence"]},
+                "limits": {"max_runtime_seconds": 45},
+            }
+            action = {"action_id": "action", "assignment_id": "evidence", "instance_id": "evidence",
+                      "provider": "codex", "task": "collect evidence"}
+            with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
+                self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "codex")
+                self.assertEqual(codex.call_args.kwargs["sandbox"], "read-only")
+
     def test_codex_worker_uses_supported_six_hundred_second_ceiling(self):
         with tempfile.TemporaryDirectory() as dirname:
             workspace = Path(dirname)
@@ -1438,6 +1549,704 @@ class ProviderRouteTests(unittest.TestCase):
             with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
                 _default_worker_adapter(action, envelope=envelope, workspace=workspace)
                 self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 600)
+
+
+class V9CharteredRouteTests(CharteredFixture):
+    def _execute_v9_topology(self, *, with_collector: bool,
+                             independent_verifier: bool):
+        """Exercise the complete v9 route while replacing only provider I/O."""
+        now = datetime.now(timezone.utc)
+        common = {"minimum_tier": "working", "locality": "any",
+                  "input_bytes": 65536, "output_bytes": 16384,
+                  "context_tokens": 32768, "risk_class": "standard",
+                  "independence_required": False}
+        assignments = [
+            {"assignment_id": "manager", "role": "delivery-lead",
+             "instructions": "Manage the approved work.", "depends_on": [],
+             "requirements": {**common, "operation": "manage",
+                              "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer",
+             "instructions": "Edit target.py.", "depends_on": [],
+             "requirements": {**common, "operation": "edit",
+                              "required_capabilities": ["structured_edit"]}},
+        ]
+        if with_collector:
+            assignments.append({
+                "assignment_id": "evidence", "role": "test-engineer",
+                "instructions": "Collect the edit and test evidence.",
+                "depends_on": ["editor"],
+                "requirements": {**common, "operation": "collect",
+                                 "required_capabilities": ["evidence_collection"]},
+            })
+        verifier_dependencies = ["editor", *(("evidence",) if with_collector else ())]
+        assignments.append({
+            "assignment_id": "verifier", "role": "quality-reviewer",
+            "instructions": "Verify the bounded evidence.",
+            "depends_on": verifier_dependencies,
+            "requirements": {**common, "operation": "verify",
+                             "required_capabilities": ["evidence_collection"],
+                             "risk_class": "high" if independent_verifier else "standard",
+                             "independence_required": independent_verifier},
+        })
+        self.charter["logical_assignments"] = assignments
+        self.charter["evidence_collector_instance_ids"] = ["evidence"] if with_collector else []
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        catalog = [
+            {"candidate_id": "ollama-local", "provider": "ollama", "model": "local-model",
+             "provider_family": "ollama", "tier": "judgment", "locality": "local",
+             "operations": ["manage", "edit", "collect", "verify"],
+             "capabilities": ["structured_output", "structured_edit", "evidence_collection"],
+             "cost_class": 0, "enabled": True},
+            {"candidate_id": "codex-hosted", "provider": "codex", "model": "hosted-model",
+             "provider_family": "openai", "tier": "judgment", "locality": "hosted",
+             "operations": ["verify"], "capabilities": ["evidence_collection"],
+             "cost_class": 1, "enabled": True},
+        ]
+        availability = [{
+            "candidate_id": item["candidate_id"], "state": "ready",
+            "observed_at": (now - timedelta(seconds=1)).isoformat(),
+            "expires_at": (now + timedelta(minutes=1)).isoformat(),
+            "evidence_code": "model_present" if item["provider"] == "ollama"
+            else "authentication_ready", "probe_version": "availability-v1",
+        } for item in catalog]
+        constraints = independence_constraints_from_assignments(assignments)
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
+            envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+                "sample", self.worktree, self.commit, root=self.root,
+                logical_assignments=assignments, catalog=catalog, availability=availability,
+                independence_constraints=constraints,
+            )
+            manager_turn = 0
+            worker_order = ["editor", *(("evidence",) if with_collector else ()), "verifier"]
+
+            def transport(binding, action):
+                nonlocal manager_turn
+                assignment_id = action["assignment_id"]
+                if assignment_id == "manager":
+                    selected = worker_order[manager_turn]
+                    manager_turn += 1
+                    return {"provider": binding["provider"], "manager_response": {
+                        "is_request_satisfied": {"answer": False},
+                        "is_in_loop": {"answer": True},
+                        "is_progress_being_made": {"answer": True},
+                        "next_speaker": {"answer": selected, "reason": "approved work remains"},
+                        "instruction_or_question": {"answer": "complete the bounded assignment"},
+                    }}
+                if assignment_id == "editor":
+                    (self.worktree / "target.py").write_text("new\n")
+                    return {"provider": binding["provider"], "output": "applied"}
+                if assignment_id == "evidence":
+                    return {"provider": binding["provider"], "output": "evidence collected"}
+                return {"provider": binding["provider"], "output": json.dumps({
+                    "schema_version": 1, "decision": "pass",
+                    "summary": "Diff and test evidence pass.", "findings": [],
+                })}
+
+            result = execute_v9_logical_delivery(
+                envelope, task, ledger, transport,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                    on_action({"attempt_id": envelope["attempt_id"],
+                               "assignment_id": manager_decision["assignment_id"],
+                               "task": manager_decision["task"], "sequence": 1,
+                               "manager_turn": manager_decision["manager_turn"]}),
+            )
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        return result, ledger.snapshot(envelope["attempt_id"]), receipt
+
+    def _write_v9_logical_charter(self) -> None:
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
+                  "output_bytes": 100, "context_tokens": 100,
+                  "risk_class": "standard", "independence_required": False}
+        self.charter["logical_assignments"] = [
+            {"assignment_id": "logical-manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                                                   "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                                                   "required_capabilities": ["structured_edit"]}},
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify.",
+             "depends_on": ["editor"], "requirements": {**common, "operation": "verify",
+                                                           "required_capabilities": ["evidence_collection"]}},
+        ]
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+
+    def _execute_semantic_v9(self, verifier_output: str | None,
+                             second_verifier_output: str | None = None,
+                             manager_invalid: bool = False,
+                             manager_outside: bool = False):
+        now = datetime.now(timezone.utc)
+        catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
+                    "provider_family": "local", "tier": "judgment", "locality": "local",
+                    "operations": ["manage", "edit", "verify"],
+                    "capabilities": ["structured_output", "structured_edit", "evidence_collection"],
+                    "cost_class": 0, "enabled": True}]
+        availability = [{"candidate_id": "local", "state": "ready",
+                         "observed_at": (now - timedelta(seconds=1)).isoformat(),
+                         "expires_at": (now + timedelta(minutes=1)).isoformat(),
+                         "evidence_code": "model_present", "probe_version": "availability-v1"}]
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 65536,
+                  "output_bytes": 16384, "context_tokens": 32768,
+                  "risk_class": "standard", "independence_required": False}
+        assignments = [
+            {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                                                   "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.py.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                                                   "required_capabilities": ["structured_edit"]}},
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify evidence.",
+             "depends_on": ["editor"], "requirements": {**common, "operation": "verify",
+                                                            "required_capabilities": ["evidence_collection"]}},
+        ]
+        if second_verifier_output is not None:
+            assignments.append(
+                {"assignment_id": "verifier-two", "role": "security-reviewer",
+                 "instructions": "Verify evidence independently.", "depends_on": ["editor"],
+                 "requirements": {**common, "operation": "verify",
+                                  "required_capabilities": ["evidence_collection"]}}
+            )
+            self.charter["verifier_instance_ids"] = ["verifier", "verifier-two"]
+        self.charter["logical_assignments"] = assignments
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
+            envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+                "sample", self.worktree, self.commit, root=self.root,
+                logical_assignments=assignments, catalog=catalog, availability=availability,
+            )
+            manager_turn = 0
+
+            def adapter(_binding, action):
+                nonlocal manager_turn
+                if action["assignment_id"] == "manager":
+                    if manager_invalid:
+                        return {"output": "observed invalid manager output",
+                                "manager_response": None, "observed_invalid": True}
+                    if manager_outside:
+                        return {"output": "observed", "manager_response": {
+                            "is_request_satisfied": {"answer": False},
+                            "is_in_loop": {"answer": True},
+                            "is_progress_being_made": {"answer": True},
+                            "next_speaker": {"answer": "not-approved", "reason": "bad choice"},
+                            "instruction_or_question": {"answer": "work"},
+                        }}
+                    manager_turn += 1
+                    return {"manager_response": {
+                        "is_request_satisfied": {"answer": False},
+                        "is_in_loop": {"answer": True},
+                        "is_progress_being_made": {"answer": True},
+                        "next_speaker": {"answer": ("editor" if manager_turn == 1 else
+                                                     "verifier" if manager_turn == 2 else "verifier-two"),
+                                         "reason": "approved work remains"},
+                        "instruction_or_question": {"answer": "bounded note"},
+                    }}
+                if action["assignment_id"] == "editor":
+                    (self.worktree / "target.py").write_text("new\n")
+                    return {"output": "applied"}
+                return {"output": (second_verifier_output
+                                    if action["assignment_id"] == "verifier-two" else verifier_output)}
+
+            result = execute_v9_logical_delivery(
+                envelope, task, ledger, adapter,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
+                    on_action({"attempt_id": envelope["attempt_id"],
+                               "assignment_id": manager_decision["assignment_id"],
+                               "task": manager_decision["task"], "sequence": 1,
+                               "manager_turn": manager_decision["manager_turn"]}),
+            )
+        return result, ledger.snapshot(envelope["attempt_id"])
+
+    def test_v9_plain_prose_verifier_cannot_complete_attempt(self):
+        result, snapshot = self._execute_semantic_v9("I'll inspect the repository now.")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "semantic_verifier_unusable")
+        self.assertEqual(snapshot["verifier_evaluations"][0]["outcome"], "unusable")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["semantic_verification"][0]["evaluation"]["disposition"], "unusable")
+
+        receipt["outcome"] = {"status": "completed", "reason": "forged completion"}
+        receipt["receipt_digest"] = selection_digest(
+            {key: value for key, value in receipt.items() if key != "receipt_digest"}
+        )
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
+
+    def test_v9_ollama_producer_and_collector_bind_independent_hosted_verifier(self):
+        result, snapshot, receipt = self._execute_v9_topology(
+            with_collector=True, independent_verifier=True)
+
+        self.assertEqual((result["status"], result["reason"]),
+                         ("completed", "semantic_verifier_valid_pass"))
+        actions = [row["request"] for row in snapshot["actions"]]
+        self.assertEqual([row["assignment_id"] for row in actions],
+                         ["manager", "editor", "manager", "evidence", "manager", "verifier"])
+        by_assignment = {row["assignment_id"]: row for row in actions if row["assignment_id"] != "manager"}
+        self.assertEqual(by_assignment["editor"]["selection_decision"]["selected_candidate_id"],
+                         "ollama-local")
+        self.assertEqual(by_assignment["editor"]["selection_decision"]["selected_binding"]["provider_family"],
+                         "ollama")
+        self.assertEqual(by_assignment["evidence"]["selection_decision"]["selected_candidate_id"],
+                         "ollama-local")
+        self.assertEqual(by_assignment["evidence"]["selection_decision"]["selected_binding"]["provider_family"],
+                         "ollama")
+        verifier_decision = by_assignment["verifier"]["selection_decision"]
+        self.assertEqual(verifier_decision["excluded_families"], ["ollama"])
+        self.assertEqual(verifier_decision["selected_candidate_id"], "codex-hosted")
+        self.assertEqual(verifier_decision["selected_binding"]["provider_family"], "openai")
+        constraint = receipt["envelope"]["selection_authority"]["independence_constraints"][0]
+        self.assertEqual(constraint["producer_assignment_ids"], ["editor"])
+        self.assertEqual(constraint["evidence_collector_assignment_ids"], ["evidence"])
+        dependencies = {row["assignment_id"]: row["depends_on"]
+                        for row in receipt["envelope"]["logical_assignments"]}
+        self.assertEqual(dependencies["evidence"], ["editor"])
+        self.assertEqual(dependencies["verifier"], ["editor", "evidence"])
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
+    def test_v9_standard_verifier_without_independence_selects_ollama(self):
+        result, snapshot, receipt = self._execute_v9_topology(
+            with_collector=False, independent_verifier=False)
+
+        self.assertEqual(result["status"], "completed")
+        actions = [row["request"] for row in snapshot["actions"]]
+        self.assertEqual([row["assignment_id"] for row in actions],
+                         ["manager", "editor", "manager", "verifier"])
+        verifier = next(row for row in actions if row["assignment_id"] == "verifier")
+        decision = verifier["selection_decision"]
+        self.assertEqual(decision["excluded_families"], [])
+        self.assertEqual(decision["selected_candidate_id"], "ollama-local")
+        self.assertEqual(decision["selected_binding"]["provider_family"], "ollama")
+        editor = next(row for row in actions if row["assignment_id"] == "editor")
+        self.assertEqual(editor["selection_decision"]["selected_candidate_id"], "ollama-local")
+        self.assertEqual(editor["selection_decision"]["selected_binding"]["provider_family"], "ollama")
+        dependencies = {row["assignment_id"]: row["depends_on"]
+                        for row in receipt["envelope"]["logical_assignments"]}
+        self.assertEqual(dependencies["verifier"], ["editor"])
+        self.assertEqual(receipt["envelope"]["selection_authority"]["independence_constraints"], [])
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
+    def test_v9_observed_invalid_manager_output_seals_failed_not_unknown(self):
+        result, snapshot = self._execute_semantic_v9("unused", manager_invalid=True)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "manager_evaluation_failed")
+        self.assertEqual(snapshot["actions"][0]["status"], "completed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["evidence_failures"][0]["stage"], "manager_evaluation")
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
+    def test_v9_out_of_frontier_manager_decision_seals_failed_not_started(self):
+        result, snapshot = self._execute_semantic_v9("unused", manager_outside=True)
+        self.assertEqual((result["status"], result["reason"]),
+                         ("failed", "manager_evaluation_failed"))
+        self.assertEqual(snapshot["status"], "failed")
+
+    def test_v9_evidence_bound_valid_pass_is_required_for_completion(self):
+        result, snapshot = self._execute_semantic_v9(json.dumps({
+            "schema_version": 1, "decision": "pass", "summary": "Diff and test evidence pass.",
+            "findings": [],
+        }))
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["reason"], "semantic_verifier_valid_pass")
+        self.assertEqual(snapshot["verifier_evaluations"][0]["outcome"], "valid_pass")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        receipt["outcome"] = {"status": "failed", "reason": "forged failure"}
+        receipt["receipt_digest"] = selection_digest(
+            {key: value for key, value in receipt.items() if key != "receipt_digest"}
+        )
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
+
+    def test_v9_every_required_verifier_must_pass(self):
+        valid = json.dumps({"schema_version": 1, "decision": "pass",
+                            "summary": "Diff and test evidence pass.", "findings": []})
+        result, snapshot = self._execute_semantic_v9("unstructured verifier prose", valid)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "semantic_verifier_unusable")
+        self.assertEqual({item["outcome"] for item in snapshot["verifier_evaluations"]},
+                         {"unusable", "valid_pass"})
+
+    def test_v9_missing_verifier_output_seals_typed_failed_receipt(self):
+        result, snapshot = self._execute_semantic_v9(None)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "verifier_evaluation_failed")
+        self.assertEqual(snapshot["status"], "failed")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["evidence_failures"][0]["stage"], "verifier_evaluation")
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+
+    def test_hosted_v9_editor_uses_scoped_staging_workspace(self):
+        (self.worktree / "secret.txt").write_text("not authorized\n")
+        (self.worktree / "target.py").chmod(0o755)
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def edit_in_staging(**kwargs):
+            staging = kwargs["workspace"]
+            self.assertNotEqual(staging, self.worktree)
+            self.assertFalse((staging / "secret.txt").exists())
+            (staging / "target.py").write_text("hosted edit\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_claude_edit", side_effect=edit_in_staging):
+            result = adapter(
+                {"provider": "claude", "model": "claude-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "hosted edit\n")
+        self.assertEqual(stat.S_IMODE((self.worktree / "target.py").stat().st_mode), 0o755)
+        self.assertEqual(result["scoped_edit"]["scope_enforcement"], "isolated_staging")
+
+    def test_observed_invalid_ollama_edit_is_completed_evidence_not_uncertainty(self):
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+        with patch("delivery_gateway.propose_ollama_edits",
+                   side_effect=ContractError("observed proposal is invalid")):
+            result = adapter(
+                {"provider": "ollama", "model": "local-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertTrue(result["observed_invalid"])
+        self.assertEqual(result["detail"], "observed proposal is invalid")
+        self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
+
+    def test_hosted_v9_editor_out_of_scope_staging_change_is_not_applied(self):
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def hostile_edit(**kwargs):
+            staging = kwargs["workspace"]
+            (staging / "target.py").write_text("should not apply\n")
+            (staging / "unauthorized.txt").write_text("escape\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_claude_edit", side_effect=hostile_edit), \
+                self.assertRaisesRegex(ContractError, "outside the approved staging scope"):
+            adapter(
+                {"provider": "claude", "model": "claude-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
+        self.assertFalse((self.worktree / "unauthorized.txt").exists())
+
+    def test_codex_v9_editor_also_uses_scoped_staging_workspace(self):
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit target.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py"],
+                                            write_paths=["target.py"])
+
+        def edit_in_staging(**kwargs):
+            self.assertEqual(kwargs["sandbox"], "workspace-write")
+            self.assertNotEqual(kwargs["workspace"], self.worktree)
+            (kwargs["workspace"] / "target.py").write_text("codex edit\n")
+            return {"output": "applied"}
+
+        with patch("delivery_gateway.call_codex", side_effect=edit_in_staging):
+            adapter(
+                {"provider": "codex", "model": "codex-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit target."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "codex edit\n")
+
+    def test_multi_file_hosted_apply_rolls_back_after_mid_apply_failure(self):
+        (self.worktree / "other.py").write_text("other old\n")
+        (self.worktree / "target.py").chmod(0o755)
+        (self.worktree / "other.py").chmod(0o640)
+        envelope = {"worktree": str(self.worktree), "logical_assignments": [{
+            "assignment_id": "editor", "role": "lead-developer", "instructions": "Edit files.",
+            "requirements": {"operation": "edit"},
+        }]}
+        adapter = _v9_adapter_for_operation(envelope, read_paths=["target.py", "other.py"],
+                                            write_paths=["target.py", "other.py"])
+
+        def edit_two(**kwargs):
+            (kwargs["workspace"] / "target.py").write_text("target new\n")
+            (kwargs["workspace"] / "other.py").write_text("other new\n")
+            return {"output": "applied"}
+
+        real_replace = os.replace
+        calls = 0
+
+        def fail_second(source, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected second-file failure")
+            return real_replace(source, target)
+
+        with patch("delivery_gateway.call_claude_edit", side_effect=edit_two), \
+                patch("delivery_gateway.os.replace", side_effect=fail_second), \
+                self.assertRaisesRegex(ContractError, "was rolled back"):
+            adapter(
+                {"provider": "claude", "model": "claude-model"},
+                {"assignment_id": "editor", "attempt_id": "attempt", "task": "Edit files."},
+            )
+        self.assertEqual((self.worktree / "target.py").read_text(), "old\n")
+        self.assertEqual((self.worktree / "other.py").read_text(), "other old\n")
+        self.assertEqual(stat.S_IMODE((self.worktree / "target.py").stat().st_mode), 0o755)
+        self.assertEqual(stat.S_IMODE((self.worktree / "other.py").stat().st_mode), 0o640)
+
+    def test_v9_projection_includes_all_approved_logical_job_roles(self):
+        self.charter["evidence_collector_instance_ids"] = ["evidence"]
+        self.charter["verifier_instance_ids"] = ["verifier"]
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
+                  "output_bytes": 100, "context_tokens": 100,
+                  "risk_class": "standard", "independence_required": False}
+        self.charter["logical_assignments"] = [
+            {"assignment_id": "logical-manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                                                   "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit exactly.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                                                   "required_capabilities": ["structured_edit"]}},
+            {"assignment_id": "evidence", "role": "test-engineer", "instructions": "Collect exactly.",
+             "depends_on": ["editor"], "requirements": {**common, "operation": "collect",
+                                                           "required_capabilities": ["evidence_collection"]}},
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify exactly.",
+             "depends_on": ["editor", "evidence"],
+             "requirements": {**common, "operation": "verify",
+                              "required_capabilities": ["evidence_collection"],
+                              "risk_class": "high", "independence_required": True}},
+        ]
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        assignments = logical_assignments_from_charter("sample", root=self.root)
+        self.assertEqual(assignments, self.charter["logical_assignments"])
+        operations = {item["assignment_id"]: item["requirements"]["operation"]
+                      for item in assignments}
+        self.assertEqual(operations, {"logical-manager": "manage", "editor": "edit",
+                                      "evidence": "collect", "verifier": "verify"})
+        self.assertTrue(next(item for item in assignments
+                             if item["assignment_id"] == "verifier")["requirements"]["independence_required"])
+        self.assertTrue(all("provider" not in item and "model" not in item for item in assignments))
+        constraints = independence_constraints_from_assignments(assignments)
+        self.assertEqual(constraints[0]["producer_assignment_ids"], ["editor"])
+        self.assertEqual(constraints[0]["evidence_collector_assignment_ids"], ["evidence"])
+
+    def test_v9_projection_rejects_id_only_charter_instead_of_fabricating_bodies(self):
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        with self.assertRaisesRegex(ContractError, "no sealed logical assignments"):
+            logical_assignments_from_charter("sample", root=self.root)
+
+    def test_v9_projection_rejects_collector_without_producer_dependency(self):
+        self.charter["producer_instance_ids"] = ["editor"]
+        self.charter["evidence_collector_instance_ids"] = ["evidence"]
+        self.charter["verifier_instance_ids"] = ["verifier"]
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
+                  "output_bytes": 100, "context_tokens": 100,
+                  "risk_class": "standard", "independence_required": False}
+        self.charter["logical_assignments"] = [
+            {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                 "required_capabilities": ["structured_output"]}},
+            {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit.",
+             "depends_on": [], "requirements": {**common, "operation": "edit",
+                 "required_capabilities": ["structured_edit"]}},
+            {"assignment_id": "evidence", "role": "test-engineer", "instructions": "Collect.",
+             "depends_on": [], "requirements": {**common, "operation": "collect",
+                 "required_capabilities": ["evidence_collection"]}},
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify.",
+             "depends_on": ["editor", "evidence"],
+             "requirements": {**common, "operation": "verify",
+                 "required_capabilities": ["evidence_collection"]}},
+        ]
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        with self.assertRaisesRegex(ContractError, "collector must depend on every producer"):
+            logical_assignments_from_charter("sample", root=self.root)
+
+    def test_v9_projection_rejects_multiple_producers(self):
+        self.charter["producer_instance_ids"] = ["editor", "editor-two"]
+        self.charter["verifier_instance_ids"] = ["verifier"]
+        common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
+                  "output_bytes": 100, "context_tokens": 100,
+                  "risk_class": "standard", "independence_required": False}
+        self.charter["logical_assignments"] = [
+            {"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
+             "depends_on": [], "requirements": {**common, "operation": "manage",
+                 "required_capabilities": ["structured_output"]}},
+            *[{"assignment_id": name, "role": "lead-developer", "instructions": "Edit.",
+               "depends_on": [], "requirements": {**common, "operation": "edit",
+                   "required_capabilities": ["structured_edit"]}}
+              for name in ("editor", "editor-two")],
+            {"assignment_id": "verifier", "role": "quality-reviewer", "instructions": "Verify.",
+             "depends_on": ["editor", "editor-two"],
+             "requirements": {**common, "operation": "verify",
+                 "required_capabilities": ["evidence_collection"]}},
+        ]
+        (self.run / "job-charter.json").write_text(json.dumps(self.charter))
+        with self.assertRaisesRegex(ContractError, "exactly one producer assignment"):
+            logical_assignments_from_charter("sample", root=self.root)
+
+    def test_completed_v9_job_hands_off_to_review_when_charter_authorizes_it(self):
+        self.intent["allowed_lifecycle_operations"] = ["handoff_to_review"]
+        (self.run / "shaper-intent.json").write_text(json.dumps(self.intent))
+        self._write_delivery_authority()
+        assignments = [{"assignment_id": "logical-editor", "role": "lead-developer",
+                        "instructions": "Edit.", "requirements": {"operation": "edit"}}]
+        envelope = {"attempt_id": "v9-attempt", "worktree": str(self.worktree),
+                    "logical_assignments": assignments, "selection_authority": {"generation": 1}}
+        with patch("delivery_gateway.flow_owned_v9_selection_inputs", return_value=([], {}, [])), \
+                patch("delivery_gateway.logical_assignments_from_charter", return_value=assignments), \
+                patch("delivery_gateway.prepare_v9_chartered_delivery", return_value=(envelope, "task", self.run, None)), \
+                patch("delivery_gateway.execute_v9_logical_delivery", return_value={
+                    "attempt_id": "v9-attempt", "status": "completed", "reason": "done", "receipt_path": "receipt.json"}), \
+                patch("delivery_gateway.handoff_to_review", return_value=(True, {"state": "reviewing"}, [])) as handoff:
+            result = execute_v9_chartered_job("sample", self.worktree, self.commit, root=self.root)
+        handoff.assert_called_once_with("sample", "v9-attempt", 1, root=self.root.resolve())
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["review_handoff"], {"status": "completed", "state": "reviewing"})
+
+    def test_prepared_v9_charter_refuses_completion_when_editor_makes_no_change(self):
+        now = datetime.now(timezone.utc)
+        catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
+                    "provider_family": "local", "tier": "judgment", "locality": "local",
+                    "operations": ["manage", "edit"],
+                    "capabilities": ["structured_output", "structured_edit"],
+                    "cost_class": 0, "enabled": True}]
+        availability = [{"candidate_id": "local", "state": "ready",
+                         "observed_at": (now - timedelta(seconds=1)).isoformat(),
+                         "expires_at": (now + timedelta(minutes=1)).isoformat(),
+                         "evidence_code": "model_present", "probe_version": "availability-v1"}]
+        assignments = [{"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
+                        "requirements": {"operation": "manage", "minimum_tier": "working",
+                                         "required_capabilities": ["structured_output"], "locality": "any",
+                                         "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
+                                         "risk_class": "standard", "independence_required": False}},
+                       {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit scope.",
+                        "requirements": {"operation": "edit", "minimum_tier": "working",
+                                         "required_capabilities": ["structured_edit"], "locality": "any",
+                                         "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
+                                         "risk_class": "standard", "independence_required": False}}]
+        claim_path = self.run / self.state["delivery"]["lead_claim_path"]
+        claim = json.loads(claim_path.read_text())
+        claim.pop("digest")
+        claim["generation"] = 2
+        claim["digest"] = delivery_digest(claim)
+        claim_path.write_text(json.dumps(claim))
+        self.state["delivery"]["owner_generation"] = 2
+        self.state["delivery"]["lead_claim_digest"] = claim["digest"]
+        (self.run / "run.json").write_text(json.dumps(self.state))
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.validate_orchestration", return_value=(True, None, [])):
+            envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+                "sample", self.worktree, self.commit, root=self.root,
+                logical_assignments=assignments, catalog=catalog, availability=availability,
+            )
+            result = execute_v9_logical_delivery(
+                    envelope, task, ledger, lambda binding, action: ({"model": binding["model"],
+                        "manager_response": {
+                            "is_request_satisfied": {"answer": False},
+                            "is_in_loop": {"answer": True},
+                            "is_progress_being_made": {"answer": True},
+                            "next_speaker": {"answer": "editor", "reason": "approved work remains"},
+                            "instruction_or_question": {"answer": task},
+                        }} if action["assignment_id"] == "manager" else {"model": binding["model"]}),
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                    supervisor=lambda _envelope, _sent_task, on_action, *, manager_decision, **_kwargs: on_action({
+                        "attempt_id": envelope["attempt_id"], "assignment_id": "editor",
+                        "task": manager_decision["task"], "sequence": 1, "manager_turn": 1,
+                    }),
+                )
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "edit_scope_validation_failed")
+        snapshot = ledger.snapshot(envelope["attempt_id"])
+        self.assertEqual(snapshot["execution_protocol_version"], 9)
+        self.assertEqual(envelope["selection_authority"]["generation"], 2)
+        self.assertEqual(snapshot["owner_generation"], 2)
+        self.assertEqual([item["state"] for item in snapshot["provider_selections"]],
+                         ["consumed", "consumed"])
+        self.assertEqual([item["status"] for item in snapshot["actions"]],
+                         ["completed", "completed"])
+        self.assertEqual(snapshot["status"], "failed")
+        self.assertTrue(any(item["event"] == "v9_evidence_failed" for item in snapshot["events"]))
+
+    def test_flow_owned_selection_probe_uses_flow_candidates_and_local_discovery(self):
+        self._write_v9_logical_charter()
+        overlay = self.root / "user-overlay"
+        overlay.mkdir()
+        (overlay / "flow.toml").write_text(
+            "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
+            "[[provider_candidates]]\ncandidate_id = \"local\"\nprovider = \"ollama\"\n"
+            "model = \"local-model\"\nprovider_family = \"local\"\ntier = \"working\"\n"
+            "locality = \"local\"\noperations = [\"manage\", \"edit\"]\n"
+            "capabilities = [\"structured_output\", \"structured_edit\"]\n"
+            "cost_class = 0\nenabled = true\n"
+        )
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.USER_OVERLAY_DIR", overlay), \
+                patch("delivery_gateway.discover_ollama_models", return_value={"local-model"}):
+            probe = provider_selection_probe("sample", root=self.root)
+        self.assertEqual(probe["availability"][0]["state"], "ready")
+        self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "local")
+
+    def test_probe_can_choose_authenticated_hosted_adapter_after_local_refusal(self):
+        self._write_v9_logical_charter()
+        empty_overlay = self.root / "empty-user-overlay"
+        (self.root / ".flow" / "flow.toml").write_text(
+            "[provider_selection]\nprovider_order = [\"ollama\", \"claude\", \"codex\"]\n\n"
+            "[[provider_candidates]]\ncandidate_id = \"ollama-local\"\nenabled = false\n"
+        )
+        with patch("delivery_gateway.run_status", return_value=self.state), \
+                patch("delivery_gateway.USER_OVERLAY_DIR", empty_overlay), \
+                patch("delivery_gateway.discover_ollama_models", return_value=set()), \
+                patch("delivery_gateway._hosted_adapter_available", side_effect=lambda provider: provider == "claude"):
+            probe = provider_selection_probe("sample", root=self.root)
+        self.assertEqual([item["state"] for item in probe["availability"]], ["unavailable", "ready", "unavailable"])
+        self.assertEqual(probe["availability"][1]["evidence_code"], "authentication_ready")
+        self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "claude-hosted")
+
+    def test_hosted_adapter_readiness_requires_local_authentication_status(self):
+        completed = subprocess.CompletedProcess
+        credential = self.root / "auth.json"
+        credential.write_text("{}")
+        with patch.dict(os.environ, {"HOME": str(self.root)}), \
+                patch("delivery_gateway.Path.is_file", return_value=True), \
+                patch("delivery_gateway.Path.is_symlink", return_value=False), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+                patch("delivery_gateway.subprocess.run", return_value=completed(
+                    ["claude", "auth", "status"], 0, '{"loggedIn": false}', "")):
+            self.assertFalse(delivery_gateway._hosted_adapter_available("claude"))
+        with patch.dict(os.environ, {"HOME": str(self.root)}), \
+                patch("delivery_gateway.Path.is_file", return_value=True), \
+                patch("delivery_gateway.Path.is_symlink", return_value=False), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+                patch("delivery_gateway.subprocess.run", return_value=completed(
+                    ["claude", "auth", "status"], 0, '{"loggedIn": true}', "")):
+            self.assertTrue(delivery_gateway._hosted_adapter_available("claude"))
+        with patch.dict(os.environ, {"CODEX_HOME": str(self.root)}), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/provider"), \
+                patch("delivery_gateway.subprocess.run", return_value=completed(
+                    ["codex", "login", "status"], 0, "", "Logged in using ChatGPT\n")):
+            self.assertTrue(delivery_gateway._hosted_adapter_available("codex"))
+
+    def test_hosted_adapter_readiness_rejects_nonprojectable_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(os.environ, {"HOME": temporary}, clear=True), \
+                patch("delivery_gateway.shutil.which", return_value="/bin/claude"):
+            self.assertFalse(delivery_gateway._hosted_adapter_available("claude"))
+
+    def test_project_cannot_invent_provider_candidate(self):
+        (self.root / ".flow" / "flow.toml").write_text(
+            "[[provider_candidates]]\ncandidate_id = \"invented\"\nenabled = true\n"
+        )
+        with self.assertRaisesRegex(ContractError, "only narrow a known candidate"):
+            provider_selection_probe("sample", root=self.root)
 
 
 if __name__ == "__main__":

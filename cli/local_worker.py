@@ -54,7 +54,8 @@ class _TrackedHTTPHandler(urllib.request.HTTPHandler):
 
 def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None = None,
                correlation_id: str | None = None, timeout_seconds: int = 60,
-               structured_verifier: bool = False) -> dict[str, Any]:
+               structured_verifier: bool = False,
+               response_schema: dict[str, Any] | None = None) -> dict[str, Any]:
     """Make one local call.
 
     With ``structured_verifier``, a received response is always returned as a
@@ -94,8 +95,10 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
             {"role": "system", "content": envelope["instructions"]},
             {"role": "user", "content": envelope["task"]},
         ], "options": {"num_predict": STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256}}
-        if structured_verifier:
-            request_body["format"] = VERIFIER_OUTPUT_SCHEMA
+        if structured_verifier and response_schema is not None:
+            raise ContractError("local worker response schema conflicts with structured verifier")
+        if structured_verifier or response_schema is not None:
+            request_body["format"] = VERIFIER_OUTPUT_SCHEMA if structured_verifier else response_schema
         body = json.dumps(request_body, sort_keys=True).encode()
         request = urllib.request.Request(url, data=body, headers={
             "Content-Type": "application/json",

@@ -41,6 +41,7 @@ from fsutil import (
     remove_empty_parents,
 )
 from model_policy import merge_session_model_profiles, runtime_policy_for_agent
+from provider_selection import merge_selection_policy
 from paths import (
     GENERATED_MARKER,
     HOME,
@@ -173,6 +174,9 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
             framework_source=str(framework_manifest_path),
             user_source=str(user_manifest_path),
         )
+        manifest["provider_selection"] = merge_selection_policy(
+            manifest.get("provider_selection", {}), None
+        )
         manifest["_agent_capability_decisions"] = resolve_agent_capabilities(
             manifest,
             None,
@@ -189,6 +193,10 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
             f"invalid user overlay {user_manifest_path}: {err}; "
             "fix the TOML before syncing so capability exceptions cannot be ignored"
         )
+
+    manifest["provider_selection"] = merge_selection_policy(
+        manifest.get("provider_selection", {}), user_manifest.get("provider_selection")
+    )
 
     advisory_override = user_manifest.get("expertise_advisory", {})
     if not isinstance(advisory_override, dict) or set(advisory_override) - {"enabled"}:
@@ -455,7 +463,6 @@ def desired_claude_outputs(
     skill_defaults = runtime.get("skill_defaults", {})
     agent_defaults = runtime.get("agent_defaults", {})
     agents = shared_agents(manifest)
-    routing_hints = routing_hints_for("claude", agents, manifest)
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()
@@ -469,7 +476,10 @@ def desired_claude_outputs(
         command_with_body = dict(command)
         command_with_body["_body"] = source_path.read_text()
         command_with_body["_expertise_advisory_enabled"] = manifest.get("expertise_advisory", {}).get("enabled", True)
-        content = render_skill_from_command(command_with_body, skill_defaults, routing_hints)
+        command_routing = routing_hints_for(
+            "claude", agents, manifest, command_name=command["name"]
+        )
+        content = render_skill_from_command(command_with_body, skill_defaults, command_routing)
         outputs[target] = content
         managed_entries.append(
             {
@@ -553,7 +563,6 @@ def desired_codex_outputs(
 ) -> tuple[dict[Path, str], list[dict], set[Path]]:
     runtime = manifest["codex"]
     agents = shared_agents(manifest)
-    routing_hints = routing_hints_for("codex", agents, manifest)
     outputs: dict[Path, str] = {}
     managed_entries: list[dict] = []
     mergeable_paths: set[Path] = set()
@@ -569,7 +578,7 @@ def desired_codex_outputs(
             command["description"],
             source_ref_for(source_rel, entry_origin),
             source_path.read_text(),
-            routing_hints,
+            routing_hints_for("codex", agents, manifest, command_name=command["name"]),
             advisory_enabled=manifest.get("expertise_advisory", {}).get("enabled", True),
         )
         managed_entries.append(

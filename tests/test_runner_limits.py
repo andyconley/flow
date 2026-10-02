@@ -20,8 +20,15 @@ class RunnerLimitsTests(unittest.TestCase):
     def test_cli_shim_loads_the_runner_module_file(self):
         self.assertEqual(Path(runtime_limits.__file__).resolve(), runner_limits.LIMITS_PATH)
         for name in ("MAX_MANAGER_CALLS", "MAX_MANAGER_ROUNDS", "MAX_ACTIONS", "MAX_VERIFIER_CALLS",
-                     "MAX_CONCURRENT", "MAX_REPLANS", "MAX_TOKEN_TRANCHES", "MAX_LINEAGE_TOKENS"):
+                     "MAX_CONCURRENT", "MAX_REPLANS", "MAX_TOKEN_TRANCHES", "MAX_LINEAGE_TOKENS",
+                     "MAX_MANAGER_MESSAGES_BYTES"):
             self.assertEqual(getattr(runner_limits, name), getattr(runtime_limits, name), name)
+
+    def test_manager_transport_cap_is_shared_with_the_gateway(self):
+        from delivery_gateway import MAX_MANAGER_MESSAGES_BYTES as gateway_cap
+
+        self.assertEqual(runtime_limits.MAX_MANAGER_MESSAGES_BYTES, gateway_cap)
+        self.assertLessEqual(gateway_cap, 1024 * 1024)
 
     def test_runner_reads_its_ceilings_from_the_shared_module(self):
         source = (REPO_ROOT / "runtime" / "maf_runner" / "delivery_lead.py").read_text()

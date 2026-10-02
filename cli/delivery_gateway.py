@@ -5,22 +5,29 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import signal
+import shutil
+import stat
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
+from copy import deepcopy
+from datetime import datetime, timezone, timedelta
 from contextlib import ExitStack, nullcontext, suppress
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
 from execution_contracts import (MANAGER_IDENTITY_FIELDS, TERMINAL_UNCERTAIN_STATUSES, ContractError, canonical,
+                                 chartered_test_argv_supported,
                                  digest, envelope_digest, handback_supported, validate_manager_identity,
                                  expected_magentic_action_id, expected_manager_call_id,
                                  expected_replan_id, validate_action, validate_manager_call,
-                                 validate_result, validate_receipt)
+                                 validate_result, validate_receipt, validate_envelope)
 from execution_ledger import ExecutionLedger, utc_now
 from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
@@ -42,19 +49,37 @@ from delivery_contracts import (DELIVERY_CHARTER_VERSION, DeliveryContractError,
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot, resolve_attempt
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
+from provider_availability import normalize_availability
+from provider_selection import merge_selection_policy
+from selection_authority import seal_selection_authority
+from provider_availability import discover_ollama_models, AvailabilityError
+from flowtoml import read_toml
+from paths import SCAFFOLD_DIR, USER_OVERLAY_DIR
+from delivery_selection import (authorize_and_dispatch as authorize_v9_and_dispatch,
+                                make_action as make_v9_action,
+                                _runtime_family_exclusions)
+from ollama_edit_worker import (propose_edits as propose_ollama_edits,
+                                source_bundle as ollama_source_bundle,
+                                validate_and_apply as apply_ollama_edits)
+from ollama_manager import call_ollama_manager
+from runner_progress import parse_progress
 from claude_worker import call_claude
 from claude_edit_worker import MAX_TRACE_BYTES, _stream_result, call_claude_edit
 from codex_worker import call_codex
-from maf_supervisor import MafChildError, MafProtocolError, MafTransportError, run_maf_delivery
+from maf_supervisor import (MafChildError, MafProtocolError, MafTransportError, run_maf_delivery,
+                            run_maf_v9_delivery)
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import handoff_to_review, status as run_status
-from verifier_contracts import (VERIFIER_CONTRACT_INSTRUCTION, evaluate_candidate, provider_binding_mismatch,
+from runner_limits import MAX_MANAGER_MESSAGES_BYTES
+from verifier_contracts import (VERIFIED_HANDOFF_AUTHORITY, VERIFIER_CONTRACT_INSTRUCTION,
+                                evaluate_candidate, provider_binding_mismatch,
                                 verifier_instructions, verifier_provider_task)
 
 APPROVED_PATHS = ("cli/codex_worker.py", "tests/test_codex_worker.py")
 ROSTER_IDS = ("claude-implementer", "local-analyst", "local-verifier")
 MAX_TASK_BYTES = 4096
+MAX_CHARTERED_DIFF_BYTES = 1024 * 1024
 # The missed-cancel bound for a wait that cannot watch the wakeup pipe.
 CANCEL_POLL_SECONDS = 0.25
 
@@ -171,18 +196,12 @@ def _job_test(test: Any) -> dict[str, Any]:
     if not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}:
         raise ContractError("targeted test specification is invalid")
     argv, timeout = test["argv"], test["timeout_seconds"]
-    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-    focused = (isinstance(argv, list) and len(argv) == 8
-               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-               and argv[6] == "-p")
     if (not isinstance(argv, list)
             or any(not isinstance(arg, str) or not arg or len(arg) > 256 or "\x00" in arg for arg in argv)
             or argv[0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or not (full_discovery or focused)
+            or not chartered_test_argv_supported(argv)
             or type(timeout) is not int or not 1 <= timeout <= 3600):
         raise ContractError("targeted test argv or deadline is unsupported")
-    if focused and (not argv[7].startswith("test_") or not argv[7].endswith(".py") or not argv[7][5:-3].replace("_", "").isalnum()):
-        raise ContractError("targeted test pattern is unsafe")
     return test
 
 
@@ -345,7 +364,9 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
     source_paths = (charter_path, manifest_path, requirements, acceptance)
     source_bytes = {path: (manifest_bytes if path == manifest_path else path.read_bytes()) for path in source_paths}
     charter = json.loads(source_bytes[charter_path])
-    if not isinstance(charter, dict) or set(charter) != {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}:
+    required_charter_fields = {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}
+    if (not isinstance(charter, dict) or not required_charter_fields.issubset(charter)
+            or set(charter) - required_charter_fields != {"evidence_collector_instance_ids"} and set(charter) != required_charter_fields):
         raise ContractError("job charter fields are invalid")
     task = charter["task"]
     if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
@@ -388,11 +409,25 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                        "model": model, "instructions": instructions,
                        "capabilities": ["read"] if read_only else ["read", "edit"]})
     by_id = {item["instance_id"]: item for item in roster}
-    producers, verifiers = charter["producer_instance_ids"], charter["verifier_instance_ids"]
+    producers = charter["producer_instance_ids"]
+    evidence_collectors = charter.get("evidence_collector_instance_ids", [])
+    verifiers = charter["verifier_instance_ids"]
     if any(item not in by_id or "edit" not in by_id[item]["capabilities"] for item in producers):
         raise ContractError("producer is not an approved editor")
     if any(item not in by_id or by_id[item]["capabilities"] != ["read"] for item in verifiers) or set(producers) & set(verifiers):
         raise ContractError("verifier is not an independent read-only specialist")
+    if (len(evidence_collectors) != len(set(evidence_collectors))
+            or any(item not in by_id or by_id[item]["capabilities"] != ["read"] for item in evidence_collectors)
+            or set(evidence_collectors) & (set(producers) | set(verifiers))):
+        raise ContractError("evidence collector is not a distinct read-only specialist")
+    verification = manifest.get("verification") or {}
+    designated_verifier = verification.get("verifier_assignment")
+    evidence_collector = verification.get("evidence_collector_assignment")
+    if (designated_verifier not in verifiers or evidence_collector in verifiers
+            or evidence_collector == designated_verifier):
+        raise ContractError("job verifier set conflicts with independent orchestration roles")
+    if evidence_collectors and evidence_collector not in evidence_collectors:
+        raise ContractError("job evidence collector differs from orchestration role")
     # The execution projection may narrow the canonical Charter, never widen
     # it. Provider, role cardinality, limits, and producer/verifier separation
     # are proven before an attempt or grant exists.
@@ -491,7 +526,9 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
                for name, path in (("requirements", requirements), ("acceptance", acceptance))}
     job_contract = {"task": task, "baseline": job_baseline,
                     "read_paths": charter["read_paths"], "write_paths": charter["write_paths"],
-                    "test": charter["test"], "producer_instance_ids": producers, "verifier_instance_ids": verifiers}
+                    "test": charter["test"], "producer_instance_ids": producers,
+                    "evidence_collector_instance_ids": evidence_collectors,
+                    "verifier_instance_ids": verifiers}
     # One projection, shared with verify-receipt (ADR 0020).
     limits, headroom = project_envelope_limits(canonical_limits)
     envelope = {"schema_version": 1, "execution_protocol_version": 8, "work_id": work_id, "attempt_id": attempt_id,
@@ -531,7 +568,8 @@ def prepare_chartered_delivery(work_id: str, worktree: Path, source_commit: str,
 
 def _normalized_manager_request(envelope: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
     messages = message.get("messages")
-    if not isinstance(messages, list) or not messages or len(canonical(messages).encode()) > 32000:
+    if (not isinstance(messages, list) or not messages
+            or len(canonical(messages).encode()) > MAX_MANAGER_MESSAGES_BYTES):
         raise ContractError("Magentic manager messages are invalid")
     request = {key: message.get(key) for key in ("schema_version", "call_id", "attempt_id", "envelope_digest",
                                                 "sequence", "phase", "manager_round", "prompt_digest")}
@@ -717,7 +755,16 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
         raise ContractError("editor changed the pinned source commit")
     allowed = tuple(Path(path) for path in job["write_paths"])
     status = _git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
+    # Interpreter caches are execution residue, not source edits or verifier
+    # evidence. Ignore them only while untracked; a tracked cache remains a
+    # normal governed file and cannot evade scope or tamper checks.
+    status = [line for line in status if not (
+        line[:2] == "??" and (
+            "__pycache__" in Path(line[3:]).parts or Path(line[3:]).suffix == ".pyc"
+        )
+    )]
     changed = [line[3:] for line in status]
+    untracked = {path for line, path in zip(status, changed) if line[:2] == "??"}
     if not changed:
         raise ContractError("editor made no edit to the worktree")
     def in_scope(relative: str) -> bool:
@@ -740,10 +787,14 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
     # the pre-existing regression again and can exceed the bounded prompt.
     diff = _git(worktree, "diff", "--", *job["write_paths"]).encode()
     for path in edited:
-        if path not in baseline["files"]:
+        if path in untracked:
             diff += ("\nNEW FILE " + path + "\n").encode() + (worktree / path).read_bytes()
-    if not diff or len(diff) > 32768:
-        raise ContractError("chartered edit diff is empty or oversized")
+    if not diff:
+        raise ContractError("chartered edit diff is empty")
+    if len(diff) > MAX_CHARTERED_DIFF_BYTES:
+        raise ContractError(
+            f"chartered edit diff is {len(diff)} bytes; limit is {MAX_CHARTERED_DIFF_BYTES} bytes"
+        )
     diff_path = attempt_dir / "repair.diff"
     if diff_path.exists():
         if diff_path.is_symlink() or diff_path.read_bytes() != diff:
@@ -792,7 +843,9 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
     output = (stdout + stderr)[-8192:]
     if process.returncode:
         raise ContractError("targeted chartered test failed: " + output[-512:])
-    return {"command": test["argv"], "status": "passed", "output_sha256": hashlib.sha256(output.encode()).hexdigest()}
+    return {"command": test["argv"], "status": "passed",
+            "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+            "output_excerpt": output}
 
 
 def _peek_snapshot(ledger_path: Path, attempt_id: str) -> dict[str, Any] | None:
@@ -1084,6 +1137,10 @@ def resume_delivery(work_id: str, attempt_id: str, *, root: Path | None = None,
     if not attempt_dir.is_dir() or attempt_dir.is_symlink():
         raise ContractError("Magentic attempt directory is absent")
     peek = _peek_snapshot(run_dir / "execution" / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] == 9:
+        # A provider send claim is never replayed by resume. Operators receive
+        # the durable reconciliation state instead of a second dispatch.
+        return v9_recovery_status(work_id, attempt_id, root=project_root)
     if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
         if continuation_epoch_id:
             raise RecoveryRefused(CONTINUATION_EPOCHS_V5_ONLY)
@@ -1281,6 +1338,8 @@ def recover_delivery(work_id: str, attempt_id: str, *, actor: str, root: Path | 
         raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
     attempt_dir = project_root / ".flow" / "runs" / work_id / "execution" / attempt_id
     peek = _peek_snapshot(attempt_dir.parent / "ledger.sqlite", attempt_id)
+    if peek is not None and peek["execution_protocol_version"] == 9:
+        return v9_recovery_status(work_id, attempt_id, root=project_root)
     if peek is not None and peek["execution_protocol_version"] in {6, 7, 8}:
         # Chunk 1 needs no operator evidence, so v8 recover equals resume.
         return _resume_chartered(work_id, attempt_id, root=project_root, manager_adapter=manager_adapter,
@@ -1615,8 +1674,11 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
     prior_verifier = [item for item in initial_snapshot["actions"]
                       if (item["request"]["instance_id"] in job["verifier_instance_ids"] if chartered else item["request"]["assignment_id"] == "local-verifier") and item["status"] == "completed"]
     if prior_verifier and edit_evidence:
-        verifier_task = _verifier_provider_task(prior_verifier[-1]["request"]["task"], (attempt_dir / "repair.diff").read_text(),
-                                                edit_evidence["diff_sha256"], structured=structured_verifier)
+        verifier_task = _verifier_provider_task(
+            prior_verifier[-1]["request"]["task"], (attempt_dir / "repair.diff").read_text(),
+            edit_evidence["diff_sha256"], structured=structured_verifier,
+            test_output=(test_evidence or {}).get("output_excerpt", ""),
+            authority_statement=VERIFIED_HANDOFF_AUTHORITY)
         verifier_input_sha256 = hashlib.sha256(verifier_task.encode()).hexdigest()
 
     manager_provider = (envelope.get("manager") or {}).get("provider", "claude") if structured_verifier else None
@@ -1697,11 +1759,14 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
         action = _normalized_action(envelope, message)
         is_verifier = action["instance_id"] in job["verifier_instance_ids"] if chartered else action["assignment_id"] == "local-verifier"
         is_producer = action["instance_id"] in job["producer_instance_ids"] if chartered else action["assignment_id"] == "claude-implementer"
+        is_evidence_collector = (chartered
+                                 and action["instance_id"] in job.get("evidence_collector_instance_ids", []))
         if (chartered and action["provider"] in {"claude", "codex"} and not is_producer
+                and not is_evidence_collector
                 and not (structured_verifier and is_verifier and action["provider"] == "codex")):
             raise ContractError("selected editor is not eligible to produce this job")
-        if is_verifier and (edit_evidence is None or test_evidence is None):
-            raise ContractError("Magentic verifier selected before Flow verified Claude repair")
+        if (is_evidence_collector or is_verifier) and (edit_evidence is None or test_evidence is None):
+            raise ContractError("Magentic read-only specialist selected before Flow verified producer repair")
         with authority_guard():
             decision = ledger.decide(envelope, action, generation=generation)
             regranted = False
@@ -1766,8 +1831,11 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
             return denied_reply(action["action_id"], decision["reason"])
         provider_action = action
         if is_verifier:
-            provider_task = _verifier_provider_task(action["task"], (attempt_dir / "repair.diff").read_text(),
-                                                    edit_evidence["diff_sha256"], structured=structured_verifier)
+            provider_task = _verifier_provider_task(
+                action["task"], (attempt_dir / "repair.diff").read_text(),
+                edit_evidence["diff_sha256"], structured=structured_verifier,
+                test_output=(test_evidence or {}).get("output_excerpt", ""),
+                authority_statement=VERIFIED_HANDOFF_AUTHORITY)
             verifier_input_sha256 = hashlib.sha256(provider_task.encode()).hexdigest()
             provider_action = {**action, "provider_task": provider_task}
         try:
@@ -1822,6 +1890,17 @@ def _run_prepared_delivery(envelope: dict[str, Any], task: str, attempt_dir: Pat
                     response_completed = True
                     if structured_verifier and is_verifier:
                         evaluation = _evaluate_verifier(ledger, action, result, verifier_binding, generation=generation)
+                    if is_evidence_collector:
+                        manifest = json.loads((attempt_dir / "manifest.snapshot.json").read_text())
+                        assignment = next(item for item in manifest["assignments"] if item["id"] == action["assignment_id"])
+                        relative = assignment["output"]["path"]
+                        project_root = attempt_dir.parents[4]
+                        run_dir = attempt_dir.parents[1]
+                        target = project_root / relative
+                        if (target.is_symlink() or target.resolve().parent != run_dir.resolve()
+                                or Path(relative).name != target.name):
+                            raise ContractError("evidence collector output path escapes the run")
+                        write_atomic(target, result["output"].rstrip() + "\n", mode=0o600)
                 if is_producer:
                     edit_evidence = verify_edit(worktree, baseline, attempt_dir)
                     test_evidence = test_runner(worktree)
@@ -1996,7 +2075,8 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
         result = call_codex(instructions="Respond to the stock Magentic manager request only. Return the requested response text without editing files.",
                             task=prompt, workspace=workspace, model=envelope["manager"]["model"],
                             timeout_seconds=timeout_seconds, sandbox="read-only",
-                            max_prompt_bytes=32768, max_output_bytes=32768, on_process_group=on_process_group)
+                            max_prompt_bytes=MAX_MANAGER_MESSAGES_BYTES,
+                            max_output_bytes=32768, on_process_group=on_process_group)
     else:
         raise ContractError("approved manager provider has no adapter")
     output = result["output"]
@@ -2040,9 +2120,938 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     if action["provider"] == "codex" and envelope["execution_protocol_version"] in {6, 7, 8}:
         is_verifier = (envelope["execution_protocol_version"] == 8
                        and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
+        is_evidence_collector = (envelope["execution_protocol_version"] == 8
+                                 and action["instance_id"] in envelope["job_contract"].get(
+                                     "evidence_collector_instance_ids", []))
         return call_codex(instructions=assignment["instructions"],
                           task=action.get("provider_task", action["task"]),
                           workspace=workspace, model=assignment["model"], timeout_seconds=timeout_seconds,
-                          sandbox="read-only" if is_verifier else "workspace-write",
+                          sandbox="read-only" if is_verifier or is_evidence_collector else "workspace-write",
                           on_process_group=on_process_group)
     raise ContractError("selected specialist provider has no approved adapter")
+
+
+def execute_v9_selected_action(envelope: dict[str, Any], action: dict[str, Any],
+                               adapter_send: Callable[[dict[str, Any], dict[str, Any]], Any], *,
+                               readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]],
+                               ledger: ExecutionLedger | None = None,
+                               generation: int | None = None,
+                               predecessor_selection_id: str | None = None) -> dict[str, Any]:
+    """Execute one v9 provider action through Flow's durable send fence.
+
+    The caller is responsible for constructing the sealed v9 envelope and
+    logical action.  Once an ``ExecutionLedger`` is supplied this is a live
+    adapter boundary: selection reservation, provider-send claim, and result
+    closure are ledger-owned.  Existing v8 dispatch never reaches this path.
+    """
+    return authorize_v9_and_dispatch(
+        envelope, action, adapter_send, readiness_recheck=readiness_recheck,
+        ledger=ledger, generation=generation,
+        predecessor_selection_id=predecessor_selection_id,
+    )
+
+
+def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: ExecutionLedger,
+                                adapter_send: Callable[[dict[str, Any], dict[str, Any]], Any], *,
+                                readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]],
+                                supervisor: Callable[..., dict[str, Any]] | None = None,
+                                python_path: str | None = None) -> dict[str, Any]:
+    """Run a sealed v9 logical assignment through MAF, Flow, and one adapter.
+
+    MAF proposes only the logical assignment/task.  Flow creates the action,
+    recomputes the sealed binding, owns reservation and send claim, then calls
+    the selected adapter.  No MAF process receives provider credentials or a
+    concrete model/provider route.
+    """
+    if envelope.get("execution_protocol_version") != 9:
+        raise ContractError("logical v9 delivery requires a protocol v9 envelope")
+    snapshot = ledger.snapshot(envelope["attempt_id"])
+    if snapshot["envelope"] != envelope or snapshot["status"] != "started":
+        raise ContractError("logical v9 delivery attempt is absent or closed")
+    generation = snapshot["owner_generation"]
+    attempt_dir = Path(envelope["checkpoint_dir"]).parent
+    live_attempt = (attempt_dir.is_absolute() and attempt_dir.is_dir() and not attempt_dir.is_symlink()
+                    and (attempt_dir / "job-charter.snapshot.json").is_file()
+                    and (attempt_dir / "baseline.json").is_file())
+    job: dict[str, Any] | None = None
+    baseline: dict[str, Any] | None = None
+    edit_evidence: dict[str, Any] | None = None
+    test_evidence: dict[str, Any] | None = None
+    verifier_evaluations: dict[str, dict[str, Any]] = {}
+    if live_attempt:
+        job = json.loads((attempt_dir / "job-charter.snapshot.json").read_text())
+        baseline = json.loads((attempt_dir / "baseline.json").read_text())
+    manager_decision: dict[str, Any] | None = None
+    dispatch_sequence_base = 1
+
+    def dispatch(proposal: dict[str, Any]) -> dict[str, Any]:
+        if manager_decision is not None and proposal["assignment_id"] != manager_decision["assignment_id"]:
+            raise ContractError("logical v9 proposal differs from the bounded manager decision")
+        if manager_decision is not None and proposal["task"] != manager_decision["task"]:
+            raise ContractError("logical v9 task differs from the bounded manager decision")
+        assignment = next((item for item in envelope["logical_assignments"]
+                           if item["assignment_id"] == proposal["assignment_id"]), None)
+        if assignment is None:
+            raise ContractError("logical v9 proposal names an unknown assignment")
+        sequence = dispatch_sequence_base if assignment["requirements"]["operation"] == "manage" \
+            else dispatch_sequence_base + 1
+        runtime_families = (_runtime_family_exclusions(envelope, proposal["assignment_id"], ledger)
+                            if assignment["requirements"]["operation"] == "verify" else None)
+        action = make_v9_action(
+            envelope, proposal["assignment_id"], proposal["task"],
+            sequence=sequence, manager_turn=proposal["manager_turn"],
+            runtime_excluded_families=runtime_families,
+        )
+        predecessor_selection_id = None
+        # A refused readiness check is the sole automatic retry case: it is
+        # positively evidenced to have happened before provider I/O.  Every
+        # adapter failure after a send claim becomes recovery-required instead.
+        while True:
+            run_dir = Path(envelope["checkpoint_dir"]).parents[2]
+            with delivery_authority_guard(run_dir, envelope):
+                result = execute_v9_selected_action(
+                    envelope, action, adapter_send, readiness_recheck=readiness_recheck,
+                    ledger=ledger, generation=generation,
+                    predecessor_selection_id=predecessor_selection_id,
+                )
+            if result["status"] != "pre_send_refused":
+                break
+            successor = result["successor_decision"]
+            if successor.get("selected_binding") is None:
+                raise ContractError("all selected provider candidates refused before send")
+            predecessor_selection_id = action["selection_id"]
+            action = make_v9_action(
+                envelope, proposal["assignment_id"], proposal["task"],
+                sequence=sequence, manager_turn=proposal["manager_turn"],
+                decision=successor,
+            )
+        # The child only needs Flow's outcome. The complete binding/action
+        # remains in the ledger and receipt, rather than echoing it back.
+        response = {"status": result["status"], "provider_action_id": action["action_id"],
+                    "selection_id": action["selection_id"]}
+        if assignment["requirements"]["operation"] == "manage":
+            response["manager_result"] = result.get("result")
+        return response
+
+    managers = [item for item in envelope["logical_assignments"]
+                if item["requirements"].get("operation") == "manage"]
+    if len(managers) != 1:
+        raise ContractError("protocol v9 requires exactly one logical manager assignment")
+    manager = managers[0]
+    workers = [item for item in envelope["logical_assignments"]
+               if item["requirements"].get("operation") != "manage"]
+    if not workers:
+        raise ContractError("protocol v9 requires at least one logical worker assignment")
+    # Bootstrap the manager through the exact same Flow-owned selection and
+    # send fence before a MAF process exists. The child receives neither the
+    # binding nor provider credentials; the durable receipt carries the proof.
+    outcomes = []
+    pending = {item["assignment_id"]: item for item in workers}
+    completed: set[str] = set()
+    stage = 0
+    while pending:
+        frontier = sorted(
+            (item for item in pending.values()
+             if set(item.get("depends_on", [])) <= completed),
+            key=lambda item: item["assignment_id"],
+        )
+        if not frontier:
+            raise ContractError("logical v9 dependency frontier is empty before work completed")
+        stage += 1
+        dispatch_sequence_base = stage * 2 - 1
+        allowed_ids = [item["assignment_id"] for item in frontier]
+        manager_decision = None
+        manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
+                  "task": ("Choose the next logical assignment for the approved task. "
+                           f"next_speaker.answer must be exactly one of {json.dumps(allowed_ids)}. "
+                           "Set is_request_satisfied.answer=false while required work remains and provide "
+                           "a nonempty reason and bounded instruction_or_question.answer."),
+                  "sequence": dispatch_sequence_base, "manager_turn": stage - 1})
+        raw_manager = manager_outcome.get("manager_result")
+        progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
+        if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
+            progress = parse_progress(raw_manager["output"]).value
+        if not isinstance(progress, dict):
+            if live_attempt:
+                manager_action = next(item["request"] for item in reversed(
+                    ledger.snapshot(envelope["attempt_id"])["actions"])
+                    if item["request"]["assignment_id"] == manager["assignment_id"])
+                ledger.record_v9_evidence_failure(
+                    envelope["attempt_id"], manager_action["action_id"], "manager_evaluation",
+                    "logical v9 manager returned no exact progress decision", generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "manager_evaluation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "manager_evaluation_failed", **sealed}
+            raise ContractError("logical v9 manager returned no exact progress decision")
+        selected = progress.get("next_speaker", {}).get("answer")
+        selected_task = progress.get("instruction_or_question", {}).get("answer")
+        reason = progress.get("next_speaker", {}).get("reason")
+        if (selected not in allowed_ids or progress.get("is_request_satisfied", {}).get("answer") is not False
+                or not isinstance(selected_task, str) or not selected_task.strip()
+                or not isinstance(reason, str) or not reason.strip()
+                or len(selected_task.encode()) > MAX_TASK_BYTES or len(reason.encode()) > MAX_TASK_BYTES):
+            if live_attempt:
+                manager_action = next(item["request"] for item in reversed(
+                    ledger.snapshot(envelope["attempt_id"])["actions"])
+                    if item["request"]["assignment_id"] == manager["assignment_id"])
+                ledger.record_v9_evidence_failure(
+                    envelope["attempt_id"], manager_action["action_id"], "manager_evaluation",
+                    "logical v9 manager decision is outside the approved logical frontier",
+                    generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "manager_evaluation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "manager_evaluation_failed", **sealed}
+            raise ContractError("logical v9 manager decision is outside the approved logical frontier")
+        selected_assignment = pending[selected]
+        bounded_task = (f"Approved job:\n{task.strip()}\n\n"
+                        f"Logical assignment: {selected}\n"
+                        f"Sealed instructions:\n{selected_assignment['instructions'].strip()}")
+        operation = selected_assignment["requirements"]["operation"]
+        if live_attempt and operation == "verify":
+            if edit_evidence is None or test_evidence is None:
+                raise ContractError("logical v9 verifier selected before Flow captured edit and test evidence")
+            bounded_task = verifier_provider_task(
+                bounded_task, (attempt_dir / "repair.diff").read_text(),
+                edit_evidence["diff_sha256"], structured=True,
+                test_output=test_evidence["output_excerpt"],
+                authority_statement=VERIFIED_HANDOFF_AUTHORITY,
+            )
+        if len(bounded_task.encode()) > MAX_TASK_BYTES:
+            raise ContractError("logical v9 sealed assignment task exceeds size limit")
+        manager_decision = {"assignment_id": selected, "task": bounded_task,
+                            "reason": reason, "manager_turn": stage}
+        outcomes.append((supervisor or run_maf_v9_delivery)(
+            envelope, task, dispatch, python_path=python_path,
+            manager_decision=manager_decision))
+        if live_attempt and operation == "edit":
+            if job is None or baseline is None:
+                raise ContractError("logical v9 job evidence contract is absent")
+            worker_action = next(item["request"] for item in reversed(
+                ledger.snapshot(envelope["attempt_id"])["actions"])
+                if item["request"]["assignment_id"] == selected)
+            try:
+                edit_evidence = _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job)
+            except ContractError as exc:
+                ledger.record_v9_evidence_failure(envelope["attempt_id"], worker_action["action_id"],
+                                                  "edit_scope", str(exc), generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "edit_scope_validation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "edit_scope_validation_failed", **sealed}
+            try:
+                test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
+                if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
+                    raise ContractError("chartered test changed the verified v9 worktree diff")
+            except ContractError as exc:
+                ledger.record_v9_evidence_failure(envelope["attempt_id"], worker_action["action_id"],
+                                                  "chartered_test", str(exc), generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "chartered_test_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "chartered_test_failed", **sealed}
+        if live_attempt and operation == "verify":
+            verifier_action = next(item["request"] for item in reversed(
+                ledger.snapshot(envelope["attempt_id"])["actions"])
+                if item["request"]["assignment_id"] == selected)
+            try:
+                raw_result = outcomes[-1].get("outcome", {}).get("result") if isinstance(outcomes[-1], dict) else None
+                if raw_result is None:
+                    action_rows = ledger.snapshot(envelope["attempt_id"])["actions"]
+                    row = next((item for item in reversed(action_rows)
+                                if item["request"]["assignment_id"] == selected), None)
+                    wrapped = row.get("result") if isinstance(row, dict) else None
+                    raw_result = wrapped.get("result") if isinstance(wrapped, dict) else None
+                output = raw_result.get("output") if isinstance(raw_result, dict) else None
+                if not isinstance(output, str):
+                    raise ContractError("logical v9 verifier returned no bounded output")
+                verifier_input = {"provider_task": verifier_action["task"], "assignment_id": selected}
+                input_digest = hashlib.sha256(canonical(verifier_input).encode()).hexdigest()
+                final_evaluation = evaluate_candidate(
+                    action_id=verifier_action["action_id"], verifier_input_digest=input_digest,
+                    raw_output=output, diff_digest=edit_evidence["diff_sha256"],
+                    test_evidence_digest=test_evidence["output_sha256"],
+                )
+                ledger.record_v9_verifier_evaluation(
+                    verifier_action["action_id"], verifier_input, raw_result, final_evaluation,
+                    edit_evidence["diff_sha256"], test_evidence["output_sha256"],
+                    generation=generation,
+                )
+                verifier_evaluations[selected] = final_evaluation
+            except ContractError as exc:
+                ledger.record_v9_evidence_failure(envelope["attempt_id"], verifier_action["action_id"],
+                                                  "verifier_evaluation", str(exc), generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "verifier_evaluation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "verifier_evaluation_failed", **sealed}
+        completed.add(selected)
+        pending.pop(selected)
+    outcome = outcomes[-1]
+    # Seal the receipt only after every dependency-valid logical assignment
+    # completed. The ledger remains the source of truth; uncertain sends
+    # refuse here and remain in explicit recovery instead.
+    if not live_attempt:
+        # Pure embedding callers can exercise the MAF/Flow adapter boundary
+        # with an in-memory-style ledger fixture. A charter-prepared live
+        # attempt always has this private absolute directory and is sealed.
+        return outcome
+    required_verifiers = {item["assignment_id"] for item in workers
+                          if item["requirements"].get("operation") == "verify"}
+    all_verifiers_passed = (set(verifier_evaluations) == required_verifiers
+                            and all(item["disposition"] == "valid_pass"
+                                    for item in verifier_evaluations.values()))
+    terminal_status = "completed" if required_verifiers and all_verifiers_passed else "failed"
+    failed_dispositions = sorted({item["disposition"] for item in verifier_evaluations.values()
+                                  if item["disposition"] != "valid_pass"})
+    terminal_reason = ("semantic_verifier_valid_pass" if terminal_status == "completed" else
+                       "semantic_verifier_" + (failed_dispositions[0] if failed_dispositions else "missing"))
+    sealed = ledger.seal_v9_attempt(envelope["attempt_id"], terminal_status, terminal_reason,
+                                    attempt_dir / "receipt.json", generation=generation)
+    return {**outcome, "attempt_id": envelope["attempt_id"], "status": terminal_status,
+            "reason": terminal_reason, "receipt_path": sealed["receipt_path"],
+            "sealed_receipt_sha256": sealed["sealed_receipt_sha256"]}
+
+
+def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: str, *,
+                                  logical_assignments: list[dict[str, Any]],
+                                  catalog: list[dict[str, Any]], availability: list[dict[str, Any]],
+                                  framework_policy: dict[str, Any] | None = None,
+                                  administrator_policy: dict[str, Any] | None = None,
+                                  project_policy: dict[str, Any] | None = None,
+                                  run_policy: dict[str, Any] | None = None,
+                                  effective_policy: dict[str, Any] | None = None,
+                                  independence_constraints: list[dict[str, Any]] | None = None,
+                                  root: Path | None = None) -> tuple[dict[str, Any], str, Path, ExecutionLedger]:
+    """Prepare a sealed, provider-neutral v9 charter attempt.
+
+    Inputs are Flow configuration/probe DTOs, never a Shaper-selected provider
+    roster.  They are closed and sealed by ``validate_envelope`` before the
+    attempt is created. The old v8 preparer remains a separate entry point.
+    """
+    project_root = (root or repo_root()).resolve()
+    run_dir = project_root / ".flow" / "runs" / work_id
+    state = run_status(work_id, root=project_root)
+    if state.get("state") != "implementing" or state.get("protocol_revision") != 2:
+        raise ContractError("v9 delivery requires an implementing revision-2 run")
+    delivery = state.get("delivery")
+    authority = _sealed_delivery_authority(run_dir, delivery)
+    valid, _, findings = validate_orchestration(work_id, "dispatch", root=project_root)
+    if not valid:
+        raise ContractError("orchestration dispatch invalid: " + "; ".join(f.message for f in findings))
+    artifacts = state.get("artifacts", {})
+    requirements = _run_file(project_root, run_dir, artifacts.get("requirements", ""))
+    acceptance = _run_file(project_root, run_dir, artifacts.get("acceptance_criteria", ""))
+    manifest = _run_file(project_root, run_dir, artifacts.get("orchestration_manifest", ""))
+    charter = _run_file(project_root, run_dir, artifacts.get("job_charter", ""))
+    task = json.loads(charter.read_text()).get("task") if charter.suffix == ".json" else charter.read_text()
+    if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
+        raise ContractError("v9 job charter task is absent or oversized")
+    raw_worktree = Path(worktree)
+    if raw_worktree.is_symlink():
+        raise ContractError("isolated worktree path is a symlink")
+    worktree = raw_worktree.resolve(strict=True)
+    _refuse_project_flow_in_worktree(worktree, project_root)
+    if _git(worktree, "rev-parse", "HEAD") != source_commit:
+        raise ContractError("isolated worktree does not match pinned source commit")
+    sources = {name: {"path": str(path.relative_to(project_root)),
+                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+               for name, path in (("requirements", requirements), ("acceptance", acceptance))}
+    execution_dir = run_dir / "execution"
+    execution_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(execution_dir, 0o700)
+    attempt_id = uuid.uuid4().hex
+    attempt_dir = execution_dir / attempt_id
+    attempt_dir.mkdir(mode=0o700)
+    (attempt_dir / "checkpoints").mkdir(mode=0o700)
+    for path, name in ((requirements, "requirements.snapshot.md"), (acceptance, "acceptance.snapshot.md"),
+                       (manifest, "manifest.snapshot.json"), (charter, "job-charter.snapshot.json")):
+        _write_snapshot(attempt_dir / name, path.read_bytes())
+    charter_data = json.loads(charter.read_text())
+    baseline_contract = charter_data.get("baseline")
+    if (not isinstance(baseline_contract, dict)
+            or set(baseline_contract) != {"kind", "diff_sha256"}):
+        raise ContractError("v9 job baseline is invalid")
+    current_diff = _git(worktree, "diff", "HEAD", "--").encode()
+    if baseline_contract["kind"] == "clean":
+        if (_git(worktree, "status", "--porcelain", "--untracked-files=all").splitlines()
+                or current_diff or baseline_contract["diff_sha256"] != hashlib.sha256(b"").hexdigest()):
+            raise ContractError("v9 isolated worktree baseline is not clean")
+    elif baseline_contract["kind"] != "declared_regression" \
+            or baseline_contract["diff_sha256"] != hashlib.sha256(current_diff).hexdigest():
+        raise ContractError("v9 declared baseline differs from the isolated worktree")
+    baseline_files = {}
+    for relative in charter_data.get("write_paths", []):
+        target = worktree / relative
+        if target.is_file() and not target.is_symlink():
+            baseline_files[relative] = hashlib.sha256(target.read_bytes()).hexdigest()
+    baseline = {"regression_diff_sha256": baseline_contract["diff_sha256"],
+                "source_commit": source_commit, "files": baseline_files}
+    write_atomic(attempt_dir / "baseline.json", canonical(baseline) + "\n", mode=0o600)
+    sealed_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    normalized_availability = [normalize_availability(item) for item in availability]
+    policy = effective_policy or merge_selection_policy(framework_policy or {}, administrator_policy, project_policy, run_policy)
+    charter_digest = digest({"requirements": sources["requirements"]["sha256"],
+                             "acceptance": sources["acceptance"]["sha256"]})
+    manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    generation = delivery.get("owner_generation") if isinstance(delivery, dict) else None
+    if (not isinstance(delivery, dict) or delivery.get("owner_status") != "active"
+            or type(generation) is not int or generation < 1
+            or not isinstance(delivery.get("charter_digest"), str)
+            or not isinstance(delivery.get("lead_claim_digest"), str)):
+        raise ContractError("v9 delivery authority is absent or stale")
+    envelope = {
+        "schema_version": 1, "execution_protocol_version": 9, "work_id": work_id,
+        "attempt_id": attempt_id, "charter_digest": charter_digest,
+        "manifest_digest": manifest_digest, "run_protocol_revision": 2,
+        "logical_assignments": logical_assignments,
+        "job_charter_digest": hashlib.sha256(charter.read_bytes()).hexdigest(),
+        "selection_inputs": {"policy": policy, "catalog": catalog, "availability": normalized_availability},
+        "selection_input_digests": {"policy": digest(policy), "catalog": digest(catalog),
+                                    "availability": digest(normalized_availability)},
+        "limits": {"max_actions": 2 * (len(logical_assignments) - 1)},
+        "checkpoint_dir": str(attempt_dir / "checkpoints"),
+        "charter_sources": sources, "source_commit": source_commit, "worktree": str(worktree),
+        "delivery_charter_digest": delivery["charter_digest"],
+        "delivery_lead_claim_digest": delivery["lead_claim_digest"],
+        "delivery_lead_claim": {"generation": generation},
+    }
+    envelope["selection_authority"] = seal_selection_authority(
+        work_id=work_id, attempt_id=attempt_id, charter_digest=charter_digest,
+        manifest_digest=manifest_digest, generation=generation, sealed_at=sealed_at,
+        logical_assignments=logical_assignments, policy=policy, catalog=catalog,
+        availability=normalized_availability, independence_constraints=independence_constraints,
+    )
+    # The ledger validator is the final authority check before any on-disk
+    # attempt exists. A malformed configuration must leave no send-capable run.
+    envelope_digest(envelope)
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    with delivery_authority_guard(run_dir, envelope):
+        ledger.create_attempt(envelope)
+    write_atomic(attempt_dir / "envelope.json", canonical(envelope) + "\n", mode=0o600)
+    return envelope, task, attempt_dir, ledger
+
+
+def _hosted_adapter_available(provider: str) -> bool:
+    """Whether the local adapter exists and reports an authenticated session.
+
+    The status commands are bounded local CLI observations. They do not send
+    the chartered task or expose credential material, so an authentication
+    refusal remains safe evidence for pre-send candidate selection.
+    """
+    executable = {"claude": "claude", "codex": "codex"}.get(provider)
+    if executable is None or shutil.which(executable) is None:
+        return False
+    if provider == "claude":
+        credential = Path(os.environ.get("HOME", "")) / ".claude" / ".credentials.json"
+    else:
+        credential = Path(os.environ.get(
+            "CODEX_HOME", str(Path(os.environ.get("HOME", "")) / ".codex")
+        )) / "auth.json"
+    # Hosted workers run with isolated homes. A host login that cannot be
+    # copied into that home is not usable readiness evidence.
+    if not credential.is_file() or credential.is_symlink():
+        return False
+    command = [executable, "auth", "status"] if provider == "claude" else [executable, "login", "status"]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    if provider == "claude":
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return False
+        return isinstance(payload, dict) and payload.get("loggedIn") is True
+    return (result.stdout + result.stderr).strip().startswith("Logged in")
+
+
+def _candidate_readiness(candidate: dict[str, Any], *, local_models: set[str],
+                         local_error: str | None, observed: str, expires: str,
+                         clock: datetime) -> dict[str, Any]:
+    provider, model = candidate.get("provider"), candidate.get("model")
+    enabled = candidate.get("enabled") is True
+    if provider == "ollama":
+        ready = enabled and model in local_models
+        state = "ready" if ready else ("unknown" if local_error else "unavailable")
+        code = "model_present" if ready else (local_error or "model_absent")
+    elif provider in {"claude", "codex"}:
+        ready = enabled and _hosted_adapter_available(provider)
+        state = "ready" if ready else "unavailable"
+        code = "authentication_ready" if ready else "authentication_unavailable"
+    else:
+        state, code = "unavailable", "adapter_unavailable"
+    return normalize_availability({
+        "candidate_id": candidate.get("candidate_id"), "state": state,
+        "observed_at": observed, "expires_at": expires, "evidence_code": code,
+        "probe_version": "availability-v1",
+    }, now=clock)
+
+
+def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None = None) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    """Load the administrator ceiling and bounded readiness facts for v9.
+
+    Administrator configuration owns exact candidate declarations. Project
+    configuration may only disable or lower limits on known candidates. Discovery never
+    invents candidates or enables a disabled one. Hosted readiness requires an
+    eligible credential artifact plus a bounded, authenticated local CLI status
+    observation. Only controlled evidence codes are retained; credential material
+    and raw command output are never persisted in selection evidence.
+    """
+    framework = read_toml(SCAFFOLD_DIR / "flow.toml")
+    administrator_path = USER_OVERLAY_DIR / "flow.toml"
+    administrator = read_toml(administrator_path) if administrator_path.is_file() else {}
+    project_path = project_root / ".flow" / "flow.toml"
+    project = read_toml(project_path) if project_path.is_file() else {}
+    raw_catalog = administrator.get("provider_candidates", framework.get("provider_candidates", []))
+    if not isinstance(raw_catalog, list) or not raw_catalog:
+        raise ContractError("Flow provider_candidates configuration is absent")
+    catalog = [dict(item) for item in raw_catalog if isinstance(item, dict)]
+    if len(catalog) != len(raw_catalog):
+        raise ContractError("Flow provider_candidates configuration is invalid")
+    adapter_ceilings = {
+        "ollama": ({"manage", "read", "edit", "verify", "collect"},
+                   {"structured_output", "structured_edit", "evidence_collection"}),
+        "claude": ({"manage", "read", "edit", "verify", "collect"},
+                   {"structured_output", "structured_edit", "evidence_collection"}),
+        "codex": ({"manage", "read", "edit", "verify", "collect"},
+                  {"structured_output", "structured_edit", "evidence_collection"}),
+    }
+    identities: dict[str, dict[str, Any]] = {}
+    for candidate in catalog:
+        candidate_id, provider = candidate.get("candidate_id"), candidate.get("provider")
+        ceiling = adapter_ceilings.get(provider)
+        if (not isinstance(candidate_id, str) or not candidate_id or candidate_id in identities
+                or ceiling is None or not set(candidate.get("operations", [])).issubset(ceiling[0])
+                or not set(candidate.get("capabilities", [])).issubset(ceiling[1])):
+            raise ContractError("administrator provider candidate exceeds Flow adapter ceiling")
+        identities[candidate_id] = candidate
+    overrides = project.get("provider_candidates", [])
+    if not isinstance(overrides, list):
+        raise ContractError("project provider_candidates must be an array")
+    allowed_override_fields = {"candidate_id", "enabled", "max_input_bytes", "max_output_bytes", "max_context_tokens"}
+    for override in overrides:
+        if not isinstance(override, dict) or not set(override).issubset(allowed_override_fields) \
+                or override.get("candidate_id") not in identities:
+            raise ContractError("project provider candidate may only narrow a known candidate")
+        target = identities[override["candidate_id"]]
+        if override.get("enabled") is True and target.get("enabled") is not True:
+            raise ContractError("project provider candidate cannot enable an administrator-disabled candidate")
+        if "enabled" in override:
+            target["enabled"] = override["enabled"]
+        for field in ("max_input_bytes", "max_output_bytes", "max_context_tokens"):
+            if field in override:
+                value = override[field]
+                if type(value) is not int or value < 0 or (field in target and value > target[field]):
+                    raise ContractError("project provider candidate limit may only narrow")
+                target[field] = value
+    policy = merge_selection_policy(framework.get("provider_selection", {}),
+                                    administrator.get("provider_selection"),
+                                    project.get("provider_selection"))
+    clock = now or datetime.now(timezone.utc)
+    try:
+        local_models = discover_ollama_models()
+        local_error = None
+    except AvailabilityError:
+        local_models, local_error = set(), "probe_failed"
+    observed = clock.isoformat().replace("+00:00", "Z")
+    expires = (clock + timedelta(minutes=2)).isoformat().replace("+00:00", "Z")
+    availability = []
+    for candidate in catalog:
+        availability.append(_candidate_readiness(candidate, local_models=local_models,
+                                                   local_error=local_error, observed=observed,
+                                                   expires=expires, clock=clock))
+    return catalog, policy, availability
+
+
+def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[str, Any]]:
+    """Project the approved provider-neutral v9 assignments without invention."""
+    run_dir = root / ".flow" / "runs" / work_id
+    state = run_status(work_id, root=root)
+    charter_rel = state.get("artifacts", {}).get("job_charter")
+    if not charter_rel:
+        raise ContractError("approved v9 job charter artifact is absent")
+    charter = _run_file(root, run_dir, charter_rel)
+    raw = json.loads(charter.read_text())
+    if not isinstance(raw, dict) or not isinstance(raw.get("write_paths"), list) or not raw["write_paths"]:
+        raise ContractError("approved v9 job charter has no edit scope")
+    assignments = raw.get("logical_assignments")
+    if not isinstance(assignments, list) or not assignments:
+        raise ContractError("approved v9 job charter has no sealed logical assignments")
+    assignments = deepcopy(assignments)
+    # Reuse the envelope validator's closed assignment/DAG checks before any
+    # selection authority or provider send exists.
+    probe = {
+        "schema_version": 1, "execution_protocol_version": 9,
+        "work_id": work_id, "attempt_id": "projection-check",
+        "charter_digest": "0" * 64, "manifest_digest": "0" * 64,
+        "run_protocol_revision": 2, "logical_assignments": assignments,
+        "selection_inputs": {}, "selection_input_digests": {},
+        "selection_authority": {}, "limits": {}, "checkpoint_dir": "projection-check",
+        "delivery_charter_digest": "0" * 64, "delivery_lead_claim_digest": "0" * 64,
+        "delivery_lead_claim": {"generation": 1},
+    }
+    try:
+        validate_envelope(probe)
+    except ContractError as exc:
+        # The synthetic probe intentionally has no selection authority. Only
+        # assignment errors are useful here; real preparation validates the
+        # complete envelope.
+        if "logical assignment" in str(exc) or "logical requirements" in str(exc):
+            raise
+    by_operation = {
+        operation: {item["assignment_id"] for item in assignments
+                    if item["requirements"].get("operation") == operation}
+        for operation in ("edit", "collect", "verify")
+    }
+    expected = {
+        "edit": set(raw.get("producer_instance_ids", [])),
+        "collect": set(raw.get("evidence_collector_instance_ids", [])),
+        "verify": set(raw.get("verifier_instance_ids", [])),
+    }
+    if by_operation != expected:
+        raise ContractError("approved v9 logical assignments conflict with charter topology")
+    if len([item for item in assignments if item["requirements"].get("operation") == "manage"]) != 1:
+        raise ContractError("approved v9 job charter requires exactly one logical manager")
+    if len(by_operation["edit"]) != 1:
+        raise ContractError("approved v9 job charter requires exactly one producer assignment")
+    if not any(item["requirements"]["operation"] == "verify" for item in assignments):
+        raise ContractError("approved v9 job charter has no verifier assignment")
+    producer_ids = by_operation["edit"]
+    collector_ids = by_operation["collect"]
+    for item in assignments:
+        operation = item["requirements"].get("operation")
+        dependencies = set(item.get("depends_on", []))
+        if operation == "collect" and not producer_ids.issubset(dependencies):
+            raise ContractError("logical evidence collector must depend on every producer assignment")
+        if operation == "verify" and not (producer_ids | collector_ids).issubset(dependencies):
+            raise ContractError("logical verifier must depend on every producer and evidence collector assignment")
+    return assignments
+
+
+def independence_constraints_from_assignments(assignments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Seal high-risk verifier topology; concrete families resolve from consumed selections."""
+    producers = [item["assignment_id"] for item in assignments
+                 if item["requirements"]["operation"] == "edit"]
+    collectors = [item["assignment_id"] for item in assignments
+                  if item["requirements"]["operation"] == "collect"]
+    source_digests = [digest(item["requirements"]) for item in assignments
+                      if item["assignment_id"] in producers + collectors]
+    return [{"assignment_id": item["assignment_id"], "risk_class": "high",
+             "excluded_provider_families": [], "producer_assignment_ids": producers,
+             "evidence_collector_assignment_ids": collectors,
+             "source_binding_digests": source_digests}
+            for item in assignments
+            if item["requirements"]["operation"] == "verify"
+            and item["requirements"]["risk_class"] == "high"
+            and item["requirements"]["independence_required"]]
+
+
+def provider_selection_probe(work_id: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Read-only v9 candidate/readiness diagnostic; it creates no attempt."""
+    project_root = (root or repo_root()).resolve()
+    catalog, policy, availability = flow_owned_v9_selection_inputs(project_root)
+    assignments = logical_assignments_from_charter(work_id, root=project_root)
+    independence_constraints = independence_constraints_from_assignments(assignments)
+    from provider_selection import select_candidate
+    decisions = [{"assignment_id": item["assignment_id"],
+                  "decision": select_candidate(item["requirements"], policy, catalog, availability)}
+                 for item in assignments]
+    return {"schema_version": 1, "work_id": work_id, "policy": policy,
+            "catalog": catalog, "availability": availability, "decisions": decisions}
+
+
+def _v9_readiness_recheck(catalog: list[dict[str, Any]], binding: dict[str, Any]) -> dict[str, Any]:
+    """Refresh only the already-selected adapter before its send claim."""
+    candidate = next((item for item in catalog if item.get("candidate_id") == binding["candidate_id"]), None)
+    if candidate is None:
+        raise ContractError("selected v9 candidate is absent from Flow catalog")
+    clock = datetime.now(timezone.utc)
+    observed = clock.isoformat().replace("+00:00", "Z")
+    expires = (clock + timedelta(minutes=2)).isoformat().replace("+00:00", "Z")
+    try:
+        local_models, local_error = discover_ollama_models(), None
+    except AvailabilityError:
+        local_models, local_error = set(), "probe_failed"
+    record = _candidate_readiness(candidate, local_models=local_models, local_error=local_error,
+                                  observed=observed, expires=expires, clock=clock)
+    # This check contains no adapter call: if it says unavailable, Flow has
+    # positive local evidence that the selected provider was not sent anything.
+    return {**record, "no_send_observed": record["state"] != "ready"}
+
+
+def _copy_scoped_tree(source: Path, target: Path, scopes: list[str]) -> None:
+    """Copy only chartered readable files into a provider-isolated staging repo."""
+    copied: set[Path] = set()
+    for relative in scopes:
+        scope = Path(relative)
+        origin = source / scope
+        if origin.is_symlink() or not origin.exists() or not origin.resolve().is_relative_to(source.resolve()):
+            raise ContractError("hosted edit scope is absent, linked, or escapes the worktree")
+        paths = [origin] if origin.is_file() else sorted(path for path in origin.rglob("*") if path.is_file())
+        if any(path.is_symlink() for path in ([origin] if origin.is_file() else origin.rglob("*"))):
+            raise ContractError("hosted edit scope contains a symlink")
+        for path in paths:
+            relative_path = path.relative_to(source)
+            if relative_path in copied:
+                continue
+            copied.add(relative_path)
+            destination = target / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
+
+
+def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[str]) -> dict[str, Any]:
+    """Validate a hosted staging diff and atomically copy approved files back."""
+    lines = _git(staging, "status", "--porcelain", "--untracked-files=all").splitlines()
+    if not lines:
+        raise ContractError("hosted editor made no edit in the scoped staging workspace")
+    changed = [line[3:] for line in lines]
+    if any(line[:2] not in {" M", "M ", "MM", "A ", "AM", "??"}
+           or not _path_within_scopes(path, write_paths) for line, path in zip(lines, changed)):
+        raise ContractError("hosted editor changed files outside the approved staging scope")
+    prepared: list[dict[str, Any]] = []
+    for relative in changed:
+        source, target = staging / relative, workspace / relative
+        if source.is_symlink() or not source.is_file() or target.is_symlink():
+            raise ContractError("hosted editor produced an unsafe scoped file")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+        source_mode = stat.S_IMODE(source.stat().st_mode)
+        original_mode = stat.S_IMODE(target.stat().st_mode) if target.is_file() else None
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(source.read_bytes())
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.fchmod(handle.fileno(), source_mode)
+        prepared.append({"relative": relative, "target": target, "temporary": Path(temporary),
+                         "original": target.read_bytes() if target.is_file() else None,
+                         "original_mode": original_mode})
+    applied: list[dict[str, Any]] = []
+    try:
+        for item in prepared:
+            os.replace(item["temporary"], item["target"])
+            applied.append(item)
+    except OSError as exc:
+        rollback_error: OSError | None = None
+        for item in reversed(applied):
+            try:
+                if item["original"] is None:
+                    item["target"].unlink(missing_ok=True)
+                    continue
+                fd, restore = tempfile.mkstemp(prefix=f".{item['target'].name}.restore.",
+                                               dir=item["target"].parent)
+                try:
+                    with os.fdopen(fd, "wb") as handle:
+                        handle.write(item["original"])
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                        os.fchmod(handle.fileno(), item["original_mode"])
+                    os.replace(restore, item["target"])
+                finally:
+                    with suppress(FileNotFoundError):
+                        os.unlink(restore)
+            except OSError as rollback_exc:
+                rollback_error = rollback_exc
+        if rollback_error is not None:
+            raise ContractError("hosted scoped edit failed and rollback was incomplete") from rollback_error
+        raise ContractError("hosted scoped edit application failed and was rolled back") from exc
+    finally:
+        for item in prepared:
+            with suppress(FileNotFoundError):
+                item["temporary"].unlink()
+    return {"changed_files": [item["relative"] for item in applied],
+            "scope_enforcement": "isolated_staging"}
+
+
+def _hosted_scoped_edit(
+    workspace: Path, *, read_paths: list[str], write_paths: list[str],
+    invoke: Callable[[Path], dict[str, Any]],
+) -> dict[str, Any]:
+    scopes = list(dict.fromkeys([*read_paths, *write_paths]))
+    with tempfile.TemporaryDirectory(prefix="flow-v9-hosted-edit-") as temporary:
+        staging = Path(temporary)
+        _copy_scoped_tree(workspace, staging, scopes)
+        _git(staging, "init", "-q")
+        _git(staging, "config", "user.email", "flow@local.invalid")
+        _git(staging, "config", "user.name", "Flow")
+        _git(staging, "add", "--all")
+        _git(staging, "commit", "-qm", "Flow scoped baseline")
+        result = invoke(staging)
+        applied = _apply_scoped_hosted_edit(workspace, staging, write_paths)
+        return {**result, "scoped_edit": applied}
+
+
+def _hosted_scoped_read(workspace: Path, *, read_paths: list[str],
+                        invoke: Callable[[Path], dict[str, Any]]) -> dict[str, Any]:
+    """Run a hosted read-only turn with only chartered material visible."""
+    with tempfile.TemporaryDirectory(prefix="flow-v9-hosted-read-") as temporary:
+        staging = Path(temporary)
+        _copy_scoped_tree(workspace, staging, read_paths)
+        return invoke(staging)
+
+
+def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str],
+                              write_paths: list[str]) -> Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]:
+    """Return the bounded adapter for the selected binding and logical operation."""
+    workspace = Path(envelope["worktree"])
+    assignment_by_id = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
+
+    def send(binding: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+        assignment = assignment_by_id.get(action["assignment_id"])
+        if assignment is None:
+            raise ContractError("v9 action has no logical assignment")
+        operation = assignment["requirements"]["operation"]
+        provider, model = binding["provider"], binding["model"]
+        instructions, task = assignment["instructions"], action["task"]
+        timeout = 60
+        if provider == "ollama":
+            if operation == "edit":
+                try:
+                    bundle = ollama_source_bundle(workspace, write_paths)
+                    proposal = propose_ollama_edits(bundle, task, model=model,
+                                                    attempt_id=action["attempt_id"], timeout_seconds=timeout)
+                    applied = apply_ollama_edits(workspace, bundle, proposal, write_scopes=write_paths,
+                                                  expected_model=model)
+                except ContractError as exc:
+                    # A structured response or a fully rolled-back application
+                    # failure is observed evidence, not an uncertain send.
+                    return {"provider": provider, "model": model, "operation": operation,
+                            "observed_invalid": True, "detail": str(exc)[:512]}
+                return {"provider": provider, "model": model, "operation": operation, "applied": applied}
+            if operation == "manage":
+                match = re.search(r"next_speaker\.answer must be exactly one of (\[[^\n]+\])", task)
+                try:
+                    allowed_speakers = json.loads(match.group(1)) if match else None
+                except json.JSONDecodeError as exc:
+                    raise ContractError("logical manager task has an invalid speaker frontier") from exc
+                return call_ollama_manager([{"role": "user", "content": task}], model=model,
+                                           attempt_id=action["attempt_id"], timeout_seconds=timeout,
+                                           preserve_observed_invalid=True,
+                                           allowed_speakers=allowed_speakers)
+            return call_local({"provider": provider, "model": model, "attempt_id": action["attempt_id"],
+                               "instructions": instructions, "task": task},
+                              correlation_id=action["action_id"], timeout_seconds=timeout)
+        if provider == "claude":
+            if operation == "edit":
+                return _hosted_scoped_edit(
+                    workspace, read_paths=read_paths, write_paths=write_paths,
+                    invoke=lambda staging: call_claude_edit(
+                        instructions=instructions, task=task, workspace=staging,
+                        model=model, timeout_seconds=timeout, confine_workspace_reads=True),
+                )
+            return _hosted_scoped_read(
+                workspace, read_paths=read_paths,
+                invoke=lambda staging: call_claude(
+                    instructions=instructions, task=task, workspace=staging,
+                    model=model, timeout_seconds=timeout, confine_workspace_reads=True),
+            )
+        if provider == "codex":
+            if operation == "edit":
+                return _hosted_scoped_edit(
+                    workspace, read_paths=read_paths, write_paths=write_paths,
+                    invoke=lambda staging: call_codex(
+                        instructions=instructions, task=task, workspace=staging, model=model,
+                        timeout_seconds=timeout, sandbox="workspace-write",
+                        confine_workspace_reads=True),
+                )
+            return _hosted_scoped_read(
+                workspace, read_paths=read_paths,
+                invoke=lambda staging: call_codex(
+                    instructions=instructions, task=task, workspace=staging, model=model,
+                    timeout_seconds=timeout, sandbox="read-only", confine_workspace_reads=True),
+            )
+        raise ContractError("selected v9 provider has no bounded adapter")
+
+    return send
+
+
+def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Default live chartered-job route for new Flow work."""
+    project_root = (root or repo_root()).resolve()
+    catalog, policy, availability = flow_owned_v9_selection_inputs(project_root)
+    assignments = logical_assignments_from_charter(work_id, root=project_root)
+    independence_constraints = independence_constraints_from_assignments(assignments)
+    state = run_status(work_id, root=project_root)
+    charter = _run_file(project_root, project_root / ".flow" / "runs" / work_id,
+                        state.get("artifacts", {}).get("job_charter", ""))
+    charter_data = json.loads(charter.read_text())
+    write_paths = charter_data.get("write_paths") if isinstance(charter_data, dict) else None
+    read_paths = charter_data.get("read_paths") if isinstance(charter_data, dict) else None
+    if not isinstance(write_paths, list) or not all(isinstance(path, str) and path for path in write_paths):
+        raise ContractError("approved v9 job charter has invalid edit scope")
+    if not isinstance(read_paths, list) or not all(isinstance(path, str) and path for path in read_paths):
+        raise ContractError("approved v9 job charter has invalid read scope")
+    envelope, task, _attempt_dir, ledger = prepare_v9_chartered_delivery(
+        work_id, worktree, source_commit, root=project_root, logical_assignments=assignments,
+        catalog=catalog, availability=availability, effective_policy=policy,
+        independence_constraints=independence_constraints,
+    )
+    result = execute_v9_logical_delivery(
+        envelope, task, ledger, _v9_adapter_for_operation(
+            envelope, read_paths=read_paths, write_paths=write_paths),
+        readiness_recheck=lambda binding: _v9_readiness_recheck(catalog, binding),
+    )
+    if result.get("status") != "completed":
+        return {"attempt_id": envelope["attempt_id"], "status": result.get("status", "refused"),
+                "reason": result.get("reason", "logical_delivery_not_completed"),
+                "receipt_path": result.get("receipt_path"), **result}
+    authority = _sealed_delivery_authority(project_root / ".flow" / "runs" / work_id,
+                                           state.get("delivery", {}))
+    if "handoff_to_review" not in authority["charter"].get("allowed_lifecycle_operations", []):
+        return result
+    ok, payload, errors = handoff_to_review(work_id, envelope["attempt_id"],
+                                            envelope["selection_authority"]["generation"], root=project_root)
+    if not ok:
+        return {**result, "status": "handoff_failed", "reason": "; ".join(errors),
+                "review_handoff": {"status": "failed", "errors": errors}}
+    return {**result, "review_handoff": {"status": "completed", "state": payload["state"]}}
+
+
+def v9_recovery_status(work_id: str, attempt_id: str, *, root: Path | None = None) -> dict[str, Any]:
+    """Return the explicit reconciliation state for a v9 attempt.
+
+    V9 never replays a claimed provider call. A caller must reconcile an
+    unknown result from Flow-owned observation, or cancel/abandon it with a
+    receipt that preserves the consumed selection.
+    """
+    project_root = (root or repo_root()).resolve()
+    ledger = ExecutionLedger(project_root / ".flow" / "runs" / work_id / "execution" / "ledger.sqlite", read_only=True)
+    snapshot = ledger.snapshot(attempt_id)
+    if snapshot["execution_protocol_version"] != 9 or snapshot["work_id"] != work_id:
+        raise ContractError("v9 recovery target differs from the requested run")
+    unresolved = [item["action_id"] for item in snapshot["actions"] if item["status"] in {"started", "unknown"}]
+    return {"work_id": work_id, "attempt_id": attempt_id, "status": snapshot["status"],
+            "reconciliation_required": bool(unresolved), "unresolved_action_ids": unresolved,
+            "resume_allowed": False,
+            "next_action": "reconcile-observed-result-or-cancel-abandon" if unresolved else "attempt-terminal-or-seal"}
+
+
+def terminate_v9_delivery(work_id: str, attempt_id: str, *, status: str, actor: str,
+                          explanation: str, root: Path | None = None) -> dict[str, Any]:
+    """Receipt-seal a v9 cancellation or abandonment without replaying I/O."""
+    project_root = (root or repo_root()).resolve()
+    execution_dir = project_root / ".flow" / "runs" / work_id / "execution"
+    ledger = ExecutionLedger(execution_dir / "ledger.sqlite")
+    snapshot = ledger.snapshot(attempt_id)
+    if snapshot["execution_protocol_version"] != 9 or snapshot["work_id"] != work_id:
+        raise ContractError("v9 termination target differs from the requested run")
+    if snapshot["status"] != "started":
+        raise ContractError("v9 attempt is already terminal")
+    run_dir = execution_dir.parent
+    with delivery_authority_guard(run_dir, snapshot["envelope"]):
+        sealed = ledger.terminate_v9_attempt(
+            attempt_id, status, generation=snapshot["owner_generation"], actor=actor,
+            explanation=explanation, cause="operator_" + status,
+            receipt_path=execution_dir / attempt_id / "receipt.json",
+        )
+    return {**sealed, "work_id": work_id, "cause": "operator_" + status,
+            "owner_generation": snapshot["owner_generation"], "reaped": []}

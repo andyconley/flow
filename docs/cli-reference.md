@@ -179,37 +179,53 @@ itself approve lifecycle handback.
 
 For the bounded multi-turn exercise, add `--multi-turn`. Flow then records three ordered action positions and three separate replan decisions. The first two replans may be allowed; the third is denied by the two-replan cap and ends that MAF phase. Flow checks the denial state before starting an independent action-3 phase in the same attempt. `--interrupt-after-third-send` is an exercise-only fault point: it marks the third action `unknown` immediately after Flow records `adapter_send_started`, before calling Ollama. The first two actions still make physical Ollama calls. This flag does not prove that Ollama received the third request. Inspect the v2 receipt and checkpoint positions for the evidence actually recorded. For a disposable loopback arrival observer, set `FLOW_OLLAMA_OBSERVER=1`, `FLOW_OLLAMA_URL=http://127.0.0.1:PORT/api/chat`, and `FLOW_OLLAMA_OBSERVER_LOG` to its owner-only JSONL file inside the run. The receipt seals a per-action arrival table; without an observer it labels endpoint arrival evidence unavailable.
 
-### `flow run execute-chartered-job <work-id> --worktree PATH --source-commit COMMIT`
+### `flow run execute-chartered-job <work-id> --worktree PATH --source-commit COMMIT [--legacy-v8]`
 
 Run an approved charter-selected specialist roster through Flow-gated Magentic, for the revision-2 implementing run.
 
 ```sh
-flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]
+flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]
 ```
 
-The run must be revision 2 and `implementing`, with a valid dispatch-stage `orchestration.json`. The approved `job-charter.json` must be linked through that orchestration manifest — the `magentic-manager` assignment's `input_evidence` must name the charter, or the run's declared `job_charter` artifact must match it. The charter pins the task, read/write paths, test, baseline, and the producer and verifier instance IDs drawn from the manifest's roster.
+New executions use protocol v9: the approved charter is provider-neutral,
+Flow seals policy/catalog/readiness, selects and send-fences the logical manager
+before MAF starts, then MAF nominates logical specialist work and Flow
+recomputes and durably fences that concrete adapter send. Both selections are
+preserved in the ledger and receipt. A positive pre-send
+readiness refusal may select the next eligible candidate; an attempted or
+uncertain send enters recovery and is never automatically replayed.
 
-Direct Claude and Codex edits are Flow-gated: only specialists the charter names as producers may hold edit capability, and their write scope must equal the charter's declared `write_paths`. Ollama performs read-only verification only — an Ollama-backed specialist must be read-only, and every declared verifier must be an independent read-only specialist disjoint from the producers. Native subagents are disabled; the roster runs only the Flow-approved specialists bound in the orchestration manifest.
+`--legacy-v8` is reserved for an already approved historical v8 contract. It
+does not migrate, rewrite, or re-rank prior attempts.
 
-Provider event volume is not a semantic failure. Flow drains Codex JSONL through a file-backed parser and records Claude event traces as streamed, digest-bound evidence, so a completed valid call is not rejected merely because its event stream crosses a fixed byte threshold. Runtime deadlines, bounded final messages, malformed or ambiguous terminal events, process cleanup, and unknown-send fencing remain enforced.
+### `flow run provider-selection-probe <work-id> [--json]`
 
-The gateway checks the managed MAF interpreter after read-only authority and worktree validation, before it creates an attempt. An unavailable runtime returns `maf_runtime_unready` without consuming execution authority. Use `flow runtime install-maf` to repair it; `FLOW_MAF_PYTHON` is an explicit validated override and never silently falls back.
+Read the effective Flow-owned v9 policy, authorized candidates, bounded
+credential-free readiness facts, exclusions, total ordering, and selected
+binding without creating an attempt or calling a provider. Ollama readiness
+requires exact local model discovery. Claude and Codex readiness establishes
+only that their bounded CLI adapter is installed; authentication is not read or
+tested by the probe.
 
-Use `flow runtime readiness --json` for the strict pre-attempt check. A healthy
-result reports the selected interpreter, package/runner identity, protocol
-compatibility, and the runtime digest. A failed result is diagnostic only: no
-execution directory, attempt, grant, receipt, or provider process is created.
-`flow doctor` reports the same missing optional runtime as a warning because
-base Flow remains usable without MAF. `flow runtime smoke --target maf` is the
-strict release/readiness check; `flow runtime smoke --target all` includes it.
+### `flow run v9-recovery-status <work-id> <attempt-id>`
+
+Read whether a protocol v9 attempt has a consumed provider send whose outcome
+requires explicit reconciliation. This command is read-only and never retries
+provider I/O.
+
+### `flow run terminate-v9-delivery <work-id> <attempt-id> --status cancelled|abandoned --actor ACTOR --explanation TEXT`
+
+Seal an uncertain protocol v9 attempt without replaying provider I/O. The
+receipt preserves the consumed selection, unknown action, operator attribution,
+and terminal explanation so a fresh attempt can be prepared safely.
 
 ### `flow run recover-runtime-startup <work-id> <attempt-id>`
 
 Create a fresh linked successor only after a sealed v8 MAF startup failure with no manager, worker, verifier, observed, or uncertain send. The original receipt remains immutable. The successor performs normal authority, clean-worktree, and MAF readiness checks; it is not a replay of the predecessor.
 
-### `flow run inspect-execution <work-id> <attempt-id>`
+### `flow run inspect-execution <work-id> <attempt-id> [--project-root <path>] [--json]`
 
-Read the original envelope, action, ordered ledger events, source snapshot checks, checkpoint link, receipt, and missing evidence without creating a new attempt or calling a provider. Use `--json` for structured output. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that Ollama did not receive the request.
+Read the original envelope, actions, ordered ledger events, source snapshot checks, checkpoint links, receipt, and missing evidence without creating a new attempt or calling a provider. `--project-root` selects the project containing `.flow`; otherwise the current repository is used. Recovery decisions use the Flow ledger; a missing local response is an unknown outcome, not proof that a provider did not receive the request.
 
 ### `flow run inspect-delivery <work-id> [--attempt-id <id>]`
 
@@ -219,7 +235,7 @@ The JSON view reports lifecycle state, the sealed charter and owner generation, 
 
 ### `flow run trace <work-id> [--attempt <id>] [--json]`
 
-Show the per-call correlation chain of a v8 attempt and its predecessors (ADR 0020). Read-only: the ledger is read in one read transaction, and the command creates no lock file.
+Show the protocol-specific correlation chain and predecessors (ADR 0020). V8 retains its existing grant/checkpoint view. V9 adds logical action, selection, fallback, provider action, and recovery-required state. Read-only: the ledger is read in one read transaction, and the command creates no lock file.
 
 - A stuck attempt leads with a banner naming why it is stuck (`expansion_paused: token_cap`, `reconciliation_required`, `running`, `recovery_in_progress`, an inactive lead, or the last interruption), since which ledger event, on which row, and the same next command `flow run stuck` gives. A terminal attempt shows its status, cause and sealed receipt digest.
 - One row per manager call and action in ledger order, with expansion events interleaved: grant history (`grant_changed`), provider session or thread id and `input_sha256`, the manager request file and whether its digest matches, the process groups that served it, its bound checkpoint and parent, send and observe times with the duration, and raw and charged usage.
@@ -230,7 +246,7 @@ For long lineages, filter the JSON form, for example `flow run trace WORK_ID --j
 
 ### `flow run verify-receipt <work-id> [--attempt <id>] [--no-lineage] [--json]`
 
-Verify a sealed v8 receipt offline against the ledger, the sealed authority, the checkpoints and the on-disk evidence (ADR 0020). It calls no provider, applies no diff, runs no test, makes no subprocess or network call and writes nothing. The default target is the latest sealed attempt; predecessors are verified recursively unless `--no-lineage`.
+Verify a sealed v8 or v9 receipt offline against the ledger and sealed authority (ADR 0020). V9 additionally recomputes the deterministic decision and proves exact action/selection closure, fallback lineage, and consumed-send correspondence. It calls no provider, applies no diff, runs no test, makes no subprocess or network call and writes nothing. The default target is the latest sealed attempt; predecessors are verified recursively unless `--no-lineage`.
 
 Each of the 17 checks (V1–V17) reports `pass` with how many facts it compared, `fail` with the row, key path and both values, or `not_applicable` where the requiredness table for that terminal status allows, with a fixed reason. Six items are always `unverifiable_offline`: that a provider ran and what it billed, the outcome of an unknown send, the test output bytes, the current worktree, a replaced draft's bytes, and the truth of ledger timestamps. It is a consistency check, not a signature.
 

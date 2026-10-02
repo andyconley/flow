@@ -63,13 +63,22 @@ def manager_call(env: dict, sequence: int, phase: str = "facts", replan_sequence
 
 
 class MagenticContractTests(unittest.TestCase):
-    def test_manager_accepts_verified_progress_prompt_within_claude_limit(self) -> None:
+    def test_manager_accepts_accumulated_progress_prompt_over_32_kib(self) -> None:
         env = envelope()
-        messages = [{"role": "user", "contents": [{"type": "text", "text": "x" * 24000}]}]
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "x" * 70000}]}]
         request = manager_call(env, 1, "progress")
         request["prompt_digest"] = digest(messages)
         request["call_id"] = expected_manager_call_id(request)
         self.assertEqual(_normalized_manager_request(env, {**request, "messages": messages}), request)
+
+    def test_manager_rejects_unbounded_accumulated_progress_prompt(self) -> None:
+        env = envelope()
+        messages = [{"role": "user", "contents": [{"type": "text", "text": "x" * (256 * 1024)}]}]
+        request = manager_call(env, 1, "progress")
+        request["prompt_digest"] = digest(messages)
+        request["call_id"] = expected_manager_call_id(request)
+        with self.assertRaisesRegex(ContractError, "messages are invalid"):
+            _normalized_manager_request(env, {**request, "messages": messages})
 
     def test_claude_edit_result_matches_v5_worker_contract(self) -> None:
         env = envelope()
@@ -261,6 +270,29 @@ class MagenticContractTests(unittest.TestCase):
             checkpoint.write_text(checkpoint.read_text().replace("flow-magentic-action-1", "flow-magentic-action-2"))
             with self.assertRaisesRegex(ContractError, "changed"):
                 ledger.read_magentic_checkpoint(env["attempt_id"], "worker", worker["action_id"])
+
+    def test_worker_checkpoint_accepts_accumulated_history_over_64_kib(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            env = {**envelope(), "checkpoint_dir": str(root)}
+            ledger = ExecutionLedger(root / "ledger.sqlite")
+            ledger.create_attempt(env)
+            worker = action(env, 1, env["roster"][0])
+            self.assertTrue(ledger.decide(env, worker, generation=1)["allowed"])
+            checkpoint = root / "checkpoint.json"
+            checkpoint.write_text(json.dumps({
+                "checkpoint_id": "cp-large",
+                "workflow_name": "flow-magentic-delivery-v5",
+                "pending_request_info_events": {"flow-magentic-action-1": {"request": "x" * 70000}},
+            }))
+            high_water = ledger.snapshot(env["attempt_id"])["events"][-1]["seq"]
+            bound = ledger.bind_magentic_checkpoint(
+                env["attempt_id"], "cp-large", "worker", worker["action_id"],
+                high_water, str(checkpoint), generation=1,
+            )
+            self.assertGreater(bound["file_size"], 65536)
+            self.assertEqual(checkpoint.read_bytes(), ledger.read_magentic_checkpoint(
+                env["attempt_id"], "worker", worker["action_id"])["bytes"])
 
     def test_terminal_v5_attempt_continues_only_after_observed_resolution(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

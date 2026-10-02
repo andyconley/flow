@@ -159,8 +159,8 @@ def _read_snapshot(ledger_path: Path, attempt_id: str) -> dict[str, Any]:
         snapshot = ExecutionLedger(ledger_path, read_only=True).snapshot(attempt_id)
     except (sqlite3.Error, ContractError, OSError, ValueError) as exc:
         raise RecoveryRefused(LEAD_GUARD_LEDGER_UNREADABLE, str(exc)) from None
-    if snapshot["execution_protocol_version"] != 8:
-        raise ContractError("cancel and abandon apply to protocol v8 attempts only")
+    if snapshot["execution_protocol_version"] not in {8, 9}:
+        raise ContractError("cancel and abandon require a chartered v8 or v9 attempt")
     return snapshot
 
 
@@ -213,9 +213,13 @@ def abandon_delivery(work_id: str, attempt_id: str, *, actor: str, explanation: 
     # the run lock through a whole send), then the run lock: the ADR 0016 order.
     with ledger.recovery_lock(attempt_id, holder="recovery"), run_lock(run_dir):
         snapshot = _read_snapshot(ledger_path, attempt_id)
-        if snapshot["envelope"]["work_id"] != work_id:
+        if snapshot["envelope"].get("work_id") != work_id:
             raise ContractError("attempt belongs to another run")
         _check_started(snapshot, expected_generation)
+        if snapshot["execution_protocol_version"] == 9:
+            from delivery_gateway import terminate_v9_delivery
+            return terminate_v9_delivery(work_id, attempt_id, status="abandoned", actor=actor,
+                                         explanation=explanation, root=root)
         reaped = process_identity.reap(attempt_dir)
         cause = abandon_cause(snapshot)
         with ledger.send_lock():
@@ -473,6 +477,10 @@ def cancel_delivery(work_id: str, attempt_id: str, *, actor: str, explanation: s
     run_dir, attempt_dir, ledger_path = _attempt_paths(root, work_id, attempt_id)
     snapshot = _read_snapshot(ledger_path, attempt_id)
     _check_started(snapshot, expected_generation)
+    if snapshot["execution_protocol_version"] == 9:
+        from delivery_gateway import terminate_v9_delivery
+        return terminate_v9_delivery(work_id, attempt_id, status="cancelled", actor=actor,
+                                     explanation=explanation, root=root)
     record = next((item for item in process_identity.records(attempt_dir)
                    if item["owner_generation"] == expected_generation), None)
     if record is None:
