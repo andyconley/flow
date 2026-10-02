@@ -155,6 +155,45 @@ class V9CliReceiptTests(unittest.TestCase):
         self.assertEqual(terminated["status"], "abandoned")
         self.assertEqual(self.ledger.snapshot(attempt_id)["status"], "abandoned")
 
+    def test_uncertain_verifier_can_be_terminated_without_semantic_evidence(self) -> None:
+        attempt_id = "d" * 32
+        envelope = copy.deepcopy(self.envelope)
+        envelope["attempt_id"] = attempt_id
+        inputs = envelope["selection_inputs"]
+        envelope["selection_authority"] = seal_selection_authority(
+            work_id=self.work_id, attempt_id=attempt_id,
+            charter_digest=envelope["charter_digest"], manifest_digest=envelope["manifest_digest"],
+            generation=1, sealed_at="2026-09-29T12:00:00Z",
+            logical_assignments=envelope["logical_assignments"], policy=inputs["policy"],
+            catalog=inputs["catalog"], availability=inputs["availability"], independence_constraints=[],
+        )
+        attempt_dir = self.execution / attempt_id
+        attempt_dir.mkdir()
+        (attempt_dir / "envelope.json").write_text(json.dumps(envelope, sort_keys=True))
+        self.ledger.create_attempt(envelope)
+        producer = make_action(envelope, "producer", "Make the bounded edit.", sequence=1, manager_turn=1)
+        execute_v9_selected_action(
+            envelope, producer, lambda binding, _: {"candidate": binding["candidate_id"], "ok": True},
+            readiness_recheck=lambda binding: {**binding, "state": "ready"},
+            ledger=self.ledger, generation=1,
+        )
+        verifier = make_action(envelope, "verifier", "Verify the evidence.", sequence=2, manager_turn=2)
+        with self.assertRaisesRegex(RuntimeError, "uncertain"):
+            execute_v9_selected_action(
+                envelope, verifier,
+                lambda _binding, _action: (_ for _ in ()).throw(RuntimeError("uncertain")),
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                ledger=self.ledger, generation=1,
+            )
+        code, terminated = self._cli(
+            "terminate-v9-delivery", self.work_id, attempt_id, "--status", "abandoned",
+            "--actor", "test-operator", "--explanation", "verifier outcome cannot be observed",
+            "--project-root", str(self.root), "--json",
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(terminated["status"], "abandoned")
+        self.assertEqual(self.ledger.snapshot(attempt_id)["status"], "abandoned")
+
     def test_inspection_rejects_unsealed_receipt_on_started_attempt(self) -> None:
         attempt_id = "c" * 32
         envelope = copy.deepcopy(self.envelope)

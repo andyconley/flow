@@ -203,9 +203,10 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     verifier_action_ids = {action["action_id"] for action in verifier_actions}
     failed_verifier_ids = {item["action_id"] for item in evidence_failures
                            if item["stage"] == "verifier_evaluation"}
+    missing_verifier_evidence = (verifier_action_ids - set(semantic_by_action)) - failed_verifier_ids
     if (len(semantic_by_action) != len(semantic)
             or not set(semantic_by_action).issubset(verifier_action_ids)
-            or (verifier_action_ids - set(semantic_by_action)) - failed_verifier_ids):
+            or (missing_verifier_evidence and termination is None)):
         raise V9ReceiptError("v9_semantic_verification_missing")
     semantic_dispositions: list[str] = []
     for action in verifier_actions:
