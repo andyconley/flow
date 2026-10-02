@@ -130,6 +130,17 @@ class MafLifecycleTransactionTests(unittest.TestCase):
         self.assertEqual(stamped["maf_runtime_activation_revision"], 1)
         self.assertEqual(stamped["maf_runtime_activation_state"], "succeeded")
 
+    def test_additive_transport_protocol_preserves_predecessor_runtime_identity(self):
+        # The previous release performs the transactional source swap with its
+        # already-loaded readiness constants. Protocol v9 deliberately avoids
+        # the package-backed MAF path, so adding it must not change the runtime
+        # package identity that the predecessor compares for exact equality.
+        from maf_runtime import SUPPORTED_PROTOCOLS
+        from runtime.maf_runner.delivery_lead import SUPPORTED_PROTOCOLS as runner_protocols
+
+        self.assertEqual(SUPPORTED_PROTOCOLS, [5, 6, 7, 8])
+        self.assertEqual(runner_protocols, SUPPORTED_PROTOCOLS)
+
     def test_failed_bridge_is_recorded_once_and_explicit_repair_is_separate(self):
         config = {"mode": "release", "version": "v0.38.0"}
         with patch.object(lifecycle, "read_install_config", side_effect=[config, config]), \
