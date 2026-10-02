@@ -2,6 +2,13 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.11](https://github.com/andyconley/flow/compare/v0.40.10...v0.40.11) (2026-10-02)
+
+### Bug Fixes
+
+* register v9 resume command help ([2b2d61d](https://github.com/andyconley/flow/commit/2b2d61dd054837a2f4400eefa58bba4fb097458d))
+* resume clean v9 delivery boundaries ([8dc145d](https://github.com/andyconley/flow/commit/8dc145d9a07964d63c98c131be05a430b0b28057))
+
 ## [0.40.10](https://github.com/andyconley/flow/compare/v0.40.9...v0.40.10) (2026-10-02)
 
 ### Bug Fixes
