@@ -52,6 +52,14 @@ collector bindings. The receipt therefore carries manager, specialist,
 fallback, and runtime independence lineage without exposing a concrete binding
 to the manager or child.
 
+Hosted v9 workers run against a temporary tree containing only the chartered
+read and write paths. On macOS, Flow also launches the provider CLI through a
+deny-default process profile: file contents are readable only from system
+runtime roots, that staged tree, and an isolated credential home. Edits are
+copied back only after scope validation; a multi-file apply is rolled back if
+any replacement fails. Local Ollama workers receive the same bounded task and
+do not gain hosted filesystem access.
+
 ```text
 approved logical charter
         |
@@ -99,6 +107,24 @@ uncertain and cannot fall forward automatically.
 - `flow run verify-receipt`, `trace`, `inspect-execution`, and `inspect-delivery` dispatch by receipt protocol and expose v9 manager and specialist selection lineage.
 - `cancel-delivery` and `abandon-delivery` seal v9 terminal evidence without replaying an uncertain send.
 - V9 recovery never resends a claimed call. Inspection reports the unresolved action that must be reconciled or terminated.
+
+### Failure triage
+
+1. Run `flow run inspect-delivery WORK_ID --attempt-id ATTEMPT_ID --json` and
+   `flow run trace WORK_ID --attempt ATTEMPT_ID --json`.
+2. A terminal `failed` attempt with `edit_scope_validation_failed` or
+   `chartered_test_failed` is already sealed. Inspect the receipt and correct
+   the charter or implementation in a new attempt; do not replay the old send.
+3. A `started` attempt with a consumed action in `unknown` state requires
+   explicit reconciliation. Run `flow run v9-recovery-status`, then cancel or
+   abandon it with the recorded actor and explanation if the external outcome
+   cannot be proven. Never start fallback for a claimed send.
+4. A hosted worker failure mentioning sandbox application means the service
+   host cannot establish the required macOS confinement. Repair the launch
+   environment or disable that hosted candidate; do not bypass confinement.
+5. Verify any terminal artifact with `flow run verify-receipt WORK_ID --json`.
+   The receipt binds its terminal status and reason as well as selection,
+   fallback, verifier, diff, and test evidence.
 
 ## Compatibility matrix
 

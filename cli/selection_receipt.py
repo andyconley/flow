@@ -58,6 +58,14 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                 or not isinstance(termination["cause"], str) or not termination["cause"]
                 or type(termination["owner_generation"]) is not int or termination["owner_generation"] < 1):
             raise V9ReceiptError("v9_termination_invalid")
+    outcome = receipt.get("outcome")
+    if outcome is not None:
+        if (not isinstance(outcome, dict) or set(outcome) != {"status", "reason"}
+                or outcome.get("status") not in {"completed", "failed", "cancelled", "abandoned"}
+                or not isinstance(outcome.get("reason"), str) or not outcome["reason"]):
+            raise V9ReceiptError("v9_outcome_invalid")
+        if termination is not None and outcome["status"] != termination["status"]:
+            raise V9ReceiptError("v9_outcome_termination_mismatch")
     rows = {row.get("selection_id"): row for row in selections if isinstance(row, dict)}
     if len(rows) != len(selections) or None in rows:
         raise V9ReceiptError("v9_selection_identity_invalid")
@@ -208,7 +216,8 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
 def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any]],
                            selections: list[dict[str, Any]], *,
                            semantic_verification: list[dict[str, Any]] | None = None,
-                           termination: dict[str, Any] | None = None) -> dict[str, Any]:
+                           termination: dict[str, Any] | None = None,
+                           outcome: dict[str, str] | None = None) -> dict[str, Any]:
     receipt = {
         "schema_version": 1,
         "execution_protocol_version": 9,
@@ -219,12 +228,15 @@ def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any
     }
     if termination is not None:
         receipt["termination"] = termination
+    if outcome is not None:
+        receipt["outcome"] = outcome
     receipt["receipt_digest"] = digest(receipt)
     verify_selection_receipt(receipt)
     return receipt
 
 
-def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, Any] | None = None) -> dict[str, Any]:
+def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, Any] | None = None,
+                          outcome: dict[str, str] | None = None) -> dict[str, Any]:
     """Render the complete v9 receipt from one ledger snapshot.
 
     The caller must obtain the snapshot under its terminal-seal transaction.
@@ -268,14 +280,15 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
             "result": action_results.get(action_id), "evaluation": evaluation["evaluation"],
         })
     return seal_selection_receipt(envelope, actions, rows, semantic_verification=semantic,
-                                  termination=termination)
+                                  termination=termination, outcome=outcome)
 
 
 def verify_selection_receipt_snapshot(receipt: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
     """Verify a v9 receipt and its exact ledger-derived closure."""
     result = verify_selection_receipt(receipt)
-    expected = receipt_from_snapshot(snapshot)
-    for field in ("envelope", "actions", "selections", "semantic_verification"):
+    expected = receipt_from_snapshot(snapshot, termination=receipt.get("termination"),
+                                     outcome=receipt.get("outcome"))
+    for field in ("envelope", "actions", "selections", "semantic_verification", "outcome"):
         if canonical_bytes(receipt.get(field)) != canonical_bytes(expected.get(field)):
             raise V9ReceiptError(f"v9_ledger_{field}_mismatch")
     return result

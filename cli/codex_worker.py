@@ -20,6 +20,7 @@ from typing import Any, Callable
 
 from delivery_cancel import interruptible
 from execution_contracts import usage_values_valid
+from macos_sandbox import confined_argv
 
 MAX_PROMPT_BYTES = 1024 * 1024
 MAX_OUTPUT_BYTES = 4096
@@ -127,6 +128,7 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                timeout_seconds: int, codex_bin: str = "codex",
                sandbox: str = "workspace-write", max_prompt_bytes: int | None = None,
                max_output_bytes: int = MAX_OUTPUT_BYTES,
+               confine_workspace_reads: bool = False,
                on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Run one Codex turn; fail closed on timeout, malformed or incomplete output.
 
@@ -171,6 +173,9 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
         shutil.copyfile(auth_path, isolated_auth)
         isolated_auth.chmod(0o600)
     env["CODEX_HOME"] = str(isolated_home_path)
+    if confine_workspace_reads:
+        env["HOME"] = str(isolated_home_path)
+        argv = confined_argv(argv, workspace=workspace, private_home=isolated_home_path)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, cwd=workspace, env=env,

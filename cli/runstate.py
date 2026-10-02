@@ -563,6 +563,17 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
             }
             if actual_by_operation != expected_by_operation:
                 errors.append("job_charter logical assignments conflict with topology IDs")
+            producers = actual_by_operation["edit"]
+            collectors = actual_by_operation["collect"]
+            for item in logical_assignments:
+                if not isinstance(item, dict) or not isinstance(item.get("requirements"), dict):
+                    continue
+                operation = item["requirements"].get("operation")
+                dependencies = set(item.get("depends_on", [])) if isinstance(item.get("depends_on"), list) else set()
+                if operation == "collect" and not producers.issubset(dependencies):
+                    errors.append("logical evidence collectors must depend on every producer assignment")
+                if operation == "verify" and not (producers | collectors).issubset(dependencies):
+                    errors.append("logical verifiers must depend on every producer and evidence collector assignment")
     return errors
 
 

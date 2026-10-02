@@ -2159,7 +2159,7 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     baseline: dict[str, Any] | None = None
     edit_evidence: dict[str, Any] | None = None
     test_evidence: dict[str, Any] | None = None
-    final_evaluation: dict[str, Any] | None = None
+    verifier_evaluations: dict[str, dict[str, Any]] = {}
     if live_attempt:
         job = json.loads((attempt_dir / "job-charter.snapshot.json").read_text())
         baseline = json.loads((attempt_dir / "baseline.json").read_text())
@@ -2287,10 +2287,31 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         if live_attempt and operation == "edit":
             if job is None or baseline is None:
                 raise ContractError("logical v9 job evidence contract is absent")
-            edit_evidence = _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job)
-            test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
-            if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
-                raise ContractError("chartered test changed the verified v9 worktree diff")
+            worker_action = next(item["request"] for item in reversed(
+                ledger.snapshot(envelope["attempt_id"])["actions"])
+                if item["request"]["assignment_id"] == selected)
+            try:
+                edit_evidence = _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job)
+            except ContractError as exc:
+                ledger.record_v9_evidence_failure(envelope["attempt_id"], worker_action["action_id"],
+                                                  "edit_scope", str(exc), generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "edit_scope_validation_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "edit_scope_validation_failed", **sealed}
+            try:
+                test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
+                if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
+                    raise ContractError("chartered test changed the verified v9 worktree diff")
+            except ContractError as exc:
+                ledger.record_v9_evidence_failure(envelope["attempt_id"], worker_action["action_id"],
+                                                  "chartered_test", str(exc), generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "chartered_test_failed",
+                    attempt_dir / "receipt.json", generation=generation)
+                return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "chartered_test_failed", **sealed}
         if live_attempt and operation == "verify":
             raw_result = outcomes[-1].get("outcome", {}).get("result") if isinstance(outcomes[-1], dict) else None
             if raw_result is None:
@@ -2317,6 +2338,7 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 edit_evidence["diff_sha256"], test_evidence["output_sha256"],
                 generation=generation,
             )
+            verifier_evaluations[selected] = final_evaluation
         completed.add(selected)
         pending.pop(selected)
     outcome = outcomes[-1]
@@ -2328,10 +2350,16 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         # with an in-memory-style ledger fixture. A charter-prepared live
         # attempt always has this private absolute directory and is sealed.
         return outcome
-    terminal_status = "completed" if final_evaluation is not None \
-        and final_evaluation["disposition"] == "valid_pass" else "failed"
+    required_verifiers = {item["assignment_id"] for item in workers
+                          if item["requirements"].get("operation") == "verify"}
+    all_verifiers_passed = (set(verifier_evaluations) == required_verifiers
+                            and all(item["disposition"] == "valid_pass"
+                                    for item in verifier_evaluations.values()))
+    terminal_status = "completed" if required_verifiers and all_verifiers_passed else "failed"
+    failed_dispositions = sorted({item["disposition"] for item in verifier_evaluations.values()
+                                  if item["disposition"] != "valid_pass"})
     terminal_reason = ("semantic_verifier_valid_pass" if terminal_status == "completed" else
-                       "semantic_verifier_" + (final_evaluation or {}).get("disposition", "missing"))
+                       "semantic_verifier_" + (failed_dispositions[0] if failed_dispositions else "missing"))
     sealed = ledger.seal_v9_attempt(envelope["attempt_id"], terminal_status, terminal_reason,
                                     attempt_dir / "receipt.json", generation=generation)
     return {**outcome, "attempt_id": envelope["attempt_id"], "status": terminal_status,
@@ -2619,6 +2647,15 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
         raise ContractError("approved v9 job charter has no producer assignment")
     if not any(item["requirements"]["operation"] == "verify" for item in assignments):
         raise ContractError("approved v9 job charter has no verifier assignment")
+    producer_ids = by_operation["edit"]
+    collector_ids = by_operation["collect"]
+    for item in assignments:
+        operation = item["requirements"].get("operation")
+        dependencies = set(item.get("depends_on", []))
+        if operation == "collect" and not producer_ids.issubset(dependencies):
+            raise ContractError("logical evidence collector must depend on every producer assignment")
+        if operation == "verify" and not (producer_ids | collector_ids).issubset(dependencies):
+            raise ContractError("logical verifier must depend on every producer and evidence collector assignment")
     return assignments
 
 
@@ -2703,25 +2740,53 @@ def _apply_scoped_hosted_edit(workspace: Path, staging: Path, write_paths: list[
     if any(line[:2] not in {" M", "M ", "MM", "A ", "AM", "??"}
            or not _path_within_scopes(path, write_paths) for line, path in zip(lines, changed)):
         raise ContractError("hosted editor changed files outside the approved staging scope")
-    applied = []
+    prepared: list[dict[str, Any]] = []
     for relative in changed:
-        source = staging / relative
-        target = workspace / relative
+        source, target = staging / relative, workspace / relative
         if source.is_symlink() or not source.is_file() or target.is_symlink():
             raise ContractError("hosted editor produced an unsafe scoped file")
         target.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-        try:
-            with os.fdopen(fd, "wb") as handle:
-                handle.write(source.read_bytes())
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, target)
-        finally:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(source.read_bytes())
+            handle.flush()
+            os.fsync(handle.fileno())
+        prepared.append({"relative": relative, "target": target, "temporary": Path(temporary),
+                         "original": target.read_bytes() if target.is_file() else None})
+    applied: list[dict[str, Any]] = []
+    try:
+        for item in prepared:
+            os.replace(item["temporary"], item["target"])
+            applied.append(item)
+    except OSError as exc:
+        rollback_error: OSError | None = None
+        for item in reversed(applied):
+            try:
+                if item["original"] is None:
+                    item["target"].unlink(missing_ok=True)
+                    continue
+                fd, restore = tempfile.mkstemp(prefix=f".{item['target'].name}.restore.",
+                                               dir=item["target"].parent)
+                try:
+                    with os.fdopen(fd, "wb") as handle:
+                        handle.write(item["original"])
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    os.replace(restore, item["target"])
+                finally:
+                    with suppress(FileNotFoundError):
+                        os.unlink(restore)
+            except OSError as rollback_exc:
+                rollback_error = rollback_exc
+        if rollback_error is not None:
+            raise ContractError("hosted scoped edit failed and rollback was incomplete") from rollback_error
+        raise ContractError("hosted scoped edit application failed and was rolled back") from exc
+    finally:
+        for item in prepared:
             with suppress(FileNotFoundError):
-                os.unlink(temporary)
-        applied.append(relative)
-    return {"changed_files": applied, "scope_enforcement": "isolated_staging"}
+                item["temporary"].unlink()
+    return {"changed_files": [item["relative"] for item in applied],
+            "scope_enforcement": "isolated_staging"}
 
 
 def _hosted_scoped_edit(
@@ -2740,6 +2805,15 @@ def _hosted_scoped_edit(
         result = invoke(staging)
         applied = _apply_scoped_hosted_edit(workspace, staging, write_paths)
         return {**result, "scoped_edit": applied}
+
+
+def _hosted_scoped_read(workspace: Path, *, read_paths: list[str],
+                        invoke: Callable[[Path], dict[str, Any]]) -> dict[str, Any]:
+    """Run a hosted read-only turn with only chartered material visible."""
+    with tempfile.TemporaryDirectory(prefix="flow-v9-hosted-read-") as temporary:
+        staging = Path(temporary)
+        _copy_scoped_tree(workspace, staging, read_paths)
+        return invoke(staging)
 
 
 def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str],
@@ -2776,21 +2850,29 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                     workspace, read_paths=read_paths, write_paths=write_paths,
                     invoke=lambda staging: call_claude_edit(
                         instructions=instructions, task=task, workspace=staging,
-                        model=model, timeout_seconds=timeout),
+                        model=model, timeout_seconds=timeout, confine_workspace_reads=True),
                 )
-            return call_claude(instructions=instructions, task=task, workspace=workspace,
-                               model=model, timeout_seconds=timeout)
+            return _hosted_scoped_read(
+                workspace, read_paths=read_paths,
+                invoke=lambda staging: call_claude(
+                    instructions=instructions, task=task, workspace=staging,
+                    model=model, timeout_seconds=timeout, confine_workspace_reads=True),
+            )
         if provider == "codex":
             if operation == "edit":
                 return _hosted_scoped_edit(
                     workspace, read_paths=read_paths, write_paths=write_paths,
                     invoke=lambda staging: call_codex(
                         instructions=instructions, task=task, workspace=staging, model=model,
-                        timeout_seconds=timeout, sandbox="workspace-write"),
+                        timeout_seconds=timeout, sandbox="workspace-write",
+                        confine_workspace_reads=True),
                 )
-            return call_codex(instructions=instructions, task=task, workspace=workspace, model=model,
-                              timeout_seconds=timeout,
-                              sandbox="read-only")
+            return _hosted_scoped_read(
+                workspace, read_paths=read_paths,
+                invoke=lambda staging: call_codex(
+                    instructions=instructions, task=task, workspace=staging, model=model,
+                    timeout_seconds=timeout, sandbox="read-only", confine_workspace_reads=True),
+            )
         raise ContractError("selected v9 provider has no bounded adapter")
 
     return send

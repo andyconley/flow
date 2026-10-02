@@ -3890,6 +3890,7 @@ class FlowCliTests(FlowCliHarness):
                 "legacy_delivery",
                 "lifecycle",
                 "local_worker",
+                "macos_sandbox",
                 "maf_runtime",
                 "maf_supervisor",
                 "manager_requests",

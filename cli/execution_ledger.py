@@ -716,6 +716,21 @@ class ExecutionLedger:
             self._event(db, row[0], action_id, "verifier_evaluated", evaluation["disposition"])
             return {"evaluation": evaluation, "replayed": False}
 
+    def record_v9_evidence_failure(self, attempt_id: str, action_id: str, stage: str,
+                                   detail: str, *, generation: int) -> None:
+        """Persist a typed post-send evidence failure before terminal sealing."""
+        if stage not in {"edit_scope", "chartered_test", "verifier_evaluation"}:
+            raise ContractError("v9 evidence failure stage is invalid")
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            row = db.execute("SELECT status FROM actions WHERE action_id=? AND attempt_id=?",
+                             (action_id, attempt_id)).fetchone()
+            if row is None or row[0] != "completed":
+                raise ContractError("v9 evidence failure requires a completed provider action")
+            self._event(db, attempt_id, action_id, "v9_evidence_failed",
+                        canonical({"stage": stage, "detail": detail[:256]}))
+
     def refuse_v9_pre_send(self, envelope: dict[str, Any], action: dict[str, Any], *,
                             generation: int, evidence_code: str) -> None:
         """Close a reserved selection only when a pre-send probe proved no I/O."""
@@ -2856,7 +2871,8 @@ class ExecutionLedger:
             termination = ({"schema_version": 1, "status": status, "actor": actor.strip(),
                             "explanation": explanation.strip(), "cause": cause,
                             "owner_generation": generation} if terminal else None)
-            receipt = receipt_from_snapshot(snapshot, termination=termination)
+            receipt = receipt_from_snapshot(snapshot, termination=termination,
+                                            outcome={"status": status, "reason": reason})
             verify_selection_receipt_snapshot(receipt, snapshot)
             receipt_bytes = canonical(receipt).encode("utf-8")
             temporary = receipt_path.with_name(f".{receipt_path.name}.{uuid.uuid4().hex}")

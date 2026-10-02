@@ -12,12 +12,15 @@ import hashlib
 import json
 import os
 import selectors
+import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable
 
 from delivery_cancel import interruptible
+from macos_sandbox import confined_argv
 
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
@@ -117,6 +120,7 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
                 timeout_seconds: int, claude_bin: str = "claude",
                 prompt_override: str | None = None,
                 max_output_bytes: int = MAX_OUTPUT_BYTES,
+                confine_workspace_reads: bool = False,
                 on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Run one Claude Code turn; fail closed on timeout, malformed or incomplete output.
 
@@ -152,6 +156,17 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
     # inherit unrelated credentials, cloud configuration, proxy variables,
     # or project secrets.
     env = {key: os.environ[key] for key in CLAUDE_ENV_KEYS if key in os.environ}
+    isolated_home = tempfile.TemporaryDirectory(prefix="flow-claude-home-") if confine_workspace_reads else None
+    if isolated_home is not None:
+        isolated_home_path = Path(isolated_home.name)
+        credential = Path(os.environ.get("HOME", "")) / ".claude" / ".credentials.json"
+        if credential.is_file() and not credential.is_symlink():
+            isolated_credential = isolated_home_path / ".claude" / ".credentials.json"
+            isolated_credential.parent.mkdir(mode=0o700)
+            shutil.copyfile(credential, isolated_credential)
+            isolated_credential.chmod(0o600)
+        env["HOME"] = str(isolated_home_path)
+        argv = confined_argv(argv, workspace=workspace, private_home=isolated_home_path)
     deadline = time.monotonic() + timeout_seconds
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, cwd=workspace, env=env,
@@ -230,3 +245,5 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
             process.stdin.close()
         process.stdout.close()
         process.stderr.close()
+        if isolated_home is not None:
+            isolated_home.cleanup()

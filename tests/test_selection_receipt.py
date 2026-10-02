@@ -72,6 +72,17 @@ class SelectionReceiptTests(unittest.TestCase):
         self.assertEqual(len(first["successors"]), 1)
         self.assertEqual(next(row for row in trace if row["state"] == "consumed")["candidate_id"], "claude")
 
+    def test_terminal_outcome_is_digest_bound_and_validated(self) -> None:
+        receipt = _receipt()
+        receipt["outcome"] = {"status": "completed", "reason": "semantic_verifier_valid_pass"}
+        _reseal(receipt)
+        self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+        receipt["outcome"]["status"] = "started"
+        _reseal(receipt)
+        with self.assertRaises(V9ReceiptError) as raised:
+            verify_selection_receipt(receipt)
+        self.assertEqual(raised.exception.code, "v9_outcome_invalid")
+
     def test_pre_send_refusal_without_provider_action_is_validated_from_successor(self) -> None:
         receipt = _receipt()
         receipt["actions"] = receipt["actions"][1:]
