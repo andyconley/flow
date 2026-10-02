@@ -21,7 +21,7 @@ from delivery_gateway import (ContractError, _default_worker_adapter, _execution
                               execute_chartered_delivery, execute_v9_logical_delivery,
                               execute_v9_chartered_job, prepare_chartered_delivery, prepare_v9_chartered_delivery,
                               provider_selection_probe, logical_assignments_from_charter,
-                              independence_constraints_from_assignments)
+                              independence_constraints_from_assignments, v9_recovery_status)
 from delivery_recovery import RecoveryRefused  # noqa: E402
 from execution_contracts import (ContractError as ExecutionContractError, envelope_digest,
                                  expected_magentic_action_id, _paths_within_scopes, validate_action, validate_envelope,
@@ -1677,7 +1677,8 @@ class V9CharteredRouteTests(CharteredFixture):
                              second_verifier_output: str | None = None,
                              manager_invalid: bool = False,
                              manager_outside: bool = False,
-                             producer_test_failures: int = 0):
+                             producer_test_failures: int = 0,
+                             interrupt_before_verifier: bool = False):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
@@ -1756,6 +1757,7 @@ class V9CharteredRouteTests(CharteredFixture):
 
             real_chartered_test = delivery_gateway._run_chartered_test
             test_runs = 0
+            interrupted = False
 
             def chartered_test(*args, **kwargs):
                 nonlocal test_runs
@@ -1764,16 +1766,33 @@ class V9CharteredRouteTests(CharteredFixture):
                     raise ContractError("targeted chartered test failed: retained evidence is stale")
                 return real_chartered_test(*args, **kwargs)
 
+            def supervise(_envelope, _task, on_action, *, manager_decision, **_kwargs):
+                nonlocal interrupted
+                if (interrupt_before_verifier and not interrupted
+                        and manager_decision["assignment_id"] == "verifier"):
+                    interrupted = True
+                    raise KillPoint("process stopped before verifier send")
+                return on_action({"attempt_id": envelope["attempt_id"],
+                                  "assignment_id": manager_decision["assignment_id"],
+                                  "task": manager_decision["task"], "sequence": 1,
+                                  "manager_turn": manager_decision["manager_turn"]})
+
             with patch("delivery_gateway._run_chartered_test", side_effect=chartered_test):
-                result = execute_v9_logical_delivery(
-                    envelope, task, ledger, adapter,
-                    readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                    supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
-                        on_action({"attempt_id": envelope["attempt_id"],
-                                   "assignment_id": manager_decision["assignment_id"],
-                                   "task": manager_decision["task"], "sequence": 1,
-                                   "manager_turn": manager_decision["manager_turn"]}),
-                )
+                try:
+                    result = execute_v9_logical_delivery(
+                        envelope, task, ledger, adapter,
+                        readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                        supervisor=supervise,
+                    )
+                except KillPoint:
+                    status = v9_recovery_status("sample", envelope["attempt_id"], root=self.root)
+                    self.assertTrue(status["resume_allowed"])
+                    self.assertEqual(status["next_action"], "resume-chartered-job")
+                    result = execute_v9_logical_delivery(
+                        envelope, task, ledger, adapter,
+                        readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                        supervisor=supervise,
+                    )
         return result, ledger.snapshot(envelope["attempt_id"])
 
     def test_v9_plain_prose_verifier_cannot_complete_attempt(self):
@@ -1816,6 +1835,17 @@ class V9CharteredRouteTests(CharteredFixture):
         verifier = next(item["request"] for item in snapshot["actions"]
                         if item["request"]["assignment_id"] == "verifier")
         self.assertEqual(len(verifier["task"]), 5000)
+
+    def test_v9_clean_boundary_resume_reuses_completed_manager_decision(self):
+        valid = json.dumps({"schema_version": 1, "decision": "pass",
+                            "summary": "Diff and test evidence pass.", "findings": []})
+        result, snapshot = self._execute_semantic_v9(
+            valid, interrupt_before_verifier=True)
+        self.assertEqual(result["status"], "completed")
+        assignment_ids = [item["request"]["assignment_id"] for item in snapshot["actions"]]
+        self.assertEqual(assignment_ids.count("manager"), 2)
+        self.assertEqual(assignment_ids.count("editor"), 1)
+        self.assertEqual(assignment_ids.count("verifier"), 1)
 
     def test_v9_second_chartered_test_failure_seals_without_another_retry(self):
         valid = json.dumps({"schema_version": 1, "decision": "pass",

@@ -115,6 +115,9 @@ fall forward automatically.
 ## Operator actions
 
 - `flow run execute-chartered-job` starts a new v9 chartered job.
+- `flow run resume-chartered-job WORK_ID ATTEMPT_ID` continues a clean
+  completed-action boundary without replaying completed manager or specialist
+  calls.
 - `--legacy-v8` is an explicit compatibility route for historical v8 execution contracts.
 - `flow run migrate-job-charter-v9 WORK_ID --replacement PATH --reason TEXT --approved-by-user`
   registers an explicitly approved provider-neutral successor for a legacy
@@ -122,7 +125,9 @@ fall forward automatically.
   already contains complete v9 logical assignments.
 - `flow run verify-receipt`, `trace`, `inspect-execution`, and `inspect-delivery` dispatch by receipt protocol and expose v9 manager and specialist selection lineage.
 - `cancel-delivery` and `abandon-delivery` seal v9 terminal evidence without replaying an uncertain send.
-- V9 recovery never resends a claimed call. Inspection reports the unresolved action that must be reconciled or terminated.
+- V9 recovery never resends a claimed call. Inspection reports either the
+  unresolved action that must be reconciled or terminated, or a clean boundary
+  that can continue with `resume-chartered-job`.
 
 ### Failure triage
 

@@ -217,6 +217,7 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow run migrate-job-charter-v9 WORK_ID [--replacement PATH] --reason TEXT --approved-by-user [--json]` | Register an audited provider-neutral v9 successor for a legacy manifest-linked charter without rewriting historical evidence |
 | `flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]` | Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending |
 | `flow run v9-recovery-status WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect whether a protocol v9 attempt requires explicit reconciliation without dispatch |
+| `flow run resume-chartered-job WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Continue a started v9 charter from a clean completed-action boundary without replaying completed provider work |
 | `flow run terminate-v9-delivery WORK_ID ATTEMPT_ID --status cancelled\|abandoned --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Seal an uncertain protocol v9 attempt without replaying provider I/O |
 | `flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Create a linked successor only for a sealed zero-send MAF startup failure |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect durable local execution evidence without dispatch |

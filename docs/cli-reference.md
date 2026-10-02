@@ -228,7 +228,17 @@ tested by the probe.
 
 Read whether a protocol v9 attempt has a consumed provider send whose outcome
 requires explicit reconciliation. This command is read-only and never retries
-provider I/O.
+provider I/O. A clean completed-action boundary reports
+`resume-chartered-job` as its next action.
+
+### `flow run resume-chartered-job <work-id> <attempt-id>`
+
+Continue a started protocol v9 charter after every recorded action completed
+but the coordinator stopped before the next provider send. Flow reconstructs
+the dependency frontier and retained edit/test evidence, reuses a completed
+manager decision when present, and dispatches only unfinished assignments.
+Attempts with a started or unknown action remain in explicit reconciliation
+and cannot use this command.
 
 ### `flow run terminate-v9-delivery <work-id> <attempt-id> --status cancelled|abandoned --actor ACTOR --explanation TEXT`
 
