@@ -680,9 +680,23 @@ class ExecutionLedger:
         """
         if (not isinstance(result, dict) or result.get("schema_version") != 1
                 or result.get("kind") != "observed_not_executed"
+                or result.get("disposition") != "observed_not_executed"
+                or result.get("adapter_schema_version") != 1
+                or result.get("terminal") is not True or result.get("execution_events") != 0
                 or result.get("provider") not in {"codex", "claude"}
                 or result.get("category") != "model_capacity"
-                or set(result) != {"schema_version", "kind", "provider", "category"}):
+                or not isinstance(result.get("observation_sha256"), str)
+                or len(result["observation_sha256"]) != 64
+                or any(character not in "0123456789abcdef" for character in result["observation_sha256"])
+                or not isinstance(result.get("diagnostic_sha256"), str)
+                or len(result["diagnostic_sha256"]) != 64
+                or any(character not in "0123456789abcdef" for character in result["diagnostic_sha256"])
+                or set(result) != {"schema_version", "kind", "disposition", "adapter_schema_version",
+                                   "provider", "category", "terminal", "execution_events",
+                                   "observation_sha256", "diagnostic_sha256"}
+                or hashlib.sha256(canonical({key: value for key, value in result.items()
+                                             if key not in {"observation_sha256", "diagnostic_sha256"}}).encode()).hexdigest()
+                != result["observation_sha256"]):
             raise ContractError("observed provider refusal is invalid")
         request = action["selection_decision"].get("selected_binding")
         if not isinstance(request, dict) or request.get("provider") != result["provider"]:

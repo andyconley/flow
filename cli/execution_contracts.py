@@ -597,7 +597,7 @@ def expansion_headroom(envelope: dict[str, Any]) -> dict[str, int]:
 # not a cost proxy.
 CHARGED_UNIT = "charged_v1"
 PAID_PROVIDERS = frozenset({"codex", "claude"})
-SENT_STATUSES = frozenset({"started", "completed", "failed", "unknown"})
+SENT_STATUSES = frozenset({"started", "completed", "failed", "unknown", "observed_not_executed"})
 # Usage counters Flow reads; any other key a provider adds is kept and ignored.
 KNOWN_USAGE_KEYS = frozenset({"input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
                               "cached_input_tokens", "cache_write_input_tokens", "reasoning_output_tokens",
@@ -665,6 +665,33 @@ def charge(status: str, provider: str | None, result: Any, unobserved_send_token
     """
     if provider not in PAID_PROVIDERS or status not in SENT_STATUSES:
         return {"charged": 0, "cache_read": 0, "recognised": True, "unobserved": False}
+    if status == "observed_not_executed":
+        observation = result.get("result") if isinstance(result, dict) else None
+        valid = (isinstance(observation, dict)
+                 and set(observation) == {"schema_version", "kind", "disposition", "adapter_schema_version",
+                                         "provider", "category", "terminal", "execution_events",
+                                         "observation_sha256", "diagnostic_sha256"}
+                 and observation.get("schema_version") == 1
+                 and observation.get("kind") == "observed_not_executed"
+                 and observation.get("disposition") == "observed_not_executed"
+                 and observation.get("adapter_schema_version") == 1
+                 and observation.get("terminal") is True and observation.get("execution_events") == 0
+                 and observation.get("provider") == provider
+                 and observation.get("category") == "model_capacity"
+                 and isinstance(observation.get("observation_sha256"), str)
+                 and len(observation["observation_sha256"]) == 64
+                 and all(character in "0123456789abcdef" for character in observation["observation_sha256"]))
+        if valid:
+            controlled = {key: value for key, value in observation.items()
+                          if key not in {"observation_sha256", "diagnostic_sha256"}}
+            valid = (isinstance(observation.get("diagnostic_sha256"), str)
+                     and len(observation["diagnostic_sha256"]) == 64
+                     and all(character in "0123456789abcdef" for character in observation["diagnostic_sha256"])
+                     and hashlib.sha256(canonical(controlled).encode()).hexdigest()
+                     == observation["observation_sha256"])
+        if valid:
+            return {"charged": 0, "cache_read": 0, "recognised": True, "unobserved": False}
+        return {"charged": unobserved_send_tokens, "cache_read": 0, "recognised": False, "unobserved": True}
     if status in {"completed", "failed"}:
         usage = result.get("usage") if isinstance(result, dict) else None
         normalized = normalized_charge(provider, usage)

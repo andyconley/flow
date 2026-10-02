@@ -18,9 +18,10 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from claude_worker import CLAUDE_ENV_KEYS, _normalized_usage
+from claude_worker import CLAUDE_ENV_KEYS, _capacity_refusal_observation, _normalized_usage
 from delivery_cancel import CancellableSelector, interruptible
 from macos_sandbox import confined_argv
+from provider_outcomes import ObservedNotExecuted
 
 MAX_PROMPT_BYTES = 32768
 MAX_STDOUT_BYTES = 262144
@@ -78,6 +79,30 @@ def _stream_result_lines(lines, model: str) -> dict[str, Any]:
 
 def _stream_result(raw: bytes, model: str) -> dict[str, Any]:
     return _stream_result_lines(raw.splitlines(), model)
+
+
+def _capacity_edit_observation(raw: bytes) -> str | None:
+    """Accept only a zero-turn structured terminal result with no edit/tool events."""
+    terminal: dict[str, Any] | None = None
+    try:
+        values = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not values:
+        return None
+    for value in values:
+        if not isinstance(value, dict):
+            return None
+        if value.get("type") in {"result", "error"}:
+            if terminal is not None:
+                return None
+            terminal = value
+        else:
+            return None
+    if terminal is None:
+        return None
+    encoded = json.dumps(terminal, sort_keys=True, separators=(",", ":")).encode()
+    return _capacity_refusal_observation(encoded, b"")
 
 
 def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: str,
@@ -186,13 +211,19 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise ClaudeEditError("Claude edit timed out")
-            if process.wait(timeout=remaining) != 0:
+            exit_code = process.wait(timeout=remaining)
+            raw = (event_path.read_bytes() if event_path is not None else b"".join(chunks))
+            if exit_code != 0:
+                observation = _capacity_edit_observation(raw)
+                if observation is not None:
+                    raise ObservedNotExecuted(provider="claude", category="model_capacity",
+                                              observation_sha256=observation)
                 raise ClaudeEditError("Claude exited without a successful edit turn")
             if event_path is not None:
                 with event_path.open("rb") as completed_events:
                     result = _stream_result_lines(completed_events, model)
             else:
-                result = _result(b"".join(chunks), model)
+                result = _result(raw, model)
             return {**result,
                     "input_sha256": hashlib.sha256(prompt).hexdigest()}
     except (subprocess.TimeoutExpired, BrokenPipeError) as exc:

@@ -35,7 +35,7 @@ from selection_authority import (  # noqa: E402
     seal_selection_authority,
     successor_authority_digest,
 )
-from selection_receipt import receipt_from_snapshot, verify_selection_receipt  # noqa: E402
+from selection_receipt import V9ReceiptError, receipt_from_snapshot, verify_selection_receipt  # noqa: E402
 from verifier_contracts import evaluate_candidate  # noqa: E402
 
 
@@ -367,7 +367,8 @@ class DeliverySelectionTests(unittest.TestCase):
             result = execute_v9_selected_action(
                 envelope, action,
                 lambda _binding, _action: (_ for _ in ()).throw(
-                    ObservedNotExecuted(provider="claude", category="model_capacity")),
+                    ObservedNotExecuted(provider="claude", category="model_capacity",
+                                        observation_sha256="a" * 64)),
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
                 ledger=ledger, generation=1,
             )
@@ -382,6 +383,13 @@ class DeliverySelectionTests(unittest.TestCase):
             receipt = receipt_from_snapshot(
                 snapshot, outcome={"status": "abandoned", "reason": "fixture_capacity_refusal"})
             self.assertEqual(verify_selection_receipt(receipt)["status"], "valid_pass")
+            self.assertEqual(receipt["provider_refusals"][0]["diagnostic_sha256"], "a" * 64)
+            tampered = copy.deepcopy(receipt)
+            tampered["provider_refusals"][0]["observation_sha256"] = "b" * 64
+            tampered["receipt_digest"] = digest({key: value for key, value in tampered.items()
+                                                  if key != "receipt_digest"})
+            with self.assertRaisesRegex(V9ReceiptError, "v9_provider_refusal_invalid|v9_observed_refusal_invalid|v9_receipt"):
+                verify_selection_receipt(tampered)
 
     def test_v9_unknown_send_can_only_be_abandoned_with_a_terminal_receipt(self) -> None:
         envelope = _envelope()

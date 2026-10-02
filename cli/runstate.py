@@ -1323,12 +1323,31 @@ def _validate_v9_successor_charter(
         raise ValueError("predecessor job charter schema is invalid")
     if not required.issubset(successor) or set(successor) - required - optional:
         raise ValueError("successor job charter schema is invalid")
+    if not isinstance(predecessor.get("task"), str) or not predecessor["task"].strip():
+        raise ValueError("predecessor job charter task is invalid")
+    test = predecessor.get("test")
+    if (not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}
+            or not isinstance(test.get("argv"), list) or not test["argv"]
+            or any(not isinstance(item, str) or not item for item in test["argv"])
+            or type(test.get("timeout_seconds")) is not int
+            or not 1 <= test["timeout_seconds"] <= 3600):
+        raise ValueError("predecessor job charter test is invalid")
+    baseline = predecessor.get("baseline")
+    if (not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}
+            or baseline.get("kind") not in {"clean", "declared_regression"}
+            or not isinstance(baseline.get("diff_sha256"), str)
+            or len(baseline["diff_sha256"]) != 64
+            or any(character not in "0123456789abcdef" for character in baseline["diff_sha256"])):
+        raise ValueError("predecessor job charter baseline is invalid")
     for field in ("read_paths", "write_paths", "producer_instance_ids", "verifier_instance_ids"):
         values = predecessor.get(field)
         if (not isinstance(values, list) or not values
                 or any(not isinstance(value, str) or not value for value in values)
                 or len(values) != len(set(values))):
             raise ValueError(f"predecessor job charter {field} is invalid")
+        if field in {"read_paths", "write_paths"} and any(
+                Path(value).is_absolute() or ".." in Path(value).parts for value in values):
+            raise ValueError(f"predecessor job charter {field} contains an unsafe path")
     collectors = predecessor.get("evidence_collector_instance_ids", [])
     if (not isinstance(collectors, list)
             or any(not isinstance(value, str) or not value for value in collectors)
@@ -1522,6 +1541,19 @@ def approve_job_charter_v9_migration(
             validate_delivery_charter(delivery_charter)
             if delivery_charter.get("digest") != delivery.get("charter_digest"):
                 raise ValueError("sealed Delivery Charter digest differs from run authority")
+            claim_rel = delivery.get("lead_claim_path")
+            if not isinstance(claim_rel, str):
+                raise ValueError("active Delivery Lead claim path is invalid")
+            claim_bytes = _bounded_regular_file(run_dir / claim_rel, run_dir, "active Delivery Lead claim")
+            claim = _json_mapping(claim_bytes, "active Delivery Lead claim")
+            if (claim.get("digest") != delivery.get("lead_claim_digest")
+                    or delivery_digest({key: value for key, value in claim.items() if key != "digest"}) != claim.get("digest")
+                    or claim.get("kind") != "delivery_lead_claim" or claim.get("status") != "active"
+                    or claim.get("owner") != "delivery-lead"
+                    or claim.get("generation") != delivery.get("owner_generation")
+                    or claim.get("charter_digest") != delivery.get("charter_digest")
+                    or claim.get("logical_delivery_attempt_id") != delivery.get("logical_delivery_attempt_id")):
+                raise ValueError("active Delivery Lead claim differs from sealed run authority")
             _validate_v9_successor_charter(predecessor, successor, manifest, delivery_charter)
         except (ValueError, DeliveryContractError) as exc:
             return False, current, [str(exc)]
@@ -1599,8 +1631,10 @@ def approve_job_charter_v9_migration(
             _append_event(work_id, event, project_root)
         except OSError as exc:
             # run.json is already the authority commit point. A replay repairs
-            # this append without advancing generation or rewriting artifacts.
-            return False, payload, [f"migration authority committed; rerun to repair history: {exc}"]
+            # this projection without advancing generation or rewriting artifacts.
+            # The migration record inside run.json is the durable audit fact, so
+            # never report an ordinary refusal after authority has committed.
+            return True, payload, [f"migration committed; rerun to repair lifecycle event projection: {exc}"]
         return True, payload, []
 
 

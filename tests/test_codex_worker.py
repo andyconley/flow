@@ -196,8 +196,8 @@ class CodexWorkerTests(unittest.TestCase):
             root = Path(temporary)
             fake = root / "codex-fake"
             fake.write_text("#!/usr/bin/env python3\n"
-                            "import sys\n"
-                            "sys.stderr.write('Selected model is at capacity; secret=do-not-record\\n')\n"
+                            "import json, sys\n"
+                            "print(json.dumps({'type':'error','message':'Selected model is at capacity; secret=do-not-record'}))\n"
                             "sys.exit(1)\n")
             fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
             with self.assertRaises(ObservedNotExecuted) as error:
@@ -205,11 +205,18 @@ class CodexWorkerTests(unittest.TestCase):
                            model="gpt-test", timeout_seconds=5, codex_bin=str(fake))
             self.assertEqual(error.exception.provider, "codex")
             self.assertEqual(error.exception.category, "model_capacity")
-            self.assertEqual(error.exception.receipt_result(), {
+            result = error.exception.receipt_result()
+            self.assertEqual({key: result[key] for key in (
+                "schema_version", "kind", "disposition", "adapter_schema_version", "provider", "category")}, {
                 "schema_version": 1, "kind": "observed_not_executed",
-                "provider": "codex", "category": "model_capacity",
-            })
+                "disposition": "observed_not_executed", "adapter_schema_version": 1,
+                "provider": "codex", "category": "model_capacity"})
+            self.assertRegex(result["observation_sha256"], r"^[0-9a-f]{64}$")
             self.assertNotIn("do-not-record", str(error.exception))
+
+    def test_unstructured_capacity_stderr_remains_uncertain(self):
+        self.assertFalse(_capacity_refusal_is_observed_not_executed(
+            b"Selected model is at capacity", b""))
 
     def test_capacity_phrase_after_execution_event_remains_uncertain(self):
         transcript = stream(

@@ -178,6 +178,19 @@ class V8V9JobCharterMigrationTests(CharteredFixture):
         self.replacement.write_text(self._json(malformed))
         self._assert_refused_atomically("requires complete logical_assignments")
 
+    def test_non_string_task_is_refused_atomically(self) -> None:
+        predecessor = copy.deepcopy(self.charter)
+        successor = self._successor_charter()
+        predecessor["task"] = successor["task"] = 123
+        (self.run / "job-charter.json").write_text(self._json(predecessor))
+        self.replacement.write_text(self._json(successor))
+        self._assert_refused_atomically("task is invalid")
+
+    def test_missing_active_lead_claim_is_refused_atomically(self) -> None:
+        claim = self.run / self.state["delivery"]["lead_claim_path"]
+        claim.unlink()
+        self._assert_refused_atomically("active Delivery Lead claim is unavailable")
+
     def test_authority_expansion_is_refused_atomically(self) -> None:
         widened = self._successor_charter()
         widened["write_paths"] = ["target.py", "other.py"]
@@ -201,6 +214,16 @@ class V8V9JobCharterMigrationTests(CharteredFixture):
         finally:
             db.close()
         self._assert_refused_atomically("started execution attempt")
+
+    def test_event_projection_failure_reports_committed_success_for_idempotent_repair(self) -> None:
+        with patch("runstate._append_event", side_effect=OSError("injected event failure")):
+            ok, payload, warnings = self._migrate()
+        self.assertTrue(ok)
+        self.assertEqual(payload["delivery"]["owner_generation"], 2)
+        self.assertTrue(any("migration committed" in warning for warning in warnings), warnings)
+        ok, repaired, errors = self._migrate()
+        self.assertTrue(ok, errors)
+        self.assertEqual(repaired["delivery"]["owner_generation"], 2)
 
     def test_cli_help_exposes_explicit_approval_and_successor_contract(self) -> None:
         output = io.StringIO()

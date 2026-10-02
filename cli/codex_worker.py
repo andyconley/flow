@@ -87,25 +87,36 @@ def _failure_category(stderr: bytes, stdout: bytes = b"") -> str:
     return "unclassified"
 
 
-def _capacity_refusal_is_observed_not_executed(stderr: bytes, stdout: bytes) -> bool:
-    """Accept capacity only when bounded events show that no turn item ran."""
-    if _failure_category(stderr, stdout) != "model_capacity":
-        return False
+def _capacity_refusal_observation(stderr: bytes, stdout: bytes) -> str | None:
+    """Return a digest only for a structured terminal refusal with no turn items."""
+    if _failure_category(stderr, stdout) != "model_capacity" or not stdout.strip():
+        return None
+    refusal: dict[str, Any] | None = None
     for line in stdout.splitlines():
         if not line.strip():
             continue
         try:
             event = json.loads(line)
         except (UnicodeDecodeError, json.JSONDecodeError):
-            return False
+            return None
         if not isinstance(event, dict):
-            return False
+            return None
         event_type = event.get("type")
         if event_type in {"turn.completed", "item.started", "item.completed"}:
-            return False
-        if event_type not in {"thread.started", "turn.failed", "error"}:
-            return False
-    return True
+            return None
+        if event_type in {"turn.failed", "error"}:
+            if refusal is not None or _failure_category(b"", json.dumps(event).encode()) != "model_capacity":
+                return None
+            refusal = event
+        elif event_type != "thread.started":
+            return None
+    if refusal is None:
+        return None
+    return hashlib.sha256(json.dumps(refusal, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _capacity_refusal_is_observed_not_executed(stderr: bytes, stdout: bytes) -> bool:
+    return _capacity_refusal_observation(stderr, stdout) is not None
 
 
 def _parse_event_lines(lines, expected_model: str, *, max_output_bytes: int = MAX_OUTPUT_BYTES) -> dict[str, Any]:
@@ -263,8 +274,10 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
                     stdout = event_file.read(MAX_STDERR_BYTES)
                     stderr = b"".join(stderr_chunks)
                     category = _failure_category(stderr, stdout)
-                    if _capacity_refusal_is_observed_not_executed(stderr, stdout):
-                        raise ObservedNotExecuted(provider="codex", category=category)
+                    observation = _capacity_refusal_observation(stderr, stdout)
+                    if observation is not None:
+                        raise ObservedNotExecuted(provider="codex", category=category,
+                                                  observation_sha256=observation)
                     raise CodexWorkerError(
                         f"Codex exited without a successful turn (status {exit_code}; category {category})"
                     )

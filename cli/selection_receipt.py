@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -19,7 +20,7 @@ except ModuleNotFoundError:  # Package import.
 
 DECISION_FIELDS = (
     "requirements_digest", "policy_digest", "catalog_digest", "availability_digest",
-    "prior_no_send_failures", "excluded_families", "exclusions", "ordered_candidates",
+    "prior_no_send_failures", "prior_retryable_failures", "excluded_families", "exclusions", "ordered_candidates",
     "selected_candidate_id", "selected_binding", "decision_digest",
 )
 
@@ -43,6 +44,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     selections = receipt.get("selections")
     semantic = receipt.get("semantic_verification", [])
     evidence_failures = receipt.get("evidence_failures", [])
+    provider_refusals = receipt.get("provider_refusals", [])
     if not isinstance(actions, list) or not isinstance(selections, list):
         raise V9ReceiptError("v9_selection_rows_missing")
     if any(not isinstance(action, dict) for action in actions) \
@@ -50,6 +52,32 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         raise V9ReceiptError("v9_selection_rows_invalid")
     if not isinstance(semantic, list) or any(not isinstance(item, dict) for item in semantic):
         raise V9ReceiptError("v9_semantic_verification_invalid")
+    refusal_fields = {"action_id", "selection_id", "schema_version", "kind", "disposition",
+                      "adapter_schema_version", "provider", "category", "terminal", "execution_events",
+                      "observation_sha256", "diagnostic_sha256"}
+    if (not isinstance(provider_refusals, list)
+            or any(not isinstance(item, dict) or set(item) != refusal_fields
+                   or item.get("schema_version") != 1 or item.get("kind") != "observed_not_executed"
+                   or item.get("disposition") != "observed_not_executed"
+                   or item.get("adapter_schema_version") != 1
+                   or item.get("terminal") is not True or item.get("execution_events") != 0
+                   or item.get("provider") not in {"codex", "claude"}
+                   or item.get("category") != "model_capacity"
+                   or not isinstance(item.get("observation_sha256"), str)
+                   or len(item["observation_sha256"]) != 64
+                   or any(character not in "0123456789abcdef" for character in item["observation_sha256"])
+                   or not isinstance(item.get("diagnostic_sha256"), str)
+                   or len(item["diagnostic_sha256"]) != 64
+                   or any(character not in "0123456789abcdef" for character in item["diagnostic_sha256"])
+                   or hashlib.sha256(canonical_bytes({key: value for key, value in item.items()
+                                                      if key not in {"action_id", "selection_id", "observation_sha256",
+                                                                     "diagnostic_sha256"}})).hexdigest()
+                   != item["observation_sha256"]
+                   for item in provider_refusals)):
+        raise V9ReceiptError("v9_provider_refusal_invalid")
+    refusal_by_action = {item["action_id"]: item for item in provider_refusals}
+    if len(refusal_by_action) != len(provider_refusals):
+        raise V9ReceiptError("v9_provider_refusal_duplicate")
     if (not isinstance(evidence_failures, list)
             or any(not isinstance(item, dict)
                    or set(item) != {"action_id", "stage", "detail"}
@@ -124,9 +152,14 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(prior, list) or any(not isinstance(item, str) for item in prior) \
                 or len(set(prior)) != len(prior):
             raise V9ReceiptError("v9_prior_no_send_failures_invalid")
+        retryable = row.get("prior_retryable_failures", [])
+        if (not isinstance(retryable, list) or any(not isinstance(item, str) for item in retryable)
+                or len(set(retryable)) != len(retryable) or set(retryable) & set(prior)):
+            raise V9ReceiptError("v9_prior_retryable_failures_invalid")
         runtime_families = runtime_families_for(action["assignment_id"])
         expected = compute_binding(
             envelope, action["assignment_id"], prior_no_send_failures=prior,
+            prior_retryable_failures=retryable,
             runtime_excluded_families=runtime_families,
         )
         actual = action["selection_decision"]
@@ -144,13 +177,22 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if state in {"superseded", "pre_send_refused"} and \
                 (row.get("provider_action_id") is not None or not row.get("reason")):
             raise V9ReceiptError("v9_unconsumed_selection_closure_invalid")
-        if state == "observed_not_executed" and (not row.get("reason") or row.get("reason") != "model_capacity"):
-            raise V9ReceiptError("v9_observed_refusal_invalid")
+        refusal = refusal_by_action.get(action["action_id"])
+        if state == "observed_not_executed":
+            binding = actual.get("selected_binding") or {}
+            if (not row.get("reason") or row.get("reason") != "model_capacity" or refusal is None
+                    or refusal["selection_id"] != action["selection_id"]
+                    or refusal["provider"] != binding.get("provider")):
+                raise V9ReceiptError("v9_observed_refusal_invalid")
+        elif refusal is not None:
+            raise V9ReceiptError("v9_orphan_provider_refusal")
         if state not in {"consumed", "observed_not_executed", "superseded", "pre_send_refused"}:
             raise V9ReceiptError("v9_selection_state_unsealed")
         if state == "consumed" and actual.get("selected_binding") is not None:
             completed_bindings.setdefault(action["assignment_id"], []).append(actual["selected_binding"])
         compared += 4
+    if set(refusal_by_action) - action_ids:
+        raise V9ReceiptError("v9_orphan_provider_refusal")
     assignments = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
     actions_by_id = {action["action_id"]: action for action in actions}
     failure_keys: set[tuple[str, str]] = set()
@@ -180,6 +222,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         expected = compute_binding(
             envelope, successor_action["assignment_id"],
             prior_no_send_failures=row.get("prior_no_send_failures", []),
+            prior_retryable_failures=row.get("prior_retryable_failures", []),
             runtime_excluded_families=runtime_families_for(successor_action["assignment_id"]),
         )
         if row.get("decision_digest") != expected.get("decision_digest") \
@@ -193,10 +236,15 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         predecessor = row.get("predecessor_selection_id")
         if predecessor is not None:
             prior = rows.get(predecessor)
-            expected_history = ([*prior.get("prior_no_send_failures", []), prior.get("candidate_id")]
-                                if prior is not None else None)
+            expected_no_send = (list(prior.get("prior_no_send_failures", [])) if prior is not None else None)
+            expected_retryable = (list(prior.get("prior_retryable_failures", [])) if prior is not None else None)
+            if prior is not None and prior.get("state") == "superseded":
+                expected_no_send.append(prior.get("candidate_id"))
+            if prior is not None and prior.get("state") == "observed_not_executed":
+                expected_retryable.append(prior.get("candidate_id"))
             if prior is None or prior.get("state") not in {"superseded", "observed_not_executed"} \
-                    or not prior.get("reason") or row.get("prior_no_send_failures") != expected_history:
+                    or not prior.get("reason") or row.get("prior_no_send_failures") != expected_no_send \
+                    or row.get("prior_retryable_failures", []) != expected_retryable:
                 raise V9ReceiptError("v9_fallback_lineage_invalid")
             compared += 1
     verifier_actions = [action for action in actions
@@ -261,6 +309,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
 
 def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any]],
                            selections: list[dict[str, Any]], *,
+                           provider_refusals: list[dict[str, Any]] | None = None,
                            semantic_verification: list[dict[str, Any]] | None = None,
                            evidence_failures: list[dict[str, Any]] | None = None,
                            termination: dict[str, Any] | None = None,
@@ -271,6 +320,7 @@ def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any
         "envelope": envelope,
         "actions": actions,
         "selections": selections,
+        "provider_refusals": provider_refusals or [],
         "semantic_verification": semantic_verification or [],
         "evidence_failures": evidence_failures or [],
     }
@@ -311,7 +361,18 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
             "predecessor_selection_id": item.get("predecessor_selection_id"),
             "provider_action_id": item.get("provider_action_id"),
             "prior_no_send_failures": item["decision"].get("prior_no_send_failures"),
+            "prior_retryable_failures": item["decision"].get("prior_retryable_failures", []),
         })
+    provider_refusals = []
+    for item in snapshot.get("actions", []):
+        if item.get("status") != "observed_not_executed":
+            continue
+        observation = (item.get("result") or {}).get("result")
+        request = item.get("request") or {}
+        if not isinstance(observation, dict):
+            raise V9ReceiptError("v9_snapshot_provider_refusal_missing")
+        provider_refusals.append({"action_id": item.get("action_id"),
+                                  "selection_id": request.get("selection_id"), **observation})
     action_results = {item["action_id"]: (item.get("result") or {}).get("result")
                       for item in snapshot.get("actions", [])}
     inputs = {item["action_id"]: item for item in snapshot.get("verifier_inputs", [])}
@@ -340,7 +401,8 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
         outcome = {"status": termination["status"], "reason": termination["cause"]}
     if outcome is None:
         raise V9ReceiptError("v9_outcome_missing")
-    return seal_selection_receipt(envelope, actions, rows, semantic_verification=semantic,
+    return seal_selection_receipt(envelope, actions, rows, provider_refusals=provider_refusals,
+                                  semantic_verification=semantic,
                                   evidence_failures=evidence_failures,
                                   termination=termination, outcome=outcome)
 
@@ -350,7 +412,7 @@ def verify_selection_receipt_snapshot(receipt: dict[str, Any], snapshot: dict[st
     result = verify_selection_receipt(receipt)
     expected = receipt_from_snapshot(snapshot, termination=receipt.get("termination"),
                                      outcome=receipt.get("outcome"))
-    for field in ("envelope", "actions", "selections", "semantic_verification", "evidence_failures", "outcome"):
+    for field in ("envelope", "actions", "selections", "provider_refusals", "semantic_verification", "evidence_failures", "outcome"):
         if canonical_bytes(receipt.get(field)) != canonical_bytes(expected.get(field)):
             raise V9ReceiptError(f"v9_ledger_{field}_mismatch")
     return result
