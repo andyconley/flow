@@ -569,11 +569,13 @@ class ExecutionLedger:
     def _v9_budget_error(self, db: sqlite3.Connection, envelope: dict[str, Any],
                          action: dict[str, Any]) -> str | None:
         """Check sealed budgets against one transaction snapshot, before any I/O."""
+        # Closure rows prove no send; they neither consume an operation nor
+        # authorize reuse of an action slot that was never claimed.
         count = db.execute("SELECT COUNT(DISTINCT json_extract(request_json,'$.logical_action_id')) "
-                           "FROM actions WHERE attempt_id=?", (envelope["attempt_id"],)).fetchone()[0]
+                           "FROM actions WHERE attempt_id=? AND status<>'pre_send_refused'", (envelope["attempt_id"],)).fetchone()[0]
         known_logical_action = db.execute(
             "SELECT 1 FROM actions WHERE attempt_id=? "
-            "AND json_extract(request_json,'$.logical_action_id')=? LIMIT 1",
+            "AND status<>'pre_send_refused' AND json_extract(request_json,'$.logical_action_id')=? LIMIT 1",
             (envelope["attempt_id"], action["logical_action_id"]),
         ).fetchone()
         if count >= envelope["limits"]["max_actions"] and not known_logical_action:
@@ -581,7 +583,7 @@ class ExecutionLedger:
         limits = envelope["limits"]
         if "max_manager_calls" in limits:
             assignments = {row["assignment_id"]: row for row in envelope["logical_assignments"]}
-            rows = db.execute("SELECT request_json,status,result_json FROM actions WHERE attempt_id=?",
+            rows = db.execute("SELECT request_json,status,result_json FROM actions WHERE attempt_id=? AND status<>'pre_send_refused'",
                               (envelope["attempt_id"],)).fetchall()
             prior = [(json.loads(row[0]), row[1], json.loads(row[2]) if row[2] else None) for row in rows]
             operation = assignments[action["assignment_id"]]["requirements"]["operation"]
@@ -632,6 +634,22 @@ class ExecutionLedger:
                 return "sealed protocol v9 token budget exhausted"
         return None
 
+    def _refuse_v9_budget_locked(self, db: sqlite3.Connection, envelope: dict[str, Any],
+                                 action: dict[str, Any], reason: str) -> None:
+        """Close a proven no-send denial in the caller's fenced transaction."""
+        action_json = canonical(action)
+        db.execute("UPDATE provider_selections SET state='pre_send_refused',reason=? "
+                   "WHERE selection_id=? AND state='reserved'",
+                   (reason, action["selection_id"]))
+        db.execute(
+            "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (action["action_id"], envelope["attempt_id"], action_json, "pre_send_refused", reason,
+             None, None, "delegate", action["sequence"], hashlib.sha256(action_json.encode()).hexdigest()),
+        )
+        self._event(db, envelope["attempt_id"], action["action_id"],
+                    "selection_pre_send_refused", action["selection_id"])
+
     @contextmanager
     def v9_send_fence(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int):
         """Claim one provider send before I/O and retain the physical-send lock.
@@ -674,17 +692,7 @@ class ExecutionLedger:
                     # consume the last slot after preparation. Commit a no-I/O
                     # closure under the same send lock and transaction, rather
                     # than rolling back to a stranded reservation.
-                    db.execute("UPDATE provider_selections SET state='pre_send_refused',reason=? "
-                               "WHERE selection_id=? AND state='reserved'",
-                               (budget_error, action["selection_id"]))
-                    db.execute(
-                        "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        (action["action_id"], envelope["attempt_id"], action_json, "pre_send_refused", budget_error,
-                         None, None, "delegate", action["sequence"], hashlib.sha256(action_json.encode()).hexdigest()),
-                    )
-                    self._event(db, envelope["attempt_id"], action["action_id"],
-                                "selection_pre_send_refused", action["selection_id"])
+                    self._refuse_v9_budget_locked(db, envelope, action, budget_error)
                 else:
                     try:
                         db.execute(

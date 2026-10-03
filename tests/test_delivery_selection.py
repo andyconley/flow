@@ -546,6 +546,35 @@ class DeliverySelectionTests(unittest.TestCase):
                         verify_selection_receipt(receipt)
                         ledger.create_attempt(_envelope(attempt_id="successor", allowed_candidates=[candidate]))
 
+    def test_budget_refusal_cannot_authorize_an_unclaimed_action_slot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            envelope = _envelope()
+            envelope["limits"]["max_actions"] = 1
+            ledger = ExecutionLedger(Path(tmp)/"ledger.sqlite")
+            ledger.create_attempt(envelope)
+            first = make_action(envelope, "manager", "First.", sequence=1, manager_turn=1)
+            denied = make_action(envelope, "manager", "Denied.", sequence=2, manager_turn=2)
+            ledger.prepare_v9_selection(envelope, denied, generation=1)
+            execute_v9_selected_action(envelope, first, lambda *_: {"output": "done"},
+                readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            with self.assertRaisesRegex(ContractError, "action budget exhausted"):
+                execute_v9_selected_action(envelope, denied, lambda *_: self.fail("send"),
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            decision = compute_binding(envelope, "manager", prior_no_send_failures=["local"])
+            fallback = make_action(envelope, "manager", "Denied.", sequence=2, manager_turn=2, decision=decision)
+            self.assertEqual(fallback["logical_action_id"], denied["logical_action_id"])
+            with self.assertRaisesRegex(ContractError, "action budget exhausted"):
+                execute_v9_selected_action(envelope, fallback, lambda *_: self.fail("bypassed action cap"),
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1,
+                    predecessor_selection_id=denied["selection_id"])
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual([r["status"] for r in snapshot["actions"]],
+                             ["completed", "pre_send_refused", "pre_send_refused"])
+            path = Path(tmp)/"receipt.json"
+            ledger.terminate_v9_attempt(envelope["attempt_id"], "abandoned", generation=1,
+                actor="operator", explanation="budget exhausted", cause="operator_abandoned", receipt_path=path)
+            verify_selection_receipt(json.loads(path.read_text()))
+
     def test_budget_denied_fallback_preserves_refusal_chain_and_can_close(self):
         for capacity in (False, True):
             with self.subTest(capacity=capacity), tempfile.TemporaryDirectory() as tmp:
