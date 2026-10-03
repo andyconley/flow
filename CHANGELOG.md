@@ -2,6 +2,16 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.15](https://github.com/andyconley/flow/compare/v0.40.14...v0.40.15) (2026-10-02)
+
+### Bug Fixes
+
+* seal exhausted v9 pre-send refusals ([897b652](https://github.com/andyconley/flow/commit/897b6522ed149fa4626e17efff1eadc563dcc305))
+
+### Tests
+
+* classify v9 terminal closure write ([63da493](https://github.com/andyconley/flow/commit/63da4931768d50384a012fc60be42e5a90cd3841))
+
 ## [0.40.14](https://github.com/andyconley/flow/compare/v0.40.13...v0.40.14) (2026-10-02)
 
 ### Bug Fixes
