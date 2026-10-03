@@ -2209,6 +2209,7 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             runtime_excluded_families=runtime_families,
         )
         predecessor_selection_id = None
+        terminal_refused_action = None
         # A process can stop after Flow durably records a positive no-send
         # refusal but before it reserves the deterministic successor. Resume
         # that exact chain instead of trying to reserve the refused decision
@@ -2233,6 +2234,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 raise ContractError("logical v9 persisted selection chain has an unsuperseded interior refusal")
             if last and row["state"] == "superseded":
                 raise ContractError("logical v9 persisted selection chain has no resumable tail")
+            if last and row["state"] == "pre_send_refused":
+                terminal_refused_action = action
             prior_no_send = list(row["decision"].get("prior_no_send_failures", []))
             prior_retryable = list(row["decision"].get("prior_retryable_failures", []))
             if row["state"] in {"superseded", "pre_send_refused"}:
@@ -2251,6 +2254,21 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 sequence=sequence, manager_turn=proposal["manager_turn"],
                 decision=successor,
             )
+        if prior_chain and action["selection_decision"].get("selected_binding") is None:
+            if live_attempt:
+                if terminal_refused_action is None:
+                    raise ContractError("logical v9 exhausted selection has no terminal refusal")
+                ledger.record_v9_terminal_pre_send_action(
+                    envelope, terminal_refused_action, generation=generation)
+                sealed = ledger.seal_v9_attempt(
+                    envelope["attempt_id"], "failed", "provider_candidates_exhausted",
+                    attempt_dir / "receipt.json", generation=generation)
+                raise ProviderCandidatesExhausted({
+                    "attempt_id": envelope["attempt_id"], "status": "failed",
+                    "reason": "provider_candidates_exhausted", **sealed,
+                })
+            return {"status": "failed", "reason": "provider_candidates_exhausted",
+                    "selection_id": predecessor_selection_id}
         # A refused readiness check is the sole automatic retry case: it is
         # positively evidenced to have happened before provider I/O.  Every
         # adapter failure after a send claim becomes recovery-required instead.
@@ -2267,6 +2285,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             successor = result["successor_decision"]
             if successor.get("selected_binding") is None:
                 if live_attempt:
+                    ledger.record_v9_terminal_pre_send_action(
+                        envelope, action, generation=generation)
                     sealed = ledger.seal_v9_attempt(
                         envelope["attempt_id"], "failed", "provider_candidates_exhausted",
                         attempt_dir / "receipt.json", generation=generation)
