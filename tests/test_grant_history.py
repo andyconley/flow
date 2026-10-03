@@ -85,6 +85,10 @@ SITES = {
     ("v9_send_fence", "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,"
                       "sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)"):
         ("exempt", "v9 uses the selection/send fence instead of v8 grants"),
+    ("_refuse_v9_budget_locked",
+     "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,"
+     "sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)"):
+        ("exempt", "v9 budget refusal records a proven no-I/O closure; it issues no v8 grant"),
     ("record_v9_terminal_pre_send_action",
      "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,"
      "sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)"):

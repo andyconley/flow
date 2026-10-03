@@ -456,6 +456,15 @@ class ExecutionLedger:
             ).fetchone()
             if stored is None or stored != (canonical(envelope), "started", 9):
                 raise ContractError("protocol v9 attempt is absent, changed, or closed")
+            existing_selection = db.execute("SELECT 1 FROM provider_selections WHERE selection_id=?",
+                                            (action["selection_id"],)).fetchone()
+            if existing_selection is None and predecessor_selection_id is None:
+                budget_error = self._v9_budget_error(db, envelope, action)
+                if budget_error:
+                    # Reject fresh work before creating an unsealed row. A
+                    # resumed reservation or fallback must reach the send
+                    # fence, which closes its existing lineage on denial.
+                    raise ContractError(budget_error)
             if predecessor_selection_id is not None:
                 predecessor = db.execute(
                     "SELECT state FROM provider_selections WHERE selection_id=? AND attempt_id=?",
@@ -557,6 +566,90 @@ class ExecutionLedger:
             elif row[0] != "reserved":
                 raise ContractError("provider selection is not reservable")
 
+    def _v9_budget_error(self, db: sqlite3.Connection, envelope: dict[str, Any],
+                         action: dict[str, Any]) -> str | None:
+        """Check sealed budgets against one transaction snapshot, before any I/O."""
+        # Closure rows prove no send; they neither consume an operation nor
+        # authorize reuse of an action slot that was never claimed.
+        count = db.execute("SELECT COUNT(DISTINCT json_extract(request_json,'$.logical_action_id')) "
+                           "FROM actions WHERE attempt_id=? AND status<>'pre_send_refused'", (envelope["attempt_id"],)).fetchone()[0]
+        known_logical_action = db.execute(
+            "SELECT 1 FROM actions WHERE attempt_id=? "
+            "AND status<>'pre_send_refused' AND json_extract(request_json,'$.logical_action_id')=? LIMIT 1",
+            (envelope["attempt_id"], action["logical_action_id"]),
+        ).fetchone()
+        if count >= envelope["limits"]["max_actions"] and not known_logical_action:
+            return "sealed protocol v9 action budget exhausted"
+        limits = envelope["limits"]
+        if "max_manager_calls" in limits:
+            assignments = {row["assignment_id"]: row for row in envelope["logical_assignments"]}
+            rows = db.execute("SELECT request_json,status,result_json FROM actions WHERE attempt_id=? AND status<>'pre_send_refused'",
+                              (envelope["attempt_id"],)).fetchall()
+            prior = [(json.loads(row[0]), row[1], json.loads(row[2]) if row[2] else None) for row in rows]
+            operation = assignments[action["assignment_id"]]["requirements"]["operation"]
+            manager_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "manage" for r, _, _ in prior)
+            worker_count = len(prior) - manager_count
+            verifier_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "verify" for r, _, _ in prior)
+            paid_count = sum(r["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}
+                             and assignments[r["assignment_id"]]["requirements"]["operation"] != "manage"
+                             and status != "observed_not_executed" for r, status, _ in prior)
+            provider = action["selection_decision"]["selected_binding"]["provider"]
+            if (operation == "manage" and manager_count >= limits["max_manager_calls"]
+                    or operation != "manage" and worker_count >= limits["max_delegations"]
+                    or operation == "verify" and verifier_count >= limits["max_verifier_calls"]
+                    or operation != "manage" and provider in {"claude", "codex"} and paid_count >= limits["max_paid_worker_calls"]):
+                return "sealed protocol v9 operation budget exhausted"
+            charged_rows = [{"request": {"provider": r["selection_decision"]["selected_binding"]["provider"]},
+                             "status": status, "result": wrapped.get("result") if isinstance(wrapped, dict) else None}
+                            for r, status, wrapped in prior]
+            charged = attempt_token_charges(envelope, charged_rows, [])["charged"]
+            # A fresh attempt cannot reset spend under the same sealed
+            # Delivery Charter. Unknown predecessors are charged
+            # conservatively, even after explicit abandonment.
+            for prior_envelope_json, request_json, status, result_json in db.execute(
+                    "SELECT attempts.envelope_json,actions.request_json,actions.status,actions.result_json "
+                    "FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
+                    "AND attempts.attempt_id<>? AND json_extract(attempts.envelope_json,'$.delivery_charter_digest')=?",
+                    (envelope["work_id"], envelope["attempt_id"], envelope["delivery_charter_digest"])):
+                prior_envelope = json.loads(prior_envelope_json)
+                request = json.loads(request_json)
+                result = json.loads(result_json) if result_json else None
+                if prior_envelope.get("execution_protocol_version") == 9:
+                    prior_provider = request["selection_decision"]["selected_binding"]["provider"]
+                    result = result.get("result") if isinstance(result, dict) else None
+                else:
+                    prior_provider = request.get("provider")
+                charged += attempt_token_charges(envelope, [{"request": {"provider": prior_provider},
+                                                               "status": status, "result": result}], [])["charged"]
+            for prior_envelope_json, status, result_json in db.execute(
+                    "SELECT attempts.envelope_json,manager_calls.status,manager_calls.result_json "
+                    "FROM manager_calls JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
+                    "AND attempts.attempt_id<>? AND json_extract(attempts.envelope_json,'$.delivery_charter_digest')=?",
+                    (envelope["work_id"], envelope["attempt_id"], envelope["delivery_charter_digest"])):
+                prior_provider = json.loads(prior_envelope_json).get("manager", {}).get("provider")
+                result = json.loads(result_json) if result_json else None
+                charged += attempt_token_charges(envelope, [{"request": {"provider": prior_provider},
+                                                               "status": status, "result": result}], [])["charged"]
+            if provider in {"claude", "codex"} and charged >= limits["max_lineage_tokens"]:
+                return "sealed protocol v9 token budget exhausted"
+        return None
+
+    def _refuse_v9_budget_locked(self, db: sqlite3.Connection, envelope: dict[str, Any],
+                                 action: dict[str, Any], reason: str) -> None:
+        """Close a proven no-send denial in the caller's fenced transaction."""
+        action_json = canonical(action)
+        db.execute("UPDATE provider_selections SET state='pre_send_refused',reason=? "
+                   "WHERE selection_id=? AND state='reserved'",
+                   (reason, action["selection_id"]))
+        db.execute(
+            "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (action["action_id"], envelope["attempt_id"], action_json, "pre_send_refused", reason,
+             None, None, "delegate", action["sequence"], hashlib.sha256(action_json.encode()).hexdigest()),
+        )
+        self._event(db, envelope["attempt_id"], action["action_id"],
+                    "selection_pre_send_refused", action["selection_id"])
+
     @contextmanager
     def v9_send_fence(self, envelope: dict[str, Any], action: dict[str, Any], *, generation: int):
         """Claim one provider send before I/O and retain the physical-send lock.
@@ -593,85 +686,34 @@ class ExecutionLedger:
                     if existing[0] != envelope["attempt_id"] or existing[1] != action_json:
                         raise ContractError("provider action identity reused with changed request")
                     raise ContractError("provider send was already claimed")
-                count = db.execute("SELECT COUNT(DISTINCT json_extract(request_json,'$.logical_action_id')) "
-                                   "FROM actions WHERE attempt_id=?", (envelope["attempt_id"],)).fetchone()[0]
-                known_logical_action = db.execute(
-                    "SELECT 1 FROM actions WHERE attempt_id=? "
-                    "AND json_extract(request_json,'$.logical_action_id')=? LIMIT 1",
-                    (envelope["attempt_id"], action["logical_action_id"]),
-                ).fetchone()
-                if count >= envelope["limits"]["max_actions"] and not known_logical_action:
-                    raise ContractError("sealed protocol v9 action budget exhausted")
-                limits = envelope["limits"]
-                if "max_manager_calls" in limits:
-                    assignments = {row["assignment_id"]: row for row in envelope["logical_assignments"]}
-                    rows = db.execute("SELECT request_json,status,result_json FROM actions WHERE attempt_id=?",
-                                      (envelope["attempt_id"],)).fetchall()
-                    prior = [(json.loads(row[0]), row[1], json.loads(row[2]) if row[2] else None) for row in rows]
-                    operation = assignments[action["assignment_id"]]["requirements"]["operation"]
-                    manager_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "manage" for r, _, _ in prior)
-                    worker_count = len(prior) - manager_count
-                    verifier_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "verify" for r, _, _ in prior)
-                    paid_count = sum(r["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}
-                                     and assignments[r["assignment_id"]]["requirements"]["operation"] != "manage"
-                                     and status != "observed_not_executed" for r, status, _ in prior)
-                    provider = action["selection_decision"]["selected_binding"]["provider"]
-                    if (operation == "manage" and manager_count >= limits["max_manager_calls"]
-                            or operation != "manage" and worker_count >= limits["max_delegations"]
-                            or operation == "verify" and verifier_count >= limits["max_verifier_calls"]
-                            or operation != "manage" and provider in {"claude", "codex"} and paid_count >= limits["max_paid_worker_calls"]):
-                        raise ContractError("sealed protocol v9 operation budget exhausted")
-                    charged_rows = [{"request": {"provider": r["selection_decision"]["selected_binding"]["provider"]},
-                                     "status": status, "result": wrapped.get("result") if isinstance(wrapped, dict) else None}
-                                    for r, status, wrapped in prior]
-                    charged = attempt_token_charges(envelope, charged_rows, [])["charged"]
-                    # A fresh attempt cannot reset spend under the same sealed
-                    # Delivery Charter. Unknown predecessors are charged
-                    # conservatively, even after explicit abandonment.
-                    for prior_envelope_json, request_json, status, result_json in db.execute(
-                            "SELECT attempts.envelope_json,actions.request_json,actions.status,actions.result_json "
-                            "FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
-                            "AND attempts.attempt_id<>? AND json_extract(attempts.envelope_json,'$.delivery_charter_digest')=?",
-                            (envelope["work_id"], envelope["attempt_id"], envelope["delivery_charter_digest"])):
-                        prior_envelope = json.loads(prior_envelope_json)
-                        request = json.loads(request_json)
-                        result = json.loads(result_json) if result_json else None
-                        if prior_envelope.get("execution_protocol_version") == 9:
-                            prior_provider = request["selection_decision"]["selected_binding"]["provider"]
-                            result = result.get("result") if isinstance(result, dict) else None
-                        else:
-                            prior_provider = request.get("provider")
-                        charged += attempt_token_charges(envelope, [{"request": {"provider": prior_provider},
-                                                                       "status": status, "result": result}], [])["charged"]
-                    for prior_envelope_json, status, result_json in db.execute(
-                            "SELECT attempts.envelope_json,manager_calls.status,manager_calls.result_json "
-                            "FROM manager_calls JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
-                            "AND attempts.attempt_id<>? AND json_extract(attempts.envelope_json,'$.delivery_charter_digest')=?",
-                            (envelope["work_id"], envelope["attempt_id"], envelope["delivery_charter_digest"])):
-                        prior_provider = json.loads(prior_envelope_json).get("manager", {}).get("provider")
-                        result = json.loads(result_json) if result_json else None
-                        charged += attempt_token_charges(envelope, [{"request": {"provider": prior_provider},
-                                                                       "status": status, "result": result}], [])["charged"]
-                    if provider in {"claude", "codex"} and charged >= limits["max_lineage_tokens"]:
-                        raise ContractError("sealed protocol v9 token budget exhausted")
-                try:
-                    db.execute(
-                        "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        (action["action_id"], envelope["attempt_id"], action_json, "started", "v9_send_claimed",
-                         None, None, "delegate", action["sequence"], hashlib.sha256(action_json.encode()).hexdigest()),
-                    )
-                    db.execute(
-                        "UPDATE provider_selections SET state='consumed',provider_action_id=? "
-                        "WHERE selection_id=? AND state='reserved'",
-                        (action["action_id"], action["selection_id"]),
-                    )
-                except sqlite3.IntegrityError as exc:
-                    raise ContractError("provider action or selection was already consumed") from exc
-                self._event(db, envelope["attempt_id"], action["action_id"],
-                            "selection_consumed", action["selection_id"])
-                self._event(db, envelope["attempt_id"], action["action_id"],
-                            "adapter_send_started", "flow_v9_send_fence")
+                budget_error = self._v9_budget_error(db, envelope, action)
+                if budget_error:
+                    # A concurrent send (or a historical reserved tail) may
+                    # consume the last slot after preparation. Commit a no-I/O
+                    # closure under the same send lock and transaction, rather
+                    # than rolling back to a stranded reservation.
+                    self._refuse_v9_budget_locked(db, envelope, action, budget_error)
+                else:
+                    try:
+                        db.execute(
+                            "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
+                            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            (action["action_id"], envelope["attempt_id"], action_json, "started", "v9_send_claimed",
+                             None, None, "delegate", action["sequence"], hashlib.sha256(action_json.encode()).hexdigest()),
+                        )
+                        db.execute(
+                            "UPDATE provider_selections SET state='consumed',provider_action_id=? "
+                            "WHERE selection_id=? AND state='reserved'",
+                            (action["action_id"], action["selection_id"]),
+                        )
+                    except sqlite3.IntegrityError as exc:
+                        raise ContractError("provider action or selection was already consumed") from exc
+                    self._event(db, envelope["attempt_id"], action["action_id"],
+                                "selection_consumed", action["selection_id"])
+                    self._event(db, envelope["attempt_id"], action["action_id"],
+                                "adapter_send_started", "flow_v9_send_fence")
+            if budget_error:
+                raise ContractError(budget_error)
             finished = False
 
             def finish(result: Any) -> None:

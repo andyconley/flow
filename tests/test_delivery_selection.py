@@ -494,6 +494,171 @@ class DeliverySelectionTests(unittest.TestCase):
             self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
             self.assertEqual(len(ledger.snapshot(envelope["attempt_id"])["actions"]), 2)
 
+    def test_budget_denials_allow_terminal_receipts_and_successors(self):
+        # Fresh work is rejected before reservation. The final fence must also
+        # close a reservation if another send used the last slot meanwhile.
+        cases = [("max_actions", "manager", "local", "action"),
+                 ("max_manager_calls", "manager", "local", "operation"),
+                 ("max_delegations", "producer", "local", "operation"),
+                 ("max_verifier_calls", "verifier", "local", "operation"),
+                 ("max_paid_worker_calls", "producer", "codex", "operation"),
+                 ("max_lineage_tokens", "producer", "codex", "token")]
+        for limit, assignment, candidate, error in cases:
+            for reserved in (False, True):
+                for terminal in ("cancelled", "abandoned"):
+                    with self.subTest(limit=limit, reserved=reserved, terminal=terminal), tempfile.TemporaryDirectory() as tmp:
+                        envelope = _envelope(allowed_candidates=[candidate])
+                        envelope["limits"].update(max_manager_calls=12, max_delegations=6,
+                            max_verifier_calls=2, max_paid_worker_calls=6,
+                            max_lineage_tokens=1000, unobserved_send_tokens=1)
+                        envelope["limits"][limit] = 1
+                        ledger = ExecutionLedger(Path(tmp)/"ledger.sqlite")
+                        ledger.create_attempt(envelope)
+                        first = make_action(envelope, assignment, "First.", sequence=1, manager_turn=1)
+                        denied = make_action(envelope, assignment, "Denied.", sequence=2, manager_turn=2)
+                        sends = []
+                        send = lambda binding, action: sends.append(action["action_id"]) or {"output": "done"}
+                        if reserved:
+                            ledger.prepare_v9_selection(envelope, denied, generation=1)
+                        execute_v9_selected_action(envelope, first, send,
+                            readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+                        for _ in range(2):
+                            with self.assertRaises(ContractError):
+                                execute_v9_selected_action(envelope, denied, send,
+                                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+                        snapshot = ledger.snapshot(envelope["attempt_id"])
+                        self.assertEqual(sends, [first["action_id"]])
+                        self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
+                        self.assertFalse(any(r["state"] in {"computed", "reserved"}
+                                             for r in snapshot["provider_selections"]))
+                        if reserved:
+                            self.assertEqual(snapshot["actions"][-1]["status"], "pre_send_refused")
+                            self.assertIn(error + " budget exhausted", snapshot["actions"][-1]["reason"])
+                        else:
+                            self.assertEqual(len(snapshot["actions"]), 1)
+                            self.assertEqual(len(snapshot["provider_selections"]), 1)
+                        path = Path(tmp)/"receipt.json"
+                        ledger.terminate_v9_attempt(envelope["attempt_id"], terminal, generation=1,
+                            actor="operator", explanation="budget exhausted", cause="operator_"+terminal,
+                            receipt_path=path)
+                        receipt = json.loads(path.read_text())
+                        self.assertEqual(receipt["outcome"]["status"], terminal)
+                        verify_selection_receipt(receipt)
+                        ledger.create_attempt(_envelope(attempt_id="successor", allowed_candidates=[candidate]))
+
+    def test_budget_refusal_cannot_authorize_an_unclaimed_action_slot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            envelope = _envelope()
+            envelope["limits"]["max_actions"] = 1
+            ledger = ExecutionLedger(Path(tmp)/"ledger.sqlite")
+            ledger.create_attempt(envelope)
+            first = make_action(envelope, "manager", "First.", sequence=1, manager_turn=1)
+            denied = make_action(envelope, "manager", "Denied.", sequence=2, manager_turn=2)
+            ledger.prepare_v9_selection(envelope, denied, generation=1)
+            execute_v9_selected_action(envelope, first, lambda *_: {"output": "done"},
+                readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            with self.assertRaisesRegex(ContractError, "action budget exhausted"):
+                execute_v9_selected_action(envelope, denied, lambda *_: self.fail("send"),
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            decision = compute_binding(envelope, "manager", prior_no_send_failures=["local"])
+            fallback = make_action(envelope, "manager", "Denied.", sequence=2, manager_turn=2, decision=decision)
+            self.assertEqual(fallback["logical_action_id"], denied["logical_action_id"])
+            with self.assertRaisesRegex(ContractError, "action budget exhausted"):
+                execute_v9_selected_action(envelope, fallback, lambda *_: self.fail("bypassed action cap"),
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1,
+                    predecessor_selection_id=denied["selection_id"])
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            self.assertEqual([r["status"] for r in snapshot["actions"]],
+                             ["completed", "pre_send_refused", "pre_send_refused"])
+            path = Path(tmp)/"receipt.json"
+            ledger.terminate_v9_attempt(envelope["attempt_id"], "abandoned", generation=1,
+                actor="operator", explanation="budget exhausted", cause="operator_abandoned", receipt_path=path)
+            verify_selection_receipt(json.loads(path.read_text()))
+
+    def test_budget_denied_fallback_preserves_refusal_chain_and_can_close(self):
+        for capacity in (False, True):
+            with self.subTest(capacity=capacity), tempfile.TemporaryDirectory() as tmp:
+                envelope = _envelope(allowed_candidates=["claude", "codex"] if capacity else None)
+                envelope["limits"].update(max_manager_calls=12, max_delegations=1,
+                    max_verifier_calls=2, max_paid_worker_calls=1 if capacity else 0,
+                    max_lineage_tokens=1000, unobserved_send_tokens=1)
+                ledger = ExecutionLedger(Path(tmp)/"ledger.sqlite")
+                ledger.create_attempt(envelope)
+                first = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+                def send(*_):
+                    if capacity:
+                        raise ObservedNotExecuted(provider="claude", category="model_capacity", observation_sha256="a"*64)
+                    self.fail("pre-send refusal called adapter")
+                result = execute_v9_selected_action(envelope, first, send,
+                    readiness_recheck=lambda b: {**b, "state": "ready" if capacity else "unavailable",
+                                                "no_send_observed": True, "evidence_code": "unavailable"},
+                    ledger=ledger, generation=1)
+                successor = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1,
+                                        decision=result["successor_decision"])
+                with self.assertRaisesRegex(ContractError, "operation budget exhausted"):
+                    execute_v9_selected_action(envelope, successor, lambda *_: self.fail("send"),
+                        readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1,
+                        predecessor_selection_id=first["selection_id"])
+                snapshot = ledger.snapshot(envelope["attempt_id"])
+                self.assertFalse(any(r["state"] in {"computed", "reserved"} for r in snapshot["provider_selections"]))
+                self.assertEqual(snapshot["actions"][-1]["status"], "pre_send_refused")
+                path = Path(tmp)/"receipt.json"
+                ledger.terminate_v9_attempt(envelope["attempt_id"], "abandoned", generation=1,
+                    actor="operator", explanation="budget exhausted", cause="operator_abandoned", receipt_path=path)
+                verify_selection_receipt(json.loads(path.read_text()))
+
+    def test_lineage_token_denial_on_new_attempt_can_be_abandoned_without_send(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp)/"ledger.sqlite")
+            sends = []
+            for attempt_id in ("spent", "denied"):
+                envelope = _envelope(attempt_id=attempt_id, allowed_candidates=["codex"])
+                envelope["limits"].update(max_manager_calls=12, max_delegations=6,
+                    max_verifier_calls=2, max_paid_worker_calls=6,
+                    max_lineage_tokens=1, unobserved_send_tokens=1)
+                ledger.create_attempt(envelope)
+                action = make_action(envelope, "manager", "Plan.", sequence=1, manager_turn=1)
+                if attempt_id == "spent":
+                    execute_v9_selected_action(envelope, action,
+                        lambda b, a: sends.append(a["action_id"]) or {"output": "done"},
+                        readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+                else:
+                    with self.assertRaisesRegex(ContractError, "token budget exhausted"):
+                        execute_v9_selected_action(envelope, action,
+                            lambda *_: self.fail("denied send executed"),
+                            readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+                    self.assertEqual(ledger.snapshot(attempt_id)["provider_selections"], [])
+                path = Path(tmp)/(attempt_id+".json")
+                ledger.terminate_v9_attempt(attempt_id, "abandoned", generation=1,
+                    actor="operator", explanation="close attempt", cause="operator_abandoned", receipt_path=path)
+                verify_selection_receipt(json.loads(path.read_text()))
+            self.assertEqual(len(sends), 1)
+
+    def test_budget_closure_cannot_modify_stale_owner_or_unknown_send(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            envelope = _envelope()
+            envelope["limits"]["max_actions"] = 1
+            ledger = ExecutionLedger(Path(tmp)/"ledger.sqlite")
+            ledger.create_attempt(envelope)
+            action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+            with self.assertRaises(RecoveryRequired):
+                execute_v9_selected_action(envelope, action,
+                    lambda *_: (_ for _ in ()).throw(TimeoutError("unknown")),
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            denied = make_action(envelope, "manager", "Plan.", sequence=2, manager_turn=2)
+            before = ledger.snapshot(envelope["attempt_id"])
+            with self.assertRaisesRegex(ContractError, "ownership is stale"):
+                execute_v9_selected_action(envelope, denied, lambda *_: self.fail("send"),
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=2)
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"]), before)
+            with self.assertRaisesRegex(ContractError, "action budget exhausted"):
+                execute_v9_selected_action(envelope, denied, lambda *_: self.fail("send"),
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            self.assertTrue(ledger.v9_recovery_required(envelope["attempt_id"]))
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][0]["status"], "unknown")
+            with self.assertRaises(RecoveryRefused):
+                ledger.create_attempt(_envelope(attempt_id="successor"))
+
     def test_gateway_v9_observed_capacity_refusal_is_failed_and_can_select_successor(self) -> None:
         """A bounded terminal capacity refusal is not an uncertain paid send."""
         envelope = _envelope()

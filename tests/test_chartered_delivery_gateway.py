@@ -1683,6 +1683,42 @@ class V9CharteredRouteTests(CharteredFixture):
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         return result, ledger.snapshot(envelope["attempt_id"]), receipt
 
+    def test_live_v9_manager_budget_denial_seals_failed_receipt(self):
+        self._assert_live_v9_manager_budget_denial(reserved=False)
+
+    def test_live_v9_reserved_manager_budget_denial_seals_failed_receipt(self):
+        self._assert_live_v9_manager_budget_denial(reserved=True)
+
+    def _assert_live_v9_manager_budget_denial(self, *, reserved):
+        def exhaust(envelope, task, on_action, *, on_manager, **kwargs):
+            from execution_contracts import canonical
+            messages = [{"role": "user", "content": "Plan the approved work."}]
+            if reserved:
+                ledger = ExecutionLedger(Path(envelope["checkpoint_dir"]).parents[1]/"ledger.sqlite")
+                sequence = envelope["limits"]["max_manager_calls"] + 1
+                action = make_action(envelope, "manager", canonical(messages)+"\nFlow accepted assignments: []",
+                                     sequence=sequence, manager_turn=sequence)
+                ledger.prepare_v9_selection(envelope, action, generation=1)
+            for sequence in range(1, envelope["limits"]["max_manager_calls"] + 2):
+                on_manager({"messages": messages, "phase": "facts", "sequence": sequence,
+                            "prompt_digest": hashlib.sha256(canonical(messages).encode()).hexdigest()})
+            self.fail("manager budget was not enforced")
+
+        with patch("delivery_gateway.execute_v9_selected_action", wraps=delivery_gateway.execute_v9_selected_action) as dispatch:
+            original = dispatch._mock_wraps
+            dispatch.side_effect = lambda envelope, action, adapter, **kw: original(
+                envelope, action, lambda *_: {"output": "Facts and plan."}, **kw)
+            result, snapshot, receipt = self._execute_v9_topology(
+                with_collector=False, independent_verifier=True, coordinator=exhaust)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "manager_evaluation_failed")
+        self.assertEqual(len(snapshot["actions"]), snapshot["envelope"]["limits"]["max_manager_calls"] + int(reserved))
+        self.assertFalse(any(r["state"] in {"computed", "reserved"} for r in snapshot["provider_selections"]))
+        if reserved:
+            self.assertEqual(snapshot["actions"][-1]["status"], "pre_send_refused")
+        self.assertIn("operation budget exhausted", receipt["evidence_failures"][0]["detail"])
+        verify_selection_receipt(receipt)
+
     @requires_maf
     def test_stock_v9_coordinates_edit_collect_verify_and_seals_real_evidence(self):
         result, snapshot, receipt = self._execute_v9_topology(
