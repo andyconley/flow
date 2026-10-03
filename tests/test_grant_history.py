@@ -85,6 +85,10 @@ SITES = {
     ("v9_send_fence", "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,"
                       "sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)"):
         ("exempt", "v9 uses the selection/send fence instead of v8 grants"),
+    ("record_v9_terminal_pre_send_action",
+     "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,"
+     "sequence,proposal_digest) VALUES(?,?,?,?,?,?,?,?,?,?)"):
+        ("exempt", "v9 records a no-I/O terminal selection closure instead of a v8 grant"),
     ("v9_send_fence", "UPDATE actions SET status='unknown',reason='v9_provider_send_uncertain' "
                       "WHERE action_id=? AND status='started'"):
         ("exempt", "v9 send outcome became uncertain"),
