@@ -410,7 +410,7 @@ class PublicationResultTests(unittest.TestCase):
 
 class PolicyAndCliTests(unittest.TestCase):
     def run_node_full_config(self, mode, repository_url=None):
-        env = {**os.environ, "FLOW_RELEASE_MODE": mode}
+        env = {**os.environ, "FLOW_RELEASE_MODE": mode, "FLOW_RELEASE_DATE": "2026-09-01"}
         if repository_url is None:
             env.pop("FLOW_RELEASE_REPOSITORY_URL", None)
         else:
@@ -421,7 +421,7 @@ class PolicyAndCliTests(unittest.TestCase):
         )
 
     def run_node_config(self, mode=None):
-        env = os.environ.copy()
+        env = {**os.environ, "FLOW_RELEASE_DATE": "2026-09-01"}
         if mode is None:
             env.pop("FLOW_RELEASE_MODE", None)
         else:
@@ -434,6 +434,20 @@ class PolicyAndCliTests(unittest.TestCase):
     def test_mode_is_explicit_and_unknown_rejected(self):
         self.assertNotEqual(self.run_node_config().returncode, 0)
         self.assertNotEqual(self.run_node_config("dry-run").returncode, 0)
+
+    def test_release_date_is_explicit_and_strict(self):
+        env = {**os.environ, "FLOW_RELEASE_MODE": "preview"}
+        missing = subprocess.run(
+            ["node", "-e", "require('./release.config.cjs')"], cwd=REPO_ROOT, env=env,
+            text=True, capture_output=True,
+        )
+        self.assertNotEqual(missing.returncode, 0)
+        env["FLOW_RELEASE_DATE"] = "September 1"
+        malformed = subprocess.run(
+            ["node", "-e", "require('./release.config.cjs')"], cwd=REPO_ROOT, env=env,
+            text=True, capture_output=True,
+        )
+        self.assertNotEqual(malformed.returncode, 0)
 
     def test_preview_excludes_mutating_plugins(self):
         result = self.run_node_config("preview")
@@ -468,6 +482,24 @@ class PolicyAndCliTests(unittest.TestCase):
         self.assertEqual(preview["plugins"][1], "./scripts/release-highlights.cjs")
         visible_types = preview["plugins"][2][1]["presetConfig"]["types"]
         self.assertTrue(all(item["hidden"] is False for item in visible_types))
+
+    def test_release_notes_context_uses_immutable_source_date(self):
+        env = {
+            **os.environ,
+            "FLOW_RELEASE_MODE": "preview",
+            "FLOW_RELEASE_DATE": "2026-09-01",
+        }
+        result = subprocess.run(
+            [
+                "node", "-e",
+                "const c=require('./release.config.cjs');"
+                "const f=c.plugins[2][1].writerOpts.finalizeContext;"
+                "console.log(JSON.stringify(f({date:'2026-09-02',keep:true})))",
+            ],
+            cwd=REPO_ROOT, env=env, text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"date": "2026-09-01", "keep": True})
 
     def test_preview_repository_url_is_canonical_config_not_action_alias(self):
         canonical = "https://github.com/andyconley/flow.git"
