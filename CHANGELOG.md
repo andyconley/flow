@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.14](https://github.com/andyconley/flow/compare/v0.40.13...v0.40.14) (2026-10-02)
+
+### Bug Fixes
+
+* resume persisted v9 refusal chains ([e42574a](https://github.com/andyconley/flow/commit/e42574a418089e43e4776a6f76a5e5ffb4d147ca))
+
 ## [0.40.13](https://github.com/andyconley/flow/compare/v0.40.12...v0.40.13) (2026-10-02)
 
 ### Bug Fixes
