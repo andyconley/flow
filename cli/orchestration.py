@@ -164,17 +164,30 @@ def _output_exists(
                     receipt_path = root / ".flow" / "runs" / work_id / "execution" / str(report.get("attempt_id")) / "receipt.json"
                     receipt = json.loads(receipt_path.read_text())
                     binding = output.get("receipt_assignment_id")
-                    completed_actions = [
-                        item for item in receipt.get("actions", [])
-                        if isinstance(item, dict) and item.get("status") == "completed"
-                        and isinstance(item.get("request"), dict)
-                        and binding in {item["request"].get("assignment_id"), item["request"].get("instance_id")}
-                    ]
-                    completed_manager_calls = [
-                        item for item in receipt.get("manager_calls", [])
-                        if isinstance(item, dict) and item.get("status") == "completed"
-                    ]
-                    bound = bool(completed_manager_calls) if role == "delivery-lead" and subject == "magentic-manager" else bool(completed_actions)
+                    if receipt.get("execution_protocol_version") == 9:
+                        # A verified completed v9 receipt contains only consumed,
+                        # receipt-bound actions. Unlike v8, completion is sealed in
+                        # the receipt outcome instead of repeated on every action.
+                        bound = (
+                            receipt.get("outcome", {}).get("status") == "completed"
+                            and any(
+                                isinstance(item, dict)
+                                and item.get("assignment_id") == binding
+                                for item in receipt.get("actions", [])
+                            )
+                        )
+                    else:
+                        completed_actions = [
+                            item for item in receipt.get("actions", [])
+                            if isinstance(item, dict) and item.get("status") == "completed"
+                            and isinstance(item.get("request"), dict)
+                            and binding in {item["request"].get("assignment_id"), item["request"].get("instance_id")}
+                        ]
+                        completed_manager_calls = [
+                            item for item in receipt.get("manager_calls", [])
+                            if isinstance(item, dict) and item.get("status") == "completed"
+                        ]
+                        bound = bool(completed_manager_calls) if role == "delivery-lead" and subject == "magentic-manager" else bool(completed_actions)
                     if binding != subject or not bound:
                         _finding(findings, field, subject, "receipt-assignment-binding", "receipt-backed output is not bound to a completed result for this assignment", "declare receipt_assignment_id equal to the assignment id and complete that bound action")
             except (VerifyRefused, OSError, ValueError, json.JSONDecodeError) as exc:

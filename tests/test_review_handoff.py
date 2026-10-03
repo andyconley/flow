@@ -196,3 +196,33 @@ class AutomaticReviewHandoffTests(unittest.TestCase):
         assignment["output"]["receipt_assignment_id"] = "magentic-manager"
         findings = validate_manifest(manifest, self.work_id, "handback", root=self.root)
         self.assertEqual([], findings)
+
+    @unittest.mock.patch("receipt_verify.verify_receipt")
+    def test_v9_receipt_backed_outputs_bind_to_sealed_actions(self, verify):
+        verify.return_value = {"attempt_id": self.attempt_id, "exit_code": 0,
+                               "status": "completed", "checks": []}
+        manifest_path = self.run_dir / "orchestration.json"
+        manifest = json.loads(manifest_path.read_text())
+        assignment = manifest["assignments"][0]
+        assignment["id"] = "magentic-manager"
+        assignment["role"] = "delivery-lead"
+        assignment["output"] = {
+            "kind": "receipt-backed",
+            "receipt_assignment_id": "magentic-manager",
+            "path": (self.run_dir / "execution" / "manager.md").relative_to(self.root).as_posix(),
+            "format": "markdown",
+        }
+        receipt_path = self.run_dir / "execution" / self.attempt_id / "receipt.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt["execution_protocol_version"] = 9
+        receipt["outcome"] = {"status": "completed", "reason": "semantic_verifier_valid_pass"}
+        receipt["actions"] = [{"assignment_id": "magentic-manager", "kind": "delegate"}]
+        receipt.pop("manager_calls", None)
+        receipt_path.write_text(json.dumps(receipt) + "\n")
+
+        self.assertEqual([], validate_manifest(manifest, self.work_id, "handback", root=self.root))
+
+        receipt["actions"] = [{"assignment_id": "another-assignment", "kind": "delegate"}]
+        receipt_path.write_text(json.dumps(receipt) + "\n")
+        findings = validate_manifest(manifest, self.work_id, "handback", root=self.root)
+        self.assertIn("receipt-assignment-binding", {finding.rule for finding in findings})
