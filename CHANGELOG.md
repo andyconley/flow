@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.16](https://github.com/andyconley/flow/compare/v0.40.15...v0.40.16) (2026-10-02)
+
+### Bug Fixes
+
+* bind v9 receipt outputs during handoff ([86087eb](https://github.com/andyconley/flow/commit/86087ebdb5d6d5fe958703c47f40d6ac82575038))
+
 ## [0.40.15](https://github.com/andyconley/flow/compare/v0.40.14...v0.40.15) (2026-10-02)
 
 ### Bug Fixes
