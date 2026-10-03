@@ -223,6 +223,10 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
             or not isinstance(claim, dict) or set(claim) != {"generation"}
             or type(claim["generation"]) is not int or claim["generation"] < 1):
         raise ContractError("protocol v9 delivery authority is invalid")
+    limits = envelope["limits"]
+    if (not isinstance(limits, dict) or type(limits.get("max_actions")) is not int
+            or limits["max_actions"] < 1):
+        raise ContractError("protocol v9 action budget is invalid")
     assignments = envelope["logical_assignments"]
     if not isinstance(assignments, list) or not assignments:
         raise ContractError("protocol v9 requires logical assignments")

@@ -419,6 +419,10 @@ class ExecutionLedger:
             claim = envelope.get("delivery_lead_claim") if protocol_version in {7, 8, 9} else None
             owner_generation = claim["generation"] if isinstance(claim, dict) else 1
             owner_actor = claim.get("lead_id", "delivery-lead") if isinstance(claim, dict) else "initial"
+            if protocol_version == 9 and db.execute(
+                    "SELECT 1 FROM attempts WHERE work_id=? AND status='started' "
+                    "AND execution_protocol_version IN (8,9) LIMIT 1", (envelope["work_id"],)).fetchone():
+                raise RecoveryRefused(SIBLING_ATTEMPT_NOT_TERMINAL)
             if protocol_version == 8 and not handback_supported(envelope):
                 # A pre-release v8 envelope stays readable and abandonable, but
                 # no new attempt may start without a sealed token budget (ADR 0020).
@@ -589,6 +593,67 @@ class ExecutionLedger:
                     if existing[0] != envelope["attempt_id"] or existing[1] != action_json:
                         raise ContractError("provider action identity reused with changed request")
                     raise ContractError("provider send was already claimed")
+                count = db.execute("SELECT COUNT(DISTINCT json_extract(request_json,'$.logical_action_id')) "
+                                   "FROM actions WHERE attempt_id=?", (envelope["attempt_id"],)).fetchone()[0]
+                known_logical_action = db.execute(
+                    "SELECT 1 FROM actions WHERE attempt_id=? "
+                    "AND json_extract(request_json,'$.logical_action_id')=? LIMIT 1",
+                    (envelope["attempt_id"], action["logical_action_id"]),
+                ).fetchone()
+                if count >= envelope["limits"]["max_actions"] and not known_logical_action:
+                    raise ContractError("sealed protocol v9 action budget exhausted")
+                limits = envelope["limits"]
+                if "max_manager_calls" in limits:
+                    assignments = {row["assignment_id"]: row for row in envelope["logical_assignments"]}
+                    rows = db.execute("SELECT request_json,status,result_json FROM actions WHERE attempt_id=?",
+                                      (envelope["attempt_id"],)).fetchall()
+                    prior = [(json.loads(row[0]), row[1], json.loads(row[2]) if row[2] else None) for row in rows]
+                    operation = assignments[action["assignment_id"]]["requirements"]["operation"]
+                    manager_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "manage" for r, _, _ in prior)
+                    worker_count = len(prior) - manager_count
+                    verifier_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "verify" for r, _, _ in prior)
+                    paid_count = sum(r["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}
+                                     and assignments[r["assignment_id"]]["requirements"]["operation"] != "manage"
+                                     and status != "observed_not_executed" for r, status, _ in prior)
+                    provider = action["selection_decision"]["selected_binding"]["provider"]
+                    if (operation == "manage" and manager_count >= limits["max_manager_calls"]
+                            or operation != "manage" and worker_count >= limits["max_delegations"]
+                            or operation == "verify" and verifier_count >= limits["max_verifier_calls"]
+                            or operation != "manage" and provider in {"claude", "codex"} and paid_count >= limits["max_paid_worker_calls"]):
+                        raise ContractError("sealed protocol v9 operation budget exhausted")
+                    charged_rows = [{"request": {"provider": r["selection_decision"]["selected_binding"]["provider"]},
+                                     "status": status, "result": wrapped.get("result") if isinstance(wrapped, dict) else None}
+                                    for r, status, wrapped in prior]
+                    charged = attempt_token_charges(envelope, charged_rows, [])["charged"]
+                    # A fresh attempt cannot reset spend under the same sealed
+                    # Delivery Charter. Unknown predecessors are charged
+                    # conservatively, even after explicit abandonment.
+                    for prior_envelope_json, request_json, status, result_json in db.execute(
+                            "SELECT attempts.envelope_json,actions.request_json,actions.status,actions.result_json "
+                            "FROM actions JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
+                            "AND attempts.attempt_id<>? AND json_extract(attempts.envelope_json,'$.delivery_charter_digest')=?",
+                            (envelope["work_id"], envelope["attempt_id"], envelope["delivery_charter_digest"])):
+                        prior_envelope = json.loads(prior_envelope_json)
+                        request = json.loads(request_json)
+                        result = json.loads(result_json) if result_json else None
+                        if prior_envelope.get("execution_protocol_version") == 9:
+                            prior_provider = request["selection_decision"]["selected_binding"]["provider"]
+                            result = result.get("result") if isinstance(result, dict) else None
+                        else:
+                            prior_provider = request.get("provider")
+                        charged += attempt_token_charges(envelope, [{"request": {"provider": prior_provider},
+                                                                       "status": status, "result": result}], [])["charged"]
+                    for prior_envelope_json, status, result_json in db.execute(
+                            "SELECT attempts.envelope_json,manager_calls.status,manager_calls.result_json "
+                            "FROM manager_calls JOIN attempts USING(attempt_id) WHERE attempts.work_id=? "
+                            "AND attempts.attempt_id<>? AND json_extract(attempts.envelope_json,'$.delivery_charter_digest')=?",
+                            (envelope["work_id"], envelope["attempt_id"], envelope["delivery_charter_digest"])):
+                        prior_provider = json.loads(prior_envelope_json).get("manager", {}).get("provider")
+                        result = json.loads(result_json) if result_json else None
+                        charged += attempt_token_charges(envelope, [{"request": {"provider": prior_provider},
+                                                                       "status": status, "result": result}], [])["charged"]
+                    if provider in {"claude", "codex"} and charged >= limits["max_lineage_tokens"]:
+                        raise ContractError("sealed protocol v9 token budget exhausted")
                 try:
                     db.execute(
                         "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
@@ -3010,7 +3075,10 @@ class ExecutionLedger:
                 required = {assignment_id for assignment_id, item in assignments.items()
                             if item["requirements"].get("operation") == "verify"}
                 verifier_actions = [item for item in snapshot["actions"]
-                                    if assignments[item["request"]["assignment_id"]]["requirements"].get("operation") == "verify"]
+                                    if assignments[item["request"]["assignment_id"]]["requirements"].get("operation") == "verify"
+                                    and item["status"] == "completed"]
+                # Proven non-execution stays in the receipt's refusal lineage;
+                # only executed results can satisfy (or duplicate) a verifier.
                 evaluations = {item["action_id"]: item["outcome"]
                                for item in snapshot["verifier_evaluations"]}
                 observed = [item["request"]["assignment_id"] for item in verifier_actions]

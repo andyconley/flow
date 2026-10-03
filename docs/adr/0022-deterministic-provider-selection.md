@@ -109,3 +109,55 @@ complete provider-neutral successor, forbids path escape, symlinks, digest
 drift, topology changes, and authority expansion, snapshots lineage, bumps the
 Delivery owner generation, and registers the successor digest atomically. It
 never infers logical assignment bodies or rewrites v8 attempts and receipts.
+
+## 2026-10-03 correction: stock Magentic owns coordination
+
+The relay implementation drifted from ADR 0011: its v9 child returned before
+MAF construction and Flow selected assignments, scheduled workers and retried
+producer work. That implementation is retired. V9 now constructs one stock
+`StandardMagenticManager` and `MagenticBuilder` workflow, with a credentialless
+manager proxy and logical guarded participants. Stock Magentic runs the facts,
+plan, progress, bounded parsing retries, replanning and final-answer phases and
+writes its pending-worker checkpoints. The v8 implementation remains separate:
+its concrete roster, action identities and recovery records are not v9 contracts.
+
+Flow independently computes the permitted unfinished frontier for each progress
+proposal, verifies the selected task again at the worker callback, recomputes
+local-first bindings, and owns every physical send and evidence decision.
+Worker failures are feedback to Magentic; Flow does not select the repair turn.
+Flow retains the existing one-repair test-failure boundary and refuses further
+execution when sealed budgets are exhausted. A final Magentic answer is a
+completion proposal; acceptance requires every required assignment, actual
+retained scoped diff/test evidence and every independent verifier's `valid_pass`.
+The owner generation and retained diff are checked again at final receipt seal.
+Scope or budget expansion still requires the existing approval path.
+
+New v9 envelopes project the sealed Delivery Charter's operation and token
+limits. Stock manager phases consume authorized manager calls, not free calls.
+The ledger checks those caps inside the physical-send fence. Historical v9
+limits are retained; resuming an old job does not enlarge its budget.
+
+### Compatibility and continuation
+
+Historical v8 attempts, checkpoints and receipt bytes are unchanged. Historical
+v9 relay attempts have no stock workflow to restore. V9 continuation therefore
+restarts stock coordination at an observed clean boundary, supplying the
+accepted assignment set and preserving all prior actions and evidence. It does
+not resend completed workers. A newly observed manager decision is a new gated
+call. Each coordination epoch has a separate checkpoint workflow name.
+
+V9 logical action journals retain the original task, sequence and binding
+proposal before reservation. On a clean restart, pending positive no-send
+selection chains reuse that identity; the stock checkpoint proposal and its
+file digest are retained separately in coordination artifacts. An older relay
+chain without a journal is reconstructed only when its sealed assignment and
+last observed manager record reproduce the exact logical identity; otherwise
+it requires explicit recovery. Started/unknown sends remain reconciliation
+blocking, with no automatic retry or fallback. Existing terminal receipts are
+still validated under their original envelope and are never rewritten.
+
+Coordination checkpoints are provenance artifacts, not authority to send or
+accept. This correction uses clean-boundary recoordination rather than arbitrary
+v9 checkpoint restoration. Insufficient historical manager/input budgets can
+refuse a resume; a successor/expanded authority must use the approved path,
+not editing an envelope or checkpoint in place.
