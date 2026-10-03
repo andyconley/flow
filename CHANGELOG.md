@@ -2,6 +2,13 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.40.13](https://github.com/andyconley/flow/compare/v0.40.12...v0.40.13) (2026-10-02)
+
+### Bug Fixes
+
+* remove Ollama execution deadlines ([15d1aa2](https://github.com/andyconley/flow/commit/15d1aa228554420fa8e983ef26d590c3ad357294))
+* stabilize release dates across midnight ([0e4dd12](https://github.com/andyconley/flow/commit/0e4dd128acc31b1e173c2b48b6316736cea6d0db))
+
 ## [0.40.12](https://github.com/andyconley/flow/compare/v0.40.11...v0.40.12) (2026-10-02)
 
 ### Bug Fixes
