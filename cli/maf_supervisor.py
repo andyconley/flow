@@ -566,20 +566,19 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
 
 def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                         on_action: Callable[[dict[str, Any]], dict[str, Any]], *,
-                        timeout_s: float = 120, python_path: str | None = None,
-                        manager_decision: dict[str, Any] | None = None,
+                        on_manager: Callable[[dict[str, Any]], str],
+                        completed_assignments: list[str] | None = None,
+                        coordination_epoch: int = 1,
+                        timeout_s: float = 900, python_path: str | None = None,
                         on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
-    """Run one credentialless logical v9 MAF proposal behind Flow dispatch.
-
-    The child cannot send to a provider and its proposal has no model or
-    provider fields.  The callback is required to construct the canonical v9
-    action and cross the ledger-owned send fence.
-    """
+    """Supervise one stock Magentic workflow; Flow authorizes each callback."""
     if (envelope.get("execution_protocol_version") != 9 or not isinstance(task, str) or not task.strip()
-            or not callable(on_action) or not isinstance(manager_decision, dict)
-            or not 0 < timeout_s <= 900):
+            or not callable(on_action) or not callable(on_manager) or not 0 < timeout_s <= 900):
         raise MafProtocolError("v9 delivery inputs are invalid")
-    executable = python_path or os.environ.get("FLOW_MAF_PYTHON") or sys.executable
+    executable = python_path or os.environ.get("FLOW_MAF_PYTHON")
+    if executable is None:
+        from maf_runtime import require_ready
+        executable = require_ready()["interpreter"]
     root = Path(__file__).resolve().parents[1]
     process = subprocess.Popen(
         [executable, "-m", "runtime.maf_runner.delivery_lead"],
@@ -587,50 +586,66 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
         cwd=root, env={"PYTHONPATH": os.pathsep.join((str(root), str(root / "cli")))}, bufsize=0, start_new_session=True,
     )
     assert process.stdin is not None and process.stdout is not None
-    deadline, pending, proposed = time.monotonic() + timeout_s, bytearray(), False
+    deadline, pending = time.monotonic() + timeout_s, bytearray()
+    initialized = False
+    runtime_ready = envelope.get("maf_runtime") is None
+    actions = calls = 0
     try:
-        if on_process_group is not None:
-            on_process_group(process.pid, "maf")
-        _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "start",
-                                                  "envelope": envelope, "task": task,
-                                                  "manager_decision": manager_decision}, deadline)
-        while True:
-            message = _read_message(process.stdout.fileno(), deadline, pending, 9)
-            kind = message["type"]
-            if kind == "runtime_initialized":
-                continue
-            if kind == "propose_v9_action":
-                if proposed or message.get("attempt_id") != envelope["attempt_id"]:
-                    raise MafProtocolError("MAF v9 proposal is duplicated or mismatched")
-                if (not isinstance(message.get("assignment_id"), str) or not isinstance(message.get("task"), str)
-                        or message.get("sequence") != 1
-                        or message.get("manager_turn") != manager_decision.get("manager_turn")):
-                    raise MafProtocolError("MAF v9 proposal is malformed")
-                if (message.get("assignment_id") != manager_decision.get("assignment_id")
-                        or message.get("task") != manager_decision.get("task")):
-                    raise MafProtocolError("MAF v9 proposal differs from the manager decision")
-                result = on_action(dict(message))
-                if not isinstance(result, dict):
-                    raise MafProtocolError("Flow v9 action callback returned invalid result")
-                # Provider execution is governed by its own adapter policy.
-                # In particular, local Ollama calls intentionally have no
-                # elapsed-time limit. Restart the coordination deadline after
-                # the callback so provider runtime is never misclassified as
-                # a stalled credentialless MAF child.
-                deadline = time.monotonic() + timeout_s
-                _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "action_result",
-                                                          "action_id": result.get("provider_action_id"), "result": result}, deadline)
-                proposed = True
-                continue
-            if kind == "workflow_finished":
-                if not proposed or message.get("attempt_id") != envelope["attempt_id"]:
-                    raise MafProtocolError("MAF v9 workflow finished without a bound action")
-                if process.wait(timeout=max(0.1, deadline - time.monotonic())) != 0:
-                    raise MafProtocolError("MAF v9 child failed after workflow_finished")
-                return message
-            if kind == "error":
-                raise MafChildError("MAF v9 child failed: " + str(message.get("message", "unknown"))[:512])
-            raise MafProtocolError("MAF v9 child sent an unexpected message")
+        with interruptible():
+            if on_process_group is not None:
+                on_process_group(process.pid, "maf")
+            _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "start",
+                          "envelope": envelope, "task": task,
+                          "completed_assignments": completed_assignments or [], "coordination_epoch": coordination_epoch}, deadline)
+            while True:
+                message = _read_message(process.stdout.fileno(), deadline, pending, 9)
+                kind = message["type"]
+                if kind == "runtime_ready":
+                    if runtime_ready or message.get("runtime") != envelope.get("maf_runtime"):
+                        raise MafProtocolError("MAF v9 runtime differs from sealed identity")
+                    runtime_ready = True
+                    continue
+                if kind == "runtime_initialized":
+                    if not runtime_ready or initialized or message.get("coordination") != "stock_magentic":
+                        raise MafProtocolError("invalid v9 runtime initialization")
+                    initialized = True
+                    continue
+                if kind in {"manager_request", "propose_v9_action"}:
+                    if not initialized or message.get("attempt_id") != envelope["attempt_id"]:
+                        raise MafProtocolError("v9 callback before initialization or wrong attempt")
+                    if kind == "manager_request":
+                        calls += 1
+                        if calls > MAX_MANAGER_CALLS or message.get("sequence") != calls:
+                            raise MafProtocolError("invalid v9 manager sequence")
+                        result = on_manager(dict(message))
+                        if not isinstance(result, str):
+                            raise MafProtocolError("invalid manager callback result")
+                        reply = {"protocol_version": 9, "type": "manager_response", "sequence": calls, "text": result}
+                    else:
+                        actions += 1
+                        if (actions > MAX_ACTIONS or message.get("sequence") != actions
+                                or type(message.get("manager_turn")) is not int or message["manager_turn"] != calls
+                                or not isinstance(message.get("checkpoint_id"), str)
+                                or not isinstance(message.get("proposal_id"), str)):
+                            raise MafProtocolError("invalid v9 worker proposal")
+                        result = on_action(dict(message))
+                        if not isinstance(result, dict):
+                            raise MafProtocolError("invalid worker callback result")
+                        reply = {"protocol_version": 9, "type": "action_result", "proposal_id": message["proposal_id"], "result": result}
+                    deadline = time.monotonic() + timeout_s
+                    _write_bounded(process.stdin.fileno(), reply, deadline)
+                    continue
+                if kind == "workflow_finished":
+                    if (not initialized or message.get("attempt_id") != envelope["attempt_id"]
+                            or message.get("coordination") != "stock_magentic"
+                            or message.get("manager_calls") != calls or message.get("actions") != actions):
+                        raise MafProtocolError("invalid v9 completion proposal")
+                    if process.wait(timeout=max(0.1, deadline - time.monotonic())) != 0:
+                        raise MafProtocolError("MAF v9 child failed after workflow_finished")
+                    return message
+                if kind == "error":
+                    raise MafChildError("MAF v9 child failed: " + str(message.get("message", "unknown"))[:512])
+                raise MafProtocolError("MAF v9 child sent an unexpected message")
     finally:
         if process.poll() is None:
             try:

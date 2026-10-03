@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sqlite3
 import sys
 import tempfile
@@ -25,6 +26,7 @@ from delivery_selection import (  # noqa: E402
 )
 from delivery_gateway import (execute_v9_logical_delivery, execute_v9_selected_action,
                               terminate_v9_delivery)  # noqa: E402
+from delivery_recovery import RecoveryRefused
 from delivery_control import DeliveryControlError  # noqa: E402
 from execution_contracts import ContractError, digest, validate_envelope  # noqa: E402
 from execution_ledger import ExecutionLedger  # noqa: E402
@@ -70,8 +72,9 @@ def _manager_result_for_action(action: dict, task: str = "Complete the approved 
 
 
 def _envelope(*, excluded_families: list[str] | None = None,
-              waiver: bool = False) -> dict:
-    policy = merge_selection_policy({})
+              waiver: bool = False, allowed_candidates: list[str] | None = None,
+              attempt_id: str = "attempt-v9") -> dict:
+    policy = merge_selection_policy({} if allowed_candidates is None else {"allowed_candidates": allowed_candidates})
     catalog = [
         _candidate("local", "ollama", "local"),
         _candidate("claude", "claude", "anthropic"),
@@ -88,7 +91,7 @@ def _envelope(*, excluded_families: list[str] | None = None,
     }, now=sealed) for item in catalog]
     common = {
         "minimum_tier": "working", "required_capabilities": ["structured_output"],
-        "locality": "any", "input_bytes": 100, "output_bytes": 100, "context_tokens": 100,
+        "locality": "any", "input_bytes": 65536, "output_bytes": 16384, "context_tokens": 32768,
         "risk_class": "standard", "independence_required": False,
     }
     assignments = [
@@ -113,7 +116,7 @@ def _envelope(*, excluded_families: list[str] | None = None,
         "source_binding_digests": ["d" * 64],
     }] if excluded_families else [])
     successor = successor_authority_digest(
-        work_id="selection-test", attempt_id="attempt-v9", charter_digest="b" * 64,
+        work_id="selection-test", attempt_id=attempt_id, charter_digest="b" * 64,
         manifest_digest="c" * 64, generation=1,
         sealed_at="2026-09-29T12:00:00Z", logical_assignments=assignments,
         catalog=catalog, availability=availability, independence_constraints=constraints,
@@ -124,7 +127,7 @@ def _envelope(*, excluded_families: list[str] | None = None,
             "schema_version": 1,
             "decision": "approve",
             "work_id": "selection-test",
-            "attempt_id": "attempt-v9",
+            "attempt_id": attempt_id,
             "assignment_id": "verifier",
             "risk_class": "high",
             "excluded_provider_families": excluded_families,
@@ -141,14 +144,14 @@ def _envelope(*, excluded_families: list[str] | None = None,
         "schema_version": 1,
         "execution_protocol_version": 9,
         "work_id": "selection-test",
-        "attempt_id": "attempt-v9",
+        "attempt_id": attempt_id,
         "charter_digest": "b" * 64,
         "manifest_digest": "c" * 64,
         "run_protocol_revision": 2,
         "logical_assignments": assignments,
         "selection_inputs": inputs,
         "selection_input_digests": {key: digest(value) for key, value in inputs.items()},
-        "limits": {"max_actions": 3},
+        "limits": {"max_actions": 18},
         "checkpoint_dir": ".flow/runs/selection-test/checkpoints",
         "delivery_charter_digest": "e" * 64,
         "delivery_lead_claim_digest": "f" * 64,
@@ -164,11 +167,20 @@ def _envelope(*, excluded_families: list[str] | None = None,
     return envelope
 
 
+from tests.v9_coordinator import coordinate, adapt
+from tests.maf_env import MAF_PYTHON, requires_maf
+
 class DeliverySelectionTests(unittest.TestCase):
     def setUp(self) -> None:
         guard = patch("delivery_gateway.delivery_authority_guard", return_value=nullcontext())
         guard.start()
         self.addCleanup(guard.stop)
+
+    def test_historical_v9_action_budget_is_readable_without_rewriting(self):
+        envelope = _envelope()
+        envelope["limits"]["max_actions"] = 64
+        validate_envelope(envelope)
+        self.assertEqual(envelope["limits"]["max_actions"], 64)
 
     def test_v9_rejects_concrete_shaper_authority(self) -> None:
         envelope = _envelope()
@@ -339,6 +351,149 @@ class DeliverySelectionTests(unittest.TestCase):
             self.assertEqual(snapshot["provider_selections"][0]["state"], "consumed")
             self.assertEqual(snapshot["actions"][0]["status"], "unknown")
 
+    def test_crash_after_dispatch_before_receipt_blocks_restart_without_duplicate(self):
+        envelope = _envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            sends = []
+
+            def send(binding, action):
+                sends.append(action["assignment_id"])
+                if action["assignment_id"] == "manager":
+                    return _manager_result_for_action(action)
+                raise SystemExit("crash after worker dispatch, before receipt")
+
+            with self.assertRaises(RecoveryRequired):
+                execute_v9_logical_delivery(envelope, "Implement.", ledger, send,
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"}, supervisor=coordinate)
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][-1]["status"], "unknown")
+            with self.assertRaisesRegex(ContractError, "reconciliation"):
+                execute_v9_logical_delivery(envelope, "Implement.", ledger, send,
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"}, supervisor=coordinate)
+            with self.assertRaises(RecoveryRefused):
+                ledger.create_attempt(_envelope(attempt_id="new-attempt-cannot-hide-unknown"))
+            self.assertEqual(sends, ["manager", "producer"])
+            self.assertEqual(ledger.snapshot(envelope["attempt_id"])["status"], "started")
+
+    def test_new_attempt_cannot_reset_sealed_authority_token_spend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            sends = []
+            for attempt_id in ("first", "second"):
+                envelope = _envelope(attempt_id=attempt_id, allowed_candidates=["codex"])
+                envelope["limits"].update({"max_manager_calls": 12, "max_delegations": 6,
+                    "max_verifier_calls": 2, "max_paid_worker_calls": 6,
+                    "max_lineage_tokens": 1, "unobserved_send_tokens": 1})
+                ledger.create_attempt(envelope)
+                action = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+                dispatch = lambda: execute_v9_selected_action(envelope, action,
+                    lambda binding, request: sends.append(request["attempt_id"]) or {"output": "observed"},
+                    readiness_recheck=lambda binding: {**binding, "state": "ready"}, ledger=ledger, generation=1)
+                if attempt_id == "first":
+                    dispatch()
+                    ledger.terminate_v9_attempt(attempt_id, "abandoned", generation=1, actor="test",
+                        explanation="budget test", cause="operator_abandoned", receipt_path=Path(tmp)/"receipt.json")
+                else:
+                    with self.assertRaisesRegex(ContractError, "token budget exhausted"):
+                        dispatch()
+                    self.assertEqual(ledger.snapshot(attempt_id)["actions"], [])
+            self.assertEqual(sends, ["first"])
+
+    def test_capacity_refusal_resume_preserves_logical_identity_and_does_not_accept_refusal(self):
+        for interrupt_success, max_actions in ((False, 5), (True, 18)):
+            with self.subTest(interrupt_success=interrupt_success, max_actions=max_actions):
+                self._resume_capacity_refusal(interrupt_success=interrupt_success, max_actions=max_actions)
+
+    def _resume_capacity_refusal(self, *, interrupt_success, max_actions):
+        envelope = _envelope(allowed_candidates=["claude", "codex"])
+        envelope["limits"]["max_actions"] = max_actions
+        sends = []
+        refused = []
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+
+            def send(binding, action):
+                sends.append((action["assignment_id"], binding["candidate_id"]))
+                if action["assignment_id"] == "manager":
+                    return _manager_result_for_action(action)
+                if action["assignment_id"] == "producer" and binding["provider"] == "claude":
+                    refused.append(action)
+                    raise ObservedNotExecuted(provider="claude", category="model_capacity",
+                                              observation_sha256="a" * 64)
+                return {"output": "observed"}
+
+            real_selected = execute_v9_selected_action
+
+            def stop_after_refusal(*args, **kwargs):
+                result = real_selected(*args, **kwargs)
+                if result["status"] == "observed_not_executed":
+                    raise SystemExit("crash after durable capacity refusal")
+                return result
+
+            with patch("delivery_gateway.execute_v9_selected_action", side_effect=stop_after_refusal):
+                with self.assertRaises(SystemExit):
+                    execute_v9_logical_delivery(envelope, "Implement.", ledger, send,
+                        readiness_recheck=lambda b: {**b, "state": "ready"}, supervisor=coordinate)
+            self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
+            accepted_on_resume = []
+
+            def resume(envelope, task, on_action, **kwargs):
+                accepted_on_resume.extend(kwargs["completed_assignments"])
+                return coordinate(envelope, task, on_action, **kwargs)
+
+            def stop_after_success(*args, **kwargs):
+                result = real_selected(*args, **kwargs)
+                if args[1]["assignment_id"] == "producer" and result["status"] == "completed":
+                    raise SystemExit("crash after durable successor result")
+                return result
+
+            if interrupt_success:
+                with patch("delivery_gateway.execute_v9_selected_action", side_effect=stop_after_success):
+                    with self.assertRaises(SystemExit):
+                        execute_v9_logical_delivery(envelope, "Implement.", ledger, send,
+                            readiness_recheck=lambda b: {**b, "state": "ready"}, supervisor=resume)
+                self.assertEqual(accepted_on_resume, [])
+            execute_v9_logical_delivery(envelope, "Implement.", ledger, send,
+                readiness_recheck=lambda b: {**b, "state": "ready"}, supervisor=resume)
+            self.assertEqual(accepted_on_resume, ["producer"] if interrupt_success else [])
+            workers = [row for row in ledger.snapshot(envelope["attempt_id"])["actions"]
+                       if row["request"]["assignment_id"] == "producer"]
+            self.assertEqual([row["status"] for row in workers], ["observed_not_executed", "completed"])
+            for key in ("logical_action_id", "task", "sequence", "manager_turn"):
+                self.assertEqual(workers[1]["request"][key], refused[0][key])
+            self.assertEqual([candidate for assignment, candidate in sends if assignment == "producer"],
+                             ["claude", "codex"])
+
+    def test_capacity_successor_uses_same_action_slot_and_new_action_is_refused_before_send(self):
+        envelope = _envelope(allowed_candidates=["claude", "codex"])
+        envelope["limits"]["max_actions"] = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
+            ledger.create_attempt(envelope)
+            original = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1)
+            refused = execute_v9_selected_action(envelope, original,
+                lambda *_: (_ for _ in ()).throw(ObservedNotExecuted(
+                    provider="claude", category="model_capacity", observation_sha256="a" * 64)),
+                readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            successor = make_action(envelope, "producer", "Implement.", sequence=1, manager_turn=1,
+                                    decision=refused["successor_decision"])
+            sends = []
+            result = execute_v9_selected_action(envelope, successor,
+                lambda b, a: sends.append(a["action_id"]) or {"output": "observed"},
+                readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1,
+                predecessor_selection_id=original["selection_id"])
+            self.assertEqual(result["status"], "completed")
+            new_action = make_action(envelope, "manager", "New work.", sequence=2, manager_turn=2)
+            with self.assertRaisesRegex(ContractError, "action budget exhausted"):
+                execute_v9_selected_action(envelope, new_action,
+                    lambda b, a: sends.append(a["action_id"]) or {"output": "unexpected"},
+                    readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            self.assertEqual(sends, [successor["action_id"]])
+            self.assertFalse(ledger.v9_recovery_required(envelope["attempt_id"]))
+            self.assertEqual(len(ledger.snapshot(envelope["attempt_id"])["actions"]), 2)
+
     def test_gateway_v9_observed_capacity_refusal_is_failed_and_can_select_successor(self) -> None:
         """A bounded terminal capacity refusal is not an uncertain paid send."""
         envelope = _envelope()
@@ -443,7 +598,7 @@ class DeliverySelectionTests(unittest.TestCase):
             outcome = execute_v9_logical_delivery(
                 envelope, "Implement the approved change.", ledger, adapter,
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                supervisor=supervisor,
+                supervisor=adapt(supervisor),
             )
             self.assertEqual(outcome["status"], "completed")
             manager_task = ledger.snapshot(envelope["attempt_id"])["actions"][0]["request"]["task"]
@@ -452,7 +607,7 @@ class DeliverySelectionTests(unittest.TestCase):
                              {"manager": "local", "producer": "local", "verifier": "local"})
             self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
                              ["completed", "completed", "completed", "completed"])
-            self.assertEqual(supervisor_timeouts, [660, 660])
+            self.assertEqual(supervisor_timeouts, [900, 900])
 
     def test_logical_v9_manager_decision_drives_verifier_stage(self) -> None:
         envelope = _envelope()
@@ -477,7 +632,7 @@ class DeliverySelectionTests(unittest.TestCase):
             outcome = execute_v9_logical_delivery(
                 envelope, "Complete the approved work.", ledger, adapter,
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                supervisor=supervisor,
+                supervisor=adapt(supervisor),
             )
             self.assertEqual(outcome["status"], "completed")
             self.assertEqual(seen, ["manager", "producer", "manager", "verifier"])
@@ -521,11 +676,7 @@ class DeliverySelectionTests(unittest.TestCase):
             execute_v9_logical_delivery(
                 envelope, "Complete approved work.", ledger, adapter,
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
-                    on_action({"attempt_id": envelope["attempt_id"],
-                               "assignment_id": manager_decision["assignment_id"],
-                               "task": manager_decision["task"], "sequence": 1,
-                               "manager_turn": manager_decision["manager_turn"]}),
+                supervisor=coordinate,
             )
             self.assertEqual(worker_order, ["producer-two", "producer", "verifier"])
             prompts = [item["request"]["task"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]
@@ -545,7 +696,7 @@ class DeliverySelectionTests(unittest.TestCase):
                     return _manager_result_for_action(action)
                 self.fail("worker adapter must not be called")
 
-            with self.assertRaisesRegex(ContractError, "differs from the bounded manager decision"):
+            with self.assertRaisesRegex(ContractError, "differs from the permitted Magentic decision"):
                 execute_v9_logical_delivery(
                     envelope, "Complete the approved work.", ledger, adapter,
                     readiness_recheck=lambda binding: {**binding, "state": "ready"},
@@ -581,7 +732,7 @@ class DeliverySelectionTests(unittest.TestCase):
                 lambda binding, action: sends.append(binding["candidate_id"]) or (
                     _manager_result_for_action(action, task="Implement.") if action["assignment_id"] == "manager"
                     else {"output": "done"}),
-                readiness_recheck=readiness, supervisor=supervisor,
+                readiness_recheck=readiness, supervisor=adapt(supervisor),
             )
             self.assertEqual(outcome["outcome"]["status"], "completed")
             self.assertEqual(sends, ["claude", "claude", "claude", "claude"])
@@ -610,11 +761,7 @@ class DeliverySelectionTests(unittest.TestCase):
 
             execute_v9_logical_delivery(
                 envelope, "Complete.", ledger, adapter, readiness_recheck=readiness,
-                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
-                    on_action({"attempt_id": envelope["attempt_id"],
-                               "assignment_id": manager_decision["assignment_id"],
-                               "task": manager_decision["task"], "sequence": 1,
-                               "manager_turn": manager_decision["manager_turn"]}),
+                supervisor=coordinate,
             )
             self.assertIn(("producer", "claude"), sends)
             self.assertIn(("verifier", "codex"), sends)
@@ -644,11 +791,7 @@ class DeliverySelectionTests(unittest.TestCase):
 
             execute_v9_logical_delivery(
                 envelope, "Complete.", ledger, adapter, readiness_recheck=readiness,
-                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
-                    on_action({"attempt_id": envelope["attempt_id"],
-                               "assignment_id": manager_decision["assignment_id"],
-                               "task": manager_decision["task"], "sequence": 1,
-                               "manager_turn": manager_decision["manager_turn"]}),
+                supervisor=coordinate,
             )
             snapshot = ledger.snapshot(envelope["attempt_id"])
             verifier_row = next(item for item in snapshot["actions"]
@@ -853,31 +996,51 @@ class DeliverySelectionTests(unittest.TestCase):
 
             with self.assertRaises(RecoveryRequired):
                 execute_v9_logical_delivery(envelope, "Implement.", ledger, uncertain_hosted,
-                                            readiness_recheck=readiness, supervisor=supervisor)
+                                            readiness_recheck=readiness, supervisor=adapt(supervisor))
             self.assertEqual(sends, ["claude", "claude"])
             selections = ledger.snapshot(envelope["attempt_id"])["provider_selections"]
             self.assertEqual([item["state"] for item in selections],
                              ["superseded", "consumed", "superseded", "consumed"])
             self.assertEqual(ledger.snapshot(envelope["attempt_id"])["actions"][-1]["status"], "unknown")
 
-    def test_logical_v9_route_runs_the_credentialless_maf_child(self) -> None:
+    @requires_maf
+    def test_logical_v9_route_runs_stock_magentic_with_dependent_assignments(self) -> None:
         envelope = _envelope()
         with tempfile.TemporaryDirectory() as tmp:
+            checkpoints = Path(tmp) / "checkpoints"
+            checkpoints.mkdir()
+            envelope["checkpoint_dir"] = str(checkpoints)
             ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
             ledger.create_attempt(envelope)
-            outcome = execute_v9_logical_delivery(
-                envelope, "Implement the approved change.", ledger,
-                lambda binding, action: (_manager_result_for_action(action, task="Implement the approved change.")
-                                         if action["assignment_id"] == "manager"
-                                         else {"provider": binding["provider"], "output": "applied"}),
-                readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                python_path=sys.executable,
-            )
-            self.assertEqual(outcome["attempt_id"], envelope["attempt_id"])
-            self.assertEqual([item["status"] for item in ledger.snapshot(envelope["attempt_id"])["actions"]],
-                             ["completed", "completed", "completed", "completed"])
+            worker_order = []
+            phases = []
 
-    def test_logical_v9_manager_uncertain_send_stops_before_maf(self) -> None:
+            def adapter(binding, action):
+                if action["assignment_id"] != "manager":
+                    worker_order.append(action["assignment_id"])
+                    return {"output": "applied"}
+                match = re.search(r"Flow permitted unfinished frontier: (\[[^\n]*\])", action["task"])
+                if match is None:
+                    phases.append("text")
+                    return {"output": "Bounded stock manager facts, plan or final answer."}
+                frontier = json.loads(match.group(1))
+                phases.append("progress")
+                progress = _manager_result(frontier[0] if frontier else "verifier")["manager_response"]
+                progress["is_request_satisfied"]["answer"] = not frontier
+                return {"output": json.dumps(progress)}
+
+            outcome = execute_v9_logical_delivery(
+                envelope, "Implement the approved change.", ledger, adapter,
+                readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                python_path=MAF_PYTHON)
+            self.assertEqual(outcome["coordination"], "stock_magentic")
+            self.assertEqual(worker_order, ["producer", "verifier"])
+            self.assertGreaterEqual(phases.count("text"), 3)
+            self.assertEqual(phases.count("progress"), 3)
+            self.assertTrue(list(checkpoints.glob("*.json")))
+            self.assertTrue(all(a["status"] == "completed" for a in ledger.snapshot(envelope["attempt_id"])["actions"]))
+
+    def test_logical_v9_manager_uncertain_send_stops_inside_maf_callback(self) -> None:
         envelope = _envelope()
         with tempfile.TemporaryDirectory() as tmp:
             ledger = ExecutionLedger(Path(tmp) / "ledger.sqlite3")
@@ -888,7 +1051,7 @@ class DeliverySelectionTests(unittest.TestCase):
                     envelope, "Implement.", ledger,
                     lambda _binding, _action: (_ for _ in ()).throw(TimeoutError("unknown")),
                     readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                    supervisor=lambda *_args, **_kwargs: supervisor_calls.append(True),
+                    supervisor=coordinate,
                 )
             self.assertEqual(supervisor_calls, [])
             snapshot = ledger.snapshot(envelope["attempt_id"])

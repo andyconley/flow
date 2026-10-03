@@ -37,12 +37,8 @@ RESOLVED_PACKAGES = {
     "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
     "pyyaml": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
 }
-# These are the protocols whose readiness depends on the pinned MAF package
-# surface. Protocol v9 uses the same managed interpreter, but its
-# credentialless selection path returns before importing MAF orchestration.
-# Keep this package-compatibility identity stable across that additive
-# transport change so the preceding release can transactionally activate the
-# new source with its already-loaded readiness probe.
+# Retain the package compatibility identity for transactional predecessor updates.
+# V9 also executes the pinned stock Magentic package surface.
 SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 READY = "ready"
 UNREADY_STATES = {

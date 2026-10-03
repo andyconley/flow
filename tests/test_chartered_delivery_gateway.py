@@ -31,13 +31,17 @@ from delivery_control import change_lead_claim
 from maf_supervisor import MafTransportError
 from maf_runtime import MafRuntimeUnready
 from tests.shaper_intent_fixture import shaper_intent
-from tests.maf_env import sealed_runtime_identity
+from tests.maf_env import sealed_runtime_identity, MAF_PYTHON, requires_maf
 from execution_ledger import ExecutionLedger
 from verifier_contracts import VERIFIER_CONTRACT_INSTRUCTION, digest as verifier_digest, evaluate_candidate
 from provider_selection import digest as selection_digest
 from selection_receipt import V9ReceiptError, verify_selection_receipt
+from delivery_selection import RecoveryRequired, make_action
+from provider_outcomes import ObservedNotExecuted
 import delivery_gateway
 
+
+from tests.v9_coordinator import coordinate, adapt
 
 class KillPoint(BaseException):
     """Simulated process death; escapes the gateway's ``except Exception`` handlers."""
@@ -1554,7 +1558,8 @@ class ProviderRouteTests(unittest.TestCase):
 
 class V9CharteredRouteTests(CharteredFixture):
     def _execute_v9_topology(self, *, with_collector: bool,
-                             independent_verifier: bool):
+                             independent_verifier: bool, real_maf: bool = False, coordinator=None,
+                             verifier_failure: str | None = None, verifier_output: str | None = None):
         """Exercise the complete v9 route while replacing only provider I/O."""
         now = datetime.now(timezone.utc)
         common = {"minimum_tier": "working", "locality": "any",
@@ -1603,6 +1608,13 @@ class V9CharteredRouteTests(CharteredFixture):
              "operations": ["verify"], "capabilities": ["evidence_collection"],
              "cost_class": 1, "enabled": True},
         ]
+        if verifier_failure is not None:
+            catalog.append({
+                "candidate_id": "claude-hosted", "provider": "claude", "model": "hosted-verifier",
+                "provider_family": "anthropic", "tier": "judgment", "locality": "hosted",
+                "operations": ["verify"], "capabilities": ["evidence_collection"],
+                "cost_class": 1, "enabled": True,
+            })
         availability = [{
             "candidate_id": item["candidate_id"], "state": "ready",
             "observed_at": (now - timedelta(seconds=1)).isoformat(),
@@ -1625,6 +1637,17 @@ class V9CharteredRouteTests(CharteredFixture):
                 nonlocal manager_turn
                 assignment_id = action["assignment_id"]
                 if assignment_id == "manager":
+                    if real_maf:
+                        match = re.search(r"Flow permitted unfinished frontier: (\[[^\n]*\])", action["task"])
+                        if match is None:
+                            return {"output": "Stock manager facts, plan and final answer."}
+                        frontier = json.loads(match.group(1))
+                        if not frontier:
+                            return {"output": json.dumps({
+                                "is_request_satisfied": {"answer": True}, "is_in_loop": {"answer": False},
+                                "is_progress_being_made": {"answer": True},
+                                "next_speaker": {"answer": "verifier", "reason": "Flow accepted every assignment"},
+                                "instruction_or_question": {"answer": "Finish"}})}
                     selected = worker_order[manager_turn]
                     manager_turn += 1
                     return {"provider": binding["provider"], "manager_response": {
@@ -1639,6 +1662,13 @@ class V9CharteredRouteTests(CharteredFixture):
                     return {"provider": binding["provider"], "output": "applied"}
                 if assignment_id == "evidence":
                     return {"provider": binding["provider"], "output": "evidence collected"}
+                if binding["provider"] == "claude" and verifier_failure == "capacity":
+                    raise ObservedNotExecuted(provider="claude", category="model_capacity",
+                                              observation_sha256="a" * 64)
+                if binding["provider"] == "claude" and verifier_failure == "unknown":
+                    raise TimeoutError("verifier outcome is unknown")
+                if verifier_output is not None:
+                    return {"provider": binding["provider"], "output": verifier_output}
                 return {"provider": binding["provider"], "output": json.dumps({
                     "schema_version": 1, "decision": "pass",
                     "summary": "Diff and test evidence pass.", "findings": [],
@@ -1647,14 +1677,115 @@ class V9CharteredRouteTests(CharteredFixture):
             result = execute_v9_logical_delivery(
                 envelope, task, ledger, transport,
                 readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                supervisor=lambda _envelope, _task, on_action, *, manager_decision, **_kwargs:
-                    on_action({"attempt_id": envelope["attempt_id"],
-                               "assignment_id": manager_decision["assignment_id"],
-                               "task": manager_decision["task"], "sequence": 1,
-                               "manager_turn": manager_decision["manager_turn"]}),
+                supervisor=coordinator or (None if real_maf else coordinate),
+                python_path=MAF_PYTHON if real_maf else None,
             )
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         return result, ledger.snapshot(envelope["attempt_id"]), receipt
+
+    @requires_maf
+    def test_stock_v9_coordinates_edit_collect_verify_and_seals_real_evidence(self):
+        result, snapshot, receipt = self._execute_v9_topology(
+            with_collector=True, independent_verifier=True, real_maf=True)
+        self.assertEqual(result["coordination"], "stock_magentic")
+        self.assertEqual(result["status"], "completed")
+        workers = [row["request"]["assignment_id"] for row in snapshot["actions"]
+                   if row["request"]["assignment_id"] != "manager"]
+        self.assertEqual(workers, ["editor", "evidence", "verifier"])
+        self.assertEqual(receipt["semantic_verification"][0]["evaluation"]["disposition"], "valid_pass")
+        self.assertEqual([row["request"]["selection_decision"]["selected_binding"]["provider"]
+                          for row in snapshot["actions"] if row["request"]["assignment_id"] != "manager"],
+                         ["ollama", "ollama", "codex"])
+        verify_selection_receipt(receipt)
+
+    @requires_maf
+    def test_stock_v9_verifier_capacity_successor_pass_seals_with_refusal_history(self):
+        result, snapshot, receipt = self._execute_v9_topology(
+            with_collector=True, independent_verifier=True, real_maf=True,
+            verifier_failure="capacity")
+        self.assertEqual(result["status"], "completed")
+        verifiers = [row for row in snapshot["actions"] if row["request"]["assignment_id"] == "verifier"]
+        self.assertEqual([row["status"] for row in verifiers], ["observed_not_executed", "completed"])
+        self.assertEqual([row["request"]["selection_decision"]["selected_binding"]["provider"]
+                          for row in verifiers], ["claude", "codex"])
+        self.assertEqual(verifiers[0]["request"]["logical_action_id"],
+                         verifiers[1]["request"]["logical_action_id"])
+        self.assertEqual(receipt["provider_refusals"][0]["action_id"], verifiers[0]["action_id"])
+        self.assertEqual(len(receipt["semantic_verification"]), 1)
+        self.assertEqual(receipt["semantic_verification"][0]["action_id"], verifiers[1]["action_id"])
+        self.assertEqual(receipt["semantic_verification"][0]["evaluation"]["disposition"], "valid_pass")
+        verify_selection_receipt(receipt)
+        missing = copy.deepcopy(receipt)
+        missing["semantic_verification"] = []
+        missing["receipt_digest"] = delivery_digest({k: v for k, v in missing.items() if k != "receipt_digest"})
+        with self.assertRaisesRegex(V9ReceiptError, "v9_semantic_verification_missing"):
+            verify_selection_receipt(missing)
+
+    def test_v9_verifier_capacity_successor_invalid_evidence_cannot_complete(self):
+        result, snapshot, receipt = self._execute_v9_topology(
+            with_collector=False, independent_verifier=True, verifier_failure="capacity",
+            verifier_output="I intend to review the evidence.")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(snapshot["verifier_evaluations"][0]["outcome"], "unusable")
+        self.assertEqual(len(receipt["provider_refusals"]), 1)
+        verify_selection_receipt(receipt)
+
+    def test_v9_verifier_capacity_successor_missing_durable_evaluation_cannot_seal(self):
+        with patch.object(ExecutionLedger, "record_v9_verifier_evaluation", return_value={}):
+            with self.assertRaisesRegex(ContractError, "terminal status contradicts verifier evidence"):
+                self._execute_v9_topology(with_collector=False, independent_verifier=True,
+                                          verifier_failure="capacity")
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
+        attempt = next(path.name for path in (self.run / "execution").iterdir() if path.is_dir())
+        snapshot = ledger.snapshot(attempt)
+        self.assertEqual(snapshot["verifier_evaluations"], [])
+        self.assertEqual(snapshot["status"], "started")
+        self.assertIsNone(snapshot["receipt_path"])
+
+    def test_v9_duplicate_actual_verifier_passes_cannot_seal(self):
+        def duplicate(envelope, task, on_action, **kwargs):
+            outcome = coordinate(envelope, task, on_action, **kwargs)
+            ledger = ExecutionLedger(Path(envelope["checkpoint_dir"]).parents[1] / "ledger.sqlite")
+            snapshot = ledger.snapshot(envelope["attempt_id"])
+            original = next(row for row in snapshot["actions"] if row["request"]["assignment_id"] == "verifier")
+            stored = snapshot["verifier_inputs"][0]
+            action = make_action(envelope, "verifier", original["request"]["task"],
+                sequence=max(row["request"]["sequence"] for row in snapshot["actions"]) + 1,
+                manager_turn=original["request"]["manager_turn"] + 1,
+                runtime_excluded_families=original["request"]["selection_decision"]["excluded_families"])
+            raw = original["result"]["result"]
+            delivery_gateway.execute_v9_selected_action(envelope, action, lambda *_: raw,
+                readiness_recheck=lambda b: {**b, "state": "ready"}, ledger=ledger, generation=1)
+            evidence = stored["input"]
+            evaluation = evaluate_candidate(action_id=action["action_id"],
+                verifier_input_digest=stored["input_digest"], raw_output=raw["output"],
+                diff_digest=stored["diff_digest"], test_evidence_digest=stored["test_digest"])
+            ledger.record_v9_verifier_evaluation(action["action_id"], evidence, raw, evaluation,
+                stored["diff_digest"], stored["test_digest"], generation=1)
+            return outcome
+
+        with self.assertRaisesRegex(ContractError, "terminal status contradicts verifier evidence"):
+            self._execute_v9_topology(with_collector=False, independent_verifier=True, coordinator=duplicate)
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
+        attempt = next(path.name for path in (self.run / "execution").iterdir() if path.is_dir())
+        snapshot = ledger.snapshot(attempt)
+        self.assertEqual([row["outcome"] for row in snapshot["verifier_evaluations"]], ["valid_pass", "valid_pass"])
+        self.assertEqual(snapshot["status"], "started")
+        self.assertIsNone(snapshot["receipt_path"])
+
+    def test_v9_unknown_verifier_outcome_never_falls_to_successor(self):
+        with self.assertRaises(RecoveryRequired):
+            self._execute_v9_topology(with_collector=False, independent_verifier=True,
+                                      verifier_failure="unknown")
+        ledger = ExecutionLedger(self.run / "execution" / "ledger.sqlite")
+        attempt = next(path.name for path in (self.run / "execution").iterdir() if path.is_dir())
+        snapshot = ledger.snapshot(attempt)
+        verifiers = [row for row in snapshot["actions"] if row["request"]["assignment_id"] == "verifier"]
+        self.assertEqual(len(verifiers), 1)
+        self.assertEqual(verifiers[0]["status"], "unknown")
+        self.assertEqual(verifiers[0]["request"]["selection_decision"]["selected_binding"]["provider"], "claude")
+        self.assertTrue(ledger.v9_recovery_required(attempt))
+        self.assertIsNone(snapshot["receipt_path"])
 
     def _write_v9_logical_charter(self) -> None:
         common = {"minimum_tier": "working", "locality": "any", "input_bytes": 100,
@@ -1816,7 +1947,7 @@ class V9CharteredRouteTests(CharteredFixture):
                     result = execute_v9_logical_delivery(
                         envelope, task, ledger, adapter,
                         readiness_recheck=readiness,
-                        supervisor=supervise,
+                        supervisor=adapt(supervise),
                     )
                 except KillPoint:
                     status = v9_recovery_status("sample", envelope["attempt_id"], root=self.root)
@@ -1825,7 +1956,7 @@ class V9CharteredRouteTests(CharteredFixture):
                     result = execute_v9_logical_delivery(
                         envelope, task, ledger, adapter,
                         readiness_recheck=readiness,
-                        supervisor=supervise,
+                        supervisor=adapt(supervise),
                     )
         return result, ledger.snapshot(envelope["attempt_id"])
 
@@ -1869,7 +2000,7 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["reason"], "provider_candidates_exhausted")
         self.assertEqual(snapshot["status"], "failed")
-        self.assertEqual(snapshot["provider_selections"][-1]["state"], "pre_send_refused")
+        self.assertIn("pre_send_refused", [row["state"] for row in snapshot["provider_selections"]])
         receipt = json.loads(Path(result["receipt_path"]).read_text())
         self.assertEqual(receipt["outcome"], {
             "status": "failed", "reason": "provider_candidates_exhausted"})
@@ -1899,14 +2030,14 @@ class V9CharteredRouteTests(CharteredFixture):
                         if item["request"]["assignment_id"] == "verifier")
         self.assertEqual(len(verifier["task"]), 5000)
 
-    def test_v9_clean_boundary_resume_reuses_completed_manager_decision(self):
+    def test_v9_clean_boundary_resume_restarts_coordination_without_repeating_workers(self):
         valid = json.dumps({"schema_version": 1, "decision": "pass",
                             "summary": "Diff and test evidence pass.", "findings": []})
         result, snapshot = self._execute_semantic_v9(
             valid, interrupt_before_verifier=True)
         self.assertEqual(result["status"], "completed")
         assignment_ids = [item["request"]["assignment_id"] for item in snapshot["actions"]]
-        self.assertEqual(assignment_ids.count("manager"), 2)
+        self.assertEqual(assignment_ids.count("manager"), 3)
         self.assertEqual(assignment_ids.count("editor"), 1)
         self.assertEqual(assignment_ids.count("verifier"), 1)
 
@@ -2383,12 +2514,12 @@ class V9CharteredRouteTests(CharteredFixture):
         assignments = [{"assignment_id": "manager", "role": "delivery-lead", "instructions": "Manage.",
                         "requirements": {"operation": "manage", "minimum_tier": "working",
                                          "required_capabilities": ["structured_output"], "locality": "any",
-                                         "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
+                                         "input_bytes": 65536, "output_bytes": 1, "context_tokens": 1,
                                          "risk_class": "standard", "independence_required": False}},
                        {"assignment_id": "editor", "role": "lead-developer", "instructions": "Edit scope.",
                         "requirements": {"operation": "edit", "minimum_tier": "working",
                                          "required_capabilities": ["structured_edit"], "locality": "any",
-                                         "input_bytes": 1, "output_bytes": 1, "context_tokens": 1,
+                                         "input_bytes": 65536, "output_bytes": 1, "context_tokens": 1,
                                          "risk_class": "standard", "independence_required": False}}]
         claim_path = self.run / self.state["delivery"]["lead_claim_path"]
         claim = json.loads(claim_path.read_text())
@@ -2415,10 +2546,7 @@ class V9CharteredRouteTests(CharteredFixture):
                             "instruction_or_question": {"answer": task},
                         }} if action["assignment_id"] == "manager" else {"model": binding["model"]}),
                     readiness_recheck=lambda binding: {**binding, "state": "ready"},
-                    supervisor=lambda _envelope, _sent_task, on_action, *, manager_decision, **_kwargs: on_action({
-                        "attempt_id": envelope["attempt_id"], "assignment_id": "editor",
-                        "task": manager_decision["task"], "sequence": 1, "manager_turn": 1,
-                    }),
+                    supervisor=coordinate,
                 )
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["reason"], "edit_scope_validation_failed")

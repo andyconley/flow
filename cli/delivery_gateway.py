@@ -72,7 +72,7 @@ from maf_supervisor import (MafChildError, MafProtocolError, MafTransportError, 
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import handoff_to_review, status as run_status
-from runner_limits import MAX_MANAGER_MESSAGES_BYTES
+from runner_limits import MAX_MANAGER_MESSAGES_BYTES, MAX_MANAGER_CALLS, MAX_ACTIONS
 from verifier_contracts import (VERIFIED_HANDOFF_AUTHORITY, VERIFIER_CONTRACT_INSTRUCTION,
                                 evaluate_candidate, provider_binding_mismatch,
                                 verifier_instructions, verifier_provider_task)
@@ -2171,6 +2171,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     if snapshot["envelope"] != envelope or snapshot["status"] != "started":
         raise ContractError("logical v9 delivery attempt is absent or closed")
     generation = snapshot["owner_generation"]
+    with delivery_authority_guard(Path(envelope["checkpoint_dir"]).parents[2], envelope):
+        pass
     attempt_dir = Path(envelope["checkpoint_dir"]).parent
     live_attempt = (attempt_dir.is_absolute() and attempt_dir.is_dir() and not attempt_dir.is_symlink()
                     and (attempt_dir / "job-charter.snapshot.json").is_file()
@@ -2183,24 +2185,21 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     if live_attempt:
         job = json.loads((attempt_dir / "job-charter.snapshot.json").read_text())
         baseline = json.loads((attempt_dir / "baseline.json").read_text())
-    manager_decision: dict[str, Any] | None = None
-    dispatch_sequence_base = 1
+    dispatch_sequence_base = max((a["request"]["sequence"] for a in snapshot["actions"]), default=0) + 1
 
     class ProviderCandidatesExhausted(Exception):
         def __init__(self, result: dict[str, Any]) -> None:
             self.result = result
 
     def dispatch(proposal: dict[str, Any]) -> dict[str, Any]:
-        if manager_decision is not None and proposal["assignment_id"] != manager_decision["assignment_id"]:
-            raise ContractError("logical v9 proposal differs from the bounded manager decision")
-        if manager_decision is not None and proposal["task"] != manager_decision["task"]:
-            raise ContractError("logical v9 task differs from the bounded manager decision")
+        nonlocal dispatch_sequence_base
         assignment = next((item for item in envelope["logical_assignments"]
                            if item["assignment_id"] == proposal["assignment_id"]), None)
         if assignment is None:
             raise ContractError("logical v9 proposal names an unknown assignment")
-        sequence = dispatch_sequence_base if assignment["requirements"]["operation"] == "manage" \
-            else dispatch_sequence_base + 1
+        sequence = dispatch_sequence_base
+        if sequence > envelope["limits"]["max_actions"]:
+            raise ContractError("sealed v9 action budget exhausted; approval is required for more work")
         runtime_families = (_runtime_family_exclusions(envelope, proposal["assignment_id"], ledger)
                             if assignment["requirements"]["operation"] == "verify" else None)
         action = make_v9_action(
@@ -2208,6 +2207,47 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             sequence=sequence, manager_turn=proposal["manager_turn"],
             runtime_excluded_families=runtime_families,
         )
+        orphan_chains = [row for row in snapshot.get("provider_selections", [])
+                         if row["decision"]["requirements_digest"] == action["selection_decision"]["requirements_digest"]
+                         and row["logical_action_id"] not in {
+                             r["request"]["logical_action_id"] for r in snapshot["actions"]
+                             if r["status"] == "completed"}]
+        if orphan_chains:
+            if len({row["logical_action_id"] for row in orphan_chains}) != 1:
+                raise ContractError("ambiguous unfinished logical selection chains require explicit recovery")
+            logical_id = orphan_chains[0]["logical_action_id"]
+            journal = attempt_dir / ("logical-action-" + logical_id + ".json")
+            if journal.is_file() and not journal.is_symlink():
+                saved = json.loads(journal.read_text())
+            elif refused_actions := [row["request"] for row in snapshot["actions"]
+                                     if row["request"]["logical_action_id"] == logical_id
+                                     and row["status"] == "observed_not_executed"]:
+                # The durable refusal retains the exact task/sequence even
+                # for embedding callers that have no action journal.
+                original = refused_actions[0]
+                saved = make_v9_action(envelope, proposal["assignment_id"], original["task"],
+                                       sequence=original["sequence"], manager_turn=original["manager_turn"],
+                                       decision=orphan_chains[0]["decision"])
+            else:
+                # Historical relay jobs did not persist a logical proposal.
+                # Recover only the deterministic task reconstructed from their
+                # sealed charter and final observed manager decision.
+                prior_manager = snapshot["actions"][-1]["request"]
+                legacy_task = (f"Approved job:\n{task.strip()}\n\n"
+                               f"Logical assignment: {proposal['assignment_id']}\n"
+                               f"Sealed instructions:\n{assignment['instructions'].strip()}")
+                saved = make_v9_action(envelope, proposal["assignment_id"], legacy_task,
+                                       sequence=prior_manager["sequence"] + 1,
+                                       manager_turn=prior_manager["manager_turn"] + 1,
+                                       runtime_excluded_families=runtime_families)
+            if saved["logical_action_id"] != logical_id or saved["assignment_id"] != proposal["assignment_id"]:
+                raise ContractError("persisted unsent logical action requires explicit recovery")
+            action = saved
+            proposal = {**proposal, "task": saved["task"], "manager_turn": saved["manager_turn"]}
+            sequence = saved["sequence"]
+        if live_attempt:
+            write_atomic(attempt_dir / ("logical-action-" + action["logical_action_id"] + ".json"),
+                         canonical(action) + "\n", mode=0o600)
         predecessor_selection_id = None
         terminal_refused_action = None
         # A process can stop after Flow durably records a positive no-send
@@ -2308,6 +2348,9 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                     "selection_id": action["selection_id"]}
         if assignment["requirements"]["operation"] == "manage":
             response["manager_result"] = result.get("result")
+        # Resuming a refusal reuses its original sequence; it must not spend
+        # an additional sequence slot after the new coordination call.
+        dispatch_sequence_base = max(dispatch_sequence_base, sequence + 1)
         return response
 
     managers = [item for item in envelope["logical_assignments"]
@@ -2319,35 +2362,24 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                if item["requirements"].get("operation") != "manage"]
     if not workers:
         raise ContractError("protocol v9 requires at least one logical worker assignment")
-    # Bootstrap the manager through the exact same Flow-owned selection and
-    # send fence before a MAF process exists. The child receives neither the
-    # binding nor provider credentials; the durable receipt carries the proof.
-    outcomes = []
     pending = {item["assignment_id"]: item for item in workers}
     completed: set[str] = set()
-    repair_feedback: dict[str, str] = {}
-    repair_counts: dict[str, int] = {}
-    # A process may stop after a fully observed action and before the next
-    # provider send (for example, a local contract refusal while constructing
-    # the verifier payload).  Reconstruct that clean boundary from the ledger
-    # instead of replaying completed provider work.  Unknown or started sends
-    # remain exclusively in the explicit reconciliation path.
     prior_actions = snapshot["actions"]
-    if any(item["status"] != "completed" for item in prior_actions):
-        raise ContractError("logical v9 continuation requires a clean completed-action boundary")
-    prior_workers = [item for item in prior_actions
-                     if item["request"]["assignment_id"] != manager["assignment_id"]]
-    failed_action_ids = {item["action_id"] for item in snapshot.get("evidence_failures", [])}
-    for item in prior_workers:
-        if item["request"]["action_id"] not in failed_action_ids:
-            completed.add(item["request"]["assignment_id"])
+    if any(item["status"] not in {"completed", "observed_not_executed"} for item in prior_actions):
+        raise ContractError("logical v9 continuation requires reconciliation of every uncertain send")
+    failed_action_ids = {item["action_id"] for item in snapshot.get("events", [])
+                         if item["event"] == "v9_evidence_failed"}
+    for item in prior_actions:
+        if item["status"] != "completed":
+            continue
+        assignment_id = item["request"]["assignment_id"]
+        if assignment_id in pending:
+            if item["action_id"] in failed_action_ids:
+                completed.discard(assignment_id)
+            else:
+                completed.add(assignment_id)
     for assignment_id in completed:
         pending.pop(assignment_id, None)
-    prior_managers = [item for item in prior_actions
-                      if item["request"]["assignment_id"] == manager["assignment_id"]]
-    trailing_manager = (prior_managers[-1] if prior_actions and prior_managers
-                        and prior_actions[-1] is prior_managers[-1] else None)
-    stage = len(prior_managers) - (1 if trailing_manager is not None else 0)
     if live_attempt and completed:
         completed_assignments = {item["assignment_id"]: item for item in workers
                                  if item["assignment_id"] in completed}
@@ -2365,89 +2397,82 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         if action is not None:
             verifier_evaluations[action["assignment_id"]] = evaluation["evaluation"]
 
-    def manager_progress(row: dict[str, Any]) -> dict[str, Any] | None:
-        wrapped = row.get("result")
-        raw = wrapped.get("result") if isinstance(wrapped, dict) else None
-        progress = raw.get("manager_response") if isinstance(raw, dict) else None
-        if progress is None and isinstance(raw, dict) and isinstance(raw.get("output"), str):
-            progress = parse_progress(raw["output"]).value
-        return progress if isinstance(progress, dict) else None
+    selected_proposal: tuple[str, str, int] | None = None
 
-    while pending:
-        frontier = sorted(
-            (item for item in pending.values()
-             if set(item.get("depends_on", [])) <= completed),
-            key=lambda item: item["assignment_id"],
-        )
-        if not frontier:
-            raise ContractError("logical v9 dependency frontier is empty before work completed")
-        stage += 1
-        dispatch_sequence_base = stage * 2 - 1
-        allowed_ids = [item["assignment_id"] for item in frontier]
-        manager_decision = None
-        if trailing_manager is not None:
-            if trailing_manager["request"]["sequence"] != dispatch_sequence_base:
-                raise ContractError("logical v9 continuation manager sequence is invalid")
-            progress = manager_progress(trailing_manager)
-            trailing_manager = None
-        else:
-            try:
-                manager_outcome = dispatch({"assignment_id": manager["assignment_id"],
-                          "task": ("Choose the next logical assignment for the approved task. "
-                                   f"next_speaker.answer must be exactly one of {json.dumps(allowed_ids)}. "
-                                   "Set is_request_satisfied.answer=false while required work remains and provide "
-                                   "a nonempty reason and bounded instruction_or_question.answer."),
-                          "sequence": dispatch_sequence_base, "manager_turn": stage - 1})
-            except ProviderCandidatesExhausted as exhausted:
-                return exhausted.result
-            raw_manager = manager_outcome.get("manager_result")
-            progress = raw_manager.get("manager_response") if isinstance(raw_manager, dict) else None
-            if progress is None and isinstance(raw_manager, dict) and isinstance(raw_manager.get("output"), str):
-                progress = parse_progress(raw_manager["output"]).value
-        if not isinstance(progress, dict):
-            if live_attempt:
-                manager_action = next(item["request"] for item in reversed(
-                    ledger.snapshot(envelope["attempt_id"])["actions"])
-                    if item["request"]["assignment_id"] == manager["assignment_id"])
-                ledger.record_v9_evidence_failure(
-                    envelope["attempt_id"], manager_action["action_id"], "manager_evaluation",
-                    "logical v9 manager returned no exact progress decision", generation=generation)
-                sealed = ledger.seal_v9_attempt(
-                    envelope["attempt_id"], "failed", "manager_evaluation_failed",
-                    attempt_dir / "receipt.json", generation=generation)
-                return {"attempt_id": envelope["attempt_id"], "status": "failed",
-                        "reason": "manager_evaluation_failed", **sealed}
-            raise ContractError("logical v9 manager returned no exact progress decision")
-        selected = progress.get("next_speaker", {}).get("answer")
-        selected_task = progress.get("instruction_or_question", {}).get("answer")
-        reason = progress.get("next_speaker", {}).get("reason")
-        if (selected not in allowed_ids or progress.get("is_request_satisfied", {}).get("answer") is not False
-                or not isinstance(selected_task, str) or not selected_task.strip()
-                or not isinstance(reason, str) or not reason.strip()
-                or len(selected_task.encode()) > MAX_TASK_BYTES or len(reason.encode()) > MAX_TASK_BYTES):
-            if live_attempt:
-                manager_action = next(item["request"] for item in reversed(
-                    ledger.snapshot(envelope["attempt_id"])["actions"])
-                    if item["request"]["assignment_id"] == manager["assignment_id"])
-                ledger.record_v9_evidence_failure(
-                    envelope["attempt_id"], manager_action["action_id"], "manager_evaluation",
-                    "logical v9 manager decision is outside the approved logical frontier",
-                    generation=generation)
-                sealed = ledger.seal_v9_attempt(
-                    envelope["attempt_id"], "failed", "manager_evaluation_failed",
-                    attempt_dir / "receipt.json", generation=generation)
-                return {"attempt_id": envelope["attempt_id"], "status": "failed",
-                        "reason": "manager_evaluation_failed", **sealed}
-            raise ContractError("logical v9 manager decision is outside the approved logical frontier")
+    def frontier_ids() -> list[str]:
+        return sorted(item["assignment_id"] for item in pending.values()
+                      if set(item.get("depends_on", [])) <= completed)
+
+    def on_manager(message: dict[str, Any]) -> str:
+        nonlocal dispatch_sequence_base, selected_proposal
+        serialized = message.get("messages")
+        phase = message.get("phase")
+        if (phase not in {"facts", "plan", "progress", "replan_facts", "replan_plan", "final"}
+                or not isinstance(serialized, list)
+                or hashlib.sha256(canonical(serialized).encode()).hexdigest() != message.get("prompt_digest")):
+            raise ContractError("invalid stock Magentic manager request")
+        allowed_ids = frontier_ids()
+        prompt = canonical(serialized)
+        prompt += "\nFlow accepted assignments: " + json.dumps(sorted(completed))
+        if phase == "progress":
+            prompt += ("\nnext_speaker.answer must be exactly one of " + json.dumps(allowed_ids or sorted(completed))
+                       + ".\nSet is_request_satisfied.answer=false while required assignments remain."
+                       + " Flow permitted unfinished frontier: " + json.dumps(allowed_ids))
+        if len(prompt.encode()) > manager["requirements"]["input_bytes"]:
+            raise ContractError("stock manager prompt exceeds sealed input budget")
+        result = dispatch({"assignment_id": manager["assignment_id"], "task": prompt,
+                           "manager_turn": message["sequence"]})
+        raw = result.get("manager_result")
+        text = raw.get("output") if isinstance(raw, dict) else None
+        progress = raw.get("manager_response") if isinstance(raw, dict) else None
+        if phase == "progress":
+            if progress is None and isinstance(text, str):
+                progress = parse_progress(text).value
+            if not isinstance(progress, dict):
+                # Stock Magentic owns the bounded parse retry, through a new
+                # authorized manager call; no worker send is retried here.
+                return text if isinstance(text, str) else "invalid progress"
+            selected = progress.get("next_speaker", {}).get("answer")
+            reason = progress.get("next_speaker", {}).get("reason")
+            instruction = progress.get("instruction_or_question", {}).get("answer")
+            satisfied = progress.get("is_request_satisfied", {}).get("answer")
+            if (type(satisfied) is not bool or not isinstance(reason, str) or not reason.strip()
+                    or len(reason.encode()) > MAX_TASK_BYTES or satisfied and pending
+                    or not satisfied and selected not in allowed_ids
+                    or not isinstance(instruction, str) or not instruction.strip()
+                    or len(instruction.encode()) > MAX_TASK_BYTES):
+                raise ContractError("Magentic decision is outside the permitted frontier or completion gate")
+            selected_proposal = (selected, instruction, message["sequence"])
+            return canonical(progress)
+        if not isinstance(text, str) or not text.strip():
+            raise ContractError("stock manager phase returned no text")
+        return text
+
+    def on_worker(proposal: dict[str, Any]) -> dict[str, Any]:
+        nonlocal dispatch_sequence_base, edit_evidence, test_evidence
+        selected = proposal.get("assignment_id")
+        if (selected_proposal != (selected, proposal.get("task"), proposal.get("manager_turn"))
+                or selected not in frontier_ids()):
+            raise ContractError("worker proposal differs from the permitted Magentic decision")
         selected_assignment = pending[selected]
+        if proposal.get("checkpoint_id") is not None:
+            checkpoint = Path(envelope["checkpoint_dir"]) / (proposal["checkpoint_id"] + ".json")
+            if (checkpoint.resolve().parent != Path(envelope["checkpoint_dir"]).resolve()
+                    or not checkpoint.is_file() or checkpoint.is_symlink() or checkpoint.stat().st_size > 1024 * 1024):
+                raise ContractError("Magentic proposal checkpoint is absent")
+            write_atomic(attempt_dir / ("coordination-" + str(dispatch_sequence_base) + ".json"),
+                         canonical({"proposal": proposal, "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+                                    "owner_generation": generation}) + "\n", mode=0o600)
         bounded_task = (f"Approved job:\n{task.strip()}\n\n"
                         f"Logical assignment: {selected}\n"
-                        f"Sealed instructions:\n{selected_assignment['instructions'].strip()}")
-        if selected in repair_feedback:
-            bounded_task += ("\n\nFlow validation feedback from the prior producer turn:\n"
-                             f"{repair_feedback[selected]}\n"
-                             "Correct this failure, rerun the chartered test, and leave the final "
-                             "retained evidence consistent with the final diff.")
+                        f"Sealed instructions:\n{selected_assignment['instructions'].strip()}\n"
+                        f"Magentic instruction:\n{proposal['task']}")
+        latest_failures = [event for event in ledger.snapshot(envelope["attempt_id"])["events"]
+                           if event["event"] == "v9_evidence_failed"
+                           and event["action_id"] in {row["action_id"] for row in ledger.snapshot(envelope["attempt_id"])["actions"]
+                                                     if row["request"]["assignment_id"] == selected}]
+        if latest_failures:
+            bounded_task += "\nFlow validation feedback: " + json.loads(latest_failures[-1]["detail"])["detail"]
         operation = selected_assignment["requirements"]["operation"]
         if len(bounded_task.encode()) > MAX_TASK_BYTES:
             raise ContractError("logical v9 sealed assignment task exceeds size limit")
@@ -2460,22 +2485,10 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 test_output=test_evidence["output_excerpt"],
                 authority_statement=VERIFIED_HANDOFF_AUTHORITY,
             )
-        input_limit = max(MAX_TASK_BYTES, selected_assignment["requirements"]["input_bytes"])
+        input_limit = selected_assignment["requirements"]["input_bytes"]
         if len(bounded_task.encode()) > input_limit:
             raise ContractError("logical v9 evidence-bearing task exceeds assignment input limit")
-        manager_decision = {"assignment_id": selected, "task": bounded_task,
-                            "reason": reason, "manager_turn": stage}
-        try:
-            outcomes.append((supervisor or run_maf_v9_delivery)(
-                envelope, task, dispatch, python_path=python_path,
-                manager_decision=manager_decision,
-                # The child waits while Flow performs the provider callback.
-                # Its protocol deadline must exceed the operation deadline or
-                # a completed worker result cannot be returned to MAF.
-                timeout_s={"read": 180, "edit": 660, "collect": 660,
-                           "verify": 660}[operation]))
-        except ProviderCandidatesExhausted as exhausted:
-            return exhausted.result
+        result = dispatch({**proposal, "task": bounded_task})
         if live_attempt and operation == "edit":
             if job is None or baseline is None:
                 raise ContractError("logical v9 job evidence contract is absent")
@@ -2490,8 +2503,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 sealed = ledger.seal_v9_attempt(
                     envelope["attempt_id"], "failed", "edit_scope_validation_failed",
                     attempt_dir / "receipt.json", generation=generation)
-                return {"attempt_id": envelope["attempt_id"], "status": "failed",
-                        "reason": "edit_scope_validation_failed", **sealed}
+                raise ProviderCandidatesExhausted({"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "edit_scope_validation_failed", **sealed})
             try:
                 test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
                 if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
@@ -2499,26 +2512,29 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             except ContractError as exc:
                 ledger.record_v9_evidence_failure(envelope["attempt_id"], worker_action["action_id"],
                                                   "chartered_test", str(exc), generation=generation)
-                if repair_counts.get(selected, 0) == 0:
-                    repair_counts[selected] = 1
-                    repair_feedback[selected] = str(exc)[:512]
-                    failed_diff = attempt_dir / "repair.diff"
-                    if failed_diff.is_file() and not failed_diff.is_symlink():
-                        os.replace(failed_diff, attempt_dir / "repair-failed-turn-1.diff")
-                    edit_evidence = None
-                    test_evidence = None
-                    continue
-                sealed = ledger.seal_v9_attempt(
-                    envelope["attempt_id"], "failed", "chartered_test_failed",
-                    attempt_dir / "receipt.json", generation=generation)
-                return {"attempt_id": envelope["attempt_id"], "status": "failed",
-                        "reason": "chartered_test_failed", **sealed}
+                # Flow denies acceptance; Magentic chooses whether to repair
+                # or replan within its bounded loop. The failed assignment
+                # remains on the independently computed frontier.
+                failures = [row for row in ledger.snapshot(envelope["attempt_id"])["events"]
+                            if row["event"] == "v9_evidence_failed"
+                            and json.loads(row["detail"])["stage"] == "chartered_test"]
+                if len(failures) >= 2:
+                    sealed = ledger.seal_v9_attempt(envelope["attempt_id"], "failed", "chartered_test_failed",
+                                                    attempt_dir / "receipt.json", generation=generation)
+                    raise ProviderCandidatesExhausted({"attempt_id": envelope["attempt_id"], "status": "failed",
+                                                       "reason": "chartered_test_failed", **sealed})
+                failed_diff = attempt_dir / "repair.diff"
+                if failed_diff.is_file() and not failed_diff.is_symlink():
+                    os.replace(failed_diff, attempt_dir / "repair-failed-turn-1.diff")
+                edit_evidence = None
+                test_evidence = None
+                return {"status": "validation_failed", "summary": str(exc)[:512]}
         if live_attempt and operation == "verify":
             verifier_action = next(item["request"] for item in reversed(
                 ledger.snapshot(envelope["attempt_id"])["actions"])
                 if item["request"]["assignment_id"] == selected)
             try:
-                raw_result = outcomes[-1].get("outcome", {}).get("result") if isinstance(outcomes[-1], dict) else None
+                raw_result = None
                 if raw_result is None:
                     action_rows = ledger.snapshot(envelope["attempt_id"])["actions"]
                     row = next((item for item in reversed(action_rows)
@@ -2547,11 +2563,48 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 sealed = ledger.seal_v9_attempt(
                     envelope["attempt_id"], "failed", "verifier_evaluation_failed",
                     attempt_dir / "receipt.json", generation=generation)
-                return {"attempt_id": envelope["attempt_id"], "status": "failed",
-                        "reason": "verifier_evaluation_failed", **sealed}
+                raise ProviderCandidatesExhausted({"attempt_id": envelope["attempt_id"], "status": "failed",
+                        "reason": "verifier_evaluation_failed", **sealed})
         completed.add(selected)
         pending.pop(selected)
-    outcome = outcomes[-1]
+        row = ledger.snapshot(envelope["attempt_id"])["actions"][-1]
+        wrapped = row.get("result")
+        raw = wrapped.get("result") if isinstance(wrapped, dict) else None
+        output = raw.get("output") if isinstance(raw, dict) else None
+        summary = "Flow observed assignment " + selected
+        if isinstance(output, str):
+            summary += ": " + output[:4096]
+        if operation == "verify" and selected in verifier_evaluations:
+            summary += "\nIndependent verification: " + verifier_evaluations[selected]["disposition"]
+        return {**result, "summary": summary}
+
+    try:
+        outcome = (supervisor or run_maf_v9_delivery)(
+            envelope, task, on_worker, on_manager=on_manager,
+            completed_assignments=sorted(completed), python_path=python_path,
+            coordination_epoch=dispatch_sequence_base)
+    except ProviderCandidatesExhausted as exhausted:
+        return exhausted.result
+    except (ContractError, MafChildError) as exc:
+        # A deterministic policy/runtime refusal is a failed attempt only when
+        # every send is observed. Transport loss and unknown sends remain in
+        # recovery and must not be relabeled as safe retries.
+        current = ledger.snapshot(envelope["attempt_id"])
+        if not live_attempt or any(row["status"] != "completed" for row in current["actions"]):
+            raise
+        manager_rows = [row for row in current["actions"]
+                        if row["request"]["assignment_id"] == manager["assignment_id"]]
+        if not manager_rows:
+            raise
+        ledger.record_v9_evidence_failure(envelope["attempt_id"], manager_rows[-1]["action_id"],
+                                          "manager_evaluation", str(exc)[:512], generation=generation)
+        with delivery_authority_guard(Path(envelope["checkpoint_dir"]).parents[2], envelope):
+            sealed = ledger.seal_v9_attempt(envelope["attempt_id"], "failed", "manager_evaluation_failed",
+                                            attempt_dir / "receipt.json", generation=generation)
+        return {"attempt_id": envelope["attempt_id"], "status": "failed",
+                "reason": "manager_evaluation_failed", **sealed}
+    if pending:
+        raise ContractError("Magentic completion proposal lacks required assignment evidence")
     # Seal the receipt only after every dependency-valid logical assignment
     # completed. The ledger remains the source of truth; uncertain sends
     # refuse here and remain in explicit recovery instead.
@@ -2570,8 +2623,13 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                                   if item["disposition"] != "valid_pass"})
     terminal_reason = ("semantic_verifier_valid_pass" if terminal_status == "completed" else
                        "semantic_verifier_" + (failed_dispositions[0] if failed_dispositions else "missing"))
-    sealed = ledger.seal_v9_attempt(envelope["attempt_id"], terminal_status, terminal_reason,
-                                    attempt_dir / "receipt.json", generation=generation)
+    with delivery_authority_guard(Path(envelope["checkpoint_dir"]).parents[2], envelope):
+        # Recheck retained evidence after the manager's completion proposal.
+        if terminal_status == "completed":
+            if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
+                raise ContractError("final retained diff differs from independent verifier evidence")
+        sealed = ledger.seal_v9_attempt(envelope["attempt_id"], terminal_status, terminal_reason,
+                                        attempt_dir / "receipt.json", generation=generation)
     return {**outcome, "attempt_id": envelope["attempt_id"], "status": terminal_status,
             "reason": terminal_reason, "receipt_path": sealed["receipt_path"],
             "sealed_receipt_sha256": sealed["sealed_receipt_sha256"]}
@@ -2625,6 +2683,8 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     sources = {name: {"path": str(path.relative_to(project_root)),
                       "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
                for name, path in (("requirements", requirements), ("acceptance", acceptance))}
+    # Readiness is credentialless and precedes any durable attempt or send.
+    runtime_identity = require_ready()
     execution_dir = run_dir / "execution"
     execution_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(execution_dir, 0o700)
@@ -2668,8 +2728,12 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
             or not isinstance(delivery.get("charter_digest"), str)
             or not isinstance(delivery.get("lead_claim_digest"), str)):
         raise ContractError("v9 delivery authority is absent or stale")
+    projected_limits, _ = project_envelope_limits(authority["charter"]["limits"])
+    projected_limits["max_actions"] = min(MAX_MANAGER_CALLS + MAX_ACTIONS,
+                                          projected_limits["max_manager_calls"] + projected_limits["max_delegations"])
     envelope = {
         "schema_version": 1, "execution_protocol_version": 9, "work_id": work_id,
+        "maf_runtime": runtime_identity,
         "attempt_id": attempt_id, "charter_digest": charter_digest,
         "manifest_digest": manifest_digest, "run_protocol_revision": 2,
         "logical_assignments": logical_assignments,
@@ -2680,7 +2744,7 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         # Reserve one bounded manager/producer repair pair for a recoverable
         # chartered-test failure. The retry remains subject to the same sealed
         # assignment, provider selection, scope, and test contracts.
-        "limits": {"max_actions": 2 * (len(logical_assignments) - 1) + 2},
+        "limits": projected_limits,
         "checkpoint_dir": str(attempt_dir / "checkpoints"),
         "charter_sources": sources, "source_commit": source_commit, "worktree": str(worktree),
         "delivery_charter_digest": delivery["charter_digest"],
@@ -3179,7 +3243,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                     return {"provider": provider, "model": model, "operation": operation,
                             "observed_invalid": True, "detail": str(exc)[:512]}
                 return {"provider": provider, "model": model, "operation": operation, "applied": applied}
-            if operation == "manage":
+            if operation == "manage" and "next_speaker.answer must be exactly one of " in task:
                 match = re.search(r"next_speaker\.answer must be exactly one of (\[[^\n]+\])", task)
                 try:
                     allowed_speakers = json.loads(match.group(1)) if match else None

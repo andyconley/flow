@@ -179,14 +179,17 @@ def authorize_and_dispatch(
             "successor_decision": successor,
         }
     observed_refusal: ObservedNotExecuted | None = None
+    send_claimed = False
     try:
         if ledger is None:
+            send_claimed = True
             try:
                 result = adapter_send(deepcopy(binding), deepcopy(action))
             except ObservedNotExecuted as exc:
                 observed_refusal = exc
         else:
             with ledger.v9_send_fence(envelope, action, generation=generation) as finish_send:
+                send_claimed = True
                 try:
                     result = adapter_send(deepcopy(binding), deepcopy(action))
                 except ObservedNotExecuted as exc:
@@ -197,6 +200,10 @@ def authorize_and_dispatch(
                 else:
                     finish_send(result)
     except BaseException as exc:
+        # The fence checks ownership and budgets before claiming a send.
+        # A refused claim has no provider I/O to reconcile.
+        if not send_claimed:
+            raise
         raise RecoveryRequired("provider send started or became uncertain") from exc
     if observed_refusal is not None:
         successor = compute_binding(

@@ -23,11 +23,8 @@ from runtime.maf_runner.limits import (MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAG
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
-# Readiness identity for the package-backed MAF orchestration path. Protocol
-# v9 is implemented below, but returns before importing that package surface;
-# its compatibility is bound by the runner digest and transport contract.
-# Keeping this list stable lets the immediately preceding updater validate and
-# atomically activate an additive v9-capable runner.
+# Package compatibility identity retained for transactional updates from v8.
+# The v9 route now constructs and executes the same pinned stock MAF surface.
 SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 _active_protocol_version: int | None = None
 MAX_LINE_BYTES = 1024 * 1024
@@ -133,39 +130,7 @@ async def _run(start: dict[str, Any]) -> None:
     if not isinstance(envelope, dict) or envelope.get("execution_protocol_version") != protocol_version:
         raise RuntimeError("Delivery Lead envelope and transport protocol differ")
     if protocol_version == 9:
-        # Protocol v9 keeps the stock MAF process credentialless and does not
-        # let it choose a concrete provider.  It may nominate one logical
-        # assignment and task; Flow recomputes the sealed provider binding and
-        # is the only process that can cross the adapter boundary.
-        task = start.get("task")
-        assignments = envelope.get("logical_assignments")
-        decision = start.get("manager_decision")
-        if (not isinstance(task, str) or not task.strip() or not isinstance(assignments, list)
-                or not isinstance(decision, dict)):
-            raise RuntimeError("protocol v9 logical delivery inputs are invalid")
-        eligible = [item for item in assignments if isinstance(item, dict)
-                    and item.get("requirements", {}).get("operation") != "manage"]
-        assignment = next((item for item in eligible
-                           if item.get("assignment_id") == decision.get("assignment_id")), None)
-        if (assignment is None or not isinstance(decision.get("task"), str)
-                or not decision["task"].strip() or type(decision.get("manager_turn")) is not int
-                or decision["manager_turn"] < 1):
-            raise PolicyAbort("manager selected an unlisted logical assignment")
-        # A child-side computation is advisory only.  The proposal never
-        # carries its concrete result; gateway equality checking remains the
-        # mandatory authority boundary.
-        if compute_binding(envelope, assignment.get("assignment_id", "")).get("selected_binding") is None:
-            raise PolicyAbort("no eligible provider for logical MAF assignment")
-        _write({"protocol_version": 9, "type": "runtime_initialized"})
-        _write({"protocol_version": 9, "type": "propose_v9_action",
-                "attempt_id": envelope.get("attempt_id"),
-                "assignment_id": assignment.get("assignment_id"), "task": decision["task"],
-                "sequence": 1, "manager_turn": decision["manager_turn"]})
-        reply = _read()
-        if reply.get("type") != "action_result" or not isinstance(reply.get("result"), dict):
-            raise PolicyAbort("Flow v9 action reply is invalid")
-        _write({"protocol_version": 9, "type": "workflow_finished",
-                "attempt_id": envelope.get("attempt_id"), "summary": reply["result"].get("status", "completed")})
+        await _run_v9(start)
         return
     # Prove that the real runner surface imports before asserting readiness.
     # The parent still receives no manager/action callback until it validates
@@ -461,6 +426,124 @@ async def _run(start: dict[str, Any]) -> None:
             "runtime_version": version("agent-framework-core"), "manager_calls": manager_call,
             "manager_rounds": manager_round, "actions": action_number,
             "summary": str(getattr(output[-1], "text", output[-1])) if output else "Magentic finished"})
+
+
+async def _run_v9(start: dict[str, Any]) -> None:
+    from agent_framework import AgentResponse, Executor, FileCheckpointStorage, Message, WorkflowContext, handler, response_handler
+    from agent_framework_orchestrations import (
+        GroupChatParticipantMessage, GroupChatRequestMessage, GroupChatResponseMessage,
+        MagenticBuilder, StandardMagenticManager,
+    )
+    envelope = start['envelope']
+    if envelope.get("maf_runtime") is not None:
+        _write({"protocol_version": 9, "type": "runtime_ready", "runtime": _runtime_identity()})
+    attempt_id = envelope['attempt_id']
+    assignments = [a for a in envelope['logical_assignments'] if a['requirements']['operation'] != 'manage']
+    completed = start.get('completed_assignments', [])
+    if not isinstance(completed, list) or not set(completed) <= {a['assignment_id'] for a in assignments}:
+        raise PolicyAbort('invalid completed assignment context')
+    storage = FileCheckpointStorage(Path(envelope['checkpoint_dir']), allowed_checkpoint_types=[
+        'agent_framework_orchestrations._base_group_chat_orchestrator:GroupChatRequestMessage',
+        'agent_framework_orchestrations._base_group_chat_orchestrator:GroupChatParticipantMessage',
+        'agent_framework_orchestrations._base_group_chat_orchestrator:GroupChatResponseMessage',
+        'agent_framework_orchestrations._magentic:MagenticContext',
+        'agent_framework_orchestrations._magentic:MagenticProgressLedger',
+        'agent_framework_orchestrations._magentic:MagenticProgressLedgerItem',
+    ])
+    calls = actions = retries = 0
+    selected_task = ''
+
+    class ManagerProxy:
+        name = 'flow-manager-proxy'
+
+        def create_session(self):
+            return object()
+
+        async def run(self, messages, *, session=None):
+            nonlocal calls, retries, selected_task
+            phase = _phase(messages[-1].text)
+            serialized = [m.to_dict() for m in messages]
+            if len(json.dumps(serialized).encode()) > MAX_MANAGER_MESSAGES_BYTES:
+                raise PolicyAbort('manager message exceeds transport cap')
+            calls += 1
+            if calls > MAX_MANAGER_CALLS:
+                raise PolicyAbort('manager call limit reached')
+            _write({'protocol_version': 9, 'type': 'manager_request', 'attempt_id': attempt_id,
+                    'sequence': calls, 'phase': phase, 'messages': serialized,
+                    'prompt_digest': _digest(serialized)})
+            reply = _read()
+            if reply.get('type') != 'manager_response' or reply.get('sequence') != calls or not isinstance(reply.get('text'), str):
+                raise PolicyAbort('invalid Flow manager response')
+            text = reply['text']
+            if phase == 'progress':
+                parsed = parse_progress(text)
+                if parsed.value is None or not _maf_reads_canonical(parsed.canonical, parsed.value):
+                    retries += 1
+                    if retries >= PROGRESS_ATTEMPTS:
+                        raise PolicyAbort('manager progress retries exhausted')
+                    return AgentResponse(messages=[Message(role='assistant', contents=[UNPARSABLE_SENTINEL])])
+                retries = 0
+                selected_task = parsed.value['instruction_or_question']['answer']
+                text = parsed.canonical
+            return AgentResponse(messages=[Message(role='assistant', contents=[text])])
+
+    class GuardedParticipant(Executor):
+        def __init__(self, assignment):
+            self.assignment = assignment
+            super().__init__(id=assignment['assignment_id'])
+
+        @handler
+        async def broadcast(self, message: GroupChatParticipantMessage, ctx: WorkflowContext[GroupChatResponseMessage]) -> None:
+            return
+
+        @handler
+        async def request(self, message: GroupChatRequestMessage, ctx: WorkflowContext[GroupChatResponseMessage]) -> None:
+            nonlocal actions
+            actions += 1
+            if actions > MAX_ACTIONS or not isinstance(selected_task, str) or not selected_task.strip():
+                raise PolicyAbort('invalid or excessive worker request')
+            if compute_binding(envelope, self.id).get('selected_binding') is None:
+                raise PolicyAbort('no eligible binding for logical assignment')
+            await ctx.request_info({'protocol_version': 9, 'type': 'propose_v9_action',
+                                    'attempt_id': attempt_id, 'assignment_id': self.id,
+                                    'task': selected_task, 'sequence': actions, 'manager_turn': calls},
+                                   dict, request_id=f'flow-v9-action-{actions}')
+
+        @response_handler(request=dict, response=dict, output=GroupChatResponseMessage)
+        async def accepted(self, request: dict[str, Any], result: dict[str, Any], ctx: WorkflowContext[GroupChatResponseMessage]) -> None:
+            summary = result.get('summary')
+            if not isinstance(summary, str) or not summary.strip():
+                raise PolicyAbort('Flow worker outcome lacks summary')
+            await ctx.send_message(GroupChatResponseMessage(message=Message(role='assistant', contents=[summary], author_name=self.id)))
+
+    manager = StandardMagenticManager(ManagerProxy(), max_reset_count=min(MAX_REPLANS, envelope["limits"].get("max_replans", MAX_REPLANS)),
+                                      max_round_count=min(MAX_MANAGER_ROUNDS, envelope["limits"].get("max_manager_rounds", MAX_MANAGER_ROUNDS)), progress_ledger_retry_count=PROGRESS_ATTEMPTS)
+    name = 'flow-magentic-delivery-v9-' + str(start.get('coordination_epoch', 1))
+    workflow = MagenticBuilder(participants=[GuardedParticipant(a) for a in assignments], manager=manager,
+                               enable_plan_review=False, checkpoint_storage=storage, name=name).build()
+    _write({'protocol_version': 9, 'type': 'runtime_initialized', 'coordination': 'stock_magentic'})
+    task = (start['task'] + '\nSealed logical assignments and dependencies: ' + json.dumps(assignments)
+            + '\nFlow has already accepted these assignments: ' + json.dumps(completed))
+    result = await workflow.run(task)
+    while requests := result.get_request_info_events():
+        if len(requests) != 1:
+            raise PolicyAbort('ambiguous pending worker request')
+        event = requests[0]
+        checkpoints = await storage.list_checkpoints(workflow_name=name)
+        pending = [c for c in checkpoints if event.request_id in c.pending_request_info_events]
+        if len(pending) != 1:
+            raise PolicyAbort('pending worker checkpoint absent or ambiguous')
+        proposal = {**event.data, 'checkpoint_id': pending[0].checkpoint_id}
+        proposal['proposal_id'] = _digest(proposal)
+        _write(proposal)
+        reply = _read()
+        if reply.get('type') != 'action_result' or reply.get('proposal_id') != proposal['proposal_id'] or not isinstance(reply.get('result'), dict):
+            raise PolicyAbort('invalid Flow action result')
+        result = await workflow.run(checkpoint_id=pending[0].checkpoint_id, checkpoint_storage=storage,
+                                    responses={event.request_id: reply['result']})
+    _write({'protocol_version': 9, 'type': 'workflow_finished', 'attempt_id': attempt_id,
+            'coordination': 'stock_magentic', 'manager_calls': calls, 'actions': actions,
+            'summary': str(result.get_outputs())[:4096]})
 
 
 def main() -> int:
