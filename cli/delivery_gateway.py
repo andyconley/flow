@@ -2590,10 +2590,12 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         # every send is observed. Transport loss and unknown sends remain in
         # recovery and must not be relabeled as safe retries.
         current = ledger.snapshot(envelope["attempt_id"])
-        if not live_attempt or any(row["status"] != "completed" for row in current["actions"]):
+        if not live_attempt or any(row["status"] not in {"completed", "pre_send_refused"}
+                                   for row in current["actions"]):
             raise
         manager_rows = [row for row in current["actions"]
-                        if row["request"]["assignment_id"] == manager["assignment_id"]]
+                        if row["request"]["assignment_id"] == manager["assignment_id"]
+                        and row["status"] == "completed"]
         if not manager_rows:
             raise
         ledger.record_v9_evidence_failure(envelope["attempt_id"], manager_rows[-1]["action_id"],
