@@ -1679,14 +1679,15 @@ class V9CharteredRouteTests(CharteredFixture):
                              manager_outside: bool = False,
                              producer_test_failures: int = 0,
                              interrupt_before_verifier: bool = False,
-                             interrupt_after_verifier_refusal: bool = False):
+                             interrupt_after_verifier_refusal: bool = False,
+                             exhaust_verifier_on_resume: bool = False):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
                     "operations": ["manage", "edit", "verify"],
                     "capabilities": ["structured_output", "structured_edit", "evidence_collection"],
                     "cost_class": 0, "enabled": True}]
-        if interrupt_after_verifier_refusal:
+        if interrupt_after_verifier_refusal and not exhaust_verifier_on_resume:
             catalog.append({
                 "candidate_id": "hosted", "provider": "codex", "model": "hosted-model",
                 "provider_family": "openai", "tier": "judgment", "locality": "hosted",
@@ -1858,6 +1859,20 @@ class V9CharteredRouteTests(CharteredFixture):
                                if item["logical_action_id"] == verifier_actions[0]["logical_action_id"]]
         self.assertEqual([item["state"] for item in verifier_selections],
                          ["superseded", "consumed"])
+
+    def test_v9_resume_seals_persisted_exhausted_verifier_refusal(self):
+        valid = json.dumps({"schema_version": 1, "decision": "pass",
+                            "summary": "Evidence passes.", "findings": []})
+        result, snapshot = self._execute_semantic_v9(
+            valid, interrupt_after_verifier_refusal=True,
+            exhaust_verifier_on_resume=True)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["reason"], "provider_candidates_exhausted")
+        self.assertEqual(snapshot["status"], "failed")
+        self.assertEqual(snapshot["provider_selections"][-1]["state"], "pre_send_refused")
+        receipt = json.loads(Path(result["receipt_path"]).read_text())
+        self.assertEqual(receipt["outcome"], {
+            "status": "failed", "reason": "provider_candidates_exhausted"})
 
     def test_v9_chartered_test_failure_gets_one_bounded_producer_repair_turn(self):
         valid = json.dumps({"schema_version": 1, "decision": "pass",

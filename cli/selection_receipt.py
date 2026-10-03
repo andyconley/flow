@@ -249,7 +249,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
             compared += 1
     terminal_refusal_exhaustions: list[str] = []
     for row in selections:
-        if row.get("state") != "observed_not_executed":
+        if row.get("state") not in {"observed_not_executed", "pre_send_refused"}:
             continue
         successors = [item for item in selections
                       if item.get("predecessor_selection_id") == row.get("selection_id")]
@@ -259,18 +259,24 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                        if item.get("selection_id") == row.get("selection_id")), None)
         if action is None:
             raise V9ReceiptError("v9_terminal_refusal_action_missing")
+        no_send = list(row.get("prior_no_send_failures", []))
         retryable = list(row.get("prior_retryable_failures", []))
-        retryable.append(row.get("candidate_id"))
+        if row.get("state") == "pre_send_refused":
+            no_send.append(row.get("candidate_id"))
+        else:
+            retryable.append(row.get("candidate_id"))
         successor = compute_binding(
             envelope, action["assignment_id"],
-            prior_no_send_failures=row.get("prior_no_send_failures", []),
+            prior_no_send_failures=no_send,
             prior_retryable_failures=retryable,
             runtime_excluded_families=runtime_families_for(action["assignment_id"]),
         )
         if successor.get("selected_binding") is None:
             terminal_refusal_exhaustions.append(row["selection_id"])
+    selection_state_by_id = {row.get("selection_id"): row.get("state") for row in selections}
     verifier_actions = [action for action in actions
-                        if assignments[action["assignment_id"]]["requirements"].get("operation") == "verify"]
+                        if assignments[action["assignment_id"]]["requirements"].get("operation") == "verify"
+                        and selection_state_by_id.get(action.get("selection_id")) == "consumed"]
     semantic_by_action = {item.get("action_id"): item for item in semantic}
     verifier_action_ids = {action["action_id"] for action in verifier_actions}
     failed_verifier_ids = {item["action_id"] for item in evidence_failures

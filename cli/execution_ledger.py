@@ -810,6 +810,49 @@ class ExecutionLedger:
         self.transition_v9_selection(action["selection_id"], "reserved", "pre_send_refused",
                                      generation=generation, reason=evidence_code)
 
+    def record_v9_terminal_pre_send_action(self, envelope: dict[str, Any], action: dict[str, Any], *,
+                                           generation: int) -> None:
+        """Bind an exhausted no-send selection to its deterministic action.
+
+        Ordinary pre-send fallbacks need no action row because their successor
+        closes the receipt lineage.  The terminal refusal has no successor, so
+        this no-I/O closure row gives the receipt the assignment and task needed
+        to recompute and prove deterministic exhaustion.
+        """
+        validate_action(envelope, action)
+        action_json = canonical(action)
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, envelope["attempt_id"], generation)
+            selection = db.execute(
+                "SELECT attempt_id,logical_action_id,state,reason,provider_action_id "
+                "FROM provider_selections WHERE selection_id=?",
+                (action["selection_id"],),
+            ).fetchone()
+            if (selection is None or selection[0] != envelope["attempt_id"]
+                    or selection[1] != action["logical_action_id"]
+                    or selection[2] != "pre_send_refused" or not selection[3]
+                    or selection[4] is not None):
+                raise ContractError("terminal pre-send action requires an exhausted refused selection")
+            existing = db.execute(
+                "SELECT attempt_id,request_json,status FROM actions WHERE action_id=?",
+                (action["action_id"],),
+            ).fetchone()
+            expected = (envelope["attempt_id"], action_json, "pre_send_refused")
+            if existing is not None:
+                if existing != expected:
+                    raise ContractError("terminal pre-send action conflicts with durable evidence")
+                return
+            db.execute(
+                "INSERT INTO actions(action_id,attempt_id,request_json,status,reason,grant_id,result_json,kind,sequence,proposal_digest) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (action["action_id"], envelope["attempt_id"], action_json, "pre_send_refused",
+                 selection[3], None, None, "delegate", action["sequence"],
+                 hashlib.sha256(action_json.encode()).hexdigest()),
+            )
+            self._event(db, envelope["attempt_id"], action["action_id"],
+                        "terminal_pre_send_action_recorded", action["selection_id"])
+
     def v9_recovery_required(self, attempt_id: str) -> bool:
         """Whether a v9 attempt has a claimed send whose outcome is unresolved."""
         with self._db() as db:
