@@ -1,6 +1,7 @@
 /* Preview and publication share this release policy. Preview stays read-only. */
 const mode = process.env.FLOW_RELEASE_MODE;
 const repositoryUrl = process.env.FLOW_RELEASE_REPOSITORY_URL;
+const releaseDate = process.env.FLOW_RELEASE_DATE;
 
 if (mode !== "preview" && mode !== "publish") {
   throw new Error("FLOW_RELEASE_MODE must be set explicitly to 'preview' or 'publish'");
@@ -8,6 +9,10 @@ if (mode !== "preview" && mode !== "publish") {
 
 if (repositoryUrl && !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(repositoryUrl)) {
   throw new Error("FLOW_RELEASE_REPOSITORY_URL must be a canonical GitHub HTTPS clone URL");
+}
+
+if (!/^\d{4}-\d{2}-\d{2}$/.test(releaseDate || "")) {
+  throw new Error("FLOW_RELEASE_DATE must be the immutable source commit date (YYYY-MM-DD)");
 }
 
 const analyzer = [
@@ -44,6 +49,12 @@ const notes = [
         { type: "ci", section: "Continuous Integration", hidden: false },
         { type: "chore", section: "Maintenance", hidden: false }
       ]
+    },
+    // conventional-changelog otherwise uses the wall-clock date. Binding the
+    // heading to the source commit keeps preview, re-analysis, and publication
+    // identical when a release crosses midnight UTC.
+    writerOpts: {
+      finalizeContext: (context) => ({ ...context, date: releaseDate })
     }
   }
 ];

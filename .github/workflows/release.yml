@@ -20,6 +20,7 @@ jobs:
       source_sha: ${{ steps.plan.outputs.source_sha }}
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
+      release_date: ${{ steps.baseline.outputs.release_date }}
       plan_artifact_name: ${{ steps.names.outputs.plan_artifact_name }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -42,10 +43,12 @@ jobs:
           test -n "$previous_tag"
           previous_version="${previous_tag#v}"
           previous_commit="$(git rev-parse "${previous_tag}^{commit}")"
+          release_date="$(git show -s --format=%cs "$SOURCE_SHA")"
           captured_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
           echo "previous_version=$previous_version" >> "$GITHUB_OUTPUT"
           echo "previous_commit=$previous_commit" >> "$GITHUB_OUTPUT"
+          echo "release_date=$release_date" >> "$GITHUB_OUTPUT"
           echo "captured_at=$captured_at" >> "$GITHUB_OUTPUT"
 
       - name: Build credential-free preview remote
@@ -78,6 +81,7 @@ jobs:
             conventional-changelog-conventionalcommits@9.3.1
         env:
           FLOW_RELEASE_MODE: preview
+          FLOW_RELEASE_DATE: ${{ steps.baseline.outputs.release_date }}
           FLOW_RELEASE_REPOSITORY_URL: ${{ steps.mirror.outputs.repository_url }}
 
       - name: Write validated release plan
@@ -285,6 +289,7 @@ jobs:
             conventional-changelog-conventionalcommits@9.3.1
         env:
           FLOW_RELEASE_MODE: preview
+          FLOW_RELEASE_DATE: ${{ needs.analyze.outputs.release_date }}
           FLOW_RELEASE_REPOSITORY_URL: ${{ steps.mirror.outputs.repository_url }}
 
       - name: Reject release-analysis drift
@@ -324,6 +329,7 @@ jobs:
             conventional-changelog-conventionalcommits@9.3.1
         env:
           FLOW_RELEASE_MODE: publish
+          FLOW_RELEASE_DATE: ${{ needs.analyze.outputs.release_date }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Capture remote state after publisher failure
