@@ -1678,17 +1678,26 @@ class V9CharteredRouteTests(CharteredFixture):
                              manager_invalid: bool = False,
                              manager_outside: bool = False,
                              producer_test_failures: int = 0,
-                             interrupt_before_verifier: bool = False):
+                             interrupt_before_verifier: bool = False,
+                             interrupt_after_verifier_refusal: bool = False):
         now = datetime.now(timezone.utc)
         catalog = [{"candidate_id": "local", "provider": "ollama", "model": "local-model",
                     "provider_family": "local", "tier": "judgment", "locality": "local",
                     "operations": ["manage", "edit", "verify"],
                     "capabilities": ["structured_output", "structured_edit", "evidence_collection"],
                     "cost_class": 0, "enabled": True}]
-        availability = [{"candidate_id": "local", "state": "ready",
+        if interrupt_after_verifier_refusal:
+            catalog.append({
+                "candidate_id": "hosted", "provider": "codex", "model": "hosted-model",
+                "provider_family": "openai", "tier": "judgment", "locality": "hosted",
+                "operations": ["verify"], "capabilities": ["evidence_collection"],
+                "cost_class": 1, "enabled": True,
+            })
+        availability = [{"candidate_id": item["candidate_id"], "state": "ready",
                          "observed_at": (now - timedelta(seconds=1)).isoformat(),
                          "expires_at": (now + timedelta(minutes=1)).isoformat(),
-                         "evidence_code": "model_present", "probe_version": "availability-v1"}]
+                         "evidence_code": "model_present", "probe_version": "availability-v1"}
+                        for item in catalog]
         common = {"minimum_tier": "working", "locality": "any", "input_bytes": 65536,
                   "output_bytes": 16384, "context_tokens": 32768,
                   "risk_class": "standard", "independence_required": False}
@@ -1758,6 +1767,8 @@ class V9CharteredRouteTests(CharteredFixture):
             real_chartered_test = delivery_gateway._run_chartered_test
             test_runs = 0
             interrupted = False
+            active_assignment = None
+            real_selected_action = delivery_gateway.execute_v9_selected_action
 
             def chartered_test(*args, **kwargs):
                 nonlocal test_runs
@@ -1777,11 +1788,33 @@ class V9CharteredRouteTests(CharteredFixture):
                                   "task": manager_decision["task"], "sequence": 1,
                                   "manager_turn": manager_decision["manager_turn"]})
 
-            with patch("delivery_gateway._run_chartered_test", side_effect=chartered_test):
+            def readiness(binding):
+                if (interrupt_after_verifier_refusal and not interrupted
+                        and active_assignment == "verifier" and binding["candidate_id"] == "local"):
+                    return {**binding, "state": "unavailable", "no_send_observed": True,
+                            "evidence_code": "model_absent"}
+                return {**binding, "state": "ready"}
+
+            def selected_action(*args, **kwargs):
+                nonlocal active_assignment, interrupted
+                active_assignment = args[1]["assignment_id"]
+                try:
+                    outcome = real_selected_action(*args, **kwargs)
+                finally:
+                    active_assignment = None
+                if (interrupt_after_verifier_refusal and not interrupted
+                        and args[1]["assignment_id"] == "verifier"
+                        and outcome["status"] == "pre_send_refused"):
+                    interrupted = True
+                    raise KillPoint("process stopped after verifier no-send refusal")
+                return outcome
+
+            with patch("delivery_gateway._run_chartered_test", side_effect=chartered_test), \
+                    patch("delivery_gateway.execute_v9_selected_action", side_effect=selected_action):
                 try:
                     result = execute_v9_logical_delivery(
                         envelope, task, ledger, adapter,
-                        readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                        readiness_recheck=readiness,
                         supervisor=supervise,
                     )
                 except KillPoint:
@@ -1790,7 +1823,7 @@ class V9CharteredRouteTests(CharteredFixture):
                     self.assertEqual(status["next_action"], "resume-chartered-job")
                     result = execute_v9_logical_delivery(
                         envelope, task, ledger, adapter,
-                        readiness_recheck=lambda binding: {**binding, "state": "ready"},
+                        readiness_recheck=readiness,
                         supervisor=supervise,
                     )
         return result, ledger.snapshot(envelope["attempt_id"])
@@ -1810,6 +1843,21 @@ class V9CharteredRouteTests(CharteredFixture):
         with self.assertRaises(V9ReceiptError) as raised:
             verify_selection_receipt(receipt)
         self.assertEqual(raised.exception.code, "v9_outcome_semantic_mismatch")
+
+    def test_v9_resume_advances_persisted_verifier_no_send_refusal(self):
+        valid = json.dumps({"schema_version": 1, "decision": "pass",
+                            "summary": "Evidence passes.", "findings": []})
+        result, snapshot = self._execute_semantic_v9(
+            valid, interrupt_after_verifier_refusal=True)
+        self.assertEqual(result["status"], "completed")
+        verifier_actions = [item["request"] for item in snapshot["actions"]
+                            if item["request"]["assignment_id"] == "verifier"]
+        self.assertEqual([item["selection_decision"]["selected_candidate_id"]
+                          for item in verifier_actions], ["hosted"])
+        verifier_selections = [item for item in snapshot["provider_selections"]
+                               if item["logical_action_id"] == verifier_actions[0]["logical_action_id"]]
+        self.assertEqual([item["state"] for item in verifier_selections],
+                         ["superseded", "consumed"])
 
     def test_v9_chartered_test_failure_gets_one_bounded_producer_repair_turn(self):
         valid = json.dumps({"schema_version": 1, "decision": "pass",

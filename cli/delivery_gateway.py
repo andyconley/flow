@@ -56,6 +56,7 @@ from provider_availability import discover_ollama_models, AvailabilityError
 from flowtoml import read_toml
 from paths import SCAFFOLD_DIR, USER_OVERLAY_DIR
 from delivery_selection import (authorize_and_dispatch as authorize_v9_and_dispatch,
+                                compute_binding as compute_v9_binding,
                                 make_action as make_v9_action,
                                 _runtime_family_exclusions)
 from ollama_edit_worker import (propose_edits as propose_ollama_edits,
@@ -2208,6 +2209,48 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             runtime_excluded_families=runtime_families,
         )
         predecessor_selection_id = None
+        # A process can stop after Flow durably records a positive no-send
+        # refusal but before it reserves the deterministic successor. Resume
+        # that exact chain instead of trying to reserve the refused decision
+        # again. A computed/reserved tail is also safe to re-enter because no
+        # provider action (and therefore no send claim) exists for it.
+        prior_chain = [item for item in snapshot.get("provider_selections", [])
+                       if item["logical_action_id"] == action["logical_action_id"]]
+        for index, row in enumerate(prior_chain):
+            if (row["selection_id"] != action["selection_id"]
+                    or row["decision"] != action["selection_decision"]
+                    or row["predecessor_selection_id"] != predecessor_selection_id):
+                raise ContractError("logical v9 persisted selection chain differs from deterministic replay")
+            last = index == len(prior_chain) - 1
+            if row["state"] in {"computed", "reserved"}:
+                if not last:
+                    raise ContractError("logical v9 persisted selection chain has an open interior decision")
+                predecessor_selection_id = row["predecessor_selection_id"]
+                break
+            if row["state"] not in {"superseded", "pre_send_refused", "observed_not_executed"}:
+                raise ContractError("logical v9 persisted selection chain is not safely resumable")
+            if not last and row["state"] == "pre_send_refused":
+                raise ContractError("logical v9 persisted selection chain has an unsuperseded interior refusal")
+            if last and row["state"] == "superseded":
+                raise ContractError("logical v9 persisted selection chain has no resumable tail")
+            prior_no_send = list(row["decision"].get("prior_no_send_failures", []))
+            prior_retryable = list(row["decision"].get("prior_retryable_failures", []))
+            if row["state"] in {"superseded", "pre_send_refused"}:
+                prior_no_send.append(row["candidate_id"])
+            else:
+                prior_retryable.append(row["candidate_id"])
+            successor = compute_v9_binding(
+                envelope, proposal["assignment_id"],
+                prior_no_send_failures=prior_no_send,
+                prior_retryable_failures=prior_retryable,
+                runtime_excluded_families=runtime_families,
+            )
+            predecessor_selection_id = row["selection_id"]
+            action = make_v9_action(
+                envelope, proposal["assignment_id"], proposal["task"],
+                sequence=sequence, manager_turn=proposal["manager_turn"],
+                decision=successor,
+            )
         # A refused readiness check is the sole automatic retry case: it is
         # positively evidenced to have happened before provider I/O.  Every
         # adapter failure after a send claim becomes recovery-required instead.
