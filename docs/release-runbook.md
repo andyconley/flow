@@ -76,6 +76,20 @@ release exists; `release-verification-*` reports
 4. Escalate to a repository administrator when branch protection, workflow
    permissions, or inconsistent GitHub state prevents a corrective release.
 
+## v0.40.16 runtime pin transition
+
+The v0.40.16 updater retains its old runtime checker in memory. Updating to
+different MAF pins can fail with `version_mismatch` and atomically restore the
+prior source, configuration and runtime pointer. The supported recovery is the
+remote release bootstrap from README's First Install instructions, run over the
+existing installation. User overlays and project artifacts are preserved.
+
+Candidate and public upgrade verification retain that failed updater output.
+Only the exact v0.40.16 checker failure with a verified unchanged prior
+installation may use bootstrap recovery, followed by runtime readiness checks.
+Other upgrade failures still block publication. CI caches both the exact prior
+release's hashed runtime lock and the candidate lock for these checks.
+
 ## Evidence retention
 
 Release artifacts are retained for 14 days. Attach their names and workflow run

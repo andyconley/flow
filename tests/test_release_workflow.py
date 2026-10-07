@@ -59,6 +59,11 @@ def workflow_contract_findings(text: str) -> set[str]:
             findings.add("managed-maf-host")
         if 'echo "FLOW_PYTHON=' not in job:
             findings.add("managed-maf-python")
+        if ('previous_sha: ${{ steps.baseline.outputs.previous_commit }}' not in analyze
+                or 'PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}' not in job
+                or 'git show "$PREVIOUS_RELEASE_SHA:runtime/maf_runner/requirements.lock"' not in job
+                or '-r "$previous_lock" -d "$wheelhouse"' not in job):
+            findings.add("managed-maf-previous-closure")
     uses = [line.split("uses:", 1)[1].strip().split()[0] for line in text.splitlines() if "uses:" in line]
     if any(not __import__("re").search(r"@[0-9a-f]{40}$", value) for value in uses):
         findings.add("mutable-action-ref")
@@ -107,6 +112,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             "notes-shell-interpolation": lambda text: text.replace("run: python3 scripts/release_gate.py compare-analysis", "run: echo \"${{ steps.preview.outputs.new_release_notes }}\"", 1),
             "managed-maf-host": lambda text: text.replace("runs-on: macos-15", "runs-on: ubuntu-latest", 1),
             "managed-maf-python": lambda text: text.replace('echo "FLOW_PYTHON=', 'echo "UNUSED_PYTHON=', 1),
+            "managed-maf-previous-closure": lambda text: text.replace('PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}', 'PREVIOUS_RELEASE_SHA: main', 1),
         }
         for expected, mutate in mutations.items():
             with self.subTest(expected=expected):
