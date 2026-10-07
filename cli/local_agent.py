@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 import select
+from execution_contracts import LOCAL_AGENT_IPC_BYTES
 try:
     from delivery_cancel import wake, wakeup_fds
 except ModuleNotFoundError:
@@ -30,7 +31,7 @@ def _read_message(fd, deadline, pending, check=None):
     while b'\n' not in pending:
         if check:
             check()
-        if len(pending) > 1024*1024:
+        if len(pending) > LOCAL_AGENT_IPC_BYTES:
             raise MafTransportError('Oversized local-agent frame')
         remaining = deadline-time.monotonic()
         if remaining <= 0:
@@ -46,6 +47,8 @@ def _read_message(fd, deadline, pending, check=None):
             raise MafTransportError('Local agent disconnected; consult recorded sends before recovery')
         pending.extend(data)
     line, _, rest = pending.partition(b'\n')
+    if len(line) + 1 > LOCAL_AGENT_IPC_BYTES:
+        raise MafTransportError('Oversized local-agent frame')
     pending[:] = rest
     value = json.loads(line)
     if not isinstance(value, dict) or value.get('protocol_version') != 1:
@@ -55,7 +58,7 @@ def _read_message(fd, deadline, pending, check=None):
 
 def _write_bounded(fd, value, deadline, check=None):
     payload = (json.dumps(value)+'\n').encode()
-    if len(payload) > 1024*1024:
+    if len(payload) > LOCAL_AGENT_IPC_BYTES:
         raise MafTransportError('Oversized local-agent frame')
     os.set_blocking(fd, False)
     position = 0
