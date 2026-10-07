@@ -2,6 +2,27 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.41.0](https://github.com/andyconley/flow/compare/v0.40.16...v0.41.0) (2026-10-07)
+
+### Features
+
+* **local-agents:** adopt retained native POC runtime ([98d5419](https://github.com/andyconley/flow/commit/98d5419b4c49a72d2efd54f677169acdb516d4e4))
+
+### Bug Fixes
+
+* **local-agents:** honor frame allowance and serialized handoffs ([7b94435](https://github.com/andyconley/flow/commit/7b944350652d5a187d2efb7412caa668f854a7cf))
+* **release:** verify pinned legacy bootstrap upgrade recovery ([208e05e](https://github.com/andyconley/flow/commit/208e05e616a6472170daf487029fdfc8d59c8731))
+
+### Code Refactoring
+
+* **ledger:** check v9 budgets before reserving sends ([12f0ebe](https://github.com/andyconley/flow/commit/12f0ebe86dc207c57243ab9af4ae6ab87e79226d))
+* **ledger:** exclude no-send closures from budget slots ([e21f014](https://github.com/andyconley/flow/commit/e21f014600fe395387a0ee78e6d6587e7a622ad7))
+* **maf:** restore stock Magentic delivery coordination ([276f340](https://github.com/andyconley/flow/commit/276f340e24163a72cff3b630308a0cb8ecd51caf))
+
+### Tests
+
+* **local-agents:** use portable approved fixture interpreter ([c9b0143](https://github.com/andyconley/flow/commit/c9b0143743d34ed4b731290649f3eeaf821ddcce))
+
 ## [0.40.16](https://github.com/andyconley/flow/compare/v0.40.15...v0.40.16) (2026-10-02)
 
 ### Bug Fixes
