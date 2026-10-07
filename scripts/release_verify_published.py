@@ -16,7 +16,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from release_candidate import _clean_env, _combine, _doctor_check, _flow, _install, _run
+from release_candidate import _clean_env, _combine, _doctor_check, _flow, _install, _run, _upgrade_previous
 from release_gate import (
     ContractError,
     file_sha256,
@@ -73,7 +73,7 @@ def _install_previous_from_public(remote: str, tag: str, home: Path, temp_root: 
     install = _run(["bash", str(clone / "install-flow.sh"), "--release"], cwd=clone, env=env)
     if install[0]:
         return install
-    return _combine(install, _flow(home, "update", "--remote", remote))
+    return _combine(install, _upgrade_previous(remote, home, tag))
 
 
 def verify(
@@ -164,7 +164,9 @@ def verify(
             )
             if upgrade[0]:
                 raise ContractError(f"public upgrade failed:\n{upgrade[1]}")
-            result["checks"].append({"id": "public-upgrade", "result": "passed"})
+            result["checks"].append({"id": "public-upgrade", "result": "passed",
+                "method": "remote-bootstrap-after-verified-legacy-rollback" if 'Recovery method:' in upgrade[1] else 'flow-update',
+                "output": upgrade[1]})
 
             before_doctor = [
                 ("setup-machine", ("setup", "machine")),

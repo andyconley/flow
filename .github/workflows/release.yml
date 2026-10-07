@@ -21,6 +21,7 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
       release_date: ${{ steps.baseline.outputs.release_date }}
+      previous_sha: ${{ steps.baseline.outputs.previous_commit }}
       plan_artifact_name: ${{ steps.names.outputs.plan_artifact_name }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -140,12 +141,20 @@ jobs:
       # smoke and the managed-runtime tests need a ready runtime, so fetch the
       # locked wheels, verified against requirements.lock hashes.
       - name: Fetch locked managed MAF wheels
+        env:
+          PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}
         run: |
           test "$(uname -s)/$(uname -m)" = Darwin/arm64
           python3 -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
           wheelhouse="$RUNNER_TEMP/flow-maf-wheelhouse"
           python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
             -r runtime/maf_runner/requirements.lock -d "$wheelhouse"
+          # Upgrade verification installs the exact previous release first.
+          # Cache both hashed closures so that step remains offline and pinned.
+          previous_lock="$RUNNER_TEMP/flow-maf-previous.lock"
+          git show "$PREVIOUS_RELEASE_SHA:runtime/maf_runner/requirements.lock" > "$previous_lock"
+          python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
+            -r "$previous_lock" -d "$wheelhouse"
           echo "FLOW_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           echo "FLOW_TEST_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           # install-flow.sh prefers the newest Python it finds, and the runner
@@ -401,12 +410,18 @@ jobs:
       # smoke and the managed-runtime tests need a ready runtime, so fetch the
       # locked wheels, verified against requirements.lock hashes.
       - name: Fetch locked managed MAF wheels
+        env:
+          PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}
         run: |
           test "$(uname -s)/$(uname -m)" = Darwin/arm64
           python3 -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
           wheelhouse="$RUNNER_TEMP/flow-maf-wheelhouse"
           python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
             -r runtime/maf_runner/requirements.lock -d "$wheelhouse"
+          previous_lock="$RUNNER_TEMP/flow-maf-previous.lock"
+          git show "$PREVIOUS_RELEASE_SHA:runtime/maf_runner/requirements.lock" > "$previous_lock"
+          python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
+            -r "$previous_lock" -d "$wheelhouse"
           echo "FLOW_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           echo "FLOW_TEST_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           # install-flow.sh prefers the newest Python it finds, and the runner

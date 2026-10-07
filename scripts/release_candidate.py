@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -145,6 +146,42 @@ def _install(remote: str, home: Path) -> Result:
 
 def _flow(home: Path, *args: str) -> Result:
     return _run([str(home / ".local" / "bin" / "flow"), *args], cwd=home, env=_clean_env(home))
+
+
+def _upgrade_previous(remote: str, home: Path, previous_tag: str) -> Result:
+    """Keep the v0.40.16 cached-checker failure distinct from bootstrap recovery.
+
+    The old updater cannot load a new runtime checker while its process remains
+    alive. Only its exact known failure after a verified rollback may use the
+    supported remote bootstrap path; all other upgrade failures block release.
+    """
+    config = home / ".flow" / "config.toml"
+    pointer = home / ".flow" / "runtimes" / "maf" / "current.json"
+    source = home / ".flow" / "source"
+    def snapshot():
+        return {str(path.relative_to(home)): file_sha256(path)
+                for path in [config, pointer, *source.rglob('*')]
+                if path.is_file() and '__pycache__' not in path.parts and path.suffix != '.pyc'}
+    before = snapshot()
+    installed = tomllib.loads(config.read_text()).get('install', {}).get('version') if config.is_file() else None
+    legacy = previous_tag == installed == 'v0.40.16'
+    if legacy:
+        code, expected = _run(['git', 'show', f'{previous_tag}:cli/maf_runtime.py'])
+        legacy = code == 0 and (source / 'cli' / 'maf_runtime.py').read_text() == expected
+    update = _flow(home, 'update', '--remote', remote)
+    if update[0] == 0:
+        return update
+    if (not legacy or update[0] != 1
+            or 'managed MAF runtime provisioning failed: version_mismatch:' not in update[1]
+            or snapshot() != before):
+        return update
+    bootstrap = _install(remote, home)
+    output = update[1] + '\nLegacy updater exit=1; exact prior source/config/runtime rollback verified.\n'
+    output += 'Recovery method: supported remote release bootstrap over the existing install.\n' + bootstrap[1]
+    if bootstrap[0]:
+        return bootstrap[0], output
+    ready = _flow(home, 'runtime', 'readiness', '--json')
+    return ready[0], output + ready[1]
 
 
 def _doctor_check(home: Path) -> Result:
@@ -295,7 +332,7 @@ def run_candidate(
             install_result = _install(previous_remote, upgrade_home)
             if install_result[0]:
                 return install_result
-            return _combine(install_result, _flow(upgrade_home, "update", "--remote", candidate_remote))
+            return _combine(install_result, _upgrade_previous(candidate_remote, upgrade_home, plan['previous_release']['tag']))
 
         commands: dict[str, Callable[[], Result]] = {
             "python-test-suite": lambda: _run(
