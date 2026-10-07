@@ -19,6 +19,8 @@ class NativeLocalAdapter:
     def __init__(self, envelope, *, read_paths, write_paths):
         self.envelope = envelope
         self.profile = envelope['local_agent_profile']
+        from local_machine import check_local_compatibility
+        check_local_compatibility(self.profile)
         self.workspace_root = Path(envelope['worktree'])
         self.artifact_dir = Path(envelope['checkpoint_dir']).parent
         self.assignments = {a['assignment_id']: a for a in envelope['logical_assignments']}
@@ -55,6 +57,8 @@ class NativeLocalAdapter:
         controller = delivery_cancel.current()
         if controller is not None:
             controller.check()
+        from execution_budgets import remaining_runtime
+        remaining_runtime(self.envelope)
         self.ledger.assert_owner(self.envelope['attempt_id'], self.envelope['delivery_lead_claim']['generation'])
         snapshot = self.ledger.snapshot(self.envelope['attempt_id'])
         if snapshot['status'] != 'started':
@@ -69,7 +73,18 @@ class NativeLocalAdapter:
         self.action = action
         if binding['provider'] != 'ollama':
             raise ContractError('Retained local-agent profile requires an explicit local selection')
+        from local_machine import check_local_compatibility
+        check_local_compatibility(self.profile, model=binding['model'])
         self.authority()
+        timeout = self.envelope.get('call_budgets', {}).get(action['assignment_id'],
+            self.profile['request_timeout_seconds'])
+        timeout = min(timeout, self.profile['request_timeout_seconds'])
+        turn_timeout = min(self.profile['turn_timeout_seconds'],
+            self.envelope.get('limits', {}).get('max_runtime_seconds', self.profile['turn_timeout_seconds']))
+        from execution_budgets import remaining_runtime
+        remaining = remaining_runtime(self.envelope)
+        if remaining is not None:
+            turn_timeout = min(turn_timeout, remaining)
         assignment = self.assignments[action['assignment_id']]
         operation = assignment['requirements']['operation']
         events = []
@@ -80,6 +95,9 @@ class NativeLocalAdapter:
                 handle.write(json.dumps(event, default=str)+'\n')
             return True
         if operation == 'manage':
+            if remaining is not None:
+                import math
+                timeout = min(timeout, max(1, math.ceil(remaining)))
             monitor_factory = partial(ResourceMonitor, endpoint='http://127.0.0.1:11434')
             try:
                 packet = json.loads(action['task'])
@@ -113,7 +131,7 @@ class NativeLocalAdapter:
             if phase == 'progress':
                 result = call_ollama_manager(messages,
                     model=binding['model'], attempt_id=action['attempt_id'],
-                    timeout_seconds=self.profile['request_timeout_seconds'],
+                    timeout_seconds=timeout,
                     preserve_observed_invalid=True, allowed_speakers=frontier,
                     local_agent_profile=self.profile, observer=observer, phase=phase,
                     native_messages=[{'role': 'system', 'content': assignment['instructions']}, *native_messages],
@@ -121,7 +139,7 @@ class NativeLocalAdapter:
             else:
                 result = call_local({'provider': 'ollama', 'model': binding['model'],
                     'attempt_id': action['attempt_id'], 'instructions': assignment['instructions'], 'task': action['task']},
-                    timeout_seconds=self.profile['request_timeout_seconds'], chat_messages=native_messages,
+                    timeout_seconds=timeout, chat_messages=native_messages,
                     local_agent_profile=self.profile, observer=observer, resource_monitor_factory=monitor_factory)
             evidence = {'session_id': 'stock-manager-'+action['action_id'], 'events': events,
                 'model_requests': [e for e in events if e['type']=='model_request'],
@@ -153,7 +171,8 @@ class NativeLocalAdapter:
             return self.workspace.callback(action['assignment_id'], name, args)
         result = self.pool.run(action['assignment_id'], instructions, packet,
             tool,
-            model=binding['model'], tools=tools, observer=observer)
+            model=binding['model'], tools=tools, observer=observer,
+            request_timeout=timeout, turn_timeout=turn_timeout)
         evidence = dict(result)
         if operation == 'edit':
             writes = [e for e in result['tool_observations'] if e.get('name') == 'write_file'

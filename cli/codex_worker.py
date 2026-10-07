@@ -177,8 +177,8 @@ def call_codex(*, instructions: str, task: str, workspace: Path, model: str,
         raise ValueError("Codex workspace must be a real directory")
     if not isinstance(model, str) or not model.strip() or any(c.isspace() for c in model):
         raise ValueError("Codex model must be explicit")
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 600:
-        raise ValueError("Codex timeout must be 1 to 600 seconds")
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or timeout_seconds < 1:
+        raise ValueError("Codex timeout must be a positive integer")
     if sandbox not in {"workspace-write", "read-only"}:
         raise ValueError("Codex sandbox must be explicit and supported")
     if max_prompt_bytes is None:

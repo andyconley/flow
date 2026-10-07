@@ -299,6 +299,15 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
 
     for assignment_id in assignment_ids:
         visit(assignment_id)
+    from execution_budgets import validate_runtime_budget
+    try:
+        validate_runtime_budget(envelope)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise ContractError(str(exc)) from exc
+    call_budgets = envelope.get("call_budgets", {})
+    if (not isinstance(call_budgets, dict) or set(call_budgets) - assignment_ids
+            or any(type(value) is not int or value < 1 for value in call_budgets.values())):
+        raise ContractError("protocol v9 call budgets are invalid")
     inputs = envelope["selection_inputs"]
     input_digests = envelope["selection_input_digests"]
     if not isinstance(inputs, dict) or set(inputs) != {"policy", "catalog", "availability"}:
@@ -419,7 +428,7 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
                         and all(type(limits[key]) is int and 0 <= limits[key] <= maximum for key, maximum in expected.items())
                         and limits["max_delegations"] >= 1 and limits["max_concurrent"] >= 1
                         and limits["max_manager_calls"] >= 1 and limits["max_manager_rounds"] >= 1
-                        and type(limits["max_runtime_seconds"]) is int and 1 <= limits["max_runtime_seconds"] <= 600
+                        and type(limits["max_runtime_seconds"]) is int and limits["max_runtime_seconds"] >= 1
                         and type(paid_calls) is int and 0 <= paid_calls <= limits["max_delegations"])
     elif envelope["execution_protocol_version"] == STRUCTURED_VERIFIER_PROTOCOL_VERSION:
         # Pre-release v8 envelopes stay readable (ADR 0020); only a handback
@@ -430,7 +439,7 @@ def _validate_magentic_envelope(envelope: dict[str, Any]) -> None:
                         and all(type(limits[key]) is int and 0 <= limits[key] <= maximum for key, maximum in expected.items())
                         and limits["max_delegations"] >= 1 and limits["max_concurrent"] >= 1
                         and limits["max_manager_calls"] >= 1 and limits["max_manager_rounds"] >= 1
-                        and type(limits["max_runtime_seconds"]) is int and 1 <= limits["max_runtime_seconds"] <= 600
+                        and type(limits["max_runtime_seconds"]) is int and limits["max_runtime_seconds"] >= 1
                         and type(paid_calls) is int and 0 <= paid_calls <= limits["max_delegations"]
                         and type(limits["max_verifier_calls"]) is int and 1 <= limits["max_verifier_calls"] <= MAX_VERIFIER_CALLS)
     else:

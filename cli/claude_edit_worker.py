@@ -119,8 +119,8 @@ def call_claude_edit(*, instructions: str, task: str, workspace: Path, model: st
         raise ValueError("Claude workspace must be a real directory")
     if not isinstance(model, str) or not model.strip() or any(c.isspace() for c in model):
         raise ValueError("Claude model must be explicit")
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 600:
-        raise ValueError("Claude timeout must be 1 to 600 seconds")
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or timeout_seconds < 1:
+        raise ValueError("Claude timeout must be a positive integer")
     if not instructions.strip() or not task.strip():
         raise ValueError("Claude task and instructions are required")
     prompt = ("Specialist instructions:\n" + instructions + "\n\nAuthorized task:\n" + task

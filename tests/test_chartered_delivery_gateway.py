@@ -43,6 +43,8 @@ import delivery_gateway
 
 from tests.v9_coordinator import coordinate, adapt
 
+from tests.shaper_intent_fixture import legacy_build_shaper_contract as build_shaper_contract
+
 class KillPoint(BaseException):
     """Simulated process death; escapes the gateway's ``except Exception`` handlers."""
 
@@ -1538,7 +1540,7 @@ class ProviderRouteTests(unittest.TestCase):
                 self.assertEqual(_default_worker_adapter(action, envelope=envelope, workspace=workspace)["provider"], "codex")
                 self.assertEqual(codex.call_args.kwargs["sandbox"], "read-only")
 
-    def test_codex_worker_uses_supported_six_hundred_second_ceiling(self):
+    def test_codex_worker_preserves_approved_runtime_budget(self):
         with tempfile.TemporaryDirectory() as dirname:
             workspace = Path(dirname)
             envelope = {
@@ -1553,7 +1555,7 @@ class ProviderRouteTests(unittest.TestCase):
                       "provider": "codex", "task": "edit"}
             with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
                 _default_worker_adapter(action, envelope=envelope, workspace=workspace)
-                self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 600)
+                self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 900)
 
 
 class V9CharteredRouteTests(CharteredFixture):

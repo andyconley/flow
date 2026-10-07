@@ -70,6 +70,9 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
     """
     profile = (resolve_local_agent_budget(local_agent_profile)
                if local_agent_profile is not None else None)
+    from local_machine import load_local_machine, check_local_compatibility
+    machine = load_local_machine()
+    check_local_compatibility(profile or machine, model=envelope['model'], machine=machine)
     if profile and timeout_seconds is None:
         timeout_seconds = profile['request_timeout_seconds']
     output_limit = (profile['output_tokens'] * 8 if profile else
@@ -97,7 +100,8 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
         messages = [{'role': 'system', 'content': envelope['instructions']}, *native]
     request_body = {'model': envelope['model'], 'stream': False, 'think': False,
                     'messages': messages, 'options': {
-                        'num_predict': STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256}}
+                        'num_ctx': machine['context_tokens'],
+                        'num_predict': min(machine['output_tokens'], STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256)}}
     if profile:
         request_body['options'] = {'num_ctx': profile['context_tokens'],
             'num_predict': profile['output_tokens'], 'temperature': 0, 'seed': 42}

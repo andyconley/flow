@@ -82,11 +82,13 @@ def _write_bounded(fd, value, deadline, check=None):
 class LocalAgentSession:
     def __init__(self, *, assignment_id: str, instructions: str, model: str,
                  runtime_python: str, artifact_dir: Path, tools: list[str],
-                 source_root: Path | None = None, num_ctx: int = 49152,
-                 num_predict: int = 12288, request_timeout: float = 600,
+                 source_root: Path | None = None, num_ctx: int = 12288,
+                 num_predict: int = 2048, request_timeout: float = 600,
                  turn_timeout: float = 2400, max_iterations: int | None = 40,
-                 max_function_calls: int | None = 80, context_reserve: int = 2048, observer: Callable | None = None,
+                 max_function_calls: int | None = 80, context_reserve: int = 1024, observer: Callable | None = None,
                  resource_monitor_factory: Callable | None = None):
+        from local_machine import check_local_compatibility
+        check_local_compatibility({'context_tokens': num_ctx}, model=model)
         self.assignment_id = assignment_id
         self.session_id = uuid.uuid4().hex
         self.observer = observer
@@ -232,9 +234,12 @@ class LocalAgentPool:
             session = LocalAgentSession(**config)
             self.sessions[assignment_id] = session
         else:
-            for field in ('instructions', 'model', 'tools', 'num_ctx', 'num_predict'):
+            for field in ('instructions', 'model', 'tools', 'num_ctx', 'num_predict', 'request_timeout'):
                 if field in config and session.config[field] != config[field]:
                     raise ValueError(f'Retained assignment {field} changed; explicit new assignment required')
+        # Remaining wall time may shrink between retained turns; model,
+        # context and per-request settings remain immutable.
+        session.turn_timeout = config.get('turn_timeout', session.turn_timeout)
         return session.run(task, callback, options.get('observer'))
 
     def close(self):

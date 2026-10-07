@@ -570,6 +570,10 @@ def main() -> int:
     run_amend_parser.add_argument("--approved-by-user", action="store_true")
     run_amend_parser.add_argument("--json", action="store_true", help="emit JSON")
 
+    run_budget_inspection_parser = run_sub.add_parser("inspect-budget-migration", help="inspect legacy Shaper budgets without changing authority")
+    run_budget_inspection_parser.add_argument("work_id")
+    run_budget_inspection_parser.add_argument("--json", action="store_true")
+
     run_charter_migration_parser = run_sub.add_parser(
         "migrate-job-charter-v9",
         help="approve and register a provider-neutral v9 successor for a legacy job charter",
@@ -1136,6 +1140,9 @@ def main() -> int:
         return run_handoff_to_review_command(args)
     if args.command == "run" and args.run_target == "amend-orchestration":
         return run_amend_orchestration_command(args)
+    if args.command == "run" and args.run_target == "inspect-budget-migration":
+        from runstate import cmd_inspect_budget_migration
+        return cmd_inspect_budget_migration(args)
     if args.command == "run" and args.run_target == "migrate-job-charter-v9":
         return run_migrate_job_charter_v9_command(args)
     if args.command == "run" and args.run_target == "validate-orchestration":

@@ -2069,7 +2069,7 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
     prompt = render_manager_prompt(message["messages"])
     if on_process_group is not None and isinstance(message.get("call_id"), str):
         on_process_group = partial(on_process_group, row_id=message["call_id"])
-    timeout_seconds = min(120, envelope.get("limits", {}).get("max_runtime_seconds", 120))
+    timeout_seconds = envelope["manager"].get("timeout_seconds", envelope.get("limits", {}).get("max_runtime_seconds", 120))
     if envelope["manager"].get("provider", "claude") == "claude":
         result = call_claude(instructions="stock Magentic manager", task="model response",
                              prompt_override=prompt, workspace=workspace,
@@ -2103,10 +2103,9 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
     assignment = next(item for item in envelope["roster"] if item["assignment_id"] == action["assignment_id"])
     if on_process_group is not None and isinstance(action.get("action_id"), str):
         on_process_group = partial(on_process_group, row_id=action["action_id"])
-    # Hosted provider workers support up to 600 seconds. Ollama is local and
-    # user-owned, so it has no elapsed-time deadline; explicit cancellation
-    # remains available through the interruptible transport.
-    timeout_seconds = min(600, envelope.get("limits", {}).get("max_runtime_seconds", 600))
+    # Call deadlines are approved task budgets, independent of model context.
+    # Legacy local transports retain their historic cancellation semantics.
+    timeout_seconds = assignment.get("timeout_seconds", envelope.get("limits", {}).get("max_runtime_seconds", 600))
     if action["provider"] == "ollama":
         structured = (envelope["execution_protocol_version"] == 8
                       and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
@@ -2519,18 +2518,17 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         if live_attempt and operation == "verify":
             if edit_evidence is None or test_evidence is None:
                 raise ContractError("logical v9 verifier selected before Flow captured edit and test evidence")
+            bounded_task = verifier_provider_task(
+                bounded_task, (attempt_dir / "repair.diff").read_text(),
+                edit_evidence["diff_sha256"], structured=True,
+                test_output=test_evidence["output_excerpt"],
+                authority_statement=VERIFIED_HANDOFF_AUTHORITY,
+            )
             if envelope.get("local_agent_profile"):
                 bounded_task += ("\nFlow observed passing tests: " + test_evidence["output_excerpt"]
                                  + "\nCurrent source diff SHA-256: " + edit_evidence["diff_sha256"]
                                  + "\nRead the actual current source using read_files, rerun run_tests, "
                                  "then call submit_review with your independent findings.")
-            else:
-                bounded_task = verifier_provider_task(
-                    bounded_task, (attempt_dir / "repair.diff").read_text(),
-                    edit_evidence["diff_sha256"], structured=True,
-                    test_output=test_evidence["output_excerpt"],
-                    authority_statement=VERIFIED_HANDOFF_AUTHORITY,
-                )
         input_limit = selected_assignment["requirements"]["input_bytes"]
         if len(bounded_task.encode()) > input_limit:
             raise ContractError("logical v9 evidence-bearing task exceeds assignment input limit")
@@ -2611,6 +2609,12 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 if not isinstance(output, str):
                     raise ContractError("logical v9 verifier returned no bounded output")
                 verifier_input = {"provider_task": verifier_action["task"], "assignment_id": selected}
+                if envelope.get("local_agent_profile"):
+                    from local_agent_workspace import LocalAgentWorkspace
+                    observed_source = LocalAgentWorkspace(Path(envelope["worktree"]),
+                        read_paths=job["read_paths"], write_paths=job["write_paths"],
+                        artifact_dir=attempt_dir / "source-bindings")
+                    verifier_input["source_digest"] = observed_source.current_source_digest
                 input_digest = hashlib.sha256(canonical(verifier_input).encode()).hexdigest()
                 final_evaluation = evaluate_candidate(
                     action_id=verifier_action["action_id"], verifier_input_digest=input_digest,
@@ -2656,7 +2660,9 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         outcome = (supervisor or run_maf_v9_delivery)(
             envelope, task, on_worker, on_manager=on_manager,
             completed_assignments=sorted(completed), python_path=python_path,
-            coordination_epoch=dispatch_sequence_base)
+            coordination_epoch=dispatch_sequence_base,
+            **({"timeout_s": envelope["limits"]["max_runtime_seconds"]}
+               if "max_runtime_seconds" in envelope["limits"] else {}))
     except ProviderCandidatesExhausted as exhausted:
         return exhausted.result
     except (ContractError, MafChildError) as exc:
@@ -2753,8 +2759,9 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     charter_data = json.loads(charter.read_text())
     profile = charter_data.get("local_agent_profile")
     sealed_profile = authority["charter"].get("local_agent_profile")
-    if profile != sealed_profile:
+    if profile is not None and profile != sealed_profile:
         raise ContractError("job local-agent profile differs from approved delivery authority")
+    profile = sealed_profile
     task = charter_data.get("task")
     if not isinstance(task, str) or not task.strip() or len(task.encode()) > (4*1024*1024 if profile else MAX_TASK_BYTES):
         raise ContractError("v9 job charter task is absent or oversized")
@@ -2837,15 +2844,26 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         "delivery_lead_claim": {"generation": generation},
     }
     if profile:
+        from local_machine import check_local_compatibility
+        check_local_compatibility(profile)
         envelope["local_agent_profile"] = resolve_local_agent_budget(profile)
-        for name, key in (("max_actions", "delegations"), ("max_manager_calls", "manager_calls"),
-                          ("max_manager_rounds", "manager_rounds"), ("max_delegations", "delegations"),
-                          ("max_replans", "replans"), ("max_verifier_calls", "delegations")):
-            envelope["limits"][name] = profile[key]
         if profile["delegations"] is not None and profile["manager_calls"] is not None:
             envelope["limits"]["max_actions"] = profile["delegations"] + profile["manager_calls"]
         else:
             envelope["limits"]["max_actions"] = None
+    declared_assignments = json.loads(manifest.read_text()).get("assignments", [])
+    from execution_budgets import seal_runtime_budget
+    envelope["runtime_budget"] = seal_runtime_budget(projected_limits["max_runtime_seconds"], sealed_at)
+    envelope["call_budgets"] = {
+        item["id"]: (item.get("execution") or {}).get("timeout_seconds", projected_limits["max_runtime_seconds"])
+        for item in declared_assignments if item.get("id") in {a["assignment_id"] for a in logical_assignments}
+    }
+    manager_budget = next(((item.get("execution") or {}).get("timeout_seconds")
+        for item in declared_assignments if item.get("id") == "magentic-manager"), None)
+    if manager_budget is not None:
+        for item in logical_assignments:
+            if item["requirements"]["operation"] == "manage":
+                envelope["call_budgets"][item["assignment_id"]] = manager_budget
     envelope["selection_authority"] = seal_selection_authority(
         work_id=work_id, attempt_id=attempt_id, charter_digest=charter_digest,
         manifest_digest=manifest_digest, generation=generation, sealed_at=sealed_at,
@@ -2977,6 +2995,16 @@ def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None =
                 if type(value) is not int or value < 0 or (field in target and value > target[field]):
                     raise ContractError("project provider candidate limit may only narrow")
                 target[field] = value
+    # Physical local capacity narrows eligibility only; hosted declarations,
+    # enabled flags, operations and policy exclusions stay administrator-owned.
+    from local_machine import load_local_machine
+    machine = load_local_machine(administrator_path)
+    for candidate in catalog:
+        if candidate["provider"] == "ollama":
+            candidate["max_context_tokens"] = min(candidate.get("max_context_tokens", machine["context_tokens"]),
+                                                   machine["context_tokens"])
+            if machine["model"] and candidate.get("model") != machine["model"]:
+                candidate["enabled"] = False
     policy = merge_selection_policy(framework.get("provider_selection", {}),
                                     administrator.get("provider_selection"),
                                     project.get("provider_selection"))
@@ -3008,17 +3036,17 @@ def local_agent_selection_inputs(catalog: list[dict[str, Any]], policy: dict[str
     native = []
     for item in catalog:
         if item["provider"] != "ollama":
+            native.append(deepcopy(item))
             continue
         candidate = deepcopy(item)
-        candidate["operations"] = ["manage", "read", "edit", "verify", "collect"]
-        candidate["capabilities"] = sorted(set(candidate["capabilities"]) | {
-            "interactive_tools", "structured_output", "evidence_collection"})
-        candidate["max_context_tokens"] = profile["context_tokens"]
-        candidate["max_input_bytes"] = 4*1024*1024
-        candidate["max_output_bytes"] = profile["output_tokens"]*8
+        # A native adapter does not widen administrator/project eligibility.
+        # Candidates with an explicitly smaller context cannot run this profile.
+        if candidate.get("max_context_tokens", profile["context_tokens"]) < profile["context_tokens"]:
+            candidate["enabled"] = False
+        candidate.setdefault("max_context_tokens", profile["context_tokens"])
+        candidate.setdefault("max_input_bytes", 4*1024*1024)
+        candidate.setdefault("max_output_bytes", profile["output_tokens"]*8)
         native.append(candidate)
-    if not native:
-        raise ContractError("approved local profile has no configured Ollama model")
     return native, policy
 
 
@@ -3077,7 +3105,8 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
         raise ContractError("approved v9 logical assignments conflict with charter topology")
     if len([item for item in assignments if item["requirements"].get("operation") == "manage"]) != 1:
         raise ContractError("approved v9 job charter requires exactly one logical manager")
-    if not by_operation["edit"] or (not raw.get("local_agent_profile") and len(by_operation["edit"]) != 1):
+    authority_profile = _sealed_delivery_authority(run_dir, state.get("delivery", {}))["charter"].get("local_agent_profile")
+    if not by_operation["edit"] or (not (raw.get("local_agent_profile") or authority_profile) and len(by_operation["edit"]) != 1):
         raise ContractError("approved v9 job charter requires exactly one producer assignment")
     if not any(item["requirements"]["operation"] == "verify" for item in assignments):
         raise ContractError("approved v9 job charter has no verifier assignment")
@@ -3314,7 +3343,12 @@ def _hosted_scoped_edit(
             # the execution can seal a normal evidence failure instead of
             # falsely requiring uncertain-send reconciliation.
             return {**result, "observed_invalid": True, "detail": str(exc)[:512]}
-        return {**result, "scoped_edit": applied}
+        from local_agent_workspace import LocalAgentWorkspace
+        source = LocalAgentWorkspace(workspace, read_paths=read_paths, write_paths=write_paths,
+            artifact_dir=staging / "flow-observed-source")
+        files = source._snapshot()
+        return {**result, "scoped_edit": {**applied, "source_files": files,
+            "source_digest": source.current_source_digest}}
 
 
 def _hosted_scoped_read(workspace: Path, *, read_paths: list[str],
@@ -3329,35 +3363,45 @@ def _hosted_scoped_read(workspace: Path, *, read_paths: list[str],
 def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str],
                               write_paths: list[str]) -> Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]:
     """Return the bounded adapter for the selected binding and logical operation."""
-    if envelope.get("local_agent_profile"):
-        return NativeLocalAdapter(envelope, read_paths=read_paths, write_paths=write_paths)
+    native = None
     workspace = Path(envelope["worktree"])
     source_commit = envelope.get("source_commit") or _git(workspace, "rev-parse", "HEAD")
     assignment_by_id = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
 
     def send(binding: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+        nonlocal native
+        from execution_budgets import remaining_runtime
+        import math
+        remaining = remaining_runtime(envelope)
+        if binding["provider"] == "ollama" and envelope.get("local_agent_profile"):
+            if native is None:
+                native = NativeLocalAdapter(envelope, read_paths=read_paths, write_paths=write_paths)
+            return native(binding, action)
         assignment = assignment_by_id.get(action["assignment_id"])
         if assignment is None:
             raise ContractError("v9 action has no logical assignment")
         operation = assignment["requirements"]["operation"]
         provider, model = binding["provider"], binding["model"]
         instructions, task = assignment["instructions"], action["task"]
-        # Hosted provider workers remain bounded. Ollama is local and has no
-        # elapsed-time deadline; explicit cancellation still interrupts its
-        # socket through local_worker.
-        timeout = {
-            "manage": 60,
-            "read": 120,
-            "edit": 600,
-            "collect": 600,
-            "verify": 600,
-        }[operation]
+        # Hosted calls use the sealed per-assignment budget. Native local
+        # sessions separately bind context, request and turn budgets.
+        timeout = envelope.get("call_budgets", {}).get(action["assignment_id"],
+            envelope.get("limits", {}).get("max_runtime_seconds", 600))
+        if remaining is not None:
+            timeout = min(timeout, max(1, math.ceil(remaining)))
+        if operation == "manage" and envelope.get("local_agent_profile"):
+            packet = json.loads(task)
+            frontier = packet["flow_authority"]["frontier"] or packet["flow_authority"]["completed"]
+            task = canonical(packet["messages"]) + "\nFlow accepted assignments: " + canonical(packet["flow_authority"]["completed"])
+            if packet["phase"] == "progress":
+                task += "\nnext_speaker.answer must be exactly one of " + canonical(frontier)
+                task += ". Set is_request_satisfied.answer=false while required assignments remain."
         if provider == "ollama":
             if operation == "edit":
                 try:
                     bundle = ollama_source_bundle(workspace, write_paths)
                     proposal = propose_ollama_edits(bundle, task, model=model,
-                                                    attempt_id=action["attempt_id"], timeout_seconds=None)
+                                                    attempt_id=action["attempt_id"], timeout_seconds=timeout)
                     applied = apply_ollama_edits(workspace, bundle, proposal, write_scopes=write_paths,
                                                   expected_model=model)
                 except ContractError as exc:
@@ -3373,12 +3417,12 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                 except json.JSONDecodeError as exc:
                     raise ContractError("logical manager task has an invalid speaker frontier") from exc
                 return call_ollama_manager([{"role": "user", "content": task}], model=model,
-                                           attempt_id=action["attempt_id"], timeout_seconds=None,
+                                           attempt_id=action["attempt_id"], timeout_seconds=timeout,
                                            preserve_observed_invalid=True,
                                            allowed_speakers=allowed_speakers)
             return call_local({"provider": provider, "model": model, "attempt_id": action["attempt_id"],
                                "instructions": instructions, "task": task},
-                              correlation_id=action["action_id"], timeout_seconds=None)
+                              correlation_id=action["action_id"], timeout_seconds=timeout)
         if provider == "claude":
             if operation == "edit":
                 return _hosted_scoped_edit(
@@ -3412,6 +3456,10 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
             )
         raise ContractError("selected v9 provider has no bounded adapter")
 
+    def close():
+        if native is not None:
+            native.close()
+    send.close = close
     return send
 
 
@@ -3523,10 +3571,9 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
     charter = _run_file(project_root, project_root / ".flow" / "runs" / work_id,
                         state.get("artifacts", {}).get("job_charter", ""))
     charter_data = json.loads(charter.read_text())
-    profile = charter_data.get("local_agent_profile")
+    profile = _sealed_delivery_authority(project_root / ".flow" / "runs" / work_id,
+        state.get("delivery", {}))["charter"].get("local_agent_profile")
     if profile:
-        if any(a["requirements"]["locality"] != "local_required" for a in assignments):
-            raise ContractError("local-agent profile requires explicit local routing for every assignment")
         catalog, policy = local_agent_selection_inputs(catalog, policy, profile)
         available_ids = {item["candidate_id"] for item in catalog}
         availability = [item for item in availability if item["candidate_id"] in available_ids]
