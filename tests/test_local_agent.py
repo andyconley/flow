@@ -1,5 +1,6 @@
 """Actual pipe boundary tests for retained local-agent parent authorization."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -9,7 +10,8 @@ import time
 import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'cli'))
-from local_agent import LocalAgentPool, LocalAgentSession, MafTransportError
+from local_agent import LocalAgentPool, LocalAgentSession, MafTransportError, _read_message, _write_bounded
+from execution_contracts import LOCAL_AGENT_IPC_BYTES
 from local_resources import ResourceMonitor, ResourcePressureError
 from tests.maf_env import MAF_PYTHON, requires_maf
 
@@ -34,6 +36,38 @@ while True:
  emit({'type':'model_response','number':turn,'responses':[{'prompt_eval_count':10,'eval_count':3}]})
  emit({'type':'result','text':str(turn)+':'+str(result['result'])})
 '''
+
+
+class LocalAgentFrameTests(unittest.TestCase):
+    def test_actual_pipe_accepts_frame_above_one_mib(self):
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, read_fd)
+        self.addCleanup(os.close, write_fd)
+        message = {'protocol_version': 1, 'text': 'x' * (2 * 1024 * 1024)}
+        errors = []
+        def write():
+            try:
+                _write_bounded(write_fd, message, time.monotonic() + 10)
+            except BaseException as exc:
+                errors.append(exc)
+        thread = threading.Thread(target=write, daemon=True)
+        thread.start()
+        actual = _read_message(read_fd, time.monotonic() + 10, bytearray())
+        thread.join(timeout=10)
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(errors)
+        self.assertEqual(actual, message)
+
+    def test_complete_oversized_frame_and_write_are_denied(self):
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, read_fd)
+        self.addCleanup(os.close, write_fd)
+        message = {'protocol_version': 1, 'text': 'x' * LOCAL_AGENT_IPC_BYTES}
+        with self.assertRaisesRegex(MafTransportError, 'Oversized'):
+            _write_bounded(write_fd, message, time.monotonic() + 1)
+        pending = bytearray((json.dumps(message) + '\n').encode())
+        with self.assertRaisesRegex(MafTransportError, 'Oversized'):
+            _read_message(read_fd, time.monotonic() + 1, pending)
 
 
 class LocalAgentTests(unittest.TestCase):

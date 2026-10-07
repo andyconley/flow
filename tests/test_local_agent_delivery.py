@@ -28,7 +28,7 @@ class NativeLocalDeliveryTests(unittest.TestCase):
         (self.attempt / 'manifest.snapshot.json').write_text(json.dumps({'assignments': [
             {'id': key, 'read_scopes':['a.py','b.py'], 'write_scopes':[{'first':'a.py','second':'b.py'}.get(key,'a.py')]
                 if op=='edit' else []} for key,op,_ in operations]}))
-        (self.attempt / 'job-charter.snapshot.json').write_text(json.dumps({'test':{'argv':['/opt/homebrew/bin/python3.12','-m','unittest','discover','-s','tests'], 'timeout_seconds':10}}))
+        (self.attempt / 'job-charter.snapshot.json').write_text(json.dumps({'test':{'argv':['python3','-m','unittest','discover','-s','tests'], 'timeout_seconds':10}}))
         self.envelope = {'attempt_id':'attempt', 'worktree':str(self.work), 'checkpoint_dir':str(self.attempt/'checkpoints'),
             'local_agent_profile':resolve_local_agent_budget(), 'logical_assignments':assignments,
             'maf_runtime':{'interpreter':sys.executable}, 'delivery_lead_claim':{'generation':1}}

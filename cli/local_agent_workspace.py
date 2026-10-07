@@ -48,6 +48,8 @@ class LocalAgentWorkspace:
         if log.is_symlink():
             raise ValueError('Tool observation log is a symlink')
         records = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+        stale = []
+        handoff_positions = {}
         for path in sorted(self.artifact_dir.glob('handoff-*.json')):
             if path.is_symlink():
                 raise ValueError('Handoff artifact is a symlink')
@@ -61,13 +63,15 @@ class LocalAgentWorkspace:
                 and record['result'].get('artifact_sha256') == digest), None)
             if observed is None:
                 raise ValueError('Handoff differs from durable parent observation')
+            position = next(index for index in reversed(range(len(records))) if records[index] is observed)
+            handoff_positions[producer] = position
             writes = set()
             for name, expected in artifact['files'].items():
                 self._path(name, self.write_paths)
                 target = self._path(name, self._scopes(producer).get('write_paths', []))
                 current = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
                 if current != expected:
-                    raise ValueError('Persisted handoff source changed; reconcile producer evidence')
+                    stale.append((producer, name, current, position))
                 if any(record.get('assignment_id') == producer and record.get('tool') == 'write_file'
                        and record.get('result', {}).get('status') == 'written'
                        and record['result'].get('path') == name
@@ -77,6 +81,18 @@ class LocalAgentWorkspace:
                 raise ValueError('Handoff lacks observed current producer writes')
             self.handoffs[producer] = dict(artifact, artifact_sha256=digest, artifact_path=str(path))
             self.writes[producer] = writes
+        for producer, name, current, position in stale:
+            latest = next(((index, record) for index, record in reversed(list(enumerate(records)))
+                if record.get('tool') == 'write_file'
+                and record.get('result', {}).get('status') == 'written'
+                and record['result'].get('path') == name), None)
+            successor = latest[1].get('assignment_id') if latest else None
+            artifact = self.handoffs.get(successor, {})
+            if (latest is None or latest[0] <= position or successor == producer
+                    or latest[1]['result'].get('sha256') != current
+                    or artifact.get('files', {}).get(name) != current
+                    or handoff_positions.get(successor, -1) <= latest[0]):
+                raise ValueError('Persisted handoff source changed; reconcile producer evidence')
 
     def _authority(self):
         if self.authority_callback and self.authority_callback() is False:
@@ -260,8 +276,11 @@ class LocalAgentWorkspace:
 
     def _read_handoff(self, assignment_id):
         records = []
+        dependencies = self._scopes(assignment_id).get('handoff_dependencies')
+        if dependencies is not None and any(producer not in self.handoffs for producer in dependencies):
+            raise ValueError('Required specialist handoff is missing')
         for producer, artifact in self.handoffs.items():
-            if producer == assignment_id:
+            if producer == assignment_id or (dependencies is not None and producer not in dependencies):
                 continue
             path = Path(artifact['artifact_path'])
             if hashlib.sha256(path.read_bytes()).hexdigest() != artifact['artifact_sha256']:

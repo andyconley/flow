@@ -32,7 +32,9 @@ class NativeLocalAdapter:
             declaration = declared.get(key, {})
             writable = assignment['requirements']['operation'] == 'edit'
             scopes[key] = {'read_paths': declaration.get('read_scopes', read_paths + write_paths),
-                           'write_paths': declaration.get('write_scopes', write_paths) if writable else []}
+                           'write_paths': declaration.get('write_scopes', write_paths) if writable else [],
+                           'handoff_dependencies': [dependency for dependency in assignment.get('depends_on', [])
+                               if self.assignments[dependency]['requirements']['operation'] == 'edit']}
         from delivery_gateway import _run_chartered_test
         job = json.loads((self.artifact_dir / 'job-charter.snapshot.json').read_text())
         self.workspace = LocalAgentWorkspace(self.workspace_root, read_paths=read_paths,

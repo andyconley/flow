@@ -103,6 +103,31 @@ class WorkspaceTests(unittest.TestCase):
             LocalAgentWorkspace(self.root, ['a.py','b.py'], ['a.py','b.py'],
                 self.root/'artifacts', assignment_scopes=self.workspace.assignment_scopes)
 
+    def test_serialized_overlapping_handoffs_restore_and_read_only_dependencies(self):
+        scopes = {'one': {'read_paths':['a.py'], 'write_paths':['a.py'], 'handoff_dependencies':[]},
+            'two': {'read_paths':['a.py'], 'write_paths':['a.py'], 'handoff_dependencies':['one']},
+            'three': {'read_paths':['a.py'], 'write_paths':[], 'handoff_dependencies':['two']}}
+        self.workspace.assignment_scopes = scopes
+        for producer, content in [('one', 'first'), ('two', 'second')]:
+            if producer == 'two':
+                self.assertEqual(self.call(producer, 'read_handoff')['status'], 'handoff_read')
+            self.call(producer, 'read_files', paths=['a.py'])
+            self.assertEqual(self.call(producer, 'write_file', path='a.py', content=content)['status'], 'written')
+            self.assertEqual(self.call(producer, 'submit_handoff', summary='Observed output')['status'], 'handoff_recorded')
+        result = self.call('three', 'read_handoff')
+        self.assertEqual(result['status'], 'handoff_read')
+        self.assertEqual([item['producer'] for item in result['handoffs']], ['two'])
+        restored = LocalAgentWorkspace(self.root, ['a.py','b.py'], ['a.py','b.py'],
+            self.root/'artifacts', assignment_scopes=scopes)
+        self.assertEqual(restored.callback('three', 'read_handoff', {})['status'], 'handoff_read')
+        self.assertEqual(restored.callback('two', 'read_handoff', {})['status'], 'denied')
+        self.assertFalse(restored.reads)
+        self.assertFalse(restored.tests)
+        (self.root/'a.py').write_text('external mutation')
+        with self.assertRaisesRegex(ValueError, 'source changed'):
+            LocalAgentWorkspace(self.root, ['a.py','b.py'], ['a.py','b.py'],
+                self.root/'artifacts', assignment_scopes=scopes)
+
     def test_symlink_and_external_scope_are_denied(self):
         (self.root/'b.py').symlink_to(self.root/'a.py')
         self.assertEqual(self.call('two','write_file',path='b.py',content='bad')['status'],'denied')
