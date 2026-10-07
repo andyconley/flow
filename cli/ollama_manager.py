@@ -56,11 +56,18 @@ def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_i
                         transport: Callable[..., Any] | None = None,
                         timeout_seconds: int | None = None,
                         preserve_observed_invalid: bool = False,
-                        allowed_speakers: list[str] | None = None) -> dict[str, Any]:
+                        allowed_speakers: list[str] | None = None,
+                        local_agent_profile: dict[str, Any] | None = None,
+                        observer: Callable[[dict[str, Any]], Any] | None = None,
+                        phase: str = "progress",
+                        resource_monitor_factory: Callable | None = None,
+                        native_messages: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     if not isinstance(messages, list) or not messages:
         raise ContractError("Ollama manager messages are absent")
+    if native_messages is not None and local_agent_profile is None:
+        raise ContractError('native manager messages require a retained local profile')
     serialized = canonical(messages)
-    if len(serialized.encode()) > MAX_MANAGER_PROMPT_BYTES:
+    if local_agent_profile is None and len(serialized.encode()) > MAX_MANAGER_PROMPT_BYTES:
         raise ContractError("Ollama manager prompt exceeds size limit")
     schema = deepcopy(MANAGER_RESPONSE_SCHEMA)
     if allowed_speakers is not None:
@@ -80,8 +87,22 @@ def call_ollama_manager(messages: list[dict[str, Any]], *, model: str, attempt_i
         ),
         "task": serialized,
     }
+    if phase != 'progress' and native_messages is not None:
+        envelope['instructions'] = 'Follow the current stock Magentic phase request in the native conversation.'
+    extra = {}
+    if native_messages is not None:
+        extra["chat_messages"] = native_messages
+    if local_agent_profile is not None:
+        extra['local_agent_profile'] = local_agent_profile
+    if observer is not None:
+        extra['observer'] = observer
+    if resource_monitor_factory is not None:
+        extra['resource_monitor_factory'] = resource_monitor_factory
     result = call_local(envelope, transport=transport, correlation_id=f"{attempt_id}-manager",
-                        timeout_seconds=timeout_seconds, response_schema=schema)
+                        timeout_seconds=timeout_seconds,
+                        response_schema=schema if phase == 'progress' else None, **extra)
+    if phase != 'progress':
+        return result
     output = result["output"]
     parsed = parse_progress(output)
     if parsed.value is None or parsed.canonical is None:

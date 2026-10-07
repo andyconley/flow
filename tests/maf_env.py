@@ -26,7 +26,18 @@ def requires_maf(target):
 
 def managed_wheelhouse() -> Path:
     """Configurable offline wheel source for managed-runtime acceptance tests."""
-    return Path(os.environ.get("FLOW_TEST_MAF_WHEELHOUSE", str(Path("/private") / "tmp" / "flow-maf-wheelhouse")))
+    override = os.environ.get("FLOW_TEST_MAF_WHEELHOUSE")
+    if override:
+        return Path(override)
+    lock = Path(__file__).resolve().parents[1] / "runtime/maf_runner/requirements.lock"
+    pins = [line.split(" --hash", 1)[0] for line in lock.read_text().splitlines()
+            if line.strip() and not line.startswith("#")]
+    for candidate in (Path("/private") / "tmp" / "flow-maf-wheelhouse", Path("/private") / "tmp" / "flow-maf-poc-wheelhouse"):
+        wheels = [wheel.name.lower().replace("-", "_") for wheel in candidate.glob("*.whl")]
+        if all(any(name.startswith(pin.replace("==", "_").replace("-", "_").lower() + "_")
+                   for name in wheels) for pin in pins):
+            return candidate
+    return Path("/private") / "tmp" / "flow-maf-wheelhouse-unavailable"
 
 
 # A stand-in for fixtures whose child never checks the sealed runtime.

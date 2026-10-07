@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import copy
 import json
 import fcntl
 import os
@@ -19,12 +20,14 @@ from execution_contracts import (
     ContractError,
     canonical,
     validate_action,
+    validate_local_manager_context_refusal,
     validate_envelope,
     execution_protocol_version,
     envelope_digest,
     validate_replan,
     validate_recovery_resolution,
     validate_result,
+    validate_local_agent_observations,
     validate_manager_call,
     RECOVERY_INTERRUPTION_CAUSES,
     TERMINAL_UNCERTAIN_STATUSES,
@@ -578,7 +581,8 @@ class ExecutionLedger:
             "AND status<>'pre_send_refused' AND json_extract(request_json,'$.logical_action_id')=? LIMIT 1",
             (envelope["attempt_id"], action["logical_action_id"]),
         ).fetchone()
-        if count >= envelope["limits"]["max_actions"] and not known_logical_action:
+        action_limit = envelope["limits"]["max_actions"]
+        if action_limit is not None and count >= action_limit and not known_logical_action:
             return "sealed protocol v9 action budget exhausted"
         limits = envelope["limits"]
         if "max_manager_calls" in limits:
@@ -594,11 +598,17 @@ class ExecutionLedger:
                              and assignments[r["assignment_id"]]["requirements"]["operation"] != "manage"
                              and status != "observed_not_executed" for r, status, _ in prior)
             provider = action["selection_decision"]["selected_binding"]["provider"]
-            if (operation == "manage" and manager_count >= limits["max_manager_calls"]
-                    or operation != "manage" and worker_count >= limits["max_delegations"]
-                    or operation == "verify" and verifier_count >= limits["max_verifier_calls"]
-                    or operation != "manage" and provider in {"claude", "codex"} and paid_count >= limits["max_paid_worker_calls"]):
+            def exhausted(name, used):
+                return limits.get(name) is not None and used >= limits[name]
+            if (operation == "manage" and exhausted("max_manager_calls", manager_count)
+                    or operation != "manage" and exhausted("max_delegations", worker_count)
+                    or operation == "verify" and exhausted("max_verifier_calls", verifier_count)
+                    or operation != "manage" and provider in {"claude", "codex"} and exhausted("max_paid_worker_calls", paid_count)):
                 return "sealed protocol v9 operation budget exhausted"
+            if "local_agent_profile" in envelope:
+                # Local profile counts are explicit task choices. Legacy token
+                # tranches do not silently constrain retained local workflows.
+                return None
             charged_rows = [{"request": {"provider": r["selection_decision"]["selected_binding"]["provider"]},
                              "status": status, "result": wrapped.get("result") if isinstance(wrapped, dict) else None}
                             for r, status, wrapped in prior]
@@ -764,6 +774,10 @@ class ExecutionLedger:
 
     def _complete_v9_send_locked(self, envelope: dict[str, Any], action: dict[str, Any], result: Any, *, generation: int) -> None:
         """Persist a normal v9 send result while the caller owns ``send_lock``."""
+        if isinstance(result, dict) and "local_agent_observations" in result:
+            if "local_agent_profile" not in envelope:
+                raise ContractError("local agent observations require sealed profile authority")
+            validate_local_agent_observations(result["local_agent_observations"], profile=envelope["local_agent_profile"])
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, envelope["attempt_id"], generation)
@@ -831,6 +845,62 @@ class ExecutionLedger:
             self._event(db, envelope["attempt_id"], action["action_id"], "provider_observed_not_executed",
                         result["category"])
 
+    def reconcile_local_manager_context_denial(self, attempt_id: str, action_id: str, *, generation: int) -> dict[str, Any]:
+        """Close only a protected, zero-I/O local manager guard refusal.
+
+        Current completed worker evidence must independently satisfy the full
+        receipt contract; this cannot recover a partial worker/provider call.
+        """
+        from selection_receipt import receipt_from_snapshot, verify_selection_receipt_snapshot
+        with self.send_lock(), self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._assert_owner(db, attempt_id, generation)
+            snapshot = self._snapshot_locked(db, attempt_id)
+            if snapshot["status"] != "started" or snapshot["execution_protocol_version"] != 9:
+                raise ContractError("local manager context recovery requires an active v9 attempt")
+            row = next((item for item in snapshot["actions"] if item["action_id"] == action_id), None)
+            if row is None or row["status"] not in {"started", "unknown"}:
+                raise ContractError("local manager context recovery requires an unresolved action")
+            envelope, action = snapshot["envelope"], row["request"]
+            path = Path(envelope["checkpoint_dir"]).parent / f"action-{action_id}-observations.jsonl"
+            if path.is_symlink() or path.parent.is_symlink():
+                raise ContractError("local manager context observation path is unsafe")
+            try:
+                fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+                with os.fdopen(fd, "rb") as handle:
+                    info = os.fstat(handle.fileno())
+                    if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+                        raise ContractError("local manager context observation file is invalid")
+                    raw = handle.read(65537)
+                text = raw.decode("utf-8")
+                events = [json.loads(line) for line in text.splitlines()]
+            except (OSError, UnicodeError, ValueError) as exc:
+                raise ContractError("local manager context observation cannot be read") from exc
+            evidence = {"session_id": action_id, "model_requests": [], "model_responses": [],
+                        "tool_observations": [], "events": events, "context_denial": {
+                            "artifact_path": str(path), "artifact_sha256": hashlib.sha256(raw).hexdigest(),
+                            "serialized_observation": text}}
+            result = {"kind": "local_manager_context_denied", "local_agent_observations": evidence}
+            validate_local_manager_context_refusal(envelope, action, result)
+            if any(item["action_id"] != action_id and item["status"] not in {"completed", "pre_send_refused"}
+                   for item in snapshot["actions"]):
+                raise ContractError("local manager context recovery cannot bypass unresolved work")
+            proof = copy.deepcopy(snapshot)
+            candidate = next(item for item in proof["actions"] if item["action_id"] == action_id)
+            candidate.update(status="pre_send_refused", reason="local_manager_context_denied", result={"result": result})
+            selection = next(item for item in proof["provider_selections"] if item["selection_id"] == action["selection_id"])
+            if selection["state"] != "consumed" or selection["provider_action_id"] != action_id:
+                raise ContractError("local manager context recovery selection is not claimed")
+            selection.update(state="pre_send_refused", reason="local_manager_context_denied", provider_action_id=None)
+            receipt = receipt_from_snapshot(proof, outcome={"status": "completed", "reason": "Current worker evidence accepted"})
+            verify_selection_receipt_snapshot(receipt, proof)
+            db.execute("UPDATE actions SET status='pre_send_refused',reason='local_manager_context_denied',result_json=? WHERE action_id=?",
+                       (canonical({"result": result}), action_id))
+            db.execute("UPDATE provider_selections SET state='pre_send_refused',reason='local_manager_context_denied',provider_action_id=NULL WHERE selection_id=?",
+                       (action["selection_id"],))
+            self._event(db, attempt_id, action_id, "local_manager_context_denied", canonical(result))
+            return {"attempt_id": attempt_id, "action_id": action_id, "status": "pre_send_refused", "result": result}
+
     def complete_v9_send(self, envelope: dict[str, Any], action: dict[str, Any], result: Any, *, generation: int) -> None:
         """Close a claimed v9 send for a recovery-owned result observation.
 
@@ -897,11 +967,21 @@ class ExecutionLedger:
     def record_v9_evidence_failure(self, attempt_id: str, action_id: str, stage: str,
                                    detail: str, *, generation: int) -> None:
         """Persist a typed post-send evidence failure before terminal sealing."""
-        if stage not in {"manager_evaluation", "edit_scope", "chartered_test", "verifier_evaluation"}:
+        if stage not in {"manager_evaluation", "edit_scope", "chartered_test", "verifier_evaluation", "assignment_evidence"}:
             raise ContractError("v9 evidence failure stage is invalid")
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             self._assert_owner(db, attempt_id, generation)
+            if stage == "assignment_evidence":
+                envelope = json.loads(db.execute("SELECT envelope_json FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()[0])
+                if "local_agent_profile" not in envelope:
+                    raise ContractError("assignment evidence feedback requires a sealed local profile")
+                request_row = db.execute("SELECT request_json FROM actions WHERE action_id=? AND attempt_id=?",
+                                         (action_id, attempt_id)).fetchone()
+                assignment_id = json.loads(request_row[0])["assignment_id"] if request_row else None
+                assignment = next((item for item in envelope["logical_assignments"] if item["assignment_id"] == assignment_id), None)
+                if assignment is None or assignment["requirements"]["operation"] not in {"edit", "collect", "verify"}:
+                    raise ContractError("assignment evidence feedback does not bind a worker operation")
             row = db.execute("SELECT status FROM actions WHERE action_id=? AND attempt_id=?",
                              (action_id, attempt_id)).fetchone()
             if row is None or row[0] != "completed":
@@ -3124,7 +3204,22 @@ class ExecutionLedger:
                 evaluations = {item["action_id"]: item["outcome"]
                                for item in snapshot["verifier_evaluations"]}
                 observed = [item["request"]["assignment_id"] for item in verifier_actions]
+                if snapshot["envelope"].get("local_agent_profile") is not None:
+                    latest = {}
+                    for item in verifier_actions:
+                        identity = item["request"]["assignment_id"]
+                        if identity not in latest or item["request"]["sequence"] > latest[identity]["request"]["sequence"]:
+                            latest[identity] = item
+                    last_producer = max((item["request"]["sequence"] for item in snapshot["actions"]
+                        if item["status"] == "completed" and assignments[item["request"]["assignment_id"]]
+                        ["requirements"].get("operation") in {"edit", "collect"}), default=0)
+                    verifier_actions = list(latest.values())
+                    observed = list(latest)
+                    current_verifiers = all(item["request"]["sequence"] > last_producer for item in verifier_actions)
+                else:
+                    current_verifiers = True
                 all_required_pass = (bool(required)
+                                     and current_verifiers
                                      and len(observed) == len(set(observed))
                                      and set(observed) == required
                                      and all(evaluations.get(item["action_id"]) == "valid_pass"

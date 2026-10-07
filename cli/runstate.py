@@ -490,11 +490,13 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
         manager = managers[0]
         execution = manager.get("execution") or {}
         if (manager.get("lane") != "implement" or manager.get("role") != "delivery-lead"
-                or execution.get("provider") not in {"claude", "codex"}
+                or execution.get("provider") not in {"claude", "codex", "ollama"}
                 or not isinstance(execution.get("model"), str) or not execution.get("model", "").strip()):
-            errors.append("magentic-manager requires an executable Claude or Codex delivery-lead binding")
+            errors.append("magentic-manager requires an executable delivery-lead binding")
         timeout = execution.get("timeout_seconds")
-        if type(timeout) is not int or not 1 <= timeout <= 600:
+        if type(timeout) is not int or timeout < 1:
+            errors.append("magentic-manager timeout_seconds must be a positive integer")
+        elif timeout > 600:
             errors.append("magentic-manager timeout_seconds must be between 1 and 600")
         if expected not in (manager.get("input_evidence") or []):
             errors.append("magentic-manager must cite the run-local job charter")
@@ -508,10 +510,27 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
         errors.append("job_charter must be valid run-local JSON")
         return errors
     required = {"task", "read_paths", "write_paths", "test", "producer_instance_ids", "verifier_instance_ids", "baseline"}
-    optional = {"evidence_collector_instance_ids", "logical_assignments"}
+    optional = {"evidence_collector_instance_ids", "logical_assignments", "local_agent_profile"}
     if not isinstance(charter, dict) or not required.issubset(charter) or set(charter) - required - optional:
         errors.append("job_charter fields are incomplete")
         return errors
+    if len(managers) == 1 and (managers[0].get("execution") or {}).get("provider") == "ollama" and "local_agent_profile" not in charter:
+        errors.append("Ollama delivery manager requires a sealed local_agent_profile")
+    if "local_agent_profile" in charter and "magentic-manager timeout_seconds must be between 1 and 600" in errors:
+        errors.remove("magentic-manager timeout_seconds must be between 1 and 600")
+    if "local_agent_profile" in charter:
+        from runner_limits import resolve_local_agent_budget
+        from execution_contracts import chartered_test_argv_supported
+        try:
+            if resolve_local_agent_budget(charter["local_agent_profile"]) != charter["local_agent_profile"]:
+                errors.append("job_charter local_agent_profile must contain its resolved budget")
+        except (TypeError, ValueError) as exc:
+            errors.append(f"job_charter local_agent_profile is invalid: {exc}")
+        test = charter.get("test")
+        if (not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}
+                or not chartered_test_argv_supported(test.get("argv"), native_local=True)
+                or type(test.get("timeout_seconds")) is not int or test["timeout_seconds"] < 1):
+            errors.append("job_charter local test command is invalid")
     baseline = charter.get("baseline")
     if (not isinstance(baseline, dict) or set(baseline) != {"kind", "diff_sha256"}
             or baseline.get("kind") not in {"clean", "declared_regression"}):
@@ -569,7 +588,7 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
             if actual_by_operation != expected_by_operation:
                 errors.append("job_charter logical assignments conflict with topology IDs")
             producers = actual_by_operation["edit"]
-            if len(producers) != 1:
+            if (not producers or "local_agent_profile" not in charter and len(producers) != 1):
                 errors.append("job_charter requires exactly one logical producer assignment")
             collectors = actual_by_operation["collect"]
             for item in logical_assignments:
@@ -1323,11 +1342,17 @@ def _validate_v9_successor_charter(
     """Prove that a v9 charter adds logical authority without widening v8 scope."""
     required = {"task", "read_paths", "write_paths", "test", "producer_instance_ids",
                 "verifier_instance_ids", "baseline"}
-    optional = {"evidence_collector_instance_ids", "logical_assignments"}
+    optional = {"evidence_collector_instance_ids", "logical_assignments", "local_agent_profile"}
     if not required.issubset(predecessor) or set(predecessor) - required - optional:
         raise ValueError("predecessor job charter schema is invalid")
     if not required.issubset(successor) or set(successor) - required - optional:
         raise ValueError("successor job charter schema is invalid")
+    if "local_agent_profile" in successor:
+        from runner_limits import resolve_local_agent_budget
+        if resolve_local_agent_budget(successor["local_agent_profile"]) != successor["local_agent_profile"]:
+            raise ValueError("successor local agent profile must contain its resolved budget")
+        if successor["local_agent_profile"] != delivery_charter.get("local_agent_profile"):
+            raise ValueError("successor local agent profile differs from sealed Delivery Charter")
     if not isinstance(predecessor.get("task"), str) or not predecessor["task"].strip():
         raise ValueError("predecessor job charter task is invalid")
     test = predecessor.get("test")
@@ -1419,7 +1444,9 @@ def _validate_v9_successor_charter(
                 raise ValueError("logical assignment exceeds sealed role authority")
         operations[operation].add(assignment_id)
         by_id[assignment_id] = item
-    if len(operations["manage"]) != 1 or len(operations["edit"]) != 1 or not operations["verify"]:
+    if (len(operations["manage"]) != 1 or not operations["edit"]
+            or "local_agent_profile" not in successor and len(operations["edit"]) != 1
+            or not operations["verify"]):
         raise ValueError("logical assignment topology is incomplete")
     expected = {
         "edit": set(predecessor["producer_instance_ids"]),

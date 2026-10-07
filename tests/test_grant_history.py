@@ -105,6 +105,9 @@ SITES = {
      "UPDATE actions SET status='observed_not_executed',result_json=?,reason=? "
      "WHERE action_id=? AND status='started'"):
         ("exempt", "v9 provider positively refused execution after the durable send claim"),
+    ("reconcile_local_manager_context_denial",
+     "UPDATE actions SET status='pre_send_refused',reason='local_manager_context_denied',result_json=? WHERE action_id=?"):
+        ("exempt", "profile v9 closes a protected parent zero-I/O context refusal; the historical send claim is retained, with no v8 grant issue, release, or replay"),
 }
 
 

@@ -49,6 +49,7 @@ from delivery_contracts import (DELIVERY_CHARTER_VERSION, DeliveryContractError,
 from execution_gateway import _effective_specialist_for, _run_file, _write_snapshot, resolve_attempt
 from fsutil import repo_root, write_atomic
 from local_worker import call_local
+from local_agent_delivery import NativeLocalAdapter
 from provider_availability import normalize_availability
 from provider_selection import merge_selection_policy
 from selection_authority import seal_selection_authority
@@ -72,7 +73,7 @@ from maf_supervisor import (MafChildError, MafProtocolError, MafTransportError, 
 from maf_runtime import require_ready
 from orchestration import validate_orchestration
 from runstate import handoff_to_review, status as run_status
-from runner_limits import MAX_MANAGER_MESSAGES_BYTES, MAX_MANAGER_CALLS, MAX_ACTIONS
+from runner_limits import MAX_MANAGER_MESSAGES_BYTES, MAX_MANAGER_CALLS, MAX_ACTIONS, resolve_local_agent_budget
 from verifier_contracts import (VERIFIED_HANDOFF_AUTHORITY, VERIFIER_CONTRACT_INSTRUCTION,
                                 evaluate_candidate, provider_binding_mismatch,
                                 verifier_instructions, verifier_provider_task)
@@ -193,14 +194,14 @@ def _sealed_delivery_authority(run_dir: Path, delivery: dict[str, Any]) -> dict[
     return {"shaper": shaper, "charter": charter, "handoff": handoff, "claim": claim}
 
 
-def _job_test(test: Any) -> dict[str, Any]:
+def _job_test(test: Any, *, native_local: bool = False) -> dict[str, Any]:
     if not isinstance(test, dict) or set(test) != {"argv", "timeout_seconds"}:
         raise ContractError("targeted test specification is invalid")
     argv, timeout = test["argv"], test["timeout_seconds"]
     if (not isinstance(argv, list)
             or any(not isinstance(arg, str) or not arg or len(arg) > 256 or "\x00" in arg for arg in argv)
             or argv[0] not in {"python3", "python3.12", "/opt/homebrew/bin/python3.12"}
-            or not chartered_test_argv_supported(argv)
+            or not chartered_test_argv_supported(argv, native_local=native_local)
             or type(timeout) is not int or not 1 <= timeout <= 3600):
         raise ContractError("targeted test argv or deadline is unsupported")
     return test
@@ -808,9 +809,10 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
 
 
 def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
-                        on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
+                        on_process_group: Callable[[int, str], None] | None = None,
+                        return_failure_evidence: bool = False) -> dict[str, Any]:
     """Run the charter's targeted test in its own process group, killed whole on timeout."""
-    test = _job_test(job["test"])
+    test = _job_test(job["test"], native_local=bool(job.get("local_agent_profile")))
     process = subprocess.Popen(test["argv"], cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, start_new_session=True)
     try:
@@ -842,9 +844,10 @@ def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
             with suppress(subprocess.TimeoutExpired):
                 process.communicate(timeout=10)
     output = (stdout + stderr)[-8192:]
-    if process.returncode:
+    if process.returncode and not return_failure_evidence:
         raise ContractError("targeted chartered test failed: " + output[-512:])
-    return {"command": test["argv"], "status": "passed",
+    return {"command": test["argv"], "status": "failed" if process.returncode else "passed",
+            "exit_code": process.returncode,
             "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
             "output_excerpt": output}
 
@@ -2153,6 +2156,18 @@ def execute_v9_selected_action(envelope: dict[str, Any], action: dict[str, Any],
     )
 
 
+def _native_manager_context_refused(envelope: dict[str, Any], row: dict[str, Any]) -> bool:
+    """Recognize only canonical, source-bound local manager no-send evidence."""
+    if (not envelope.get("local_agent_profile") or row.get("status") != "pre_send_refused"
+            or row.get("reason") != "local_manager_context_denied"):
+        return False
+    from execution_contracts import validate_local_manager_context_refusal
+    wrapped = row.get("result")
+    result = wrapped.get("result") if isinstance(wrapped, dict) else None
+    validate_local_manager_context_refusal(envelope, row["request"], result)
+    return True
+
+
 def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: ExecutionLedger,
                                 adapter_send: Callable[[dict[str, Any], dict[str, Any]], Any], *,
                                 readiness_recheck: Callable[[dict[str, Any]], dict[str, Any]],
@@ -2198,7 +2213,7 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         if assignment is None:
             raise ContractError("logical v9 proposal names an unknown assignment")
         sequence = dispatch_sequence_base
-        if sequence > envelope["limits"]["max_actions"]:
+        if envelope["limits"]["max_actions"] is not None and sequence > envelope["limits"]["max_actions"]:
             raise ContractError("sealed v9 action budget exhausted; approval is required for more work")
         runtime_families = (_runtime_family_exclusions(envelope, proposal["assignment_id"], ledger)
                             if assignment["requirements"]["operation"] == "verify" else None)
@@ -2365,7 +2380,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
     pending = {item["assignment_id"]: item for item in workers}
     completed: set[str] = set()
     prior_actions = snapshot["actions"]
-    if any(item["status"] not in {"completed", "observed_not_executed"} for item in prior_actions):
+    if any(item["status"] not in {"completed", "observed_not_executed"}
+           and not _native_manager_context_refused(envelope, item) for item in prior_actions):
         raise ContractError("logical v9 continuation requires reconciliation of every uncertain send")
     failed_action_ids = {item["action_id"] for item in snapshot.get("events", [])
                          if item["event"] == "v9_evidence_failed"}
@@ -2384,7 +2400,9 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         completed_assignments = {item["assignment_id"]: item for item in workers
                                  if item["assignment_id"] in completed}
         if any(item["requirements"]["operation"] == "edit"
-               for item in completed_assignments.values()):
+               for item in completed_assignments.values()) and (not envelope.get("local_agent_profile") or all(
+                   item["assignment_id"] in completed for item in workers
+                   if item["requirements"]["operation"] == "edit")):
             if job is None or baseline is None:
                 raise ContractError("logical v9 continuation evidence contract is absent")
             edit_evidence = _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job)
@@ -2396,6 +2414,13 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         action = action_by_id.get(evaluation.get("action_id"))
         if action is not None:
             verifier_evaluations[action["assignment_id"]] = evaluation["evaluation"]
+
+    if envelope.get("local_agent_profile") and any(
+            evaluation["disposition"] != "valid_pass" for evaluation in verifier_evaluations.values()):
+        for item in workers:
+            if item["requirements"]["operation"] in {"edit", "verify", "collect"}:
+                completed.discard(item["assignment_id"])
+                pending[item["assignment_id"]] = item
 
     selected_proposal: tuple[str, str, int] | None = None
 
@@ -2412,9 +2437,19 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 or hashlib.sha256(canonical(serialized).encode()).hexdigest() != message.get("prompt_digest")):
             raise ContractError("invalid stock Magentic manager request")
         allowed_ids = frontier_ids()
-        prompt = canonical(serialized)
-        prompt += "\nFlow accepted assignments: " + json.dumps(sorted(completed))
-        if phase == "progress":
+        if envelope.get("local_agent_profile"):
+            compact_messages = [{"role": m.get("role"), "author_name": m.get("author_name"),
+                                 "content": "\n".join(c.get("text", "") for c in m.get("contents", [])
+                                                      if isinstance(c, dict) and isinstance(c.get("text"), str))}
+                                for m in serialized]
+            prompt = canonical({'phase': phase, 'messages': compact_messages,
+                                'flow_authority': {'completed': sorted(completed),
+                                                   'frontier': allowed_ids}})
+        else:
+            prompt = canonical(serialized)
+        if not envelope.get("local_agent_profile"):
+            prompt += "\nFlow accepted assignments: " + json.dumps(sorted(completed))
+        if phase == "progress" and not envelope.get("local_agent_profile"):
             prompt += ("\nnext_speaker.answer must be exactly one of " + json.dumps(allowed_ids or sorted(completed))
                        + ".\nSet is_request_satisfied.answer=false while required assignments remain."
                        + " Flow permitted unfinished frontier: " + json.dumps(allowed_ids))
@@ -2474,22 +2509,53 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         if latest_failures:
             bounded_task += "\nFlow validation feedback: " + json.loads(latest_failures[-1]["detail"])["detail"]
         operation = selected_assignment["requirements"]["operation"]
-        if len(bounded_task.encode()) > MAX_TASK_BYTES:
+        if envelope.get("local_agent_profile") and operation == "edit":
+            prior_reviews = [item["evaluation"] for item in ledger.snapshot(envelope["attempt_id"])["verifier_evaluations"]
+                             if item["evaluation"]["disposition"] != "valid_pass"]
+            if prior_reviews:
+                bounded_task += "\nPrior independent review feedback (inspect current source before repairing): " + canonical(prior_reviews[-1])
+        if len(bounded_task.encode()) > (4*1024*1024 if envelope.get("local_agent_profile") else MAX_TASK_BYTES):
             raise ContractError("logical v9 sealed assignment task exceeds size limit")
         if live_attempt and operation == "verify":
             if edit_evidence is None or test_evidence is None:
                 raise ContractError("logical v9 verifier selected before Flow captured edit and test evidence")
-            bounded_task = verifier_provider_task(
-                bounded_task, (attempt_dir / "repair.diff").read_text(),
-                edit_evidence["diff_sha256"], structured=True,
-                test_output=test_evidence["output_excerpt"],
-                authority_statement=VERIFIED_HANDOFF_AUTHORITY,
-            )
+            if envelope.get("local_agent_profile"):
+                bounded_task += ("\nFlow observed passing tests: " + test_evidence["output_excerpt"]
+                                 + "\nCurrent source diff SHA-256: " + edit_evidence["diff_sha256"]
+                                 + "\nRead the actual current source using read_files, rerun run_tests, "
+                                 "then call submit_review with your independent findings.")
+            else:
+                bounded_task = verifier_provider_task(
+                    bounded_task, (attempt_dir / "repair.diff").read_text(),
+                    edit_evidence["diff_sha256"], structured=True,
+                    test_output=test_evidence["output_excerpt"],
+                    authority_statement=VERIFIED_HANDOFF_AUTHORITY,
+                )
         input_limit = selected_assignment["requirements"]["input_bytes"]
         if len(bounded_task.encode()) > input_limit:
             raise ContractError("logical v9 evidence-bearing task exceeds assignment input limit")
+        if envelope.get("local_agent_profile") and operation == "edit":
+            prior_diff = attempt_dir / "repair.diff"
+            if prior_diff.is_file():
+                os.replace(prior_diff, attempt_dir / ("repair-before-action-" + str(dispatch_sequence_base) + ".diff"))
+            edit_evidence = test_evidence = None
+            verifier_evaluations.clear()
+            for item in workers:
+                if item["requirements"]["operation"] in {"verify", "collect"}:
+                    completed.discard(item["assignment_id"])
+                    pending[item["assignment_id"]] = item
         result = dispatch({**proposal, "task": bounded_task})
-        if live_attempt and operation == "edit":
+        if envelope.get("local_agent_profile"):
+            row = ledger.snapshot(envelope["attempt_id"])["actions"][-1]
+            wrapped = row.get("result")
+            observed = wrapped.get("result") if isinstance(wrapped, dict) else None
+            if isinstance(observed, dict) and observed.get("observed_invalid"):
+                detail = str(observed.get("detail", "Incomplete observed assignment evidence"))
+                ledger.record_v9_evidence_failure(envelope["attempt_id"], row["request"]["action_id"],
+                                                  "assignment_evidence", detail, generation=generation)
+                return {"status": "validation_failed", "summary": detail}
+        if live_attempt and operation == "edit" and (not envelope.get("local_agent_profile") or not any(
+                item["requirements"]["operation"] == "edit" and key != selected for key, item in pending.items())):
             if job is None or baseline is None:
                 raise ContractError("logical v9 job evidence contract is absent")
             worker_action = next(item["request"] for item in reversed(
@@ -2518,14 +2584,14 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 failures = [row for row in ledger.snapshot(envelope["attempt_id"])["events"]
                             if row["event"] == "v9_evidence_failed"
                             and json.loads(row["detail"])["stage"] == "chartered_test"]
-                if len(failures) >= 2:
+                if not envelope.get("local_agent_profile") and len(failures) >= 2:
                     sealed = ledger.seal_v9_attempt(envelope["attempt_id"], "failed", "chartered_test_failed",
                                                     attempt_dir / "receipt.json", generation=generation)
                     raise ProviderCandidatesExhausted({"attempt_id": envelope["attempt_id"], "status": "failed",
                                                        "reason": "chartered_test_failed", **sealed})
                 failed_diff = attempt_dir / "repair.diff"
                 if failed_diff.is_file() and not failed_diff.is_symlink():
-                    os.replace(failed_diff, attempt_dir / "repair-failed-turn-1.diff")
+                    os.replace(failed_diff, attempt_dir / ("repair-failed-turn-" + str(len(failures)) + ".diff"))
                 edit_evidence = None
                 test_evidence = None
                 return {"status": "validation_failed", "summary": str(exc)[:512]}
@@ -2557,6 +2623,14 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                     generation=generation,
                 )
                 verifier_evaluations[selected] = final_evaluation
+                if envelope.get("local_agent_profile") and final_evaluation["disposition"] != "valid_pass":
+                    ledger.record_v9_evidence_failure(envelope["attempt_id"], verifier_action["action_id"],
+                                                      "verifier_evaluation", output, generation=generation)
+                    for item in workers:
+                        if item["requirements"]["operation"] in {"edit", "verify", "collect"}:
+                            pending[item["assignment_id"]] = item
+                            completed.discard(item["assignment_id"])
+                    return {"status": "validation_failed", "summary": "Independent current-source review requested repair: " + output}
             except ContractError as exc:
                 ledger.record_v9_evidence_failure(envelope["attempt_id"], verifier_action["action_id"],
                                                   "verifier_evaluation", str(exc), generation=generation)
@@ -2605,6 +2679,10 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                                             attempt_dir / "receipt.json", generation=generation)
         return {"attempt_id": envelope["attempt_id"], "status": "failed",
                 "reason": "manager_evaluation_failed", **sealed}
+    finally:
+        close = getattr(adapter_send, "close", None)
+        if close:
+            close()
     if pending:
         raise ContractError("Magentic completion proposal lacks required assignment evidence")
     # Seal the receipt only after every dependency-valid logical assignment
@@ -2672,8 +2750,13 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
     if (state.get("job_charter_migrations") and (not isinstance(approved_charter_digest, str)
             or hashlib.sha256(charter.read_bytes()).hexdigest() != approved_charter_digest)):
         raise ContractError("approved v9 job charter digest is absent or stale")
-    task = json.loads(charter.read_text()).get("task") if charter.suffix == ".json" else charter.read_text()
-    if not isinstance(task, str) or not task.strip() or len(task.encode()) > MAX_TASK_BYTES:
+    charter_data = json.loads(charter.read_text())
+    profile = charter_data.get("local_agent_profile")
+    sealed_profile = authority["charter"].get("local_agent_profile")
+    if profile != sealed_profile:
+        raise ContractError("job local-agent profile differs from approved delivery authority")
+    task = charter_data.get("task")
+    if not isinstance(task, str) or not task.strip() or len(task.encode()) > (4*1024*1024 if profile else MAX_TASK_BYTES):
         raise ContractError("v9 job charter task is absent or oversized")
     raw_worktree = Path(worktree)
     if raw_worktree.is_symlink():
@@ -2753,6 +2836,16 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         "delivery_lead_claim_digest": delivery["lead_claim_digest"],
         "delivery_lead_claim": {"generation": generation},
     }
+    if profile:
+        envelope["local_agent_profile"] = resolve_local_agent_budget(profile)
+        for name, key in (("max_actions", "delegations"), ("max_manager_calls", "manager_calls"),
+                          ("max_manager_rounds", "manager_rounds"), ("max_delegations", "delegations"),
+                          ("max_replans", "replans"), ("max_verifier_calls", "delegations")):
+            envelope["limits"][name] = profile[key]
+        if profile["delegations"] is not None and profile["manager_calls"] is not None:
+            envelope["limits"]["max_actions"] = profile["delegations"] + profile["manager_calls"]
+        else:
+            envelope["limits"]["max_actions"] = None
     envelope["selection_authority"] = seal_selection_authority(
         work_id=work_id, attempt_id=attempt_id, charter_digest=charter_digest,
         manifest_digest=manifest_digest, generation=generation, sealed_at=sealed_at,
@@ -2903,6 +2996,32 @@ def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None =
     return catalog, policy, availability
 
 
+def local_agent_selection_inputs(catalog: list[dict[str, Any]], policy: dict[str, Any],
+                                  profile: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Advertise the authorized native runtime without changing user installation.
+
+    A sealed local profile selects the native adapter rather than the historical
+    JSON editor. Existing model identities, enabled flags, costs, policy exclusions
+    and family independence remain authoritative. Its measured context and native
+    tools are capabilities of this adapter, recorded in the sealed run catalog.
+    """
+    native = []
+    for item in catalog:
+        if item["provider"] != "ollama":
+            continue
+        candidate = deepcopy(item)
+        candidate["operations"] = ["manage", "read", "edit", "verify", "collect"]
+        candidate["capabilities"] = sorted(set(candidate["capabilities"]) | {
+            "interactive_tools", "structured_output", "evidence_collection"})
+        candidate["max_context_tokens"] = profile["context_tokens"]
+        candidate["max_input_bytes"] = 4*1024*1024
+        candidate["max_output_bytes"] = profile["output_tokens"]*8
+        native.append(candidate)
+    if not native:
+        raise ContractError("approved local profile has no configured Ollama model")
+    return native, policy
+
+
 def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[str, Any]]:
     """Project the approved provider-neutral v9 assignments without invention."""
     run_dir = root / ".flow" / "runs" / work_id
@@ -2958,7 +3077,7 @@ def logical_assignments_from_charter(work_id: str, *, root: Path) -> list[dict[s
         raise ContractError("approved v9 logical assignments conflict with charter topology")
     if len([item for item in assignments if item["requirements"].get("operation") == "manage"]) != 1:
         raise ContractError("approved v9 job charter requires exactly one logical manager")
-    if len(by_operation["edit"]) != 1:
+    if not by_operation["edit"] or (not raw.get("local_agent_profile") and len(by_operation["edit"]) != 1):
         raise ContractError("approved v9 job charter requires exactly one producer assignment")
     if not any(item["requirements"]["operation"] == "verify" for item in assignments):
         raise ContractError("approved v9 job charter has no verifier assignment")
@@ -3210,6 +3329,8 @@ def _hosted_scoped_read(workspace: Path, *, read_paths: list[str],
 def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str],
                               write_paths: list[str]) -> Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]:
     """Return the bounded adapter for the selected binding and logical operation."""
+    if envelope.get("local_agent_profile"):
+        return NativeLocalAdapter(envelope, read_paths=read_paths, write_paths=write_paths)
     workspace = Path(envelope["worktree"])
     source_commit = envelope.get("source_commit") or _git(workspace, "rev-parse", "HEAD")
     assignment_by_id = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
@@ -3294,6 +3415,104 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
     return send
 
 
+def _publish_local_reconciliation(envelope: dict[str, Any], *, root: Path) -> None:
+    """Render actual receipt evidence into the already-declared handback artifact.
+
+    Scope, role bindings and reconciliation target are approved manifest inputs;
+    this does not amend them or manufacture a review. Missing target metadata
+    remains a normal handback validation failure.
+    """
+    from receipt_verify import verify_receipt
+    report = verify_receipt(envelope["work_id"], root=root)
+    if report.get("exit_code") != 0 or report.get("status") != "completed" or report.get("attempt_id") != envelope["attempt_id"]:
+        raise ContractError("local reconciliation requires an actual verified completed receipt")
+    attempt_dir = Path(envelope["checkpoint_dir"]).parent
+    manifest = json.loads((attempt_dir / "manifest.snapshot.json").read_text())
+    target = manifest.get("reconciliation", {}).get("artifact_path")
+    if not isinstance(target, str) or not target:
+        return
+    relative = Path(target)
+    run_dir = root / ".flow" / "runs" / envelope["work_id"]
+    path = root / relative
+    if relative.is_absolute() or ".." in relative.parts or path.is_symlink() or not path.resolve().is_relative_to(run_dir.resolve()):
+        raise ContractError("local reconciliation target exceeds the declared run artifact scope")
+    cursor = path.parent
+    while cursor != root:
+        if cursor.is_symlink():
+            raise ContractError("local reconciliation parent is a symlink")
+        cursor = cursor.parent
+    receipt_path = attempt_dir / "receipt.json"
+    receipt = json.loads(receipt_path.read_text())
+    rows = receipt.get("local_agent_observations", [])
+    counts = {key: 0 for key in ("model_requests", "model_sends", "model_responses", "tool_calls", "delegations")}
+    from execution_contracts import validate_local_agent_observations
+    for row in rows:
+        actual = validate_local_agent_observations(row["evidence"], profile=envelope["local_agent_profile"])
+        for key in counts:
+            counts[key] += actual[key]
+    body = ("# Observed local execution reconciliation\n\n"
+            + "Flow verified the completed sealed receipt for the current combined source. "
+            + "Independent verification disposition: semantic_verifier_valid_pass.\n\n"
+            + "Receipt: " + str(receipt_path.relative_to(root)) + "\n\n"
+            + "Receipt SHA-256: " + hashlib.sha256(receipt_path.read_bytes()).hexdigest() + "\n\n"
+            + "Observed counts: " + canonical(counts) + "\n\n"
+            + "These counts distinguish delegation turns, authorized requests, attempted sends, "
+            + "completed responses and parent-observed tools. Source/test/review bindings and full "
+            + "model output remain in the verified receipt and attempt histories.\n")
+    write_atomic(path, body, mode=0o600)
+
+
+def _execute_v9_controlled(envelope: dict[str, Any], task: str, ledger: ExecutionLedger,
+                           adapter: Callable, *, readiness_recheck: Callable) -> dict[str, Any]:
+    """Keep native retained sessions within Flow's existing cancel control."""
+    if not envelope.get("local_agent_profile"):
+        return execute_v9_logical_delivery(envelope, task, ledger, adapter,
+            readiness_recheck=readiness_recheck)
+    attempt_dir = Path(envelope["checkpoint_dir"]).parent
+    generation = envelope["delivery_lead_claim"]["generation"]
+    control = attempt_dir / f"control-g{generation}.json"
+    closed = attempt_dir / f"control-g{generation}.closed"
+    if control.is_file() and closed.is_file():
+        # A completed dispatch can fail during sealing. Its closed process
+        # identity remains immutable; finalization needs no new dispatching
+        # parent or provider call. The ordinary gateway still rechecks current
+        # source, tests, authority and the complete receipt below.
+        snapshot = ledger.snapshot(envelope["attempt_id"])
+        assignments = {a["assignment_id"]: a for a in envelope["logical_assignments"]
+                       if a["requirements"]["operation"] != "manage"}
+        latest = {}
+        for row in snapshot["actions"]:
+            identity = row["request"]["assignment_id"]
+            if identity in assignments:
+                latest[identity] = row
+        failures = {row["action_id"] for row in snapshot.get("evidence_failures", [])}
+        evaluations = {row["action_id"]: row["outcome"]
+                       for row in snapshot.get("verifier_evaluations", [])}
+        if (set(latest) != set(assignments)
+                or any(row["status"] != "completed" and not _native_manager_context_refused(envelope, row)
+                       for row in snapshot["actions"])
+                or any(row["request"]["action_id"] in failures for row in latest.values())
+                or any(evaluations.get(latest[key]["request"]["action_id"]) != "valid_pass"
+                       for key, assignment in assignments.items()
+                       if assignment["requirements"]["operation"] == "verify")):
+            raise ContractError("Closed native dispatch requires explicit recovery before further provider calls")
+        def finalize_observed(_envelope, _task, _on_worker, *, completed_assignments, **_options):
+            if set(completed_assignments) != set(assignments):
+                raise ContractError("Retained native completion lacks all required assignment evidence")
+            return {"coordination": "retained_observed_completion"}
+        return execute_v9_logical_delivery(envelope, task, ledger, adapter,
+            readiness_recheck=readiness_recheck, supervisor=finalize_observed)
+    with delivery_cancel.parent_scope(attempt_dir, generation, attempt_id=envelope["attempt_id"]):
+        try:
+            return execute_v9_logical_delivery(envelope, task, ledger, adapter,
+                readiness_recheck=readiness_recheck)
+        except delivery_cancel.DeliveryCancelled:
+            sealed = ledger.terminate_v9_attempt(envelope["attempt_id"], "cancelled", generation=generation,
+                actor="flow-cancel-controller", explanation="Native parent observed cooperative cancellation; uncertain sends preserved",
+                cause="operator_cancelled", receipt_path=attempt_dir / "receipt.json")
+            return {"attempt_id": envelope["attempt_id"], "status": "cancelled", "reason": "operator_cancelled", **sealed}
+
+
 def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *, root: Path | None = None) -> dict[str, Any]:
     """Default live chartered-job route for new Flow work."""
     project_root = (root or repo_root()).resolve()
@@ -3304,6 +3523,13 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
     charter = _run_file(project_root, project_root / ".flow" / "runs" / work_id,
                         state.get("artifacts", {}).get("job_charter", ""))
     charter_data = json.loads(charter.read_text())
+    profile = charter_data.get("local_agent_profile")
+    if profile:
+        if any(a["requirements"]["locality"] != "local_required" for a in assignments):
+            raise ContractError("local-agent profile requires explicit local routing for every assignment")
+        catalog, policy = local_agent_selection_inputs(catalog, policy, profile)
+        available_ids = {item["candidate_id"] for item in catalog}
+        availability = [item for item in availability if item["candidate_id"] in available_ids]
     write_paths = charter_data.get("write_paths") if isinstance(charter_data, dict) else None
     read_paths = charter_data.get("read_paths") if isinstance(charter_data, dict) else None
     if not isinstance(write_paths, list) or not all(isinstance(path, str) and path for path in write_paths):
@@ -3315,7 +3541,7 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
         catalog=catalog, availability=availability, effective_policy=policy,
         independence_constraints=independence_constraints,
     )
-    result = execute_v9_logical_delivery(
+    result = _execute_v9_controlled(
         envelope, task, ledger, _v9_adapter_for_operation(
             envelope, read_paths=read_paths, write_paths=write_paths),
         readiness_recheck=lambda binding: _v9_readiness_recheck(catalog, binding),
@@ -3324,6 +3550,8 @@ def execute_v9_chartered_job(work_id: str, worktree: Path, source_commit: str, *
         return {"attempt_id": envelope["attempt_id"], "status": result.get("status", "refused"),
                 "reason": result.get("reason", "logical_delivery_not_completed"),
                 "receipt_path": result.get("receipt_path"), **result}
+    if envelope.get("local_agent_profile"):
+        _publish_local_reconciliation(envelope, root=project_root)
     authority = _sealed_delivery_authority(project_root / ".flow" / "runs" / work_id,
                                            state.get("delivery", {}))
     if "handoff_to_review" not in authority["charter"].get("allowed_lifecycle_operations", []):
@@ -3347,9 +3575,19 @@ def resume_v9_chartered_job(work_id: str, attempt_id: str, *, root: Path | None 
         raise ContractError("v9 continuation target differs from the requested run")
     if snapshot["status"] != "started":
         raise ContractError("v9 continuation target is already terminal")
-    if any(item["status"] != "completed" for item in snapshot["actions"]):
-        raise ContractError("v9 continuation requires explicit reconciliation before resume")
     envelope = snapshot["envelope"]
+    if envelope.get("local_agent_profile"):
+        for row in snapshot["actions"]:
+            assignment = next((a for a in envelope["logical_assignments"]
+                               if a["assignment_id"] == row["request"]["assignment_id"]), None)
+            if (row["status"] in {"started", "unknown"} and assignment is not None
+                    and assignment["requirements"]["operation"] == "manage"):
+                ledger.reconcile_local_manager_context_denial(attempt_id, row["request"]["action_id"],
+                    generation=snapshot["owner_generation"])
+        snapshot = ledger.snapshot(attempt_id)
+    if any(item["status"] != "completed" and not _native_manager_context_refused(envelope, item)
+           for item in snapshot["actions"]):
+        raise ContractError("v9 continuation requires explicit reconciliation before resume")
     attempt_dir = execution_dir / attempt_id
     charter_path = attempt_dir / "job-charter.snapshot.json"
     if not charter_path.is_file() or charter_path.is_symlink():
@@ -3366,7 +3604,7 @@ def resume_v9_chartered_job(work_id: str, attempt_id: str, *, root: Path | None 
     catalog = envelope.get("selection_inputs", {}).get("catalog")
     if not isinstance(catalog, list):
         raise ContractError("v9 continuation selection catalog is absent")
-    result = execute_v9_logical_delivery(
+    result = _execute_v9_controlled(
         envelope, task, ledger,
         _v9_adapter_for_operation(envelope, read_paths=read_paths, write_paths=write_paths),
         readiness_recheck=lambda binding: _v9_readiness_recheck(catalog, binding),
@@ -3374,6 +3612,8 @@ def resume_v9_chartered_job(work_id: str, attempt_id: str, *, root: Path | None 
     if result.get("status") != "completed":
         return result
     state = run_status(work_id, root=project_root)
+    if envelope.get("local_agent_profile"):
+        _publish_local_reconciliation(envelope, root=project_root)
     authority = _sealed_delivery_authority(run_dir, state.get("delivery", {}))
     if "handoff_to_review" not in authority["charter"].get("allowed_lifecycle_operations", []):
         return result

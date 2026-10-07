@@ -39,6 +39,23 @@ STRUCTURED_VERIFIER_PROTOCOL_VERSION = 8
 PROVIDER_SELECTION_PROTOCOL_VERSION = 9
 MAX_TASK_BYTES = 4096
 MAX_MESSAGE_BYTES = 65536
+# IPC transport protection; retained-agent context is measured by the provider
+# gate, rather than inferred from this byte ceiling.
+LOCAL_AGENT_IPC_BYTES = 4 * 1024 * 1024
+
+
+def validate_local_agent_profile(profile: Any) -> dict[str, Any]:
+    try:
+        from runner_limits import resolve_local_agent_budget
+    except ModuleNotFoundError:
+        from .runner_limits import resolve_local_agent_budget
+    try:
+        normalized = resolve_local_agent_budget(profile)
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"local agent profile is invalid: {exc}") from exc
+    if profile != normalized:
+        raise ContractError("local agent profile must contain its resolved budget")
+    return normalized
 ALLOWED_PROVIDERS = frozenset({"ollama", "local-stub"})
 MIXED_ASSIGNMENTS = (("test-engineer", "ollama"), ("lead-developer", "codex"))
 CLAUDE_ASSIGNMENTS = (("test-engineer", "ollama"), ("quality-reviewer", "claude"))
@@ -204,13 +221,17 @@ def _hex_digest(value: Any) -> bool:
 
 
 def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
+    retained = "local_agent_profile" in envelope
+    if retained:
+        validate_local_agent_profile(envelope["local_agent_profile"])
     required = (
         "work_id", "attempt_id", "charter_digest", "manifest_digest", "run_protocol_revision",
         "logical_assignments", "selection_inputs", "selection_input_digests", "selection_authority",
         "limits", "checkpoint_dir", "delivery_charter_digest", "delivery_lead_claim_digest",
         "delivery_lead_claim",
     )
-    require_fields(envelope, required, kind="protocol v9 envelope")
+    require_fields(envelope, required, kind="protocol v9 envelope",
+                   max_bytes=LOCAL_AGENT_IPC_BYTES if retained else MAX_MESSAGE_BYTES)
     if envelope["run_protocol_revision"] != 2:
         raise ContractError("protocol v9 requires run protocol revision 2")
     if not _hex_digest(envelope["charter_digest"]) or not _hex_digest(envelope["manifest_digest"]):
@@ -224,8 +245,9 @@ def _validate_v9_envelope(envelope: dict[str, Any]) -> None:
             or type(claim["generation"]) is not int or claim["generation"] < 1):
         raise ContractError("protocol v9 delivery authority is invalid")
     limits = envelope["limits"]
-    if (not isinstance(limits, dict) or type(limits.get("max_actions")) is not int
-            or limits["max_actions"] < 1):
+    if (not isinstance(limits, dict) or not (
+            retained and limits.get("max_actions") is None
+            or type(limits.get("max_actions")) is int and limits["max_actions"] >= 1)):
         raise ContractError("protocol v9 action budget is invalid")
     assignments = envelope["logical_assignments"]
     if not isinstance(assignments, list) or not assignments:
@@ -313,7 +335,8 @@ def _validate_v9_action(envelope: dict[str, Any], action: dict[str, Any]) -> Non
         "action_id", "logical_action_id", "selection_id", "selection_decision", "attempt_id",
         "envelope_digest", "assignment_id", "role", "task", "task_digest", "sequence",
         "manager_turn", "kind",
-    ), kind="protocol v9 action")
+    ), kind="protocol v9 action", max_bytes=(LOCAL_AGENT_IPC_BYTES
+        if "local_agent_profile" in envelope else MAX_MESSAGE_BYTES))
     if action["kind"] != "delegate" or type(action["sequence"]) is not int or action["sequence"] < 1:
         raise ContractError("protocol v9 action sequence is invalid")
     assignment = next((item for item in envelope["logical_assignments"]
@@ -459,13 +482,16 @@ def _paths_within_scopes(paths: Any, scopes: Any) -> bool:
                for path in paths)
 
 
-def chartered_test_argv_supported(argv: Any) -> bool:
+def chartered_test_argv_supported(argv: Any, *, native_local: bool = False) -> bool:
     """One canonical command-shape policy shared by sealing and dispatch."""
-    full_discovery = isinstance(argv, list) and len(argv) == 6 and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
-    focused = (isinstance(argv, list) and len(argv) == 8
-               and argv[1:6] == ["-m", "unittest", "discover", "-s", "tests"]
+    if not isinstance(argv, list) or any(not isinstance(item, str) or not item for item in argv):
+        return False
+    discovery_roots = {"tests", "."} if native_local else {"tests"}
+    discovery = len(argv) >= 6 and argv[1:5] == ["-m", "unittest", "discover", "-s"] and argv[5] in discovery_roots
+    full_discovery = len(argv) == 6 and discovery
+    focused = (len(argv) == 8 and discovery
                and argv[6] == "-p" and argv[7].startswith("test_") and argv[7].endswith(".py")
-               and argv[7][5:-3].replace("_", "").isalnum())
+               and (argv[7][5:-3].replace("_", "").isalnum() or native_local and argv[7] == "test_*.py"))
     probe = (isinstance(argv, list) and len(argv) == 2
              and argv[1].startswith("tests/") and argv[1].endswith("_probe.py")
              and argv[1][len("tests/"):-len("_probe.py")].replace("_", "").isalnum())
@@ -1260,8 +1286,98 @@ def validate_replan(envelope: dict[str, Any], replan: dict[str, Any]) -> None:
         raise ContractError("replan ID mismatch")
 
 
+def validate_local_manager_context_refusal(envelope: dict[str, Any], action: dict[str, Any], result: Any) -> None:
+    """Validate a parent context guard refusal, never a provider response."""
+    profile = envelope.get("local_agent_profile")
+    assignment = next((item for item in envelope.get("logical_assignments", [])
+                       if item.get("assignment_id") == action.get("assignment_id")), {})
+    binding = action.get("selection_decision", {}).get("selected_binding") or {}
+    if (profile is None or assignment.get("requirements", {}).get("operation") != "manage"
+            or binding.get("provider") != "ollama" or not isinstance(result, dict)
+            or set(result) != {"kind", "local_agent_observations"}
+            or result.get("kind") != "local_manager_context_denied"):
+        raise ContractError("local manager context refusal scope is invalid")
+    evidence = result["local_agent_observations"]
+    validate_local_agent_observations(evidence, profile=profile)
+    artifact = evidence.get("context_denial")
+    expected = Path(envelope["checkpoint_dir"]).parent / f"action-{action['action_id']}-observations.jsonl"
+    if (evidence.get("session_id") != action["action_id"]
+            or not isinstance(artifact, dict)
+            or set(artifact) != {"artifact_path", "artifact_sha256", "serialized_observation"}
+            or artifact.get("artifact_path") != str(expected)
+            or not isinstance(artifact.get("serialized_observation"), str)
+            or hashlib.sha256(artifact["serialized_observation"].encode()).hexdigest() != artifact.get("artifact_sha256")):
+        raise ContractError("local manager context refusal artifact binding is invalid")
+    try:
+        events = [json.loads(line) for line in artifact["serialized_observation"].splitlines()]
+    except (ValueError, TypeError) as exc:
+        raise ContractError("local manager context refusal artifact is invalid") from exc
+    if events != evidence["events"]:
+        raise ContractError("local manager context refusal artifact events differ")
+
+
+def validate_local_agent_observations(evidence: Any, *, profile: dict[str, Any] | None = None) -> dict[str, int]:
+    """Count observed sends/tools, never equating a delegation with one call.
+
+    Request hooks precede authorization. Only model_send events count as sends;
+    these still do not claim the backend executed or retained a request.
+    """
+    if not isinstance(evidence, dict) or not isinstance(evidence.get("session_id"), str) or not evidence["session_id"]:
+        raise ContractError("local agent observation session is invalid")
+    for field in ("model_requests", "model_responses", "tool_observations", "events"):
+        if not isinstance(evidence.get(field), list) or any(not isinstance(item, dict) for item in evidence[field]):
+            raise ContractError(f"local agent observation {field} is invalid")
+    events = evidence["events"]
+    if "context_denial" in evidence:
+        if (profile is None or len(events) != 1 or set(events[0]) != {"type", "bound", "allowance"}
+                or events[0].get("type") != "context_denied"
+                or type(events[0].get("bound")) is not int or type(events[0].get("allowance")) is not int
+                or events[0]["allowance"] != profile["context_tokens"] - profile["output_tokens"] - profile["context_reserve"]
+                or events[0]["bound"] <= events[0]["allowance"]):
+            raise ContractError("local manager context refusal budget or zero-I/O evidence is invalid")
+    requests = [item for item in events if item.get("type") == "model_request"]
+    sends = [item for item in events if item.get("type") == "model_send"]
+    responses = [item for item in events if item.get("type") == "model_response"]
+    tools = [item for item in events if item.get("type") == "tool_result"]
+    if any(not isinstance(item.get("name"), str) or not item["name"]
+           or not isinstance(item.get("result"), dict) for item in tools):
+        raise ContractError("local agent tool result observation is invalid")
+    request_numbers = [item.get("number") for item in requests]
+    send_numbers = [item.get("number") for item in sends]
+    response_numbers = [item.get("number") for item in responses]
+    if (any(type(number) is not int or number < 1 for number in request_numbers)
+            or len(set(request_numbers)) != len(request_numbers)
+            or len(set(send_numbers)) != len(send_numbers)
+            or len(set(response_numbers)) != len(response_numbers)
+            or not set(send_numbers).issubset(request_numbers)
+            or not set(response_numbers).issubset(send_numbers)
+            or evidence["model_requests"] != requests
+            or evidence["model_responses"] != responses
+            or evidence["tool_observations"] != tools
+            or "model_sends" in evidence and evidence["model_sends"] != sends):
+        raise ContractError("local agent model observation lineage is invalid")
+    positions = {(item.get("type"), item.get("number")): index for index, item in enumerate(events)
+                 if item.get("type") in {"model_request", "model_send", "model_response"}}
+    if (any(positions[("model_request", number)] >= positions[("model_send", number)] for number in send_numbers)
+            or any(positions[("model_send", number)] >= positions[("model_response", number)] for number in response_numbers)):
+        raise ContractError("local agent model observation ordering is invalid")
+    if profile is not None:
+        for request in requests:
+            options = (request.get("request") or {}).get("options", {})
+            if options.get("num_ctx") != profile["context_tokens"] or options.get("num_predict") != profile["output_tokens"]:
+                raise ContractError("local agent request differs from sealed context profile")
+    return {"model_requests": len(requests), "model_sends": len(sends),
+            "model_responses": len(responses), "tool_calls": len(evidence["tool_observations"]),
+            "delegations": 1}
+
+
 def validate_result(envelope: dict[str, Any], result: dict[str, Any], *, action: dict[str, Any] | None = None) -> None:
-    require_fields(result, ("status", "provider", "model", "physical_call", "evidence_level", "output", "output_sha256"), kind="result")
+    require_fields(result, ("status", "provider", "model", "physical_call", "evidence_level", "output", "output_sha256"), kind="result",
+                   max_bytes=LOCAL_AGENT_IPC_BYTES if "local_agent_profile" in envelope else MAX_MESSAGE_BYTES)
+    if "local_agent_observations" in result:
+        if "local_agent_profile" not in envelope:
+            raise ContractError("local agent observations require a sealed local profile")
+        validate_local_agent_observations(result["local_agent_observations"], profile=envelope["local_agent_profile"])
     if is_magentic_protocol(execution_protocol_version(envelope)):
         if action is None:
             raise ContractError("Magentic result requires selected action identity")

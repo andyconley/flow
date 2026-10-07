@@ -1,15 +1,23 @@
-# Resolved from /private/tmp/flow-maf-lock-20260927 on macOS arm64/Python 3.12.
-# macOS arm64 / CPython 3.12 wheel lock. Regenerate from a trusted local
-# wheelhouse with `shasum -a 256 wheelhouse/*.whl`; provisioning uses
-# --require-hashes and --no-deps.
-agent-framework-core==1.19.0 --hash=sha256:c887e6d5380b5ab21731b981f4c3e6b342f211bda20526ab82fa20c34a9bddbd
-agent-framework-orchestrations==1.2.0 --hash=sha256:c152ebe352cf259d8e673c74ff8e12baef3e9a6e961806004d24cde8d5f3c2be
+# Exact successful POC dependency closure, macOS arm64 / CPython 3.12.
+# Regenerate hashes from trusted wheels; provisioning uses --require-hashes --no-deps.
+agent-framework-core==1.20.0 --hash=sha256:baa2e90a83c4aef9bf6ee11d2600a78e46439aa06a3fc372f2d50ccbd87584fc
+agent-framework-ollama==1.0.0b261002 --hash=sha256:b3ac7ade04da442ee5aaae6e42c4b078f9d9bd745df3dde8f2174dbb294b3bc5
+agent-framework-orchestrations==1.3.0 --hash=sha256:e522509a893952a70ca37b9996c05bf1d19d454177a2131922b63c4b7850093e
 annotated-types==0.8.0 --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
-msgspec==0.21.1 --hash=sha256:5102c7e9b3acff82178449b85006d96310e690291bb1ea0142f1b24bcb8aabcb
+anyio==4.15.1 --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101
+certifi==2026.7.22 --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+h11==0.16.0 --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
+httpcore==1.0.9 --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55
+httpx==0.28.1 --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
+idna==3.20 --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
+msgspec==0.22.0 --hash=sha256:b60b43425a47eb9cfe987f6874e354ca7c760e58e295b4e2273ff03574df28a1
+ollama==0.5.3 --hash=sha256:a8303b413d99a9043dbf77ebf11ced672396b59bec27e6d5db67c88f01b279d2
 opentelemetry-api==1.45.0 --hash=sha256:80e068aba7cd56c8b58512d6a36f8d25cb1dfaa0c0a4cc1c938ccf9f362d9cb3
-pydantic==2.13.5 --hash=sha256:346a034f080da3755d8e9cb5e00e8b07de1d39e4f6e2c87d8ab7cafa0b269a73
-pydantic-core==2.46.5 --hash=sha256:a39ac25a9a2fa4072efdb429833c4a4c8009a51ff9eea3eeae131713cd27991e
-python-dotenv==1.2.3 --hash=sha256:904552145e8bfed22162c09dab1c2b9b54fefa7b23ba780f4f26ca0316b0f0d9
-PyYAML==6.0.3 --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0
-typing-inspection==0.4.4 --hash=sha256:65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147
+pydantic==2.14.0b2 --hash=sha256:4556c932fb3dbb7e9ac773bee241b2eb7058a2f9ff1d850d45d7d11cb6e54b68
+pydantic-core==2.49.0 --hash=sha256:f63e2bae46f4ba6353869c6441d81c027fce74a2edac1b20bfac2c0098581a27
+python-dotenv==1.2.4 --hash=sha256:42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc
+pyyaml==6.0.3 --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0
+regex==2026.9.29 --hash=sha256:f57dc6b8fef170f105d2cf5cdce254f47b137d7755086cf7050f47e16582abba
+truststore==0.10.4 --hash=sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981
 typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+typing-inspection==0.4.4 --hash=sha256:65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147

@@ -35,3 +35,9 @@ for _name in ("MAX_MANAGER_CALLS", "MAX_MANAGER_ROUNDS", "MAX_MANAGER_MESSAGES_B
         raise ImportError(f"runner limit {_name} must be a positive integer")
 if MAX_VERIFIER_CALLS > 2:
     raise ImportError("runner verifier ceiling exceeds the ADR 0015 bound of two")
+
+# Opt-in retained-agent profiles deliberately do not inherit legacy ceilings.
+LOCAL_CONTEXT_TOKENS = _module.LOCAL_CONTEXT_TOKENS
+LOCAL_OUTPUT_TOKENS = _module.LOCAL_OUTPUT_TOKENS
+LOCAL_CONTEXT_RESERVE = _module.LOCAL_CONTEXT_RESERVE
+resolve_local_agent_budget = _module.resolve_local_agent_budget

@@ -19,7 +19,7 @@ from typing import Any
 from cli.delivery_selection import compute_binding
 
 from runtime.maf_runner.limits import (MAX_ACTIONS, MAX_MANAGER_CALLS, MAX_MANAGER_MESSAGES_BYTES,
-                                       MAX_MANAGER_ROUNDS, MAX_REPLANS)
+                                       MAX_MANAGER_ROUNDS, MAX_REPLANS, resolve_local_agent_budget)
 from runtime.maf_runner.progress_parse import UNPARSABLE_SENTINEL, parse_progress
 
 PROTOCOL_VERSION = 8
@@ -27,7 +27,8 @@ PROTOCOL_VERSION = 8
 # The v9 route now constructs and executes the same pinned stock MAF surface.
 SUPPORTED_PROTOCOLS = [5, 6, 7, 8]
 _active_protocol_version: int | None = None
-MAX_LINE_BYTES = 1024 * 1024
+_active_local_profile = False
+MAX_LINE_BYTES = 4 * 1024 * 1024
 MAX_TASK_BYTES = 4096
 # One progress step gets its first reply plus two retries (ADR 0018).
 PROGRESS_ATTEMPTS = 3
@@ -46,9 +47,8 @@ def _runtime_identity() -> dict[str, Any]:
     """Compute, rather than echo, the interpreter identity Flow sealed."""
     root = Path(__file__).resolve().parents[2]
     lock = root / "runtime" / "maf_runner" / "requirements.lock"
-    names = ("agent-framework-core", "agent-framework-orchestrations", "annotated-types", "msgspec",
-             "opentelemetry-api", "pydantic", "pydantic-core", "python-dotenv", "pyyaml",
-             "typing-inspection", "typing-extensions")
+    names = tuple(line.split("==", 1)[0] for line in lock.read_text().splitlines()
+                  if line.strip() and not line.startswith("#"))
     packages = {name: version(name) for name in names}
     records = {}
     for name in names:
@@ -74,11 +74,15 @@ def _write(value: dict[str, Any]) -> None:
 
 
 def _read() -> dict[str, Any]:
-    global _active_protocol_version
+    global _active_protocol_version, _active_local_profile
     line = sys.stdin.buffer.readline(MAX_LINE_BYTES + 1)
     if not line or len(line) > MAX_LINE_BYTES or not line.endswith(b"\n"):
         raise RuntimeError("invalid or missing parent protocol line")
     value = json.loads(line)
+    if isinstance(value, dict) and value.get('type') == 'start':
+        _active_local_profile = 'local_agent_profile' in value.get('envelope', {})
+    if not _active_local_profile and len(line) > 1024 * 1024:
+        raise RuntimeError('legacy parent protocol line exceeds size limit')
     if not isinstance(value, dict) or value.get("protocol_version") not in {5, 6, 7, 8, 9}:
         raise RuntimeError("unsupported parent protocol message")
     if _active_protocol_version is None:
@@ -437,6 +441,11 @@ async def _run_v9(start: dict[str, Any]) -> None:
     envelope = start['envelope']
     if envelope.get("maf_runtime") is not None:
         _write({"protocol_version": 9, "type": "runtime_ready", "runtime": _runtime_identity()})
+    profile = (resolve_local_agent_budget(envelope['local_agent_profile'])
+               if 'local_agent_profile' in envelope else None)
+    call_limit = profile['manager_calls'] if profile else MAX_MANAGER_CALLS
+    action_limit = profile['delegations'] if profile else MAX_ACTIONS
+    message_limit = 4 * 1024 * 1024 if profile else MAX_MANAGER_MESSAGES_BYTES
     attempt_id = envelope['attempt_id']
     assignments = [a for a in envelope['logical_assignments'] if a['requirements']['operation'] != 'manage']
     completed = start.get('completed_assignments', [])
@@ -463,10 +472,10 @@ async def _run_v9(start: dict[str, Any]) -> None:
             nonlocal calls, retries, selected_task
             phase = _phase(messages[-1].text)
             serialized = [m.to_dict() for m in messages]
-            if len(json.dumps(serialized).encode()) > MAX_MANAGER_MESSAGES_BYTES:
+            if len(json.dumps(serialized).encode()) > message_limit:
                 raise PolicyAbort('manager message exceeds transport cap')
             calls += 1
-            if calls > MAX_MANAGER_CALLS:
+            if call_limit is not None and calls > call_limit:
                 raise PolicyAbort('manager call limit reached')
             _write({'protocol_version': 9, 'type': 'manager_request', 'attempt_id': attempt_id,
                     'sequence': calls, 'phase': phase, 'messages': serialized,
@@ -500,7 +509,7 @@ async def _run_v9(start: dict[str, Any]) -> None:
         async def request(self, message: GroupChatRequestMessage, ctx: WorkflowContext[GroupChatResponseMessage]) -> None:
             nonlocal actions
             actions += 1
-            if actions > MAX_ACTIONS or not isinstance(selected_task, str) or not selected_task.strip():
+            if (action_limit is not None and actions > action_limit) or not isinstance(selected_task, str) or not selected_task.strip():
                 raise PolicyAbort('invalid or excessive worker request')
             if compute_binding(envelope, self.id).get('selected_binding') is None:
                 raise PolicyAbort('no eligible binding for logical assignment')
@@ -516,8 +525,13 @@ async def _run_v9(start: dict[str, Any]) -> None:
                 raise PolicyAbort('Flow worker outcome lacks summary')
             await ctx.send_message(GroupChatResponseMessage(message=Message(role='assistant', contents=[summary], author_name=self.id)))
 
-    manager = StandardMagenticManager(ManagerProxy(), max_reset_count=min(MAX_REPLANS, envelope["limits"].get("max_replans", MAX_REPLANS)),
-                                      max_round_count=min(MAX_MANAGER_ROUNDS, envelope["limits"].get("max_manager_rounds", MAX_MANAGER_ROUNDS)), progress_ledger_retry_count=PROGRESS_ATTEMPTS)
+    manager = StandardMagenticManager(
+        ManagerProxy(),
+        max_reset_count=profile['replans'] if profile else min(MAX_REPLANS, envelope["limits"].get("max_replans", MAX_REPLANS)),
+        max_round_count=profile['manager_rounds'] if profile else min(MAX_MANAGER_ROUNDS, envelope["limits"].get("max_manager_rounds", MAX_MANAGER_ROUNDS)),
+        max_stall_count=profile['max_stall_count'] if profile else 3,
+        progress_ledger_retry_count=PROGRESS_ATTEMPTS,
+    )
     name = 'flow-magentic-delivery-v9-' + str(start.get('coordination_epoch', 1))
     workflow = MagenticBuilder(participants=[GuardedParticipant(a) for a in assignments], manager=manager,
                                enable_plan_review=False, checkpoint_storage=storage, name=name).build()
