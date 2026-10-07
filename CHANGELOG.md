@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.41.1](https://github.com/andyconley/flow/compare/v0.41.0...v0.41.1) (2026-10-07)
+
+### Bug Fixes
+
+* **release:** authenticate read-only publication verification ([ad8d81f](https://github.com/andyconley/flow/commit/ad8d81fb232c569333f468db6a1056bdd6d4220d))
+
 ## [0.41.0](https://github.com/andyconley/flow/compare/v0.40.16...v0.41.0) (2026-10-07)
 
 ### Features
