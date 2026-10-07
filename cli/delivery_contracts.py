@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 from runner_limits import (MAX_ACTIONS, MAX_LINEAGE_TOKENS, MAX_MANAGER_CALLS, MAX_MANAGER_ROUNDS, MAX_TOKEN_TRANCHES,
-                           MAX_VERIFIER_CALLS)
+                           MAX_VERIFIER_CALLS, resolve_local_agent_budget)
 
 
 SCHEMA_VERSION = 1
@@ -126,7 +126,8 @@ def _sources(sources: object, work_id: str) -> dict[str, dict[str, str]]:
 
 
 def validate_expansion_headroom(headroom: object, base: dict[str, int], *,
-                                names: tuple[str, ...] | None = None) -> dict[str, int]:
+                                names: tuple[str, ...] | None = None,
+                                local_profile: bool = False) -> dict[str, int]:
     """Return the full headroom map, refusing anything the runner cannot run.
 
     ``base`` holds the sealed limit for every expandable name. Base plus
@@ -141,7 +142,7 @@ def validate_expansion_headroom(headroom: object, base: dict[str, int], *,
     for name, value in full.items():
         if type(value) is not int or value < 0:
             raise DeliveryContractError(f"expansion_headroom {name} must be a non-negative integer")
-        if type(base.get(name)) is not int or base[name] + value > EXPANSION_CEILINGS[name]:
+        if type(base.get(name)) is not int or (not local_profile and base[name] + value > EXPANSION_CEILINGS[name]):
             raise DeliveryContractError(f"{name} limit plus headroom exceeds the runner ceiling")
     if base["paid_worker_calls"] + full["paid_worker_calls"] > base["delegations"] + full["delegations"]:
         raise DeliveryContractError("paid-worker headroom exceeds delegation headroom")
@@ -210,9 +211,14 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
     input as an explicit default of two total verifier calls.
     """
     required = INTENT_FIELDS - {"allowed_lifecycle_operations"}
-    if not isinstance(intent, dict) or not required <= set(intent) <= INTENT_FIELDS | {"max_verifier_calls", "expansion_headroom"}:
+    if not isinstance(intent, dict) or not required <= set(intent) <= INTENT_FIELDS | {"max_verifier_calls", "expansion_headroom", "local_agent_profile"}:
         raise DeliveryContractError("shaper_intent is invalid")
     intent = dict(intent)
+    if "local_agent_profile" in intent:
+        try:
+            intent["local_agent_profile"] = resolve_local_agent_budget(intent["local_agent_profile"])
+        except (TypeError, ValueError) as exc:
+            raise DeliveryContractError(str(exc)) from exc
     intent.setdefault("max_verifier_calls", 2)
     intent.setdefault("expansion_headroom", {})
     intent.setdefault("allowed_lifecycle_operations", [])
@@ -250,7 +256,7 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
         minimum = 1 if name in {"max_concurrent", "runtime_seconds", "max_manager_calls", "max_manager_rounds"} else 0
         if type(enforceable[name]) is not int or enforceable[name] < minimum:
             raise DeliveryContractError(f"{name} is invalid")
-    if enforceable["runtime_seconds"] > 600:
+    if "local_agent_profile" not in intent and enforceable["runtime_seconds"] > 600:
         raise DeliveryContractError("runtime_seconds exceeds the protocol maximum of 600")
     for name in ("tools", "paths", "outputs"):
         values = _list(enforceable[name], name, nonempty=True)
@@ -261,11 +267,11 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
     if enforceable["max_concurrent"] > delegation["max_delegations"] or enforceable["max_paid_worker_calls"] > delegation["max_delegations"]:
         raise DeliveryContractError("concurrency or paid-worker limit exceeds max_delegations")
     validate_token_budget({name: enforceable[name] for name in TOKEN_LIMIT_FIELDS}, 0)
-    if type(intent["max_verifier_calls"]) is not int or intent["max_verifier_calls"] not in {1, 2}:
+    if type(intent["max_verifier_calls"]) is not int or intent["max_verifier_calls"] < 1 or ("local_agent_profile" not in intent and intent["max_verifier_calls"] not in {1, 2}):
         raise DeliveryContractError("max_verifier_calls must be one or two")
     intent["expansion_headroom"] = validate_expansion_headroom(intent["expansion_headroom"], _expansion_base(
         delegation["max_delegations"], enforceable["max_paid_worker_calls"], intent["max_verifier_calls"],
-        enforceable["max_manager_calls"], enforceable["max_manager_rounds"]))
+        enforceable["max_manager_calls"], enforceable["max_manager_rounds"]), local_profile="local_agent_profile" in intent)
     validate_token_budget({name: enforceable[name] for name in TOKEN_LIMIT_FIELDS}, intent["expansion_headroom"]["tokens"])
     # The flag is derived, never independent: it states whether any headroom exists.
     if type(delegation["delegated_expansion"]) is not bool or delegation["delegated_expansion"] != any(intent["expansion_headroom"].values()):
@@ -279,6 +285,7 @@ def _intent(work_id: str, sources: dict[str, dict[str, str]], approved: dict[str
     approved = validate_shaper_intent(approved)
     claimed = lambda value: _claim(value, sources)
     return {
+        **({"local_agent_profile": approved["local_agent_profile"]} if "local_agent_profile" in approved else {}),
         "problem": claimed(approved["problem"]),
         **{name: [claimed(value) for value in approved[name]] for name in
            ("intended_users", "outcomes", "scope", "exclusions", "constraints", "assumptions", "acceptance_criteria")},
@@ -323,6 +330,7 @@ def build_delivery_charter(shaper: dict[str, Any]) -> dict[str, Any]:
     enforceable = shaper["budget_safety_envelope"]["enforceable"]
     record = {
         "schema_version": SCHEMA_VERSION, "charter_version": DELIVERY_CHARTER_VERSION, "kind": "delivery_charter",
+        **({"local_agent_profile": shaper["local_agent_profile"]} if "local_agent_profile" in shaper else {}),
         "charter_id": charter_id, "run_id": shaper["run_id"], "delivery_attempt_policy": {"one_active_lead": True, "resume_or_supersede": "explicit"},
         "shaper_contract": {"id": shaper["shaper_contract_id"], "version": shaper["version"], "digest": shaper["digest"]},
         "approved_sources": shaper["approved_sources"], "outcomes": shaper["outcomes"], "scope": shaper["scope"],
@@ -345,6 +353,17 @@ def build_delivery_charter(shaper: dict[str, Any]) -> dict[str, Any]:
     return _seal(record, validate_delivery_charter)
 
 
+def _validate_local_profile(record: dict[str, Any]) -> None:
+    if "local_agent_profile" not in record:
+        return
+    try:
+        profile = resolve_local_agent_budget(record["local_agent_profile"])
+    except (TypeError, ValueError) as exc:
+        raise DeliveryContractError(str(exc)) from exc
+    if profile != record["local_agent_profile"]:
+        raise DeliveryContractError("local agent profile must contain its resolved budget")
+
+
 def _validate_digest(record: dict[str, Any], label: str) -> None:
     expected = dict(record)
     actual = expected.pop("digest", None)
@@ -355,6 +374,7 @@ def _validate_digest(record: dict[str, Any], label: str) -> None:
 def validate_shaper_contract(record: dict[str, Any]) -> None:
     if not isinstance(record, dict) or record.get("schema_version") != SCHEMA_VERSION or record.get("version") not in SHAPER_CONTRACT_VERSIONS or record.get("kind") != "shaper_contract":
         raise DeliveryContractError("unsupported Shaper Contract version")
+    _validate_local_profile(record)
     work_id = _text(record.get("run_id"), "run_id")
     _text(record.get("shaper_contract_id"), "shaper_contract_id")
     if record.get("status") != "approved":
@@ -389,7 +409,7 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
     if record["approval_matrix"].get("provider_dispatch") != "Flow_grant":
         raise DeliveryContractError("provider dispatch must require a Flow grant")
     if record["version"] != LEGACY_SHAPER_CONTRACT_VERSION:
-        if type(record.get("max_verifier_calls")) is not int or record["max_verifier_calls"] not in {1, 2}:
+        if type(record.get("max_verifier_calls")) is not int or record["max_verifier_calls"] < 1 or ("local_agent_profile" not in record and record["max_verifier_calls"] not in {1, 2}):
             raise DeliveryContractError("Shaper Contract max_verifier_calls is invalid")
     elif "max_verifier_calls" in record:
         raise DeliveryContractError("legacy Shaper Contract cannot carry max_verifier_calls")
@@ -401,7 +421,8 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
         headroom = validate_expansion_headroom(record.get("expansion_headroom"), _expansion_base(
             delegation.get("max_delegations"), enforceable.get("max_paid_worker_calls"), record["max_verifier_calls"],
             enforceable.get("max_manager_calls"), enforceable.get("max_manager_rounds")),
-            names=None if tokens else PRE_TOKEN_EXPANSION_NAMES)
+            names=None if tokens else PRE_TOKEN_EXPANSION_NAMES,
+            local_profile="local_agent_profile" in record)
         if headroom != record["expansion_headroom"] or delegation.get("delegated_expansion") is not any(headroom.values()):
             raise DeliveryContractError("Shaper Contract expansion headroom is invalid")
         if tokens:
@@ -414,6 +435,7 @@ def validate_shaper_contract(record: dict[str, Any]) -> None:
 def validate_delivery_charter(record: dict[str, Any]) -> None:
     if not isinstance(record, dict) or record.get("schema_version") != SCHEMA_VERSION or record.get("charter_version") not in DELIVERY_CHARTER_VERSIONS or record.get("kind") != "delivery_charter":
         raise DeliveryContractError("unsupported Delivery Charter version")
+    _validate_local_profile(record)
     work_id = _text(record.get("run_id"), "run_id")
     _text(record.get("charter_id"), "charter_id")
     _sources(record.get("approved_sources"), work_id)
@@ -452,12 +474,13 @@ def validate_delivery_charter(record: dict[str, Any]) -> None:
         raise DeliveryContractError("Delivery Charter numeric limits are invalid")
     if record["charter_version"] != LEGACY_DELIVERY_CHARTER_VERSION:
         # A charter and its Shaper Contract share one version line after v1.
-        if source["version"] != record["charter_version"] or limits["max_verifier_calls"] not in {1, 2}:
+        if source["version"] != record["charter_version"] or type(limits["max_verifier_calls"]) is not int or limits["max_verifier_calls"] < 1 or ("local_agent_profile" not in record and limits["max_verifier_calls"] not in {1, 2}):
             raise DeliveryContractError("Delivery Charter max_verifier_calls is invalid")
         if record["charter_version"] in HEADROOM_VERSIONS and validate_expansion_headroom(limits["expansion_headroom"], _expansion_base(
                 limits["delegations"], limits["max_paid_worker_calls"], limits["max_verifier_calls"],
                 limits["max_manager_calls"], limits["max_manager_rounds"]),
-                names=None if record["charter_version"] in TOKEN_VERSIONS else PRE_TOKEN_EXPANSION_NAMES
+                names=None if record["charter_version"] in TOKEN_VERSIONS else PRE_TOKEN_EXPANSION_NAMES,
+                local_profile="local_agent_profile" in record
                 ) != limits["expansion_headroom"]:
             raise DeliveryContractError("Delivery Charter expansion headroom is invalid")
         if record["charter_version"] in TOKEN_VERSIONS:

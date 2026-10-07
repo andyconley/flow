@@ -20,7 +20,7 @@ except ModuleNotFoundError:  # Package import used by the MAF child.
 
 
 OPERATIONS = frozenset({"manage", "read", "edit", "verify", "collect"})
-CAPABILITIES = frozenset({"structured_output", "structured_edit", "evidence_collection"})
+CAPABILITIES = frozenset({"structured_output", "structured_edit", "evidence_collection", "interactive_tools"})
 RISK_CLASSES = frozenset({"standard", "high"})
 AVAILABILITY_STATES = frozenset({"ready", "unavailable", "unknown", "stale"})
 AVAILABILITY_EVIDENCE_CODES = frozenset({

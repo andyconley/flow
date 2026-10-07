@@ -76,5 +76,20 @@ class EnvelopeHeadroomTests(unittest.TestCase):
             validate_envelope(env)
 
 
+class LocalAgentBudgetTests(unittest.TestCase):
+    def test_measured_profile_does_not_apply_legacy_count_ceilings(self):
+        budget = runner_limits.resolve_local_agent_budget()
+        self.assertEqual((budget['context_tokens'], budget['output_tokens']), (49152, 12288))
+        self.assertIsNone(budget['manager_rounds'])
+        self.assertIsNone(budget['delegations'])
+        self.assertEqual(runner_limits.resolve_local_agent_budget({'manager_calls': 50})['manager_calls'], 50)
+
+    def test_invalid_profiles_fail_before_dispatch(self):
+        for budget in ({'manager_calls': True}, {'tool_calls': 0}, {'unknown': 1},
+                       {'context_tokens': 14000}, {'request_timeout_seconds': None}):
+            with self.subTest(budget=budget), self.assertRaises(ValueError):
+                runner_limits.resolve_local_agent_budget(budget)
+
+
 if __name__ == "__main__":
     unittest.main()

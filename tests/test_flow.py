@@ -975,16 +975,12 @@ class FlowCliTests(FlowCliHarness):
         venv.EnvBuilder(with_pip=False).create(environment)
         site_packages = Path(subprocess.check_output(
             [str(interpreter), "-c", "import site; print(site.getsitepackages()[0])"], text=True).strip())
-        for package, version in {
-            "agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0",
-            "annotated-types": "0.8.0", "msgspec": "0.21.1", "opentelemetry-api": "1.45.0",
-            "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
-            "PyYAML": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
-        }.items():
+        from maf_runtime import RESOLVED_PACKAGES
+        for package, version in RESOLVED_PACKAGES.items():
             metadata = site_packages / (package.replace("-", "_") + ".dist-info")
             metadata.mkdir()
             (metadata / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {package}\nVersion: {version}\n")
-        for module in ("agent_framework", "agent_framework_orchestrations"):
+        for module in ("agent_framework", "agent_framework_orchestrations", "agent_framework_ollama"):
             package_dir = site_packages / module
             package_dir.mkdir()
             (package_dir / "__init__.py").write_text("# local runtime-fixture import proof\n")
@@ -3893,6 +3889,10 @@ class FlowCliTests(FlowCliHarness):
                 "jsonl_watermark",
                 "legacy_delivery",
                 "lifecycle",
+                "local_agent",
+                "local_agent_delivery",
+                "local_agent_workspace",
+                "local_resources",
                 "local_worker",
                 "macos_sandbox",
                 "maf_runtime",

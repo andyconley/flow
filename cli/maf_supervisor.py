@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from runner_limits import MAX_ACTIONS, MAX_MANAGER_CALLS
+from runner_limits import MAX_ACTIONS, MAX_MANAGER_CALLS, resolve_local_agent_budget
 
 try:  # flow.py runs siblings directly; package imports use the second path.
     from delivery_cancel import interruptible, wake, wakeup_fds
@@ -30,7 +30,8 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by package consumers
 
 PROTOCOL_VERSION = 1
 MULTITURN_PROTOCOL_VERSION = 2
-PINNED_MAF_CORE_VERSION = "1.19.0"
+from maf_runtime import PINNED_PACKAGES
+PINNED_MAF_CORE_VERSION = PINNED_PACKAGES["agent-framework-core"]
 MAX_LINE_BYTES = 256 * 1024
 
 
@@ -50,10 +51,10 @@ def _json_line(value: dict[str, Any]) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
-def _write_bounded(fd: int, value: dict[str, Any], deadline: float) -> None:
+def _write_bounded(fd: int, value: dict[str, Any], deadline: float, max_line_bytes: int = MAX_LINE_BYTES) -> None:
     """Write a bounded protocol line without letting a nonreading child hang Flow."""
     payload = _json_line(value)
-    if len(payload) > MAX_LINE_BYTES:
+    if len(payload) > max_line_bytes:
         raise MafProtocolError("Flow protocol line exceeds the bounded size")
     os.set_blocking(fd, False)
     sent = 0
@@ -76,7 +77,7 @@ def _write_bounded(fd: int, value: dict[str, Any], deadline: float) -> None:
             raise MafTransportError("MAF child closed stdin during a protocol message") from exc
 
 
-def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version: int = PROTOCOL_VERSION) -> dict[str, Any]:
+def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version: int = PROTOCOL_VERSION, max_line_bytes: int = MAX_LINE_BYTES) -> dict[str, Any]:
     """Read one bounded protocol line without allowing partial output to hang.
 
     ``readline`` after ``select`` can block when a child wrote only part of a
@@ -87,12 +88,12 @@ def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version
     while True:
         newline = pending.find(b"\n")
         if newline >= 0:
-            if newline > MAX_LINE_BYTES:
+            if newline > max_line_bytes:
                 raise MafProtocolError("MAF child sent an oversized protocol line")
             line = bytes(pending[:newline + 1])
             del pending[:newline + 1]
             break
-        if len(pending) > MAX_LINE_BYTES:
+        if len(pending) > max_line_bytes:
             raise MafProtocolError("MAF child sent an oversized unterminated protocol line")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -105,7 +106,7 @@ def _read_message(fd: int, deadline: float, pending: bytearray, protocol_version
                 continue
         elif not ready:
             raise MafTransportError("MAF child timed out before sending a protocol message")
-        chunk = os.read(fd, min(65536, MAX_LINE_BYTES + 1 - len(pending)))
+        chunk = os.read(fd, min(65536, max_line_bytes + 1 - len(pending)))
         if not chunk:
             raise MafTransportError("MAF child closed stdout before workflow_finished")
         pending.extend(chunk)
@@ -572,8 +573,15 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                         timeout_s: float = 900, python_path: str | None = None,
                         on_process_group: Callable[[int, str], None] | None = None) -> dict[str, Any]:
     """Supervise one stock Magentic workflow; Flow authorizes each callback."""
+    profile = (resolve_local_agent_budget(envelope['local_agent_profile'])
+               if 'local_agent_profile' in envelope else None)
+    if profile and timeout_s == 900:
+        timeout_s = profile['turn_timeout_seconds']
+    call_limit = profile['manager_calls'] if profile else MAX_MANAGER_CALLS
+    action_limit = profile['delegations'] if profile else MAX_ACTIONS
+    transport_limit = 4 * 1024 * 1024 if profile else MAX_LINE_BYTES
     if (envelope.get("execution_protocol_version") != 9 or not isinstance(task, str) or not task.strip()
-            or not callable(on_action) or not callable(on_manager) or not 0 < timeout_s <= 900):
+            or not callable(on_action) or not callable(on_manager) or not (timeout_s > 0 and (profile is not None or timeout_s <= 900))):
         raise MafProtocolError("v9 delivery inputs are invalid")
     executable = python_path or os.environ.get("FLOW_MAF_PYTHON")
     if executable is None:
@@ -596,9 +604,9 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                 on_process_group(process.pid, "maf")
             _write_bounded(process.stdin.fileno(), {"protocol_version": 9, "type": "start",
                           "envelope": envelope, "task": task,
-                          "completed_assignments": completed_assignments or [], "coordination_epoch": coordination_epoch}, deadline)
+                          "completed_assignments": completed_assignments or [], "coordination_epoch": coordination_epoch}, deadline, transport_limit)
             while True:
-                message = _read_message(process.stdout.fileno(), deadline, pending, 9)
+                message = _read_message(process.stdout.fileno(), deadline, pending, 9, transport_limit)
                 kind = message["type"]
                 if kind == "runtime_ready":
                     if runtime_ready or message.get("runtime") != envelope.get("maf_runtime"):
@@ -615,7 +623,7 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                         raise MafProtocolError("v9 callback before initialization or wrong attempt")
                     if kind == "manager_request":
                         calls += 1
-                        if calls > MAX_MANAGER_CALLS or message.get("sequence") != calls:
+                        if (call_limit is not None and calls > call_limit) or message.get("sequence") != calls:
                             raise MafProtocolError("invalid v9 manager sequence")
                         result = on_manager(dict(message))
                         if not isinstance(result, str):
@@ -623,7 +631,7 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                         reply = {"protocol_version": 9, "type": "manager_response", "sequence": calls, "text": result}
                     else:
                         actions += 1
-                        if (actions > MAX_ACTIONS or message.get("sequence") != actions
+                        if ((action_limit is not None and actions > action_limit) or message.get("sequence") != actions
                                 or type(message.get("manager_turn")) is not int or message["manager_turn"] != calls
                                 or not isinstance(message.get("checkpoint_id"), str)
                                 or not isinstance(message.get("proposal_id"), str)):
@@ -633,7 +641,7 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                             raise MafProtocolError("invalid worker callback result")
                         reply = {"protocol_version": 9, "type": "action_result", "proposal_id": message["proposal_id"], "result": result}
                     deadline = time.monotonic() + timeout_s
-                    _write_bounded(process.stdin.fileno(), reply, deadline)
+                    _write_bounded(process.stdin.fileno(), reply, deadline, transport_limit)
                     continue
                 if kind == "workflow_finished":
                     if (not initialized or message.get("attempt_id") != envelope["attempt_id"]

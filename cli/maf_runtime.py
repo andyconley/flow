@@ -28,14 +28,33 @@ from typing import Any
 from paths import FLOW_HOME
 
 PINNED_PACKAGES = {
-    "agent-framework-core": "1.19.0",
-    "agent-framework-orchestrations": "1.2.0",
+    'agent-framework-core': '1.20.0',
+    'agent-framework-orchestrations': '1.3.0',
+    'agent-framework-ollama': '1.0.0b261002',
+    'ollama': '0.5.3',
 }
 RESOLVED_PACKAGES = {
-    "agent-framework-core": "1.19.0", "agent-framework-orchestrations": "1.2.0",
-    "annotated-types": "0.8.0", "msgspec": "0.21.1", "opentelemetry-api": "1.45.0",
-    "pydantic": "2.13.5", "pydantic-core": "2.46.5", "python-dotenv": "1.2.3",
-    "pyyaml": "6.0.3", "typing-inspection": "0.4.4", "typing-extensions": "4.16.0",
+    'agent-framework-core': '1.20.0',
+    'agent-framework-ollama': '1.0.0b261002',
+    'agent-framework-orchestrations': '1.3.0',
+    'annotated-types': '0.8.0',
+    'anyio': '4.15.1',
+    'certifi': '2026.7.22',
+    'h11': '0.16.0',
+    'httpcore': '1.0.9',
+    'httpx': '0.28.1',
+    'idna': '3.20',
+    'msgspec': '0.22.0',
+    'ollama': '0.5.3',
+    'opentelemetry-api': '1.45.0',
+    'pydantic': '2.14.0b2',
+    'pydantic-core': '2.49.0',
+    'python-dotenv': '1.2.4',
+    'pyyaml': '6.0.3',
+    'regex': '2026.9.29',
+    'truststore': '0.10.4',
+    'typing-extensions': '4.16.0',
+    'typing-inspection': '0.4.4',
 }
 # Retain the package compatibility identity for transactional predecessor updates.
 # V9 also executes the pinned stock Magentic package surface.
@@ -154,8 +173,8 @@ def _probe_command() -> str:
         " records[name]={'record':hashlib.sha256(record.read_bytes()).hexdigest(),'bad':bad}\n"
     )
     return (
-        "import json,sys,platform,sysconfig; from agent_framework import AgentResponse,Executor,FileCheckpointStorage,Message,WorkflowContext,handler,response_handler; "
-        "from agent_framework_orchestrations import GroupChatParticipantMessage,GroupChatRequestMessage,GroupChatResponseMessage,MagenticBuilder,StandardMagenticManager; "
+        "import json,sys,platform,sysconfig; from agent_framework import Agent,AgentResponse,Executor,FileCheckpointStorage,Message,WorkflowContext,handler,response_handler; "
+        "from agent_framework_ollama import OllamaChatClient; from agent_framework_orchestrations import GroupChatParticipantMessage,GroupChatRequestMessage,GroupChatResponseMessage,MagenticBuilder,StandardMagenticManager; "
         "from importlib.metadata import version; "
         "from runtime.maf_runner import delivery_lead; exec(" + repr(integrity) + "); "
         "print(json.dumps({'executable':sys.executable,'python':list(sys.version_info[:3]),"

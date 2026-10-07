@@ -8,12 +8,12 @@ from typing import Any
 
 try:
     from delivery_selection import compute_binding
-    from execution_contracts import ContractError, validate_action, validate_envelope
+    from execution_contracts import ContractError, validate_action, validate_envelope, validate_local_agent_observations, validate_local_manager_context_refusal
     from provider_selection import canonical_bytes, digest
     from verifier_contracts import evaluate_candidate, validate_evaluation
 except ModuleNotFoundError:  # Package import.
     from .delivery_selection import compute_binding
-    from .execution_contracts import ContractError, validate_action, validate_envelope
+    from .execution_contracts import ContractError, validate_action, validate_envelope, validate_local_agent_observations, validate_local_manager_context_refusal
     from .provider_selection import canonical_bytes, digest
     from .verifier_contracts import evaluate_candidate, validate_evaluation
 
@@ -50,6 +50,21 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     if any(not isinstance(action, dict) for action in actions) \
             or any(not isinstance(row, dict) for row in selections):
         raise V9ReceiptError("v9_selection_rows_invalid")
+    observations = receipt.get("local_agent_observations", [])
+    if not isinstance(observations, list) or (observations and "local_agent_profile" not in envelope):
+        raise V9ReceiptError("v9_local_agent_observations_invalid")
+    observed_ids = set()
+    action_ids = {item.get("action_id") for item in actions}
+    for item in observations:
+        if (not isinstance(item, dict) or set(item) != {"action_id", "evidence", "evidence_digest"}
+                or item["action_id"] not in action_ids or item["action_id"] in observed_ids
+                or item["evidence_digest"] != digest(item["evidence"])):
+            raise V9ReceiptError("v9_local_agent_observation_binding_invalid")
+        observed_ids.add(item["action_id"])
+        try:
+            validate_local_agent_observations(item["evidence"], profile=envelope["local_agent_profile"])
+        except ContractError as exc:
+            raise V9ReceiptError("v9_local_agent_observations_invalid", str(exc)) from exc
     if not isinstance(semantic, list) or any(not isinstance(item, dict) for item in semantic):
         raise V9ReceiptError("v9_semantic_verification_invalid")
     refusal_fields = {"action_id", "selection_id", "schema_version", "kind", "disposition",
@@ -82,7 +97,8 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
             or any(not isinstance(item, dict)
                    or set(item) != {"action_id", "stage", "detail"}
                    or not isinstance(item["action_id"], str)
-                   or item["stage"] not in {"manager_evaluation", "edit_scope", "chartered_test", "verifier_evaluation"}
+                   or item["stage"] not in ({"manager_evaluation", "edit_scope", "chartered_test", "verifier_evaluation"}
+                       | ({"assignment_evidence"} if "local_agent_profile" in envelope else set()))
                    or not isinstance(item["detail"], str) or not item["detail"]
                    for item in evidence_failures)):
         raise V9ReceiptError("v9_evidence_failures_invalid")
@@ -172,6 +188,16 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if row.get("candidate_id") != actual["selected_candidate_id"]:
             raise V9ReceiptError("v9_selection_row_candidate_mismatch")
         state = row.get("state")
+        observation = next((item["evidence"] for item in observations if item["action_id"] == action["action_id"]), None)
+        if (row.get("reason") == "local_manager_context_denied"
+                or isinstance(observation, dict) and "context_denial" in observation):
+            if state != "pre_send_refused" or row.get("reason") != "local_manager_context_denied":
+                raise V9ReceiptError("v9_local_manager_context_refusal_state_invalid")
+            try:
+                validate_local_manager_context_refusal(envelope, action,
+                    {"kind": "local_manager_context_denied", "local_agent_observations": observation})
+            except ContractError as exc:
+                raise V9ReceiptError("v9_local_manager_context_refusal_invalid", str(exc)) from exc
         if state in {"consumed", "observed_not_executed"} and row.get("provider_action_id") != action["action_id"]:
             raise V9ReceiptError("v9_consumed_action_mismatch")
         if state in {"superseded", "pre_send_refused"} and \
@@ -202,8 +228,10 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                      if action is not None else None)
         expected_operation = ("manage" if failure["stage"] == "manager_evaluation" else
                               "verify" if failure["stage"] == "verifier_evaluation" else "edit")
+        if failure["stage"] == "assignment_evidence":
+            expected_operation = operation if operation in {"edit", "collect", "verify"} else None
         key = (failure["action_id"], failure["stage"])
-        if action is None or operation != expected_operation or key in failure_keys:
+        if action is None or expected_operation is None or operation != expected_operation or key in failure_keys:
             raise V9ReceiptError("v9_evidence_failure_binding_invalid")
         failure_keys.add(key)
     orphan_ids = set(rows) - action_selection_ids
@@ -280,7 +308,7 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     semantic_by_action = {item.get("action_id"): item for item in semantic}
     verifier_action_ids = {action["action_id"] for action in verifier_actions}
     failed_verifier_ids = {item["action_id"] for item in evidence_failures
-                           if item["stage"] == "verifier_evaluation"}
+                           if item["stage"] in {"verifier_evaluation", "assignment_evidence"}}
     missing_verifier_evidence = (verifier_action_ids - set(semantic_by_action)) - failed_verifier_ids
     if (len(semantic_by_action) != len(semantic)
             or not set(semantic_by_action).issubset(verifier_action_ids)
@@ -322,6 +350,76 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                          and set(observed_verifiers) == required_verifiers
                          and len(semantic_dispositions) == len(required_verifiers)
                          and all(item == "valid_pass" for item in semantic_dispositions))
+    if "local_agent_profile" in envelope:
+        # History is fully evaluated above. A genuine failed review can be
+        # superseded by repair and a fresh review; it must never poison every
+        # subsequent completion or allow an old pass to approve a new edit.
+        consumed_actions = [action for action in actions
+                            if selection_state_by_id.get(action.get("selection_id")) == "consumed"]
+        latest = {}
+        for action in consumed_actions:
+            key = action["assignment_id"]
+            if key not in latest or action["sequence"] > latest[key]["sequence"]:
+                latest[key] = action
+        producer_actions = [action for action in consumed_actions
+                            if assignments[action["assignment_id"]]["requirements"]["operation"] == "edit"]
+        last_edit = max((action["sequence"] for action in producer_actions), default=0)
+        latest_reviews = [latest.get(identity) for identity in required_verifiers]
+        failed_ids = {failure["action_id"] for failure in evidence_failures}
+        all_required_pass = (bool(required_verifiers)
+            and all(action is not None and action["sequence"] > last_edit
+                    and action["action_id"] not in failed_ids
+                    and semantic_by_action.get(action["action_id"], {}).get("evaluation", {}).get("disposition") == "valid_pass"
+                    for action in latest_reviews)
+            and all(action["action_id"] not in failed_ids for identity, action in latest.items()
+                    if assignments[identity]["requirements"]["operation"] in {"edit", "collect"}))
+        observed_by_action = {item["action_id"]: item["evidence"] for item in observations}
+        current_source = None
+        for action in sorted(producer_actions, key=lambda item: item["sequence"]):
+            for tool in observed_by_action.get(action["action_id"], {}).get("tool_observations", []):
+                result = tool.get("result", {})
+                if tool.get("name") == "write_file" and result.get("status") == "written":
+                    current_source = result.get("source_digest")
+        source_bound = (isinstance(current_source, str) and len(current_source) == 64
+                        and all(char in "0123456789abcdef" for char in current_source))
+        for action in latest_reviews:
+            if action is None:
+                source_bound = False
+                continue
+            item = semantic_by_action.get(action["action_id"], {})
+            review = (item.get("result") or {}).get("current_source_review")
+            observed_reviews = [tool.get("result", {}) for tool in
+                observed_by_action.get(action["action_id"], {}).get("tool_observations", [])
+                if tool.get("name") == "submit_review" and tool.get("result", {}).get("status") == "review_recorded"]
+            actual = observed_reviews[-1] if observed_reviews else None
+            test = review.get("test_evidence", {}) if isinstance(review, dict) else {}
+            try:
+                output_candidate = json.loads((item.get("result") or {}).get("output", ""))
+            except (TypeError, ValueError):
+                output_candidate = None
+            source_bound = source_bound and (
+                isinstance(review, dict) and isinstance(actual, dict)
+                and {key: value for key, value in actual.items() if key != "status"} == review
+                and output_candidate == review.get("candidate")
+                and review.get("source_digest") == current_source
+                and test.get("source_digest") == current_source
+                and test.get("current_source_digest") == current_source
+                and test.get("status") == "passed")
+        # A latest producer must have actual parent observations; old source
+        # writes from an earlier delegation cannot certify an unobserved turn.
+        required_workers = {identity for identity, assignment in assignments.items()
+                            if assignment["requirements"]["operation"] in {"edit", "collect"}}
+        source_bound = source_bound and required_workers.issubset(latest)
+        for identity in required_workers:
+            action = latest.get(identity)
+            body = observed_by_action.get(action["action_id"], {}) if action else {}
+            if not body:
+                source_bound = False
+            elif assignments[identity]["requirements"]["operation"] == "edit":
+                source_bound = source_bound and any(
+                    tool.get("name") == "write_file" and tool.get("result", {}).get("status") == "written"
+                    for tool in body.get("tool_observations", []))
+        all_required_pass = all_required_pass and source_bound
     if outcome["status"] in {"completed", "failed"}:
         if (outcome["status"] == "completed") != all_required_pass:
             raise V9ReceiptError("v9_outcome_semantic_mismatch")
@@ -343,6 +441,7 @@ def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any
                            provider_refusals: list[dict[str, Any]] | None = None,
                            semantic_verification: list[dict[str, Any]] | None = None,
                            evidence_failures: list[dict[str, Any]] | None = None,
+                           local_agent_observations: list[dict[str, Any]] | None = None,
                            termination: dict[str, Any] | None = None,
                            outcome: dict[str, str]) -> dict[str, Any]:
     receipt = {
@@ -357,6 +456,8 @@ def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any
     }
     if termination is not None:
         receipt["termination"] = termination
+    if local_agent_observations is not None:
+        receipt["local_agent_observations"] = local_agent_observations
     receipt["outcome"] = outcome
     receipt["receipt_digest"] = digest(receipt)
     verify_selection_receipt(receipt)
@@ -406,6 +507,10 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
                                   "selection_id": request.get("selection_id"), **observation})
     action_results = {item["action_id"]: (item.get("result") or {}).get("result")
                       for item in snapshot.get("actions", [])}
+    local_observations = [{"action_id": action_id, "evidence": result["local_agent_observations"],
+                           "evidence_digest": digest(result["local_agent_observations"])}
+                          for action_id, result in action_results.items()
+                          if isinstance(result, dict) and "local_agent_observations" in result]
     inputs = {item["action_id"]: item for item in snapshot.get("verifier_inputs", [])}
     evaluations = {item["action_id"]: item for item in snapshot.get("verifier_evaluations", [])}
     semantic = []
@@ -435,6 +540,7 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
     return seal_selection_receipt(envelope, actions, rows, provider_refusals=provider_refusals,
                                   semantic_verification=semantic,
                                   evidence_failures=evidence_failures,
+                                  local_agent_observations=(local_observations if "local_agent_profile" in envelope else None),
                                   termination=termination, outcome=outcome)
 
 
@@ -443,7 +549,7 @@ def verify_selection_receipt_snapshot(receipt: dict[str, Any], snapshot: dict[st
     result = verify_selection_receipt(receipt)
     expected = receipt_from_snapshot(snapshot, termination=receipt.get("termination"),
                                      outcome=receipt.get("outcome"))
-    for field in ("envelope", "actions", "selections", "provider_refusals", "semantic_verification", "evidence_failures", "outcome"):
+    for field in ("envelope", "actions", "selections", "provider_refusals", "semantic_verification", "evidence_failures", "outcome", "local_agent_observations"):
         if canonical_bytes(receipt.get(field)) != canonical_bytes(expected.get(field)):
             raise V9ReceiptError(f"v9_ledger_{field}_mismatch")
     return result

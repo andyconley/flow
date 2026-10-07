@@ -65,6 +65,28 @@ class OllamaManagerTests(unittest.TestCase):
                          ["logical-editor"])
         self.assertNotIn("enum", MANAGER_RESPONSE_SCHEMA["properties"]["next_speaker"]["properties"]["answer"])
 
+    @patch("ollama_manager.call_local")
+    def test_native_progress_forwards_actual_roles_with_same_schema(self, local) -> None:
+        from runner_limits import resolve_local_agent_budget
+        messages=[{'role':'user','content':'task'}, {'role':'assistant','content':'observed result'},
+                  {'role':'user','content':'current stock progress request'}]
+        local.return_value={'output':json.dumps(PROGRESS)}
+        call_ollama_manager(messages, model='local-model', attempt_id='a',
+                            native_messages=messages, local_agent_profile=resolve_local_agent_budget())
+        self.assertEqual(local.call_args.kwargs['chat_messages'],messages)
+        self.assertEqual(local.call_args.kwargs['response_schema'],MANAGER_RESPONSE_SCHEMA)
+
+    @patch("ollama_manager.call_local")
+    def test_native_nonprogress_does_not_inject_progress_instructions(self, local) -> None:
+        from runner_limits import resolve_local_agent_budget
+        messages=[{'role':'user','content':'Final stock phase request'}]
+        local.return_value={'output':'Actual final narrative'}
+        result=call_ollama_manager(messages,model='local-model',attempt_id='a', phase='final',
+            native_messages=messages, local_agent_profile=resolve_local_agent_budget())
+        self.assertEqual(result['output'],'Actual final narrative')
+        self.assertIsNone(local.call_args.kwargs['response_schema'])
+        self.assertNotIn('Return exactly one JSON',local.call_args.args[0]['instructions'])
+
     def test_malformed_or_wrong_model_response_fails_closed(self) -> None:
         with self.assertRaisesRegex(ContractError, "not exact Magentic progress"):
             call_ollama_manager([{"role": "user", "content": "x"}], model="local-model",
