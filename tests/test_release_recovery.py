@@ -140,6 +140,33 @@ class PublicationReconciliationTests(unittest.TestCase):
 
 
 class PublicReleaseReadbackTests(unittest.TestCase):
+    def test_metadata_read_uses_optional_read_token_without_exporting_to_children(self) -> None:
+        import io
+        from release_candidate import _clean_env
+        payload = {'tag_name':'v0.22.0', 'body':'Verified notes',
+            'html_url':'https://github.com/andyconley/flow/releases/tag/v0.22.0'}
+        with unittest.mock.patch.dict('os.environ', {'FLOW_RELEASE_READ_TOKEN':'test-read-token'}), \
+                unittest.mock.patch.object(release_verify_published.urllib.request, 'urlopen',
+                    return_value=io.BytesIO(json.dumps(payload).encode())) as opened:
+            release_verify_published._release_body('andyconley/flow', 'v0.22.0', None)
+            request = opened.call_args.args[0]
+            self.assertEqual(request.get_header('Authorization'), 'Bearer test-read-token')
+            self.assertEqual(request.get_method(), 'GET')
+            self.assertNotIn('FLOW_RELEASE_READ_TOKEN', _clean_env())
+            with unittest.mock.patch.object(release_verify_published, '_run', return_value=(0, 'read')) as child:
+                release_verify_published._checked(['git', 'read'], cwd=REPO_ROOT)
+                self.assertNotIn('FLOW_RELEASE_READ_TOKEN', child.call_args.kwargs['env'])
+
+    def test_metadata_read_can_remain_anonymous(self) -> None:
+        import io
+        payload = {'tag_name':'v0.22.0', 'body':'Verified notes',
+            'html_url':'https://github.com/andyconley/flow/releases/tag/v0.22.0'}
+        with unittest.mock.patch.dict('os.environ', {}, clear=True), \
+                unittest.mock.patch.object(release_verify_published.urllib.request, 'urlopen',
+                    return_value=io.BytesIO(json.dumps(payload).encode())) as opened:
+            release_verify_published._release_body('andyconley/flow', 'v0.22.0', None)
+            self.assertIsNone(opened.call_args.args[0].get_header('Authorization'))
+
     def test_release_fixture_requires_tag_url_and_nonempty_notes(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             fixture = Path(raw) / "release.json"

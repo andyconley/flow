@@ -56,6 +56,7 @@ def _clean_env(home: Path | None = None) -> dict[str, str]:
     for name in (
         "GITHUB_TOKEN",
         "GH_TOKEN",
+        "FLOW_RELEASE_READ_TOKEN",
         "GIT_ASKPASS",
         "SSH_ASKPASS",
         "GIT_DIR",

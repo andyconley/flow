@@ -444,6 +444,10 @@ jobs:
           path: .release
 
       - name: Verify public release and consumer paths
+        env:
+          # This job inherits contents: read; the token is used only by the
+          # release metadata GET and stripped from consumer subprocesses.
+          FLOW_RELEASE_READ_TOKEN: ${{ github.token }}
         run: >-
           python3 scripts/release_verify_published.py
           --plan .release/release-plan.json

@@ -28,7 +28,7 @@ from release_gate import (
 
 
 def _checked(argv: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> str:
-    code, output = _run(argv, cwd=cwd, env=env)
+    code, output = _run(argv, cwd=cwd, env=_clean_env() if env is None else env)
     if code:
         raise ContractError(f"{' '.join(argv)} failed:\n{output}")
     return output.strip()
@@ -39,9 +39,12 @@ def _release_body(repository: str, tag: str, fixture: Path | None) -> tuple[str,
         payload = json.loads(fixture.read_text(encoding="utf-8"))
     else:
         url = f"https://api.github.com/repos/{repository}/releases/tags/{urllib.parse.quote(tag, safe='')}"
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "flow-release-verifier"}
+        if token := os.environ.get("FLOW_RELEASE_READ_TOKEN"):
+            headers["Authorization"] = f"Bearer {token}"
         request = urllib.request.Request(
             url,
-            headers={"Accept": "application/vnd.github+json", "User-Agent": "flow-release-verifier"},
+            headers=headers,
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
