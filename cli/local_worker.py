@@ -17,6 +17,7 @@ from delivery_cancel import interruptible, run_interruptibly
 from execution_contracts import ContractError
 from verifier_contracts import VERIFIER_OUTPUT_SCHEMA
 from runner_limits import resolve_local_agent_budget
+from local_machine import load_local_machine, check_local_compatibility
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MAX_RESPONSE_BYTES = 131072
@@ -70,7 +71,6 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
     """
     profile = (resolve_local_agent_budget(local_agent_profile)
                if local_agent_profile is not None else None)
-    from local_machine import load_local_machine, check_local_compatibility
     machine = load_local_machine()
     check_local_compatibility(profile or machine, model=envelope['model'], machine=machine)
     if profile and timeout_seconds is None:

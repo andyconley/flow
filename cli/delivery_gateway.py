@@ -29,6 +29,7 @@ from execution_contracts import (MANAGER_IDENTITY_FIELDS, TERMINAL_UNCERTAIN_STA
                                  expected_replan_id, validate_action, validate_manager_call,
                                  validate_result, validate_receipt, validate_envelope)
 from execution_ledger import ExecutionLedger, utc_now
+from execution_budgets import remaining_runtime, seal_runtime_budget
 from delivery_control import DeliveryControlError, delivery_authority_guard
 from delivery_projection import lead_claim_active
 import delivery_termination
@@ -2670,7 +2671,6 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         return {**result, "summary": summary}
 
     try:
-        from execution_budgets import remaining_runtime
         outcome = (supervisor or run_maf_v9_delivery)(
             envelope, task, on_worker, on_manager=on_manager,
             completed_assignments=sorted(completed), python_path=python_path,
@@ -2866,7 +2866,6 @@ def prepare_v9_chartered_delivery(work_id: str, worktree: Path, source_commit: s
         else:
             envelope["limits"]["max_actions"] = None
     declared_assignments = json.loads(manifest.read_text()).get("assignments", [])
-    from execution_budgets import seal_runtime_budget
     envelope["runtime_budget"] = seal_runtime_budget(projected_limits["max_runtime_seconds"], sealed_at)
     envelope["call_budgets"] = {
         item["id"]: (item.get("execution") or {}).get("timeout_seconds", projected_limits["max_runtime_seconds"])
@@ -3396,7 +3395,6 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
     def send(binding: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
         nonlocal native
         pre_send_check(binding, action)
-        from execution_budgets import remaining_runtime
         import math
         remaining = remaining_runtime(envelope)
         if binding["provider"] == "ollama" and envelope.get("local_agent_profile"):
