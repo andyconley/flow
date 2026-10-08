@@ -112,7 +112,7 @@ class BudgetAuthorityTests(unittest.TestCase):
         self.assertEqual(catalog,original)
         self.assertFalse(projected[0]['enabled'])
         self.assertEqual(projected[0]['operations'],['verify'])
-        self.assertEqual(projected[0]['max_context_tokens'],32768)
+        self.assertEqual(projected[0]['max_context_tokens'],12288)
         self.assertEqual(projected[0]['max_input_bytes'],1000)
         self.assertEqual(projected[1:],original[1:])
 
@@ -236,3 +236,17 @@ class MixedDefaultPipelineTests(unittest.TestCase):
 
     def test_claude_producer_local_reviewer_uses_normal_gateway(self):
         self.exercise('claude','ollama')
+
+    def test_recomputed_receipt_cannot_bind_review_to_different_current_source(self):
+        from verifier_contracts import evaluate_candidate
+        receipt=self.exercise('codex','ollama')
+        bad=copy.deepcopy(receipt)
+        item=bad['semantic_verification'][0]
+        item['input']['source_digest']='0'*64
+        item['input_digest']=digest(item['input'])
+        item['evaluation']=evaluate_candidate(action_id=item['action_id'],
+            verifier_input_digest=item['input_digest'],raw_output=item['result']['output'],
+            diff_digest=item['diff_digest'],test_evidence_digest=item['test_digest'])
+        bad.pop('receipt_digest')
+        bad['receipt_digest']=digest(bad)
+        with self.assertRaises(V9ReceiptError):verify_selection_receipt(bad)

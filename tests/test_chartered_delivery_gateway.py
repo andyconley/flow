@@ -1547,15 +1547,20 @@ class ProviderRouteTests(unittest.TestCase):
                 "execution_protocol_version": 8,
                 "attempt_id": "attempt",
                 "roster": [{"assignment_id": "editor", "instructions": "do task", "model": "gpt-test",
-                            "provider": "codex"}],
+                            "provider": "codex", "timeout_seconds": 900}],
                 "job_contract": {"verifier_instance_ids": []},
                 "limits": {"max_runtime_seconds": 900},
             }
             action = {"action_id": "action", "assignment_id": "editor", "instance_id": "editor",
                       "provider": "codex", "task": "edit"}
-            with patch("delivery_gateway.call_codex", return_value={"provider": "codex"}) as codex:
+            with patch("delivery_gateway.call_codex", return_value={"provider": "codex", "timeout_seconds": 900}) as codex:
                 _default_worker_adapter(action, envelope=envelope, workspace=workspace)
                 self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 900)
+                # A historical envelope without a sealed per-call budget keeps
+                # its old adapter bound; explicit successor budgets remove it.
+                envelope["roster"][0].pop("timeout_seconds")
+                _default_worker_adapter(action, envelope=envelope, workspace=workspace)
+                self.assertEqual(codex.call_args.kwargs["timeout_seconds"], 600)
 
 
 class V9CharteredRouteTests(CharteredFixture):

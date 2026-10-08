@@ -2069,7 +2069,7 @@ def _default_manager_adapter(message: dict[str, Any], *, envelope: dict[str, Any
     prompt = render_manager_prompt(message["messages"])
     if on_process_group is not None and isinstance(message.get("call_id"), str):
         on_process_group = partial(on_process_group, row_id=message["call_id"])
-    timeout_seconds = envelope["manager"].get("timeout_seconds", envelope.get("limits", {}).get("max_runtime_seconds", 120))
+    timeout_seconds = envelope["manager"].get("timeout_seconds", min(120, envelope.get("limits", {}).get("max_runtime_seconds", 120)))
     if envelope["manager"].get("provider", "claude") == "claude":
         result = call_claude(instructions="stock Magentic manager", task="model response",
                              prompt_override=prompt, workspace=workspace,
@@ -2105,7 +2105,7 @@ def _default_worker_adapter(action: dict[str, Any], *, envelope: dict[str, Any],
         on_process_group = partial(on_process_group, row_id=action["action_id"])
     # Call deadlines are approved task budgets, independent of model context.
     # Legacy local transports retain their historic cancellation semantics.
-    timeout_seconds = assignment.get("timeout_seconds", envelope.get("limits", {}).get("max_runtime_seconds", 600))
+    timeout_seconds = assignment.get("timeout_seconds", min(600, envelope.get("limits", {}).get("max_runtime_seconds", 600)))
     if action["provider"] == "ollama":
         structured = (envelope["execution_protocol_version"] == 8
                       and action["instance_id"] in envelope["job_contract"]["verifier_instance_ids"])
@@ -2148,6 +2148,12 @@ def execute_v9_selected_action(envelope: dict[str, Any], action: dict[str, Any],
     adapter boundary: selection reservation, provider-send claim, and result
     closure are ledger-owned.  Existing v8 dispatch never reaches this path.
     """
+    pre_send_check = getattr(adapter_send, "pre_send_check", None)
+    original_recheck = readiness_recheck
+    if callable(pre_send_check):
+        def readiness_recheck(binding):
+            pre_send_check(binding, action)
+            return original_recheck(binding)
     return authorize_v9_and_dispatch(
         envelope, action, adapter_send, readiness_recheck=readiness_recheck,
         ledger=ledger, generation=generation,
@@ -2527,8 +2533,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             if envelope.get("local_agent_profile"):
                 bounded_task += ("\nFlow observed passing tests: " + test_evidence["output_excerpt"]
                                  + "\nCurrent source diff SHA-256: " + edit_evidence["diff_sha256"]
-                                 + "\nRead the actual current source using read_files, rerun run_tests, "
-                                 "then call submit_review with your independent findings.")
+                                 + "\nRead the actual current source and report independent findings "
+                                 "in the required verifier output format.")
         input_limit = selected_assignment["requirements"]["input_bytes"]
         if len(bounded_task.encode()) > input_limit:
             raise ContractError("logical v9 evidence-bearing task exceeds assignment input limit")
@@ -2657,12 +2663,13 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
         return {**result, "summary": summary}
 
     try:
+        from execution_budgets import remaining_runtime
         outcome = (supervisor or run_maf_v9_delivery)(
             envelope, task, on_worker, on_manager=on_manager,
             completed_assignments=sorted(completed), python_path=python_path,
             coordination_epoch=dispatch_sequence_base,
-            **({"timeout_s": envelope["limits"]["max_runtime_seconds"]}
-               if "max_runtime_seconds" in envelope["limits"] else {}))
+            **({"timeout_s": remaining_runtime(envelope)}
+               if "runtime_budget" in envelope else {}))
     except ProviderCandidatesExhausted as exhausted:
         return exhausted.result
     except (ContractError, MafChildError) as exc:
@@ -3043,7 +3050,8 @@ def local_agent_selection_inputs(catalog: list[dict[str, Any]], policy: dict[str
         # Candidates with an explicitly smaller context cannot run this profile.
         if candidate.get("max_context_tokens", profile["context_tokens"]) < profile["context_tokens"]:
             candidate["enabled"] = False
-        candidate.setdefault("max_context_tokens", profile["context_tokens"])
+        candidate["max_context_tokens"] = min(candidate.get("max_context_tokens", profile["context_tokens"]),
+                                               profile["context_tokens"])
         candidate.setdefault("max_input_bytes", 4*1024*1024)
         candidate.setdefault("max_output_bytes", profile["output_tokens"]*8)
         native.append(candidate)
@@ -3368,8 +3376,19 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
     source_commit = envelope.get("source_commit") or _git(workspace, "rev-parse", "HEAD")
     assignment_by_id = {item["assignment_id"]: item for item in envelope["logical_assignments"]}
 
+    def pre_send_check(binding, action):
+        if binding["provider"] == "ollama":
+            from local_machine import load_local_machine, check_local_compatibility
+            assignment = assignment_by_id.get(action["assignment_id"])
+            if assignment is None:
+                raise ContractError("v9 action has no logical assignment")
+            profile = envelope.get("local_agent_profile") or load_local_machine()
+            check_local_compatibility(profile, model=binding["model"],
+                required_context=assignment["requirements"].get("context_tokens", 0))
+
     def send(binding: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
         nonlocal native
+        pre_send_check(binding, action)
         from execution_budgets import remaining_runtime
         import math
         remaining = remaining_runtime(envelope)
@@ -3397,11 +3416,14 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                 task += "\nnext_speaker.answer must be exactly one of " + canonical(frontier)
                 task += ". Set is_request_satisfied.answer=false while required assignments remain."
         if provider == "ollama":
+            # Historic non-retained envelopes had cancellation without a
+            # per-call deadline. Only newly sealed call/runtime authority adds it.
+            local_timeout = timeout if "call_budgets" in envelope or "runtime_budget" in envelope else None
             if operation == "edit":
                 try:
                     bundle = ollama_source_bundle(workspace, write_paths)
                     proposal = propose_ollama_edits(bundle, task, model=model,
-                                                    attempt_id=action["attempt_id"], timeout_seconds=timeout)
+                                                    attempt_id=action["attempt_id"], timeout_seconds=local_timeout)
                     applied = apply_ollama_edits(workspace, bundle, proposal, write_scopes=write_paths,
                                                   expected_model=model)
                 except ContractError as exc:
@@ -3417,12 +3439,12 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                 except json.JSONDecodeError as exc:
                     raise ContractError("logical manager task has an invalid speaker frontier") from exc
                 return call_ollama_manager([{"role": "user", "content": task}], model=model,
-                                           attempt_id=action["attempt_id"], timeout_seconds=timeout,
+                                           attempt_id=action["attempt_id"], timeout_seconds=local_timeout,
                                            preserve_observed_invalid=True,
                                            allowed_speakers=allowed_speakers)
             return call_local({"provider": provider, "model": model, "attempt_id": action["attempt_id"],
                                "instructions": instructions, "task": task},
-                              correlation_id=action["action_id"], timeout_seconds=timeout)
+                              correlation_id=action["action_id"], timeout_seconds=local_timeout)
         if provider == "claude":
             if operation == "edit":
                 return _hosted_scoped_edit(
@@ -3460,6 +3482,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
         if native is not None:
             native.close()
     send.close = close
+    send.pre_send_check = pre_send_check
     return send
 
 

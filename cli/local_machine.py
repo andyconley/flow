@@ -28,9 +28,11 @@ def new_local_profile_settings():
     return {name: settings[name] for name in ('context_tokens', 'output_tokens', 'context_reserve')}
 
 
-def check_local_compatibility(profile, *, model=None, machine=None):
+def check_local_compatibility(profile, *, model=None, machine=None, required_context=0):
     """Refuse incompatible sealed work without rewriting its approved authority."""
     machine = load_local_machine() if machine is None else machine
+    if required_context > profile['context_tokens']:
+        raise ContractError('sealed assignment context exceeds effective local context; explicit successor approval required')
     if profile['context_tokens'] > machine['max_context_tokens']:
         raise ContractError('sealed local context exceeds machine capacity; explicit successor approval required')
     if model is not None and machine['model'] and model != machine['model']:

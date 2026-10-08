@@ -418,6 +418,8 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                 source_bound = False
                 continue
             item = semantic_by_action.get(action["action_id"], {})
+            if "source_digest" in item.get("input", {}):
+                source_bound = source_bound and item["input"]["source_digest"] == current_source
             if action["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}:
                 # Hosted verification remains bound to the Flow-observed diff
                 # and tests above, after the latest source edit. Native tool

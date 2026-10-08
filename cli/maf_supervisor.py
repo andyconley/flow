@@ -575,6 +575,8 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
     """Supervise one stock Magentic workflow; Flow authorizes each callback."""
     profile = (resolve_local_agent_budget(envelope['local_agent_profile'])
                if 'local_agent_profile' in envelope else None)
+    if profile and timeout_s == 900 and 'runtime_budget' not in envelope:
+        timeout_s = profile['turn_timeout_seconds']
     call_limit = profile['manager_calls'] if profile else MAX_MANAGER_CALLS
     action_limit = profile['delegations'] if profile else MAX_ACTIONS
     transport_limit = 4 * 1024 * 1024 if profile else MAX_LINE_BYTES

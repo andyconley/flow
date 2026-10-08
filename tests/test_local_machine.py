@@ -58,3 +58,38 @@ class MachineProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(ContractError,'capacity'):
                 call_local(ENVELOPE,local_agent_profile=profile)
             opener.assert_not_called()
+
+class SealedDispatchCapacityTests(unittest.TestCase):
+    def test_catalog_narrows_context_without_replacing_hosted_candidates(self):
+        from delivery_gateway import local_agent_selection_inputs
+        from tests.test_delivery_selection import _envelope
+        catalog=copy.deepcopy(_envelope()['selection_inputs']['catalog'])
+        original=copy.deepcopy(catalog)
+        native,policy=local_agent_selection_inputs(catalog,{'excluded_candidates':['codex']},resolve_local_agent_budget())
+        self.assertEqual(catalog,original)
+        self.assertEqual(native[0]['max_context_tokens'],12288)
+        self.assertEqual(native[1:],original[1:])
+        self.assertEqual(policy,{'excluded_candidates':['codex']})
+
+    def test_incompatible_assignment_is_refused_before_physical_send_claim(self):
+        from delivery_gateway import _v9_adapter_for_operation, execute_v9_selected_action
+        from delivery_selection import make_action
+        from execution_ledger import ExecutionLedger
+        from tests.test_delivery_selection import _envelope
+        envelope=_envelope(allowed_candidates=['local'])
+        envelope['local_agent_profile']=resolve_local_agent_budget()
+        original=copy.deepcopy(envelope)
+        with tempfile.TemporaryDirectory() as directory:
+            envelope['worktree']=directory;envelope['source_commit']='a'*40
+            ledger=ExecutionLedger(Path(directory)/'ledger.sqlite');ledger.create_attempt(envelope)
+            adapter=_v9_adapter_for_operation(envelope,read_paths=['app.py'],write_paths=['app.py'])
+            action=make_action(envelope,'producer','approved task',sequence=1,manager_turn=1)
+            with patch('delivery_gateway.NativeLocalAdapter') as native:
+                with self.assertRaisesRegex(ContractError,'assignment context exceeds'):
+                    execute_v9_selected_action(envelope,action,adapter,ledger=ledger,generation=1,
+                        readiness_recheck=lambda binding:{**binding,'state':'ready'})
+                native.assert_not_called()
+            snapshot=ledger.snapshot(envelope['attempt_id'])
+            self.assertFalse(any(row['status']=='started' for row in snapshot['actions']))
+            self.assertEqual(envelope['selection_inputs'],original['selection_inputs'])
+            self.assertEqual(envelope['local_agent_profile'],original['local_agent_profile'])
