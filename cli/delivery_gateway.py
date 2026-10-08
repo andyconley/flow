@@ -811,9 +811,11 @@ def _verify_chartered_edit(worktree: Path, baseline: dict[str, Any], attempt_dir
 
 def _run_chartered_test(worktree: Path, job: dict[str, Any], *,
                         on_process_group: Callable[[int, str], None] | None = None,
-                        return_failure_evidence: bool = False) -> dict[str, Any]:
+                        return_failure_evidence: bool = False,
+                        native_local: bool | None = None) -> dict[str, Any]:
     """Run the charter's targeted test in its own process group, killed whole on timeout."""
-    test = _job_test(job["test"], native_local=bool(job.get("local_agent_profile")))
+    test = _job_test(job["test"], native_local=(bool(job.get("local_agent_profile"))
+                    if native_local is None else native_local))
     process = subprocess.Popen(test["argv"], cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, start_new_session=True)
     try:
@@ -2419,7 +2421,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             if job is None or baseline is None:
                 raise ContractError("logical v9 continuation evidence contract is absent")
             edit_evidence = _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job)
-            test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
+            test_evidence = _run_chartered_test(Path(envelope["worktree"]), job,
+                native_local=bool(envelope.get("local_agent_profile")))
             if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
                 raise ContractError("chartered test changed the resumed v9 worktree diff")
     action_by_id = {item["request"]["action_id"]: item["request"] for item in prior_actions}
@@ -2533,10 +2536,11 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
             if edit_evidence is None or test_evidence is None:
                 raise ContractError("logical v9 verifier selected before Flow captured edit and test evidence")
             bounded_task = verifier_provider_task(
-                bounded_task, (attempt_dir / "repair.diff").read_text(),
+                bounded_task, "" if envelope.get("local_agent_profile") else (attempt_dir / "repair.diff").read_text(),
                 edit_evidence["diff_sha256"], structured=True,
                 test_output=test_evidence["output_excerpt"],
                 authority_statement=VERIFIED_HANDOFF_AUTHORITY,
+                source_tools=bool(envelope.get("local_agent_profile")),
             )
             if envelope.get("local_agent_profile"):
                 bounded_task += ("\nFlow observed passing tests: " + test_evidence["output_excerpt"]
@@ -2584,7 +2588,8 @@ def execute_v9_logical_delivery(envelope: dict[str, Any], task: str, ledger: Exe
                 raise ProviderCandidatesExhausted({"attempt_id": envelope["attempt_id"], "status": "failed",
                         "reason": "edit_scope_validation_failed", **sealed})
             try:
-                test_evidence = _run_chartered_test(Path(envelope["worktree"]), job)
+                test_evidence = _run_chartered_test(Path(envelope["worktree"]), job,
+                    native_local=bool(envelope.get("local_agent_profile")))
                 if _verify_chartered_edit(Path(envelope["worktree"]), baseline, attempt_dir, job) != edit_evidence:
                     raise ContractError("chartered test changed the verified v9 worktree diff")
             except ContractError as exc:
@@ -3407,6 +3412,10 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
         operation = assignment["requirements"]["operation"]
         provider, model = binding["provider"], binding["model"]
         instructions, task = assignment["instructions"], action["task"]
+        # Retained verifiers review source through tools, including edits that
+        # the charter permits separately from its general read scopes.
+        scoped_read_paths = (sorted(set(read_paths + write_paths))
+            if operation == "verify" and envelope.get("local_agent_profile") else read_paths)
         # Hosted calls use the sealed per-assignment budget. Native local
         # sessions separately bind context, request and turn budgets.
         timeout = envelope.get("call_budgets", {}).get(action["assignment_id"],
@@ -3460,7 +3469,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                         model=model, timeout_seconds=timeout, confine_workspace_reads=True),
                 )
             return _hosted_scoped_read(
-                workspace, read_paths=read_paths,
+                workspace, read_paths=scoped_read_paths,
                 invoke=lambda staging: call_claude(
                     instructions=instructions, task=task, workspace=staging,
                     model=model, timeout_seconds=timeout, confine_workspace_reads=True),
@@ -3476,7 +3485,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                         confine_workspace_reads=True),
                 )
             return _hosted_scoped_read(
-                workspace, read_paths=read_paths,
+                workspace, read_paths=scoped_read_paths,
                 invoke=lambda staging: call_codex(
                     instructions=instructions, task=task, workspace=staging, model=model,
                     timeout_seconds=timeout, sandbox="read-only", confine_workspace_reads=True),

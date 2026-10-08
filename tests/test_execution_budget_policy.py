@@ -148,14 +148,76 @@ class BudgetAuthorityTests(unittest.TestCase):
                 gateway.execute_v9_selected_action(envelope, second, lambda *_: self.fail('must not send'),
                     readiness_recheck=lambda binding: {**binding, 'state': 'ready'}, ledger=ledger, generation=1)
 
+    def test_local_worker_consumes_shared_allowance_before_hosted_verifier(self):
+        envelope = _envelope(excluded_families=['local'])
+        envelope['local_agent_profile'] = resolve_local_agent_budget()
+        envelope['limits'].update(max_manager_calls=20, max_delegations=1,
+            max_verifier_calls=20, max_paid_worker_calls=20, max_lineage_tokens=100000,
+            token_tranche=100000, unobserved_send_tokens=1000)
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = ExecutionLedger(Path(directory)/'ledger.sqlite')
+            ledger.create_attempt(envelope)
+            first = make_action(envelope, 'producer', 'Approved edit', sequence=1, manager_turn=1)
+            self.assertEqual(first['selection_decision']['selected_binding']['provider'], 'ollama')
+            gateway.execute_v9_selected_action(envelope, first, lambda *_: {'output': 'observed'},
+                readiness_recheck=lambda binding: {**binding, 'state': 'ready'}, ledger=ledger, generation=1)
+            second = make_action(envelope, 'verifier', 'Independent review', sequence=2, manager_turn=2)
+            self.assertIn(second['selection_decision']['selected_binding']['provider'], {'claude','codex'})
+            with self.assertRaisesRegex(ContractError, 'operation budget exhausted'):
+                gateway.execute_v9_selected_action(envelope, second, lambda *_: self.fail('must not send'),
+                    readiness_recheck=lambda binding: {**binding, 'state': 'ready'}, ledger=ledger, generation=1)
+
+
+    def test_local_manager_consumes_shared_allowance_before_hosted_successor(self):
+        envelope = _envelope()
+        envelope['local_agent_profile'] = resolve_local_agent_budget()
+        envelope['limits'].update(max_manager_calls=1, max_delegations=20,
+            max_verifier_calls=20, max_paid_worker_calls=20, max_lineage_tokens=100000,
+            token_tranche=100000, unobserved_send_tokens=1000)
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = ExecutionLedger(Path(directory)/'ledger.sqlite')
+            ledger.create_attempt(envelope)
+            first = make_action(envelope, 'manager', 'Coordinate', sequence=1, manager_turn=1)
+            self.assertEqual(first['selection_decision']['selected_binding']['provider'], 'ollama')
+            gateway.execute_v9_selected_action(envelope, first, lambda *_: {'output': 'observed'},
+                readiness_recheck=lambda binding: {**binding, 'state': 'ready'}, ledger=ledger, generation=1)
+            second = make_action(envelope, 'manager', 'Coordinate again', sequence=2, manager_turn=2)
+            refused = gateway.execute_v9_selected_action(envelope, second, lambda *_: self.fail('must not send'),
+                readiness_recheck=lambda binding: {**binding, 'state':'unavailable',
+                    'no_send_observed':True,'evidence_code':'unavailable'}, ledger=ledger, generation=1)
+            self.assertEqual(refused['status'],'pre_send_refused')
+            successor = make_action(envelope,'manager',second['task'],sequence=2,manager_turn=2,
+                decision=refused['successor_decision'])
+            self.assertIn(successor['selection_decision']['selected_binding']['provider'],{'claude','codex'})
+            with self.assertRaisesRegex(ContractError,'operation budget exhausted'):
+                gateway.execute_v9_selected_action(envelope,successor,lambda *_:self.fail('must not send'),
+                    readiness_recheck=lambda binding:{**binding,'state':'ready'},ledger=ledger,generation=1,
+                    predecessor_selection_id=second['selection_id'])
+
 
 class MixedDefaultPipelineTests(unittest.TestCase):
-    def exercise(self, producer, reviewer):
+    def exercise(self, producer, reviewer, *, large_edit=False, native_discovery=False,
+                 split_scopes=False):
         fixture = fixtures.CharteredFixture(methodName='runTest')
         # Use new default authority, rather than the historical fixture helper.
         with patch.object(fixtures, 'build_shaper_contract', build_shaper_contract):
             fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        edited_source = ('new_' * 10000 + '\n') if large_edit else 'new\n'
+        if split_scopes:
+            fixture.charter['read_paths'] = ['tests']
+        if large_edit or native_discovery:
+            import subprocess
+            if large_edit:
+                (fixture.worktree/'target.py').write_text('old_' * 10000 + '\n')
+            if native_discovery:
+                (fixture.worktree/'test_native.py').write_text((fixture.worktree/'tests/test_target.py').read_text())
+                fixture.charter['test']['argv'] = ['python3','-m','unittest','discover','-s','.','-p','test_*.py']
+            subprocess.run(['git','add','--all'],cwd=fixture.worktree,check=True)
+            subprocess.run(['git','commit','-qm','Regression fixture source'],cwd=fixture.worktree,check=True)
+            fixture.commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=fixture.worktree,text=True).strip()
         fixture.intent['budget_safety_envelope']['enforceable']['runtime_seconds'] = 3600
         (fixture.run/'shaper-intent.json').write_text(json.dumps(fixture.intent))
         with patch.object(fixtures, 'build_shaper_contract', build_shaper_contract):
@@ -182,6 +244,7 @@ class MixedDefaultPipelineTests(unittest.TestCase):
         for item in fixture.manifest['assignments']:
             item['execution']['timeout_seconds'] = 1800
         fixture._write_inputs()
+        self.assertNotIn('local_agent_profile',fixture.charter)
         with patch.object(gateway,'run_status',return_value=fixture.state), \
              patch.object(gateway,'validate_orchestration',return_value=(True,None,[])):
             envelope,task,directory,ledger = gateway.prepare_v9_chartered_delivery('sample',fixture.worktree,
@@ -201,11 +264,18 @@ class MixedDefaultPipelineTests(unittest.TestCase):
                     'is_progress_being_made':{'answer':True},'next_speaker':{'answer':allowed[0],'reason':'approved frontier'},
                     'instruction_or_question':{'answer':'Complete approved assignment'}})}
             if options.get('sandbox')=='workspace-write' or producer=='claude' and reviewer!='claude':
-                (options['workspace']/'target.py').write_text('new\n')
+                (options['workspace']/'target.py').write_text(edited_source)
                 return {'output':'Applied observed edit'}
+            if split_scopes:
+                self.assertEqual((options['workspace']/'target.py').read_text(),edited_source)
+                self.assertTrue((options['workspace']/'tests/test_target.py').is_file())
             return {'output':json.dumps({'schema_version':1,'decision':'pass','summary':'Current diff and tests reviewed','findings':[]})}
         def native(pool,identity,instructions,task,callback,**options):
             calls.append(('local',options['request_timeout']))
+            if identity=='verifier' and large_edit:
+                self.assertLess(len(task.encode()),65536)
+                self.assertNotIn(edited_source,task)
+                self.assertIn('actual current source',task)
             tools=[]
             def tool(name,args):
                 result=callback(name,args)
@@ -213,7 +283,7 @@ class MixedDefaultPipelineTests(unittest.TestCase):
                 return result
             if identity=='producer':
                 tool('read_files',{'paths':['target.py']})
-                tool('write_file',{'path':'target.py','content':'new\n'})
+                tool('write_file',{'path':'target.py','content':edited_source})
                 tool('run_tests',{})
             else:
                 tool('read_files',{'paths':['target.py']})
@@ -226,12 +296,17 @@ class MixedDefaultPipelineTests(unittest.TestCase):
              patch.object(gateway,'call_claude_edit',side_effect=hosted), \
              patch.object(LocalAgentPool,'run',autospec=True,side_effect=native):
             result=gateway.execute_v9_logical_delivery(envelope,task,ledger,
-                gateway._v9_adapter_for_operation(envelope,read_paths=['target.py'],write_paths=['target.py']),
+                gateway._v9_adapter_for_operation(envelope,read_paths=fixture.charter['read_paths'],write_paths=['target.py']),
                 readiness_recheck=lambda binding:{**binding,'state':'ready'},supervisor=coordinate)
         self.assertEqual(result['status'],'completed',repr(result)+' '+repr([e for e in ledger.snapshot(envelope['attempt_id'])['events'] if e['event']=='v9_evidence_failed']))
         receipt=json.loads(Path(result['receipt_path']).read_text())
         verify_selection_receipt(receipt)
-        self.assertEqual((fixture.worktree/'target.py').read_text(),'new\n')
+        self.assertEqual((fixture.worktree/'target.py').read_text(),edited_source)
+        if large_edit:
+            self.assertGreater((directory/'repair.diff').stat().st_size,65536)
+        if native_discovery:
+            snapshot=json.loads((directory/'job-charter.snapshot.json').read_text())
+            self.assertNotIn('local_agent_profile',snapshot)
         self.assertIn(('hosted',1800),calls)
         self.assertIn(('local',1800),calls)
         selected={a['assignment_id']:a['selection_decision']['selected_binding']['provider'] for a in receipt['actions']}
@@ -250,6 +325,17 @@ class MixedDefaultPipelineTests(unittest.TestCase):
 
     def test_claude_producer_local_reviewer_uses_normal_gateway(self):
         self.exercise('claude','ollama')
+
+    def test_large_diff_keeps_native_verifier_prompt_within_approved_input(self):
+        self.exercise('codex','ollama',large_edit=True)
+
+    def test_omitted_job_profile_uses_sealed_native_test_command_authority(self):
+        self.exercise('ollama','codex',native_discovery=True)
+
+    def test_hosted_verifiers_read_edited_files_when_read_and_write_scopes_differ(self):
+        for reviewer in ('codex','claude'):
+            with self.subTest(reviewer=reviewer):
+                self.exercise('ollama',reviewer,split_scopes=True)
 
     def test_recomputed_receipt_cannot_bind_review_to_different_current_source(self):
         from verifier_contracts import evaluate_candidate

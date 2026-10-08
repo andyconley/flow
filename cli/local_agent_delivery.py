@@ -42,7 +42,8 @@ class NativeLocalAdapter:
         self.workspace = LocalAgentWorkspace(self.workspace_root, read_paths=read_paths,
             write_paths=write_paths, artifact_dir=self.artifact_dir,
             assignment_scopes=scopes, authority_callback=self.authority,
-            test_callback=lambda: _run_chartered_test(self.workspace_root, job, return_failure_evidence=True))
+            test_callback=lambda: _run_chartered_test(self.workspace_root, job,
+                return_failure_evidence=True, native_local=True))
         self.pool = LocalAgentPool(runtime_python=envelope['maf_runtime']['interpreter'],
             artifact_dir=self.artifact_dir, source_root=Path(__file__).resolve().parents[1],
             num_ctx=self.profile['context_tokens'], num_predict=self.profile['output_tokens'],
