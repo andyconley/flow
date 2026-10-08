@@ -46,7 +46,7 @@ class MachineProfileTests(unittest.TestCase):
         class Opener:
             def open(self,request,timeout):
                 sent.append(json.loads(request.data));return _Response(json.dumps(payload('ok')).encode())
-        with patch('local_machine.load_local_machine',return_value=settings), patch('local_worker.urllib.request.build_opener',return_value=Opener()):
+        with patch('local_worker.load_local_machine',return_value=settings), patch('local_worker.urllib.request.build_opener',return_value=Opener()):
             call_local(ENVELOPE)
             call_local(ENVELOPE,local_agent_profile=resolve_local_agent_budget({'context_tokens':16384,'output_tokens':3072,'context_reserve':1024}))
         self.assertEqual([r['options']['num_ctx'] for r in sent],[16384,16384])
