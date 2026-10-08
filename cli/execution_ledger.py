@@ -604,12 +604,6 @@ class ExecutionLedger:
                              and status != "observed_not_executed" for r, status, _ in prior)
             provider = action["selection_decision"]["selected_binding"]["provider"]
             operation_limits = limits
-            if "local_agent_profile" in envelope and provider in {"claude", "codex"}:
-                hosted_prior = [(r, status, result) for r, status, result in prior
-                    if r["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}]
-                manager_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "manage" for r, _, _ in hosted_prior)
-                worker_count = len(hosted_prior) - manager_count
-                verifier_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "verify" for r, _, _ in hosted_prior)
             if provider == "ollama" and "local_agent_profile" in envelope:
                 profile = envelope["local_agent_profile"]
                 operation_limits = {**limits, "max_manager_calls": profile["manager_calls"],

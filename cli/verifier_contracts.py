@@ -312,12 +312,22 @@ def validate_structured_verifier_result(result: object) -> dict[str, Any]:
 
 
 def verifier_provider_task(task: str, diff: str, diff_sha256: str, *, structured: bool,
-                           test_output: str = "", authority_statement: str = "") -> str:
+                           test_output: str = "", authority_statement: str = "",
+                           source_tools: bool = False) -> str:
     """Build the exact evidence-bearing verifier input Flow sends and digests."""
-    text = (task + "\n\nFlow-verified complete bounded diff for this review:\n"
-            + diff + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
+    if source_tools:
+        text = (task + "\n\nReview the actual current source using authorized read-only tools."
+                + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
+    else:
+        text = (task + "\n\nFlow-verified complete bounded diff for this review:\n"
+                + diff + "\nTargeted test: passed. Diff SHA-256: " + diff_sha256)
     if test_output:
         text += "\nFlow-retained targeted-test output (bound by the receipt test digest):\n" + test_output
     if authority_statement:
         text += "\nFlow-verified control-plane authority:\n" + authority_statement
-    return text + VERIFIER_CONTRACT_INSTRUCTION if structured else text
+    contract = VERIFIER_CONTRACT_INSTRUCTION
+    if source_tools:
+        contract = contract.replace(
+            "judge only the diff and test result supplied above; do not claim to have inspected anything else.",
+            "inspect the current source through authorized read-only tools and independently review it against the approved job and test evidence.")
+    return text + contract if structured else text
