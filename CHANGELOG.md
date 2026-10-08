@@ -4,6 +4,17 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Preserve shared mixed-provider call limits and review approved edited source, including large edits and native test commands.
+
+
+## [0.42.1](https://github.com/andyconley/flow/compare/v0.42.0...v0.42.1) (2026-10-08)
+
+### Bug Fixes
+
+* preserve retained mixed execution authority ([aa6f4b5](https://github.com/andyconley/flow/commit/aa6f4b576e410767162d8d91783f83dd5f52d7c7))
+
+### Highlights
+
 - Configure machine-local inference context separately from approved runtime budgets, with retained local sessions and source-bound verification.
 
 
