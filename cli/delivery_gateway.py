@@ -3412,6 +3412,10 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
         operation = assignment["requirements"]["operation"]
         provider, model = binding["provider"], binding["model"]
         instructions, task = assignment["instructions"], action["task"]
+        # Retained verifiers review source through tools, including edits that
+        # the charter permits separately from its general read scopes.
+        scoped_read_paths = (sorted(set(read_paths + write_paths))
+            if operation == "verify" and envelope.get("local_agent_profile") else read_paths)
         # Hosted calls use the sealed per-assignment budget. Native local
         # sessions separately bind context, request and turn budgets.
         timeout = envelope.get("call_budgets", {}).get(action["assignment_id"],
@@ -3465,7 +3469,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                         model=model, timeout_seconds=timeout, confine_workspace_reads=True),
                 )
             return _hosted_scoped_read(
-                workspace, read_paths=read_paths,
+                workspace, read_paths=scoped_read_paths,
                 invoke=lambda staging: call_claude(
                     instructions=instructions, task=task, workspace=staging,
                     model=model, timeout_seconds=timeout, confine_workspace_reads=True),
@@ -3481,7 +3485,7 @@ def _v9_adapter_for_operation(envelope: dict[str, Any], *, read_paths: list[str]
                         confine_workspace_reads=True),
                 )
             return _hosted_scoped_read(
-                workspace, read_paths=read_paths,
+                workspace, read_paths=scoped_read_paths,
                 invoke=lambda staging: call_codex(
                     instructions=instructions, task=task, workspace=staging, model=model,
                     timeout_seconds=timeout, sandbox="read-only", confine_workspace_reads=True),

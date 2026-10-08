@@ -198,13 +198,16 @@ class BudgetAuthorityTests(unittest.TestCase):
 
 
 class MixedDefaultPipelineTests(unittest.TestCase):
-    def exercise(self, producer, reviewer, *, large_edit=False, native_discovery=False):
+    def exercise(self, producer, reviewer, *, large_edit=False, native_discovery=False,
+                 split_scopes=False):
         fixture = fixtures.CharteredFixture(methodName='runTest')
         # Use new default authority, rather than the historical fixture helper.
         with patch.object(fixtures, 'build_shaper_contract', build_shaper_contract):
             fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         edited_source = ('new_' * 10000 + '\n') if large_edit else 'new\n'
+        if split_scopes:
+            fixture.charter['read_paths'] = ['tests']
         if large_edit or native_discovery:
             import subprocess
             if large_edit:
@@ -263,6 +266,9 @@ class MixedDefaultPipelineTests(unittest.TestCase):
             if options.get('sandbox')=='workspace-write' or producer=='claude' and reviewer!='claude':
                 (options['workspace']/'target.py').write_text(edited_source)
                 return {'output':'Applied observed edit'}
+            if split_scopes:
+                self.assertEqual((options['workspace']/'target.py').read_text(),edited_source)
+                self.assertTrue((options['workspace']/'tests/test_target.py').is_file())
             return {'output':json.dumps({'schema_version':1,'decision':'pass','summary':'Current diff and tests reviewed','findings':[]})}
         def native(pool,identity,instructions,task,callback,**options):
             calls.append(('local',options['request_timeout']))
@@ -290,7 +296,7 @@ class MixedDefaultPipelineTests(unittest.TestCase):
              patch.object(gateway,'call_claude_edit',side_effect=hosted), \
              patch.object(LocalAgentPool,'run',autospec=True,side_effect=native):
             result=gateway.execute_v9_logical_delivery(envelope,task,ledger,
-                gateway._v9_adapter_for_operation(envelope,read_paths=['target.py'],write_paths=['target.py']),
+                gateway._v9_adapter_for_operation(envelope,read_paths=fixture.charter['read_paths'],write_paths=['target.py']),
                 readiness_recheck=lambda binding:{**binding,'state':'ready'},supervisor=coordinate)
         self.assertEqual(result['status'],'completed',repr(result)+' '+repr([e for e in ledger.snapshot(envelope['attempt_id'])['events'] if e['event']=='v9_evidence_failed']))
         receipt=json.loads(Path(result['receipt_path']).read_text())
@@ -325,6 +331,11 @@ class MixedDefaultPipelineTests(unittest.TestCase):
 
     def test_omitted_job_profile_uses_sealed_native_test_command_authority(self):
         self.exercise('ollama','codex',native_discovery=True)
+
+    def test_hosted_verifiers_read_edited_files_when_read_and_write_scopes_differ(self):
+        for reviewer in ('codex','claude'):
+            with self.subTest(reviewer=reviewer):
+                self.exercise('ollama',reviewer,split_scopes=True)
 
     def test_recomputed_receipt_cannot_bind_review_to_different_current_source(self):
         from verifier_contracts import evaluate_candidate
