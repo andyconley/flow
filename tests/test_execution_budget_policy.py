@@ -44,6 +44,20 @@ class BudgetAuthorityTests(unittest.TestCase):
         self.assertEqual(charter['local_agent_profile']['request_timeout_seconds'], 3600)
         validate_shaper_contract(shaper)
 
+    def test_legacy_role_amendment_does_not_silently_adopt_retention(self):
+        intent=shaper_intent(limits={'runtime_seconds':3600})
+        original=copy.deepcopy(intent)
+        sources={'requirements': {'path':'.flow/runs/old/requirements.md','sha256':'a'*64},
+                 'acceptance_criteria': {'path':'.flow/runs/old/acceptance.md','sha256':'b'*64}}
+        successor=build_shaper_contract('old',sources,intent,approval_event='approve-orchestration-amendment')
+        self.assertNotIn('local_agent_profile',successor)
+        self.assertEqual(successor['budget_safety_envelope'],original['budget_safety_envelope'])
+        self.assertEqual(intent,original)
+        approved=copy.deepcopy(intent)
+        approved['local_agent_profile']=resolve_local_agent_budget({'delegations':6,'manager_calls':12,'manager_rounds':6})
+        adopted=build_shaper_contract('old',sources,approved,approval_event='approve-orchestration-amendment')
+        self.assertEqual(adopted['local_agent_profile'],approved['local_agent_profile'])
+
     def test_old_artifact_inspection_does_not_clamp_or_insert_token_authority(self):
         intent = shaper_intent(limits={'runtime_seconds': 3600})
         for key in ('max_lineage_tokens', 'token_tranche', 'unobserved_send_tokens'):

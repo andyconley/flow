@@ -2152,7 +2152,14 @@ def execute_v9_selected_action(envelope: dict[str, Any], action: dict[str, Any],
     original_recheck = readiness_recheck
     if callable(pre_send_check):
         def readiness_recheck(binding):
-            pre_send_check(binding, action)
+            try:
+                pre_send_check(binding, action)
+            except ContractError:
+                # This check performed no provider I/O. Close the reserved
+                # selection through the ordinary no-send path; any successor
+                # still comes from the unchanged sealed provider permissions.
+                return {**binding, "state": "unavailable", "no_send_observed": True,
+                        "evidence_code": "local_machine_incompatible"}
             return original_recheck(binding)
     return authorize_v9_and_dispatch(
         envelope, action, adapter_send, readiness_recheck=readiness_recheck,

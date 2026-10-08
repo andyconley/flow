@@ -85,11 +85,14 @@ class SealedDispatchCapacityTests(unittest.TestCase):
             adapter=_v9_adapter_for_operation(envelope,read_paths=['app.py'],write_paths=['app.py'])
             action=make_action(envelope,'producer','approved task',sequence=1,manager_turn=1)
             with patch('delivery_gateway.NativeLocalAdapter') as native:
-                with self.assertRaisesRegex(ContractError,'assignment context exceeds'):
-                    execute_v9_selected_action(envelope,action,adapter,ledger=ledger,generation=1,
-                        readiness_recheck=lambda binding:{**binding,'state':'ready'})
+                result=execute_v9_selected_action(envelope,action,adapter,ledger=ledger,generation=1,
+                    readiness_recheck=lambda binding:{**binding,'state':'ready'})
+                self.assertEqual(result['status'],'pre_send_refused')
+                self.assertEqual(result['evidence_code'],'local_machine_incompatible')
+                self.assertIsNone(result['successor_decision']['selected_binding'])
                 native.assert_not_called()
             snapshot=ledger.snapshot(envelope['attempt_id'])
             self.assertFalse(any(row['status']=='started' for row in snapshot['actions']))
+            self.assertEqual(snapshot['provider_selections'][-1]['state'],'pre_send_refused')
             self.assertEqual(envelope['selection_inputs'],original['selection_inputs'])
             self.assertEqual(envelope['local_agent_profile'],original['local_agent_profile'])

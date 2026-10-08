@@ -325,13 +325,17 @@ def _seal(record: dict[str, Any], validator) -> dict[str, Any]:
     return result
 
 
-def build_shaper_contract(work_id: str, sources: dict[str, dict[str, str]], intent: dict[str, Any], *, approval_event: str = "approve-definition", retained_local: bool = True) -> dict[str, Any]:
+def build_shaper_contract(work_id: str, sources: dict[str, dict[str, str]], intent: dict[str, Any], *, approval_event: str = "approve-definition", retained_local: bool | None = None) -> dict[str, Any]:
     work_id = _text(work_id, "run_id")
     sources = _sources(sources, work_id)
     # New authority adopts retained local execution by default. Derive finite
     # task counts from the reviewed intent; never replace them with unbounded
     # profile defaults. Reading an old sealed contract does not run this path.
     intent = dict(intent)
+    # Changing roles in an old run does not itself approve new execution
+    # semantics. Retention adoption must be explicit in successor authority.
+    if retained_local is None:
+        retained_local = approval_event == "approve-definition"
     if retained_local and "local_agent_profile" not in intent:
         limits = intent["budget_safety_envelope"]["enforceable"]
         from local_machine import new_local_profile_settings
