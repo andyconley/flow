@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fsutil import ensure_dir, repo_root, write_atomic
-from delivery_contracts import (DEFAULT_TOKEN_BUDGET, DeliveryContractError,
+from delivery_contracts import (DeliveryContractError,
                                 build_delivery_charter, build_shaper_contract,
                                 digest as delivery_digest, validate_delivery_charter,
                                 validate_shaper_intent)
@@ -496,8 +496,6 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
         timeout = execution.get("timeout_seconds")
         if type(timeout) is not int or timeout < 1:
             errors.append("magentic-manager timeout_seconds must be a positive integer")
-        elif timeout > 600:
-            errors.append("magentic-manager timeout_seconds must be between 1 and 600")
         if expected not in (manager.get("input_evidence") or []):
             errors.append("magentic-manager must cite the run-local job charter")
     if charter_relative != expected:
@@ -514,10 +512,6 @@ def _delivery_plan_errors(work_id: str, payload: dict[str, Any], *, root: Path |
     if not isinstance(charter, dict) or not required.issubset(charter) or set(charter) - required - optional:
         errors.append("job_charter fields are incomplete")
         return errors
-    if len(managers) == 1 and (managers[0].get("execution") or {}).get("provider") == "ollama" and "local_agent_profile" not in charter:
-        errors.append("Ollama delivery manager requires a sealed local_agent_profile")
-    if "local_agent_profile" in charter and "magentic-manager timeout_seconds must be between 1 and 600" in errors:
-        errors.remove("magentic-manager timeout_seconds must be between 1 and 600")
     if "local_agent_profile" in charter:
         from runner_limits import resolve_local_agent_budget
         from execution_contracts import chartered_test_argv_supported
@@ -997,13 +991,15 @@ def _apply_authority_amendment(intent: dict[str, Any], replacement: dict[str, An
     authority = replacement.get("authority_amendment")
     if authority is None:
         return intent
-    if not isinstance(authority, dict) or set(authority) != {"allowed_lifecycle_operations"}:
-        raise DeliveryContractError("authority_amendment must contain only allowed_lifecycle_operations")
-    operations = authority["allowed_lifecycle_operations"]
-    if not isinstance(operations, list):
-        raise DeliveryContractError("authority_amendment allowed_lifecycle_operations must be a list")
-    amended = dict(intent)
-    amended["allowed_lifecycle_operations"] = list(operations)
+    allowed = {"allowed_lifecycle_operations", "budget_safety_envelope", "delegation_matrix",
+               "max_verifier_calls", "expansion_headroom", "local_agent_profile"}
+    if not isinstance(authority, dict) or not authority or not set(authority) <= allowed:
+        raise DeliveryContractError("authority_amendment must contain only supported lifecycle or budget fields")
+    from copy import deepcopy
+    amended = deepcopy(intent)
+    amended.update(deepcopy(authority))
+    # Complete replacements only: never fill absent legacy token authority,
+    # clamp runtime, or normalize an old intent during read-only inspection.
     return validate_shaper_intent(amended)
 
 
@@ -1115,8 +1111,6 @@ def approve_orchestration_amendment(
         amended_intent["allowed_specialists"] = [allowed[item["role"]]
                                                   for item in amended_intent["allowed_specialists"]]
         enforceable = amended_intent.get("budget_safety_envelope", {}).get("enforceable", {})
-        for name, value in DEFAULT_TOKEN_BUDGET.items():
-            enforceable.setdefault(name, value)
         lineage = list(amended_intent.get("amendment_lineage") or [])
         lineage.append({
             "sequence": sequence,
@@ -1695,6 +1689,28 @@ def approve_job_charter_v9_migration(
         payload.pop("pending_lifecycle_event", None)
         _write_run(work_id, payload, project_root)
         return True, payload, []
+
+
+def cmd_inspect_budget_migration(args) -> int:
+    from delivery_contracts import inspect_budget_migration
+    root = repo_root()
+    if not valid_work_id(args.work_id):
+        print("invalid work id")
+        return 1
+    state = _load_run(args.work_id, root)
+    relative = (state or {}).get("artifacts", {}).get("shaper_intent")
+    run_dir = root / ".flow" / "runs" / args.work_id
+    path = root / relative if isinstance(relative, str) else run_dir / "shaper-intent.json"
+    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(run_dir.resolve()):
+        print("run-local Shaper intent is unavailable")
+        return 1
+    try:
+        report = inspect_budget_migration(json.loads(path.read_text()))
+    except (ValueError, OSError) as exc:
+        print(str(exc))
+        return 1
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
 
 
 def cmd_migrate_job_charter_v9(args) -> int:

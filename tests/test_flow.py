@@ -708,7 +708,7 @@ class OrchestrationCliTests(FlowCliHarness):
         status = json.loads(self.run_flow("run", "status", "demo", "--json").stdout)
         self.assertEqual(status["state"], "definition_approved")
 
-    def test_shaper_intent_refuses_runtime_above_protocol_ceiling(self) -> None:
+    def test_shaper_intent_accepts_runtime_above_the_legacy_ceiling(self) -> None:
         self.setup_project()
         self._write_valid_manifest()
         run_dir = self.repo / ".flow" / "runs" / "demo"
@@ -716,15 +716,18 @@ class OrchestrationCliTests(FlowCliHarness):
         intent = shaper_intent()
         intent["budget_safety_envelope"]["enforceable"]["runtime_seconds"] = 1800
         (run_dir / "shaper-intent.json").write_text(json.dumps(intent) + "\n")
-        refused = self.run_flow(
+        accepted = self.run_flow(
             "run", "transition", "demo", "approve-definition",
             "--artifact", "requirements=.flow/runs/demo/requirements.md",
             "--artifact", "acceptance_criteria=.flow/runs/demo/acceptance.md",
             "--artifact", "shaper_intent=.flow/runs/demo/shaper-intent.json",
             "--artifact", "orchestration_manifest=.flow/runs/demo/orchestration.json",
         )
-        self.assertEqual(refused.returncode, 1)
-        self.assertIn("runtime_seconds exceeds the protocol maximum", refused.stdout)
+        self.assert_ok(accepted)
+        state=json.loads((run_dir / "run.json").read_text())
+        self.assertEqual(state['state'],'definition_approved')
+        approved=json.loads((self.repo / state['artifacts']['shaper_intent']).read_text())
+        self.assertEqual(approved['budget_safety_envelope']['enforceable']['runtime_seconds'],1800)
 
     def test_chartered_delivery_plan_is_checked_before_approval(self) -> None:
         self.setup_project()
@@ -747,7 +750,7 @@ class OrchestrationCliTests(FlowCliHarness):
         finally:
             sys.path.pop(0)
             sys.modules.pop("runstate", None)
-        self.assertIn("magentic-manager timeout_seconds must be between 1 and 600", errors)
+        self.assertFalse(any("timeout_seconds" in error for error in errors))
         self.assertIn("chartered Delivery plan requires the canonical run-local job_charter artifact", errors)
 
     def test_explicit_user_approval_amends_orchestration_with_lineage(self) -> None:
@@ -3866,6 +3869,7 @@ class FlowCliTests(FlowCliHarness):
                 "delivery_trace",
                 "diagnostic_model",
                 "diagnostics",
+                "execution_budgets",
                 "execution_contracts",
                 "execution_gateway",
                 "execution_ledger",
@@ -3892,6 +3896,7 @@ class FlowCliTests(FlowCliHarness):
                 "local_agent",
                 "local_agent_delivery",
                 "local_agent_workspace",
+                "local_machine",
                 "local_resources",
                 "local_worker",
                 "macos_sandbox",

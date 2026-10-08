@@ -60,3 +60,9 @@ def shaper_intent(definition_digests=None, *, limits=None, expansion_headroom=No
         intent["expansion_headroom"] = expansion_headroom
         intent["delegation_matrix"]["delegated_expansion"] = any(expansion_headroom.values())
     return intent
+
+
+def legacy_build_shaper_contract(*args, **kwargs):
+    """Reproduce historical sealed authority, without new retention defaults."""
+    from delivery_contracts import build_shaper_contract
+    return build_shaper_contract(*args, retained_local=False, **kwargs)

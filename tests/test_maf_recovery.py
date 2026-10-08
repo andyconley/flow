@@ -24,7 +24,7 @@ sys.path.insert(0, str(REPO / "tests"))
 from maf_env import MAF_AVAILABLE, MAF_PYTHON, SKIP_REASON  # noqa: E402
 
 from maf_supervisor import MafProtocolError, PINNED_MAF_CORE_VERSION, run_maf  # noqa: E402
-from test_maf_supervisor import SupervisorProtocolTests  # noqa: E402
+from test_maf_supervisor import SupervisorProtocolTests, PROTOCOL_FIXTURE_TIMEOUT  # noqa: E402
 import execution_gateway as gateway  # noqa: E402
 from test_execution import ASSIGNMENT_ID, ExecutionFixture, WORK_ID, action_for, stub_result  # noqa: E402
 
@@ -57,7 +57,7 @@ print(json.dumps({"protocol_version":1,"type":"workflow_finished","attempt_id":e
             self.envelope,
             lambda action: seen.append(action) or {"status": "completed", "action_id": action["action_id"], "output": "stored result"},
             python_path=executable,
-            timeout_s=2,
+            timeout_s=PROTOCOL_FIXTURE_TIMEOUT,
             resume={"schema_version": 2, "attempt_id": "attempt-1", "checkpoint_id": "checkpoint-1", "ledger_seq": 7},
         )
         self.assertEqual(outcome["summary"], "replayed")
@@ -67,7 +67,7 @@ print(json.dumps({"protocol_version":1,"type":"workflow_finished","attempt_id":e
         executable = self.script("import sys\nsys.stdin.readline()\n")
         with self.assertRaisesRegex(MafProtocolError, "invalid Flow resume message"):
             run_maf(self.envelope, lambda _: self.fail("resume must not propose"), python_path=executable,
-                    timeout_s=2, resume={"schema_version": 1, "checkpoint_id": "wrong"})
+                    timeout_s=PROTOCOL_FIXTURE_TIMEOUT, resume={"schema_version": 1, "checkpoint_id": "wrong"})
 
     def test_resume_child_cannot_propose_a_foreign_action(self) -> None:
         executable = self.script('''import json,sys
@@ -77,7 +77,7 @@ print(json.dumps({"protocol_version":1,"type":"propose_action","schema_version":
 ''')
         with self.assertRaisesRegex(MafProtocolError, "not bound to the envelope"):
             run_maf(self.envelope, lambda _: self.fail("foreign resume must not reach Flow"), python_path=executable,
-                    timeout_s=2, resume={"schema_version": 2, "attempt_id": "attempt-1", "checkpoint_id": "checkpoint-1", "ledger_seq": 7})
+                    timeout_s=PROTOCOL_FIXTURE_TIMEOUT, resume={"schema_version": 2, "attempt_id": "attempt-1", "checkpoint_id": "checkpoint-1", "ledger_seq": 7})
 
 
 class ReceiptSplitRecoveryTests(ExecutionFixture):

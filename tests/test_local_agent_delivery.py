@@ -135,7 +135,7 @@ class NativeManagerConversationTests(unittest.TestCase):
         self.assertEqual(len(observations),1)
         self.assertEqual(set(observations[0]),{'type','bound','allowance'})
         self.assertEqual(observations[0]['type'],'context_denied')
-        self.assertEqual(observations[0]['allowance'],49152-12288-2048)
+        self.assertEqual(observations[0]['allowance'],12288-2048-1024)
         self.assertGreater(observations[0]['bound'],observations[0]['allowance'])
         self.assertNotIn('model_request',[event['type'] for event in observations])
         self.assertNotIn('model_send',[event['type'] for event in observations])
@@ -264,7 +264,7 @@ class CanonicalManagerNoSendCompletionTests(unittest.TestCase):
         ClosedNativeCompletionTests.setUp(self)
 
     def canonical_row(self):
-        allowance=49152-12288-2048
+        allowance=12288-2048-1024
         event={'type':'context_denied','bound':allowance+1,'allowance':allowance}
         text=json.dumps(event)+'\n'
         path=Path(self.envelope['checkpoint_dir']).parent/'action-manager-action-observations.jsonl'

@@ -465,7 +465,7 @@ def run_maf_delivery(envelope: dict[str, Any], task: str,
     protocol_version = envelope.get("execution_protocol_version")
     if protocol_version not in {5, 6, 7, 8} or not isinstance(task, str) or not task.strip():
         raise MafProtocolError("delivery requires a v5, v6, v7, or v8 envelope and task")
-    if not callable(on_manager) or not callable(on_action) or not 0 < timeout_s <= 900:
+    if not callable(on_manager) or not callable(on_action) or not timeout_s > 0:
         raise MafProtocolError("delivery callbacks or timeout are invalid")
     runtime = envelope.get("maf_runtime")
     bound = runtime.get("interpreter") if isinstance(runtime, dict) else None
@@ -575,13 +575,13 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
     """Supervise one stock Magentic workflow; Flow authorizes each callback."""
     profile = (resolve_local_agent_budget(envelope['local_agent_profile'])
                if 'local_agent_profile' in envelope else None)
-    if profile and timeout_s == 900:
+    if profile and timeout_s == 900 and 'runtime_budget' not in envelope:
         timeout_s = profile['turn_timeout_seconds']
     call_limit = profile['manager_calls'] if profile else MAX_MANAGER_CALLS
     action_limit = profile['delegations'] if profile else MAX_ACTIONS
     transport_limit = 4 * 1024 * 1024 if profile else MAX_LINE_BYTES
     if (envelope.get("execution_protocol_version") != 9 or not isinstance(task, str) or not task.strip()
-            or not callable(on_action) or not callable(on_manager) or not (timeout_s > 0 and (profile is not None or timeout_s <= 900))):
+            or not callable(on_action) or not callable(on_manager) or not timeout_s > 0):
         raise MafProtocolError("v9 delivery inputs are invalid")
     executable = python_path or os.environ.get("FLOW_MAF_PYTHON")
     if executable is None:
@@ -640,7 +640,6 @@ def run_maf_v9_delivery(envelope: dict[str, Any], task: str,
                         if not isinstance(result, dict):
                             raise MafProtocolError("invalid worker callback result")
                         reply = {"protocol_version": 9, "type": "action_result", "proposal_id": message["proposal_id"], "result": result}
-                    deadline = time.monotonic() + timeout_s
                     _write_bounded(process.stdin.fileno(), reply, deadline, transport_limit)
                     continue
                 if kind == "workflow_finished":

@@ -296,3 +296,44 @@ Current limitations of the adapter system:
 - no content-aware merge for most generated files
 - no automated client invocation or transcript verification for whether Claude or Codex honored configured subagent models
 - no project migration assistant for changing runtime contracts over time
+
+### Machine-local context and approved runtime budgets
+
+New Shaper approvals use retained local sessions by default, including mixed
+Ollama/Claude/Codex workflows. Local sessions retain assignment-specific history
+and tools; hosted selections retain their separate spending and provider fences.
+Approved runtime and per-assignment call budgets are positive seconds, independent
+of model context. The former 600-second ceiling does not constrain a newly
+approved budget. A sealed deadline survives reopen; exhaustion requires an
+explicitly approved successor rather than a fresh timer.
+
+Configure this computer in `~/.flow/user/flow.toml`:
+
+```toml
+[local_machine]
+model = "llama3.1:8b"
+context_tokens = 12288
+max_context_tokens = 16384
+output_tokens = 2048
+context_reserve = 1024
+```
+
+The default context is 12K. Set `context_tokens = 16384` to select the measured
+16K profile when appropriate on this laptop. Output and reserve are configurable
+and must leave room for input. `max_context_tokens` is the computer's measured
+capacity, not a provider grant. A Studio has its own settings; do not copy its
+49K profile to a laptop. Configuration does not install a model or replace the
+`provider_candidates` array, enable providers, or widen project permissions.
+
+New retained authority seals the selected context/output/reserve. Ordinary
+Ollama requests also send an explicit `num_ctx`; the retained client checks the
+actual HTTP model, `num_ctx`, and `num_predict` before authorizing a send. Catalog
+eligibility is narrowed to effective local context while hosted entries remain
+available. Moving a sealed profile to a smaller machine refuses dispatch and
+requires explicit successor approval; it does not silently clamp its authority.
+
+`flow run inspect-budget-migration <work-id>` reports missing legacy budget fields
+and proposed values without changing the run. Supply complete budget replacements
+through an explicitly approved `amend-orchestration` authority amendment; use
+`migrate-job-charter-v9` for legacy topology. Reading or reopening an old run does
+not insert new token authority, reset elapsed time, or expand its provider grants.

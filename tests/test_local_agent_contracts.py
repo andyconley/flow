@@ -29,7 +29,7 @@ def evidence():
     for number in (1, 2):
         events.extend([
             {'type': 'model_request', 'number': number, 'request': {
-                'options': {'num_ctx': 49152, 'num_predict': 12288}}},
+                'options': {'num_ctx': 12288, 'num_predict': 2048}}},
             {'type': 'model_send', 'number': number},
             {'type': 'model_response', 'number': number, 'responses': [{'done_reason': 'stop'}]},
         ])
@@ -119,7 +119,7 @@ class LocalAgentContractsTests(unittest.TestCase):
                     execute_v9_selected_action(envelope, action,
                         lambda *_: (_ for _ in ()).throw(TimeoutError('pre-send context guard')),
                         readiness_recheck=lambda binding: {**binding, 'state': 'ready'}, ledger=ledger, generation=1)
-                event = {'type': 'context_denied', 'bound': 35847, 'allowance': 34816}
+                event = {'type': 'context_denied', 'bound': 10247, 'allowance': 9216}
                 if mutation == 'budget':
                     event['allowance'] = 30000
                 path = root/f"action-{action['action_id']}-observations.jsonl"
@@ -176,7 +176,9 @@ class LocalAgentContractsTests(unittest.TestCase):
                 Path(tmp) / 'receipt.json', generation=1)
             receipt = json.loads(Path(sealed['receipt_path']).read_text())
             self.assertEqual(verify_selection_receipt(receipt)['status'], 'valid_pass')
-            self.assertEqual([item['evaluation']['disposition'] for item in receipt['semantic_verification']],
+            sequence = {action['action_id']: action['sequence'] for action in receipt['actions']}
+            history = sorted(receipt['semantic_verification'], key=lambda item: sequence[item['action_id']])
+            self.assertEqual([item['evaluation']['disposition'] for item in history],
                              ['valid_fail', 'valid_pass'])
 
     def test_legacy_ledger_still_rejects_repeated_completed_verifiers(self):
@@ -280,7 +282,7 @@ class LocalAgentContractsTests(unittest.TestCase):
             (run/'job-charter.json').write_text(json.dumps(charter))
             errors = _delivery_plan_errors('demo', payload, root=root)
             self.assertTrue(any('exactly one logical producer' in error for error in errors))
-            self.assertTrue(any('Ollama delivery manager' in error for error in errors))
+            self.assertFalse(any('Ollama delivery manager' in error for error in errors))
     def test_nullable_native_ledger_budget_and_completed_observations(self):
         envelope = _envelope()
         envelope['local_agent_profile'] = resolve_local_agent_budget()
@@ -308,8 +310,9 @@ class LocalAgentContractsTests(unittest.TestCase):
         self.assertEqual(shaper['local_agent_profile'], resolve_local_agent_budget())
         self.assertEqual(charter['local_agent_profile'], shaper['local_agent_profile'])
         del intent['local_agent_profile']
-        with self.assertRaises(DeliveryContractError):
-            build_shaper_contract('demo', sources, intent)
+        default = build_shaper_contract('demo', sources, intent)
+        self.assertEqual(default['local_agent_profile']['delegations'], 20)
+        self.assertEqual(default['local_agent_profile']['turn_timeout_seconds'], 2400)
     def test_resolved_profile_allows_uncapped_counts_but_reserves_context(self):
         profile = resolve_local_agent_budget()
         self.assertEqual(validate_local_agent_profile(profile), profile)

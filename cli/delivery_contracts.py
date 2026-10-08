@@ -142,7 +142,7 @@ def validate_expansion_headroom(headroom: object, base: dict[str, int], *,
     for name, value in full.items():
         if type(value) is not int or value < 0:
             raise DeliveryContractError(f"expansion_headroom {name} must be a non-negative integer")
-        if type(base.get(name)) is not int or (not local_profile and base[name] + value > EXPANSION_CEILINGS[name]):
+        if type(base.get(name)) is not int or ((not local_profile or name in {"paid_worker_calls", "tokens"}) and base[name] + value > EXPANSION_CEILINGS[name]):
             raise DeliveryContractError(f"{name} limit plus headroom exceeds the runner ceiling")
     if base["paid_worker_calls"] + full["paid_worker_calls"] > base["delegations"] + full["delegations"]:
         raise DeliveryContractError("paid-worker headroom exceeds delegation headroom")
@@ -256,8 +256,6 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
         minimum = 1 if name in {"max_concurrent", "runtime_seconds", "max_manager_calls", "max_manager_rounds"} else 0
         if type(enforceable[name]) is not int or enforceable[name] < minimum:
             raise DeliveryContractError(f"{name} is invalid")
-    if "local_agent_profile" not in intent and enforceable["runtime_seconds"] > 600:
-        raise DeliveryContractError("runtime_seconds exceeds the protocol maximum of 600")
     for name in ("tools", "paths", "outputs"):
         values = _list(enforceable[name], name, nonempty=True)
         if len(values) != len(set(values)) or any(not isinstance(value, str) or not value for value in values):
@@ -278,6 +276,29 @@ def validate_shaper_intent(intent: object) -> dict[str, Any]:
         raise DeliveryContractError("delegated_expansion must state whether any expansion headroom is sealed")
     _list(envelope["observations"], "budget_safety_envelope observations")
     return intent
+
+
+def inspect_budget_migration(intent: dict[str, Any]) -> dict[str, Any]:
+    """Read-only old-artifact assessment; proposals never become authority."""
+    from copy import deepcopy
+    if not isinstance(intent, dict):
+        raise DeliveryContractError("shaper_intent is invalid")
+    current = deepcopy(intent)
+    enforceable = current.get("budget_safety_envelope", {}).get("enforceable", {})
+    missing = [name for name in TOKEN_LIMIT_FIELDS if name not in enforceable]
+    try:
+        validate_shaper_intent(current)
+        valid, error = True, None
+    except DeliveryContractError as exc:
+        valid, error = False, str(exc)
+    return {"valid": valid, "error": error, "current_budget": enforceable,
+        "missing_token_fields": missing,
+        "proposed_token_fields": {name: DEFAULT_TOKEN_BUDGET[name] for name in missing},
+        "runtime_seconds_preserved": enforceable.get("runtime_seconds"),
+        "retained_local_already_sealed": "local_agent_profile" in current,
+        "approval_required": bool(missing or "local_agent_profile" not in current),
+        "migration_route": "amend-orchestration with explicit user-approved authority_amendment; migrate-job-charter-v9 for legacy topology",
+        "automatic_changes": []}
 
 
 def _intent(work_id: str, sources: dict[str, dict[str, str]], approved: dict[str, Any]) -> dict[str, Any]:
@@ -304,9 +325,29 @@ def _seal(record: dict[str, Any], validator) -> dict[str, Any]:
     return result
 
 
-def build_shaper_contract(work_id: str, sources: dict[str, dict[str, str]], intent: dict[str, Any], *, approval_event: str = "approve-definition") -> dict[str, Any]:
+def build_shaper_contract(work_id: str, sources: dict[str, dict[str, str]], intent: dict[str, Any], *, approval_event: str = "approve-definition", retained_local: bool | None = None) -> dict[str, Any]:
     work_id = _text(work_id, "run_id")
     sources = _sources(sources, work_id)
+    # New authority adopts retained local execution by default. Derive finite
+    # task counts from the reviewed intent; never replace them with unbounded
+    # profile defaults. Reading an old sealed contract does not run this path.
+    intent = dict(intent)
+    # Changing roles in an old run does not itself approve new execution
+    # semantics. Retention adoption must be explicit in successor authority.
+    if retained_local is None:
+        retained_local = approval_event == "approve-definition"
+    if retained_local and "local_agent_profile" not in intent:
+        limits = intent["budget_safety_envelope"]["enforceable"]
+        from local_machine import new_local_profile_settings
+        intent["local_agent_profile"] = resolve_local_agent_budget({
+            **new_local_profile_settings(),
+            "delegations": intent["delegation_matrix"]["max_delegations"],
+            "manager_calls": limits["max_manager_calls"],
+            "manager_rounds": limits["max_manager_rounds"],
+            "replans": limits["max_replans"],
+            "request_timeout_seconds": limits["runtime_seconds"],
+            "turn_timeout_seconds": limits["runtime_seconds"],
+        })
     intent = _intent(work_id, sources, intent)
     record = {
         "schema_version": SCHEMA_VERSION, "version": SHAPER_CONTRACT_VERSION, "kind": "shaper_contract",

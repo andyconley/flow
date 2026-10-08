@@ -581,6 +581,11 @@ class ExecutionLedger:
             "AND status<>'pre_send_refused' AND json_extract(request_json,'$.logical_action_id')=? LIMIT 1",
             (envelope["attempt_id"], action["logical_action_id"]),
         ).fetchone()
+        from execution_budgets import remaining_runtime
+        try:
+            remaining_runtime(envelope)
+        except TimeoutError:
+            return "sealed protocol v9 runtime budget exhausted"
         action_limit = envelope["limits"]["max_actions"]
         if action_limit is not None and count >= action_limit and not known_logical_action:
             return "sealed protocol v9 action budget exhausted"
@@ -598,16 +603,27 @@ class ExecutionLedger:
                              and assignments[r["assignment_id"]]["requirements"]["operation"] != "manage"
                              and status != "observed_not_executed" for r, status, _ in prior)
             provider = action["selection_decision"]["selected_binding"]["provider"]
+            operation_limits = limits
+            if "local_agent_profile" in envelope and provider in {"claude", "codex"}:
+                hosted_prior = [(r, status, result) for r, status, result in prior
+                    if r["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}]
+                manager_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "manage" for r, _, _ in hosted_prior)
+                worker_count = len(hosted_prior) - manager_count
+                verifier_count = sum(assignments[r["assignment_id"]]["requirements"]["operation"] == "verify" for r, _, _ in hosted_prior)
+            if provider == "ollama" and "local_agent_profile" in envelope:
+                profile = envelope["local_agent_profile"]
+                operation_limits = {**limits, "max_manager_calls": profile["manager_calls"],
+                    "max_delegations": profile["delegations"], "max_verifier_calls": profile["delegations"]}
             def exhausted(name, used):
-                return limits.get(name) is not None and used >= limits[name]
+                return operation_limits.get(name) is not None and used >= operation_limits[name]
             if (operation == "manage" and exhausted("max_manager_calls", manager_count)
                     or operation != "manage" and exhausted("max_delegations", worker_count)
                     or operation == "verify" and exhausted("max_verifier_calls", verifier_count)
                     or operation != "manage" and provider in {"claude", "codex"} and exhausted("max_paid_worker_calls", paid_count)):
                 return "sealed protocol v9 operation budget exhausted"
-            if "local_agent_profile" in envelope:
-                # Local profile counts are explicit task choices. Legacy token
-                # tranches do not silently constrain retained local workflows.
+            if "local_agent_profile" in envelope and provider == "ollama":
+                # Local retention does not exempt hosted sends in a mixed run
+                # from sealed lineage spending controls.
                 return None
             charged_rows = [{"request": {"provider": r["selection_decision"]["selected_binding"]["provider"]},
                              "status": status, "result": wrapped.get("result") if isinstance(wrapped, dict) else None}

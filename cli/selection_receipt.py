@@ -50,6 +50,26 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     if any(not isinstance(action, dict) for action in actions) \
             or any(not isinstance(row, dict) for row in selections):
         raise V9ReceiptError("v9_selection_rows_invalid")
+    hosted = receipt.get("hosted_scope_observations", [])
+    if not isinstance(hosted, list):
+        raise V9ReceiptError("v9_hosted_scope_observations_invalid")
+    hosted_by_action = {}
+    action_by_identity = {a.get("action_id"): a for a in actions}
+    for item in hosted:
+        if (not isinstance(item, dict) or set(item) != {"action_id", "evidence", "evidence_digest"}
+                or item["action_id"] not in action_by_identity or item["action_id"] in hosted_by_action
+                or item["evidence_digest"] != digest(item["evidence"])):
+            raise V9ReceiptError("v9_hosted_scope_observation_binding_invalid")
+        action = action_by_identity[item["action_id"]]
+        evidence = item["evidence"]
+        files = evidence.get("source_files") if isinstance(evidence, dict) else None
+        if (action.get("selection_decision", {}).get("selected_binding", {}).get("provider") not in {"claude", "codex"}
+                or not isinstance(files, dict) or not files
+                or evidence.get("scope_enforcement") != "isolated_staging"
+                or not evidence.get("changed_files")
+                or evidence.get("source_digest") != hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()):
+            raise V9ReceiptError("v9_hosted_scope_observations_invalid")
+        hosted_by_action[item["action_id"]] = evidence
     observations = receipt.get("local_agent_observations", [])
     if not isinstance(observations, list) or (observations and "local_agent_profile" not in envelope):
         raise V9ReceiptError("v9_local_agent_observations_invalid")
@@ -323,7 +343,16 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                     "result", "evaluation"}
         if set(item) != required or item["action_id"] != action["action_id"]:
             raise V9ReceiptError("v9_semantic_verification_invalid")
-        if item["input"] != {"provider_task": action["task"], "assignment_id": action["assignment_id"]} \
+        expected_input = {"provider_task": action["task"], "assignment_id": action["assignment_id"]}
+        # Retained receipts bind verification to the observed current source.
+        # Historical receipts keep their exact two-field input representation.
+        if "source_digest" in item["input"]:
+            source_digest = item["input"]["source_digest"]
+            if ("local_agent_profile" not in envelope or not isinstance(source_digest, str)
+                    or len(source_digest) != 64 or any(c not in "0123456789abcdef" for c in source_digest)):
+                raise V9ReceiptError("v9_verifier_source_digest_invalid")
+            expected_input["source_digest"] = source_digest
+        if item["input"] != expected_input \
                 or item["input_digest"] != digest(item["input"]):
             raise V9ReceiptError("v9_verifier_input_mismatch")
         output = item["result"].get("output") if isinstance(item["result"], dict) else None
@@ -376,6 +405,8 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         observed_by_action = {item["action_id"]: item["evidence"] for item in observations}
         current_source = None
         for action in sorted(producer_actions, key=lambda item: item["sequence"]):
+            if action["action_id"] in hosted_by_action:
+                current_source = hosted_by_action[action["action_id"]]["source_digest"]
             for tool in observed_by_action.get(action["action_id"], {}).get("tool_observations", []):
                 result = tool.get("result", {})
                 if tool.get("name") == "write_file" and result.get("status") == "written":
@@ -387,6 +418,14 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
                 source_bound = False
                 continue
             item = semantic_by_action.get(action["action_id"], {})
+            if "source_digest" in item.get("input", {}):
+                source_bound = source_bound and item["input"]["source_digest"] == current_source
+            if action["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}:
+                # Hosted verification remains bound to the Flow-observed diff
+                # and tests above, after the latest source edit. Native tool
+                # observations are required only for actual local selections.
+                source_bound = source_bound and item.get("input", {}).get("source_digest") == current_source
+                continue
             review = (item.get("result") or {}).get("current_source_review")
             observed_reviews = [tool.get("result", {}) for tool in
                 observed_by_action.get(action["action_id"], {}).get("tool_observations", [])
@@ -413,6 +452,10 @@ def verify_selection_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         for identity in required_workers:
             action = latest.get(identity)
             body = observed_by_action.get(action["action_id"], {}) if action else {}
+            if action and action["selection_decision"]["selected_binding"]["provider"] in {"claude", "codex"}:
+                if assignments[identity]["requirements"]["operation"] == "edit":
+                    source_bound = source_bound and action["action_id"] in hosted_by_action
+                continue
             if not body:
                 source_bound = False
             elif assignments[identity]["requirements"]["operation"] == "edit":
@@ -442,6 +485,7 @@ def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any
                            semantic_verification: list[dict[str, Any]] | None = None,
                            evidence_failures: list[dict[str, Any]] | None = None,
                            local_agent_observations: list[dict[str, Any]] | None = None,
+                           hosted_scope_observations: list[dict[str, Any]] | None = None,
                            termination: dict[str, Any] | None = None,
                            outcome: dict[str, str]) -> dict[str, Any]:
     receipt = {
@@ -458,6 +502,8 @@ def seal_selection_receipt(envelope: dict[str, Any], actions: list[dict[str, Any
         receipt["termination"] = termination
     if local_agent_observations is not None:
         receipt["local_agent_observations"] = local_agent_observations
+    if hosted_scope_observations is not None:
+        receipt["hosted_scope_observations"] = hosted_scope_observations
     receipt["outcome"] = outcome
     receipt["receipt_digest"] = digest(receipt)
     verify_selection_receipt(receipt)
@@ -511,6 +557,10 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
                            "evidence_digest": digest(result["local_agent_observations"])}
                           for action_id, result in action_results.items()
                           if isinstance(result, dict) and "local_agent_observations" in result]
+    hosted_observations = [{"action_id": action_id, "evidence": result["scoped_edit"],
+                            "evidence_digest": digest(result["scoped_edit"])}
+                           for action_id, result in action_results.items()
+                           if isinstance(result, dict) and "source_digest" in result.get("scoped_edit", {})]
     inputs = {item["action_id"]: item for item in snapshot.get("verifier_inputs", [])}
     evaluations = {item["action_id"]: item for item in snapshot.get("verifier_evaluations", [])}
     semantic = []
@@ -541,6 +591,7 @@ def receipt_from_snapshot(snapshot: dict[str, Any], *, termination: dict[str, An
                                   semantic_verification=semantic,
                                   evidence_failures=evidence_failures,
                                   local_agent_observations=(local_observations if "local_agent_profile" in envelope else None),
+                                  hosted_scope_observations=hosted_observations or None,
                                   termination=termination, outcome=outcome)
 
 
@@ -549,7 +600,7 @@ def verify_selection_receipt_snapshot(receipt: dict[str, Any], snapshot: dict[st
     result = verify_selection_receipt(receipt)
     expected = receipt_from_snapshot(snapshot, termination=receipt.get("termination"),
                                      outcome=receipt.get("outcome"))
-    for field in ("envelope", "actions", "selections", "provider_refusals", "semantic_verification", "evidence_failures", "outcome", "local_agent_observations"):
+    for field in ("envelope", "actions", "selections", "provider_refusals", "semantic_verification", "evidence_failures", "outcome", "local_agent_observations", "hosted_scope_observations"):
         if canonical_bytes(receipt.get(field)) != canonical_bytes(expected.get(field)):
             raise V9ReceiptError(f"v9_ledger_{field}_mismatch")
     return result

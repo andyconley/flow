@@ -161,8 +161,8 @@ def call_claude(*, instructions: str, task: str, workspace: Path, model: str,
         raise ValueError("Claude workspace must be a real directory")
     if not isinstance(model, str) or not model.strip() or any(c.isspace() for c in model):
         raise ValueError("Claude model must be explicit")
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 600:
-        raise ValueError("Claude timeout must be 1 to 600 seconds")
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or timeout_seconds < 1:
+        raise ValueError("Claude timeout must be a positive integer")
     if isinstance(max_output_bytes, bool) or not isinstance(max_output_bytes, int) or not 1 <= max_output_bytes <= 32768:
         raise ValueError("Claude output limit must be 1 to 32768 bytes")
     if prompt_override is None:
