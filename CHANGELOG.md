@@ -2,6 +2,17 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+### Highlights
+
+- Configure machine-local inference context separately from approved runtime budgets, with retained local sessions and source-bound verification.
+
+
+## [0.42.0](https://github.com/andyconley/flow/compare/v0.41.1...v0.42.0) (2026-10-08)
+
+### Features
+
+* configure runtime budgets and machine-local inference profiles ([9ea08a1](https://github.com/andyconley/flow/commit/9ea08a1a43db463774b66543b62900695a785fcc))
+
 ## [0.41.1](https://github.com/andyconley/flow/compare/v0.41.0...v0.41.1) (2026-10-07)
 
 ### Bug Fixes
