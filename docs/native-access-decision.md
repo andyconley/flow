@@ -197,3 +197,45 @@ option was not enabled in this retry and its complete startup behavior here is
 unverified. Do not infer that access to the whole `.codex` home is necessary from
 the root-level error. Further scoped startup configuration or access needs must
 preserve in-place native authentication and the existing outer restrictions.
+
+## SQLite relocation verified; remaining native-home startup write
+
+Pinned official Codex `rust-v0.153.4` source confirms `CODEX_SQLITE_HOME` is used
+when no `sqlite_home` configuration overrides it. There is no such override in
+the existing user config. The restricted retry set that variable only for the
+test process to the disposable project's `.native-sqlite`; native SQLite
+databases were successfully created there. No shared native-home database write
+was granted and no authentication/credential home was relocated.
+
+Startup then exited with `Operation not permitted`. The pinned startup source
+unconditionally calls `resolve_installation_id(&config.codex_home)` after SQLite
+initialization. Its implementation opens `<codex_home>/installation_id` with
+read/write/create, locks it, can normalize mode to 0644, and writes a new UUID if
+contents are absent/invalid. The existing file's presence was checked without
+reading its value. This mandatory operation needs access beyond the current
+write scope; the exact failed syscall is not emitted by the native error, so
+attribution of that generic error to this next required write is a source-backed
+inference, not a syscall trace. There is no distinct installation-ID path override
+in this implementation.
+
+Smallest identified new access: native read/write/lock access to
+`/Users/andyconley/.codex/installation_id` for the acceptance process, with the
+above possible mode/identifier effects. This is not approval to write all of the
+native home, native permission settings or credentials. It has not been granted
+or attempted outside the sandbox. Later session/history/network needs are still
+untested and cannot be assumed covered.
+
+PATH aliases are rooted at `<CODEX_HOME>/tmp/arg0` in the pinned implementation.
+Alias failure is expressly nonfatal and startup continues; no alias-home write
+grant is requested as a cure for the fatal startup error. No supported separate
+alias-root override was found. The task did not relocate the login/credential
+home, copy credentials, patch native code, or create a command wrapper.
+
+Both requirements outputs are still absent. Native acceptance and actual resume
+remain incomplete. The attempt exited on its own; no provider remains running.
+
+Official pinned sources:
+- https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/codex-rs/core/src/config/mod.rs
+- https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/codex-rs/app-server/src/lib.rs
+- https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/codex-rs/core/src/installation_id.rs
+- https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/codex-rs/arg0/src/lib.rs
