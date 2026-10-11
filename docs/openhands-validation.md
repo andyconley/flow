@@ -87,3 +87,37 @@ Preserved evidence lives in the ignored disposable project under
 `.flow/runs/native-acceptance/openhands/npm-cache/_logs/` and the Flow session
 reference/outcome. No credential material was copied. The approved callback
 acknowledgement exists only in this disposable test profile.
+
+## Dependency provisioning allowed; restricted retry reached Codex
+
+The normal reviewer allowed dependency provisioning only. The official pinned
+`@agentclientprotocol/codex-acp@1.10.0` and its dependencies were installed into
+the disposable project's SDK npm cache from `registry.npmjs.org`, using the SDK's
+cache-warming form (empty Node code, no native adapter execution). The installed
+native dependency reports `@openai/codex@0.153.4`.
+
+Acceptance was then retried in the original restricted context, without elevation.
+The SDK reloaded its existing conversation reference and launched the real pinned
+adapter/native process. Codex exited with:
+
+> Error: failed to initialize sqlite state runtime under /Users/andyconley/.codex
+
+It also warned that PATH alias creation was not permitted. Existing native-home
+file names include `state_5.sqlite` and WAL/SHM sidecars, log databases, and
+`tmp/arg0`; the error identifies the native-home runtime root, not an exact denied
+file. No broad native-home grant was requested or enabled. No credential values,
+SQLite contents or user session contents were inspected/copied.
+
+The native task did not reach subscription inference, artifact creation or actual
+native session resume. Workflow remains `defining`, SDK reference is now `error`
+with `RequestError`, and both requirements artifacts remain absent. Task/native
+processes have exited. Subscription network and later state-write prerequisites
+remain untested. The successful dependency provisioning is not native acceptance.
+
+The installed binary contains the standard `CODEX_SQLITE_HOME` option; relocating
+SQLite bookkeeping to the already writable disposable workspace is a candidate
+for avoiding shared-home database writes, not an additional host grant. That
+option was not enabled in this retry and its complete startup behavior here is
+unverified. Do not infer that access to the whole `.codex` home is necessary from
+the root-level error. Further scoped startup configuration or access needs must
+preserve in-place native authentication and the existing outer restrictions.
