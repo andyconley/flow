@@ -93,6 +93,14 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(config.RuntimeConfigurationError, "Native access decision required"):
             openhands_runtime.build_native_agent(selection, self.root)
 
+    def test_sdk_error_status_is_cli_failure(self):
+        handler = flow._handler(lambda _: {"work_id": "example", "stage": "define",
+                                          "session": {"status": "error", "conversation_id": "test"}})
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(handler(Namespace(json=True)), 1)
+
     def test_legacy_runs_are_not_migrated_or_resumed(self):
         runstate.apply_transition("example", "start-definition", root=self.root)
         before = (self.directory / "run.json").read_bytes()

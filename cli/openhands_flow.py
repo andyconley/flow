@@ -95,10 +95,12 @@ def execute(args) -> dict:
             conversation_id = UUID(reference["conversation_id"])
         else:
             conversation_id = uuid4()
-        reference = {"conversation_id": str(conversation_id), "binding": binding,
+        previous = sessions.get(key)
+        reference = {**(previous if previous and not args.new_session else {}),
+                     "conversation_id": str(conversation_id), "binding": binding,
                      "role": selection.role, "profile": selection.profile, "stage": stage,
                      "workspace": selection.workspace, "status": "starting"}
-        previous = sessions.get(key)
+        reference.pop("error_type", None)
         if previous and args.new_session:
             payload.setdefault("prior_sessions", []).append(previous)
         sessions[key] = reference
@@ -235,7 +237,7 @@ def _handler(function):
             print(json.dumps({"status": "error", "error_type": type(exc).__name__, "reason": "SDK execution failed; inspect the preserved session and masked runtime diagnostic."}))
             return 1
         print(json.dumps(result, indent=2, default=str) if args.json else _summary(result))
-        return 0
+        return 1 if result.get("session", {}).get("status") == "error" else 0
     return handle
 
 

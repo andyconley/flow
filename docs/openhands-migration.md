@@ -54,7 +54,10 @@ are not downloaded implicitly.
 
 Each role can select its own profile. The SDK TaskToolSet handles a role's
 configured specialist roster; Flow does not run a second manager loop. Native specialists use stock ACPAgent after the explicit native access decision
-described below. A `task` tool is required when a role declares a specialist roster.
+described below. A `task` tool is required when a role declares a specialist roster. SDK factory
+names include a project/profile binding suffix; the agent context maps configured
+role names to those identifiers. Repeated construction reuses the SDK registry
+without confusing different project profiles.
 
 ## Workflow
 

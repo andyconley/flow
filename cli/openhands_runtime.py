@@ -63,7 +63,7 @@ def build_agent(selection: Selection, root: Path):
     from openhands.tools.file_editor import FileEditorTool
     from openhands.tools.task_tracker import TaskTrackerTool
     from openhands.tools.task import TaskToolSet
-    from openhands.sdk.subagent import register_agent
+    from openhands.sdk.subagent import register_agent_if_absent
     from openhands_config import load_config, select
 
     tools = {"terminal": TerminalTool, "file_editor": FileEditorTool,
@@ -78,15 +78,24 @@ def build_agent(selection: Selection, root: Path):
     # Register declared specialists with the SDK's own delegation mechanism.
     # Each factory resolves its own local profile; no Flow manager/dispatch loop.
     config = load_config(root)
+    delegation = []
     for name in selection.role_options.get("specialists", []):
         child = select(root, "implement", name, config=config)
-        if child.role_options.get("specialists"):
-            raise RuntimeConfigurationError("nested specialist rosters must be expressed in OpenHands agent files")
-        register_agent(name=name, factory_func=lambda _llm, selected=child: build_agent(selected, root),
-                       description=f"Flow specialist {name}: {child.role_file.name}")
+        # The SDK registry is process-global. Scope its identity to the actual
+        # project/profile binding so repeats reuse a factory and different
+        # projects or changed profiles do not inherit a stale factory.
+        import hashlib
+        registry_key = f"{name}-{hashlib.sha256((str(root.resolve()) + child.fingerprint()).encode()).hexdigest()[:16]}"
+        register_agent_if_absent(name=registry_key,
+                                factory_func=lambda _llm, selected=child: build_agent(selected, root),
+                                description=f"Flow specialist {name}: {child.role_file.name}")
+        delegation.append(f"{name}: use task subagent_type={registry_key}")
+    context = _context(selection, root)
+    if delegation:
+        context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
     return Agent(llm=llm,
                  tools=[Tool(name=tools[t].name) for t in selection.role_options.get("tools", ["terminal", "file_editor"])],
-                 agent_context=_context(selection, root))
+                 agent_context=context)
 
 
 def build_native_agent(selection: Selection, root: Path):

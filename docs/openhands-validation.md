@@ -33,3 +33,12 @@ Live native subscription acceptance is incomplete. See
 choice and containment scope. Native state/network permissions were not broadened;
 no permission acknowledgement is enabled in the template. Remote workspace
 provisioning/deployment and a production self-hosted model were not run.
+
+## Focused post-implementation review
+
+Eleven focused replacement/SDK construction tests pass after fixing duplicate
+SDK specialist registration, project/profile factory identity, waiting-resume
+outcome preservation and CLI failure reporting for SDK error status. Nested
+rosters are delegated through the SDK rather than rejected by Flow. These tests
+make no live model/native calls. The prior full repository result remains the
+2,130-test run above; it was not repeated for these narrowly tested fixes.
