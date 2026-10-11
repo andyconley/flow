@@ -17,6 +17,10 @@ base_url = "http://127.0.0.1:8000/v1"
 kind = "local"
 model = "ollama_chat/your-coding-model"
 base_url = "http://127.0.0.1:11434"
+# Match these to the host's effective num_ctx, not its architecture maximum.
+# max_input_tokens = 65536
+# max_output_tokens = 8192
+# condenser_max_tokens = 57344  # stock SDK summarization with output headroom
 
 [profiles.codex]
 kind = "codex"

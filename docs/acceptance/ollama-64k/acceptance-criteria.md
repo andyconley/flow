@@ -1,0 +1,1 @@
+Acceptance criteria include verifying that calling `greeting("")` raises a `ValueError`, and confirming that calling `greeting("Alice")` correctly returns `"Hello, Alice!"`.

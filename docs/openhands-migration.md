@@ -167,3 +167,13 @@ Official references: [architecture](https://docs.openhands.dev/sdk/arch/overview
 [local models](https://docs.openhands.dev/openhands/usage/llms/local-llms).
 Moving docs are explanatory; the pinned installed APIs are the implementation
 contract.
+
+## Effective local context settings
+
+Local profiles may supply the SDK's `max_input_tokens` and `max_output_tokens`.
+`condenser_max_tokens` selects the stock SDK LLMSummarizingCondenser with that
+summary threshold; Flow neither counts tokens nor implements its own compaction.
+Absent fields retain SDK defaults. The isolated branch project's current profile
+selects the existing Ollama development model with context 65,536, output 8,192
+and summary threshold 57,344. No global/user profile is changed. See
+[64K setup and rollback](ollama-64k-setup.md).

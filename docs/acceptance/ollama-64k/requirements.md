@@ -1,0 +1,1 @@
+The `greeting` function must be updated to reject an empty string as input by raising a `ValueError`, while continuing to return the appropriate greeting for all other valid string inputs.

@@ -90,6 +90,10 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
         model = provider.get("model", "")
         if not isinstance(model, str) or not model.startswith(("openai/", "ollama/", "ollama_chat/")):
             raise RuntimeConfigurationError("local model must use openai/, ollama/, or ollama_chat/ with an explicit self-hosted endpoint")
+        for name in ("max_input_tokens", "max_output_tokens", "condenser_max_tokens"):
+            value = provider.get(name)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
+                raise RuntimeConfigurationError(f"{name} must be a positive integer")
         key_env = provider.get("api_key_env")
         if key_env and (not re.fullmatch(r"[A-Z][A-Z0-9_]*", key_env) or key_env in {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"}):
             raise RuntimeConfigurationError("use a dedicated self-hosted credential environment variable")

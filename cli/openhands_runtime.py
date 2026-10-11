@@ -73,8 +73,15 @@ def build_agent(selection: Selection, root: Path):
     key = os.environ.get(key_env) if key_env else "self-hosted"
     if key_env and not key:
         raise RuntimeConfigurationError(f"self-hosted credential variable {key_env} is unset")
+    llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens") if name in provider}
     llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
-              usage_id=f"flow-{selection.role}")
+              usage_id=f"flow-{selection.role}", **llm_options)
+    condenser = None
+    if provider.get("condenser_max_tokens") is not None:
+        from openhands.sdk.context.condenser import LLMSummarizingCondenser
+        condenser = LLMSummarizingCondenser(
+            llm=llm.model_copy(update={"usage_id": f"flow-{selection.role}-condenser"}),
+            max_tokens=provider["condenser_max_tokens"])
     # Register declared specialists with the SDK's own delegation mechanism.
     # Each factory resolves its own local profile; no Flow manager/dispatch loop.
     config = load_config(root)
@@ -95,7 +102,7 @@ def build_agent(selection: Selection, root: Path):
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
     return Agent(llm=llm,
                  tools=[Tool(name=tools[t].name) for t in selection.role_options.get("tools", ["terminal", "file_editor"])],
-                 agent_context=context)
+                 agent_context=context, condenser=condenser)
 
 
 def build_native_agent(selection: Selection, root: Path):

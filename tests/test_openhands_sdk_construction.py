@@ -62,3 +62,13 @@ class SpecialistConstructionTests(unittest.TestCase):
             self.assertEqual(result["session"]["metrics"], {"cost": 0.2})
             stored = runstate.status("waiting", root)["sessions"]["define:business-analyst"]
             self.assertEqual(stored["response"], "previous response")
+
+    def test_configured_effective_context_controls_sdk_and_summary_headroom(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / ".flow").mkdir()
+            (root / ".flow/runtime.toml").write_text('default_profile="local"\n[profiles.local]\nkind="local"\nmodel="openai/test"\nbase_url="http://localhost:8000/v1"\nmax_input_tokens=65536\nmax_output_tokens=8192\ncondenser_max_tokens=57344\n')
+            agent = build_agent(select(root, "define"), root)
+            self.assertEqual(agent.llm.effective_max_input_tokens, 65536)
+            self.assertEqual(agent.llm.effective_max_output_tokens, 8192)
+            self.assertEqual(agent.condenser._effective_max_tokens(agent.llm), 57344)

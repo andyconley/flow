@@ -309,3 +309,14 @@ original-source modification, deployment or installed Flow replacement occurred.
 
 Local Ollama inference/tool/persistence and both native acceptance paths are now
 verified. Remote deployment and larger production coding tasks remain untested.
+
+## Authorized 64K update
+
+The existing development model now has effective context 65,536, with exact
+32K rollback preserved and all other recipe parameters/base weights unchanged.
+The branch-specific local profile forwards SDK input 65,536/output 8,192 and
+uses stock summarization at 57,344. Real short-call verification passed; observed
+model allocation was 16.24 GiB with normal memory pressure. Full repository suite:
+2,135 run, 68 skipped, zero failures/errors; 12 focused SDK tests passed. Larger
+prompt/actual summary-trigger behavior is untested. See
+[setup and rollback](ollama-64k-setup.md). Prior acceptance evidence is unchanged.
