@@ -23,10 +23,9 @@ class AdvisoryRenderTests(unittest.TestCase):
             if "## Composition" in (ROOT / "scaffolds/default" / row["source"]).read_text()
         }
         self.assertEqual(dispatchers, {
-            "flow-define", "flow-solution", "flow-plan", "flow-implement",
-            "flow-review", "flow-archive", "flow-init-project",
+            "flow-init-project",
         })
-        for name in dispatchers | {"flow-scout", "flow-resume"}:
+        for name in dispatchers | {"flow-scout"}:
             with self.subTest(name=name):
                 body = (ROOT / "scaffolds/default" / commands[name]["source"]).read_text()
                 claude = render.render_skill_from_command(
@@ -40,7 +39,8 @@ class AdvisoryRenderTests(unittest.TestCase):
                 self.assertEqual(codex.count("## Advisory expertise at role dispatch"), 1)
                 for role in render.EXPERTISE_ADVISORY_ROLES:
                     self.assertIn(role, shared)
-        self.assertEqual(render.expertise_advisory_guidance("flow-help"), "")
+        for name in ("flow-help", "flow-define", "flow-solution", "flow-plan", "flow-implement", "flow-review", "flow-archive", "flow-resume"):
+            self.assertEqual(render.expertise_advisory_guidance(name), "")
 
     def test_user_overlay_can_disable_advisory_generation_for_rollback(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -24,17 +24,17 @@ from sync import (
 )
 
 
-TARGETS = ("claude", "codex", "maf")
+TARGETS = ("claude", "codex", "openhands")
 C_LITE_COMMAND_NEEDLES = {
-    "flow-define": "flow run transition <work-id> start-definition",
-    "flow-solution": "flow run transition <work-id> start-solution",
-    "flow-plan": "flow run transition <work-id> start-plan",
-    "flow-implement": "flow run transition <work-id> start-implementation",
-    "flow-review": "flow run transition <work-id> start-review",
-    "flow-archive": "flow run transition <work-id> archive",
+    "flow-define": "flow workflow execute <work-id> --stage define",
+    "flow-solution": "flow workflow execute <work-id> --stage solution",
+    "flow-plan": "flow workflow execute <work-id> --stage plan",
+    "flow-implement": "flow workflow execute <work-id> --stage implement",
+    "flow-review": "flow workflow execute <work-id> --stage review",
+    "flow-archive": "flow workflow archive <work-id>",
     "flow-scout": "flow run transition <work-id> start-scout-review",
     "flow-status": "flow run list",
-    "flow-resume": "flow run verify",
+    "flow-resume": "flow workflow status",
 }
 
 
@@ -231,7 +231,7 @@ def smoke_payload(target: str = "all", root: Path = HOME) -> dict[str, Any]:
         raise ValueError(f"unsupported target: {target}")
     manifest_path, manifest = merge_user_overlay(SCAFFOLD_DIR)
     targets = TARGETS if target == "all" else (target,)
-    results = [_maf_target() if item == "maf" else _check_target(root, manifest_path, manifest, item) for item in targets]
+    results = [_openhands_target() if item == "openhands" else _check_target(root, manifest_path, manifest, item) for item in targets]
     failed = sum(1 for result in results for row in result["static"] if row["status"] == "failed")
     manual_required = sum(1 for result in results for row in result["manual"] if row["status"] == "manual_required")
     return {
@@ -242,11 +242,10 @@ def smoke_payload(target: str = "all", root: Path = HOME) -> dict[str, Any]:
     }
 
 
-def _maf_target() -> dict[str, Any]:
-    from maf_runtime import probe
+def _openhands_target() -> dict[str, Any]:
+    from openhands_runtime import probe
     result = probe()
-    status = "passed" if result["state"] == "ready" else "failed"
-    return {"target": "maf", "static": [_check("MAF delivery runtime", status, result["state"] + ": " + result["remedy"])], "manual": []}
+    return {"target": "openhands", "static": [_check("OpenHands execution runtime", "passed" if result["ready"] else "failed", json.dumps(result["packages"]))], "manual": []}
 
 
 def _render_target(result: dict[str, Any]) -> list[str]:

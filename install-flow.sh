@@ -227,9 +227,6 @@ mode = "release"
 version = "${version}"
 remote = "${remote}"
 installed_at = "${installed_at}"
-maf_runtime_activation_revision = 1
-maf_runtime_activation_state = "pending"
-maf_runtime_activation_attempted_at = "${installed_at}"
 TOML
 else
   ln -s "${ROOT_DIR}" "${SOURCE_DIR}"
@@ -244,9 +241,6 @@ python_version = "${FLOW_PYTHON_VERSION}"
 mode = "develop"
 source_target = "${ROOT_DIR}"
 installed_at = "${installed_at}"
-maf_runtime_activation_revision = 1
-maf_runtime_activation_state = "pending"
-maf_runtime_activation_attempted_at = "${installed_at}"
 TOML
 fi
 
@@ -276,23 +270,10 @@ if ! "${BIN_DIR}/flow" --help >/dev/null 2>&1; then
   exit 1
 fi
 
-# Delivery is optional after installation, but a successful install owns a
-# verified runtime for the chartered lane. `install-maf` stages and probes its
-# environment before atomically changing the runtime pointer, so an existing
-# known-good selection remains intact if this step fails.
-set +e
-maf_install_output="$("${BIN_DIR}/flow" runtime install-maf 2>&1)"
-maf_install_status=$?
-set -e
-printf '%s\n' "${maf_install_output}"
-if [[ ${maf_install_status} -ne 0 ]]; then
-  if [[ "${maf_install_output}" == *"unsupported_runtime"* ]]; then
-    echo "warning: managed MAF runtime is unsupported on this host; base Flow installed without Delivery readiness"
-  else
-    rollback_install
-    err "managed MAF runtime could not be provisioned; prior Flow source, config, and runtime selection were restored"
-  fi
-fi
+# OpenHands is an explicit, isolated Python dependency environment. Installing
+# Flow must not activate an old MAF runtime or start any provider session.
+echo "Execution runtime: install runtime/openhands/requirements.txt in an isolated Python 3.12 environment."
+echo "Verify it with that interpreter: python cli/flow.py workflow runtime --json"
 
 rm -rf "${SOURCE_BACKUP}" "${CONFIG_BACKUP}"
 

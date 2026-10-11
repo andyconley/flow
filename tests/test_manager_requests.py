@@ -272,7 +272,8 @@ class RecoveryActorCliTests(unittest.TestCase):
         with patch("flow.recover_delivery", side_effect=fake), patch("sys.stdout"), \
              patch("sys.argv", ["flow", "run", "recover-delivery-lead", "work", "attempt", "--actor", "andy"]):
             code = flow.main()
-        self.assertEqual((code, seen["actor"]), (0, "andy"))
+        self.assertEqual(code, 2)
+        self.assertEqual(seen, {})
 
     def test_the_hard_coded_default_is_gone(self):
         cli = Path(__file__).resolve().parents[1] / "cli"

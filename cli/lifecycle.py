@@ -713,7 +713,8 @@ def _convert_to_release() -> int:
     )
     print(f"converted to release mode (version: {version})")
     print(f"clone preserved at: {clone}")
-    return 0 if _finish_maf_transaction(prior_config) else 1
+    _remove_path(_stage_path("old"))
+    return 0
 
 
 def _convert_to_develop(clone: Path) -> int:
@@ -763,7 +764,8 @@ def _convert_to_develop(clone: Path) -> int:
         }
     )
     print(f"converted to develop mode (source: {clone})")
-    return 0 if _finish_maf_transaction(prior_config) else 1
+    _remove_path(_stage_path("old"))
+    return 0
 
 
 def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False) -> int:
@@ -983,4 +985,5 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
     write_install_config(new_install)
 
     print(f"updated to {tag}")
-    return 0 if _finish_maf_transaction(prior_config) else 1
+    _remove_path(_stage_path("old"))
+    return 0

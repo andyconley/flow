@@ -1420,35 +1420,25 @@ class FlowCliTests(FlowCliHarness):
     def test_lifecycle_commands_reference_c_lite_run_protocol(self) -> None:
         command_dir = REPO_ROOT / "scaffolds" / "default" / "commands"
         expected = {
-            "flow-define.md": "flow run transition <work-id> start-definition",
-            "flow-solution.md": "flow run transition <work-id> start-solution",
-            "flow-plan.md": "flow run transition <work-id> start-plan",
-            "flow-implement.md": "flow run transition <work-id> start-implementation",
-            "flow-review.md": "flow run transition <work-id> start-review",
-            "flow-archive.md": "flow run transition <work-id> archive",
+            "flow-define.md": "flow workflow execute <work-id> --stage define",
+            "flow-solution.md": "flow workflow execute <work-id> --stage solution",
+            "flow-plan.md": "flow workflow execute <work-id> --stage plan",
+            "flow-implement.md": "flow workflow execute <work-id> --stage implement",
+            "flow-review.md": "flow workflow execute <work-id> --stage review",
+            "flow-archive.md": "flow workflow archive <work-id>",
             "flow-scout.md": "flow run transition <work-id> start-scout-review",
             "flow-status.md": "flow run list",
-            "flow-resume.md": "flow run verify",
+            "flow-resume.md": "flow workflow status",
         }
         for name, needle in expected.items():
             with self.subTest(command=name):
                 self.assertIn(needle, (command_dir / name).read_text())
 
-    def test_archive_command_registers_its_final_outcome_source(self) -> None:
-        text = (
-            REPO_ROOT / "scaffolds" / "default" / "commands" / "flow-archive.md"
-        ).read_text()
-
-        self.assertIn(
-            "--artifact archive=.flow/runs/<work-id>/archive.md",
-            text,
-        )
-        self.assertIn("write the completed Archive Summary", text)
-        self.assertIn("`Work Closed` heading", text)
-        self.assertLess(
-            text.index("write the completed Archive Summary"),
-            text.index("flow run transition <work-id> archive"),
-        )
+    def test_archive_command_preserves_project_outcomes(self) -> None:
+        text = (REPO_ROOT / "scaffolds/default/commands/flow-archive.md").read_text()
+        self.assertIn("accepted review", text)
+        self.assertIn("outcomes", text)
+        self.assertIn("flow workflow archive <work-id>", text)
 
     def test_shared_commands_use_runtime_memory_provider_language(self) -> None:
         command_dir = REPO_ROOT / "scaffolds" / "default" / "commands"
@@ -2977,7 +2967,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("brew install python@3.12", combined)
         self.assertFalse((fake_home / ".flow" / "source").exists())
 
-    def test_unsupported_managed_maf_host_keeps_base_install_and_readiness_is_strict(self) -> None:
+    def test_install_keeps_openhands_explicit_and_does_not_activate_maf(self) -> None:
         fake_home = self._new_fake_home()
         base = self.repo / "unsupported-maf-python"
         base.write_text("#!/bin/sh\ncase \"$2\" in\n  *sys.platform*) echo 'linux|x86_64|3|12' ;;\n  *) echo '3.12.0' ;;\nesac\n")
@@ -2988,14 +2978,14 @@ class FlowCliTests(FlowCliHarness):
         result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
                                 text=True, capture_output=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("managed MAF runtime is unsupported", result.stdout)
+        self.assertIn("runtime/openhands/requirements.txt", result.stdout)
         self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
         config = (fake_home / ".flow" / "config.toml").read_text()
-        self.assertIn('maf_runtime_activation_state = "unsupported"', config)
+        self.assertNotIn("maf_runtime_activation_state", config)
         readiness = subprocess.run([sys.executable, str(FLOW_CLI), "runtime", "readiness"], cwd=self.repo,
                                   text=True, capture_output=True, env=env)
         self.assertNotEqual(readiness.returncode, 0)
-        self.assertIn("not_installed", readiness.stdout)
+        self.assertIn("openhands-sdk", readiness.stdout)
 
     def test_install_flow_sh_uses_versioned_python_when_python3_is_too_old(self) -> None:
         fake_home = self._new_fake_home()
@@ -3904,6 +3894,9 @@ class FlowCliTests(FlowCliHarness):
                 "normalize",
                 "ollama_edit_worker",
                 "ollama_manager",
+                "openhands_config",
+                "openhands_flow",
+                "openhands_runtime",
                 "orchestration",
                 "overlay",
                 "paths",

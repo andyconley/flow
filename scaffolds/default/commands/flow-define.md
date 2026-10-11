@@ -1,368 +1,62 @@
 # flow-define
 
-Use `flow-define` for early feature or architectural-capability definition: ideation, scope discovery, evidence gathering, and requirements approval before `flow-plan` or `flow-solution`.
+Use research and evidence to clarify the requested outcome, stakeholders, constraints, non-goals and testable acceptance criteria. Surface consequential ambiguity to the user.
 
-<HARD-GATE>
-Do NOT produce approved requirements, route to `flow-plan` / `flow-solution`, or declare the definition complete until the definition has passed discovery, research/evidence review when needed, adversarial review, and explicit engineer approval. A definition that skips questioning creates polished requirements around untested assumptions.
-</HARD-GATE>
+Flow owns this workflow stage and its outputs. OpenHands owns execution, tools,
+conversation history, retries and specialist delegation. Do not rebuild a Flow
+manager, file broker, provider loop, token/rate gate or execution ledger.
 
-## Overview
+## Enter and execute
 
-This command turns a vague idea, feature concept, or architectural capability into approved requirements. It is the phase before planning and solutioning.
+Start new work with `flow workflow init <work-id>`. Historical runs stay intact;
+reference their artifacts in the new task rather than migrating checkpoints.
 
-Where `flow-solution` decides which technical approach fits approved requirements, and `flow-plan` turns approved scope into an implementation-ready plan, `flow-define` decides what outcome and requirements are worth pursuing.
+For a configured self-hosted profile:
 
-The command runs in six phases:
-
-1. intake
-2. discovery
-3. research and evidence
-4. adversarial review
-5. requirements capture
-6. approval and routing
-
-## When to Use
-
-Use this command when:
-
-- the user has an idea but not agreed requirements
-- feature scope, target users, outcomes, or non-goals are still forming
-- an architectural capability needs definition before solutioning
-- research may be needed to understand precedent, standards, user pain, or operational evidence
-- `/flow-boot` sees a vague new idea and needs a default next lane
-
-**When NOT to use:** bug reports or defect investigations that already have expected/actual behavior; route those to `flow-plan` for now. Do not use this once requirements are already approved; route to `flow-solution` or `flow-plan`.
-
-## Archive retrieval and proposal evidence
-
-After the engineer confirms the entry subject/scope, before proposal shaping,
-run `flow archive search "<confirmed subject>" --lane define --json` once for
-this lane entry. Preserve the first engagement response requirements. Default
-search includes ancestor overlays. Keep the returned `selection_id` as the
-logical active selection; later turns reuse it, not another automatic search.
-Implement/scout do not gain automatic retrieval from this contract.
-
-Handle retrieval exit codes deliberately: 0 complete/no_matches; 2 invalid
-request; 3 partial; 4 unavailable/preflight_required. A retrieval failure never
-aborts this lane. Missing/stale preflight directs the operator to `flow doctor`;
-do not first probe FTS5 here or silently use another scorer. Partial results have
-subset counts and missing-source uncertainty. No matches is not proof that no
-relevant decision exists. Respect the full-response byte ceiling; it is not a
-measured model-token count.
-
-For an explicit narrower rerequest, replace the logical active selection. Do not
-append all earlier hits again or claim retained transcript tokens were erased.
-Keep material dispositions and unresolved questions in the proposal/handoff even
-when the active selection changes.
-
-Before advancing a proposal that appears to contradict a retrieved current
-decision, visibly cite the qualified source and record one disposition:
-
-- Adapt the proposal to honor applicable guidance.
-- Reject applicability using the pointed source's actual conditions.
-- Propose supersession with rationale and an explicit engineer approval decision.
-- Record unresolved applicability, missing evidence and an owner in the proposal
-  and subsequent handoff.
-
-A rank or BM25 score establishes neither applicability nor authority. For a
-same-component, close-vocabulary, plausible but inapplicable current hit, cite
-its source conditions and explain the mismatch; do not change the proposal to
-conform to it merely because it ranked highly. Do this even without another
-genuine conflict, including ancestor and child-specific precedents. When the
-abstract is insufficient, consult its source pointer or explicitly retain an
-unavailable/unresolved disposition. Never invent the missing conditions.
-
-When manual source inspection finds evidence after a no-match or unavailable
-retrieval, identify it as manually inspected evidence outside the active
-retrieval selection. Do not call it a returned or ranked hit, or imply that
-retrieval found it. Keep the retrieval miss visible alongside that evidence.
-Retrieval introduces no lifecycle veto, inferred supersession or new approval gate.
-
-A `reviewed_legacy` hit has explicit reviewer-backed authority, not canonical
-lifecycle closure. Preserve that provenance and any unknown historical date;
-reviewer identity is declared, not authenticated or necessarily independent.
-Apply the same conflict and applicability dispositions to these hits. Withdrawal
-or stale evidence excludes a legacy decision; a cached result cannot restore
-approval. Rescan repairs generated content only and never substitutes for an
-explicit evidence-backed reapproval. When current authority is unavailable, keep
-that limitation visible rather than treating an older receipt as current.
-
-
-## Primary inputs
-
-- idea, feature concept, capability request, or project-scope question
-- available user, support, operational, market, or standards evidence
-- project overlay context and active standards
-- any known constraints, risks, or non-goals
-
-## Primary outputs
-
-- approved requirements, or a clear not-yet-approved disposition
-- recommended durable artifact or structured chat summary
-- role-owned research notes when evidence is needed
-- adversarial review findings and dispositions
-- next-lane recommendation: `flow-solution`, `flow-plan`, further definition, or defer/reject
-
-## C-Lite Run Protocol
-
-For durable definition work, create or update the run through the CLI rather
-than editing lifecycle state by hand:
-
-```bash
-flow run transition <work-id> start-definition
-flow run transition <work-id> approve-definition \
-  --artifact requirements=.flow/runs/<work-id>/requirements.md \
-  --artifact acceptance_criteria=.flow/runs/<work-id>/acceptance-criteria.md
+```sh
+flow workflow execute <work-id> --stage define --task-file <task.md>
 ```
 
-Do not route to `flow-solution` or `flow-plan` until `approve-definition`
-succeeds. A refused transition is a hard gate, not advisory prose.
+The command enters a legal stage from the prior approved state and resumes the
+stage/role's SDK conversation. Use `--role` and `--profile` for a specialist or
+different self-hosted endpoint. Profile and role settings live in `.flow/runtime.toml`
+and the user overlay. The installed OpenHands packages must match the pinned
+runtime requirements. Actual workspace permissions still apply.
 
-## Orchestration safety
+For an existing official native Codex/Claude session:
 
-Revision-2 runs persist `orchestration_manifest=.flow/runs/<work-id>/orchestration.json`. Follow `standards/orchestration.md` and run `flow run validate-orchestration <work-id> --stage dispatch` immediately before delegation or shared mutation; `approve-definition` rechecks it.
-
-## Composition
-
-Core roles:
-
-- `business-analyst` for users, workflows, ambiguity, current pain, and acceptance criteria
-- `product-manager` for outcome, value, priority, success criteria, and non-goals
-- `solution-architect` for capability boundaries, standards, precedent, feasibility signals, and decision surfaces
-
-The opener depends on the request:
-
-- `product-manager` opens when the problem is user, business, or priority led.
-- `solution-architect` opens when the problem is platform, architectural, or capability led.
-
-All three core roles participate in discovery, research proposal, adversarial review, and approval readiness.
-
-Conditional roles:
-
-- `sre` for operational incidents, alerts, reliability pain, rollout constraints, or observability gaps
-- `support-lead` for support burden, recurring user confusion, troubleshooting gaps, and escalation evidence
-- `test-engineer` for measurable acceptance, validation feasibility, and testability risks
-- `security-reviewer` for abuse cases, sensitive data, auth, policy, compliance, or third-party risk
-- `data-engineer` for data ownership, persistence, schema, migration, and lifecycle concerns
-- `ux-specialist` for interaction models, user journeys, accessibility, and content clarity
-
-## Definition Workflow
-
-### Phase 1 - Intake
-
-Classify the request:
-
-- feature
-- architectural capability
-- workflow/process capability
-- not definition-shaped; route elsewhere
-
-Confirm:
-
-- who the definition is for
-- what outcome the user is trying to reach
-- whether this is bug-shaped work that should stay in `flow-plan`
-- whether the current conversation can use a structured chat summary or needs durable artifacts
-
-### Phase 2 - Discovery
-
-Clarify the problem before researching or writing requirements.
-
-After the engineer confirms the subject and scope, read
-`standards/session-model-advice.md`, run
-`flow model context --runtime <active-runtime> --lane define --json`, assess
-the next meaningful definition work, and resolve the selected profile. Report
-the recommendation and active-parent provenance separately before substantive
-discovery. The advice is advisory and provisional when scope is still unclear,
-performs no switch, adds no approval question, and does not block this phase.
-
-Cover:
-
-- problem or opportunity
-- target users, operators, or maintainers
-- current workflow or current limitation
-- desired outcome
-- success criteria
-- known constraints
-- explicit non-goals
-- assumptions and open questions
-
-### Phase 3 - Research and Evidence
-
-Research is optional, but the decision to skip it is explicit.
-
-Any core or conditional role may identify a research need. Research must answer a named question, not gather background generally. Use `standards/research-evidence.md` to choose each role's research focus.
-
-Examples:
-
-- What standards govern this kind of work?
-- What internal precedent should we mirror?
-- What do comparable tools or teams do?
-- What user reports, support tickets, or feedback prove this matters?
-- What operational incidents, alerts, or support load make this urgent?
-- What security, privacy, data, or rollout constraints should shape requirements?
-
-For lightweight work, summarize the evidence inside the definition output. For substantial work, write one note per question under:
-
-```text
-.flow/runs/<work-id>/research/<topic-slug>.md
+```sh
+flow workflow native-handoff <work-id> --stage define --profile <codex-or-claude-profile> --task-file <task.md>
 ```
 
-Use `templates/research-note.md`. Research is complete only when each finding has an implication for requirements.
+Use that context artifact in the native session with its existing subscription
+and permissions. Automated native profiles use stock OpenHands ACPAgent after
+the scoped access decision in docs/native-access-decision.md. Stock ACP can grant
+persistent native permissions; defaults leave acknowledgement unset. Native
+handoff is a temporary interactive fallback. Do not copy credentials or switch billing.
 
-### Phase 4 - Adversarial Review
+## Durable outputs
 
-Before requirements can be approved, the roles challenge the draft from their accountable perspectives.
+Write these files under `.flow/runs/<work-id>/`:
 
-**Every brief carries an evidence inventory** — what already exists in the area under review, with paths. Without it a reviewer cannot tell absent from unfound, and "X is missing" is an unsupported finding. See `standards/evidence.md`; `templates/adversarial-review.md` has the block.
+- `requirements.md`
+- `acceptance-criteria.md`
 
-- `product-manager`: Is the outcome worth doing now? Is the scope too broad? Are non-goals honest?
-- `business-analyst`: Are users, workflows, acceptance criteria, and edge cases clear enough?
-- `solution-architect`: Are capability boundaries, standards, precedent, and feasibility assumptions sound?
-- Conditional roles challenge their own risk surfaces when engaged.
+Use specialist roles, project skills, context and existing approved artifacts as
+needed. SDK TaskToolSet handles configured specialist delegation. Record actual
+results and unresolved questions; a model response alone does not approve work.
 
-Adversarial review should produce dispositions:
+## Approval and continuation
 
-- requirement changed
-- acceptance criterion changed
-- non-goal clarified
-- assumption confirmed or rejected
-- open question recorded
-- next lane changed to `flow-solution`
-- idea deferred or rejected
+After the user/operator has reviewed the outputs:
 
-### Phase 5 - Requirements Capture
-
-Capture the result in the smallest artifact that can survive handoff.
-
-Use a structured chat summary only when all are true:
-
-- the definition is small
-- no research files were needed
-- the requirements can fit clearly in one response
-- no multi-session handoff is expected
-
-Otherwise recommend and create a durable artifact using `templates/definition.md` under the run or project location that fits the work.
-
-Required fields:
-
-- problem or opportunity
-- audience / operator / maintainer
-- desired outcome
-- success criteria
-- acceptance criteria
-- non-goals
-- constraints
-- assumptions
-- evidence and research implications
-- open questions
-- approval status
-
-### Phase 6 - Approval and Routing
-
-Requirements are not approved until the engineer explicitly accepts them.
-
-Routing:
-
-- `flow-solution` when approved requirements still need technical options, architecture tradeoffs, or chunking
-- `flow-plan` when the requirements and approach are clear enough to shape implementation
-- further definition when evidence or scope is still incomplete
-- defer/reject when the opportunity is not worth pursuing now
-
-## Output Format
-
-**Emit the structured output below only after discovery, research/evidence assessment, and adversarial review have completed.**
-
-```md
-## Definition Summary
-
-### Problem or Opportunity
-- What:
-- Who:
-- Why now:
-
-### Desired Outcome
-- [Outcome]
-
-### Session Model Advice
-- Coordinator recommendation: [profile, native model/effort or unresolved, disposition, reason]
-- Active parent: [observed | declared | unknown, with source when known]
-- Switch performed: no
-
-### Evidence
-- Research needed: yes | no
-- Findings and requirement implications:
-
-### Requirements
-- Success criteria:
-- Acceptance criteria:
-- Non-goals:
-- Constraints:
-- Assumptions:
-
-### Adversarial Review
-- Product:
-- Requirements:
-- Architecture/capability:
-- Other roles:
-
-### Artifact
-- Structured chat summary | durable artifact at [path]
-- Why:
-
-### Approval
-- Approved | Not approved
-- Approver:
-- Remaining open questions:
-
-### Next Lane
-- `flow-solution` | `flow-plan` | further definition | defer/reject
-- Why:
+```sh
+flow workflow approve <work-id> --stage define
 ```
 
-## Common Rationalizations
 
-| Rationalization | Reality |
-|---|---|
-| "We can define requirements during planning." | Planning should shape approved requirements, not discover the outcome from scratch. |
-| "Research will slow us down." | Targeted research prevents requirements from hardening around guesses. |
-| "The idea is obvious." | Obvious ideas still need users, outcomes, non-goals, and approval. |
-| "A chat summary is enough." | Only if the requirements are small enough to survive handoff without hidden context. |
-| "Adversarial review is negative." | It is how good ideas stop carrying bad assumptions. |
+Inspect progress with `flow workflow status`, `flow run history` and SDK outcome
+artifacts. Pause/block/resume through ordinary Flow lifecycle transitions.
 
-## Red Flags
-
-- requirements approved without explicit user approval
-- research performed without named questions
-- evidence listed without implications for requirements
-- no non-goals
-- no acceptance criteria
-- no success criteria for feature or capability value
-- downstream lane chosen before adversarial review
-- bug-shaped work pulled into definition instead of `flow-plan`
-
-## Escalation Rules
-
-- Escalate to `flow-solution` when the definition exposes multiple viable technical approaches, durable architecture decisions, or unclear capability boundaries.
-- Escalate to `flow-plan` when requirements are approved and implementation shaping is the next real task.
-- Stay in definition when scope, evidence, or approval is still missing.
-- Defer or reject when the evidence does not justify the work.
-
-## Verification
-
-Before leaving `flow-define`, confirm:
-
-- [ ] request was classified as definition-shaped
-- [ ] opener role was selected intentionally
-- [ ] business-analyst, product-manager, and solution-architect participated
-- [ ] research need was considered explicitly
-- [ ] each research finding has an implication for requirements
-- [ ] adversarial review ran and findings were dispositioned
-- [ ] requirements include success criteria, acceptance criteria, non-goals, constraints, assumptions, and open questions
-- [ ] artifact choice was recommended and justified
-- [ ] approval status is explicit
-- [ ] next lane is explicit and justified
-
-## Finish Criteria
-
-`flow-define` is done when the user has approved requirements, or a clear reason the definition is not yet approved, and the next lane is obvious.
+Use the active runtime memory provider as companion context when available.
+Verify material claims against canonical project artifacts and code.

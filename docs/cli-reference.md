@@ -17,6 +17,52 @@ The usage-tracking commands form a pipeline, and the order matters: **`harvest` 
 
 ## Command Reference
 
+### `flow workflow init <work-id>`
+
+Start a revision-3 definition. Flow owns stage state and artifacts; OpenHands
+owns execution. Historical runs are not silently migrated.
+
+### `flow workflow execute <work-id>`
+
+Execute or resume a specialist using the pinned SDK and an explicit self-hosted
+profile. `--task-file PATH` is required; `--stage`, `--role`, `--profile`,
+`--new-session`, `--project-root` and `--json` are available. Optional SDK
+confirmation uses `--confirm-pending` or `--reject-pending REASON`.
+
+### `flow workflow approve <work-id>`
+
+After reviewing the stage outputs, approve with `--stage` and any necessary
+`--disposition NAME=VALUE` values. Implementation approval enters review;
+review approval accepts it. This does not merge, push or deploy.
+
+### `flow workflow native-handoff <work-id>`
+
+Prepare context for an existing official Codex or Claude session with
+`--stage`, `--profile` and required `--task-file PATH`. Native subscriptions
+and permissions stay on the interactive native path. Automated SDK ACP
+execution is blocked by upstream auto-approval of permission requests.
+
+### `flow workflow archive <work-id>`
+
+Close an accepted review with `--disposition memory=VALUE` and
+`--disposition capability_gaps=VALUE`. Preserve a project archive summary.
+
+### `flow workflow status <work-id>`
+
+Inspect stages, outputs, SDK conversation IDs, outcomes and metrics. Use `--json`
+for a structured projection.
+
+### `flow workflow runtime`
+
+Read exact pinned package versions and the native access decision. `--json` is
+available. This command does not install packages or start providers.
+
+The [OpenHands migration guide](openhands-migration.md) documents configuration,
+workspace access, supported execution and differences from historical MAF runs.
+Historical provider execution entry points below are retained for reference but
+refuse to start/resume providers on this branch.
+
+
 ### `flow setup machine`
 
 Prepare machine-local support under `~/.flow`.

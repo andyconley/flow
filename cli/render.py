@@ -176,9 +176,7 @@ def manifest_ref_for() -> str:
 
 
 EXPERTISE_ADVISORY_COMMANDS = frozenset({
-    "flow-define", "flow-solution", "flow-plan", "flow-implement",
-    "flow-review", "flow-archive", "flow-init-project", "flow-scout",
-    "flow-resume",
+    "flow-init-project", "flow-scout",
 })
 EXPERTISE_ADVISORY_ROLES = (
     "architect", "business-analyst", "lead-developer", "sre",

@@ -2,6 +2,20 @@
 
 Portable workflow framework for AI-assisted development.
 
+## OpenHands-backed Flow (this branch)
+
+Flow owns define, solution, plan, implement, review and archive, specialist roles,
+skills, context and project outputs. OpenHands 1.54.0 owns execution, conversations,
+workspaces, tools and specialist delegation. Self-hosted compatible models are
+coding providers; existing native subscriptions continue through interactive
+handoffs while upstream ACP permission handling blocks automated native execution.
+
+Start with [the branch migration guide](docs/openhands-migration.md) and
+[the runtime profile template](templates/openhands-runtime.toml). Preview with an
+isolated Python environment; do not replace the live install. Old MAF execution
+commands are retired and historical records remain inspectable.
+
+
 ## What It Is
 
 `flow` is a local workflow layer for Claude and Codex. It installs shared commands, agent roles, standards, hooks, and templates so AI-assisted work follows a repeatable path instead of living only in chat.
@@ -210,35 +224,32 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow project audit` | Classify a repo's `.flow/` overlay against the framework (read-only) |
 | `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
 | `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
-| `flow run execute-local WORK_ID --assignment ID --task-file PATH [--multi-turn]` | Run one guarded local specialist call, or the bounded v2 three-call MAF exercise |
-| `flow run execute-mixed WORK_ID --local-task-file PATH --codex-task-file PATH` | Run one guarded Ollama test-engineer and Codex lead-developer job through MAF |
-| `flow run execute-local-claude WORK_ID --local-task-file PATH --claude-task-file PATH` | Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter |
-| `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]` | Run a new provider-neutral v9 charter through Flow-gated Magentic; --legacy-v8 preserves an existing historical v8 contract |
 | `flow run migrate-job-charter-v9 WORK_ID [--replacement PATH] --reason TEXT --approved-by-user [--json]` | Register an audited provider-neutral v9 successor for a legacy manifest-linked charter without rewriting historical evidence |
 | `flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]` | Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending |
 | `flow run v9-recovery-status WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect whether a protocol v9 attempt requires explicit reconciliation without dispatch |
-| `flow run resume-chartered-job WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Continue a started v9 charter from a clean completed-action boundary without replaying completed provider work |
 | `flow run terminate-v9-delivery WORK_ID ATTEMPT_ID --status cancelled\|abandoned --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Seal an uncertain protocol v9 attempt without replaying provider I/O |
-| `flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Create a linked successor only for a sealed zero-send MAF startup failure |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect durable local execution evidence without dispatch |
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
 | `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny a pending v8 expansion request for a paused attempt |
 | `flow run stuck [--json]` | List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only) |
 | `flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]` | Verify a sealed v8 or v9 receipt offline; v9 recomputes selection and exact ledger closure (read-only) |
 | `flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]` | Show protocol-specific call and selection lineage, including v9 fallback and recovery state (read-only) |
-| `flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME` | Recover a v8 attempt (after a decision, an interruption, or a pause) under a fenced claim; the actor is recorded |
 | `flow run cancel-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Ask a live v8 parent to stop; it kills its recorded processes and seals the attempt cancelled, or reports attempt_finished |
 | `flow run abandon-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Reap a stuck v8 attempt's recorded processes and seal it abandoned, keeping every uncertain send uncertain |
 | `flow run delivery-lead WORK_ID attention\|release\|resume\|supersede --expected-generation N [--owner ID]` | Change the Delivery Lead claim under its lead generation; refusals print a stable code |
-| `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |
 | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
-| `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
 | `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
-| `flow runtime smoke [--target all\|claude\|codex\|maf] [--json]` | Check generated runtime surfaces and strict optional MAF readiness |
-| `flow runtime readiness [--json]` | Check strict MAF Delivery readiness without creating an attempt |
-| `flow runtime install-maf [--json]` | Stage, prove, and select Flow's managed pinned MAF runtime |
+| `flow runtime smoke [--target all\|claude\|codex\|openhands] [--json]` | Check generated native surfaces and pinned OpenHands readiness |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |
 | `flow model resolve --runtime <runtime> --profile <profile> [--json]` | Resolve an agent-selected session profile without changing runtime configuration |
+| `flow workflow init WORK_ID` | Start a new Flow definition using OpenHands |
+| `flow workflow execute WORK_ID --stage STAGE --task-file PATH [--role ROLE] [--profile PROFILE] [--new-session]` | Execute or resume an SDK specialist using a configured self-hosted coding endpoint |
+| `flow workflow approve WORK_ID --stage STAGE [--disposition NAME=VALUE]` | Approve durable outputs and advance Flow stages |
+| `flow workflow native-handoff WORK_ID --stage STAGE --profile PROFILE --task-file PATH` | Prepare context for an existing official Codex or Claude subscription session |
+| `flow workflow archive WORK_ID --disposition memory=VALUE --disposition capability_gaps=VALUE` | Archive accepted review outcomes |
+| `flow workflow status WORK_ID [--json]` | Inspect workflow state and SDK conversation references |
+| `flow workflow runtime [--json]` | Inspect pinned OpenHands packages and native access decision |
+| `flow runtime readiness [--json]` | Inspect OpenHands readiness without starting a provider |
 <!-- generated:cli-commands-table:end -->
 
 ### Install and Update

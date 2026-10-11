@@ -29,6 +29,7 @@ from selection_authority import SelectionAuthorityError, validate_requirements
 
 SCHEMA_VERSION = 1
 PROTOCOL_REVISION_CURRENT = 2
+PROTOCOL_REVISION_OPENHANDS = 3
 RUNS_DIR = Path(".flow") / "runs"
 RUN_FILE = "run.json"
 EVENTS_FILE = "events.jsonl"
@@ -400,9 +401,9 @@ ORCHESTRATION_STAGES = {
 
 def _protocol_revision(payload: dict[str, Any]) -> int:
     revision = payload.get("protocol_revision", 1)
-    if isinstance(revision, bool) or revision not in {1, PROTOCOL_REVISION_CURRENT}:
+    if isinstance(revision, bool) or revision not in {1, PROTOCOL_REVISION_CURRENT, PROTOCOL_REVISION_OPENHANDS}:
         raise ValueError(
-            f"protocol_revision: expected 1 or {PROTOCOL_REVISION_CURRENT}"
+            f"protocol_revision: expected 1, {PROTOCOL_REVISION_CURRENT}, or {PROTOCOL_REVISION_OPENHANDS}"
         )
     return revision
 
@@ -418,6 +419,8 @@ def _orchestration_gate_errors(
         revision = _protocol_revision(payload)
     except ValueError as exc:
         return [str(exc)]
+    if revision == PROTOCOL_REVISION_OPENHANDS:
+        return []
     artifacts = payload.get("artifacts", {})
     expected_path = manifest_path(work_id, root)
     expected_relative = expected_path.relative_to((root or repo_root()).resolve()).as_posix()
@@ -634,6 +637,7 @@ def apply_transition(
     note: str | None = None,
     root: Path | None = None,
     _lock_held: bool = False,
+    protocol_revision: int | None = None,
 ) -> tuple[bool, dict[str, Any], list[str]]:
     if not valid_work_id(work_id):
         return False, {}, [
@@ -676,7 +680,7 @@ def apply_transition(
         with run_lock(_run_dir(work_id, root)):
             return apply_transition(
                 work_id, event_name, artifacts=artifacts, dispositions=dispositions,
-                note=note, root=root, _lock_held=True,
+                note=note, root=root, _lock_held=True, protocol_revision=protocol_revision,
             )
     transition = TRANSITIONS[event_name]
     current = _load_run(work_id, root)
@@ -712,7 +716,9 @@ def apply_transition(
     payload = dict(current or {})
     payload.setdefault("schema_version", SCHEMA_VERSION)
     if current is None:
-        payload["protocol_revision"] = PROTOCOL_REVISION_CURRENT
+        payload["protocol_revision"] = protocol_revision or PROTOCOL_REVISION_CURRENT
+        if payload["protocol_revision"] == PROTOCOL_REVISION_OPENHANDS:
+            payload["runtime"] = "openhands"
     payload.setdefault("work_id", work_id)
     payload.setdefault("created_at", now)
     payload["artifacts"] = dict(payload.get("artifacts", {}))
@@ -753,6 +759,14 @@ def apply_transition(
             payload["approved_artifact_digests"][name] = hashlib.sha256(content).hexdigest()
 
     missing = _missing_gate_items(payload, transition)
+    if payload.get("runtime") == "openhands":
+        active_root = (root or repo_root()).resolve()
+        for name in transition.required_artifacts:
+            relative = payload["artifacts"].get(name)
+            path = active_root / relative if isinstance(relative, str) else None
+            run_dir = _run_dir(work_id, active_root).resolve()
+            if path is None or not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(run_dir):
+                missing.append(f"artifact:{name} must be an existing current-run file")
     if missing:
         gate = f" for {transition.gate}" if transition.gate else ""
         return False, current or {}, [f"missing{gate}: {item}" for item in missing]

@@ -1,0 +1,148 @@
+"""Thin integration with pinned OpenHands. No Flow agent loop or tool transport."""
+from __future__ import annotations
+
+from contextlib import contextmanager
+from importlib.metadata import version, PackageNotFoundError
+from pathlib import Path
+import os
+
+from openhands_config import SDK_VERSION, RuntimeConfigurationError, Selection
+
+
+ACP_ACCESS_NOTE = ("Stock OpenHands ACP automatically answers native permission requests. "
+                   "Flow selects Codex agent (workspace-write/auto_review) or Claude default, "
+                   "and inherits the execution environment's actual containment. Claude may offer allow_always first and update native permission rules. "
+                   "A live native run requires authorized native network and session-state access; "
+                   "this branch has not broadened either or copied credentials.")
+ACP_BLOCKER = ACP_ACCESS_NOTE  # historical handoff text; not a blanket runtime veto
+
+
+
+def probe() -> dict:
+    packages = {}
+    for name in ("openhands-sdk", "openhands-tools", "openhands-workspace", "openhands-agent-server"):
+        try:
+            packages[name] = version(name)
+        except PackageNotFoundError:
+            packages[name] = None
+    return {"ready": all(v == SDK_VERSION for v in packages.values()), "required_version": SDK_VERSION,
+            "packages": packages, "native_automation": "implemented_not_live_validated", "native_access_note": ACP_ACCESS_NOTE}
+
+
+def _context(selection: Selection, root: Path):
+    from openhands.sdk.subagent import AgentDefinition
+    from paths import USER_OVERLAY_DIR
+    from openhands.sdk import AgentContext
+    from openhands.sdk.context import Skill, load_skills_from_dir
+
+    role = AgentDefinition.load(selection.role_file)
+    skills = {}
+    for directory in (USER_OVERLAY_DIR / "skills", root / ".agents/skills", root / ".flow/skills"):
+        if directory.is_dir():
+            groups = load_skills_from_dir(directory)
+            for group in groups:
+                skills.update(group)
+    for relative in selection.role_options.get("skills", []):
+        skill = Skill.load(root / relative)
+        skills[skill.name] = skill
+    context = [role.system_prompt]
+    for relative in selection.role_options.get("context", []):
+        context.append((root / relative).read_text())
+    project = root / ".flow/PROJECT.md"
+    if project.is_file():
+        context.append(project.read_text())
+    return AgentContext(skills=list(skills.values()), system_message_suffix="\n\n".join(context),
+                        load_user_skills=False, load_public_skills=False, load_project_skills=True)
+
+
+def build_agent(selection: Selection, root: Path):
+    if selection.provider["kind"] != "local":
+        return build_native_agent(selection, root)
+    from openhands.sdk import Agent, LLM, Tool
+    from openhands.tools.terminal import TerminalTool
+    from openhands.tools.file_editor import FileEditorTool
+    from openhands.tools.task_tracker import TaskTrackerTool
+    from openhands.tools.task import TaskToolSet
+    from openhands.sdk.subagent import register_agent
+    from openhands_config import load_config, select
+
+    tools = {"terminal": TerminalTool, "file_editor": FileEditorTool,
+             "task_tracker": TaskTrackerTool, "task": TaskToolSet}
+    provider = selection.provider
+    key_env = provider.get("api_key_env")
+    key = os.environ.get(key_env) if key_env else "self-hosted"
+    if key_env and not key:
+        raise RuntimeConfigurationError(f"self-hosted credential variable {key_env} is unset")
+    llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
+              usage_id=f"flow-{selection.role}")
+    # Register declared specialists with the SDK's own delegation mechanism.
+    # Each factory resolves its own local profile; no Flow manager/dispatch loop.
+    config = load_config(root)
+    for name in selection.role_options.get("specialists", []):
+        child = select(root, "implement", name, config=config)
+        if child.role_options.get("specialists"):
+            raise RuntimeConfigurationError("nested specialist rosters must be expressed in OpenHands agent files")
+        register_agent(name=name, factory_func=lambda _llm, selected=child: build_agent(selected, root),
+                       description=f"Flow specialist {name}: {child.role_file.name}")
+    return Agent(llm=llm,
+                 tools=[Tool(name=tools[t].name) for t in selection.role_options.get("tools", ["terminal", "file_editor"])],
+                 agent_context=_context(selection, root))
+
+
+def build_native_agent(selection: Selection, root: Path):
+    if selection.provider.get("permission_requests") != "stock-openhands":
+        raise RuntimeConfigurationError("Native access decision required: see docs/native-access-decision.md before selecting permission_requests=stock-openhands.")
+    from openhands.sdk.agent import ACPAgent
+    from openhands.sdk.settings.acp_install_catalog import ACP_INSTALL_CATALOG
+    kind = selection.provider["kind"]
+    # Reject ambient API routing instead of silently switching account/billing.
+    variables = ("OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL") if kind == "codex" else ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
+    if any(os.environ.get(name) for name in variables):
+        raise RuntimeConfigurationError("native subscription execution requires an environment without paid API credentials or routing overrides")
+    modes = {"codex": {"agent", "read-only"}, "claude": {"default", "plan"}}
+    mode = selection.provider.get("session_mode", "agent" if kind == "codex" else "default")
+    if mode not in modes[kind]:
+        raise RuntimeConfigurationError("native session mode would broaden access; supported modes: " + ", ".join(sorted(modes[kind])))
+    provider_key = "codex" if kind == "codex" else "claude-code"
+    spec = ACP_INSTALL_CATALOG[provider_key]
+    # Official maintained bridge and native agent. SDK owns stdio, permissions,
+    # session resume, npm cache, authentication and metrics. No wrapper transport.
+    return ACPAgent(acp_command=list(spec.npx_command()), acp_server=provider_key,
+                    acp_session_mode=mode, acp_model=selection.provider.get("model"),
+                    acp_isolate_data_dir=False, acp_file_secrets=[],
+                    agent_context=_context(selection, root))
+
+
+@contextmanager
+def conversation(selection: Selection, root: Path, persistence: Path, conversation_id, callback):
+    diagnostic = probe()
+    if not diagnostic["ready"]:
+        raise RuntimeConfigurationError("run this command with the isolated pinned OpenHands environment: " + str(diagnostic["packages"]))
+    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests") != "stock-openhands":
+        raise RuntimeConfigurationError("Native access decision required: stock ACP auto-approval may add native permission rules. See docs/native-access-decision.md; after approval select permission_requests=stock-openhands in the native profile.")
+    from openhands.sdk import Conversation
+    from openhands.sdk.workspace import LocalWorkspace
+    from openhands.sdk.security import AlwaysConfirm
+    agent = build_agent(selection, root)
+    workspace_options = selection.workspace
+    if workspace_options.get("kind", "local") == "local":
+        workspace = LocalWorkspace(working_dir=root)
+    else:
+        from openhands.sdk import RemoteWorkspace
+        key_env = workspace_options.get("api_key_env")
+        workspace = RemoteWorkspace(host=workspace_options["host"],
+                                    api_key=os.environ.get(key_env) if key_env else None,
+                                    working_dir=workspace_options.get("working_dir", "/workspace"))
+    # LocalWorkspace inherits the process's actual OS permissions. A cwd is not
+    # a sandbox. Flow does not manufacture filesystem or network grants.
+    kwargs = {"agent": agent, "workspace": workspace, "conversation_id": conversation_id,
+              "callbacks": [callback], "visualizer": None}
+    if workspace_options.get("kind", "local") == "local":
+        kwargs["persistence_dir"] = persistence
+    session = Conversation(**kwargs)
+    if workspace_options.get("confirmation") == "always":
+        session.set_confirmation_policy(AlwaysConfirm())
+    try:
+        yield session
+    finally:
+        session.close()

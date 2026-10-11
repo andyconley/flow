@@ -2,6 +2,19 @@
 
 Portable workflow contract.
 
+## Execution architecture
+
+New runs use `flow workflow init/execute/approve/archive`. Flow owns stages and
+project artifacts; pinned OpenHands owns the model loop, conversations, tools,
+workspaces, retries, delegation and execution metrics. Roles and skills are
+project/user context; self-hosted compatible models are coding providers.
+Do not recreate MAF dispatch fences, command wrappers, file brokers, rate/token
+gates or a second checkpoint ledger. Preserve actual permissions. Native
+Codex/Claude subscriptions use stock ACPAgent with explicit session modes. Live
+native validation awaits the scoped permission decision; native-handoff is temporary.
+Historical run records remain readable and their active providers are not migrated.
+
+
 ## Purpose
 
 - define reusable workflow phases

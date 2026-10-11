@@ -1,0 +1,52 @@
+# Copy to .flow/runtime.toml and select self-hosted model names and URLs.
+default_profile = "local-coder"
+
+[workspace]
+kind = "local"
+# LocalWorkspace inherits process access. Its cwd is not a sandbox.
+# Existing sandbox server: kind="remote", host="http://...",
+# working_dir="/workspace", api_key_env="FLOW_RUNTIME_SERVER_KEY".
+
+[profiles.local-coder]
+kind = "local"
+model = "openai/your-coding-model"
+base_url = "http://127.0.0.1:8000/v1"
+# api_key_env = "FLOW_LOCAL_MODEL_KEY"
+
+[profiles.ollama]
+kind = "local"
+model = "ollama_chat/your-coding-model"
+base_url = "http://127.0.0.1:11434"
+
+[profiles.codex]
+kind = "codex"
+# Existing official native authentication; no credential copies.
+session_mode = "agent"
+# After scoped approval: permission_requests = "stock-openhands"
+
+[profiles.claude]
+kind = "claude"
+session_mode = "default"
+# After scoped approval: permission_requests = "stock-openhands"
+# See docs/native-access-decision.md before enabling either native profile.
+
+[roles.lead-developer]
+profile = "local-coder"
+tools = ["terminal", "file_editor", "task_tracker", "task"]
+specialists = ["test-engineer", "quality-reviewer"]
+# context = ["docs/architecture.md"]
+# skills = [".agents/skills/project-tests/SKILL.md"]
+
+[roles.test-engineer]
+profile = "local-coder"
+tools = ["terminal", "file_editor"]
+
+[roles.quality-reviewer]
+profile = "local-coder"
+tools = ["terminal", "file_editor"]
+
+[stages.define]
+role = "business-analyst"
+
+[stages.solution]
+role = "solution-architect"

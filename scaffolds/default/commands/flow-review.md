@@ -1,166 +1,62 @@
 # flow-review
 
-Use `flow-review` for structured review after implementation work.
+Review the implemented change against requirements and acceptance criteria. Record actionable findings, validation results and a supported acceptance recommendation.
 
-<HARD-GATE>
-Do NOT produce a verdict, findings, or the Review Summary until you have actually read both (a) the changed artifacts and (b) the original plan / requirements / acceptance criteria they are being judged against. Skimming is not reading. A verdict produced without comparison against intent is theatre — it provides false confidence and lets drift through. If either side is missing (e.g., no plan exists), say so explicitly in the Verdict rather than producing a judgment that pretends it has the comparison.
-</HARD-GATE>
+Flow owns this workflow stage and its outputs. OpenHands owns execution, tools,
+conversation history, retries and specialist delegation. Do not rebuild a Flow
+manager, file broker, provider loop, token/rate gate or execution ledger.
 
-## Overview
+## Enter and execute
 
-This command judges the implementation against intent. It exists to separate "code was written" from "the slice is actually acceptable."
+For a configured self-hosted profile:
 
-## When to Use
-
-Use this command when:
-
-- implementation is complete but acceptance is not yet clear
-- a structured second pass is needed before archive
-- a separate review lane owns correctness or acceptance
-
-**When NOT to use:** initial shaping or planning work, or final memory packaging that belongs in `flow-archive`.
-
-## Primary inputs
-
-- implemented change
-- relevant plan or requirements
-- tests and validation evidence
-- standards and project overlays that apply
-
-## Primary outputs
-
-- structured review verdict
-- prioritized findings
-- acceptance disposition
-- residual-risk summary
-
-## C-Lite Run Protocol
-
-Review must enter and leave the lane through the CLI:
-
-```bash
-flow run status <work-id> --json
-# If state is handback_ready:
-flow run transition <work-id> start-review
-# A completed scout enters reviewing through start-scout-review; in either
-# reviewing case, continue without writing another transition.
-flow run transition <work-id> accept-review \
-  --artifact review=.flow/runs/<work-id>/review.md
+```sh
+flow workflow execute <work-id> --stage review --task-file <task.md>
 ```
 
-For a scout review, the registered `scout_summary` is the approved scope,
-acceptance intent, implementation handback, and validation inventory. Read it
-as the original intent source required by this command's hard gate.
+The command enters a legal stage from the prior approved state and resumes the
+stage/role's SDK conversation. Use `--role` and `--profile` for a specialist or
+different self-hosted endpoint. Profile and role settings live in `.flow/runtime.toml`
+and the user overlay. The installed OpenHands packages must match the pinned
+runtime requirements. Actual workspace permissions still apply.
 
-Do not produce an archive-ready acceptance claim until `accept-review`
-succeeds. If review requests changes, do not advance the run to archive.
-For a scout review, use `request-scout-refinement` rather than
-`request-refinement`; the corrected scout writes a fresh Scout Summary and
-uses `start-scout-review` again. If the work no longer meets the Scout-Size
-Criteria, escalate it to `flow-plan` instead.
+For an existing official native Codex/Claude session:
 
-## Orchestration safety
-
-Follow `standards/orchestration.md`. Reconcile claim provenance and provider identities, run `flow run validate-orchestration <work-id> --stage acceptance`, and require a verifier distinct from producer and evidence collector for high-risk work. Revision-2 `accept-review` rechecks it.
-
-## Composition
-
-Core roles (always invoked):
-
-- `quality-reviewer` for correctness and structural-fit review
-- `test-engineer` for coverage and proof review
-
-Conditional roles (invoked when relevant):
-
-- `security-reviewer` when the work touches sensitive or risky surfaces
-- `ux-specialist` when user-facing fit is at stake
-- `sre` when rollout, runtime, or observability fit is at stake
-
-`flow-review` is the place where implementation is judged against intent, not just whether the work mechanically completes.
-
-## Review Dimensions
-
-Review should check:
-
-1. requirement fit
-2. UX or design-contract fit
-3. technical fit
-4. validation evidence
-5. follow-up risks or gaps
-
-## Review Workflow
-
-**Every brief carries an evidence inventory** — what already exists in the area under review, with paths. Without it a reviewer cannot tell absent from unfound, and "X is missing" is an unsupported finding. See `standards/evidence.md`; `templates/adversarial-review.md` has the block.
-
-1. Read the plan or requirements.
-2. Read the implementation and changed tests.
-3. Compare implementation to:
-   - requested behavior
-   - standards
-   - acceptance criteria
-4. Assess proof:
-   - automated tests
-   - manual checks
-   - runtime evidence
-5. Produce one of these dispositions:
-   - ready to accept or archive
-   - needs refinement
-   - wrong slice or drifted scope
-
-## Output Format
-
-**Always emit your result in the following format before ending the command.** Do not stop after gathering inputs — produce the output.
-
-```md
-## Review Summary
-
-### Verdict
-- Ready to accept/archive | Needs refinement | Wrong slice/drifted scope
-
-### Findings
-- Critical:
-- Important:
-- Suggestions:
-
-### Requirement Fit
-- [Assessment]
-
-### Validation Fit
-- [Assessment]
-
-### Residual Risks
-- [Assessment]
+```sh
+flow workflow native-handoff <work-id> --stage review --profile <codex-or-claude-profile> --task-file <task.md>
 ```
 
-## Common Rationalizations
+Use that context artifact in the native session with its existing subscription
+and permissions. Automated native profiles use stock OpenHands ACPAgent after
+the scoped access decision in docs/native-access-decision.md. Stock ACP can grant
+persistent native permissions; defaults leave acknowledgement unset. Native
+handoff is a temporary interactive fallback. Do not copy credentials or switch billing.
 
-| Rationalization | Reality |
-|---|---|
-| "The tests pass, so review is done." | Passing tests are evidence, not the whole judgment. Scope, UX, architecture, and risk still matter. |
-| "It's close enough; we can fix the rest later." | Unclear acceptance standards create drift and recurring rework. |
-| "I already reviewed it while coding." | Self-review is useful but not a substitute for structured acceptance review. |
-| "Only big issues matter." | Missing proof, wrong slice boundaries, and silent scope drift also matter. |
+## Durable outputs
 
-## Red Flags
+Write these files under `.flow/runs/<work-id>/`:
 
-- verdict produced without an explicit read of the original plan / acceptance criteria
-- "the diff looks fine" as a verdict without comparison against intent
-- no comparison to the original plan or acceptance criteria
-- verdict is vague or non-committal
-- missing distinction between critical issues and suggestions
-- validation evidence is mentioned but not assessed
-- review ignores UX, security, or runtime fit on relevant changes
+- `review.md`
 
-## Verification
+Use specialist roles, project skills, context and existing approved artifacts as
+needed. SDK TaskToolSet handles configured specialist delegation. Record actual
+results and unresolved questions; a model response alone does not approve work.
 
-Before leaving `flow-review`, confirm:
+## Approval and continuation
 
-- [ ] requirement fit was assessed explicitly
-- [ ] validation evidence was assessed explicitly
-- [ ] findings are prioritized
-- [ ] the verdict is clear
-- [ ] residual risks or next actions are stated
+After the user/operator has reviewed the outputs:
 
-## Finish Criteria
+```sh
+flow workflow approve <work-id> --stage review
+```
 
-`flow-review` is done when the team knows clearly whether to accept, refine, or rescope the work.
+If findings require changes, use `flow run transition <work-id> request-refinement`,
+then continue implementation. Accepted review can proceed to `flow-archive`.
+
+Inspect progress with `flow workflow status`, `flow run history` and SDK outcome
+artifacts. Pause/block/resume through ordinary Flow lifecycle transitions.
+
+Use the active runtime memory provider as companion context when available.
+Verify material claims against canonical project artifacts and code.
+
+Follow `standards/git-commits.md` for any authorized commits.
