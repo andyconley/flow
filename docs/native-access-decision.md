@@ -50,45 +50,58 @@ subscription; it means a login is not visible to this execution environment.
 The current Claude default permission mode is `auto`. Flow selects `default`.
 No native login, token export or credential copying was attempted.
 
-## Exact choice to present once
+## Smallest approval: Codex only, nonpersistent
 
-**Approve stock OpenHands native ACP permission handling within an independently
-confined execution environment, or keep live native execution pending?**
+The pinned Codex adapter sorts command options with `allow_once` before
+`allow_always`; file edits offer `allow_once` first. Additional permissions offer
+“grant these permissions for this turn” first. The stock OpenHands callback thus
+selects one-time/turn-scoped approvals on these paths, not persistent allow rules.
+This is a supported nonpersistent path. It still automatically approves requested
+access for that turn; independent outer containment is required.
 
-Approval would cover the SDK's automatic native permission answers, including
-possible `allow_always` rules and session mode changes **only for the isolated
-Flow implementation sessions**. The enforceable outer scope must still be:
+Suggested concrete question:
 
-1. Product/code writes restricted to the selected new isolated worktree and its
-   `.flow/runs` storage; original Flow source, installed `.flow/source`, Witmark
-   worktrees and the preserved candidate patch stay excluded from writes.
-2. Existing native account authentication through the official native agent.
-   No API keys, credential copies, forwarded secret blobs or new account grants.
-3. Explicit native state writes needed by that account: Codex session/history/log
-   state under the existing Codex home; Claude project/session/debug state under
-   its existing native home. Additional state paths and token-refresh writes
-   must be identified from the actual native startup diagnostic before granting
-   them. Global native permission/settings files must remain outside write
-   scope unless separately approved. The current environment does not grant
-   these writes.
-4. Outbound subscription inference/authentication services for the selected
-   native provider. Exact domains must come from the official native runtime's
-   startup/network policy; this task does not add blanket network access or
-   silently route to paid APIs.
-5. If Claude needs login visibility, use the user's existing official native
-   login on the intended host. Creating or copying credentials is outside this
-   task; the user must resolve a genuinely absent official login.
+**May I enable stock OpenHands ACP permission handling for one Codex-only live
+acceptance run in
+`/Users/andyconley/Documents/Codex/2026-10-11/task-3/flow-openhands`, using the
+existing ChatGPT Codex login and `agent` mode, with one-time/turn-scoped native
+approvals, code writes confined to a disposable test project under that worktree,
+and no persistent permission rules, global settings changes or broader host
+access?**
 
-If this environment cannot enforce that scoped containment, select an existing
-OpenHands workspace that can enforce it and has authorized native login access.
-Do not replace it with an unrestricted elevated local process.
+This approval covers the native callback behavior only. It does not grant new OS
+filesystem/network access. The current managed sandbox remains in force; do not
+run the whole Python/native process with unrestricted elevation. If native startup
+requires currently denied native session/log or subscription network access,
+identify the exact denied path/domain and obtain that scoped access separately.
+No blanket native-home write grant or all-network approval is requested now.
+Original source, installed Flow, Witmark worktrees and preserved candidate patches
+remain excluded from writes. Existing native authentication is read in place; no
+credentials are copied, exported or replaced and no paid model API is used.
 
-After approval and containment are established, set
-`permission_requests="stock-openhands"` in the approved native runtime profile.
-The adapter is already implemented; that setting acknowledges the concrete
-native permission behavior. It is not an OS grant or proof of confinement.
-Neither the setting nor any extra host/network grant has been enabled in this
-branch's default configuration.
+After approval, set `permission_requests="stock-openhands"` only in the temporary
+Codex test profile. The acknowledgement is not a sandbox or OS grant. The template
+leaves it unset. Native session history/logs and SDK test artifacts may persist;
+persistent native permission/settings edits are outside this Codex approval.
+
+## Separate Claude decision
+
+Current stock Claude execution cannot guarantee one-time-only tool permission
+answers: its first ordinary option is `allow_always`. The fallback rule destination
+is `session` (not necessarily an on-disk permanent rule), but permission suggestions
+may target persistent settings. Therefore it is inaccurate both to claim every
+`allow_always` lasts permanently and to promise this path has no persistent effects.
+ExitPlanMode can also change permission mode. No public stock bridge callback or
+option-selection setting was found that chooses Claude's `allow_once` instead.
+
+Claude live acceptance remains pending a separate scoped decision covering these
+possible rule/mode effects and a visible official login. It is not included in the
+Codex-only question. Do not enable `bypassPermissions`, forward credentials,
+change global native settings or remove outer containment as a shortcut.
+
+If appropriate confinement cannot be enforced, leave live acceptance pending or
+use an already authorized workspace that can enforce it. This branch has created
+no such workspace, host grant or native login.
 
 ## Verification completed independently
 
@@ -97,3 +110,24 @@ A deterministic ACP protocol peer tests the real stock SDK transport, explicit
 Codex/Claude modes, permission callback and resume in disposable directories.
 That test does not use real native credentials or constitute live native
 subscription acceptance. A real native stage remains pending the access decision.
+
+## Deterministic tests versus live acceptance
+
+`tests/openhands_acp_eval.py` replaces only the SDK catalog launch executable with
+a disposable deterministic ACP peer. Both profile tests use the same peer, which
+advertises the requested modes, offers `allow_once` first, writes a proof file,
+returns a fixed response and resumes the same session. It exercises stock SDK
+stdio transport, explicit mode selection, first-option permission handling,
+response capture and persisted resume. It does **not** exercise the real npm
+adapters, native authentication, subscription inference, provider sandbox or
+Claude's actual `allow_always` behavior. Those behavior findings are source audits
+of the pinned published adapters.
+
+The proposed live acceptance is one actual Codex-native Flow `define` stage plus
+a continuation of the same SDK conversation in a disposable project under the
+worktree. The task is to inspect a small fixture, produce requirements and
+acceptance-criteria artifacts, and finish. Verify native subscription execution,
+project artifacts, response/metrics capture, SDK persistence and same-session
+resume. It is not a mixed-model benchmark or work on Witmark. Native execution
+must remain blocked until the scoped prerequisites are established. No live
+acceptance was run while preparing this memo.
