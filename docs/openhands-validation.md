@@ -55,3 +55,35 @@ Tested code commit: `f93489a` (`feature/openhands-runtime`).
 - No implementation changes were needed and no live provider ran.
 
 Live native acceptance remains on hold pending the explicit Codex-only approval.
+
+## Approved Codex-only attempt: blocked before native startup
+
+Andy approved the scoped Codex-only acceptance on 2026-10-11. The attempt used
+ordinary managed sandbox execution, existing ChatGPT authentication in place,
+`agent` mode, and a disposable project inside the isolated worktree:
+`.venv-openhands/codex-acceptance-462uaigk`.
+
+Stock SDK startup tried to provision `@agentclientprotocol/codex-acp@1.10.0`
+into the project's SDK npm cache. Requests to
+`https://registry.npmjs.org/@agentclientprotocol%2fcodex-acp` failed with
+`getaddrinfo ENOTFOUND registry.npmjs.org`; npm's own metadata request to
+`https://registry.npmjs.org/npm` also failed. SDK warm-cache startup failed and
+the normal npx retry encountered the same DNS restriction. The task was
+interrupted rather than rerun with unrestricted elevation.
+
+The required scoped prerequisite is HTTPS/DNS access to `registry.npmjs.org`
+for provisioning the pinned adapter and its dependencies into this worktree-local
+cache, or an already provisioned equivalent. No such access was enabled. This is
+not a request for subscription network, all-network access, native-home writes or
+persistent permission rules. Those later prerequisites are untested.
+
+Workflow state remains `defining`; session
+`e4d2689d-afdf-4bfb-b3a0-9d7d5b28799d` is recorded as `interrupted`.
+Neither requirements.md nor acceptance-criteria.md exists. Native authentication,
+inference and actual session resume were not reached. No native acceptance pass
+is claimed. Task/provider processes are stopped; no existing provider was touched.
+
+Preserved evidence lives in the ignored disposable project under
+`.flow/runs/native-acceptance/openhands/npm-cache/_logs/` and the Flow session
+reference/outcome. No credential material was copied. The approved callback
+acknowledgement exists only in this disposable test profile.
