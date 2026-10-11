@@ -26,7 +26,7 @@ def probe() -> dict:
         except PackageNotFoundError:
             packages[name] = None
     return {"ready": all(v == SDK_VERSION for v in packages.values()), "required_version": SDK_VERSION,
-            "packages": packages, "native_automation": "implemented_not_live_validated", "native_access_note": ACP_ACCESS_NOTE}
+            "packages": packages, "native_automation": "implemented", "native_access_note": ACP_ACCESS_NOTE}
 
 
 def _context(selection: Selection, root: Path):

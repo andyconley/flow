@@ -1,9 +1,10 @@
 # Native ACP access decision
 
-Native automation is implemented using stock `ACPAgent`, but live native
-acceptance is **incomplete**. Interactive handoff is a temporary fallback, not
-the final architecture. This document records the actual decision needed before
-running a native subscription session from this environment.
+Native automation uses stock `ACPAgent`. **Live Codex acceptance passed** under
+the subsequently approved launcher scope; Claude remains unvalidated. Interactive
+handoff is a temporary fallback, not the final architecture. This document keeps
+the pinned permission audit and chronological access decisions; the final section
+records successful native artifacts and same-session resume.
 
 ## Verified versions and behavior
 
@@ -262,3 +263,39 @@ the approved single-file read/write/lock capability while preserving existing
 filesystem and network restrictions. The tool interface cannot apply that policy
 change. Native acceptance was not retried under unchanged access, and no file
 contents, credentials, global settings or native home grants were modified.
+
+## Live Codex acceptance passed under the subsequently approved launcher scope
+
+Andy approved one normally reviewed acceptance outside the outer sandbox while
+retaining native Codex `agent` mode. The normal reviewer admitted the launch.
+The existing disposable project and project-local SQLite were reused; no
+credential copy, paid API route, global configuration edit, Claude run or live
+Flow replacement was performed.
+
+The pinned real adapter initialized and authenticated through `chat-gpt`. The
+saved default `gpt-6.1-sol` was rejected by this native ChatGPT path. A profile-only
+selection of `gpt-6-astra`, advertised by the native session model catalog,
+succeeded. The prior failed reference was retained and an explicit new SDK
+conversation was used for the changed profile binding. This was repair of the
+same acceptance task, not a model benchmark. Global model settings were untouched.
+
+Verified:
+- Both actual requirements and acceptance-criteria artifacts were written.
+- The second execution reloaded SDK conversation
+  `c6a06974-7ad2-412b-8c45-5ba569e0db93` and the same native session
+  `01a12ce5-79d1-78f0-a4ef-528d90f0431a`.
+- Continuation read and confirmed the existing artifacts without changing them.
+- The test harness then approved definition, and Flow run verification passed.
+- The fixture implementation remained byte-for-byte unchanged.
+- SDK responses, token/cache metrics and SDK-reported cost estimates persisted.
+  Cost estimates are tracking data, not evidence of paid API billing.
+- Observed native tool calls read project files and edit the two run artifacts;
+  no stock ACP permission callback request was logged during this successful run.
+- The acceptance/native processes exited. Existing checkouts remained clean.
+
+Reviewable artifact copies and bounded outcome data are in
+`docs/acceptance/codex-native/`. Original SDK history remains in the ignored
+disposable project. Claude live acceptance and remote deployment are still
+unvalidated. This host's restricted outer context still cannot run native startup
+without the separately approved launcher scope; success does not erase that
+operational limitation or authorize unrestricted future runs.
