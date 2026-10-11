@@ -228,3 +228,44 @@ implemented without the stale blanket “not live validated” label. Eleven foc
 SDK/replacement tests and the OpenHands diagnostic tests passed after that
 metadata-only code adjustment. The prior full suite remains 2,134 run, 67 skipped;
 no runtime control or execution behavior changed in this final adjustment.
+
+## Live Claude acceptance passed after explicit approval
+
+Andy approved the disclosed stock Claude scope, including a normally reviewed
+run outside the outer sandbox and possible automatic permission effects. The
+reviewer admitted the bounded fixture/resume command. Real adapter `0.63.0`,
+bundled `@anthropic-ai/claude-agent-sdk@0.3.220`, and OpenHands `1.54.0` ran using
+existing first-party Team authentication and explicit `default` mode. Native
+model was the existing/default `opus[1m]`; no API key or routing override was used.
+
+Both requirements and acceptance-criteria artifacts were produced. SDK
+conversation `68d34ad7-1342-4924-92e1-86b0d65f2eec` and the same native Claude
+session resumed successfully; repository evidence retains only a fingerprint
+of the native identifier. The continuation read the existing artifacts. Fixture
+source stayed byte-for-byte unchanged. Harness definition approval and Flow run
+verification passed. Response/token/cache/SDK cost-estimate tracking persisted;
+those estimates are not evidence of paid API billing.
+
+Observed effects:
+- User `.claude/settings.json` and its permission-rule projection were unchanged.
+- Neither project `.claude/settings.json` nor `.claude/settings.local.json` was
+  created.
+- Existing `.claude.json` changed. Only its before/after fingerprint was captured;
+  exact changed fields were not determined. Do not assert it was solely harmless
+  bookkeeping or attribute every change to this process rather than concurrency.
+- No stock ACP permission request callback was logged in this successful run.
+  This does not invalidate the audited allow-always behavior or guarantee that
+  another task cannot create persistent grants.
+- Observed tool calls read the fixture/run/project files, executed local listing
+  and search commands, and wrote/edited the two requested artifacts. No native
+  explicit bypass/plan-mode transition, deployment or original/live-install edit
+  was observed.
+- Acceptance/native processes exited; original source and branch worktrees are
+  clean. No credentials were copied or exposed in the saved evidence.
+
+Reviewable outcomes are in `docs/acceptance/claude-native/`. Raw SDK persistence
+and diagnostics remain in the ignored disposable project. This success does not
+establish independent workspace confinement for Claude, authorize future host
+runs or remove the documented stock permission caveat. Remote deployment and a
+production self-hosted model remain unvalidated; the actual local SDK/tool path
+and both native acceptance paths have now been exercised.

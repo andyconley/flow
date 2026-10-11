@@ -1,7 +1,10 @@
 # Claude native acceptance preparation
 
 No Claude model request, live ACP launch, native permission update or settings
-change was made during this preparation.
+change was made during this preparation. The subsequent explicitly approved live
+acceptance passed; see [validation](openhands-validation.md) and
+[artifact evidence](acceptance/claude-native/result.json). The original approval
+question and audit below are retained as history, not a pending request.
 
 ## Actual authentication visibility
 

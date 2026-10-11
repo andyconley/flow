@@ -102,8 +102,8 @@ An execution response does not prove the acceptance criteria or approve a stage.
 Profiles `kind="codex"` and `kind="claude"` execute through stock OpenHands
 ACPAgent and the pinned official adapters. Flow explicitly selects Codex `agent`
 and Claude `default` modes, reuses native authentication in place, and materializes
-no credentials. Live Codex execution and same-session resume passed in the approved disposable
-acceptance. Claude remains unvalidated; see docs/acceptance/codex-native/.
+no credentials. Live Codex and Claude execution and same-session resume passed in their explicitly
+approved disposable acceptances; see docs/acceptance/.
 
 Stock SDK selects the first permission option; the pinned Claude adapter puts
 `allow_always` first. This can create permission rules. Before enabling
@@ -115,8 +115,8 @@ private SDK callbacks or implement a replacement transport.
 
 `flow workflow native-handoff` prepares a context artifact for an existing native
 session as a temporary fallback. It is not automated native acceptance. Further native execution requires its actual host access and the documented
-acknowledgement; Claude still needs a visible official subscription login and its
-separate permission decision. No paid model API fallback is used.
+acknowledgement; Claude uses its visible official subscription login and retains the separate
+stock permission caveat described in the access memo. No paid model API fallback is used.
 
 ## Workspaces and actual permissions
 

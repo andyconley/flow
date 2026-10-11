@@ -1,0 +1,116 @@
+{
+  "status": "passed",
+  "project": "/Users/andyconley/Documents/Codex/2026-10-11/task-3/flow-openhands/.venv-openhands/claude-native-acceptance",
+  "sdk_conversation_id": "68d34ad7-1342-4924-92e1-86b0d65f2eec",
+  "native_session_id_sha256": "d1f69d9cd4f2441a1360dc8a08fa33cc7574b264261f7335ff20b9962622befe",
+  "native_model": "opus[1m]",
+  "same_sdk_and_native_session_resume": true,
+  "fixture_unchanged": true,
+  "artifacts": {
+    "requirements.md": "394133a1b30cb2a2a0be95ccc69489709b1f1dfee84580461ebd2616c3353e30",
+    "acceptance-criteria.md": "f70a70b6b5bf7278f8706808866deee9837c8a3baf2db2ebba7b566097667e1b"
+  },
+  "metrics": {
+    "model_name": "default",
+    "accumulated_cost": 1.6233334999999998,
+    "max_budget_per_task": null,
+    "accumulated_token_usage": {
+      "model": "default",
+      "prompt_tokens": 20,
+      "completion_tokens": 10764,
+      "cache_read_tokens": 316187,
+      "cache_write_tokens": 119604,
+      "reasoning_tokens": 0,
+      "context_window": 1000000,
+      "per_turn_token": 1208,
+      "response_id_sha256": ""
+    },
+    "costs": [
+      {
+        "model": "acp-managed",
+        "cost": 0.7750535,
+        "timestamp": 1791755848.071857
+      },
+      {
+        "model": "acp-managed",
+        "cost": 0.8482799999999999,
+        "timestamp": 1791755866.415783
+      }
+    ],
+    "response_latencies": [
+      {
+        "model": "acp-managed",
+        "latency": 123.3845891659148,
+        "response_id_sha256": "d1f69d9cd4f2441a1360dc8a08fa33cc7574b264261f7335ff20b9962622befe"
+      },
+      {
+        "model": "acp-managed",
+        "latency": 15.884159124922007,
+        "response_id_sha256": "d1f69d9cd4f2441a1360dc8a08fa33cc7574b264261f7335ff20b9962622befe"
+      }
+    ],
+    "token_usages": [
+      {
+        "model": "acp-managed",
+        "prompt_tokens": 14,
+        "completion_tokens": 9562,
+        "cache_read_tokens": 228047,
+        "cache_write_tokens": 42191,
+        "reasoning_tokens": 0,
+        "context_window": 1000000,
+        "per_turn_token": 9576,
+        "response_id_sha256": "d1f69d9cd4f2441a1360dc8a08fa33cc7574b264261f7335ff20b9962622befe"
+      },
+      {
+        "model": "acp-managed",
+        "prompt_tokens": 6,
+        "completion_tokens": 1202,
+        "cache_read_tokens": 88140,
+        "cache_write_tokens": 77413,
+        "reasoning_tokens": 0,
+        "context_window": 1000000,
+        "per_turn_token": 1208,
+        "response_id_sha256": "d1f69d9cd4f2441a1360dc8a08fa33cc7574b264261f7335ff20b9962622befe"
+      }
+    ]
+  },
+  "sdk_version": "1.54.0",
+  "adapter_version": "0.63.0",
+  "bundled_native_sdk_version": "0.3.220",
+  "mode": "default",
+  "authentication": "existing first-party claude.ai Team login",
+  "scope": "explicitly approved normally reviewed run outside outer sandbox",
+  "workflow_state": "definition_approved",
+  "credential_copy": false,
+  "paid_api_routing": false,
+  "providers_stopped": true,
+  "metrics_cost_note": "native/SDK reported estimates; not evidence of API billing",
+  "stock_acp_permission_requests_observed": 0,
+  "observed_settings_effects": {
+    "/Users/andyconley/.claude/settings.json": {
+      "existed_before": true,
+      "exists_after": true,
+      "file_changed": false,
+      "permission_rules_changed": false
+    },
+    "/Users/andyconley/.claude.json": {
+      "existed_before": true,
+      "exists_after": true,
+      "file_changed": true,
+      "permission_rules_changed": null
+    },
+    "/Users/andyconley/Documents/Codex/2026-10-11/task-3/flow-openhands/.venv-openhands/claude-native-acceptance/.claude/settings.json": {
+      "existed_before": false,
+      "exists_after": false,
+      "file_changed": false,
+      "permission_rules_changed": false
+    },
+    "/Users/andyconley/Documents/Codex/2026-10-11/task-3/flow-openhands/.venv-openhands/claude-native-acceptance/.claude/settings.local.json": {
+      "existed_before": false,
+      "exists_after": false,
+      "file_changed": false,
+      "permission_rules_changed": false
+    }
+  },
+  "settings_effect_attribution": "before/after file comparison; exact .claude.json changes and concurrent attribution not determined"
+}

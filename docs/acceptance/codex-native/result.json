@@ -26,7 +26,7 @@
       "per_turn_token": 1556,
       "prompt_tokens": 3204,
       "reasoning_tokens": 0,
-      "response_id": ""
+      "response_id_sha256": ""
     },
     "costs": [
       {
@@ -46,12 +46,12 @@
       {
         "latency": 54.31149262492545,
         "model": "gpt-6-astra",
-        "response_id": "01a12ce5-79d1-78f0-a4ef-528d90f0431a"
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
       },
       {
         "latency": 9.306606166996062,
         "model": "gpt-6-astra",
-        "response_id": "01a12ce5-79d1-78f0-a4ef-528d90f0431a"
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
       }
     ],
     "token_usages": [
@@ -64,7 +64,7 @@
         "per_turn_token": 1748,
         "prompt_tokens": 1695,
         "reasoning_tokens": 0,
-        "response_id": "01a12ce5-79d1-78f0-a4ef-528d90f0431a"
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
       },
       {
         "cache_read_tokens": 38528,
@@ -75,7 +75,7 @@
         "per_turn_token": 1556,
         "prompt_tokens": 1509,
         "reasoning_tokens": 0,
-        "response_id": "01a12ce5-79d1-78f0-a4ef-528d90f0431a"
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
       }
     ]
   },
