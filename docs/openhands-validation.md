@@ -42,3 +42,16 @@ outcome preservation and CLI failure reporting for SDK error status. Nested
 rosters are delegated through the SDK rather than rejected by Flow. These tests
 make no live model/native calls. The prior full repository result remains the
 2,130-test run above; it was not repeated for these narrowly tested fixes.
+
+## Full regression after review fixes
+
+Tested code commit: `f93489a` (`feature/openhands-runtime`).
+
+- `/opt/homebrew/bin/python3.12 -m unittest discover -s tests`: **2,134 run,
+  2,067 passed, 67 skipped, zero failures/errors**, 395.376 seconds.
+- `.venv-openhands/bin/python -m unittest discover -s tests -p 'test_openhands*.py'`:
+  **11 passed, zero skipped/failures/errors**, 2.492 seconds. This independently
+  covers SDK construction tests skipped by the standard Python environment.
+- No implementation changes were needed and no live provider ran.
+
+Live native acceptance remains on hold pending the explicit Codex-only approval.
