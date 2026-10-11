@@ -156,7 +156,8 @@ by the replacement execution path. No existing run is silently converted.
 - Real SDK integration: `.venv-openhands/bin/python tests/openhands_runtime_eval.py`.
   The deterministic loopback endpoint drives SDK tool calls, all stages, SDK
   resume and archive in disposable directories. It is not a quality benchmark
-  or a production local/native provider test.
+  or a production local/native provider test. Actual approved native and Ollama
+  fixture executions are separately recorded under `docs/acceptance/`.
 - Shell syntax, bytecode compilation, generated help consistency and diff checks.
 
 Official references: [architecture](https://docs.openhands.dev/sdk/arch/overview),

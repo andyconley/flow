@@ -1,5 +1,10 @@
 # Isolated implementation validation
 
+Current result: actual Codex, Claude and Ollama fixture/artifact/resume acceptance
+passed. Evidence is in `docs/acceptance/`. Source and live installation remain
+preserved; all operational access choices and limitations are documented below.
+The Ollama test changed no implementation code or global runtime defaults.
+
 Branch: `feature/openhands-runtime`; base:
 `ad8d81fb232c569333f468db6a1056bdd6d4220d`.
 No deployment, push, live installation replacement or existing provider execution.
@@ -269,3 +274,38 @@ establish independent workspace confinement for Claude, authorize future host
 runs or remove the documented stock permission caveat. Remote deployment and a
 production self-hosted model remain unvalidated; the actual local SDK/tool path
 and both native acceptance paths have now been exercised.
+
+## Actual Ollama local-loop acceptance passed
+
+Andy requested the same fixture/artifact/resume acceptance with the existing
+Ollama installation. The normally reviewed command used server `0.32.1` at
+`http://127.0.0.1:11434` and existing `gemma4-26b-dev:latest` (Gemma4 25.8B,
+Q4_K_M). The exact pre-existing model digest is preserved in the outcome record.
+No model was pulled/replaced, and no global/default runtime profile or server
+configuration was changed. Only the disposable project profile was configured.
+
+The real OpenHands local Agent/LLM/tool loop made actual Ollama inference calls,
+read fixture/task files and created both required artifacts using SDK FileEditor.
+A relative-path view was rejected by the editor; the model corrected it to an
+absolute project path through the normal SDK loop. There was no manual retry,
+provider switch, transport wrapper or benchmark. SDK conversation
+`2aaaed19-62aa-48e6-8791-a7820ae991b7` resumed from persistence, read both artifacts
+and confirmed their content. Artifact hashes and fixture source stayed unchanged
+on resume. Harness definition approval and Flow run verification passed.
+
+Model capabilities reported completion, vision, tools and thinking; only the
+coding/text/tool path was tested. Ollama's actual loaded context is 32,768; SDK
+metric metadata reports the model's 262,144 context. This fixture's prompts were
+below the effective server window. Long-context alignment is unverified; do not
+interpret the SDK number as the configured host capacity. Draft documents still
+leave whitespace and exception semantics unresolved and require operator review;
+this acceptance establishes runtime functionality, not implementation quality.
+
+Reviewable artifacts, exact test profile, action projection and model/outcome
+metadata are in `docs/acceptance/ollama/`. Raw SDK history/diagnostics remain in
+`.venv-openhands/ollama-native-acceptance`. The acceptance client exited; the
+pre-existing Ollama server was left running. No paid API routing, Witmark work,
+original-source modification, deployment or installed Flow replacement occurred.
+
+Local Ollama inference/tool/persistence and both native acceptance paths are now
+verified. Remote deployment and larger production coding tasks remain untested.
