@@ -163,3 +163,26 @@ Official pinned sources:
 - https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/codex-rs/app-server/src/lib.rs
 - https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/codex-rs/core/src/installation_id.rs
 - https://raw.githubusercontent.com/openai/codex/rust-v0.153.4/codex-rs/arg0/src/lib.rs
+
+## Installation-ID access approved; tooling cannot apply the narrow grant
+
+Andy explicitly approved read/write/lock access to the existing
+`/Users/andyconley/.codex/installation_id` and its described possible effects.
+That authorization is retained; no repeated user approval is required.
+
+The available execution interface has only `sandbox_permissions="use_default"`
+(the existing managed sandbox) and `"require_escalated"` (unsandboxed command
+execution). It has no additional-writable-file parameter, and the available tool
+inventory exposes no host filesystem grant operation. The task's current write
+roots still exclude the approved installation-ID file.
+
+Elevating a single-file helper could authorize that helper's own operation but
+would not extend the later native child's inherited sandbox. Changing file mode
+would not change the managed sandbox policy. Elevating the entire acceptance
+process is explicitly outside the approved scope and was not attempted.
+
+The actual remaining requirement is for the execution host/task sandbox to expose
+the approved single-file read/write/lock capability while preserving existing
+filesystem and network restrictions. The tool interface cannot apply that policy
+change. Native acceptance was not retried under unchanged access, and no file
+contents, credentials, global settings or native home grants were modified.
