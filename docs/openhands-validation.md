@@ -206,7 +206,7 @@ Verified:
 - Both actual requirements and acceptance-criteria artifacts were written.
 - The second execution reloaded SDK conversation
   `c6a06974-7ad2-412b-8c45-5ba569e0db93` and the same native session
-  `01a12ce5-79d1-78f0-a4ef-528d90f0431a`.
+  (native identifier retained in SDK storage; repository evidence contains its SHA-256).
 - Continuation read and confirmed the existing artifacts without changing them.
 - The test harness then approved definition, and Flow run verification passed.
 - The fixture implementation remained byte-for-byte unchanged.

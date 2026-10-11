@@ -8,7 +8,6 @@
   "selected_model": "gpt-6-astra",
   "saved_default_model_rejected": "gpt-6.1-sol",
   "sdk_conversation_id": "c6a06974-7ad2-412b-8c45-5ba569e0db93",
-  "native_session_id": "01a12ce5-79d1-78f0-a4ef-528d90f0431a",
   "same_sdk_and_native_session_resume": true,
   "workflow_state": "definition_approved",
   "fixture_unchanged": true,
@@ -85,5 +84,6 @@
   "global_settings_changed_by_flow": false,
   "claude_executed": false,
   "production_flow_replaced": false,
-  "providers_stopped": true
+  "providers_stopped": true,
+  "native_session_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
 }

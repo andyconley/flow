@@ -283,7 +283,7 @@ Verified:
 - Both actual requirements and acceptance-criteria artifacts were written.
 - The second execution reloaded SDK conversation
   `c6a06974-7ad2-412b-8c45-5ba569e0db93` and the same native session
-  `01a12ce5-79d1-78f0-a4ef-528d90f0431a`.
+  (native identifier retained in SDK storage; repository evidence contains its SHA-256).
 - Continuation read and confirmed the existing artifacts without changing them.
 - The test harness then approved definition, and Flow run verification passed.
 - The fixture implementation remained byte-for-byte unchanged.
@@ -299,3 +299,12 @@ disposable project. Claude live acceptance and remote deployment are still
 unvalidated. This host's restricted outer context still cannot run native startup
 without the separately approved launcher scope; success does not erase that
 operational limitation or authorize unrestricted future runs.
+
+## Claude preparation after Codex success
+
+Official host `claude auth status` now confirms an existing first-party
+`claude.ai` Team login; the restricted status check remains unable to see it.
+No Claude model was called and no permissions/settings changed. See
+[claude-native-acceptance-preparation.md](claude-native-acceptance-preparation.md)
+for pinned configuration, session versus persistent rule effects, unverified
+native containment, and one concrete approval question for the actual stock path.
