@@ -7,12 +7,18 @@ permissions, persistence and metrics. No custom execution controller is added.
 
 ## Regression and protocol evidence
 
-Ten new pinned-SDK regression tests cover mixed local/native construction,
-custom role context, inheritance of a switched LLM, explicit role bindings,
+Eleven new pinned-SDK regression tests cover mixed local/native construction,
+custom role context, nested skill package boundaries, inheritance of a switched LLM, explicit role bindings,
 project/profile registry isolation, stock classifier execution and switching,
 explicit profile precedence, unchanged non-routing session fingerprints, routing
 target binding changes, legacy child identifier compatibility, native access acknowledgement and restricted SDK scope
-rejection. The existing focused runtime suite remains applicable.
+rejection. The initial full run executed **2,200 tests**, with 81 skips and 23 failures/errors
+caused by SDK provisioning network denial or localhost socket denial. A targeted
+rerun recovered 22 of those with the verified interpreter and permitted test
+sockets; the remaining interpreter-selection test passed when run under the
+pinned interpreter, as the release gate does. Subsequent focused regressions
+cover the final specialist and skill-loading changes. Remote PR/release checks
+provide the authoritative full candidate run.
 
 `tests/openhands_specialist_eval.py` runs actual stock TaskManager child
 conversations. With the disposable ACP peer, both Claude and Codex factory
@@ -40,11 +46,23 @@ grants are changed by the fixture.
   until that existing quota resets; no API fallback or purchased capacity was
   used. The disposable protocol peer covers transport/resume independently.
 - Existing Ollama `gemma4-26b-dev` was observed loaded at **65,536** context.
-  An initial relative-path request reached the stock file editor but repeatedly
-  used relative paths, which the editor rejects, and stopped as SDK `stuck`.
-  A retained rerun uses explicit absolute fixture paths; its final result is
-  recorded below when available. This is model/tool-use behavior, not a Flow
-  provider rejection. No model/server configuration was changed.
+  After correcting nested skill package discovery, the local child wrote
+  `sum.txt` containing **10**, completed, and resumed the same child conversation.
+  A real Ollama parent also used stock `task` to select a local coding child,
+  select native Codex for verification, then resume that same Codex task. The
+  persisted parent finished; `sum.txt` contained **10** and the same native
+  child history contained two user turns. Two child conversations were created.
+
+The initial Ollama attempts read the input but looped on directory inspection.
+The compatible-endpoint comparison reached a completed SDK status with the
+wrong requested outcome: its response addressed unrelated MCP instructions.
+History exposed **312,913 characters** of reference documents misclassified as
+permanent skill content, including nested synced skill references. The fix uses
+SDK `load_available_skills`, `load_skills_from_dir(exclude_dirs=...)` and
+`Skill.load` with actual package boundaries. The corrected fixture keeps the
+same host skills and all reference files, with AgentSkills loaded progressively.
+Its outcome is verified by the file contents, not just SDK completion status.
+No model/server/global discovery configuration was changed.
 
 The host's restricted shell initially denied SDK profile-home lock writes and
 native npx/network startup. A reviewed live invocation with isolated SDK settings
@@ -52,6 +70,16 @@ started both native bridges. The outer execution environment still determines
 actual containment. Raw host diagnostics stay in the task workspace, outside the
 repository; native session identifiers and credentials are not publication
 artifacts.
+
+The stock classifier also completed a real local inference and selected the
+coding category, switching to the inline compatible profile at the existing
+Ollama `/v1` endpoint. Both tested profiles use the same physical model; this is
+profile-routing acceptance rather than a comparison of model quality.
+
+Final local CI subset: **69 tests passed**, including the corrected generated
+factory contract and all 11 specialist regressions. The deterministic task/ACP
+fixture passes again after skill discovery changes. Sanitized acceptance is in
+[acceptance/specialists/result.json](acceptance/specialists/result.json).
 
 ## SDK behavior and remaining limits
 

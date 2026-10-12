@@ -53,19 +53,39 @@ def _context(selection: Selection, root: Path):
     if GENERATED_MARKER in body:
         capabilities = None
     metadata, prompt = parse_frontmatter(render_openhands_agent(selection.role, str(selection.role_file), body, capabilities))
-    skills = {}
+    from openhands.sdk.skills import load_available_skills
+    # SDK discovery also composes AGENTS.md and conditional project rules.
+    skills = load_available_skills(root, include_user=True, include_project=True, include_public=False)
     for directory in (HOME / ".agents/skills", USER_OVERLAY_DIR / "skills", root / ".agents/skills", root / ".flow/skills"):
-        if directory.is_dir():
-            groups = load_skills_from_dir(directory)
-            for group in groups:
-                skills.update(group)
-    if metadata.get("skills"):
-        from openhands.sdk.skills import load_available_skills
-        available = load_available_skills(root, include_user=True, include_project=True, include_public=False)
-        for name in metadata["skills"]:
-            if name not in available:
-                raise RuntimeConfigurationError(f"role skill not found: {name}")
-            skills[name] = available[name]
+        if not directory.is_dir():
+            continue
+        # SDK 1.54 discovers AgentSkills packages only immediately below a
+        # collection. Nested synced packages otherwise leak their reference
+        # Markdown into permanent context. Give the stock loader the package
+        # boundaries and load those SKILL.md declarations with its own parser.
+        packages = sorted(p for p in directory.rglob("*.md")
+                          if p.name.lower() == "skill.md" and p.parent.parent != directory)
+        package_roots = {p.parent.resolve() for p in packages}
+        for name, skill in list(skills.items()):
+            source = Path(skill.source).resolve() if skill.source else None
+            if source and source.name.lower() != "skill.md" and any(package in source.parents for package in package_roots):
+                skills.pop(name)
+        groups = load_skills_from_dir(directory, exclude_dirs={p.parent for p in packages})
+        collection = {}
+        for group in groups:
+            collection.update(group)
+        for path in packages:
+            try:
+                skill = Skill.load(path)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("Skipping invalid nested skill %s: %s", path, exc)
+                continue
+            collection.setdefault(skill.name, skill)
+        skills.update(collection)
+    for name in metadata.get("skills", []):
+        if name not in skills:
+            raise RuntimeConfigurationError(f"role skill not found: {name}")
     for relative in selection.role_options.get("skills", []):
         skill = Skill.load(root / relative)
         skills[skill.name] = skill
@@ -76,7 +96,7 @@ def _context(selection: Selection, root: Path):
     if project.is_file():
         context.append(project.read_text())
     return AgentContext(skills=list(skills.values()), system_message_suffix="\n\n".join(context),
-                        load_user_skills=False, load_public_skills=False, load_project_skills=True)
+                        load_user_skills=False, load_public_skills=False, load_project_skills=False)
 
 
 def local_llm(selection: Selection):

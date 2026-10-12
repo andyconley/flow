@@ -296,6 +296,12 @@ same roster. Flow registers SDK factories; OpenHands TaskToolSet/TaskManager
 creates, runs, reports and resumes child conversations. A native-bound role
 returns the stock ACPAgent and reuses its existing native authentication.
 Custom project and user role definitions use the same composition pipeline.
+SDK skill discovery composes user/project skills and project instructions.
+Nested synced AgentSkills packages are loaded from their `SKILL.md` declarations
+with SDK parsers and package exclusions, so their reference Markdown remains
+available on demand rather than being injected as permanent instructions.
+Project skill precedence and explicit role skill references remain supported;
+no global discovery files are rewritten by runtime construction.
 The prompt lists each specialist's actual profile and provider kind.
 
 An explicit role profile selects the child's endpoint, including native
@@ -340,7 +346,9 @@ resolve to a local profile. Native harnesses are specialist endpoints, because
 SDK LLM switching does not switch ACP sessions. `--profile` preserves an explicit
 user selection and suppresses automatic model routing for that role and its
 unbound children. Explicit child role bindings still win. Whole-stage native
-selection and native-generated model/effort settings continue to work.
+selection remains supported. Native parents continue to use harness discovery
+and generated role model/effort definitions. ACP factory models come from their
+native profile; effort remains managed by the native harness configuration.
 
 Model routing runs when the agent calls `route_task_to_model`; the role prompt
 instructs it to route near the start or when requirements change. Classification

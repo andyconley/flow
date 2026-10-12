@@ -27,6 +27,7 @@ from openhands.tools.task.manager import TaskManager
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--live', action='store_true')
+    parser.add_argument('--orchestrated', action='store_true', help='Run real local-parent selection through stock Conversation.run')
     parser.add_argument('--provider', choices=('local-coder', 'claude-reader', 'codex-reader'))
     parser.add_argument('--output-dir', type=Path)
     parser.add_argument('--local-api', choices=('ollama', 'openai'), default='ollama')
@@ -47,7 +48,7 @@ def main():
         (root / '.flow/runtime.toml').write_text('''default_profile="local"
 [profiles.local]
 kind="local"
-model="ollama_chat/gemma4-26b-dev"
+model="ollama_chat/gemma4-26b-dev:latest"
 base_url="http://localhost:11434"
 max_input_tokens=65536
 max_output_tokens=8192
@@ -72,11 +73,42 @@ profile="codex"
 ''')
         if args.local_api == 'openai':
             runtime_path = root / '.flow/runtime.toml'
-            runtime_path.write_text(runtime_path.read_text().replace('ollama_chat/gemma4-26b-dev', 'openai/gemma4-26b-dev:latest').replace('http://localhost:11434', 'http://localhost:11434/v1'))
+            runtime_path.write_text(runtime_path.read_text().replace('ollama_chat/gemma4-26b-dev:latest', 'openai/gemma4-26b-dev:latest').replace('http://localhost:11434', 'http://localhost:11434/v1'))
         agent = build_agent(select(root, 'implement', 'coordinator'), root)
         keys = dict(re.findall(r'([\w-]+): use task subagent_type=(\S+)', agent.agent_context.system_message_suffix))
-        parent = Conversation(agent=agent, workspace=root, persistence_dir=root / 'history', visualizer=None, max_iteration_per_run=8)
+        parent = Conversation(agent=agent, workspace=root, persistence_dir=root / '.flow/history', visualizer=None, max_iteration_per_run=12 if args.orchestrated else 8)
         try:
+            if args.orchestrated:
+                if not args.live:
+                    parser.error('--orchestrated requires --live')
+                parent.send_message(
+                    f"Complete this benign fixture by delegating with the stock task tool. "
+                    f"First use subagent_type={keys['local-coder']} to read {root / 'numbers.txt'} "
+                    f"and create {root / 'sum.txt'} containing the sum 10. "
+                    f"Then use subagent_type={keys['codex-reader']} to read those files and verify the sum. "
+                    f"Continue that same Codex child once using the task ID returned by task and the resume parameter. "
+                    "Native instructions: read only; do not edit configuration or request new permissions. "
+                    "Do not perform the child tasks yourself. Finish with the verified sum and delegation result.")
+                parent.run()
+                from openhands.sdk.conversation.response_utils import get_agent_final_response
+                child_paths = list((root / '.flow/history').glob('*/subagents/*/base_state.json'))
+                child_states = [json.loads(path.read_text()) for path in child_paths]
+                native_turns = [sum(1 for event_path in path.parent.glob('events/*.json')
+                                    if (event := json.loads(event_path.read_text())).get('kind') == 'MessageEvent' and event.get('source') == 'user')
+                                for path, state in zip(child_paths, child_states) if state['agent'].get('acp_server') == 'codex']
+                verified = (root / 'sum.txt').is_file() and (root / 'sum.txt').read_text().strip() == '10'
+                verified = verified and any(turns >= 2 for turns in native_turns)
+                verified = verified and any(state['agent'].get('llm', {}).get('model', '').startswith('ollama_chat/') for state in child_states)
+                report = {'live': True, 'orchestrated': True, 'outcome_verified': bool(verified),
+                          'parent_status': parent.state.execution_status.value,
+                          'response': get_agent_final_response(parent.state.events),
+                          'child_count': len(child_states), 'native_child_user_turns': native_turns, 'sum_file': (root / 'sum.txt').read_text() if (root / 'sum.txt').is_file() else None}
+                print(json.dumps(report, indent=2))
+                if args.output_dir:
+                    (root / 'result.json').write_text(json.dumps(report, indent=2))
+                if not verified or parent.state.execution_status.value != 'finished':
+                    raise SystemExit(1)
+                return
             manager = TaskManager()
             manager.attach_parent(parent)
             names = ('local-coder', 'claude-reader', 'codex-reader') if args.live else ('claude-reader', 'codex-reader')
@@ -106,11 +138,16 @@ profile="codex"
                 raise AssertionError('SDK task map unexpectedly survived a fresh manager')
             assert (root / 'native-fixture-proof.txt').read_text() == '4', results
             assert all(r.get('same_conversation') and not r.get('resume_error') for r in results), results
-        report = {'live': args.live, 'results': results, 'sum_file': (root / 'sum.txt').read_text() if (root / 'sum.txt').is_file() else None}
+        verified = all(not r.get('error') and not r.get('resume_error') and r.get('same_conversation') for r in results)
+        if args.live:
+            verified = verified and all('10' in str(r.get('result', '')) for r in results if r['role'] != 'local-coder')
+            if 'local-coder' in names:
+                verified = verified and (root / 'sum.txt').is_file() and (root / 'sum.txt').read_text().strip() == '10'
+        report = {'live': args.live, 'outcome_verified': bool(verified), 'results': results, 'sum_file': (root / 'sum.txt').read_text() if (root / 'sum.txt').is_file() else None}
         print(json.dumps(report, indent=2))
         if args.output_dir:
             (root / 'result.json').write_text(json.dumps(report, indent=2))
-        if any(r.get('error') or r.get('resume_error') for r in results):
+        if not verified:
             raise SystemExit(1)
 
 if __name__ == '__main__':

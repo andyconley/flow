@@ -155,3 +155,17 @@ class SpecialistTests(unittest.TestCase):
             resumed = get_agent_factory(key).factory_func(parent.llm)
         self.assertEqual(resumed.llm.model, parent.llm.model)
         self.assertIn('native: use task', resumed.agent_context.system_message_suffix)
+
+    def test_nested_skill_packages_keep_references_out_of_permanent_context(self):
+        package = self.root / '.agents/skills/synced/bundle/nested-skill'
+        (package / 'references').mkdir(parents=True)
+        (package / 'SKILL.md').write_text('---\nname: nested-skill\ndescription: A custom nested skill\n---\nUse the reference only when needed.\n')
+        (package / 'references/example.md').write_text('UNRELATED_EXAMPLE_SHOULD_NOT_BE_PERMANENT_CONTEXT')
+        (self.root / 'AGENTS.md').write_text('Project instructions must remain available.')
+        agent = self.build()
+        skills = {skill.name: skill for skill in agent.agent_context.skills}
+        self.assertIn('nested-skill', skills)
+        self.assertTrue(skills['nested-skill'].is_agentskills_format)
+        self.assertTrue(any('Project instructions must remain available.' in skill.content for skill in skills.values()))
+        self.assertFalse(any('UNRELATED_EXAMPLE_SHOULD_NOT_BE_PERMANENT_CONTEXT' in skill.content for skill in skills.values()))
+        self.assertTrue((package / 'references/example.md').is_file())

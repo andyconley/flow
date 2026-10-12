@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "sdk_version": "1.54.0",
+  "released_base": "4b9fce64c8d17fe4bfd41dd7566d9e1436def807",
+  "local_model": "gemma4-26b-dev:latest",
+  "observed_context_tokens": 65536,
+  "local_child": {
+    "status": "completed",
+    "verified_sum": 10,
+    "same_conversation_resume": true
+  },
+  "orchestrated_local_parent": {
+    "status": "finished",
+    "child_conversations": 2,
+    "selected_local_coding_child": true,
+    "selected_native_codex_child": true,
+    "native_child_user_turns": 2,
+    "verified_sum": 10
+  },
+  "native_codex": {
+    "bridge": "codex-acp@1.10.0",
+    "authentication": "existing ChatGPT subscription",
+    "mode": "read-only",
+    "status": "completed",
+    "same_conversation_resume": true
+  },
+  "native_claude": {
+    "bridge": "claude-agent-acp@0.63.0",
+    "mode": "plan",
+    "bridge_initialized": true,
+    "live_inference": "blocked by existing subscription session limit",
+    "live_resume": "unverified"
+  },
+  "stock_classifier": {
+    "real_local_inference": true,
+    "selected_category": "Implementing code and automated tests",
+    "selected_profile": "compatible",
+    "active_model": "openai/gemma4-26b-dev:latest",
+    "base_url": "http://localhost:11434/v1",
+    "same_physical_model_comparison": true
+  },
+  "stock_acp_peer": {
+    "providers": [
+      "claude",
+      "codex"
+    ],
+    "execution": true,
+    "permission_transport": "allow_once",
+    "same_conversation_resume": true,
+    "fresh_manager_task_map": "not reconstructed by SDK 1.54.0"
+  },
+  "regression_tests": {
+    "specialist_tests": 11,
+    "local_ci_subset": 69,
+    "status": "passed"
+  },
+  "global_configuration_changed": false,
+  "credential_copy": false,
+  "new_grants": false
+}

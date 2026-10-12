@@ -183,6 +183,7 @@ import os, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1] + "/cli")
 from openhands.sdk.subagent import load_project_agents, get_agent_factory
+from openhands.tools.task import TaskToolSet
 from openhands_config import select
 from openhands_runtime import build_agent
 root = Path(os.environ["HOME"])
@@ -195,11 +196,11 @@ roster = agent.agent_context.system_message_suffix.split("Configured specialist 
 assert len(roster) == 12, roster
 for line in roster:
     role, key = line.split(": use task subagent_type=")
-    child = get_agent_factory(key).factory_func(agent.llm)
+    child = get_agent_factory(key.split()[0]).factory_func(agent.llm)
     assert child.llm.model == agent.llm.model
     assert child.agent_context.system_message_suffix
     assert child.tools
-    assert not any(tool.name == "task" for tool in child.tools)
+    assert any(tool.name == TaskToolSet.name for tool in child.tools)
 print("13 SDK definitions discovered; 12 stock delegate factories constructed")
 '''
         result = subprocess.run([sys.executable, "-c", code, str(ROOT)], env=self.env, capture_output=True, text=True)
