@@ -158,11 +158,13 @@ def execute(args) -> dict:
             reference["elapsed_seconds"] = round(elapsed_before + time.monotonic() - started, 3)
             # Also refresh on waiting, provider failures and Ctrl-C. The context
             # manager has persisted/closed the SDK conversation before this runs.
-            if session is not None and hasattr(session, "conversation_stats"):
+            if session is not None:
                 try:
-                    reference["metrics"] = session.conversation_stats.get_combined_metrics().model_dump(mode="json")
-                    reference["metrics_by_usage"] = session.conversation_stats.model_dump(mode="json")["usage_to_metrics"]
-                    reference.pop("metrics_error_type", None)
+                    stats = getattr(session, "conversation_stats", None)
+                    if stats is not None:
+                        reference["metrics"] = stats.get_combined_metrics().model_dump(mode="json")
+                        reference["metrics_by_usage"] = stats.model_dump(mode="json")["usage_to_metrics"]
+                        reference.pop("metrics_error_type", None)
                 except Exception as metrics_error:
                     reference["metrics_error_type"] = type(metrics_error).__name__
             reference["metrics_observed_at"] = datetime.now(timezone.utc).isoformat()
