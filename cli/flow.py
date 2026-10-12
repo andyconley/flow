@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import sqlite3
 import sys
 from datetime import datetime
@@ -1027,6 +1028,34 @@ def main() -> int:
     update_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
 
     args = parser.parse_args()
+    # An older updater cannot call new installer hooks. Complete that installed
+    # source's bounded bridge before SDK-dependent commands, never for a plain
+    # project checkout, read-only inspection or retired historical execution.
+    needs_openhands = args.command in {"workflow", "bootstrap"} or (
+        args.command == "update" and not args.check) or (
+        args.command == "runtime" and args.runtime_target in {"readiness", "smoke"})
+    if needs_openhands:
+        from lifecycle import activate_managed_openhands_runtime
+        activation = activate_managed_openhands_runtime()
+        if activation["state"] == "failed":
+            detail = "OpenHands activation failed; prior bindings retained. Retry flow update. " + activation["detail"]
+            if getattr(args, "json", False):
+                import json
+                print(json.dumps({"status": "error", "reason": detail}))
+            else:
+                print(detail, file=sys.stderr)
+            return 1
+        if activation.get("adapter_conflicts"):
+            detail = "OpenHands activated; generated adapter conflicts require reconciliation with flow sync."
+            if getattr(args, "json", False):
+                import json
+                print(json.dumps({"status": "error", "reason": detail}))
+            else:
+                print(detail, file=sys.stderr)
+            return 1
+        if activation.get("attempted"):
+            python = activation["interpreter"]
+            os.execv(python, [python, str(Path(__file__).resolve()), *sys.argv[1:]])
     if hasattr(args, "openhands_handler"):
         return args.openhands_handler(args)
 

@@ -88,6 +88,23 @@ Why a single path contract: everything downstream — `flow sync`, managed manif
 
 `flow install --release` / `flow install --develop <path>` converts an existing install between modes. The clone is never deleted by either direction; the user controls its lifecycle.
 
+#### Runtime activation and predecessor upgrades
+
+Current installation and update code provisions the pinned OpenHands SDK before
+swapping source, and restores source/configuration/launcher/runtime pointer if
+activation fails. Verified custom pinned interpreters and user runtime profiles
+are preserved. Readiness checks do not call a model.
+
+An older updater may replace source without knowing about OpenHands provisioning.
+First use of the newly installed CLI for workflow/update/bootstrap or runtime
+readiness/smoke checks the explicit installed-source binding and missing activation
+marker, binds the verified SDK interpreter and re-executes the requested command.
+Project checkouts and retired execution commands do not activate this bridge.
+On failure, the prior launcher/configuration/runtime pointer remain available;
+stdlib inspection still works and OpenHands-dependent commands report the error.
+Retry `flow update` to repair. A predecessor-deleted source cannot be restored
+by this first-use bridge. See [the upgrade and rollback boundaries](openhands-migration.md#upgrade-through-a-predecessor-installer).
+
 #### Release Validation Gate
 
 The GitHub release pipeline is a four-stage evidence chain:

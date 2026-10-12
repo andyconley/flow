@@ -1,5 +1,7 @@
 """Transactional runtime/source activation in isolated install homes."""
+import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -40,3 +42,136 @@ class ActivationTests(unittest.TestCase):
                     self.assertIn(sys.executable,launcher.read_text())
                     self.assertIn(sys.executable,config.read_text())
                     self.assertFalse((flow/'source.old').exists())
+
+class PredecessorActivationBridgeTests(unittest.TestCase):
+    """The predecessor may swap source before it knows about SDK activation."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.home = Path(self.temp.name) / 'user'
+        self.flow = self.home / '.flow'
+        self.source = self.flow / 'source'
+        (self.source / 'cli').mkdir(parents=True)
+        (self.source / 'candidate').write_text('already installed new source')
+        (self.source / 'cli/openhands_provision.py').write_text('# predecessor installed new provisioner\n')
+        self.config = self.flow / 'config.toml'
+        self.config.write_text('[flow]\npython="prior-python"\n[install]\nmode="release"\nversion="candidate"\n')
+        self.launcher = self.home / '.local/bin/flow'
+        self.launcher.parent.mkdir(parents=True)
+        self.launcher.write_text('prior launcher')
+        self.launcher.chmod(0o755)
+        self.pointer = self.flow / 'runtimes/openhands/current.json'
+        self.pointer.parent.mkdir(parents=True)
+        self.pointer.write_text('prior pointer')
+        self.profile = self.flow / 'runtime.toml'
+        self.profile.write_text('[profiles.custom]\nkind="local"\nmodel="local/custom"\n')
+        self.patches = patch.multiple(lifecycle, FLOW_HOME=self.flow, SOURCE_DIR=self.source,
+                                      FLOW_CONFIG=self.config,
+                                      __file__=str(self.source / 'cli/lifecycle.py'))
+        self.sync_patch = patch.object(lifecycle, '_sync_installed_adapters', return_value=0)
+        self.sync = self.sync_patch.start()
+        self.addCleanup(self.sync_patch.stop)
+        self.patches.start()
+        self.addCleanup(self.patches.stop)
+        self.addCleanup(self.temp.cleanup)
+
+    def provision(self, source):
+        self.assertEqual(source, self.source)
+        self.pointer.write_text('new verified pointer')
+        return sys.executable
+
+    def test_first_managed_invocation_binds_verified_runtime_and_repeat_skips(self):
+        profile = self.profile.read_bytes()
+        with patch.object(lifecycle, '_provision_openhands_interpreter', side_effect=self.provision) as provision:
+            result = lifecycle.activate_managed_openhands_runtime()
+            self.assertEqual(result['state'], 'succeeded')
+            self.assertTrue(result['attempted'])
+            self.assertEqual(result['interpreter'], sys.executable)
+            config = lifecycle.read_install_config()
+            self.assertEqual(config['openhands_runtime_activation_revision'], 1)
+            self.assertEqual(config['openhands_runtime_activation_state'], 'succeeded')
+            self.assertIn(sys.executable, self.launcher.read_text())
+            self.assertIn(sys.executable, self.config.read_text())
+            repeat = lifecycle.activate_managed_openhands_runtime()
+            self.assertFalse(repeat['attempted'])
+            provision.assert_called_once_with(self.source)
+            self.sync.assert_called_once_with(quiet=True)
+        self.assertEqual((self.source / 'candidate').read_text(), 'already installed new source')
+        self.assertEqual(self.profile.read_bytes(), profile)
+
+    def test_failure_restores_bindings_and_pointer_without_reverting_new_source_then_forced_retry(self):
+        for failing_step in ('provision', 'binding'):
+            with self.subTest(step=failing_step):
+                snapshots = {path: path.read_bytes() for path in (self.config, self.launcher, self.pointer, self.profile)}
+                def fail(source):
+                    self.provision(source)
+                    raise RuntimeError('offline dependency failure')
+                provision_effect = fail if failing_step == 'provision' else self.provision
+                with patch.object(lifecycle, '_provision_openhands_interpreter', side_effect=provision_effect):
+                    if failing_step == 'binding':
+                        def fail_binding(*args):
+                            self.config.write_text('partial config')
+                            self.launcher.write_text('partial launcher')
+                            raise OSError('binding failed')
+                        with patch.object(lifecycle, '_bind_openhands_launcher', side_effect=fail_binding):
+                            result = lifecycle.activate_managed_openhands_runtime(force=True)
+                    else:
+                        result = lifecycle.activate_managed_openhands_runtime(force=True)
+                self.assertTrue(result['attempted'])
+                self.assertEqual(result['state'], 'failed')
+                self.assertTrue(result['detail'])
+                self.assertEqual(self.sync.call_count, 0 if failing_step == 'provision' else 1)
+                for path, before in snapshots.items():
+                    self.assertEqual(path.read_bytes(), before, path)
+                self.assertEqual(self.launcher.stat().st_mode & 0o777, 0o755)
+                self.assertTrue((self.source / 'candidate').is_file())
+                with patch.object(lifecycle, '_provision_openhands_interpreter', side_effect=self.provision):
+                    self.assertEqual(lifecycle.activate_managed_openhands_runtime(force=True)['state'], 'succeeded')
+
+    def test_unmanaged_and_noninstalled_source_do_not_provision(self):
+        with patch.object(lifecycle, '_provision_openhands_interpreter') as provision:
+            with patch.object(lifecycle, '__file__', str(self.home / 'project/cli/lifecycle.py')):
+                self.assertFalse(lifecycle.activate_managed_openhands_runtime()['attempted'])
+            self.config.write_text('[flow]\npython="prior-python"\n')
+            self.assertFalse(lifecycle.activate_managed_openhands_runtime()['attempted'])
+            provision.assert_not_called()
+            self.sync.assert_not_called()
+
+    def test_adapter_conflict_is_reported_after_verified_binding(self):
+        self.sync.return_value = 1
+        with patch.object(lifecycle, '_provision_openhands_interpreter', side_effect=self.provision):
+            result = lifecycle.activate_managed_openhands_runtime()
+        self.assertEqual(result['state'], 'succeeded')
+        self.assertTrue(result['adapter_conflicts'])
+        self.assertIn(sys.executable, self.launcher.read_text())
+        self.assertEqual(self.pointer.read_text(), 'new verified pointer')
+        self.assertEqual(lifecycle.read_install_config()['openhands_runtime_activation_state'], 'succeeded')
+
+    def test_installed_cli_reexecutes_and_refreshes_all_role_discovery_paths(self):
+        repository = Path(__file__).resolve().parents[1]
+        shutil.copytree(repository / 'cli', self.source / 'cli', dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('__pycache__'))
+        shutil.copytree(repository / 'scaffolds', self.source / 'scaffolds')
+        shutil.copytree(repository / 'hooks', self.source / 'hooks')
+        shutil.copytree(repository / 'runtime', self.source / 'runtime',
+                        ignore=shutil.ignore_patterns('__pycache__', 'wheelhouse'))
+        # Provisioning itself is separately covered. This fixture supplies a
+        # verified interpreter without network access or live model execution.
+        (self.source / 'cli/openhands_provision.py').write_text(
+            'VERSION = "1.54.0"\nif __name__ == "__main__":\n    print(' + repr(sys.executable) + ')\n')
+        environment = {**os.environ, 'HOME': str(self.home), 'PYTHONDONTWRITEBYTECODE': '1'}
+        process = subprocess.run([sys.executable, str(self.source / 'cli/flow.py'),
+                                  'workflow', 'runtime', '--json'], env=environment,
+                                 text=True, capture_output=True, timeout=60)
+        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+        # Pure JSON proves adapter progress was quiet before os.execv reran
+        # the originally requested command under the activated interpreter.
+        payload = json.loads(process.stdout)
+        self.assertIn('ready', payload)
+        for directory, suffix in (('.claude/agents', '.md'), ('.codex/agents', '.toml'),
+                                  ('.agents/agents', '.md')):
+            generated = list((self.home / directory).glob('*' + suffix))
+            self.assertEqual(len(generated), 13, directory)
+            self.assertTrue(all(path.is_symlink() for path in generated))
+        self.assertIn(sys.executable, self.launcher.read_text())
+        self.assertEqual(self.profile.read_text(), '[profiles.custom]\nkind="local"\nmodel="local/custom"\n')

@@ -44,6 +44,21 @@ role and the source fields it cannot translate. The CLI prints these warnings;
 JSON mode leaves the report in the proposed/generated artifact rather than
 mixing prose into diagnostic JSON.
 
+### Runtime activation during an older-release upgrade
+
+Current install/update code provisions the pinned SDK before source activation,
+with source/configuration/launcher/runtime-pointer rollback on activation failure.
+A predecessor updater may instead replace source first. The new explicitly
+installed CLI detects the missing activation marker on workflow/update/bootstrap
+or runtime readiness/smoke use, binds the pinned SDK and re-executes the requested
+command. It does not activate from a project checkout or retired execution path.
+User profiles and verified custom pinned Python remain preserved.
+
+If this bridge fails, the prior launcher/configuration/runtime pointer remain
+and stdlib inspection works; OpenHands-dependent commands report failure.
+Retry `flow update` to repair. The bridge cannot restore old source already
+deleted by the predecessor. See [migration and rollback](openhands-migration.md#upgrade-through-a-predecessor-installer).
+
 ## Ownership and migration
 
 The existing managed manifest now records SHA-256 hashes for replacement

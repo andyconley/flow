@@ -3915,6 +3915,7 @@ class FlowCliTests(FlowCliHarness):
                 "ollama_manager",
                 "openhands_config",
                 "openhands_flow",
+                "openhands_provision",
                 "openhands_runtime",
                 "orchestration",
                 "overlay",

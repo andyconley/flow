@@ -257,6 +257,9 @@ python = "${FLOW_PYTHON_BIN}"
 python_version = "${FLOW_PYTHON_VERSION}"
 
 [install]
+openhands_sdk_version = "1.54.0"
+openhands_runtime_activation_revision = 1
+openhands_runtime_activation_state = "succeeded"
 mode = "release"
 version = "${version}"
 remote = "${remote}"
@@ -272,6 +275,9 @@ python = "${FLOW_PYTHON_BIN}"
 python_version = "${FLOW_PYTHON_VERSION}"
 
 [install]
+openhands_sdk_version = "1.54.0"
+openhands_runtime_activation_revision = 1
+openhands_runtime_activation_state = "succeeded"
 mode = "develop"
 source_target = "${ROOT_DIR}"
 installed_at = "${installed_at}"

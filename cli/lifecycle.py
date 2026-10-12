@@ -59,6 +59,7 @@ from paths import (
     SOURCE_DIR,
 )
 from setup import _ensure_usage_store
+from openhands_provision import VERSION as OPENHANDS_SDK_VERSION
 from sync import sync_target
 from maf_runtime import MafRuntimeUnready, provision as provision_maf_runtime
 
@@ -660,6 +661,72 @@ def install_command(release: bool, develop_path: str | None) -> int:
     return 2
 
 
+OPENHANDS_RUNTIME_ACTIVATION_REVISION = 1
+
+
+def _provision_openhands_interpreter(source: Path) -> str:
+    result = subprocess.run([sys.executable, str(source / "cli/openhands_provision.py"),
+                             "--source-root", str(source), "--home", str(FLOW_HOME),
+                             "--python", sys.executable], capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "OpenHands dependency setup failed")
+    python = result.stdout.strip()
+    if not python or not Path(python).is_file():
+        raise RuntimeError("OpenHands provisioner returned no verified interpreter")
+    return python
+
+
+def _bind_openhands_launcher(install: dict, python: str) -> None:
+    selected = dict(install)
+    selected.update(openhands_sdk_version=OPENHANDS_SDK_VERSION,
+                    openhands_runtime_activation_revision=OPENHANDS_RUNTIME_ACTIVATION_REVISION,
+                    openhands_runtime_activation_state="succeeded")
+    write_install_config(selected, python=python)
+    launcher = FLOW_HOME.parent / ".local/bin/flow"
+    ensure_dir(launcher.parent)
+    launcher.write_text('#!/bin/sh\nexec ' + shlex.quote(python) +
+                        ' "$HOME/.flow/source/cli/flow.py" "$@"\n')
+    launcher.chmod(0o755)
+
+
+def activate_managed_openhands_runtime(*, force: bool = False) -> dict:
+    """Finish an inbound predecessor update before executing SDK commands.
+
+    The predecessor has already committed its source swap. Preserve its bindings
+    on failure rather than claiming we can recover a source it already deleted.
+    Only an explicit installed source participates; project checkouts do not.
+    """
+    if (not FLOW_CONFIG.is_file() or Path(__file__).resolve().parents[1] != SOURCE_DIR.resolve()
+            or not (SOURCE_DIR / "cli/openhands_provision.py").is_file()):
+        return {"attempted": False, "state": "unmanaged"}
+    raw = read_toml(FLOW_CONFIG)
+    install = raw.get("install", {})
+    if not isinstance(install, dict) or install.get("mode") not in {INSTALL_MODE_RELEASE, INSTALL_MODE_DEVELOP}:
+        return {"attempted": False, "state": "unmanaged"}
+    if (not force and install.get("openhands_runtime_activation_revision") == OPENHANDS_RUNTIME_ACTIVATION_REVISION
+            and install.get("openhands_runtime_activation_state") == "succeeded"
+            and install.get("openhands_sdk_version") == OPENHANDS_SDK_VERSION):
+        return {"attempted": False, "state": "succeeded"}
+    pointer = FLOW_HOME / "runtimes/openhands/current.json"
+    launcher = FLOW_HOME.parent / ".local/bin/flow"
+    snapshots = {path: path.read_bytes() if path.is_file() else None
+                 for path in (FLOW_CONFIG, pointer, launcher)}
+    try:
+        python = _provision_openhands_interpreter(SOURCE_DIR)
+        _bind_openhands_launcher(install, python)
+    except Exception as exc:
+        for path, content in snapshots.items():
+            if content is None:
+                _remove_path(path)
+            else:
+                ensure_dir(path.parent)
+                path.write_bytes(content)
+        return {"attempted": True, "state": "failed", "detail": str(exc)}
+    conflicts = _sync_installed_adapters(quiet=True)
+    return {"attempted": True, "state": "succeeded", "interpreter": python,
+            "adapter_conflicts": bool(conflicts)}
+
+
 def _activate_openhands_source(staging: Path, install: dict) -> bool:
     """Prove staged execution before swapping; restore selection on failure."""
     pointer = FLOW_HOME / "runtimes/openhands/current.json"
@@ -668,23 +735,12 @@ def _activate_openhands_source(staging: Path, install: dict) -> bool:
                  for path in (FLOW_CONFIG, pointer, launcher)}
     swapped = False
     try:
-        result = subprocess.run([sys.executable, str(staging / "cli/openhands_provision.py"),
-                                 "--source-root", str(staging), "--home", str(FLOW_HOME),
-                                 "--python", sys.executable], capture_output=True, text=True, check=False)
-        if result.returncode:
-            raise RuntimeError(result.stderr.strip() or "OpenHands dependency setup failed")
-        python = result.stdout.strip()
-        if not python or not Path(python).is_file():
-            raise RuntimeError("OpenHands provisioner returned no verified interpreter")
+        python = _provision_openhands_interpreter(staging)
         error = _swap_source_with_staging(staging, keep_old=True)
         if error:
             raise RuntimeError(error)
         swapped = True
-        write_install_config(install, python=python)
-        ensure_dir(launcher.parent)
-        launcher.write_text('#!/bin/sh\nexec ' + shlex.quote(python) +
-                            ' "$HOME/.flow/source/cli/flow.py" "$@"\n')
-        launcher.chmod(0o755)
+        _bind_openhands_launcher(install, python)
     except Exception as exc:
         if swapped:
             _restore_after_maf_failure(snapshots[FLOW_CONFIG])
@@ -1004,16 +1060,19 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
     return 0
 
 
-def _sync_installed_adapters() -> int:
+def _sync_installed_adapters(*, quiet: bool = False) -> int:
     """Run the installed renderer after a source swap, never stale imports."""
     python = read_toml(FLOW_CONFIG).get("flow", {}).get("python", sys.executable) if FLOW_CONFIG.is_file() else sys.executable
     failures = []
     for target in ("claude", "codex", "openhands"):
         result = subprocess.run([python, str(SOURCE_DIR / "cli/flow.py"),
-                                 "sync", target, "--user"], check=False)
+                                 "sync", target, "--user"], check=False, capture_output=quiet, text=quiet)
         if result.returncode:
             failures.append(target)
+            if quiet:
+                print(result.stdout + result.stderr, file=sys.stderr)
     if failures:
-        print("source installed; adapter conflicts need attention: " + ", ".join(failures))
+        print("source installed; adapter conflicts need attention: " + ", ".join(failures),
+              file=sys.stderr if quiet else sys.stdout)
         return 1
     return 0

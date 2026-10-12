@@ -174,7 +174,7 @@ class MafLifecycleTransactionTests(unittest.TestCase):
             self.assertEqual(restored["maf_runtime_activation_state"], "unsupported")
             self.assertEqual(restored["maf_runtime_activation_detail"], "unsupported_runtime")
 
-    def test_develop_conversion_does_not_provision_or_change_historical_runtime(self):
+    def test_develop_conversion_provisions_openhands_without_changing_historical_runtime(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             source = root / "source"
@@ -196,9 +196,12 @@ class MafLifecycleTransactionTests(unittest.TestCase):
                  patch.object(lifecycle, "FLOW_HOME", root), \
                  patch.object(lifecycle, "FLOW_CONFIG", config), \
                  patch.object(lifecycle, "_provision_maf_runtime", return_value=False) as provision, \
-                 patch.object(lifecycle, "write_install_config", side_effect=write_config):
+                 patch.object(lifecycle, "_provision_openhands_interpreter", return_value=sys.executable) as openhands, \
+                 patch.object(lifecycle, "_bind_openhands_launcher", side_effect=lambda install, python: write_config(install)), \
+                 patch.object(lifecycle, "_sync_installed_adapters", return_value=0):
                 self.assertEqual(lifecycle._convert_to_develop(clone), 0)
                 provision.assert_not_called()
+                openhands.assert_called_once()
 
             self.assertTrue(source.is_symlink())
             self.assertEqual(source.resolve(), clone.resolve())
