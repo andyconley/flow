@@ -68,6 +68,9 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
         self.patches = patch.multiple(lifecycle, FLOW_HOME=self.flow, SOURCE_DIR=self.source,
                                       FLOW_CONFIG=self.config,
                                       __file__=str(self.source / 'cli/lifecycle.py'))
+        self.ready_patch = patch.object(lifecycle, "_openhands_runtime_ready", return_value=True)
+        self.ready = self.ready_patch.start()
+        self.addCleanup(self.ready_patch.stop)
         self.sync_patch = patch.object(lifecycle, '_sync_installed_adapters', return_value=0)
         self.sync = self.sync_patch.start()
         self.addCleanup(self.sync_patch.stop)
@@ -165,7 +168,7 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
         # Provisioning itself is separately covered. This fixture supplies a
         # verified interpreter without network access or live model execution.
         (self.source / 'cli/openhands_provision.py').write_text(
-            'VERSION = "1.54.0"\nif __name__ == "__main__":\n    print(' + repr(sys.executable) + ')\n')
+            'VERSION = "1.54.0"\ndef ready(python): return True\nif __name__ == "__main__":\n    print(' + repr(sys.executable) + ')\n')
         environment = {**os.environ, 'HOME': str(self.home), 'PYTHONDONTWRITEBYTECODE': '1'}
         process = subprocess.run([sys.executable, str(self.source / 'cli/flow.py'),
                                   'workflow', 'execute', 'example', '--task-file', str(task), '--json'], env=environment,
@@ -187,7 +190,7 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
     def test_installed_inspection_and_workflow_metadata_do_not_provision(self):
         self.copy_installed_cli()
         (self.source / 'cli/openhands_provision.py').write_text(
-            'VERSION = "1.54.0"\nif __name__ == "__main__":\n    raise RuntimeError("must not install during inspection")\n')
+            'VERSION = "1.54.0"\ndef ready(python): return True\nif __name__ == "__main__":\n    raise RuntimeError("must not install during inspection")\n')
         # Resolve update diagnostics wholly offline against a nonexistent local
         # remote, rather than probing a live index or GitHub repository.
         self.config.write_text('[flow]\npython="prior-python"\n[install]\nmode="release"\nversion="candidate"\nremote="file:///nonexistent-flow-remote"\n')
@@ -220,7 +223,7 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
     def test_invalid_update_json_is_rejected_before_activation(self):
         self.copy_installed_cli()
         (self.source / 'cli/openhands_provision.py').write_text(
-            'VERSION = "1.54.0"\nif __name__ == "__main__":\n    raise RuntimeError("must not install rejected flags")\n')
+            'VERSION = "1.54.0"\ndef ready(python): return True\nif __name__ == "__main__":\n    raise RuntimeError("must not install rejected flags")\n')
         before = {path: path.read_bytes() for path in (self.config, self.launcher, self.pointer, self.profile)}
         environment = {**os.environ, 'HOME': str(self.home), 'PYTHONDONTWRITEBYTECODE': '1'}
         process = subprocess.run([sys.executable, '-S', str(self.source / 'cli/flow.py'),
@@ -232,3 +235,16 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
         for path, content in before.items():
             self.assertEqual(path.read_bytes(), content, path)
         self.assertFalse((self.flow / 'generated').exists())
+
+    def test_damaged_marked_runtime_is_revalidated_and_reprovisioned(self):
+        with patch.object(lifecycle, '_provision_openhands_interpreter', side_effect=self.provision) as provision:
+            lifecycle.activate_managed_openhands_runtime()
+            self.ready.return_value = False
+            repaired = lifecycle.activate_managed_openhands_runtime()
+            self.assertTrue(repaired['attempted'])
+            self.assertEqual(repaired['state'], 'succeeded')
+            self.ready.assert_called_with(sys.executable)
+            self.assertEqual(provision.call_count, 2)
+            self.ready.return_value = True
+            self.assertFalse(lifecycle.activate_managed_openhands_runtime()['attempted'])
+            self.assertEqual(provision.call_count, 2)

@@ -121,7 +121,7 @@ retries repair. Source already deleted by the predecessor cannot be restored;
 current new install/update paths still provision before swap with full activation
 rollback. See [the migration boundary](openhands-migration.md#upgrade-through-a-predecessor-installer).
 
-The bridge passes eight lifecycle tests, including actual isolated CLI activation, clean JSON after re-execution, all 39 role discovery links, and read-only command preservation. The focused bridge/install/approval/staging suite passes 30 tests. These fixtures contact no package index or model. The live installation remains untouched.
+The bridge passes nine lifecycle tests, including actual isolated CLI activation, clean JSON after re-execution, all 39 role discovery links, and read-only command preservation. The focused bridge/install/approval/staging suite passes 30 tests. These fixtures contact no package index or model. The live installation remains untouched.
 
 Release candidate and published verification now install the pinned SDK in their
 CI environment before requiring all-target runtime smoke, and both verify the

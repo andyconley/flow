@@ -46,6 +46,9 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         self.assertFalse((self.directory / "execution/ledger.sqlite").exists())
         self.assertNotIn("orchestration_manifest", payload["artifacts"])
         self.assertIn("archive", payload["artifacts"])
+        history = [json.loads(line) for line in (self.directory / "events.jsonl").read_text().splitlines()]
+        archived = next(event for event in history if event["event"] == "archive")
+        self.assertEqual(archived["approved_artifact_digests"]["archive"], payload["approved_artifact_digests"]["archive"])
 
     def approved_through(self, last_stage="review"):
         flow.initialize(self.args)

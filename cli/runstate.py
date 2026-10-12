@@ -867,7 +867,7 @@ def apply_transition(
          payload.get("runtime") == "openhands" and event_name in OPENHANDS_SEAL_EVENTS)
             and payload.get("approved_artifact_digests")):
         if payload.get("runtime") == "openhands":
-            names = transition.required_artifacts
+            names = (*transition.required_artifacts, "archive") if event_name == "archive" else transition.required_artifacts
         else:
             names = ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest") if event_name == "approve-definition" else ("solution",)
         event["approved_artifact_digests"] = {

@@ -59,7 +59,7 @@ from paths import (
     SOURCE_DIR,
 )
 from setup import _ensure_usage_store
-from openhands_provision import VERSION as OPENHANDS_SDK_VERSION
+from openhands_provision import VERSION as OPENHANDS_SDK_VERSION, ready as _openhands_runtime_ready
 from sync import sync_target
 from maf_runtime import MafRuntimeUnready, provision as provision_maf_runtime
 
@@ -705,7 +705,8 @@ def activate_managed_openhands_runtime(*, force: bool = False) -> dict:
         return {"attempted": False, "state": "unmanaged"}
     if (not force and install.get("openhands_runtime_activation_revision") == OPENHANDS_RUNTIME_ACTIVATION_REVISION
             and install.get("openhands_runtime_activation_state") == "succeeded"
-            and install.get("openhands_sdk_version") == OPENHANDS_SDK_VERSION):
+            and install.get("openhands_sdk_version") == OPENHANDS_SDK_VERSION
+            and _openhands_runtime_ready(raw.get("flow", {}).get("python") or sys.executable)):
         return {"attempted": False, "state": "succeeded"}
     pointer = FLOW_HOME / "runtimes/openhands/current.json"
     launcher = FLOW_HOME.parent / ".local/bin/flow"
