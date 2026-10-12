@@ -1,7 +1,7 @@
 """Flow-owned specialist and endpoint selection; execution belongs to OpenHands."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 import hashlib
@@ -62,21 +62,34 @@ class Selection:
     role_file: Path
     role_options: dict
     workspace: dict
+    profile_override: bool = False
+    routing_profiles: dict = field(default_factory=dict)
 
     def fingerprint(self) -> str:
         binding = {"role": self.role, "profile": self.profile, "provider": self.provider,
                    "role_text": self.role_file.read_text(), "options": self.role_options,
                    "workspace": self.workspace}
+        if self.role_options.get("model_routing"):
+            binding["profile_override"] = self.profile_override
+            binding["routing_profiles"] = self.routing_profiles
         return hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
 
 
 def select(root: Path, stage: str, role: str | None = None, profile: str | None = None,
            *, config: dict | None = None, user_overlay: Path = USER_OVERLAY_DIR) -> Selection:
+    profile_override = profile is not None
     config = load_config(root, user_overlay) if config is None else config
     stage_options = config.get("stages", {}).get(stage, {})
     role = identifier(role or stage_options.get("role", STAGES[stage][2]), "role")
     options = config.get("roles", {}).get(role, {})
-    profile = identifier(profile or options.get("profile") or stage_options.get("profile") or config.get("default_profile", ""), "profile")
+    if profile is None:
+        if "profile" in options:
+            profile = options["profile"]
+        elif "profile" in stage_options:
+            profile = stage_options["profile"]
+        else:
+            profile = config.get("default_profile", "")
+    profile = identifier(profile, "profile")
     provider = config.get("profiles", {}).get(profile)
     if not isinstance(provider, dict):
         raise RuntimeConfigurationError(f"profile {profile!r} is not configured in .flow/runtime.toml")
@@ -125,6 +138,23 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
             raise RuntimeConfigurationError("specialist names must be unique")
     if options.get("specialists") and "task" not in tools:
         raise RuntimeConfigurationError("a specialist roster requires the SDK task tool")
+    routing_profiles = {}
+    routing = options.get("model_routing")
+    if routing is not None:
+        if kind != "local" and not profile_override:
+            raise RuntimeConfigurationError("model_routing switches SDK LLMs; native specialists use role profile bindings")
+        if not isinstance(routing, dict) or not isinstance(routing.get("categories"), list) or not routing["categories"]:
+            raise RuntimeConfigurationError("model_routing requires classifier_profile and nonempty categories")
+        names = [routing.get("classifier_profile")]
+        for entry in routing["categories"]:
+            if not isinstance(entry, dict) or not isinstance(entry.get("description"), str) or not entry["description"].strip():
+                raise RuntimeConfigurationError("routing categories require description and profile")
+            names.append(entry.get("profile"))
+        for name in names:
+            identifier(name, "routing profile")
+            if config.get("profiles", {}).get(name, {}).get("kind") != "local":
+                raise RuntimeConfigurationError(f"routing profile {name!r} must be a configured local LLM; use a specialist for native execution")
+            routing_profiles[name] = dict(config["profiles"][name])
     workspace = config.get("workspace", {"kind": "local"})
     if workspace.get("kind", "local") not in {"local", "remote"}:
         raise RuntimeConfigurationError("workspace kind must be local or remote")
@@ -132,4 +162,4 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
         raise RuntimeConfigurationError("remote workspace needs an existing OpenHands agent-server host")
     if workspace.get("confirmation") not in {None, "always"}:
         raise RuntimeConfigurationError("workspace confirmation must be always, or omitted to use the SDK default")
-    return Selection(role, profile, dict(provider), role_file, dict(options), dict(workspace))
+    return Selection(role, profile, dict(provider), role_file, dict(options), dict(workspace), profile_override, routing_profiles)
