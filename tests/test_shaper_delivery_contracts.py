@@ -16,6 +16,8 @@ from delivery_contracts import (  # noqa: E402
 from tests.shaper_intent_fixture import shaper_intent  # noqa: E402
 
 
+from tests.shaper_intent_fixture import legacy_build_shaper_contract as build_shaper_contract
+
 class ShaperDeliveryContractTests(unittest.TestCase):
     def sources(self):
         return {

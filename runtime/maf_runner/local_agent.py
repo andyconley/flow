@@ -77,6 +77,11 @@ async def main() -> None:
                 if request.url.path != '/api/chat':
                     raise RuntimeError('Unexpected local provider endpoint')
                 raw = request.content
+                actual = json.loads(raw)
+                if (actual.get('model') != config['model']
+                        or actual.get('options', {}).get('num_ctx') != config['num_ctx']
+                        or actual.get('options', {}).get('num_predict') != config['num_predict']):
+                    raise RuntimeError('Local client did not project sealed model/context/output; no send')
                 bound = (previous['prompt_tokens'] + max(0, len(raw)-previous['http_bytes'])+512
                          if previous else len(raw)+512)
                 allowance = config['num_ctx']-config['num_predict']-config.get('context_reserve', 2048)

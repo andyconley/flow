@@ -15,6 +15,8 @@ from orchestration import validate_manifest  # noqa: E402
 from tests.shaper_intent_fixture import shaper_intent  # noqa: E402
 
 
+from tests.shaper_intent_fixture import legacy_build_shaper_contract as build_shaper_contract
+
 class AutomaticReviewHandoffTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

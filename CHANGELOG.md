@@ -2,6 +2,34 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+### Highlights
+
+- Preserve shared mixed-provider call limits and review approved edited source, including large edits and native test commands.
+
+
+## [0.42.1](https://github.com/andyconley/flow/compare/v0.42.0...v0.42.1) (2026-10-08)
+
+### Bug Fixes
+
+* preserve retained mixed execution authority ([aa6f4b5](https://github.com/andyconley/flow/commit/aa6f4b576e410767162d8d91783f83dd5f52d7c7))
+
+### Highlights
+
+- Configure machine-local inference context separately from approved runtime budgets, with retained local sessions and source-bound verification.
+
+
+## [0.42.0](https://github.com/andyconley/flow/compare/v0.41.1...v0.42.0) (2026-10-08)
+
+### Features
+
+* configure runtime budgets and machine-local inference profiles ([9ea08a1](https://github.com/andyconley/flow/commit/9ea08a1a43db463774b66543b62900695a785fcc))
+
+## [0.41.1](https://github.com/andyconley/flow/compare/v0.41.0...v0.41.1) (2026-10-07)
+
+### Bug Fixes
+
+* **release:** authenticate read-only publication verification ([ad8d81f](https://github.com/andyconley/flow/commit/ad8d81fb232c569333f468db6a1056bdd6d4220d))
+
 ## [0.41.0](https://github.com/andyconley/flow/compare/v0.40.16...v0.41.0) (2026-10-07)
 
 ### Features

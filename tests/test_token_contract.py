@@ -43,6 +43,8 @@ def intent_with(tokens=None, headroom=None):
     return intent
 
 
+from tests.shaper_intent_fixture import legacy_build_shaper_contract as build_shaper_contract
+
 class TokenContractTests(unittest.TestCase):
     def test_the_default_budget_is_the_calibrated_one(self):
         self.assertEqual(DEFAULT_TOKEN_BUDGET, {"max_lineage_tokens": 200_000, "token_tranche": 100_000,

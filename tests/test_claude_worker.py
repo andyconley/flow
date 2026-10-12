@@ -109,7 +109,7 @@ class ClaudeWorkerTests(unittest.TestCase):
                             workspace=workspace, model="claude-test", timeout_seconds=0)
             with self.assertRaises(ValueError):
                 call_claude(instructions="Review charter", task="Review",
-                            workspace=workspace, model="claude-test", timeout_seconds=601)
+                            workspace=workspace, model="claude-test", timeout_seconds=1.5)
             with self.assertRaises(ValueError):
                 call_claude(instructions="Review charter", task="Review",
                             workspace=workspace, model="claude-test", timeout_seconds=True)

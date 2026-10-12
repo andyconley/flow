@@ -26,9 +26,9 @@ MAX_LINEAGE_TOKENS = 2_000_000
 # one-call runner's hard ceilings. None means no count ceiling; elapsed-time
 # cancellation and pressure supervision still apply. These are profile defaults,
 # not requirements imposed on users.
-LOCAL_CONTEXT_TOKENS = 49_152
-LOCAL_OUTPUT_TOKENS = 12_288
-LOCAL_CONTEXT_RESERVE = 2_048
+LOCAL_CONTEXT_TOKENS = 12_288
+LOCAL_OUTPUT_TOKENS = 2_048
+LOCAL_CONTEXT_RESERVE = 1_024
 
 
 def resolve_local_agent_budget(contract=None):
@@ -54,7 +54,8 @@ def resolve_local_agent_budget(contract=None):
     for name, value in result.items():
         if value is None and name in nullable:
             continue
-        if type(value) is not int or value < 1:
+        minimum = 0 if name == "replans" else 1
+        if type(value) is not int or value < minimum:
             raise ValueError(f"local agent budget {name} must be a positive integer" + (" or null" if name in nullable else ""))
     if result["output_tokens"] + result["context_reserve"] >= result["context_tokens"]:
         raise ValueError("local agent budget must reserve input context")

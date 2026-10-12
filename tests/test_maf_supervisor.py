@@ -14,6 +14,10 @@ sys.path.insert(0, str(REPO / "cli"))
 from maf_supervisor import MafProtocolError, run_maf  # noqa: E402
 
 
+# Protocol rejection tests exercise fake executable children. Allow process
+# startup under host load; dedicated deadline tests below keep short budgets.
+PROTOCOL_FIXTURE_TIMEOUT = 10
+
 class SupervisorProtocolTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -50,7 +54,7 @@ class SupervisorProtocolTests(unittest.TestCase):
     def assert_protocol_rejected(self, body: str, message: str) -> None:
         executable = self.script(body)
         with self.assertRaisesRegex(MafProtocolError, message):
-            run_maf(self.envelope, lambda _: self.fail("no proposal expected"), python_path=executable, timeout_s=2)
+            run_maf(self.envelope, lambda _: self.fail("no proposal expected"), python_path=executable, timeout_s=PROTOCOL_FIXTURE_TIMEOUT)
 
     def test_partial_line_obeys_deadline(self):
         executable = self.script("import sys,time\nsys.stdin.readline()\nsys.stdout.write('{')\nsys.stdout.flush()\ntime.sleep(1)\n")
@@ -72,7 +76,7 @@ sys.exit(7)
 ''')
         seen = []
         with self.assertRaisesRegex(RuntimeError, "exited 7"):
-            run_maf(self.envelope, lambda action: seen.append(action) or {"status": "completed", "output": "stub"}, python_path=executable, timeout_s=2)
+            run_maf(self.envelope, lambda action: seen.append(action) or {"status": "completed", "output": "stub"}, python_path=executable, timeout_s=PROTOCOL_FIXTURE_TIMEOUT)
         self.assertEqual(len(seen), 1)
 
     def test_rejects_invalid_protocol_version_before_callback(self):
@@ -135,7 +139,7 @@ print(json.dumps(proposal),flush=True)
 ''')
         seen = []
         with self.assertRaisesRegex(MafProtocolError, "more than one action"):
-            run_maf(self.envelope, lambda action: seen.append(action) or {"status": "completed"}, python_path=executable, timeout_s=2)
+            run_maf(self.envelope, lambda action: seen.append(action) or {"status": "completed"}, python_path=executable, timeout_s=PROTOCOL_FIXTURE_TIMEOUT)
         self.assertEqual(len(seen), 1)
 
 

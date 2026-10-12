@@ -1677,3 +1677,11 @@ oracle passes, normalized repeats are identical, and all five supported cells
 meet the latency and footprint limits. Any miss, incomplete disposition,
 degraded state, leakage, repeatability failure, or missing environment cell
 records `stop`.
+
+
+### Historical budget inspection
+
+`flow run inspect-budget-migration <work-id> --json` reads a run-local legacy
+Shaper intent and reports missing budget fields/proposed values. It does not
+change authority, reactivate MAF, or configure the active OpenHands runtime.
+Legacy amendment/migration execution commands remain retired.
