@@ -360,7 +360,12 @@ configures one conservative stock threshold across the active model and routing
 candidates, honoring their configured caps and available input/output headroom.
 A larger-context candidate may summarize earlier than its preferred threshold;
 no candidate is excluded and no custom switch/compaction controller is added.
-An inherited switched child also uses the named profile cap when available. The active model and
+An inherited switched child also uses the named profile cap when available. On local
+CLI resume, Flow reads the active profile name from SDK persistence and restores
+it through stock `switch_llm` before running or confirming pending actions.
+Credentials and inline tool configuration are re-resolved from current config
+and environment, since SDK snapshots redact secrets. No separate model ledger
+is created. The active model and
 classifier usage are recorded in SDK events/metrics. Profile override intent is
 included in routing-enabled session bindings, so resume cannot silently change
 that intent. Existing bindings without routing retain their fingerprint format. The prior

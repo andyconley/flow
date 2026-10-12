@@ -227,3 +227,46 @@ class SpecialistTests(unittest.TestCase):
         self.assertEqual(child.llm.model, 'openai/other')
         parent.switch_llm(agent.llm)
         self.assertEqual(parent.agent.condenser._effective_max_tokens(parent.agent.llm), 24576)
+
+    def test_fresh_process_restores_routed_model_and_current_credentials(self):
+        import json
+        import subprocess
+        from uuid import uuid4
+        from openhands_runtime import conversation, local_llm
+        self.routing()
+        self.config['profiles']['other'].update(api_key_env='FLOW_LOCAL_TEST_TOKEN', max_input_tokens=32768,
+                                              max_output_tokens=8192, condenser_max_tokens=24576)
+        selection = select(self.root, 'implement', 'coordinator', config=self.config)
+        identifier = uuid4()
+        persistence = self.root / 'history'
+        with patch('openhands_config.load_config', return_value=self.config), patch.dict(os.environ, {'FLOW_LOCAL_TEST_TOKEN': 'first-test-key'}):
+            with conversation(selection, self.root, persistence, identifier, lambda event: None) as session:
+                target = local_llm(select(self.root, 'implement', 'coordinator', 'other', config=self.config))
+                session.switch_llm(target.model_copy(update={'usage_id': 'profile:other'}))
+        config_file = self.root / 'config.json'
+        config_file.write_text(json.dumps(self.config))
+        code = """
+import json, os, sys
+from pathlib import Path
+from uuid import UUID
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+from openhands_config import select
+from openhands_runtime import conversation
+root = Path(sys.argv[2])
+config = json.loads((root / 'config.json').read_text())
+selection = select(root, 'implement', 'coordinator', config=config)
+with patch('openhands_config.load_config', return_value=config):
+    with conversation(selection, root, root / 'history', UUID(sys.argv[3]), lambda event: None) as session:
+        assert session.agent.llm.model == 'openai/other'
+        assert session.agent.llm.effective_max_input_tokens == 32768
+        assert session.agent.condenser.max_tokens == 24576
+        assert session.agent.llm.api_key.get_secret_value() == os.environ['FLOW_LOCAL_TEST_TOKEN']
+        print('fresh process restored active profile and current credential')
+"""
+        environment = {**os.environ, 'OH_PERSISTENCE_DIR': str(self.root / 'fresh-sdk-settings'),
+                       'FLOW_LOCAL_TEST_TOKEN': 'current-test-key'}
+        result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).resolve().parents[1] / 'cli'),
+                                 str(self.root), str(identifier)], env=environment, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('fresh process restored active profile', result.stdout)

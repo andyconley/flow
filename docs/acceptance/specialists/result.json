@@ -52,12 +52,26 @@
     "fresh_manager_task_map": "not reconstructed by SDK 1.54.0"
   },
   "regression_tests": {
-    "specialist_tests": 14,
+    "specialist_tests": 15,
     "local_ci_subset": 74,
     "status": "passed",
     "focused_runtime_tests": 48
   },
   "global_configuration_changed": false,
   "credential_copy": false,
-  "new_grants": false
+  "new_grants": false,
+  "routing_resume": {
+    "fresh_processes": true,
+    "same_conversation": true,
+    "pending_confirmation_preserved": true,
+    "active_model": "openai/routed",
+    "request_models": [
+      "initial",
+      "initial",
+      "routed",
+      "routed",
+      "routed"
+    ],
+    "current_credentials_re_resolved": true
+  }
 }

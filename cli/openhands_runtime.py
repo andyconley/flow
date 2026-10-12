@@ -267,6 +267,29 @@ def conversation(selection: Selection, root: Path, persistence: Path, conversati
     from openhands.sdk.security import AlwaysConfirm
     agent = build_agent(selection, root)
     workspace_options = selection.workspace
+    restored_llm = None
+    if (workspace_options.get("kind", "local") == "local" and selection.provider["kind"] == "local"
+            and selection.role_options.get("model_routing") and not selection.profile_override):
+        import json
+        from openhands.sdk.conversation.impl.local_conversation import LocalConversation
+        from openhands.sdk.conversation.state import BASE_STATE
+        from openhands_config import load_config, select
+        # Read the SDK's own snapshot, not a second Flow model/session ledger.
+        snapshot = Path(LocalConversation.get_persistence_dir(persistence, conversation_id)) / BASE_STATE
+        try:
+            saved = json.loads(snapshot.read_text())
+        except FileNotFoundError:
+            saved = None
+        if saved:
+            usage = saved.get("agent", {}).get("llm", {}).get("usage_id", "")
+            if usage.startswith("profile:"):
+                profile = usage.removeprefix("profile:")
+                candidates = {entry["profile"] for entry in selection.role_options["model_routing"]["categories"]}
+                if profile not in candidates:
+                    raise RuntimeConfigurationError("persisted routed profile is no longer a candidate; use --new-session")
+                resolved = select(root, "implement", selection.role, profile, config=load_config(root))
+                # Re-resolve credentials in place: SDK snapshots redact secrets.
+                restored_llm = local_llm(resolved).model_copy(update={"usage_id": usage})
     if workspace_options.get("kind", "local") == "local":
         workspace = LocalWorkspace(working_dir=root)
     else:
@@ -282,9 +305,11 @@ def conversation(selection: Selection, root: Path, persistence: Path, conversati
     if workspace_options.get("kind", "local") == "local":
         kwargs["persistence_dir"] = persistence
     session = Conversation(**kwargs)
-    if workspace_options.get("confirmation") == "always":
-        session.set_confirmation_policy(AlwaysConfirm())
     try:
+        if restored_llm is not None:
+            session.switch_llm(restored_llm)
+        if workspace_options.get("confirmation") == "always":
+            session.set_confirmation_policy(AlwaysConfirm())
         yield session
     finally:
         session.close()

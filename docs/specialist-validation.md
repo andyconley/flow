@@ -7,7 +7,7 @@ permissions, persistence and metrics. No custom execution controller is added.
 
 ## Regression and protocol evidence
 
-Fourteen new pinned-SDK regression tests cover mixed local/native construction,
+Fifteen new pinned-SDK regression tests cover mixed local/native construction,
 custom role context, nested skill package boundaries and project precedence, inheritance of a switched LLM, explicit role bindings,
 project/profile registry isolation, stock classifier execution and switching,
 explicit profile precedence, unchanged non-routing session fingerprints, routing
@@ -76,10 +76,19 @@ coding category, switching to the inline compatible profile at the existing
 Ollama `/v1` endpoint. Both tested profiles use the same physical model; this is
 profile-routing acceptance rather than a comparison of model quality.
 
-Final exact CI subset: **74 tests passed**, including the corrected generated
-factory contract and all 14 specialist regressions. The deterministic task/ACP
+Final exact CI subset: **74 tests passed** before the added fresh-process resume regression, including the corrected generated
+factory contract and all 15 specialist regressions. The deterministic task/ACP
 fixture passes again after skill discovery changes. Sanitized acceptance is in
 [acceptance/specialists/result.json](acceptance/specialists/result.json).
+
+`tests/openhands_routing_resume_eval.py` passed with actual SDK classification,
+file actions, pending confirmation and fresh Flow processes. Request models were
+`initial`, `initial` (classifier), then `routed` for all three continuation calls.
+An unconfirmed inspection made no model/tool call; confirmed actions retained the
+same conversation and active model. A separate cold-process unit test verifies
+that the active profile, smaller-context condenser cap and current dedicated
+credential environment are restored. Both checks run without native access or
+paid inference.
 
 ## SDK behavior and remaining limits
 

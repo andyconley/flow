@@ -45,3 +45,8 @@ jobs:
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
           OPENHANDS_SUPPRESS_BANNER: '1'
         run: python tests/openhands_specialist_eval.py
+      - name: Verify routed model and pending confirmation across fresh Flow processes
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          OPENHANDS_SUPPRESS_BANNER: '1'
+        run: python tests/openhands_routing_resume_eval.py
