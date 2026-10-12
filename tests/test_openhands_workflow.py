@@ -62,7 +62,12 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         result = flow.archive(self.args)
         self.assertFalse(result["enrichment_diagnostics"], result)
         self.assertTrue((self.directory / "abstract.json").exists())
-        found = search(self.root, "Zephyr accounting")
+        import archive_preflight
+        # A new CI machine has no receipt. Exercise the real probe in a
+        # disposable home instead of depending on the developer's machine.
+        with patch.object(archive_preflight.Path, "home", return_value=self.root):
+            self.assertEqual(archive_preflight.probe()["state"], "available")
+            found = search(self.root, "Zephyr accounting")
         self.assertTrue(found["hits"], found)
         before = {name: (self.directory / name).read_bytes() for name in ("run.json", "events.jsonl", "archive.md", "abstract.json")}
         retry = flow.archive(self.args)

@@ -33,7 +33,8 @@ Distinct task UUID buckets survive the restarted parent. SDK parent/child token
 sums match endpoint request measurements exactly. Reimport adds zero calls;
 normalization has zero stale rows. The prior session remains referenced, elapsed
 seconds accumulate, and failure/interruption projections retain spent usage.
-Summary, trend and active read the imported SDK data. The synthetic endpoint is
+Summary, trend and active read the imported SDK data. Actual CLI harvest,
+summary and active commands also pass with an isolated reporting HOME. The synthetic endpoint is
 accounting/lifecycle evidence, not a model-quality or live-provider benchmark.
 
 `tests/openhands_routing_resume_eval.py` independently passes real SDK routing,
@@ -46,6 +47,6 @@ session identity, both import orders, parent/child rollup exclusion, resume,
 reimport, new sessions, pricing provenance, raw correction and projection fallback.
 
 `tests/test_openhands_workflow.py` runs the approved full lifecycle, verifies
-sealed artifact digests and events, generates a searchable abstract through the
+sealed artifact digests and events, generates a searchable abstract after a real FTS5 probe in a temporary home through the
 archive service, and retries after an injected enrichment failure. Retry does not
 change canonical run/event/summary/abstract bytes or approve changed dispositions.

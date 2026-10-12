@@ -148,6 +148,19 @@ tools=[]
             assert failed['sessions'][key]['metrics']['accumulated_token_usage']['completion_tokens']>interrupted['sessions'][key]['metrics']['accumulated_token_usage']['completion_tokens']
             assert active_rows(conn,60), 'SDK sessions absent from active report'
             assert trend_rows(conn,None,'day'), 'SDK sessions absent from trend'
+            # Exercise the user-facing parser and persisted reporting store too.
+            cli_env = {**env, 'HOME': str(root/'report-home')}
+            for arguments in (['harvest','openhands','--project-root',str(root)],
+                              ['cost','summary','--all','--json'], ['cost','active','--json']):
+                done = subprocess.run([sys.executable,str(Path(cli)/'flow.py'),*arguments],cwd=root,
+                                      env=cli_env,capture_output=True,text=True,timeout=30)
+                assert done.returncode == 0, done.stdout+done.stderr
+                report = json.loads(done.stdout)
+                if arguments[1] == 'summary':
+                    assert sum(r['fresh_input_tokens'] for r in report['rows']) == 1050, report
+                    assert report['sdk_usage'], report
+                elif arguments[1] == 'active':
+                    assert report['rows'] and report['sdk_usage'], report
             evidence=reporting_rows(conn)
             assert any(r['role']=='test-engineer' and r['provider']=='local' for r in evidence),evidence
             print(json.dumps({'status':'passed','fresh_processes':5,'sdk_requests':len(Endpoint.calls),
