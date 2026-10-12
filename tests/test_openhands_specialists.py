@@ -169,3 +169,57 @@ class SpecialistTests(unittest.TestCase):
         self.assertTrue(any('Project instructions must remain available.' in skill.content for skill in skills.values()))
         self.assertFalse(any('UNRELATED_EXAMPLE_SHOULD_NOT_BE_PERMANENT_CONTEXT' in skill.content for skill in skills.values()))
         self.assertTrue((package / 'references/example.md').is_file())
+
+    def test_sdk_project_skill_precedence_over_user_collection(self):
+        home = self.root / 'fake-home'
+        user_package = home / '.agents/skills/shared-skill'
+        project_package = self.root / '.openhands/skills/shared-skill'
+        for package, body in ((user_package, 'User version'), (project_package, 'Project version')):
+            package.mkdir(parents=True)
+            (package / 'SKILL.md').write_text(f'---\nname: shared-skill\ndescription: A shared skill\n---\n{body}\n')
+        with patch('paths.HOME', home):
+            agent = self.build()
+        skill = next(skill for skill in agent.agent_context.skills if skill.name == 'shared-skill')
+        self.assertIn('Project version', skill.content)
+        self.assertNotIn('User version', skill.content)
+
+    def test_explicit_empty_profiles_are_rejected_at_every_precedence_level(self):
+        for invalid in ('', None, 42):
+            with self.subTest(specialist_profile=invalid):
+                self.config['roles']['worker']['profile'] = invalid
+                with self.assertRaisesRegex(RuntimeConfigurationError, 'invalid profile'):
+                    self.build()
+        self.config['roles']['worker'].pop('profile')
+        with self.assertRaisesRegex(RuntimeConfigurationError, 'invalid profile'):
+            self.build('')
+        self.config['stages'] = {'implement': {'profile': ''}}
+        with self.assertRaisesRegex(RuntimeConfigurationError, 'invalid profile'):
+            self.build()
+        self.assertEqual(self.build('local').llm.model, 'openai/initial')
+
+    def test_stock_switch_and_inherited_child_keep_safe_candidate_condenser_caps(self):
+        from openhands.sdk import Conversation
+        from openhands.sdk.llm import Message, TextContent
+        from openhands.sdk.tool.builtins.classify_and_switch_llm import ClassifyAndSwitchLLMTool, ClassifyAndSwitchLLMAction
+        self.routing()
+        self.config['profiles']['local'].update(max_input_tokens=65536, max_output_tokens=8192, condenser_max_tokens=57344)
+        self.config['profiles']['other'].update(max_input_tokens=32768, max_output_tokens=8192, condenser_max_tokens=24576)
+        agent = self.build()
+        self.assertEqual(agent.condenser.max_tokens, 24576)
+        self.assertEqual(self.build('local').condenser.max_tokens, 57344)
+        parent = Conversation(agent=agent, workspace=self.root, persistence_dir=self.root / 'history', visualizer=None)
+        self.addCleanup(parent.close)
+        parent.send_message('Implement a parser')
+        tool = next(t for t in agent.tools if t.name == ClassifyAndSwitchLLMTool.__name__)
+        response = SimpleNamespace(message=Message(role='assistant', content=[TextContent(text='1')]))
+        with patch('openhands.sdk.llm.LLM.completion', return_value=response):
+            result = ClassifyAndSwitchLLMTool.create(**tool.params)[0].executor(ClassifyAndSwitchLLMAction(), parent)
+        self.assertFalse(result.is_error, result)
+        self.assertEqual(parent.agent.condenser.llm.model, 'openai/other')
+        self.assertEqual(parent.agent.condenser._effective_max_tokens(parent.agent.llm), 24576)
+        with patch('openhands_config.load_config', return_value=self.config):
+            child = self.factories(agent)['worker'](parent.agent.llm)
+        self.assertEqual(child.condenser.max_tokens, 24576)
+        self.assertEqual(child.llm.model, 'openai/other')
+        parent.switch_llm(agent.llm)
+        self.assertEqual(parent.agent.condenser._effective_max_tokens(parent.agent.llm), 24576)

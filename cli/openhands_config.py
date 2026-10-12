@@ -82,7 +82,14 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
     stage_options = config.get("stages", {}).get(stage, {})
     role = identifier(role or stage_options.get("role", STAGES[stage][2]), "role")
     options = config.get("roles", {}).get(role, {})
-    profile = identifier(profile or options.get("profile") or stage_options.get("profile") or config.get("default_profile", ""), "profile")
+    if profile is None:
+        if "profile" in options:
+            profile = options["profile"]
+        elif "profile" in stage_options:
+            profile = stage_options["profile"]
+        else:
+            profile = config.get("default_profile", "")
+    profile = identifier(profile, "profile")
     provider = config.get("profiles", {}).get(profile)
     if not isinstance(provider, dict):
         raise RuntimeConfigurationError(f"profile {profile!r} is not configured in .flow/runtime.toml")

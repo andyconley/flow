@@ -7,11 +7,11 @@ permissions, persistence and metrics. No custom execution controller is added.
 
 ## Regression and protocol evidence
 
-Eleven new pinned-SDK regression tests cover mixed local/native construction,
-custom role context, nested skill package boundaries, inheritance of a switched LLM, explicit role bindings,
+Fourteen new pinned-SDK regression tests cover mixed local/native construction,
+custom role context, nested skill package boundaries and project precedence, inheritance of a switched LLM, explicit role bindings,
 project/profile registry isolation, stock classifier execution and switching,
 explicit profile precedence, unchanged non-routing session fingerprints, routing
-target binding changes, legacy child identifier compatibility, native access acknowledgement and restricted SDK scope
+target binding changes, legacy child identifier compatibility, explicit invalid profile rejection, condenser safety across smaller/larger switches, native access acknowledgement and restricted SDK scope
 rejection. The initial full run executed **2,200 tests**, with 81 skips and 23 failures/errors
 caused by SDK provisioning network denial or localhost socket denial. A targeted
 rerun recovered 22 of those with the verified interpreter and permitted test
@@ -77,7 +77,7 @@ Ollama `/v1` endpoint. Both tested profiles use the same physical model; this is
 profile-routing acceptance rather than a comparison of model quality.
 
 Final local CI subset: **69 tests passed**, including the corrected generated
-factory contract and all 11 specialist regressions. The deterministic task/ACP
+factory contract and all 14 specialist regressions. The deterministic task/ACP
 fixture passes again after skill discovery changes. Sanitized acceptance is in
 [acceptance/specialists/result.json](acceptance/specialists/result.json).
 

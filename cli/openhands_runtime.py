@@ -55,16 +55,16 @@ def _context(selection: Selection, root: Path):
     metadata, prompt = parse_frontmatter(render_openhands_agent(selection.role, str(selection.role_file), body, capabilities))
     from openhands.sdk.skills import load_available_skills
     # SDK discovery also composes AGENTS.md and conditional project rules.
-    skills = load_available_skills(root, include_user=True, include_project=True, include_public=False)
-    for directory in (HOME / ".agents/skills", USER_OVERLAY_DIR / "skills", root / ".agents/skills", root / ".flow/skills"):
+    skills = load_available_skills(root, include_user=True, include_project=False, include_public=False)
+    def merge_collection(directory):
         if not directory.is_dir():
-            continue
+            return
         # SDK 1.54 discovers AgentSkills packages only immediately below a
         # collection. Nested synced packages otherwise leak their reference
         # Markdown into permanent context. Give the stock loader the package
         # boundaries and load those SKILL.md declarations with its own parser.
-        packages = sorted(p for p in directory.rglob("*.md")
-                          if p.name.lower() == "skill.md" and p.parent.parent != directory)
+        packages = sorted(p for p in directory.rglob("*")
+                          if p.name.lower() == "skill.md" and p.is_file() and p.parent.parent != directory)
         package_roots = {p.parent.resolve() for p in packages}
         for name, skill in list(skills.items()):
             source = Path(skill.source).resolve() if skill.source else None
@@ -83,6 +83,13 @@ def _context(selection: Selection, root: Path):
                 continue
             collection.setdefault(skill.name, skill)
         skills.update(collection)
+    # Project sources remain authoritative over user/overlay skills, including
+    # SDK-native .openhands skills and scoped AGENTS.md rules.
+    for directory in (HOME / ".agents/skills", USER_OVERLAY_DIR / "skills"):
+        merge_collection(directory)
+    skills.update(load_available_skills(root, include_user=False, include_project=True, include_public=False))
+    for directory in (root / ".flow/skills", root / ".openhands/skills", root / ".agents/skills"):
+        merge_collection(directory)
     for name in metadata.get("skills", []):
         if name not in skills:
             raise RuntimeConfigurationError(f"role skill not found: {name}")
@@ -127,12 +134,6 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
              "task_tracker": TaskTrackerTool, "task": TaskToolSet}
     llm = inherited_llm if inherited_llm is not None else local_llm(selection)
     provider = selection.provider
-    condenser = None
-    if provider.get("condenser_max_tokens") is not None:
-        from openhands.sdk.context.condenser import LLMSummarizingCondenser
-        condenser = LLMSummarizingCondenser(
-            llm=llm.model_copy(update={"usage_id": f"flow-{selection.role}-condenser"}),
-            max_tokens=provider["condenser_max_tokens"])
     # Register declared specialists with the SDK's own delegation mechanism.
     # Explicit child bindings win; unbound local children inherit the active SDK LLM.
     config = load_config(root)
@@ -154,11 +155,13 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
     for name in roster if "task" in selected_tools else []:
         if name == selection.role:
             continue
-        child_profile = config.get("roles", {}).get(name, {}).get("profile")
-        child = select(root, "implement", name, child_profile or selection.profile, config=config)
+        child_options = config.get("roles", {}).get(name, {})
+        bound = "profile" in child_options
+        child_profile = child_options["profile"] if bound else selection.profile
+        child = select(root, "implement", name, child_profile, config=config)
         # Only explicit role bindings choose a new endpoint. The SDK passes its
         # current (possibly switched) LLM to every unbound local child.
-        inherit = child_profile is None and child.provider["kind"] == "local"
+        inherit = not bound and child.provider["kind"] == "local"
         child = replace(child, profile_override=selection.profile_override if inherit else False)
         # The SDK registry is process-global. Scope its identity to the actual
         # project/profile binding so repeats reuse a factory and different
@@ -186,10 +189,20 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
     tool_specs = [Tool(name=tools[t].name) for t in selected_tools]
     routing = selection.role_options.get("model_routing")
+    condenser_profiles = [provider]
+    condenser_llms = [llm]
+    # Stock switches retain the condenser's threshold. Honor every candidate's
+    # cap conservatively without intercepting or replacing the SDK switch tool.
+    inherited_profile = config.get("profiles", {}).get(llm.usage_id.removeprefix("profile:")) if llm.usage_id.startswith("profile:") else None
+    if inherited_profile and inherited_profile.get("kind") == "local":
+        condenser_profiles.append(inherited_profile)
     if routing and not selection.profile_override:
         from openhands.sdk.tool.builtins.classify_and_switch_llm import ClassifyAndSwitchLLMTool
         names = {routing["classifier_profile"], *(entry["profile"] for entry in routing["categories"])}
         resolved = {name: local_llm(select(root, "implement", selection.role, name, config=config)) for name in sorted(names)}
+        candidates = {entry["profile"] for entry in routing["categories"]}
+        condenser_profiles.extend(config["profiles"][name] for name in candidates)
+        condenser_llms.extend(resolved[name] for name in candidates)
         tool_specs.append(Tool(name=ClassifyAndSwitchLLMTool.__name__, params={
             "meta_profile": {"classifier_model": routing["classifier_profile"],
                              "classes": [{"description": entry["description"], "model": entry["profile"]}
@@ -198,6 +211,20 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix +
             "\n\nUse route_task_to_model near the start of a task or when its requirements change. "
             "This switches local models; use task for specialist and native delegation."})
+    limits = [profile["condenser_max_tokens"] for profile in condenser_profiles
+              if profile.get("condenser_max_tokens") is not None]
+    if (routing and not selection.profile_override) or inherited_llm is not None:
+        for candidate in condenser_llms:
+            inputs = candidate.effective_max_input_tokens
+            outputs = candidate.effective_max_output_tokens or 0
+            if inputs is not None:
+                limits.append(inputs - outputs if inputs > outputs else inputs)
+    condenser = None
+    if limits:
+        from openhands.sdk.context.condenser import LLMSummarizingCondenser
+        condenser = LLMSummarizingCondenser(
+            llm=llm.model_copy(update={"usage_id": f"flow-{selection.role}-condenser"}),
+            max_tokens=min(limits))
     return Agent(llm=llm,
                  tools=tool_specs,
                  agent_context=context, condenser=condenser)

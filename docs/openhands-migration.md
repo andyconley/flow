@@ -305,7 +305,8 @@ no global discovery files are rewritten by runtime construction.
 The prompt lists each specialist's actual profile and provider kind.
 
 An explicit role profile selects the child's endpoint, including native
-providers. An unbound local child inherits the LLM supplied by the SDK, including
+providers. An omitted role profile means inheritance; present empty or invalid bindings
+are configuration errors. An unbound local child inherits the LLM supplied by the SDK, including
 an active model chosen through routing. Child tools and context come from the
 child's role. Omitted child rosters follow the normal merged-role default;
 `specialists = []` is the explicit way to make a role a leaf. SDK tool/MCP scope
@@ -352,7 +353,13 @@ native profile; effort remains managed by the native harness configuration.
 
 Model routing runs when the agent calls `route_task_to_model`; the role prompt
 instructs it to route near the start or when requirements change. Classification
-errors are SDK error observations with no silent default. The active model and
+errors are SDK error observations with no silent default. Stock model switching
+updates the summarizing LLM but retains its condenser threshold. Flow therefore
+configures one conservative stock threshold across the active model and routing
+candidates, honoring their configured caps and available input/output headroom.
+A larger-context candidate may summarize earlier than its preferred threshold;
+no candidate is excluded and no custom switch/compaction controller is added.
+An inherited switched child also uses the named profile cap when available. The active model and
 classifier usage are recorded in SDK events/metrics. Profile override intent is
 included in routing-enabled session bindings, so resume cannot silently change
 that intent. Existing bindings without routing retain their fingerprint format. The prior
