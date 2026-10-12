@@ -174,7 +174,7 @@ class MafLifecycleTransactionTests(unittest.TestCase):
             self.assertEqual(restored["maf_runtime_activation_state"], "unsupported")
             self.assertEqual(restored["maf_runtime_activation_detail"], "unsupported_runtime")
 
-    def test_develop_conversion_restores_source_config_and_runtime_pointer_when_provision_fails(self):
+    def test_develop_conversion_does_not_provision_or_change_historical_runtime(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             source = root / "source"
@@ -195,12 +195,14 @@ class MafLifecycleTransactionTests(unittest.TestCase):
             with patch.object(lifecycle, "SOURCE_DIR", source), \
                  patch.object(lifecycle, "FLOW_HOME", root), \
                  patch.object(lifecycle, "FLOW_CONFIG", config), \
-                 patch.object(lifecycle, "_provision_maf_runtime", return_value=False), \
+                 patch.object(lifecycle, "_provision_maf_runtime", return_value=False) as provision, \
                  patch.object(lifecycle, "write_install_config", side_effect=write_config):
-                self.assertEqual(lifecycle._convert_to_develop(clone), 1)
+                self.assertEqual(lifecycle._convert_to_develop(clone), 0)
+                provision.assert_not_called()
 
-            self.assertEqual((source / "prior.txt").read_bytes(), b"prior source\n")
-            self.assertEqual(config.read_bytes(), b"mode = 'release'\n")
+            self.assertTrue(source.is_symlink())
+            self.assertEqual(source.resolve(), clone.resolve())
+            self.assertIn("develop", config.read_text())
             self.assertEqual(pointer.read_bytes(), b"{\"prior\":true}\n")
 
 

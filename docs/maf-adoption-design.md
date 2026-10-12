@@ -1,5 +1,11 @@
 # Adopting Microsoft Agent Framework beneath Flow
 
+> Historical MAF/v8/v9 execution reference. New workflows use stock OpenHands
+> and native ACP harnesses; old provider-start/resume commands are retired.
+> Preserved contracts and records do not describe current runtime containment,
+> install provisioning or provider precedence. See [OpenHands migration](openhands-migration.md).
+
+
 Status: architecture direction accepted 2026-09-19. Updated 2026-09-27.
 
 Progress against the adoption sequence below:

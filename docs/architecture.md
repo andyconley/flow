@@ -6,9 +6,25 @@
 
 - **The framework** (the HOW: workflow phases, role agents, standards) is the source of truth, edited in the flow repo's `scaffolds/default/`.
 - **Project overlays** (the WHAT: project-specific role assignments, memory, runs) live per-project in `<repo>/.flow/`.
-- **Runtime-facing files** (`.claude/`, `.agents/skills/`, `.codex/`) are generated adapters from both layers — never hand-maintained.
+- **Flow-managed runtime files** are generated from framework and registered user sources. Unrelated native configuration and custom agents remain user-owned.
 
 This keeps durable workflow content runtime-neutral while supporting runtime-specific execution surfaces, and lets the framework be installed at the user level (active in every supported runtime session) while per-project overlays stay opt-in.
+
+## Current execution ownership
+
+Flow owns workflow stages, explicit approvals, authoritative role definitions,
+source composition, project context and durable artifacts. OpenHands 1.54.0 owns
+Agent/Conversation execution, tool loops, delegation, persistence and metrics.
+Local profiles target explicit self-hosted endpoints. Native Claude/Codex
+profiles use maintained ACP bridges and subscription authentication after the
+[explicit native access decision](native-access-decision.md). Stock native
+permissions and local process/workspace access differ; Flow does not promise
+identical containment or add a cross-provider MCP dispatcher.
+
+See [runtime configuration and exact selection precedence](openhands-migration.md)
+and [generated role distribution](agent-distribution.md). Historical MAF
+execution, provider-selection ledgers and old containment claims describe
+retained evidence; they are not the execution contract for new workflows.
 
 ## Layer Model
 
@@ -17,8 +33,8 @@ This keeps durable workflow content runtime-neutral while supporting runtime-spe
 1. **Machine support** at `~/.flow/` — install state, config, the source link or copy
 2. **Framework source** in the `flow` repo (`scaffolds/default/`) — the canonical workflow vocabulary
 3. **User overlay** at `~/.flow/user/` — personal overrides and additions that apply in every supported runtime session (opt-in)
-4. **User-level install** at `~/.claude/`, `~/.agents/skills/`, and `~/.codex/` — generated adapters active in every session (built from framework + user overlay)
-5. **Project overlays** at `<repo>/.flow/` and their generated adapters at `<repo>/.claude/`, `<repo>/.agents/skills/`, and `<repo>/.codex/` — per-project, opt-in
+4. **User-level install** at `~/.claude/`, `~/.agents/skills/`, `~/.agents/agents/`, and `~/.codex/` — generated adapters active in every session (built from framework + user overlay)
+5. **Project overlays** at `<repo>/.flow/` — project context and run artifacts; project adapter sync is retired
 
 ### `~/.flow/`
 
@@ -27,6 +43,8 @@ The machine-local install home. Contains:
 - the framework at `~/.flow/source/` (the path contract — see "Install Modes" below)
 - local config at `~/.flow/config.toml` (includes the `[install]` section: mode, version, installed_at)
 - the user overlay at `~/.flow/user/` (see "User Overlay" below)
+- generated agent backing definitions at `generated/agents/{claude,codex,openhands}/`
+- generated agent backing definitions at `generated/agents/{claude,codex,openhands}/`
 - support directories: `hooks/`, `logs/`
 
 Installation and local execution support, not project truth.
@@ -264,7 +282,7 @@ Commands are runtime-adapted.
 
 Reason:
 
-- `.flow/commands/*.md` are generic workflow contracts
+- `scaffolds/default/commands/*.md` are generic workflow contracts
 - each runtime may need different wrapper metadata, invocation behavior, or packaging
 
 Current examples:
@@ -301,7 +319,7 @@ Agents are registered once and adapted per runtime.
 
 Reason:
 
-- `.flow/agents/*.md` are the durable role contracts
+- `scaffolds/default/agents/*.md` (Markdown with YAML metadata) are the authoritative role contracts; registered user overlays can replace or add roles
 - shared `[[agents]]` entries in `flow.toml` name the source file, summary, and semantic model tier
 - each runtime needs a different generated shape for model and effort controls
 
@@ -309,6 +327,8 @@ Current examples:
 
 - Claude receives generated `.claude/agents/*.md` files with manifest-resolved `model` and `effort`
 - Codex receives generated `.codex/agents/*.toml` files with `developer_instructions`, `model`, and `model_reasoning_effort`
+- OpenHands receives `.agents/agents/*.md`; local Flow registers contextual factories with stock delegation, while external file discovery is instructions-only
+- OpenHands receives `.agents/agents/*.md`; local Flow registers contextual factories with stock delegation, while external file discovery is instructions-only
 
 ### Agent Capabilities
 
@@ -327,7 +347,8 @@ or overlay catalog redefinition fail generation.
 The resolved boolean crosses an adapter boundary:
 
 - Claude normalizes `WebSearch` and `WebFetch` in the role's tools list.
-- Codex emits the coupled `web_search` mode and `tools.web_search` boolean.
+- Codex emits the native `web_search` mode; Codex 0.153.4 ignores the legacy `[tools].web_search` boolean, so Flow no longer emits it.
+- OpenHands file discovery reports untranslated source tool metadata and supplies no tools; configured local SDK factories supply their tools separately.
 - Both receive the same generated task-authorization and external-content
   guidance.
 
@@ -355,9 +376,15 @@ These manifests let `flow` distinguish:
 
 Current behavior:
 
-- generated managed files are updated in place
-- stale managed files are removed
-- unmanaged conflicting files cause sync to stop with a conflict
+- unchanged owned outputs can be replaced or retired after SHA-256 verification
+- agent discovery uses relative symlinks to stable Flow backing definitions, with managed-copy fallback
+- custom files, modified backing content, redirected links and edited managed copies are preserved as conflicts
+- a conflict stops writes for that runtime; hashless legacy differences require review
+
+Every runtime emits a `translation-report.json` describing unsupported fields.
+This is translation of supported configuration, not proof of permission or
+sandbox parity. Bootstrap, release update and mode conversion sync all three
+targets with the new CLI; develop mode requires manual pull and sync.
 
 ## Runtime Split
 

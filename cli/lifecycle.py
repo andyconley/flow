@@ -713,7 +713,8 @@ def _convert_to_release() -> int:
     )
     print(f"converted to release mode (version: {version})")
     print(f"clone preserved at: {clone}")
-    return 0 if _finish_maf_transaction(prior_config) else 1
+    _remove_path(_stage_path("old"))
+    return _sync_installed_adapters()
 
 
 def _convert_to_develop(clone: Path) -> int:
@@ -763,7 +764,8 @@ def _convert_to_develop(clone: Path) -> int:
         }
     )
     print(f"converted to develop mode (source: {clone})")
-    return 0 if _finish_maf_transaction(prior_config) else 1
+    _remove_path(_stage_path("old"))
+    return _sync_installed_adapters()
 
 
 def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False) -> int:
@@ -778,7 +780,7 @@ def update_command(check: bool, resync: bool, remote_override: str | None, as_js
             "warning",
             "develop install; flow update does not apply",
             detail=f"source target: {install.get('source_target', '<clone>')}",
-            next_action="git -C <clone> pull --ff-only; flow sync claude --user; flow sync codex --user",
+            next_action="git -C <clone> pull --ff-only; flow setup user",
         )
         if as_json:
             print_json(support_payload("update", Path.cwd(), [diag], install=install))
@@ -789,6 +791,7 @@ def update_command(check: bool, resync: bool, remote_override: str | None, as_js
         print(f"  git -C {target} pull --ff-only")
         print("  flow sync claude --user")
         print("  flow sync codex --user")
+        print("  flow sync openhands --user")
         return 0
 
     if mode != INSTALL_MODE_RELEASE:
@@ -928,17 +931,9 @@ def update_command(check: bool, resync: bool, remote_override: str | None, as_js
     print()
     _ensure_usage_store()
 
-    if resync:
-        print()
-        claude_rc = sync_target("claude", check=False, user_mode=True)
-        codex_rc = sync_target("codex", check=False, user_mode=True)
-        if claude_rc != 0 or codex_rc != 0:
-            print("re-sync completed with errors; review output above")
-            return 1
-    else:
-        print()
-        _print_resync_hint()
-    return 0
+    # Agent conversion/discovery is part of every update, not an optional
+    # follow-up that leaves role definitions stale until the next setup.
+    return _sync_installed_adapters()
 
 
 def _apply_release_update(remote: str, tag: str, install: dict) -> int:
@@ -983,4 +978,19 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
     write_install_config(new_install)
 
     print(f"updated to {tag}")
-    return 0 if _finish_maf_transaction(prior_config) else 1
+    _remove_path(_stage_path("old"))
+    return 0
+
+
+def _sync_installed_adapters() -> int:
+    """Run the installed renderer after a source swap, never stale imports."""
+    failures = []
+    for target in ("claude", "codex", "openhands"):
+        result = subprocess.run([sys.executable, str(SOURCE_DIR / "cli/flow.py"),
+                                 "sync", target, "--user"], check=False)
+        if result.returncode:
+            failures.append(target)
+    if failures:
+        print("source installed; adapter conflicts need attention: " + ", ".join(failures))
+        return 1
+    return 0

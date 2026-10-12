@@ -1,0 +1,35 @@
+name: OpenHands runtime and agent distribution
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-runtime:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install the pinned SDK and stock tools
+        run: python -m pip install -r runtime/openhands/requirements.txt
+      - name: Verify generated inventory, discovery, installer ownership and stock factories
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          OPENHANDS_SUPPRESS_BANNER: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: >-
+          python -m unittest
+          tests.test_agent_distribution
+          tests.test_openhands_sdk_construction
+          tests.test_openhands_workflow
+          tests.test_agent_capabilities
+          tests.test_expertise_advisory_render

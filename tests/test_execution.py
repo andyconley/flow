@@ -482,9 +482,9 @@ class ExecutionCliTests(unittest.TestCase):
              patch.object(sys, "argv", ["flow", "run", "execute-local", "fixture", "--assignment", "a", "--task-file", "task.md", "--json"]), \
              redirect_stdout(io.StringIO()) as stdout:
             code = module.main()
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(stdout.getvalue()), expected)
-        execute.assert_called_once_with("fixture", "a", "task.md")
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "refused")
+        execute.assert_not_called()
         fresh = subprocess.run(
             [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import execution_gateway; assert 'agent_framework' not in sys.modules", str(REPO / "cli")],
             capture_output=True,

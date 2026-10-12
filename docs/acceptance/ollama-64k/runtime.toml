@@ -1,0 +1,10 @@
+# Project-specific runtime for this isolated OpenHands branch.
+default_profile = "ollama"
+[profiles.ollama]
+kind = "local"
+model = "ollama_chat/gemma4-26b-dev:latest"
+base_url = "http://127.0.0.1:11434"
+max_input_tokens = 65536
+max_output_tokens = 8192
+# Stock SDK summary threshold, leaving 8192 tokens of output headroom.
+condenser_max_tokens = 57344

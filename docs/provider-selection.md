@@ -1,5 +1,11 @@
 # Provider selection policy
 
+> Historical MAF/v8/v9 execution reference. New workflows use stock OpenHands
+> and native ACP harnesses; old provider-start/resume commands are retired.
+> Preserved contracts and records do not describe current runtime containment,
+> install provisioning or provider precedence. See [OpenHands migration](openhands-migration.md).
+
+
 Flow protocol v9 separates shaping from delivery binding. Shaper artifacts state
 logical operation, tier, capabilities, locality, limits, risk, and independence;
 they do not select a provider, model, candidate, or ranked roster.

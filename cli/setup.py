@@ -367,7 +367,8 @@ def setup_user(overlay_repo: str | None = None) -> int:
     print()
     codex_result = sync_target("codex", check=False, user_mode=True)
     print()
-    if claude_result != 0 or codex_result != 0 or overlay_result != 0:
+    openhands_result = sync_target("openhands", check=False, user_mode=True)
+    if claude_result != 0 or codex_result != 0 or openhands_result != 0 or overlay_result != 0:
         print("user-level setup completed with errors; review output above")
         return 1
     print("user-level setup complete")

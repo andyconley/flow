@@ -2,6 +2,45 @@
 
 Portable workflow framework for AI-assisted development.
 
+## OpenHands-backed Flow (this branch)
+
+Flow owns define, solution, plan, implement, review and archive, specialist roles,
+skills, context and project outputs. OpenHands 1.54.0 owns execution, conversations,
+workspaces, tools and specialist delegation. Self-hosted profiles run stock OpenHands agents and SDK tools. Claude and Codex
+profiles run their maintained ACP bridges and stock subscription-backed native
+harnesses, using existing native authentication. Automated native execution
+requires the explicit `permission_requests = "stock-openhands"` access decision;
+stock permission handling can approve requests and may persist Claude rules.
+See [the native access decision](docs/native-access-decision.md). Interactive
+`native-handoff` remains available. Neither path creates API credentials or
+silently changes providers.
+
+Start with [the branch migration guide](docs/openhands-migration.md) and
+[the runtime profile template](templates/openhands-runtime.toml). Preview with an
+isolated Python environment; do not replace the live install. Old MAF execution
+commands are retired and historical records remain inspectable.
+
+
+## Quickstart for the current runtime
+
+Preview in an isolated checkout before coordinating any live installation:
+
+```sh
+python3.12 -m venv .venv-openhands
+.venv-openhands/bin/python -m pip install -r runtime/openhands/requirements.txt
+# Copy the template into an already initialized project and edit its endpoint/model.
+cp templates/openhands-runtime.toml /path/to/project/.flow/runtime.toml
+.venv-openhands/bin/python cli/flow.py workflow runtime --json
+.venv-openhands/bin/python cli/flow.py workflow init my-change --project-root /path/to/project
+.venv-openhands/bin/python cli/flow.py workflow execute my-change --stage define --task-file /path/to/task.md --project-root /path/to/project
+```
+
+Review durable outputs before `workflow approve`. These execution commands
+require an authorized endpoint; parser and discovery checks need no model calls.
+The [migration guide](docs/openhands-migration.md) covers subsequent stages,
+profile precedence, workspace access and native execution. The [role distribution
+contract](docs/agent-distribution.md) covers all 13 roles and safe installation.
+
 ## What It Is
 
 `flow` is a local workflow layer for Claude and Codex. It installs shared commands, agent roles, standards, hooks, and templates so AI-assisted work follows a repeatable path instead of living only in chat.
@@ -55,8 +94,8 @@ Start with commands and agents. The other files support customization, project o
 
 Main surfaces:
 
-- [command contracts](scaffolds/default/commands/) under `.flow/commands/`
-- [agent role definitions](scaffolds/default/agents/) under `.flow/agents/`
+- [command contracts](scaffolds/default/commands/) under `scaffolds/default/commands/`
+- [agent role definitions](scaffolds/default/agents/) under `scaffolds/default/agents/`
 - [standards](scaffolds/default/standards/), resolved at runtime from the user overlay or the framework default
 
 Customization and project files:
@@ -210,40 +249,37 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow project audit` | Classify a repo's `.flow/` overlay against the framework (read-only) |
 | `flow project migrate` | Remove the framework copies `audit` finds; dry run unless `--apply --yes` |
 | `flow run list/status/history/verify/transition` | Inspect and hard-gate C-lite workflow run state |
-| `flow run execute-local WORK_ID --assignment ID --task-file PATH [--multi-turn]` | Run one guarded local specialist call, or the bounded v2 three-call MAF exercise |
-| `flow run execute-mixed WORK_ID --local-task-file PATH --codex-task-file PATH` | Run one guarded Ollama test-engineer and Codex lead-developer job through MAF |
-| `flow run execute-local-claude WORK_ID --local-task-file PATH --claude-task-file PATH` | Run one guarded Ollama test-engineer and read-only Claude quality-reviewer job through MAF; set FLOW_MAF_PYTHON to the pinned MAF interpreter |
-| `flow run execute-chartered-job WORK_ID --worktree PATH --source-commit COMMIT [--legacy-v8] [--project-root PATH] [--json]` | Run a new provider-neutral v9 charter through Flow-gated Magentic; --legacy-v8 preserves an existing historical v8 contract |
 | `flow run migrate-job-charter-v9 WORK_ID [--replacement PATH] --reason TEXT --approved-by-user [--json]` | Register an audited provider-neutral v9 successor for a legacy manifest-linked charter without rewriting historical evidence |
 | `flow run provider-selection-probe WORK_ID [--project-root PATH] [--json]` | Show Flow-owned policy, readiness, exclusions, ranking, and selection without creating an attempt or sending |
 | `flow run v9-recovery-status WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect whether a protocol v9 attempt requires explicit reconciliation without dispatch |
-| `flow run resume-chartered-job WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Continue a started v9 charter from a clean completed-action boundary without replaying completed provider work |
 | `flow run terminate-v9-delivery WORK_ID ATTEMPT_ID --status cancelled\|abandoned --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Seal an uncertain protocol v9 attempt without replaying provider I/O |
-| `flow run recover-runtime-startup WORK_ID ATTEMPT_ID --worktree PATH --source-commit COMMIT [--project-root PATH] [--json]` | Create a linked successor only for a sealed zero-send MAF startup failure |
 | `flow run inspect-execution WORK_ID ATTEMPT_ID [--project-root PATH] [--json]` | Inspect durable local execution evidence without dispatch |
 | `flow run inspect-delivery WORK_ID [--attempt-id ID]` | Inspect sealed Shaper/Delivery authority, owner generation, compatibility, and execution evidence without dispatch |
 | `flow run decide-expansion WORK_ID ATTEMPT_ID REQUEST_ID (--approve \| --deny) --expected-generation N --actor ACTOR --explanation TEXT [--project-root PATH] [--json]` | Approve or deny a pending v8 expansion request for a paused attempt |
 | `flow run stuck [--json]` | List every started v8 attempt with liveness, lead status, uncertain rows, and the single next command (read-only) |
 | `flow run verify-receipt WORK_ID [--attempt ATTEMPT_ID] [--no-lineage] [--json]` | Verify a sealed v8 or v9 receipt offline; v9 recomputes selection and exact ledger closure (read-only) |
 | `flow run trace WORK_ID [--attempt ATTEMPT_ID] [--json]` | Show protocol-specific call and selection lineage, including v9 fallback and recovery state (read-only) |
-| `flow run recover-delivery-lead WORK_ID ATTEMPT_ID --actor NAME` | Recover a v8 attempt (after a decision, an interruption, or a pause) under a fenced claim; the actor is recorded |
 | `flow run cancel-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Ask a live v8 parent to stop; it kills its recorded processes and seals the attempt cancelled, or reports attempt_finished |
 | `flow run abandon-delivery WORK_ID ATTEMPT_ID --actor NAME --explanation TEXT --expected-generation N` | Reap a stuck v8 attempt's recorded processes and seal it abandoned, keeping every uncertain send uncertain |
 | `flow run delivery-lead WORK_ID attention\|release\|resume\|supersede --expected-generation N [--owner ID]` | Change the Delivery Lead claim under its lead generation; refusals print a stable code |
-| `flow run resume-execution WORK_ID ATTEMPT_ID` | Fence the former owner and reopen a safe local attempt |
 | `flow run resolve-execution WORK_ID ATTEMPT_ID ACTION_ID` | Append an evidence-backed operator finding |
-| `flow run continue-resolved-execution WORK_ID ATTEMPT_ID ACTION_ID --actor NAME` | Continue one resolved third action through a fenced, linked MAF epoch |
 | `flow archive search/backfill/inspect/refine/import` | Search current decisions, repair canonical archives, inspect/refine evidence, or review legacy imports |
-| `flow runtime smoke [--target all\|claude\|codex\|maf] [--json]` | Check generated runtime surfaces and strict optional MAF readiness |
-| `flow runtime readiness [--json]` | Check strict MAF Delivery readiness without creating an attempt |
-| `flow runtime install-maf [--json]` | Stage, prove, and select Flow's managed pinned MAF runtime |
+| `flow runtime smoke [--target all\|claude\|codex\|openhands] [--json]` | Check generated native surfaces and pinned OpenHands readiness |
 | `flow model context --runtime <runtime> --lane <entry> [--json]` | Read evidence-qualified facts for advisory parent-model selection |
 | `flow model resolve --runtime <runtime> --profile <profile> [--json]` | Resolve an agent-selected session profile without changing runtime configuration |
+| `flow workflow init WORK_ID` | Start a new Flow definition using OpenHands |
+| `flow workflow execute WORK_ID --stage STAGE --task-file PATH [--role ROLE] [--profile PROFILE] [--new-session]` | Execute or resume an SDK specialist using a configured self-hosted coding endpoint |
+| `flow workflow approve WORK_ID --stage STAGE [--disposition NAME=VALUE]` | Approve durable outputs and advance Flow stages |
+| `flow workflow native-handoff WORK_ID --stage STAGE --profile PROFILE --task-file PATH` | Prepare context for an existing official Codex or Claude subscription session |
+| `flow workflow archive WORK_ID --disposition memory=VALUE --disposition capability_gaps=VALUE` | Archive accepted review outcomes |
+| `flow workflow status WORK_ID [--json]` | Inspect workflow state and SDK conversation references |
+| `flow workflow runtime [--json]` | Inspect pinned OpenHands packages and native access decision |
+| `flow runtime readiness [--json]` | Inspect OpenHands readiness without starting a provider |
 <!-- generated:cli-commands-table:end -->
 
 ### Install and Update
 
-Most users only need the bootstrap installer once, then `flow update --resync` later. Use the other commands when setting up a machine, connecting your user overlay to git, or converting an existing install between modes.
+Most users only need the bootstrap installer once, then `flow update` later. Use the other commands when setting up a machine, connecting your user overlay to git, or converting an existing install between modes.
 
 - `flow setup machine`
   - prepare `~/.flow/`, `~/.local/bin/flow`, and local config
@@ -299,8 +335,10 @@ Use these after changing framework content, user overlays, project overlays, com
   - generate Claude runtime files at user level
 - `flow sync codex --user`
   - generate Codex runtime files at user level
+- `flow sync openhands --user`
+  - generate OpenHands role discovery definitions at user level
 - `flow runtime smoke --target all`
-  - check generated Claude/Codex surfaces and list manual runtime smoke evidence
+  - check generated native surfaces and pinned OpenHands readiness
 - `flow model context --runtime codex --lane plan --json`
   - read the active runtime's configured parent-session profiles and bounded
     local evidence without harvesting, normalizing, migrating, or writing
@@ -320,8 +358,10 @@ Typical user-level sync:
 ```bash
 flow sync claude --user
 flow sync codex --user
+flow sync openhands --user
 flow sync claude --user --check
 flow sync codex --user --check
+flow sync openhands --user --check
 flow runtime smoke --target all
 ```
 
@@ -436,18 +476,19 @@ Two things to know before acting on the numbers. **A high count usually means ho
 
 ## How Flow Manages Runtime Files
 
-Most users only need to know that flow writes the Claude and Codex files each runtime expects. For the full adapter model and file list, see [runtime-adapters.md](docs/runtime-adapters.md).
+Flow generates Claude, Codex and OpenHands role definitions from the same authoritative Markdown sources and shared manifest. For the full adapter model and file list, see [runtime-adapters.md](docs/runtime-adapters.md).
 
 ### What Gets Installed
 
 At user level, flow installs the pieces each runtime needs:
 
-- Claude gets `flow-*` skills, project subagents, and hooks that add flow context and warn when generated files are edited directly.
-- Codex gets flow skills, native agent definitions, hooks, and a managed-file manifest.
+- Claude gets `flow-*` skills, native role agents, and managed hooks.
+- Codex gets Flow skills, native agent definitions, hooks, and a managed-file manifest.
+- OpenHands gets Markdown discovery definitions. Flow local execution also registers contextual factories with stock SDK delegation.
 
 ### Why Generated Files Exist
 
-Claude and Codex do not read the same configuration format. Flow keeps one source of truth under `.flow/`, then generates the shape each runtime expects.
+Claude and Codex do not read the same configuration format. Flow keeps role Markdown with YAML frontmatter in `scaffolds/default/agents/`, registers it through shared `[[agents]]` in `flow.toml`, and generates each runtime format. User manifest entries can replace or add roles.
 
 That keeps commands, agents, and hooks portable without asking you to hand-maintain parallel Claude and Codex copies.
 
@@ -455,12 +496,19 @@ That keeps commands, agents, and hooks portable without asking you to hand-maint
 
 Flow-managed files are generated. Change the `.flow/` source files instead of editing generated copies directly:
 
-- edit `.flow/commands/*` to change generated skills
-- edit `.flow/agents/*` to change generated agents
+- edit `scaffolds/default/commands/*` or registered user-overlay sources to change generated skills
+- edit `scaffolds/default/agents/*` or registered user-overlay sources to change generated agents
 - edit framework hook sources in this repo to change generated hook scripts
 - rerun `flow sync claude --user` and `flow sync codex --user` after changing the source of truth
 
-Flow preserves unmanaged Claude and Codex files. It only removes files that were previously marked as flow-managed and are no longer part of the generated surface.
+Discovery agents link to `~/.flow/generated/agents/<runtime>/`; unsupported
+symlink filesystems use managed copies. SHA-256 ownership checks preserve custom
+files and edits to managed output. A conflict prevents writes for that target;
+legacy unproven differences require review. Translation reports identify fields
+that cannot be represented. See [distribution and migration](docs/agent-distribution.md).
+Bootstrap, conversion and release update sync all three targets automatically;
+`--resync` is retained for compatibility. Develop mode still needs an explicit
+pull and sync. Coordinate live updates with active sessions, including Witmark.
 
 ## Maintainer Docs
 

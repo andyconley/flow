@@ -93,13 +93,16 @@ def render_yaml_frontmatter(frontmatter: dict) -> list[str]:
         elif isinstance(value, bool):
             lines.append(f"{key}: {'true' if value else 'false'}")
         else:
-            lines.append(f"{key}: {value}")
+            scalar = str(value)
+            if ": " in scalar or " #" in scalar or scalar.startswith(("{", "[", "*", "&", "!", "|", ">", "@", "`")) or "\n" in scalar:
+                scalar = json.dumps(scalar, ensure_ascii=False)
+            lines.append(f"{key}: {scalar}")
     lines.append("---")
     return lines
 
 
 def toml_string(value: str) -> str:
-    return json.dumps(value)
+    return json.dumps(value, ensure_ascii=False)
 
 
 SHAPER_COMMANDS = frozenset({"flow-boot", "flow-define", "flow-solution", "flow-plan"})
@@ -176,9 +179,7 @@ def manifest_ref_for() -> str:
 
 
 EXPERTISE_ADVISORY_COMMANDS = frozenset({
-    "flow-define", "flow-solution", "flow-plan", "flow-implement",
-    "flow-review", "flow-archive", "flow-init-project", "flow-scout",
-    "flow-resume",
+    "flow-init-project", "flow-scout",
 })
 EXPERTISE_ADVISORY_ROLES = (
     "architect", "business-analyst", "lead-developer", "sre",
@@ -403,6 +404,10 @@ def render_claude_agent(
         if "tools" in frontmatter or decision.enabled:
             frontmatter["tools"] = normalized
         content = f"{content.rstrip()}\n\n{guidance_for(decision)}\n"
+    # Native access/permission modes are deliberately not generated. Source
+    # fields without a supported translation are listed in the sync report.
+    supported = {"name", "description", "tools", "model", "effort", "skills", "color"}
+    frontmatter = {key: value for key, value in frontmatter.items() if key in supported}
     marker = f"<!-- {GENERATED_MARKER} Edit `{source_ref}` and run `flow sync claude --user`. -->"
     lines = render_yaml_frontmatter(frontmatter)
     lines.extend(["", marker, "", content.rstrip(), ""])
@@ -418,14 +423,19 @@ def render_codex_agent(
 ) -> str:
     frontmatter, content = parse_frontmatter(body)
     description = str(frontmatter.get("description", f"Flow agent: {name}"))
+    if frontmatter.get("skills"):
+        names = frontmatter["skills"]
+        if not isinstance(names, list):
+            names = [names]
+        content = content.rstrip() + "\n\nRole skill references (resolve with native skill discovery): " + ", ".join(names) + "\n"
     decision = capabilities.get(WEB_RESEARCH) if capabilities else None
     if decision is not None:
         content = f"{content.rstrip()}\n\n{guidance_for(decision)}\n"
-    safe_body = content.rstrip().replace('"""', '""\\"')
+    safe_body = toml_string(content.rstrip() + "\n")
     lines = [
         f"name = {toml_string(name)}",
         f"description = {toml_string(description)}",
-        f'developer_instructions = """{safe_body}\n"""',
+        f"developer_instructions = {safe_body}",
     ]
     model = policy.get("model")
     if model:
@@ -436,13 +446,6 @@ def render_codex_agent(
     if decision is not None:
         lines.append(
             f'web_search = {toml_string("live" if decision.enabled else "disabled")}'
-        )
-        lines.extend(
-            [
-                "",
-                "[tools]",
-                f"web_search = {'true' if decision.enabled else 'false'}",
-            ]
         )
     lines.extend(
         [
@@ -472,7 +475,31 @@ def build_managed_manifest(target_name: str, entries: list[dict]) -> str:
                 f'kind = "{entry["kind"]}"',
                 f'source = "{entry["source"]}"',
                 f'sync_mode = "{entry["sync_mode"]}"',
-                "",
             ]
         )
+        for key in ("sha256", "link"):
+            if key in entry:
+                lines.append(f"{key} = {toml_string(entry[key])}")
+        lines.append("")
     return "\n".join(lines)
+
+
+def render_openhands_agent(name: str, source_ref: str, body: str, capabilities: dict | None = None) -> str:
+    """SDK 1.54 file format. Runtime configuration owns tools and endpoint choice.
+
+    File discovery outside Flow gets an instructions-only agent. Flow registers
+    a contextual factory with the selected local profile and its existing tools.
+    Claude tool names and model aliases are not OpenHands tool/profile names.
+    """
+    metadata, content = parse_frontmatter(body)
+    decision = capabilities.get(WEB_RESEARCH) if capabilities else None
+    if decision is not None:
+        content = f"{content.rstrip()}\n\n{guidance_for(decision)}\n"
+    header = {"name": name, "description": json.dumps(str(metadata.get("description", f"Flow specialist {name}")), ensure_ascii=False),
+              "model": "inherit", "tools": []}
+    if metadata.get("skills"):
+        names = metadata["skills"]
+        header["skills"] = names if isinstance(names, list) else [name.strip() for name in str(names).split(",") if name.strip()]
+    return "\n".join([*render_yaml_frontmatter(header), "",
+        f"<!-- {GENERATED_MARKER} Edit `{source_ref}` and run `flow sync openhands --user`. -->",
+        "", content.rstrip(), ""])

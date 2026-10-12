@@ -345,8 +345,17 @@ Edit these directly in the `flow` repo:
 
 Do not treat generated runtime folders as the primary source of truth at any scope:
 
-- `<repo>/.claude/`, `<repo>/.agents/skills/`, and `<repo>/.codex/` — project-level adapter outputs derived from `<repo>/.flow/`
-- `~/.claude/`, `~/.agents/skills/`, and `~/.codex/` — user-level adapter outputs derived from this repo's `scaffolds/default/`
+- `<repo>/.claude/`, `<repo>/.agents/skills/`, and `<repo>/.codex/` — legacy project adapter outputs or custom native configuration; project sync is retired
+- `~/.claude/`, `~/.agents/skills/`, and `~/.codex/` — user-level adapters from framework plus registered user overlays
+- `~/.flow/generated/agents/{claude,codex,openhands}/` — stable generated backing definitions and translation reports
+- `~/.agents/agents/` — stock OpenHands role discovery; native agent discovery links live in `.claude/agents/` and `.codex/agents/`
+
+Agent outputs use owned relative symlinks with managed-copy fallback and SHA-256
+checks. Local Flow registers contextual OpenHands factories separately. Runtime
+selection lives in `cli/openhands_config.py`; execution in
+`cli/openhands_runtime.py`. See [distribution](agent-distribution.md) and
+[migration](openhands-migration.md). MAF modules below remain historical evidence
+and inspection support, rather than the new workflow execution path.
 
 All of these are generated. To change them, edit the corresponding source:
 

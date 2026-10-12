@@ -1,0 +1,7 @@
+default_profile="ollama-acceptance"
+[profiles.ollama-acceptance]
+kind="local"
+model="ollama_chat/gemma4-26b-dev:latest"
+base_url="http://127.0.0.1:11434"
+[roles.business-analyst]
+tools=["file_editor"]

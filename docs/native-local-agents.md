@@ -1,5 +1,11 @@
 # Native retained local agents
 
+> Historical MAF/v8/v9 execution reference. New workflows use stock OpenHands
+> and native ACP harnesses; old provider-start/resume commands are retired.
+> Preserved contracts and records do not describe current runtime containment,
+> install provisioning or provider precedence. See [OpenHands migration](openhands-migration.md).
+
+
 A sealed `local_agent_profile` selects retained MAF/Ollama participants for a native v9 chartered job. Flow still owns authority, provider selection, scoped effects, receipts, checkpoints and lifecycle transitions. The profile adopts the successful local-agent POC's execution behavior; it does not call the older one-shot whole-file JSON editor.
 
 ## Development execution

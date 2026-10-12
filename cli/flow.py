@@ -18,6 +18,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 # have to follow the sys.path append above, so they cannot sit at the top of
 # the file where E402 expects them.
 from archive_commands import register as register_archive, dispatch as dispatch_archive  # noqa: E402
+from openhands_flow import register_commands as register_openhands  # noqa: E402
 from baseline import baseline_command  # noqa: E402
 from cost import (  # noqa: E402
     BUCKET_DAY,
@@ -139,6 +140,8 @@ def main() -> int:
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, title="commands")
+
+    register_openhands(sub)
 
     register_expertise(sub)
 
@@ -835,13 +838,13 @@ def main() -> int:
     )
     runtime_smoke_parser.add_argument(
         "--target",
-        choices=("all", "claude", "codex", "maf"),
+        choices=("all", "claude", "codex", "openhands"),
         default="all",
         help="runtime target to check (default: all)",
     )
     runtime_smoke_parser.add_argument("--json", action="store_true", help="emit JSON")
-    runtime_sub.add_parser("readiness", help="check strict MAF Delivery readiness").add_argument("--json", action="store_true")
-    runtime_sub.add_parser("install-maf", help="stage and select the managed pinned MAF runtime").add_argument("--json", action="store_true")
+    runtime_sub.add_parser("readiness", help="check pinned OpenHands readiness").add_argument("--json", action="store_true")
+    runtime_sub.add_parser("install-maf", help="retired historical MAF provisioning command").add_argument("--json", action="store_true")
 
     model_parser = sub.add_parser(
         "model",
@@ -934,7 +937,8 @@ def main() -> int:
         epilog=(
             "Targets:\n"
             "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
-            "  codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.\n\n"
+            "  codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.\n"
+            "  openhands Generate .agents/agents definitions and a managed manifest.\n\n"
             "Examples:\n"
             "  flow sync claude --user\n"
             "  flow sync claude --user --check\n"
@@ -945,7 +949,7 @@ def main() -> int:
     )
     sync.add_argument(
         "target",
-        choices=["claude", "codex"],
+        choices=["claude", "codex", "openhands"],
         help="runtime adapter target to generate or check",
     )
     sync.add_argument(
@@ -1013,7 +1017,7 @@ def main() -> int:
     update_parser.add_argument(
         "--resync",
         action="store_true",
-        help="after applying, run `flow sync claude --user` and `flow sync codex --user`",
+        help="compatibility flag; all adapters are refreshed after every update",
     )
     update_parser.add_argument(
         "--remote",
@@ -1023,20 +1027,24 @@ def main() -> int:
     update_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
 
     args = parser.parse_args()
+    if hasattr(args, "openhands_handler"):
+        return args.openhands_handler(args)
 
-    # A v0.38 updater can activate this source but cannot invoke a hook it did
-    # not ship. On the first later operational command, do one transactional
-    # activation attempt. Help, read-only checks, and explicit repair stay
-    # side-effect free; a recorded failure is never retried implicitly.
-    bridge_command = ((args.command == "bootstrap")
-                      or (args.command == "setup" and args.setup_target == "machine")
-                      or (args.command == "run" and args.run_target == "execute-chartered-job"))
-    if bridge_command:
-        bridge = activate_managed_maf_runtime()
-        if bridge["attempted"]:
-            print("MAF runtime post-activation: " + str(bridge["state"]) +
-                  ("; run `flow runtime install-maf` to repair." if bridge["state"] == "failed" else ""),
-                  file=sys.stderr)
+    # The replacement runtime does not activate or resume historical providers.
+    retired_execution = {
+        "execute-local", "execute-mixed", "execute-local-claude", "execute-delivery-lead",
+        "execute-chartered-job", "resume-chartered-job", "recover-runtime-startup",
+        "resume-delivery-lead", "recover-delivery-lead", "continue-resolved-execution",
+        "resume-execution",
+    }
+    if args.command == "run" and args.run_target in retired_execution:
+        import json
+        reason = "Historical MAF execution is retired in this branch. Use flow workflow init/execute; old runs remain inspectable."
+        print(json.dumps({"status": "refused", "reason": reason}) if args.json else reason)
+        return 2
+    if args.command == "runtime" and args.runtime_target == "install-maf":
+        print("MAF provisioning is retired. Install runtime/openhands/requirements.txt into an isolated Python 3.12 environment.")
+        return 2
 
     if args.command == "setup" and args.setup_target == "machine":
         return setup_machine()
@@ -1479,21 +1487,11 @@ def main() -> int:
     if args.command == "runtime" and args.runtime_target == "smoke":
         return runtime_smoke_command(args)
     if args.command == "runtime" and args.runtime_target == "readiness":
+        from openhands_runtime import probe
         import json
-        result = maf_probe()
-        print(json.dumps(result, sort_keys=True) if args.json else f"MAF Delivery readiness: {result['state']}\n{result['remedy']}")
-        return 0 if result["state"] == "ready" else 1
-    if args.command == "runtime" and args.runtime_target == "install-maf":
-        import json
-        try:
-            result = maf_provision()
-        except MafRuntimeUnready as exc:
-            record_managed_maf_runtime_unavailable(str(exc.diagnostic.get("state", "provisioning_failed")))
-            print(json.dumps(exc.diagnostic, sort_keys=True) if args.json else str(exc))
-            return 1
-        record_managed_maf_runtime_repair()
-        print(json.dumps(result, sort_keys=True) if args.json else "MAF runtime installed and verified")
-        return 0
+        result = probe()
+        print(json.dumps(result, sort_keys=True) if args.json else json.dumps(result, indent=2))
+        return 0 if result["ready"] else 1
     if args.command == "model" and args.model_target == "context":
         return model_context_command(args)
     if args.command == "model" and args.model_target == "resolve":

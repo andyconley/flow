@@ -1,0 +1,157 @@
+{
+  "status": "passed",
+  "sdk_context": 65536,
+  "sdk_output_limit": 8192,
+  "sdk_summary_threshold": 57344,
+  "model_loaded": {
+    "name": "gemma4-26b-dev:latest",
+    "digest": "b9e099edcd08dd5a8f1f0fd1aba55816c4b23e7702a02d063d016161a40a13b1",
+    "size": 17434421492,
+    "size_vram": 17434421492,
+    "context_length": 65536
+  },
+  "memory": {
+    "vm.swapusage": "total = 9216.00M  used = 7841.50M  free = 1374.50M  (encrypted)",
+    "kern.memorystatus_vm_pressure_level": "1",
+    "memory_pressure_query": "The system has 38654705664 (2359296 pages with a page size of 16384).\nSystem-wide memory free percentage: 32%"
+  },
+  "metrics": {
+    "model_name": "default",
+    "accumulated_cost": 0.0,
+    "max_budget_per_task": null,
+    "accumulated_token_usage": {
+      "model": "default",
+      "prompt_tokens": 46975,
+      "completion_tokens": 1440,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "reasoning_tokens": 0,
+      "context_window": 65536,
+      "per_turn_token": 0,
+      "response_id_sha256": ""
+    },
+    "costs": [],
+    "response_latencies": [
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 24.2253201007843,
+        "response_id_sha256": "6f6492a0f10924b1c9124f2142fc200f2d85acb7e395d574f83a7023f46270c6"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 1.5948209762573242,
+        "response_id_sha256": "b8c83350996e5b796ce66633643320144b268fbe3b54fa140e8cfe720ea6706c"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 2.758244037628174,
+        "response_id_sha256": "4fefcf689dfe1edc8e40542514f5393a84effd065a09cfd7d85f0dd334265897"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 6.3739941120147705,
+        "response_id_sha256": "d1cd169f136c39808e4d7cd39d3ac5d3cda45bdad00eb602821fc940fb7cb86c"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 3.9760000705718994,
+        "response_id_sha256": "e2f323228651b3862eb50478fc83305857eee0f87b0cbb4f4c6f1f67fffc4fe6"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 2.4426188468933105,
+        "response_id_sha256": "3702a3469fa31b55642de62dfa61ce83524f0851b55f3c21005fdcf191c55252"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 1.9008738994598389,
+        "response_id_sha256": "825582abf05d381387b5c4f23f0b2176670f1cebdfa13042b3857053149888d9"
+      }
+    ],
+    "token_usages": [
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 5979,
+        "completion_tokens": 388,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 65536,
+        "per_turn_token": 6367,
+        "response_id_sha256": "6f6492a0f10924b1c9124f2142fc200f2d85acb7e395d574f83a7023f46270c6"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 6104,
+        "completion_tokens": 85,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 65536,
+        "per_turn_token": 6189,
+        "response_id_sha256": "b8c83350996e5b796ce66633643320144b268fbe3b54fa140e8cfe720ea6706c"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 6478,
+        "completion_tokens": 153,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 65536,
+        "per_turn_token": 6631,
+        "response_id_sha256": "4fefcf689dfe1edc8e40542514f5393a84effd065a09cfd7d85f0dd334265897"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 6666,
+        "completion_tokens": 436,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 65536,
+        "per_turn_token": 7102,
+        "response_id_sha256": "d1cd169f136c39808e4d7cd39d3ac5d3cda45bdad00eb602821fc940fb7cb86c"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 7037,
+        "completion_tokens": 138,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 65536,
+        "per_turn_token": 7175,
+        "response_id_sha256": "e2f323228651b3862eb50478fc83305857eee0f87b0cbb4f4c6f1f67fffc4fe6"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 7248,
+        "completion_tokens": 140,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 65536,
+        "per_turn_token": 7388,
+        "response_id_sha256": "3702a3469fa31b55642de62dfa61ce83524f0851b55f3c21005fdcf191c55252"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 7463,
+        "completion_tokens": 100,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 65536,
+        "per_turn_token": 7563,
+        "response_id_sha256": "825582abf05d381387b5c4f23f0b2176670f1cebdfa13042b3857053149888d9"
+      }
+    ]
+  },
+  "conversation_id": "10b37746-e271-4b23-9c65-66b28650c7c4",
+  "larger_prompt_behavior_tested": false,
+  "fixture_unchanged": true,
+  "previous_32k_allocation_bytes": 17394638518,
+  "observed_allocation_delta_bytes": 39782974,
+  "memory_scope_note": "API reported allocation after a short prompt, not peak allocation for a filled 64K context."
+}

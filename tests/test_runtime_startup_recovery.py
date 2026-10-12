@@ -86,13 +86,13 @@ class RuntimeStartupRecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "already has a successor"):
             ledger.claim_runtime_startup_successor("old")
 
-    def test_reconciled_successor_command_exits_zero(self):
+    def test_historical_successor_command_does_not_start_runtime(self):
         argv = ["flow", "run", "recover-runtime-startup", "sample", "old", "--worktree", self.tmp.name,
                 "--source-commit", "deadbeef"]
         with patch.object(sys, "argv", argv), patch.object(flow, "recover_runtime_startup",
                 return_value={"attempt_id": "next", "status": "reconciled", "predecessor_attempt_id": "old"}), \
              contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(flow.main(), 0)
+            self.assertEqual(flow.main(), 2)
 
 
 if __name__ == "__main__":

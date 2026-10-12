@@ -1,0 +1,19 @@
+{
+  "target": "gemma4-26b-dev:latest",
+  "old_digest": "8ab8e8b442905a9633822f776d91b10129c44df9c952661c07778d83164dbd7b",
+  "new_digest": "b9e099edcd08dd5a8f1f0fd1aba55816c4b23e7702a02d063d016161a40a13b1",
+  "old_num_ctx": 32768,
+  "new_num_ctx": 65536,
+  "rollback_tag": "gemma4-26b-dev-flow-rollback-32k:20261011",
+  "rollback_tag_digest": "8ab8e8b442905a9633822f776d91b10129c44df9c952661c07778d83164dbd7b",
+  "base_weight_reference_unchanged": true,
+  "unrelated_model_digests_unchanged": true,
+  "rollback_api": {
+    "endpoint": "http://127.0.0.1:11434/api/copy",
+    "body": {
+      "source": "gemma4-26b-dev-flow-rollback-32k:20261011",
+      "destination": "gemma4-26b-dev:latest"
+    }
+  },
+  "all_other_parameters_and_model_info_unchanged": true
+}

@@ -1,5 +1,11 @@
 # V9 orchestration ownership correction
 
+> Historical MAF/v8/v9 execution reference. New workflows use stock OpenHands
+> and native ACP harnesses; old provider-start/resume commands are retired.
+> Preserved contracts and records do not describe current runtime containment,
+> install provisioning or provider precedence. See [OpenHands migration](../openhands-migration.md).
+
+
 Baseline: v0.40.16, `ea55e55baab50580b5034645b60a2a5b68df4c3c`.
 The initial clean checkout was `b3893de` on
 `codex/cancel-wakeup-all-waits`; current refs were fetched and the local

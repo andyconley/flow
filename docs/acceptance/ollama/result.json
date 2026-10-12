@@ -1,0 +1,279 @@
+{
+  "status": "passed",
+  "model_identity": {
+    "server_version": "0.32.1",
+    "model": "gemma4-26b-dev:latest",
+    "digest": "8ab8e8b442905a9633822f776d91b10129c44df9c952661c07778d83164dbd7b",
+    "capabilities": [
+      "completion",
+      "vision",
+      "tools",
+      "thinking"
+    ],
+    "details": {
+      "parent_model": "gemma4:26b",
+      "format": "gguf",
+      "family": "gemma4",
+      "families": [
+        "gemma4"
+      ],
+      "parameter_size": "25.8B",
+      "quantization_level": "Q4_K_M"
+    },
+    "model_parameters": "top_k                          64\ntop_p                          0.95\nnum_ctx                        32768\ntemperature                    1"
+  },
+  "sdk_conversation_id": "2aaaed19-62aa-48e6-8791-a7820ae991b7",
+  "same_sdk_conversation_resume": true,
+  "fixture_unchanged": true,
+  "artifacts_unchanged_on_resume": true,
+  "artifacts": {
+    "requirements.md": "a07cc5d1c0823a6846f3a2824148c934bed04f18c886d43ef3cbb094beaa996f",
+    "acceptance-criteria.md": "961c496a210a1939c71a461603ab265e6da7a6aab55120c3f4c8ed4c307342d8"
+  },
+  "metrics": {
+    "model_name": "default",
+    "accumulated_cost": 0.0,
+    "max_budget_per_task": null,
+    "accumulated_token_usage": {
+      "model": "default",
+      "prompt_tokens": 75579,
+      "completion_tokens": 2736,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "reasoning_tokens": 0,
+      "context_window": 262144,
+      "per_turn_token": 10023,
+      "response_id_sha256": ""
+    },
+    "costs": [],
+    "response_latencies": [
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 21.14124321937561,
+        "response_id_sha256": "04a1e6029f1943c47b8a6283355dbad1284e4bf04c2a9f52622e237d4440c684"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 1.5554850101470947,
+        "response_id_sha256": "1955d2b4a9c3b531298d888eed54214130f1961a8b11e916ae7adc2b4d2eaafe"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 2.3262741565704346,
+        "response_id_sha256": "9cd4a01f444ba33b7ccc0c1f094ce0cb7046dd461fde43bd7520744c06af803f"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 5.104842901229858,
+        "response_id_sha256": "e9c68b868505c12936d6ccb1604b854de42d5c07744213fc518a303116b130a9"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 8.550159215927124,
+        "response_id_sha256": "e05c634d08e56b80c8fc3c806b45ab162a1297ce2a6a2f4d55723a8a15901b01"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 7.342703819274902,
+        "response_id_sha256": "19b676ebe4b8106fc722fc06982e8a16da28b57b328e4966a1dfaccd79ca3783"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 5.934935808181763,
+        "response_id_sha256": "55516232970d0f8b7b7aff6c842ea67072f5cc21065499d185ee7980df1fe83e"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 9.212720155715942,
+        "response_id_sha256": "e01516d24236d1fa886936ec5db0c3df25105d4da9c0b9bdbdf685785812c837"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 2.728969097137451,
+        "response_id_sha256": "8a264fd91cf9bdc571321d1531f955c2e900744adf72422f7af66e3598e3c06c"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "latency": 2.6692888736724854,
+        "response_id_sha256": "c2d5dd869e9d86f9884eaea2af56c36a1493a6381f0eedbcd30064247cca171f"
+      }
+    ],
+    "token_usages": [
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 5981,
+        "completion_tokens": 397,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 6378,
+        "response_id_sha256": "04a1e6029f1943c47b8a6283355dbad1284e4bf04c2a9f52622e237d4440c684"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 6108,
+        "completion_tokens": 84,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 6192,
+        "response_id_sha256": "1955d2b4a9c3b531298d888eed54214130f1961a8b11e916ae7adc2b4d2eaafe"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 6471,
+        "completion_tokens": 125,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 6596,
+        "response_id_sha256": "9cd4a01f444ba33b7ccc0c1f094ce0cb7046dd461fde43bd7520744c06af803f"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 6654,
+        "completion_tokens": 350,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 7004,
+        "response_id_sha256": "e9c68b868505c12936d6ccb1604b854de42d5c07744213fc518a303116b130a9"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 6900,
+        "completion_tokens": 609,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 7509,
+        "response_id_sha256": "e05c634d08e56b80c8fc3c806b45ab162a1297ce2a6a2f4d55723a8a15901b01"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 7579,
+        "completion_tokens": 349,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 7928,
+        "response_id_sha256": "19b676ebe4b8106fc722fc06982e8a16da28b57b328e4966a1dfaccd79ca3783"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 8003,
+        "completion_tokens": 193,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 8196,
+        "response_id_sha256": "55516232970d0f8b7b7aff6c842ea67072f5cc21065499d185ee7980df1fe83e"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 8591,
+        "completion_tokens": 393,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 8984,
+        "response_id_sha256": "e01516d24236d1fa886936ec5db0c3df25105d4da9c0b9bdbdf685785812c837"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 9401,
+        "completion_tokens": 104,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 9505,
+        "response_id_sha256": "8a264fd91cf9bdc571321d1531f955c2e900744adf72422f7af66e3598e3c06c"
+      },
+      {
+        "model": "ollama_chat/gemma4-26b-dev:latest",
+        "prompt_tokens": 9891,
+        "completion_tokens": 132,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "context_window": 262144,
+        "per_turn_token": 10023,
+        "response_id_sha256": "c2d5dd869e9d86f9884eaea2af56c36a1493a6381f0eedbcd30064247cca171f"
+      }
+    ]
+  },
+  "provider": "ollama",
+  "endpoint": "http://127.0.0.1:11434",
+  "tools": [
+    "SDK file_editor",
+    "SDK finish"
+  ],
+  "model_downloaded": false,
+  "global_runtime_changed": false,
+  "paid_api_routing": false,
+  "sdk_version": "1.54.0",
+  "workflow_state": "definition_approved",
+  "observed_tool_actions": [
+    {
+      "tool": "file_editor",
+      "command": "view",
+      "path": "."
+    },
+    {
+      "tool": "file_editor",
+      "command": "view",
+      "path": "."
+    },
+    {
+      "tool": "file_editor",
+      "command": "view",
+      "path": "fixture.py"
+    },
+    {
+      "tool": "file_editor",
+      "command": "view",
+      "path": "task.md"
+    },
+    {
+      "tool": "file_editor",
+      "command": "create",
+      "path": ".flow/runs/ollama-acceptance/requirements.md"
+    },
+    {
+      "tool": "file_editor",
+      "command": "create",
+      "path": ".flow/runs/ollama-acceptance/acceptance-criteria.md"
+    },
+    {
+      "tool": "finish",
+      "command": null,
+      "path": null
+    },
+    {
+      "tool": "file_editor",
+      "command": "view",
+      "path": ".flow/runs/ollama-acceptance/requirements.md"
+    },
+    {
+      "tool": "file_editor",
+      "command": "view",
+      "path": ".flow/runs/ollama-acceptance/acceptance-criteria.md"
+    }
+  ],
+  "sdk_error_observations": 1,
+  "model_replaced": false,
+  "effective_server_context_length": 32768,
+  "context_note": "Ollama effective context is 32768; SDK metric metadata says 262144. This fixture stayed below the effective window; long-context alignment was not tested.",
+  "acceptance_client_exited": true,
+  "existing_ollama_server_left_running": true,
+  "artifact_scope_note": "Definition drafts only; whitespace and exception semantics remain unresolved and need operator review. No implementation correctness claimed."
+}

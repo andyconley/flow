@@ -1,0 +1,89 @@
+{
+  "status": "passed",
+  "scope": "approved Codex-only acceptance outside outer sandbox; native agent mode",
+  "sdk_version": "1.54.0",
+  "adapter_version": "1.10.0",
+  "native_codex_version": "0.153.4",
+  "authentication": "existing ChatGPT subscription via official native path",
+  "selected_model": "gpt-6-astra",
+  "saved_default_model_rejected": "gpt-6.1-sol",
+  "sdk_conversation_id": "c6a06974-7ad2-412b-8c45-5ba569e0db93",
+  "same_sdk_and_native_session_resume": true,
+  "workflow_state": "definition_approved",
+  "fixture_unchanged": true,
+  "artifacts": {
+    "requirements.md": "85eba7ae5e3eca7a414b2b832745d7b9a720b97c19c51573d7cb5d86a1e7b7e1",
+    "acceptance-criteria.md": "8ca2c695f5996c2f81aa427c2b8bc61bed7ee8fbe4ea0996e5324e650e4716a8"
+  },
+  "metrics": {
+    "accumulated_cost": 0.037040000000000003,
+    "accumulated_token_usage": {
+      "cache_read_tokens": 76800,
+      "cache_write_tokens": 0,
+      "completion_tokens": 100,
+      "context_window": 258400,
+      "model": "default",
+      "per_turn_token": 1556,
+      "prompt_tokens": 3204,
+      "reasoning_tokens": 0,
+      "response_id_sha256": ""
+    },
+    "costs": [
+      {
+        "cost": 0.0196,
+        "model": "gpt-6-astra",
+        "timestamp": 1791754653.38837
+      },
+      {
+        "cost": 0.01744,
+        "model": "gpt-6-astra",
+        "timestamp": 1791754663.821437
+      }
+    ],
+    "max_budget_per_task": null,
+    "model_name": "default",
+    "response_latencies": [
+      {
+        "latency": 54.31149262492545,
+        "model": "gpt-6-astra",
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
+      },
+      {
+        "latency": 9.306606166996062,
+        "model": "gpt-6-astra",
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
+      }
+    ],
+    "token_usages": [
+      {
+        "cache_read_tokens": 38272,
+        "cache_write_tokens": 0,
+        "completion_tokens": 53,
+        "context_window": 258400,
+        "model": "gpt-6-astra",
+        "per_turn_token": 1748,
+        "prompt_tokens": 1695,
+        "reasoning_tokens": 0,
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
+      },
+      {
+        "cache_read_tokens": 38528,
+        "cache_write_tokens": 0,
+        "completion_tokens": 47,
+        "context_window": 258400,
+        "model": "gpt-6-astra",
+        "per_turn_token": 1556,
+        "prompt_tokens": 1509,
+        "reasoning_tokens": 0,
+        "response_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
+      }
+    ]
+  },
+  "metrics_cost_note": "SDK reported estimate, not evidence of API billing",
+  "credential_copy": false,
+  "global_settings_changed_by_flow": false,
+  "claude_executed": false,
+  "production_flow_replaced": false,
+  "providers_stopped": true,
+  "native_session_id_sha256": "b7355318ee79de0b2fb5032fb7dc9bbf28cd50104c74d44470f45c8cd2bf4d99"
+}
