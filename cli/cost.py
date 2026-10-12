@@ -64,6 +64,7 @@ from hookio import log_hook_error as _log_hook_error
 from hookio import read_hook_stdin as _read_hook_stdin
 from hookio import safe_key as _safe_session_id
 from normalize import normalize_all
+from openhands_usage import harvest_project, reporting_rows
 from paths import HOME, SOURCE_DIR
 from session_lookup import lookup_session_for_path
 import telemetry_freshness
@@ -268,14 +269,14 @@ def summary_rows(conn: sqlite3.Connection, since: str | None) -> list[dict]:
     params = (since,) if since is not None else ()
     rows = conn.execute(
         f"""
-        SELECT s.harness AS harness, tn.model AS model, COUNT(*) AS turns,
+        SELECT s.harness AS harness, tn.model AS model, CASE WHEN SUM(CASE WHEN json_extract(tr.payload, '$.record_kind')='cumulative' THEN 1 ELSE 0 END)>0 THEN NULL ELSE COUNT(*) END AS turns,
                SUM(tn.fresh_input_tokens) AS fresh_input_tokens,
                SUM(tn.cache_read_tokens) AS cache_read_tokens,
                SUM(tn.cache_write_tokens) AS cache_write_tokens,
                SUM(tn.output_tokens) AS output_tokens
-        FROM turn_norm tn
-        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
-        JOIN session s ON s.id = tr.session_row_id
+        FROM usage_norm tn
+        JOIN usage_raw tr ON tr.id = tn.turn_raw_id
+        JOIN usage_session s ON s.id = tr.session_row_id
         {where}
         GROUP BY s.harness, tn.model
         ORDER BY s.harness, tn.model
@@ -323,15 +324,15 @@ def sessions_rows(conn: sqlite3.Connection, since: str | None, limit: int | None
     rows = conn.execute(
         f"""
         SELECT s.id AS session_row_id, s.harness AS harness, s.title AS title,
-               s.cwd AS cwd, s.session_id AS session_id, COUNT(*) AS turns,
+               s.cwd AS cwd, s.session_id AS session_id, CASE WHEN SUM(CASE WHEN json_extract(tr.payload, '$.record_kind')='cumulative' THEN 1 ELSE 0 END)>0 THEN NULL ELSE COUNT(*) END AS turns,
                MIN(tn.ts) AS first_ts, MAX(tn.ts) AS last_ts,
                SUM(tn.fresh_input_tokens) AS fresh_input_tokens,
                SUM(tn.cache_read_tokens) AS cache_read_tokens,
                SUM(tn.cache_write_tokens) AS cache_write_tokens,
                SUM(tn.output_tokens) AS output_tokens
-        FROM turn_norm tn
-        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
-        JOIN session s ON s.id = tr.session_row_id
+        FROM usage_norm tn
+        JOIN usage_raw tr ON tr.id = tn.turn_raw_id
+        JOIN usage_session s ON s.id = tr.session_row_id
         {where}
         GROUP BY s.id
         ORDER BY last_ts DESC, s.id DESC
@@ -418,9 +419,9 @@ def capacity_gauge(
                    tn.capacity_{field}_used_pct AS used_pct,
                    tn.capacity_{field}_window_minutes AS window_minutes,
                    tn.capacity_{field}_resets_at AS resets_at
-            FROM turn_norm tn
-            JOIN turn_raw tr ON tr.id = tn.turn_raw_id
-            JOIN session s ON s.id = tr.session_row_id
+            FROM usage_norm tn
+            JOIN usage_raw tr ON tr.id = tn.turn_raw_id
+            JOIN usage_session s ON s.id = tr.session_row_id
             WHERE s.harness = ? AND tn.capacity_{field}_used_pct IS NOT NULL {where}
             ORDER BY tn.ts DESC
             LIMIT 1
@@ -515,9 +516,9 @@ def coverage_floor(conn: sqlite3.Connection) -> dict:
     rows = conn.execute(
         """
         SELECT s.harness AS harness, MIN(tn.ts) AS first_ts
-        FROM turn_norm tn
-        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
-        JOIN session s ON s.id = tr.session_row_id
+        FROM usage_norm tn
+        JOIN usage_raw tr ON tr.id = tn.turn_raw_id
+        JOIN usage_session s ON s.id = tr.session_row_id
         GROUP BY s.harness
         """
     ).fetchall()
@@ -581,9 +582,9 @@ def trend_rows(
     rows = conn.execute(
         f"""
         SELECT {bucket_sql} AS bucket, s.harness AS harness,
-               SUM(CASE WHEN tn.is_subagent = 0 THEN 1 ELSE 0 END) AS turns,
+               SUM(CASE WHEN tn.is_subagent = 0 AND COALESCE(json_extract(tr.payload, '$.record_kind'), 'call') != 'cumulative' THEN 1 ELSE 0 END) AS turns,
                COUNT(DISTINCT CASE WHEN tn.is_subagent = 0 THEN s.id END) AS sessions,
-               SUM(CASE WHEN tn.is_subagent = 0 THEN
+               SUM(CASE WHEN tn.is_subagent = 0 AND COALESCE(json_extract(tr.payload, '$.record_kind'), 'call') != 'cumulative' THEN
                      COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
                      + COALESCE(tn.cache_write_tokens, 0) ELSE 0 END) AS main_ctx,
                SUM(COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
@@ -591,9 +592,9 @@ def trend_rows(
                SUM(COALESCE(tn.output_tokens, 0)) AS total_output,
                SUM({weighted}) AS weighted_total,
                SUM(CASE WHEN tn.is_subagent = 1 THEN {weighted} ELSE 0 END) AS weighted_sub
-        FROM turn_norm tn
-        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
-        JOIN session s ON s.id = tr.session_row_id
+        FROM usage_norm tn
+        JOIN usage_raw tr ON tr.id = tn.turn_raw_id
+        JOIN usage_session s ON s.id = tr.session_row_id
         WHERE {where}
         GROUP BY bucket, s.harness
         ORDER BY bucket, s.harness
@@ -681,7 +682,7 @@ def _compactions_by_bucket(conn: sqlite3.Connection, bucket: str, since: str | N
                json_extract(a.payload, '$.compactMetadata.trigger') AS trigger,
                json_extract(a.payload, '$.compactMetadata.preTokens') AS pre_tokens
         FROM agent_activity_raw a
-        JOIN session s ON s.id = a.session_row_id
+        JOIN usage_session s ON s.id = a.session_row_id
         WHERE a.kind = 'compact_boundary' {where}
         """,
         params,
@@ -843,6 +844,12 @@ def _resolve_window(
     if models is None:
         models = _model_windows()
 
+    if session_row_id < 0:
+        measured = conn.execute("SELECT tn.context_window FROM usage_norm tn JOIN usage_raw tr ON tr.id=tn.turn_raw_id WHERE tr.session_row_id=? AND tn.context_window>0 ORDER BY tn.ts DESC, tr.turn_seq DESC LIMIT 1", (session_row_id,)).fetchone()
+        if measured and ctx <= measured[0]:
+            return measured[0], "sdk"
+        window = _model_window(model, ctx, models)
+        return (window, "model") if window else (None, "unknown")
     window = _statusline_window(session_id, models)
     if window is not None and ctx <= window:
         return window, "statusline"
@@ -909,15 +916,16 @@ def active_rows(
         f"""
         SELECT s.id AS session_row_id, s.session_id AS session_id,
                s.title AS title, s.cwd AS cwd, MAX(tn.ts) AS last_ts
-        FROM turn_norm tn
-        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
-        JOIN session s ON s.id = tr.session_row_id
-        WHERE s.harness = ? AND tn.is_subagent = 0 AND tn.ts >= ?
+        FROM usage_norm tn
+        JOIN usage_raw tr ON tr.id = tn.turn_raw_id
+        JOIN usage_session s ON s.id = tr.session_row_id
+        WHERE s.harness IN (?, ?) AND tn.is_subagent = 0 AND tn.ts >= ?
+          AND COALESCE(json_extract(tr.payload, '$.record_kind'), 'call') != 'cumulative'
           AND COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
               + COALESCE(tn.cache_write_tokens, 0) > 0
         GROUP BY s.id
         """,
-        (CLAUDE_HARNESS, cutoff),
+        (CLAUDE_HARNESS, "openhands", cutoff),
     ).fetchall()
 
     result = []
@@ -931,12 +939,12 @@ def active_rows(
             SELECT COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
                    + COALESCE(tn.cache_write_tokens, 0) AS ctx,
                    tn.ts AS ts
-            FROM turn_norm tn
-            JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+            FROM usage_norm tn
+            JOIN usage_raw tr ON tr.id = tn.turn_raw_id
             WHERE tr.session_row_id = ? AND tn.is_subagent = 0
               AND COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
                   + COALESCE(tn.cache_write_tokens, 0) > 0
-            ORDER BY tn.ts DESC, tr.id DESC LIMIT 2
+            ORDER BY tn.ts DESC, CASE WHEN tr.id < 0 THEN tr.turn_seq END DESC, tr.id DESC LIMIT 2
             """,
             (raw["session_row_id"],),
         ).fetchall()
@@ -944,12 +952,12 @@ def active_rows(
             """
             SELECT COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
                    + COALESCE(tn.cache_write_tokens, 0) AS ctx
-            FROM turn_norm tn
-            JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+            FROM usage_norm tn
+            JOIN usage_raw tr ON tr.id = tn.turn_raw_id
             WHERE tr.session_row_id = ? AND tn.is_subagent = 0
               AND COALESCE(tn.fresh_input_tokens, 0) + COALESCE(tn.cache_read_tokens, 0)
                   + COALESCE(tn.cache_write_tokens, 0) > 0
-            ORDER BY tn.ts ASC, tr.id ASC LIMIT 1
+            ORDER BY tn.ts ASC, CASE WHEN tr.id < 0 THEN tr.turn_seq END ASC, tr.id ASC LIMIT 1
             """,
             (raw["session_row_id"],),
         ).fetchone()
@@ -967,9 +975,9 @@ def active_rows(
                 gap = max(0, int((newer - older).total_seconds()))
 
         model = conn.execute(
-            "SELECT tn.model FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id"
+            "SELECT tn.model FROM usage_norm tn JOIN usage_raw tr ON tr.id = tn.turn_raw_id"
             " WHERE tr.session_row_id = ? AND tn.is_subagent = 0 AND tn.model IS NOT NULL"
-            " ORDER BY tn.ts DESC LIMIT 1",
+            " ORDER BY tn.ts DESC, CASE WHEN tr.id < 0 THEN tr.turn_seq END DESC, tr.id DESC LIMIT 1",
             (raw["session_row_id"],),
         ).fetchone()
         window, window_source = _resolve_window(
@@ -1002,9 +1010,9 @@ def active_rows(
                 # Kept as the renderer's `~` gate, now derived from the source
                 # rather than tracked separately: statusline and compaction are
                 # both real observations, the model table is a lookup.
-                "window_exact": window_source in ("statusline", "compaction"),
+                "window_exact": window_source in ("statusline", "compaction", "sdk"),
                 "window_source": window_source,
-                "sub_pct": _subagent_share(conn, raw["session_row_id"], weights),
+                "sub_pct": _subagent_share(conn, raw["session_row_id"], weights) if raw["session_row_id"] > 0 else None,
                 "idle_sec": idle_sec,
                 "recommend": _recommendation(carry_pct, action) if carry_pct is not None else None,
                 "session_id": raw["session_id"],
@@ -1062,8 +1070,8 @@ def _subagent_share(conn: sqlite3.Connection, session_row_id: int, weights: dict
         f"""
         SELECT SUM(CASE WHEN tn.is_subagent = 1 THEN {weighted} ELSE 0 END) AS sub,
                SUM({weighted}) AS total
-        FROM turn_norm tn
-        JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        FROM usage_norm tn
+        JOIN usage_raw tr ON tr.id = tn.turn_raw_id
         WHERE tr.session_row_id = ?
         """,
         (session_row_id,),
@@ -1163,6 +1171,7 @@ def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False
     conn.row_factory = sqlite3.Row
     try:
         rows = summary_rows(conn, since)
+        sdk_usage = reporting_rows(conn, since)
         gauge = capacity_gauge(conn, since)
         freshness = telemetry_freshness.usage_freshness(conn)
     finally:
@@ -1170,11 +1179,15 @@ def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False
 
     if as_json:
         payload = {"rows": rows, "freshness": freshness}
+        if sdk_usage:
+            payload["sdk_usage"] = sdk_usage
         if gauge is not None:
             payload["capacity"] = gauge
         print(render_json(payload))
     else:
         print(render_table(rows))
+        if sdk_usage:
+            print("OpenHands: SDK calls counted once; native transcripts take precedence by session identity. Pricing is an estimate or unknown; subscription billing is unmeasured. See --json sdk_usage for attribution.")
         if gauge is not None:
             print()
             print(_render_gauge_line(gauge))
@@ -1209,6 +1222,7 @@ def cost_sessions_command(
     conn.row_factory = sqlite3.Row
     try:
         rows = sessions_rows(conn, since, row_limit)
+        sdk_usage = reporting_rows(conn, since)
         freshness = telemetry_freshness.usage_freshness(conn)
     finally:
         conn.close()
@@ -1217,9 +1231,11 @@ def cost_sessions_command(
     # never needs to know which subcommand produced a payload before reading
     # payload["rows"] out of it.
     if as_json:
-        print(render_json({"rows": rows, "freshness": freshness}))
+        print(render_json({"rows": rows, "freshness": freshness, **({"sdk_usage": sdk_usage} if sdk_usage else {})}))
     else:
         print(render_table(rows))
+        if sdk_usage:
+            print("OpenHands: SDK calls counted once; native transcripts take precedence by session identity. Pricing is an estimate or unknown; subscription billing is unmeasured. See --json sdk_usage for attribution.")
         notes = telemetry_freshness.freshness_notes(freshness, read_only=True)
         if notes:
             print()
@@ -1307,6 +1323,7 @@ def cost_trend_command(
     conn.row_factory = sqlite3.Row
     try:
         rows = trend_rows(conn, since, bucket=bucket, harness=harness)
+        sdk_usage = reporting_rows(conn, since)
         floor = coverage_floor(conn)
         freshness = telemetry_freshness.usage_freshness(conn)
     finally:
@@ -1320,7 +1337,7 @@ def cost_trend_command(
         # them: it is a property of the store, not of any bucket, and a
         # caller checking whether its window was fully covered should not
         # have to infer that from which rows happen to be present.
-        print(render_json({"rows": rows, "coverage": floor, "freshness": freshness}))
+        print(render_json({"rows": rows, "coverage": floor, "freshness": freshness, **({"sdk_usage": sdk_usage} if sdk_usage else {})}))
     else:
         print(_render_trend_table(rows, notes))
     return 0
@@ -1427,18 +1444,26 @@ def cost_active_command(
                 line = failure["line"]
                 where = f":{line}" if line is not None else ""
                 print(f"note: skipped {failure['path']}{where} — {failure['reason']}")
+        from fsutil import repo_root
+        sdk_result = harvest_project(conn, repo_root())
+
         norm_result = normalize_all(conn)
         for failure in norm_result["failures"]:
             print(f"note: could not normalize turn_raw id {failure['turn_raw_id']} — {failure['reason']}")
         rows = active_rows(conn, within)
+        sdk_usage = reporting_rows(conn)
         freshness = telemetry_freshness.usage_freshness(conn)
     finally:
         conn.close()
 
     if as_json:
-        print(render_json({"rows": rows, "freshness": freshness}))
+        print(render_json({"rows": rows, "freshness": freshness, **({"sdk_usage": sdk_usage, "sdk_import": sdk_result} if sdk_usage or sdk_result["failures"] or sdk_result["notes"] else {})}))
     else:
         print(_render_active_table(rows))
+        for failure in sdk_result["failures"]:
+            print(f"note: SDK usage {failure['path']} — {failure['reason']}")
+        for note in sdk_result["notes"]:
+            print("note: " + note)
         notes = telemetry_freshness.freshness_notes(freshness, read_only=False)
         if notes:
             print()
@@ -1471,23 +1496,23 @@ def _session_context_samples(conn: sqlite3.Connection, session_row_id: int) -> t
     recent = conn.execute(
         f"""
         SELECT {ctx_expr} AS ctx, tn.ts AS ts
-        FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        FROM usage_norm tn JOIN usage_raw tr ON tr.id = tn.turn_raw_id
         WHERE tr.session_row_id = ? AND tn.is_subagent = 0 AND {ctx_expr} > 0
-        ORDER BY tn.ts DESC, tr.id DESC LIMIT 2
+        ORDER BY tn.ts DESC, CASE WHEN tr.id < 0 THEN tr.turn_seq END DESC, tr.id DESC LIMIT 2
         """,
         (session_row_id,),
     ).fetchall()
     first = conn.execute(
         f"""
         SELECT {ctx_expr} AS ctx
-        FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id
+        FROM usage_norm tn JOIN usage_raw tr ON tr.id = tn.turn_raw_id
         WHERE tr.session_row_id = ? AND tn.is_subagent = 0 AND {ctx_expr} > 0
-        ORDER BY tn.ts ASC, tr.id ASC LIMIT 1
+        ORDER BY tn.ts ASC, CASE WHEN tr.id < 0 THEN tr.turn_seq END ASC, tr.id ASC LIMIT 1
         """,
         (session_row_id,),
     ).fetchone()
     requests = conn.execute(
-        "SELECT COUNT(*) FROM turn_norm tn JOIN turn_raw tr ON tr.id = tn.turn_raw_id"
+        "SELECT COUNT(*) FROM usage_norm tn JOIN usage_raw tr ON tr.id = tn.turn_raw_id"
         " WHERE tr.session_row_id = ? AND tn.is_subagent = 0",
         (session_row_id,),
     ).fetchone()[0]
@@ -1528,7 +1553,7 @@ def verdict_for_transcript(conn: sqlite3.Connection, transcript: Path, session_i
     session_row_id = None
     if session_id:
         row = conn.execute(
-            "SELECT id FROM session WHERE harness = ? AND session_id = ?", (harness, session_id)
+            "SELECT id FROM usage_session WHERE harness = ? AND session_id = ?", (harness, session_id)
         ).fetchone()
         session_row_id = row[0] if row else None
     if session_row_id is None:

@@ -63,6 +63,44 @@ class SpecialistConstructionTests(unittest.TestCase):
             stored = runstate.status("waiting", root)["sessions"]["define:business-analyst"]
             self.assertEqual(stored["response"], "previous response")
 
+    def test_unavailable_metrics_property_preserves_original_failure_and_outcome(self):
+        from argparse import Namespace
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from openhands.sdk.conversation.state import ConversationExecutionStatus
+        import openhands_flow as flow
+        import runstate
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            (root / ".flow").mkdir()
+            (root / ".flow/runtime.toml").write_text('default_profile="local"\n[profiles.local]\nkind="local"\nmodel="openai/test"\nbase_url="http://localhost:8000/v1"\n')
+            (root / "task.md").write_text("Report continuity when remote metrics are unavailable")
+            args = Namespace(project_root=root, work_id="metrics-failure", stage="define", role=None,
+                             profile=None, task_file=Path("task.md"), new_session=False)
+            flow.initialize(args)
+            class Session:
+                state = SimpleNamespace(execution_status=ConversationExecutionStatus.FINISHED)
+                def send_message(self, *_):
+                    pass
+                def run(self):
+                    raise RuntimeError("original execution failure")
+                @property
+                def conversation_stats(self):
+                    raise ConnectionError("metrics endpoint unavailable")
+            @contextmanager
+            def unavailable(*_, **__):
+                yield Session()
+            with patch("openhands_runtime.conversation", unavailable):
+                with self.assertRaisesRegex(RuntimeError, "original execution failure"):
+                    flow.execute(args)
+            stored = runstate.status(args.work_id, root)["sessions"]["define:business-analyst"]
+            self.assertEqual(stored["status"], "error")
+            self.assertEqual(stored["error_type"], "RuntimeError")
+            self.assertEqual(stored["metrics_error_type"], "ConnectionError")
+            self.assertIn("elapsed_seconds", stored)
+            self.assertTrue((root / ".flow/runs/metrics-failure/define-business-analyst-outcome.json").exists())
+
     def test_configured_effective_context_controls_sdk_and_summary_headroom(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

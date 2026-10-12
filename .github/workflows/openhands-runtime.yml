@@ -33,6 +33,7 @@ jobs:
           tests.test_agent_distribution
           tests.test_openhands_sdk_construction
           tests.test_openhands_specialists
+          tests.test_openhands_usage
           tests.test_openhands_workflow
           tests.test_openhands_provision
           tests.test_openhands_lifecycle
@@ -50,3 +51,8 @@ jobs:
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
           OPENHANDS_SUPPRESS_BANNER: '1'
         run: python tests/openhands_routing_resume_eval.py
+      - name: Verify combined usage across fresh parents, delegation, interruption and failure
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          OPENHANDS_SUPPRESS_BANNER: '1'
+        run: python tests/openhands_usage_eval.py
