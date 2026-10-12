@@ -20,7 +20,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install the pinned SDK and stock tools
-        run: python -m pip install -r runtime/openhands/requirements.txt
+        run: |
+          python -m pip install -r runtime/openhands/requirements.txt
+          echo "FLOW_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
       - name: Verify generated inventory, discovery, installer ownership and stock factories
         env:
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
@@ -31,5 +33,9 @@ jobs:
           tests.test_agent_distribution
           tests.test_openhands_sdk_construction
           tests.test_openhands_workflow
+          tests.test_openhands_provision
+          tests.test_openhands_lifecycle
           tests.test_agent_capabilities
           tests.test_expertise_advisory_render
+          tests.test_flow.FlowCliTests.test_runtime_smoke_checks_generated_surfaces
+          tests.test_flow.FlowCliTests.test_install_verifies_openhands_and_does_not_activate_maf

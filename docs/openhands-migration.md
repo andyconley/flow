@@ -28,6 +28,72 @@ The integration was checked against these installed PyPI packages, including
 `ACPAgent.acp_session_mode`, its permission callback, `AgentDefinition.load`,
 `AgentContext`, `Conversation`, `RemoteWorkspace`, SDK skill loaders and tools.
 
+## Automatic install and update provisioning
+
+Fresh bootstrap installs, release updates and install-mode conversions now
+provision the four pinned OpenHands 1.54.0 packages before activating source.
+The CLI's inspection commands still support Python 3.10+, but execution needs
+an installed Python 3.12+ interpreter. The installer does not install Python.
+For example, select it with:
+
+```sh
+FLOW_PYTHON=/absolute/path/to/python3.12 ./install-flow.sh --release
+```
+
+A pinned-ready explicit `FLOW_PYTHON` takes precedence over the existing
+`[flow].python`, which takes precedence over the installer-selected interpreter.
+A verified custom interpreter is reused without installing into it. Otherwise
+Flow first reuses a ready managed runtime, or uses a compatible Python to create
+an isolated virtual environment under `~/.flow/runtimes/openhands/`. The managed
+`current.json` pointer and launcher refer to its verified interpreter. Immutable
+environments remain available for rollback; repeat installs reuse readiness.
+Provisioning uses `runtime/openhands/requirements.txt`; the macOS closure lock
+is version-pinned reference evidence, not a cross-platform hash lock.
+
+Package-index access is required only when a new environment needs dependencies.
+A failed dependency build is removed and does not change the previous source,
+launcher or runtime pointer. Source/launcher activation failure restores those
+bindings as well. Runtime profiles, custom TOMLs, credentials, global Python
+packages and native provider settings are preserved. No model is called during
+readiness checks. Adapter conflicts are reported after source activation and
+preserve custom files; reconcile them with the documented sync commands.
+For rollback, reinstall the previous release in a coordinated window; retain
+its managed environment and restore its pointer/launcher together if manually
+restoring backups. Do not change a live installation during an active run.
+
+### Upgrade through a predecessor installer
+
+The pre-OpenHands updater cannot execute provisioning code shipped only in the
+new release. It may swap the source first, leaving its prior Python launcher in
+place. On the first invocation of the newly installed CLI for `workflow execute`,
+explicit `update` (without `--check`), or `bootstrap`, Flow checks that this
+is the explicitly installed source and that its OpenHands activation marker is
+missing. It provisions/binds the pinned SDK, then re-executes the requested
+command with the verified interpreter. Running a project checkout does not
+activate this bridge, and retired execution paths do not trigger it.
+
+
+Inspection remains free of installation side effects: `workflow status`,
+`workflow runtime`, runtime readiness/smoke, and `update --check` report existing
+state without provisioning. Workflow init, approve, archive and native-handoff
+also do not activate the bridge because they do not require SDK execution.
+Readiness reports a missing runtime; use `workflow execute`, explicit
+`flow update`, or bootstrap to activate an unmarked installed upgrade.
+
+A bridge failure retains the previous launcher, configuration and managed
+runtime pointer. The new standard-library CLI remains inspectable, while
+OpenHands-dependent commands report the unavailable runtime. Retry `flow update`
+to repair provisioning. User profiles and verified custom pinned Python bindings
+are preserved; no provider is started by provisioning itself.
+
+This path has a narrower rollback boundary than a new installer: the predecessor
+may already have deleted its old source before the bridge runs. The bridge
+cannot restore that source. Restore a reviewed earlier release explicitly in a
+coordinated window if needed. New install/update code provisions before source
+swap and can restore source, launcher, configuration and runtime pointer on
+activation failure; do not apply that full rollback claim to predecessor-driven
+upgrades.
+
 ## Configure self-hosted coding profiles
 
 Copy `templates/openhands-runtime.toml` to a project's `.flow/runtime.toml` and
@@ -173,7 +239,7 @@ the SDK confirmation API. Flow does not add a homegrown permission system.
 | Custom command/file brokers and local model wrappers | SDK terminal/file editor tools and LLM interface | Compatible self-hosted hosts can perform coding, not just verifier tasks |
 | Flow-owned model budgets, rate gates, checkpoints and retries | SDK execution, persistence and metrics | No duplicated token/rate controller or converted old checkpoints |
 | Sealed orchestration manifests and charters required for new runs | Revision 3 reuses Flow lifecycle and actual stage artifacts | Stage approvals remain; old execution-control artifacts are not required |
-| Install/update automatically provisions/activates MAF | Explicit isolated pinned OpenHands dependencies | Installing core Flow does not start providers or replace a runtime selection |
+| Install/update automatically provisions/activates MAF | Automatic pinned OpenHands runtime provisioning, with first-use bridge for predecessor updaters | Installs bind a verified SDK interpreter without starting providers or changing user profiles |
 | Agent metadata assumed Claude tools/models | OpenHands file parsing plus explicit runtime profile/tools | Old role bodies remain useful; endpoint/tool selection moves to runtime.toml |
 | Automated native invocation with broad defaults | Stock ACPAgent with explicit modes and scoped access acknowledgement | Scoped disposable native acceptance passed; future execution still requires the documented access decision |
 | Current run.json plus separate execution state systems | Flow stage state plus SDK conversation persistence | Sessions are references, not another checkpoint/receipt ledger |

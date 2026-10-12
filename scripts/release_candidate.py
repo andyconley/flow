@@ -349,6 +349,7 @@ def run_candidate(
             "setup-user": lambda: _setup_user(fresh_home),
             "claude-sync-check": lambda: _flow(fresh_home, "sync", "claude", "--user", "--check"),
             "codex-sync-check": lambda: _flow(fresh_home, "sync", "codex", "--user", "--check"),
+            "openhands-sync-check": lambda: _flow(fresh_home, "sync", "openhands", "--user", "--check"),
             "doctor-check": lambda: _doctor_check(fresh_home),
             "runtime-smoke-static": lambda: _flow(fresh_home, "runtime", "smoke", "--target", "all"),
             "representative-cli": lambda: _flow(fresh_home, "update", "--check", "--json", "--remote", candidate_remote),

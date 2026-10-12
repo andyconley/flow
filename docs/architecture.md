@@ -26,6 +26,30 @@ and [generated role distribution](agent-distribution.md). Historical MAF
 execution, provider-selection ledgers and old containment claims describe
 retained evidence; they are not the execution contract for new workflows.
 
+## Approved artifact integrity (revision 3)
+
+OpenHands workflow approval records SHA-256 digests for the required definition,
+solution, plan, implementation/handback, review and archive output files.
+Verification and subsequent execution, continuation or archive reject changed,
+missing or symlinked approved files; approval binds the reviewed bytes rather
+than only a filename. Approved files must remain regular files in the current
+run. A successful digest check establishes byte integrity, not semantic quality.
+
+Existing approved revision-3 runs without the required digests remain
+inspectable, but cannot continue. Review their prior artifacts as inputs to a
+new workflow; Flow does not silently seal old approvals or infer consent from
+existing files.
+
+For authorized implementation rework, use `flow run transition WORK_ID request-refinement` while reviewing. This clears the current implementation
+evidence, handback and review seals and their corresponding approval gates,
+retaining the approved definition, optional solution and plan. Rework can then
+produce new implementation/review outputs and receive fresh approval. Do not
+edit earlier approved artifacts or manually change `run.json` to bypass checks.
+
+Implementation approval can be retried from persisted `handback_ready`: Flow
+skips the completed `mark-handback-ready` transition and proceeds to review,
+without replaying execution. It still verifies the sealed handback bytes.
+
 ## Layer Model
 
 `flow` operates across five layers:
@@ -63,6 +87,31 @@ Why a single path contract: everything downstream — `flow sync`, managed manif
 `flow update` rolls forward a release install by staging the new tree, validating it, and atomically swapping it into `~/.flow/source/`. A failed update — at any point before the swap — leaves the existing install untouched. The window between renaming the old install aside and renaming the staging into place is a single syscall pair; failures during the swap attempt rollback.
 
 `flow install --release` / `flow install --develop <path>` converts an existing install between modes. The clone is never deleted by either direction; the user controls its lifecycle.
+
+#### Runtime activation and predecessor upgrades
+
+Current installation and update code provisions the pinned OpenHands SDK before
+swapping source, and restores source/configuration/launcher/runtime pointer if
+activation fails. Verified custom pinned interpreters and user runtime profiles
+are preserved. Readiness checks do not call a model.
+
+An older updater may replace source without knowing about OpenHands provisioning.
+First use of the newly installed CLI for `workflow execute`, explicit `update`
+(without `--check`), or `bootstrap` checks the installed-source binding and missing activation
+marker, binds the verified SDK interpreter and re-executes the requested command.
+Project checkouts and retired execution commands do not activate this bridge.
+On failure, the prior launcher/configuration/runtime pointer remain available;
+stdlib inspection still works and OpenHands-dependent commands report the error.
+Retry `flow update` to repair. A predecessor-deleted source cannot be restored
+by this first-use bridge. See [the upgrade and rollback boundaries](openhands-migration.md#upgrade-through-a-predecessor-installer).
+
+
+Inspection remains free of installation side effects: `workflow status`,
+`workflow runtime`, runtime readiness/smoke, and `update --check` report existing
+state without provisioning. Workflow init, approve, archive and native-handoff
+also do not activate the bridge because they do not require SDK execution.
+Readiness reports a missing runtime; use `workflow execute`, explicit
+`flow update`, or bootstrap to activate an unmarked installed upgrade.
 
 #### Release Validation Gate
 

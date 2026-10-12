@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import sqlite3
 import sys
 from datetime import datetime
@@ -1027,6 +1028,35 @@ def main() -> int:
     update_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
 
     args = parser.parse_args()
+    if args.command == "update" and args.json and not args.check:
+        parser.error("flow update --json requires --check")
+    # An older updater cannot call new installer hooks. Complete that installed
+    # source's bounded bridge before SDK-dependent commands, never for a plain
+    # project checkout, read-only inspection or retired historical execution.
+    needs_openhands = (args.command == "workflow" and args.workflow_command == "execute") or (
+        args.command == "update" and not args.check) or args.command == "bootstrap"
+    if needs_openhands:
+        from lifecycle import activate_managed_openhands_runtime
+        activation = activate_managed_openhands_runtime()
+        if activation["state"] == "failed":
+            detail = "OpenHands activation failed; prior bindings retained. Retry flow update. " + activation["detail"]
+            if getattr(args, "json", False):
+                import json
+                print(json.dumps({"status": "error", "reason": detail}))
+            else:
+                print(detail, file=sys.stderr)
+            return 1
+        if activation.get("adapter_conflicts"):
+            detail = "OpenHands activated; generated adapter conflicts require reconciliation with flow sync."
+            if getattr(args, "json", False):
+                import json
+                print(json.dumps({"status": "error", "reason": detail}))
+            else:
+                print(detail, file=sys.stderr)
+            return 1
+        if activation.get("attempted"):
+            python = activation["interpreter"]
+            os.execv(python, [python, str(Path(__file__).resolve()), *sys.argv[1:]])
     if hasattr(args, "openhands_handler"):
         return args.openhands_handler(args)
 
@@ -1511,8 +1541,6 @@ def main() -> int:
             report()
         return result
     if args.command == "update":
-        if args.json and not args.check:
-            parser.error("flow update --json requires --check")
         result = update_command(check=args.check, resync=args.resync, remote_override=args.remote, as_json=args.json)
         if result == 0 and not args.check:
             from archive_preflight import report

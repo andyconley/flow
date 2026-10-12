@@ -39,6 +39,7 @@ STABLE_CHECK_IDS = (
     "setup-user",
     "claude-sync-check",
     "codex-sync-check",
+    "openhands-sync-check",
     "doctor-check",
     "runtime-smoke-static",
     "representative-cli",

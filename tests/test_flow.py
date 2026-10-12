@@ -4,6 +4,7 @@ import os
 import re
 import stat
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -1026,7 +1027,10 @@ class FlowCliTests(FlowCliHarness):
             good_python = fake_bin / good_name
             if good_python.exists() or good_python.is_symlink():
                 good_python.unlink()
-            good_python.symlink_to(sys.executable)
+            # A symlink outside a venv loses its pyvenv.cfg context. Invoke
+            # the actual interpreter so the fixture keeps its pinned SDK.
+            good_python.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + ' "$@"\n')
+            good_python.chmod(0o755)
 
         return fake_bin
 
@@ -1626,24 +1630,28 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn('model = "gpt-5.6-luna"', tech_writer_content)
         self.assertIn('model_reasoning_effort = "low"', tech_writer_content)
 
-    @requires_managed_wheelhouse
     def test_runtime_smoke_checks_generated_surfaces(self) -> None:
         fake_home = self.use_fake_home()
-        # Smoke is deliberately diagnostic-only. Provision the real locked
-        # managed runtime explicitly before asking the all-target report to
-        # require MAF readiness.
-        self.assert_ok(self.run_flow("runtime", "install-maf"))
+        # MAF provisioning is retired. Generated native surfaces are testable
+        # without installing a runtime; all-target readiness reflects the
+        # independently installed pinned OpenHands environment.
+        retired = self.run_flow("runtime", "install-maf")
+        self.assertEqual(retired.returncode, 2)
+        self.assertIn("retired", retired.stdout)
         self.assert_ok(self.run_flow("sync", "claude", "--user"))
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
+        self.assert_ok(self.run_flow("sync", "openhands", "--user"))
 
         result = self.run_flow("runtime", "smoke", "--target", "all", "--json")
 
-        self.assert_ok(result)
+        ready = load_cli_module("openhands_runtime").probe()["ready"]
+        self.assertEqual(result.returncode, 0 if ready else 1)
         payload = json.loads(result.stdout)
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["failed"], 0)
+        self.assertEqual(payload["ok"], ready)
+        self.assertEqual(payload["failed"], 0 if ready else 1)
         self.assertEqual(payload["manual_required"], 4)
         targets = {item["target"]: item for item in payload["targets"]}
+        self.assertIn("openhands", targets)
         claude_static = targets["claude"]["static"]
         codex_static = targets["codex"]["static"]
         self.assertTrue(any(row["name"] == "command flow-plan C-lite protocol" for row in claude_static))
@@ -2976,7 +2984,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("brew install python@3.12", combined)
         self.assertFalse((fake_home / ".flow" / "source").exists())
 
-    def test_install_keeps_openhands_explicit_and_does_not_activate_maf(self) -> None:
+    def test_install_verifies_openhands_and_does_not_activate_maf(self) -> None:
         fake_home = self._new_fake_home()
         base = self.repo / "unsupported-maf-python"
         base.write_text("#!/bin/sh\ncase \"$2\" in\n  *sys.platform*) echo 'linux|x86_64|3|12' ;;\n  *) echo '3.12.0' ;;\nesac\n")
@@ -2987,7 +2995,7 @@ class FlowCliTests(FlowCliHarness):
         result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
                                 text=True, capture_output=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("runtime/openhands/requirements.txt", result.stdout)
+        self.assertIn("OpenHands SDK 1.54.0 verified; launcher bound to", result.stdout)
         self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
         config = (fake_home / ".flow" / "config.toml").read_text()
         self.assertNotIn("maf_runtime_activation_state", config)
@@ -3907,6 +3915,7 @@ class FlowCliTests(FlowCliHarness):
                 "ollama_manager",
                 "openhands_config",
                 "openhands_flow",
+                "openhands_provision",
                 "openhands_runtime",
                 "orchestration",
                 "overlay",

@@ -30,6 +30,9 @@ def _run(root: Path, work_id: str) -> tuple[Path, dict]:
     payload = runstate.status(work_id, root)
     if payload.get("runtime") != "openhands" or payload.get("protocol_revision") != 3:
         raise RuntimeConfigurationError("historical runs are not resumed by the replacement runtime; create a new workflow with the prior artifacts as context")
+    errors = runstate.openhands_approval_errors(work_id, payload, root)
+    if errors:
+        raise RuntimeConfigurationError("; ".join(errors))
     return directory, payload
 
 
@@ -169,7 +172,9 @@ def approve(args) -> dict:
     dispositions = runstate.parse_assignments(args.disposition, "disposition")
     if stage == "implement":
         with run_lock(directory):
-            _transition(root, args.work_id, "mark-handback-ready", artifacts=artifacts, _lock_held=True)
+            _, current = _run(root, args.work_id)
+            if current["state"] != runstate.STATE_HANDBACK_READY:
+                _transition(root, args.work_id, "mark-handback-ready", artifacts=artifacts, _lock_held=True)
             return _transition(root, args.work_id, "start-review", _lock_held=True)
     return _transition(root, args.work_id, APPROVALS[stage], artifacts=artifacts, dispositions=dispositions)
 
@@ -215,7 +220,15 @@ def archive(args) -> dict:
 
 
 def show(args) -> dict:
-    return _run(_root(args), args.work_id)[1]
+    root = _root(args)
+    payload = runstate.status(args.work_id, root)
+    if payload.get("runtime") != "openhands" or payload.get("protocol_revision") != 3:
+        raise RuntimeConfigurationError("this is not an OpenHands workflow; use flow run status for historical runs")
+    result = dict(payload)
+    errors = runstate.openhands_approval_errors(args.work_id, payload, root)
+    if errors:
+        result["approval_integrity"] = {"ok": False, "errors": errors}
+    return result
 
 
 def runtime_info(args) -> dict:
@@ -247,7 +260,11 @@ def _summary(result):
     if "session" in result:
         return f"{result['work_id']} {result['stage']}: {result['session']['status']} ({result['session']['conversation_id']})"
     if "state" in result:
-        return f"{result['work_id']}: {result['state']}"
+        text = f"{result['work_id']}: {result['state']}"
+        integrity = result.get("approval_integrity", {})
+        if integrity.get("errors"):
+            text += "\napproval integrity: " + "; ".join(integrity["errors"])
+        return text
     return json.dumps(result, indent=2)
 
 
