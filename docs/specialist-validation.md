@@ -7,7 +7,7 @@ permissions, persistence and metrics. No custom execution controller is added.
 
 ## Regression and protocol evidence
 
-Fifteen new pinned-SDK regression tests cover mixed local/native construction,
+Sixteen new pinned-SDK regression tests cover mixed local/native construction,
 custom role context, nested skill package boundaries and project precedence, inheritance of a switched LLM, explicit role bindings,
 project/profile registry isolation, stock classifier execution and switching,
 explicit profile precedence, unchanged non-routing session fingerprints, routing
@@ -77,7 +77,7 @@ Ollama `/v1` endpoint. Both tested profiles use the same physical model; this is
 profile-routing acceptance rather than a comparison of model quality.
 
 Final exact CI subset: **74 tests passed** before the added fresh-process resume regression, including the corrected generated
-factory contract and all 15 specialist regressions. The deterministic task/ACP
+factory contract and all 16 specialist regressions. The deterministic task/ACP
 fixture passes again after skill discovery changes. Sanitized acceptance is in
 [acceptance/specialists/result.json](acceptance/specialists/result.json).
 
@@ -109,3 +109,23 @@ confirmation behavior is distinct from OS containment. No scoped capability
 check or host access boundary was removed. Remote-workspace delegation, native
 write/permission requests on live accounts and automatic selection quality
 across several live models are not validated by this fixture.
+
+## Remote factory transport limitation
+
+Pinned SDK 1.54.0 `RemoteConversation` serializes registered `AgentDefinition`
+objects and does not transfer Python closures. `AgentDefinition` has no ACP
+agent/command discriminator; its stock reconstruction always returns `Agent`.
+A round-trip regression proves that a locally working ACP factory becomes a
+local-LLM agent if only its definition is transferred. Plain description
+registrations also omit role tools, prompt and profile. Flow therefore reports
+this unsupported transport before starting remote specialist execution, rather
+than silently using another backend or dropping the role context. This is an
+SDK serialization limitation, not a native/local candidate policy.
+
+Options: keep Flow specialist coordination on `LocalWorkspace` (the verified
+Studio path), execute server-owned stock definitions/profile stores and native
+factories directly on an existing server, or adopt an SDK transport capable of
+serializing full local/ACP factories. Whole-stage remote execution can continue
+with `specialists = []` or without the task tool. No native authentication is
+copied or forwarded and no remote grant is added. The remote metadata round
+trip is tested; no live remote server was contacted.

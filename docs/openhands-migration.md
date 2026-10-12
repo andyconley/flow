@@ -379,3 +379,9 @@ Use the existing host containment and native configuration; this integration
 adds no filesystem/network grants. Read the native access decision before
 choosing these profiles. Validation details and SDK limitations are in
 [specialist-validation.md](specialist-validation.md).
+
+Remote workspace note: SDK 1.54 transports `AgentDefinition` rather than local
+factory closures and cannot serialize ACP children. Flow surfaces that mismatch
+before remote specialist execution. Local mixed delegation is verified;
+whole-stage remote work retains stock project discovery. See the
+[remote transport options](specialist-validation.md#remote-factory-transport-limitation).

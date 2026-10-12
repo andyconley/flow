@@ -184,6 +184,7 @@ class SpecialistTests(unittest.TestCase):
         self.assertNotIn('User version', skill.content)
         self.assertFalse(agent.agent_context.load_project_skills)
         self.config['workspace'] = {'kind': 'remote', 'host': 'http://localhost:8787'}
+        self.config['roles']['coordinator']['specialists'] = []
         remote = self.build()
         self.assertTrue(remote.agent_context.load_project_skills)
 
@@ -270,3 +271,23 @@ with patch('openhands_config.load_config', return_value=config):
                                  str(self.root), str(identifier)], env=environment, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('fresh process restored active profile', result.stdout)
+
+    def test_sdk_remote_definition_round_trip_cannot_preserve_acp_factory(self):
+        from openhands.sdk import Agent
+        from openhands.sdk.agent import ACPAgent
+        from openhands.sdk.subagent import get_agent_factory
+        from openhands.sdk.subagent.schema import AgentDefinition
+        from openhands.sdk.subagent.registry import agent_definition_to_factory
+        parent = self.build()
+        key = re.search(r'native: use task subagent_type=(\S+)', parent.agent_context.system_message_suffix)[1]
+        factory = get_agent_factory(key)
+        self.assertIsInstance(factory.factory_func(parent.llm), ACPAgent)
+        wire = AgentDefinition.model_validate(factory.definition.model_dump(mode='json'))
+        reconstructed = agent_definition_to_factory(wire, work_dir=self.root)(parent.llm)
+        self.assertIsInstance(reconstructed, Agent)
+        self.assertNotIsInstance(reconstructed, ACPAgent)
+        self.config['workspace'] = {'kind': 'remote', 'host': 'http://localhost:8787'}
+        with self.assertRaisesRegex(RuntimeConfigurationError, 'SDK 1.54 remote transport'):
+            self.build()
+        self.config['roles']['coordinator']['specialists'] = []
+        self.assertIsInstance(self.build(), Agent)

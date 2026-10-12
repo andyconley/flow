@@ -153,6 +153,15 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
     selected_tools = list(selection.role_options.get("tools", ["terminal", "file_editor", "task"]))
     if not roster:
         selected_tools = [tool for tool in selected_tools if tool != "task"]
+    if (selection.workspace.get("kind") == "remote" and "task" in selected_tools
+            and any(name != selection.role for name in roster)):
+        raise RuntimeConfigurationError(
+            "OpenHands SDK 1.54 remote transport sends AgentDefinition metadata, not Flow factories; "
+            "it cannot reproduce these specialist contexts/profiles or ACPAgent children. "
+            "Use a local workspace for Flow specialist delegation, run server-owned stock definitions/factories "
+            "directly on the server, or adopt an SDK transport that serializes these agents. "
+            "Whole-stage remote execution remains available with specialists=[] or without the task tool; "
+            "no native credentials are forwarded.")
     for name in roster if "task" in selected_tools else []:
         if name == selection.role:
             continue
