@@ -1028,6 +1028,8 @@ def main() -> int:
     update_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
 
     args = parser.parse_args()
+    if args.command == "update" and args.json and not args.check:
+        parser.error("flow update --json requires --check")
     # An older updater cannot call new installer hooks. Complete that installed
     # source's bounded bridge before SDK-dependent commands, never for a plain
     # project checkout, read-only inspection or retired historical execution.
@@ -1539,8 +1541,6 @@ def main() -> int:
             report()
         return result
     if args.command == "update":
-        if args.json and not args.check:
-            parser.error("flow update --json requires --check")
         result = update_command(check=args.check, resync=args.resync, remote_override=args.remote, as_json=args.json)
         if result == 0 and not args.check:
             from archive_preflight import report

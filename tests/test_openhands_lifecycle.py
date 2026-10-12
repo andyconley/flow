@@ -216,3 +216,19 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
                     self.assertEqual(path.read_bytes(), content, path)
                 self.assertFalse((self.flow / 'generated').exists())
         self.assertTrue((project / '.flow/runs/inspection/run.json').is_file())
+
+    def test_invalid_update_json_is_rejected_before_activation(self):
+        self.copy_installed_cli()
+        (self.source / 'cli/openhands_provision.py').write_text(
+            'VERSION = "1.54.0"\nif __name__ == "__main__":\n    raise RuntimeError("must not install rejected flags")\n')
+        before = {path: path.read_bytes() for path in (self.config, self.launcher, self.pointer, self.profile)}
+        environment = {**os.environ, 'HOME': str(self.home), 'PYTHONDONTWRITEBYTECODE': '1'}
+        process = subprocess.run([sys.executable, '-S', str(self.source / 'cli/flow.py'),
+                                  'update', '--json'], env=environment, text=True,
+                                 capture_output=True, timeout=60)
+        self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+        self.assertIn('flow update --json requires --check', process.stderr)
+        self.assertNotIn('must not install', process.stdout + process.stderr)
+        for path, content in before.items():
+            self.assertEqual(path.read_bytes(), content, path)
+        self.assertFalse((self.flow / 'generated').exists())
