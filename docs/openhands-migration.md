@@ -56,7 +56,8 @@ user overlay `agents/<role>.md` > merged shared-manifest source > framework
 adapter generation, which merges the framework and registered user manifest. OpenHands parses the file's role body. Flow's historical
 Claude `model` and `tools` hints are not translated into new grants: the profile
 and SDK tool selection are explicit runtime settings. Configured context files,
-`.flow/PROJECT.md`, project `.agents/skills` and `.flow/skills` enter AgentContext.
+`.flow/PROJECT.md`, user `.agents/skills`, project `.agents/skills` and
+`.flow/skills` enter AgentContext.
 Configured skill files retain SDK triggers and resource discovery. Public skills
 are not downloaded implicitly.
 

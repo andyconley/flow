@@ -78,7 +78,7 @@ OpenHands file definitions carry instructions, description, named skills and
 Read/Write/Grep/Glob lists are not equivalent SDK tools. Generated files therefore
 specify no tools: outside Flow, stock file discovery yields an instructions-only
 agent. Inside Flow, the stock delegation registry receives contextual factories
-using the same renderer, source resolution, expertise, skills and project
+using the same renderer, source resolution, expertise, capability guidance, skills and project
 context as the selected parent role. Those factories use the configured local
 runtime tools and model profile. Default roles expose the SDK task tool and the
 full other-role roster; an explicit `specialists` list or `specialists = []`
@@ -96,7 +96,8 @@ a child's explicit configured roster is retained.
 
 Native ACP agents continue to use their stock Claude/Codex harnesses and native
 role discovery. SDK task tools and condensers are not attached to ACP agents.
-There is no MCP dispatcher, credential copying, provider switch, permission
+Web-research policy remains prompt guidance on OpenHands, not an SDK terminal or
+network permission fence. There is no MCP dispatcher, credential copying, provider switch, permission
 rule generation, or claim of identical containment between runtimes.
 
 ## Pinned evidence
@@ -120,3 +121,6 @@ branch using `./install-flow.sh --release`. Resolve any reported legacy conflict
 as described above, rerun `flow setup user`, and run all three sync checks in a
 fresh session. Until that coordinated step, the live installation remains on
 its existing version. Offline tests do not establish live model/tool execution.
+
+See [the output inventory and validation record](agent-distribution-validation.md)
+for new checks, existing regression results and the limits of offline evidence.

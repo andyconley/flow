@@ -171,7 +171,7 @@ class AgentDistributionTests(unittest.TestCase):
         self.assertIn("User edit", target.read_text())
 
     def test_codex_instructions_escape_backslashes_quotes_and_newlines(self):
-        body = '---\nname: sample\ndescription: sample\n---\nC:\\new\\test and """quotes"""\n'
+        body = '---\nname: sample\ndescription: sample\n---\nC:\\new\\test and """quotes""" 🐾\n'
         result = tomllib.loads(render_codex_agent("sample", "sample.md", body, {}))
         self.assertEqual(result["developer_instructions"], body.split("---\n", 2)[-1])
 

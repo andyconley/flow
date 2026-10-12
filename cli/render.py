@@ -95,14 +95,14 @@ def render_yaml_frontmatter(frontmatter: dict) -> list[str]:
         else:
             scalar = str(value)
             if ": " in scalar or " #" in scalar or scalar.startswith(("{", "[", "*", "&", "!", "|", ">", "@", "`")) or "\n" in scalar:
-                scalar = json.dumps(scalar)
+                scalar = json.dumps(scalar, ensure_ascii=False)
             lines.append(f"{key}: {scalar}")
     lines.append("---")
     return lines
 
 
 def toml_string(value: str) -> str:
-    return json.dumps(value)
+    return json.dumps(value, ensure_ascii=False)
 
 
 SHAPER_COMMANDS = frozenset({"flow-boot", "flow-define", "flow-solution", "flow-plan"})
@@ -484,7 +484,7 @@ def build_managed_manifest(target_name: str, entries: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def render_openhands_agent(name: str, source_ref: str, body: str) -> str:
+def render_openhands_agent(name: str, source_ref: str, body: str, capabilities: dict | None = None) -> str:
     """SDK 1.54 file format. Runtime configuration owns tools and endpoint choice.
 
     File discovery outside Flow gets an instructions-only agent. Flow registers
@@ -492,7 +492,10 @@ def render_openhands_agent(name: str, source_ref: str, body: str) -> str:
     Claude tool names and model aliases are not OpenHands tool/profile names.
     """
     metadata, content = parse_frontmatter(body)
-    header = {"name": name, "description": json.dumps(str(metadata.get("description", f"Flow specialist {name}"))),
+    decision = capabilities.get(WEB_RESEARCH) if capabilities else None
+    if decision is not None:
+        content = f"{content.rstrip()}\n\n{guidance_for(decision)}\n"
+    header = {"name": name, "description": json.dumps(str(metadata.get("description", f"Flow specialist {name}")), ensure_ascii=False),
               "model": "inherit", "tools": []}
     if metadata.get("skills"):
         names = metadata["skills"]

@@ -866,7 +866,8 @@ def desired_openhands_outputs(root: Path, flow_dir: Path, manifest: dict, manife
         source = source_ref_for(agent["source"], agent.get("_origin", "framework"))
         path = root / runtime["agent_dir"] / (agent["name"] + ".md")
         outputs[path] = render_openhands_agent(agent["name"], source,
-            agent_body(agent, agent.get("_root", flow_dir), flow_dir, manifest.get("claude", {}).get("agent_defaults", {})))
+            agent_body(agent, agent.get("_root", flow_dir), flow_dir, manifest.get("claude", {}).get("agent_defaults", {})),
+            manifest.get("_agent_capability_decisions", {}).get(agent["name"]))
         entries.append(dict(path=rel_posix(path, root), kind="agent", source=source, sync_mode="replace"))
     path = root / runtime["managed_manifest"]
     entries.append(dict(path=rel_posix(path, root), kind="managed-manifest", source=manifest_rel, sync_mode="replace"))

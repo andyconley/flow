@@ -29,8 +29,8 @@ OpenHands definitions carry description, instructions, named skills and
 instructions-only agents. Within Flow, contextual factories register the same
 composed roles with stock SDK delegation, configured local tools and profiles,
 project context and skills. Default task-enabled parents expose the other-role
-roster; explicit lists control Flow factory registration and prompt hints; `specialists = []` removes the task tool. Implicit
-child rosters are empty. Native parents use stock ACP/native discovery. ACP does
+roster. Explicit lists control Flow factory registration and prompt hints;
+`specialists = []` removes the task tool. Implicit child rosters are empty. Native parents use stock ACP/native discovery. ACP does
 not receive SDK custom tools or condensers. Unsupported fields are recorded in
 per-target `translation-report.json`; translation is not identical containment.
 

@@ -48,7 +48,11 @@ def _context(selection: Selection, root: Path):
                           manifest.get("claude", {}).get("agent_defaults", {}))
     else:
         body = selection.role_file.read_text()
-    metadata, prompt = parse_frontmatter(render_openhands_agent(selection.role, str(selection.role_file), body))
+    capabilities = manifest.get("_agent_capability_decisions", {}).get(selection.role)
+    # Already generated definitions carry this guidance; do not duplicate it.
+    if GENERATED_MARKER in body:
+        capabilities = None
+    metadata, prompt = parse_frontmatter(render_openhands_agent(selection.role, str(selection.role_file), body, capabilities))
     skills = {}
     for directory in (HOME / ".agents/skills", USER_OVERLAY_DIR / "skills", root / ".agents/skills", root / ".flow/skills"):
         if directory.is_dir():
