@@ -2,6 +2,26 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.43.0](https://github.com/andyconley/flow/compare/v0.42.1...v0.43.0) (2026-10-11)
+
+### Features
+
+* distribute Flow roles to native agents and OpenHands delegation ([2d132c2](https://github.com/andyconley/flow/commit/2d132c2e4c578c30f2e969c2045f80ab9f72ee3d))
+
+### Bug Fixes
+
+* **ci:** verify releases with pinned OpenHands and all agent surfaces ([028ff11](https://github.com/andyconley/flow/commit/028ff11088da8b848a5f0cc32815ede12ed90717))
+* **cli:** reject invalid update flags before activation ([8aae512](https://github.com/andyconley/flow/commit/8aae512bb532621e12c54024a82ee21aa7cebd6c))
+* **install:** activate stock OpenHands after predecessor upgrades ([57afb05](https://github.com/andyconley/flow/commit/57afb05758b6c1f9d9e8fb684b28d6156e0d2245))
+* **runtime:** revalidate activation and retain archive digest history ([6fd1ae7](https://github.com/andyconley/flow/commit/6fd1ae76bf182fa3292a2819a6110119f7de617a))
+* **workflow:** keep inspection free of runtime activation ([50ad7a7](https://github.com/andyconley/flow/commit/50ad7a7cbf8d448e64561bc820c2d229d4d252fb))
+
+### Tests
+
+* **install:** preserve virtualenv context in Python selection fixture ([0421311](https://github.com/andyconley/flow/commit/04213115c4d0209c99d5fc9bf303504879e454ef))
+* replace retired MAF provisioning in runtime smoke coverage ([911c56d](https://github.com/andyconley/flow/commit/911c56dc41625b2bf9bc1e7104fc739b004ee670))
+* validate complete generated roster with pinned OpenHands CI ([7d1d35b](https://github.com/andyconley/flow/commit/7d1d35ba72997cc5cdcf793737768d95422b8797))
+
 ### Highlights
 
 - Preserve shared mixed-provider call limits and review approved edited source, including large edits and native test commands.
