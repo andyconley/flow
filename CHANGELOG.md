@@ -4,6 +4,24 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- OpenHands usage now joins native reports without duplicate counts, survives parent restarts and interruptions, and archived workflows regain searchable enrichment.
+
+
+## [0.44.1](https://github.com/andyconley/flow/compare/v0.44.0...v0.44.1) (2026-10-12)
+
+### Bug Fixes
+
+* preserve outcomes when SDK metrics are unavailable ([8779eb4](https://github.com/andyconley/flow/commit/8779eb4d83cadfa7f6e2a21d9b02438f1b4b1aed))
+* require SDK reporting helpers in release staging ([376c001](https://github.com/andyconley/flow/commit/376c001f09a8cb2e8181b187a4eae501d7f754a4))
+* restore OpenHands usage reporting and archive enrichment ([ed83e29](https://github.com/andyconley/flow/commit/ed83e29938a72fe47c81d906c00c546d8f425933))
+
+### Tests
+
+* isolate archive preflight and exercise reporting CLI ([d9b726d](https://github.com/andyconley/flow/commit/d9b726d0accfd93443f8746debc7fbd7a133e974))
+* keep archive project separate from machine home ([5671f37](https://github.com/andyconley/flow/commit/5671f374064dc70465fc3b431695f96d7854c72d))
+
+### Highlights
+
 - Coordinate custom local, Claude and Codex specialists with stock OpenHands delegation and optional local model routing.
 
 
