@@ -1,4 +1,5 @@
 """Replacement contracts; optional SDK integration is in openhands_runtime_eval.py."""
+import hashlib
 import json
 import sys
 import tempfile
@@ -45,6 +46,120 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         self.assertFalse((self.directory / "execution/ledger.sqlite").exists())
         self.assertNotIn("orchestration_manifest", payload["artifacts"])
         self.assertIn("archive", payload["artifacts"])
+
+    def approved_through(self, last_stage="review"):
+        flow.initialize(self.args)
+        for stage in ("define", "solution", "plan", "implement", "review"):
+            self.args.stage = stage
+            start, state, _ = config.STAGES[stage]
+            if runstate.status("example", self.root)["state"] != state:
+                flow._transition(self.root, "example", start)
+            self.outputs(stage)
+            self.args.disposition = ["risk=accepted"] if stage == "solution" else []
+            flow.approve(self.args)
+            if stage == last_stage:
+                return runstate.status("example", self.root)
+
+    def test_every_approved_stage_records_byte_digests_and_journal_evidence(self):
+        payload = self.approved_through()
+        expected = {name for outputs in config.OUTPUTS.values() for name in outputs}
+        self.assertEqual(set(payload["approved_artifact_digests"]), expected)
+        for name in expected:
+            self.assertEqual(payload["approved_artifact_digests"][name],
+                             hashlib.sha256((self.root / payload["artifacts"][name]).read_bytes()).hexdigest())
+        events = [json.loads(line) for line in (self.directory / "events.jsonl").read_text().splitlines()]
+        for event in events:
+            if event["event"] in {"approve-definition", "approve-solution", "approve-plan", "mark-handback-ready", "accept-review"}:
+                self.assertTrue(event["approved_artifact_digests"], event)
+
+    def test_changed_approved_artifacts_block_verification_continuation_and_archive(self):
+        payload = self.approved_through()
+        self.args.disposition = ["memory=recorded", "capability_gaps=none"]
+        for name in ("requirements", "solution", "plan", "review"):
+            path = self.root / payload["artifacts"][name]
+            original = path.read_bytes()
+            with self.subTest(artifact=name):
+                path.write_bytes(original + b"Unapproved change\n")
+                ok, errors, _ = runstate.verify("example", self.root)
+                self.assertFalse(ok)
+                self.assertTrue(any(name in error and "changed after approval" in error for error in errors), errors)
+                before = (self.directory / "run.json").read_bytes()
+                with self.assertRaisesRegex(config.RuntimeConfigurationError, "changed after approval"):
+                    flow._run(self.root, "example")
+                with self.assertRaisesRegex(config.RuntimeConfigurationError, "changed after approval"):
+                    flow.archive(self.args)
+                self.assertEqual((self.directory / "run.json").read_bytes(), before)
+                self.assertFalse((self.directory / "archive.md").exists())
+                path.write_bytes(original)
+        self.assertTrue(runstate.verify("example", self.root)[0])
+
+    def test_hashless_approved_native_run_is_inspectable_without_silent_reapproval(self):
+        payload = self.approved_through("define")
+        payload.pop("approved_artifact_digests")
+        runstate._write_run("example", payload, self.root)
+        before = (self.directory / "run.json").read_bytes()
+        self.assertEqual(runstate.status("example", self.root)["state"], "definition_approved")
+        ok, errors, _ = runstate.verify("example", self.root)
+        self.assertFalse(ok)
+        self.assertTrue(any("unsealed approved artifact" in error for error in errors), errors)
+        with self.assertRaisesRegex(config.RuntimeConfigurationError, "unsealed approved artifact"):
+            flow._run(self.root, "example")
+        with self.assertRaisesRegex(config.RuntimeConfigurationError, "unsealed approved artifact"):
+            flow._transition(self.root, "example", "start-solution")
+        self.assertEqual((self.directory / "run.json").read_bytes(), before)
+
+    def test_same_bytes_replaced_by_symlink_do_not_keep_approval(self):
+        payload = self.approved_through("define")
+        path = self.root / payload["artifacts"]["requirements"]
+        replacement = self.directory / "replacement.md"
+        replacement.write_bytes(path.read_bytes())
+        path.unlink()
+        path.symlink_to(replacement.name)
+        ok, errors, _ = runstate.verify("example", self.root)
+        self.assertFalse(ok)
+        self.assertTrue(any("requirements" in error and "regular file" in error for error in errors), errors)
+        with self.assertRaisesRegex(config.RuntimeConfigurationError, "regular file"):
+            flow._run(self.root, "example")
+
+    def test_authorized_refinement_releases_only_implementation_seals(self):
+        payload = self.approved_through("implement")
+        earlier = {name: digest for name, digest in payload["approved_artifact_digests"].items()
+                   if name not in {"implementation_evidence", "handback", "review"}}
+        self.outputs("review")
+        refined = flow._transition(self.root, "example", "request-refinement")
+        self.assertEqual(refined["approved_artifact_digests"], earlier)
+        self.assertNotIn("mark-handback-ready", refined["gates"])
+        self.assertNotIn("accept-review", refined["gates"])
+        for filename in config.OUTPUTS["implement"].values():
+            (self.directory / filename).write_text("Revised implementation evidence\n")
+        self.args.stage = "implement"
+        resumed = flow.approve(self.args)
+        self.assertEqual(resumed["state"], "reviewing")
+        for name, digest in earlier.items():
+            self.assertEqual(resumed["approved_artifact_digests"][name], digest)
+        for name in config.OUTPUTS["implement"]:
+            self.assertNotEqual(resumed["approved_artifact_digests"][name], payload["approved_artifact_digests"][name])
+        self.assertTrue(runstate.verify("example", self.root)[0])
+
+    def test_implementation_approval_retries_after_interrupted_review_transition(self):
+        self.approved_through("plan")
+        flow._transition(self.root, "example", "start-implementation")
+        self.outputs("implement")
+        self.args.stage = "implement"
+        self.args.disposition = []
+        original = flow._transition
+        def interrupt_review(root, work_id, event, **kwargs):
+            if event == "start-review":
+                raise KeyboardInterrupt("interrupted after durable handback")
+            return original(root, work_id, event, **kwargs)
+        with patch.object(flow, "_transition", side_effect=interrupt_review):
+            with self.assertRaises(KeyboardInterrupt):
+                flow.approve(self.args)
+        self.assertEqual(runstate.status("example", self.root)["state"], "handback_ready")
+        self.assertEqual(flow.approve(self.args)["state"], "reviewing")
+        events = [json.loads(line) for line in (self.directory / "events.jsonl").read_text().splitlines()]
+        self.assertEqual(sum(event["event"] == "mark-handback-ready" for event in events), 1)
+        self.assertEqual(sum(event["event"] == "start-review" for event in events), 1)
 
     def test_missing_outputs_do_not_advance(self):
         flow.initialize(self.args)

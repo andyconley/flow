@@ -622,6 +622,37 @@ def _scout_artifact_errors(
     return []
 
 
+OPENHANDS_SEAL_EVENTS = frozenset({"approve-definition", "approve-solution", "approve-plan",
+                                  "mark-handback-ready", "accept-review", "archive"})
+
+
+def openhands_approval_errors(work_id: str, payload: dict[str, Any], root: Path | None = None) -> list[str]:
+    """Check recorded approved bytes without manufacturing authority for old runs."""
+    if payload.get("runtime") != "openhands" or payload.get("protocol_revision") != PROTOCOL_REVISION_OPENHANDS:
+        return []
+    digests = payload.get("approved_artifact_digests", {})
+    if not isinstance(digests, dict):
+        return ["approved_artifact_digests must be a mapping"]
+    expected = {name for event in OPENHANDS_SEAL_EVENTS if event in payload.get("gates", {})
+                for name in TRANSITIONS[event].required_artifacts}
+    if "archive" in payload.get("gates", {}):
+        expected.add("archive")
+    errors = [f"unsealed approved artifact:{name}; review prior artifacts in a new workflow"
+              for name in sorted(expected - set(digests))]
+    active_root = (root or repo_root()).resolve()
+    run_dir = _run_dir(work_id, active_root).resolve()
+    for name, digest in digests.items():
+        relative = payload.get("artifacts", {}).get(name)
+        path = active_root / relative if isinstance(relative, str) else None
+        if (path is None or not path.is_file() or path.is_symlink()
+                or not path.resolve().is_relative_to(run_dir)):
+            errors.append(f"approved artifact:{name} must remain a current-run regular file")
+            continue
+        if not isinstance(digest, str) or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            errors.append(f"approved artifact:{name} changed after approval")
+    return errors
+
+
 def apply_transition(
     work_id: str,
     event_name: str,
@@ -679,6 +710,10 @@ def apply_transition(
     transition = TRANSITIONS[event_name]
     current = _load_run(work_id, root)
     current_state = current.get("state") if current else None
+    if current and event_name not in {"pause", "block"}:
+        approval_errors = openhands_approval_errors(work_id, current, root)
+        if approval_errors:
+            return False, current, approval_errors
     is_scout_review = bool(current and "start-scout-review" in current.get("gates", {}))
     if event_name == "start-scout-review" and current_state == STATE_REVIEWING and is_scout_review:
         scout_names = {"scout_summary", "orchestration_manifest"}
@@ -724,6 +759,12 @@ def apply_transition(
         return False, current or {}, ["orchestration_manifest cannot be replaced after it is recorded"]
     payload["artifacts"].update(artifacts or {})
     payload["dispositions"].update(dispositions or {})
+    if event_name == "request-refinement" and payload.get("runtime") == "openhands":
+        payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
+        for name in ("implementation_evidence", "handback", "review"):
+            payload["approved_artifact_digests"].pop(name, None)
+        for approval_event in ("mark-handback-ready", "accept-review"):
+            payload["gates"].pop(approval_event, None)
     if event_name == "request-scout-refinement":
         payload["artifacts"].pop("review", None)
         payload["artifacts"].pop("scout_summary", None)
@@ -755,12 +796,20 @@ def apply_transition(
     missing = _missing_gate_items(payload, transition)
     if payload.get("runtime") == "openhands":
         active_root = (root or repo_root()).resolve()
-        for name in transition.required_artifacts:
+        seal_names = (*transition.required_artifacts, "archive") if event_name == "archive" else transition.required_artifacts
+        for name in seal_names:
             relative = payload["artifacts"].get(name)
             path = active_root / relative if isinstance(relative, str) else None
             run_dir = _run_dir(work_id, active_root).resolve()
             if path is None or not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(run_dir):
                 missing.append(f"artifact:{name} must be an existing current-run file")
+            elif event_name in OPENHANDS_SEAL_EVENTS:
+                content = path.read_bytes()
+                if not content.strip():
+                    missing.append(f"artifact:{name} must be nonempty")
+                else:
+                    payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
+                    payload["approved_artifact_digests"][name] = hashlib.sha256(content).hexdigest()
     if missing:
         gate = f" for {transition.gate}" if transition.gate else ""
         return False, current or {}, [f"missing{gate}: {item}" for item in missing]
@@ -814,8 +863,13 @@ def apply_transition(
         "artifacts": artifacts or {},
         "dispositions": dispositions or {},
     }
-    if event_name in {"approve-definition", "approve-solution"} and payload.get("approved_artifact_digests"):
-        names = ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest") if event_name == "approve-definition" else ("solution",)
+    if ((event_name in {"approve-definition", "approve-solution"} or
+         payload.get("runtime") == "openhands" and event_name in OPENHANDS_SEAL_EVENTS)
+            and payload.get("approved_artifact_digests")):
+        if payload.get("runtime") == "openhands":
+            names = transition.required_artifacts
+        else:
+            names = ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest") if event_name == "approve-definition" else ("solution",)
         event["approved_artifact_digests"] = {
             name: payload["approved_artifact_digests"][name] for name in names
         }
@@ -995,6 +1049,10 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
     if payload.get("last_event") and lifecycle_events and lifecycle_events[-1].get("event") != payload.get("last_event"):
         ok = False
         messages.append("last_event does not match latest history event")
+    approval_errors = openhands_approval_errors(work_id, payload, root)
+    if approval_errors:
+        ok = False
+        messages.extend(approval_errors)
     if ok:
         messages.append("ok")
     return ok, messages, payload

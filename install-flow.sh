@@ -139,6 +139,40 @@ done
 
 resolve_python
 
+RUNTIME_POINTER="${FLOW_HOME}/runtimes/openhands/current.json"
+INSTALL_TRANSACTION="$(mktemp -d)"
+had_runtime_pointer=0
+had_launcher=0
+if [[ -f "${RUNTIME_POINTER}" ]]; then cp -p "${RUNTIME_POINTER}" "${INSTALL_TRANSACTION}/current.json"; had_runtime_pointer=1; fi
+if [[ -f "${BIN_DIR}/flow" ]]; then cp -p "${BIN_DIR}/flow" "${INSTALL_TRANSACTION}/flow"; had_launcher=1; fi
+finish_install_transaction() {
+  local status=$?
+  if [[ ${status} -ne 0 ]]; then
+    if declare -F rollback_install >/dev/null; then rollback_install; fi
+    if [[ ${had_runtime_pointer} -eq 1 ]]; then
+      cp -p "${INSTALL_TRANSACTION}/current.json" "${RUNTIME_POINTER}"
+    else
+      rm -f "${RUNTIME_POINTER}"
+    fi
+    if [[ ${had_launcher} -eq 1 ]]; then
+      cp -p "${INSTALL_TRANSACTION}/flow" "${BIN_DIR}/flow"
+    else
+      rm -f "${BIN_DIR}/flow"
+    fi
+  fi
+  rm -rf "${INSTALL_TRANSACTION}"
+}
+trap finish_install_transaction EXIT
+
+# Prove execution readiness before touching source, config or launcher.
+# An already pinned-ready FLOW_PYTHON is retained; otherwise provision an
+# isolated managed venv without mutating the chosen/global interpreter.
+if ! OPENHANDS_PYTHON="$("${FLOW_PYTHON_BIN}" "${ROOT_DIR}/cli/openhands_provision.py" --source-root "${ROOT_DIR}" --home "${FLOW_HOME}" --python "${FLOW_PYTHON_BIN}")"; then
+  err "OpenHands setup failed; the previous source, config and launcher are unchanged."
+fi
+FLOW_PYTHON_BIN="${OPENHANDS_PYTHON}"
+FLOW_PYTHON_VERSION="$("${FLOW_PYTHON_BIN}" -c 'import sys; print("{}.{}.{}".format(*sys.version_info[:3]))')"
+
 mkdir -p "${FLOW_HOME}" "${BIN_DIR}"
 # Keep the active installation intact until the optional managed runtime has
 # been staged and proven.  This matters most on a package-index outage: Flow
@@ -270,12 +304,13 @@ if ! "${BIN_DIR}/flow" --help >/dev/null 2>&1; then
   exit 1
 fi
 
-# OpenHands is an explicit, isolated Python dependency environment. Installing
-# Flow must not activate an old MAF runtime or start any provider session.
-echo "Execution runtime: install runtime/openhands/requirements.txt in an isolated Python 3.12 environment."
-echo "Verify it with that interpreter: python cli/flow.py workflow runtime --json"
+echo "OpenHands SDK 1.54.0 verified; launcher bound to ${FLOW_PYTHON_BIN}."
 
 rm -rf "${SOURCE_BACKUP}" "${CONFIG_BACKUP}"
+# Source, launcher and runtime are now committed. Adapter conflicts preserve
+# this usable installation and are reported below for user reconciliation.
+trap - EXIT
+rm -rf "${INSTALL_TRANSACTION}"
 
 "${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/archive_preflight.py" || true
 

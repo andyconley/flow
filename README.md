@@ -129,6 +129,9 @@ flow setup user
 
 That command queries the flow remote for the latest tagged release, shallow-clones it to a temporary directory, installs the framework into `~/.flow/source/` in release mode, then cleans up. After it runs, the temp clone is disposable. The install is self-contained, and `flow update` rolls it forward to newer tagged releases later.
 
+Install and update automatically verify OpenHands SDK, tools, workspace and agent-server **1.54.0**. They reuse a pinned-ready explicit `FLOW_PYTHON` or existing `[flow].python`; otherwise they provision a dedicated virtual environment under `~/.flow/runtimes/openhands/` with Python **3.12+**, then bind the launcher to its verified interpreter. No global packages, credentials or runtime profiles are changed. Python must already be installed; `FLOW_PYTHON=/path/to/python3.12 ./install-flow.sh --release` selects a base interpreter. Package installation requires access to the configured Python package index. A provisioning failure preserves the previous source, launcher and runtime selection and reports the repair needed.
+
+
 ## Maintainer Install
 
 To edit framework content yourself, clone the repo and use the maintainer flow:

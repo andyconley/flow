@@ -78,20 +78,25 @@ only because a wheelhouse-gated legacy smoke test still expected the retired
 intentional retirement, generated surfaces and independently installed SDK
 readiness. It passed both with the pinned SDK and with a base interpreter.
 
-Codex's review of head `7d1d35b` completed at 2026-10-12 00:57:45 UTC and submitted
-two workflow findings. Both reproduce offline and remain unfixed:
+Codex's review of head `7d1d35b` completed at 2026-10-12 00:57:45 UTC
+and identified two workflow findings. The authorized follow-up addresses both:
 
-- [P1: approved revision-3 artifact bytes are not sealed](https://github.com/andyconley/flow/pull/111#discussion_r4243956499).
-  Modifying approved requirements changes their hash while `runstate.verify`
-  still returns `ok`; no approved digest was recorded.
-- [P2: implementation approval cannot retry from handback_ready](https://github.com/andyconley/flow/pull/111#discussion_r4243956500).
-  A persisted intermediate `handback_ready` state causes a retry to attempt
-  `mark-handback-ready` again and refuse the transition instead of starting review.
+- [Approved revision-3 artifact integrity](https://github.com/andyconley/flow/pull/111#discussion_r4243956499):
+  approvals record SHA-256 digests for required definition, solution, plan,
+  implementation/handback, review and archive outputs. Verification and later
+  execution/continuation/archive reject changed, missing or symlinked approved
+  files. Old approved runs without required digests remain inspectable but
+  require a new reviewed workflow to continue; they are never silently resealed.
+- [Implementation approval retry](https://github.com/andyconley/flow/pull/111#discussion_r4243956500):
+  retry from `handback_ready` skips the completed mark transition and starts
+  review, while retaining artifact integrity checks.
 
-These are follow-up lifecycle fixes in the included OpenHands ancestry, not
-agent-format failures. The live installation remains unchanged. Resolve them
-through an authorized follow-up before treating approval integrity and recovery
-as verified live acceptance behavior.
+Authorized `request-refinement` clears only current implementation evidence,
+handback and review seals/gates, preserving earlier definition/solution/plan
+approvals for the rework cycle. See [approval integrity](architecture.md#approved-artifact-integrity-revision-3).
+The follow-up focused suite passes 23 tests, including seven provisioning tests, six new approval/retry regressions, and transactional source/config/launcher/pointer rollback checks. All fixtures use isolated destinations and no models. The earlier counts above describe their
+recorded runs and do not claim validation of these lifecycle fixes. Offline
+checks do not establish live acceptance. The live installation remains unchanged.
 
 Release candidate and published verification now install the pinned SDK in their
 CI environment before requiring all-target runtime smoke, and both verify the

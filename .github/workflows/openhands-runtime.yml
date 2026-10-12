@@ -31,6 +31,8 @@ jobs:
           tests.test_agent_distribution
           tests.test_openhands_sdk_construction
           tests.test_openhands_workflow
+          tests.test_openhands_provision
+          tests.test_openhands_lifecycle
           tests.test_agent_capabilities
           tests.test_expertise_advisory_render
           tests.test_flow.FlowCliTests.test_runtime_smoke_checks_generated_surfaces

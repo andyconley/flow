@@ -32,7 +32,11 @@ confirmation uses `--confirm-pending` or `--reject-pending REASON`.
 
 After reviewing the stage outputs, approve with `--stage` and any necessary
 `--disposition NAME=VALUE` values. Implementation approval enters review;
-review approval accepts it. This does not merge, push or deploy.
+review approval accepts it. Required output bytes are sealed with SHA-256.
+Subsequent verification, continuation and archive reject edited, missing or
+symlinked approved artifacts. Retry implementation approval from
+`handback_ready` continues into review without repeating the completed mark.
+This does not merge, push or deploy.
 
 ### `flow workflow native-handoff <work-id>`
 
@@ -40,10 +44,20 @@ Prepare context for an existing official Codex or Claude session with
 `--stage`, `--profile` and required `--task-file PATH`. Native subscriptions
 and permissions remain in the stock native harness. Automated ACP execution is also available after the explicit `permission_requests = "stock-openhands"` access decision; see [native access](native-access-decision.md).
 
+### Revision-3 approval recovery
+
+Approved revision-3 runs without required digests are inspectable but cannot
+continue; use a new reviewed workflow with their artifacts as inputs. Flow never
+silently reseals an old approval. During review, authorized
+`flow run transition WORK_ID request-refinement` clears only current
+implementation evidence, handback and review seals/gates, retaining definition,
+solution and plan. Earlier approved bytes remain protected. See
+[approval integrity](architecture.md#approved-artifact-integrity-revision-3).
+
 ### `flow workflow archive <work-id>`
 
 Close an accepted review with `--disposition memory=VALUE` and
-`--disposition capability_gaps=VALUE`. Preserve a project archive summary.
+`--disposition capability_gaps=VALUE`. Preserve a project archive summary. Approved artifact digests are checked before archive and the required archive output is sealed.
 
 ### `flow workflow status <work-id>`
 

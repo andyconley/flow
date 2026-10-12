@@ -28,6 +28,39 @@ The integration was checked against these installed PyPI packages, including
 `ACPAgent.acp_session_mode`, its permission callback, `AgentDefinition.load`,
 `AgentContext`, `Conversation`, `RemoteWorkspace`, SDK skill loaders and tools.
 
+## Automatic install and update provisioning
+
+Fresh bootstrap installs, release updates and install-mode conversions now
+provision the four pinned OpenHands 1.54.0 packages before activating source.
+The CLI's inspection commands still support Python 3.10+, but execution needs
+an installed Python 3.12+ interpreter. The installer does not install Python.
+For example, select it with:
+
+```sh
+FLOW_PYTHON=/absolute/path/to/python3.12 ./install-flow.sh --release
+```
+
+A pinned-ready explicit `FLOW_PYTHON` takes precedence over the existing
+`[flow].python`, which takes precedence over the installer-selected interpreter.
+A verified custom interpreter is reused without installing into it. Otherwise
+Flow first reuses a ready managed runtime, or uses a compatible Python to create
+an isolated virtual environment under `~/.flow/runtimes/openhands/`. The managed
+`current.json` pointer and launcher refer to its verified interpreter. Immutable
+environments remain available for rollback; repeat installs reuse readiness.
+Provisioning uses `runtime/openhands/requirements.txt`; the macOS closure lock
+is version-pinned reference evidence, not a cross-platform hash lock.
+
+Package-index access is required only when a new environment needs dependencies.
+A failed dependency build is removed and does not change the previous source,
+launcher or runtime pointer. Source/launcher activation failure restores those
+bindings as well. Runtime profiles, custom TOMLs, credentials, global Python
+packages and native provider settings are preserved. No model is called during
+readiness checks. Adapter conflicts are reported after source activation and
+preserve custom files; reconcile them with the documented sync commands.
+For rollback, reinstall the previous release in a coordinated window; retain
+its managed environment and restore its pointer/launcher together if manually
+restoring backups. Do not change a live installation during an active run.
+
 ## Configure self-hosted coding profiles
 
 Copy `templates/openhands-runtime.toml` to a project's `.flow/runtime.toml` and

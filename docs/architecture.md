@@ -26,6 +26,30 @@ and [generated role distribution](agent-distribution.md). Historical MAF
 execution, provider-selection ledgers and old containment claims describe
 retained evidence; they are not the execution contract for new workflows.
 
+## Approved artifact integrity (revision 3)
+
+OpenHands workflow approval records SHA-256 digests for the required definition,
+solution, plan, implementation/handback, review and archive output files.
+Verification and subsequent execution, continuation or archive reject changed,
+missing or symlinked approved files; approval binds the reviewed bytes rather
+than only a filename. Approved files must remain regular files in the current
+run. A successful digest check establishes byte integrity, not semantic quality.
+
+Existing approved revision-3 runs without the required digests remain
+inspectable, but cannot continue. Review their prior artifacts as inputs to a
+new workflow; Flow does not silently seal old approvals or infer consent from
+existing files.
+
+For authorized implementation rework, use `flow run transition WORK_ID request-refinement` while reviewing. This clears the current implementation
+evidence, handback and review seals and their corresponding approval gates,
+retaining the approved definition, optional solution and plan. Rework can then
+produce new implementation/review outputs and receive fresh approval. Do not
+edit earlier approved artifacts or manually change `run.json` to bypass checks.
+
+Implementation approval can be retried from persisted `handback_ready`: Flow
+skips the completed `mark-handback-ready` transition and proceeds to review,
+without replaying execution. It still verifies the sealed handback bytes.
+
 ## Layer Model
 
 `flow` operates across five layers:

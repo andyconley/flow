@@ -21,6 +21,7 @@ lands so a new schema version applies without waiting for the next
 """
 
 import ast
+import shlex
 import importlib.machinery
 import os
 import re
@@ -113,7 +114,7 @@ def read_install_config() -> dict:
     return {}
 
 
-def write_install_config(install: dict) -> None:
+def write_install_config(install: dict, *, python: str | None = None) -> None:
     """Replace the `[install]` section, preserving any existing `[flow]` section."""
     flow_section: dict[str, str] = {
         "source_home": "~/.flow/source",
@@ -130,6 +131,8 @@ def write_install_config(install: dict) -> None:
                 if isinstance(value, (str, int, bool)):
                     flow_section[key] = value
 
+    if python is not None:
+        flow_section["python"] = python
     ensure_dir(FLOW_CONFIG.parent)
     lines: list[str] = ["[flow]"]
     for key, value in flow_section.items():
@@ -657,6 +660,46 @@ def install_command(release: bool, develop_path: str | None) -> int:
     return 2
 
 
+def _activate_openhands_source(staging: Path, install: dict) -> bool:
+    """Prove staged execution before swapping; restore selection on failure."""
+    pointer = FLOW_HOME / "runtimes/openhands/current.json"
+    launcher = FLOW_HOME.parent / ".local/bin/flow"
+    snapshots = {path: path.read_bytes() if path.is_file() else None
+                 for path in (FLOW_CONFIG, pointer, launcher)}
+    swapped = False
+    try:
+        result = subprocess.run([sys.executable, str(staging / "cli/openhands_provision.py"),
+                                 "--source-root", str(staging), "--home", str(FLOW_HOME),
+                                 "--python", sys.executable], capture_output=True, text=True, check=False)
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or "OpenHands dependency setup failed")
+        python = result.stdout.strip()
+        if not python or not Path(python).is_file():
+            raise RuntimeError("OpenHands provisioner returned no verified interpreter")
+        error = _swap_source_with_staging(staging, keep_old=True)
+        if error:
+            raise RuntimeError(error)
+        swapped = True
+        write_install_config(install, python=python)
+        ensure_dir(launcher.parent)
+        launcher.write_text('#!/bin/sh\nexec ' + shlex.quote(python) +
+                            ' "$HOME/.flow/source/cli/flow.py" "$@"\n')
+        launcher.chmod(0o755)
+    except Exception as exc:
+        if swapped:
+            _restore_after_maf_failure(snapshots[FLOW_CONFIG])
+        for path, content in snapshots.items():
+            if content is None:
+                _remove_path(path)
+            else:
+                ensure_dir(path.parent)
+                path.write_bytes(content)
+        print(f"OpenHands activation failed; previous installation restored: {exc}")
+        return False
+    _remove_path(_stage_path("old"))
+    return True
+
+
 def _convert_to_release() -> int:
     current = read_install_config()
     current_mode = current.get("mode", "unknown")
@@ -697,20 +740,12 @@ def _convert_to_release() -> int:
         print(invalid)
         return 1
 
-    prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
-    swap_err = _swap_source_with_staging(staging, keep_old=True)
-    if swap_err:
-        print(swap_err)
+    if not _activate_openhands_source(staging, {
+        "mode": INSTALL_MODE_RELEASE, "version": version, "remote": remote,
+        "installed_at": _now_utc_iso(),
+    }):
+        _remove_path(staging)
         return 1
-
-    write_install_config(
-        {
-            "mode": INSTALL_MODE_RELEASE,
-            "version": version,
-            "remote": remote,
-            "installed_at": _now_utc_iso(),
-        }
-    )
     print(f"converted to release mode (version: {version})")
     print(f"clone preserved at: {clone}")
     _remove_path(_stage_path("old"))
@@ -750,19 +785,12 @@ def _convert_to_develop(clone: Path) -> int:
     except OSError as err:
         print(f"could not stage develop source link: {err}")
         return 1
-    swap_err = _swap_source_with_staging(staging, keep_old=True)
-    if swap_err:
+    if not _activate_openhands_source(staging, {
+        "mode": INSTALL_MODE_DEVELOP, "source_target": str(clone),
+        "installed_at": _now_utc_iso(),
+    }):
         _remove_path(staging)
-        print(swap_err)
         return 1
-
-    write_install_config(
-        {
-            "mode": INSTALL_MODE_DEVELOP,
-            "source_target": str(clone),
-            "installed_at": _now_utc_iso(),
-        }
-    )
     print(f"converted to develop mode (source: {clone})")
     _remove_path(_stage_path("old"))
     return _sync_installed_adapters()
@@ -964,18 +992,12 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
             print(invalid)
             return 1
 
-        prior_config = FLOW_CONFIG.read_bytes() if FLOW_CONFIG.is_file() else None
-        swap_err = _swap_source_with_staging(staging, keep_old=True)
-        if swap_err:
-            print(swap_err)
+        new_install = dict(install)
+        new_install.update(mode=INSTALL_MODE_RELEASE, version=tag, remote=remote,
+                           installed_at=_now_utc_iso())
+        if not _activate_openhands_source(staging, new_install):
+            _remove_path(staging)
             return 1
-
-    new_install = dict(install)
-    new_install["mode"] = INSTALL_MODE_RELEASE
-    new_install["version"] = tag
-    new_install["remote"] = remote
-    new_install["installed_at"] = _now_utc_iso()
-    write_install_config(new_install)
 
     print(f"updated to {tag}")
     _remove_path(_stage_path("old"))
@@ -984,9 +1006,10 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
 
 def _sync_installed_adapters() -> int:
     """Run the installed renderer after a source swap, never stale imports."""
+    python = read_toml(FLOW_CONFIG).get("flow", {}).get("python", sys.executable) if FLOW_CONFIG.is_file() else sys.executable
     failures = []
     for target in ("claude", "codex", "openhands"):
-        result = subprocess.run([sys.executable, str(SOURCE_DIR / "cli/flow.py"),
+        result = subprocess.run([python, str(SOURCE_DIR / "cli/flow.py"),
                                  "sync", target, "--user"], check=False)
         if result.returncode:
             failures.append(target)
