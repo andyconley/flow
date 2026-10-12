@@ -69,3 +69,26 @@ Install tests create temporary homes and never write the current user's native
 agent directories. Restricted hosts may need loopback access for the two
 cancellation fixture tests. Refer to [the migration contract](agent-distribution.md)
 for the coordinated live installation step and conservative legacy conflicts.
+
+## Post-merge review and release-gate follow-up
+
+The first main release gate for merge `08e50be3` exercised 2,172 tests and failed
+only because a wheelhouse-gated legacy smoke test still expected the retired
+`runtime install-maf` command to succeed. The follow-up test now checks the
+intentional retirement, generated surfaces and independently installed SDK
+readiness. It passed both with the pinned SDK and with a base interpreter.
+
+Codex's review of head `7d1d35b` completed at 2026-10-12 00:57:45 UTC and submitted
+two workflow findings. Both reproduce offline and remain unfixed:
+
+- [P1: approved revision-3 artifact bytes are not sealed](https://github.com/andyconley/flow/pull/111#discussion_r4243956499).
+  Modifying approved requirements changes their hash while `runstate.verify`
+  still returns `ok`; no approved digest was recorded.
+- [P2: implementation approval cannot retry from handback_ready](https://github.com/andyconley/flow/pull/111#discussion_r4243956500).
+  A persisted intermediate `handback_ready` state causes a retry to attempt
+  `mark-handback-ready` again and refuse the transition instead of starting review.
+
+These are follow-up lifecycle fixes in the included OpenHands ancestry, not
+agent-format failures. The live installation remains unchanged. Resolve them
+through an authorized follow-up before treating approval integrity and recovery
+as verified live acceptance behavior.

@@ -1626,24 +1626,28 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn('model = "gpt-5.6-luna"', tech_writer_content)
         self.assertIn('model_reasoning_effort = "low"', tech_writer_content)
 
-    @requires_managed_wheelhouse
     def test_runtime_smoke_checks_generated_surfaces(self) -> None:
         fake_home = self.use_fake_home()
-        # Smoke is deliberately diagnostic-only. Provision the real locked
-        # managed runtime explicitly before asking the all-target report to
-        # require MAF readiness.
-        self.assert_ok(self.run_flow("runtime", "install-maf"))
+        # MAF provisioning is retired. Generated native surfaces are testable
+        # without installing a runtime; all-target readiness reflects the
+        # independently installed pinned OpenHands environment.
+        retired = self.run_flow("runtime", "install-maf")
+        self.assertEqual(retired.returncode, 2)
+        self.assertIn("retired", retired.stdout)
         self.assert_ok(self.run_flow("sync", "claude", "--user"))
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
+        self.assert_ok(self.run_flow("sync", "openhands", "--user"))
 
         result = self.run_flow("runtime", "smoke", "--target", "all", "--json")
 
-        self.assert_ok(result)
+        ready = load_cli_module("openhands_runtime").probe()["ready"]
+        self.assertEqual(result.returncode, 0 if ready else 1)
         payload = json.loads(result.stdout)
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["failed"], 0)
+        self.assertEqual(payload["ok"], ready)
+        self.assertEqual(payload["failed"], 0 if ready else 1)
         self.assertEqual(payload["manual_required"], 4)
         targets = {item["target"]: item for item in payload["targets"]}
+        self.assertIn("openhands", targets)
         claude_static = targets["claude"]["static"]
         codex_static = targets["codex"]["static"]
         self.assertTrue(any(row["name"] == "command flow-plan C-lite protocol" for row in claude_static))
