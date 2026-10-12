@@ -137,9 +137,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Managed MAF supports only macOS arm64 with CPython 3.12. The runtime
-      # smoke and the managed-runtime tests need a ready runtime, so fetch the
-      # locked wheels, verified against requirements.lock hashes.
+      - name: Install pinned OpenHands for current runtime verification
+        run: python3 -m pip install -r runtime/openhands/requirements.txt
+
+      # Historical MAF wheels remain necessary for archived contract tests and
+      # the exact previous-release upgrade fixture. Current runtime smoke uses
+      # the separately pinned OpenHands environment above.
       - name: Fetch locked managed MAF wheels
         env:
           PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}
@@ -158,7 +161,8 @@ jobs:
           echo "FLOW_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           echo "FLOW_TEST_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           # install-flow.sh prefers the newest Python it finds, and the runner
-          # ships 3.13; pin Flow to this 3.12 so managed MAF can provision.
+          # ships 3.13; pin Flow to this 3.12 for both current SDK verification
+          # and the isolated previous-release MAF compatibility fixture.
           echo "FLOW_PYTHON=$(python3 -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
 
       - name: Name candidate-evidence artifact
@@ -406,9 +410,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Managed MAF supports only macOS arm64 with CPython 3.12. The runtime
-      # smoke and the managed-runtime tests need a ready runtime, so fetch the
-      # locked wheels, verified against requirements.lock hashes.
+      - name: Install pinned OpenHands for current runtime verification
+        run: python3 -m pip install -r runtime/openhands/requirements.txt
+
+      # Historical MAF wheels remain necessary for archived contract tests and
+      # the exact previous-release upgrade fixture. Current runtime smoke uses
+      # the separately pinned OpenHands environment above.
       - name: Fetch locked managed MAF wheels
         env:
           PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}
@@ -425,7 +432,8 @@ jobs:
           echo "FLOW_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           echo "FLOW_TEST_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
           # install-flow.sh prefers the newest Python it finds, and the runner
-          # ships 3.13; pin Flow to this 3.12 so managed MAF can provision.
+          # ships 3.13; pin Flow to this 3.12 for both current SDK verification
+          # and the isolated previous-release MAF compatibility fixture.
           echo "FLOW_PYTHON=$(python3 -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

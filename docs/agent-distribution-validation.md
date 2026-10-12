@@ -92,3 +92,9 @@ These are follow-up lifecycle fixes in the included OpenHands ancestry, not
 agent-format failures. The live installation remains unchanged. Resolve them
 through an authorized follow-up before treating approval integrity and recovery
 as verified live acceptance behavior.
+
+Release candidate and published verification now install the pinned SDK in their
+CI environment before requiring all-target runtime smoke, and both verify the
+OpenHands sync surface as an additional required check. Historical wheelhouse
+fetching remains for archived tests and exact previous-release compatibility;
+no release gate is bypassed or made optional.

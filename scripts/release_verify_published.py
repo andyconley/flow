@@ -176,6 +176,7 @@ def verify(
                 ("setup-user", ("setup", "user")),
                 ("claude-sync-check", ("sync", "claude", "--user", "--check")),
                 ("codex-sync-check", ("sync", "codex", "--user", "--check")),
+                ("openhands-sync-check", ("sync", "openhands", "--user", "--check")),
             ]
             after_doctor = [
                 ("runtime-smoke-static", ("runtime", "smoke", "--target", "all")),
