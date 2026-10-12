@@ -103,7 +103,8 @@ def _context(selection: Selection, root: Path):
     if project.is_file():
         context.append(project.read_text())
     return AgentContext(skills=list(skills.values()), system_message_suffix="\n\n".join(context),
-                        load_user_skills=False, load_public_skills=False, load_project_skills=False)
+                        load_user_skills=False, load_public_skills=False,
+                        load_project_skills=selection.workspace.get("kind") == "remote")
 
 
 def local_llm(selection: Selection):

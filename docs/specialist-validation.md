@@ -41,10 +41,10 @@ grants are changed by the fixture.
   continuation completed using the same SDK child conversation. ChatGPT native
   authentication and `gpt-6-astra` were used.
 - Native Claude through pinned `claude-agent-acp@0.63.0`: initialized and selected
-  `plan`, then subscription inference returned **session limit reached**. The SDK
-  surfaced the error after its retries. Live child execution/resume is unproven
-  until that existing quota resets; no API fallback or purchased capacity was
-  used. The disposable protocol peer covers transport/resume independently.
+  `plan`. The first attempt hit the existing subscription session limit. After
+  its normal reset, the child completed with sum **10** and resumed the same
+  conversation. The continuation used read-only `ls`/`Read`; no write or grant
+  was requested and no paid API fallback or purchased capacity was used.
 - Existing Ollama `gemma4-26b-dev` was observed loaded at **65,536** context.
   After correcting nested skill package discovery, the local child wrote
   `sum.txt` containing **10**, completed, and resumed the same child conversation.
@@ -76,7 +76,7 @@ coding category, switching to the inline compatible profile at the existing
 Ollama `/v1` endpoint. Both tested profiles use the same physical model; this is
 profile-routing acceptance rather than a comparison of model quality.
 
-Final local CI subset: **69 tests passed**, including the corrected generated
+Final exact CI subset: **74 tests passed**, including the corrected generated
 factory contract and all 14 specialist regressions. The deterministic task/ACP
 fixture passes again after skill discovery changes. Sanitized acceptance is in
 [acceptance/specialists/result.json](acceptance/specialists/result.json).

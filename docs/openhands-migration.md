@@ -301,7 +301,8 @@ Nested synced AgentSkills packages are loaded from their `SKILL.md` declarations
 with SDK parsers and package exclusions, so their reference Markdown remains
 available on demand rather than being injected as permanent instructions.
 Project skill precedence and explicit role skill references remain supported;
-no global discovery files are rewritten by runtime construction.
+no global discovery files are rewritten by runtime construction. Remote
+workspaces retain stock lazy project discovery on the server.
 The prompt lists each specialist's actual profile and provider kind.
 
 An explicit role profile selects the child's endpoint, including native

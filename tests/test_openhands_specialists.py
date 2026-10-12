@@ -182,6 +182,10 @@ class SpecialistTests(unittest.TestCase):
         skill = next(skill for skill in agent.agent_context.skills if skill.name == 'shared-skill')
         self.assertIn('Project version', skill.content)
         self.assertNotIn('User version', skill.content)
+        self.assertFalse(agent.agent_context.load_project_skills)
+        self.config['workspace'] = {'kind': 'remote', 'host': 'http://localhost:8787'}
+        remote = self.build()
+        self.assertTrue(remote.agent_context.load_project_skills)
 
     def test_explicit_empty_profiles_are_rejected_at_every_precedence_level(self):
         for invalid in ('', None, 42):

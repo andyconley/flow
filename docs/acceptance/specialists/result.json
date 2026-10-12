@@ -28,8 +28,10 @@
     "bridge": "claude-agent-acp@0.63.0",
     "mode": "plan",
     "bridge_initialized": true,
-    "live_inference": "blocked by existing subscription session limit",
-    "live_resume": "unverified"
+    "live_inference": "completed after normal subscription reset",
+    "live_resume": "completed",
+    "same_conversation_resume": true,
+    "verified_sum": 10
   },
   "stock_classifier": {
     "real_local_inference": true,
@@ -50,9 +52,10 @@
     "fresh_manager_task_map": "not reconstructed by SDK 1.54.0"
   },
   "regression_tests": {
-    "specialist_tests": 11,
-    "local_ci_subset": 69,
-    "status": "passed"
+    "specialist_tests": 14,
+    "local_ci_subset": 74,
+    "status": "passed",
+    "focused_runtime_tests": 48
   },
   "global_configuration_changed": false,
   "credential_copy": false,
