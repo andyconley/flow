@@ -2,6 +2,28 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+### Highlights
+
+- Coordinate custom local, Claude and Codex specialists with stock OpenHands delegation and optional local model routing.
+
+
+## [0.44.0](https://github.com/andyconley/flow/compare/v0.43.0...v0.44.0) (2026-10-12)
+
+### Features
+
+* **runtime:** reuse stock model routing and native specialist delegation ([6834b8d](https://github.com/andyconley/flow/commit/6834b8dca2ae932ba6072a038f511746dc4abcfd))
+
+### Bug Fixes
+
+* **runtime:** preserve nested skill package boundaries in specialist context ([12ea943](https://github.com/andyconley/flow/commit/12ea943e5d50e9fcdf4cd853438599d0df98bf83))
+* **runtime:** preserve routing headroom and reject invalid explicit bindings ([faeea8d](https://github.com/andyconley/flow/commit/faeea8df21c7782bec5410e9623935cedd8c6ac6))
+* **runtime:** retain routed profiles across fresh process continuation ([b5e27d6](https://github.com/andyconley/flow/commit/b5e27d6411422178a2350f390e9067585602e482))
+* **runtime:** surface SDK remote factory serialization limits ([f120d4a](https://github.com/andyconley/flow/commit/f120d4ac66cbd3974c7e3f0ac9148c982ed54041))
+
+### Tests
+
+* **runtime:** record native Claude acceptance and retain remote project discovery ([175b59c](https://github.com/andyconley/flow/commit/175b59c130ec8e9ff213f6a8fa5123c16441a910))
+
 ## [0.43.0](https://github.com/andyconley/flow/compare/v0.42.1...v0.43.0) (2026-10-11)
 
 ### Features
