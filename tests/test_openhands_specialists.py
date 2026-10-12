@@ -1,0 +1,157 @@
+"""Regression coverage for stock specialist factories and inline model routing."""
+import os
+import re
+import sys
+import tempfile
+import unittest
+from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+os.environ.setdefault('LITELLM_LOCAL_MODEL_COST_MAP', 'True')
+os.environ.setdefault('OPENHANDS_SUPPRESS_BANNER', '1')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'cli'))
+from openhands_config import select, RuntimeConfigurationError
+from openhands_runtime import build_agent, probe
+
+
+@unittest.skipUnless(probe()['ready'], 'isolated pinned SDK required')
+class SpecialistTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        (self.root / '.flow/agents').mkdir(parents=True)
+        for role in ('coordinator', 'worker', 'native'):
+            (self.root / f'.flow/agents/{role}.md').write_text(f'# {role}\nCustom {role} specialist instructions.\n')
+        self.environment = patch.dict(os.environ, {'OH_PERSISTENCE_DIR': str(self.root / 'sdk-settings')})
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        self.profile_directory = patch('openhands.sdk.llm.llm_profile_store._DEFAULT_PROFILE_DIR', self.root / 'profiles')
+        self.profile_directory.start()
+        self.addCleanup(self.profile_directory.stop)
+        self.config = {'default_profile': 'local', 'profiles': {
+            'local': {'kind': 'local', 'model': 'openai/initial', 'base_url': 'http://localhost:8000/v1'},
+            'other': {'kind': 'local', 'model': 'openai/other', 'base_url': 'http://localhost:8001/v1'},
+            'native': {'kind': 'codex', 'permission_requests': 'stock-openhands', 'session_mode': 'read-only'}},
+            'roles': {'coordinator': {'specialists': ['worker', 'native']},
+                      'worker': {'specialists': []}, 'native': {'profile': 'native'}}}
+
+    def build(self, profile=None):
+        with patch('openhands_config.load_config', return_value=self.config):
+            return build_agent(select(self.root, 'implement', 'coordinator', profile, config=self.config), self.root)
+
+    @staticmethod
+    def factories(agent):
+        from openhands.sdk.subagent import get_agent_factory
+        return {name: get_agent_factory(key).factory_func for name, key in
+                re.findall(r'([\w-]+): use task subagent_type=(\S+)', agent.agent_context.system_message_suffix)}
+
+    def test_mixed_roster_custom_roles_and_active_model_inheritance(self):
+        from openhands.sdk.agent import ACPAgent
+        parent = self.build()
+        factories = self.factories(parent)
+        active = parent.llm.model_copy(update={'model': 'openai/switched'})
+        with patch('openhands_config.load_config', return_value=self.config):
+            child = factories['worker'](active)
+            native = factories['native'](active)
+        self.assertEqual(child.llm.model, 'openai/switched')
+        self.assertIn('Custom worker specialist instructions.', child.agent_context.system_message_suffix)
+        self.assertIsInstance(native, ACPAgent)
+        self.assertEqual(native.acp_session_mode, 'read-only')
+
+    def test_explicit_child_binding_wins_and_registry_changes(self):
+        parent = self.build()
+        old = self.factories(parent)['worker']
+        self.config['roles']['worker']['profile'] = 'other'
+        rebound = self.build()
+        new = self.factories(rebound)['worker']
+        self.assertIsNot(old, new)
+        with patch('openhands_config.load_config', return_value=self.config):
+            self.assertEqual(new(parent.llm).llm.model, 'openai/other')
+
+    def test_sdk_restricted_scope_still_rejects_native(self):
+        from openhands.sdk import Conversation
+        from openhands.sdk.subagent.scope import SubAgentScope
+        from openhands.sdk.subagent import get_agent_factory
+        from openhands.tools.task.manager import TaskManager
+        agent = self.build()
+        key = re.search(r'native: use task subagent_type=(\S+)', agent.agent_context.system_message_suffix)[1]
+        parent = Conversation(agent=agent, workspace=self.root, visualizer=None)
+        self.addCleanup(parent.close)
+        manager = TaskManager(sub_agent_scope=SubAgentScope(tools=True))
+        manager.attach_parent(parent)
+        with self.assertRaisesRegex(ValueError, 'tools cannot be checked'):
+            manager._get_sub_agent_from_factory(get_agent_factory(key))
+
+    def routing(self):
+        self.config['roles']['coordinator']['model_routing'] = {
+            'classifier_profile': 'local', 'categories': [{'description': 'Coding tasks', 'profile': 'other'}]}
+
+    def test_stock_classifier_switch_and_explicit_selection(self):
+        from openhands.sdk import Conversation
+        from openhands.sdk.llm import Message, TextContent
+        from openhands.sdk.tool.builtins.classify_and_switch_llm import ClassifyAndSwitchLLMTool, ClassifyAndSwitchLLMAction
+        self.routing()
+        agent = self.build()
+        tool = next(t for t in agent.tools if t.name == ClassifyAndSwitchLLMTool.__name__)
+        parent = Conversation(agent=agent, workspace=self.root, persistence_dir=self.root / 'history', visualizer=None)
+        self.addCleanup(parent.close)
+        parent.send_message('Implement a parser')
+        response = SimpleNamespace(message=Message(role='assistant', content=[TextContent(text='1')]))
+        with patch('openhands.sdk.llm.LLM.completion', return_value=response):
+            result = ClassifyAndSwitchLLMTool.create(**tool.params)[0].executor(ClassifyAndSwitchLLMAction(), parent)
+        self.assertFalse(result.is_error, result)
+        self.assertEqual(parent.agent.llm.model, 'openai/other')
+        explicit = self.build('local')
+        self.assertNotIn(ClassifyAndSwitchLLMTool.__name__, [t.name for t in explicit.tools])
+        original = select(self.root, 'implement', 'coordinator', config=self.config)
+        self.assertNotEqual(original.fingerprint(), replace(original, profile_override=True).fingerprint())
+
+    def test_native_routing_rejected_with_delegation_guidance(self):
+        self.routing()
+        self.config['roles']['coordinator']['model_routing']['categories'][0]['profile'] = 'native'
+        with self.assertRaisesRegex(RuntimeConfigurationError, 'use a specialist'):
+            self.build()
+
+    def test_native_permission_acknowledgement_is_not_removed(self):
+        self.config['profiles']['native'].pop('permission_requests')
+        parent = self.build()
+        with self.assertRaisesRegex(RuntimeConfigurationError, 'Native access decision required'):
+            self.factories(parent)['native'](parent.llm)
+
+    def test_nonrouting_fingerprint_preserves_release_session_bindings(self):
+        import hashlib
+        import json
+        selection = select(self.root, 'implement', 'coordinator', config=self.config)
+        legacy = {'role': selection.role, 'profile': selection.profile, 'provider': selection.provider,
+                  'role_text': selection.role_file.read_text(), 'options': selection.role_options,
+                  'workspace': selection.workspace}
+        self.assertEqual(selection.fingerprint(), hashlib.sha256(json.dumps(legacy, sort_keys=True).encode()).hexdigest())
+
+    def test_routing_target_change_updates_session_binding(self):
+        self.routing()
+        first = select(self.root, 'implement', 'coordinator', config=self.config).fingerprint()
+        self.config['profiles']['other']['model'] = 'openai/replacement'
+        second = select(self.root, 'implement', 'coordinator', config=self.config).fingerprint()
+        self.assertNotEqual(first, second)
+
+    def test_explicit_native_stage_selection_preserves_whole_stage_support(self):
+        from openhands.sdk.agent import ACPAgent
+        self.routing()
+        agent = self.build('native')
+        self.assertIsInstance(agent, ACPAgent)
+        self.assertEqual(agent.acp_session_mode, 'read-only')
+
+    def test_legacy_implicit_leaf_identifiers_remain_callable(self):
+        import hashlib
+        from openhands.sdk.subagent import get_agent_factory
+        self.config['roles']['worker'].pop('specialists')
+        parent = self.build()
+        child = select(self.root, 'implement', 'worker', 'local', config=self.config)
+        legacy = replace(child, role_options={**child.role_options, 'specialists': []})
+        key = f"worker-{hashlib.sha256((str(self.root.resolve()) + legacy.fingerprint()).encode()).hexdigest()[:16]}"
+        with patch('openhands_config.load_config', return_value=self.config):
+            resumed = get_agent_factory(key).factory_func(parent.llm)
+        self.assertEqual(resumed.llm.model, parent.llm.model)
+        self.assertIn('native: use task', resumed.agent_context.system_message_suffix)

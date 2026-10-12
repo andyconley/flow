@@ -127,19 +127,15 @@ and SDK tool selection are explicit runtime settings. Configured context files,
 Configured skill files retain SDK triggers and resource discovery. Public skills
 are not downloaded implicitly.
 
-The stock SDK TaskToolSet handles local delegation. Default tools are
+The stock SDK TaskToolSet handles specialist delegation. Default tools are
 `terminal`, `file_editor`, `task`; omitted `specialists` exposes all other merged
-roles. Explicit `specialists = []` disables delegation, and an explicit list
-controls Flow factory registration and prompt hints, rather than an enforceable SDK
-allowlist. Implicit children receive an empty roster to prevent recursive
-fan-out; explicitly configured child rosters remain. Children inherit the
-parent's local profile unless runtime configuration selects another local
-profile. A native child in a local roster is rejected, preventing an implicit
-provider switch. Native parent execution uses stock ACP discovery for delegated
-roles, rather than SDK custom tools or condensers. A `task` tool is required when a role declares a specialist roster. SDK factory
-names include a project/profile binding suffix; the agent context maps configured
-role names to those identifiers. Repeated construction reuses the SDK registry
-without confusing different project profiles.
+roles, and `specialists = []` disables delegation. Explicit role profile bindings
+can select local or native children. Unbound local children inherit the SDK's
+active LLM. SDK factory names include a project/profile binding suffix and the
+agent context maps role names to those identifiers. Native parent execution uses
+stock ACP discovery rather than SDK custom tools or condensers. See
+[Specialist selection and model routing](#specialist-selection-and-model-routing-v044)
+for the configuration and permission contract.
 
 ## Generated discovery and installation
 
@@ -292,3 +288,73 @@ review; preserve custom files and edits. `flow update` selects the latest remote
 tag and is not an older-tag selector. Historical run artifacts are retained;
 new runtime workflows do not reinterpret old MAF receipts. Provider profiles
 remain explicit and no migration authorizes new access or model calls.
+
+## Specialist selection and model routing (v0.44)
+
+Local OpenHands parents can delegate to local, Claude, and Codex roles in the
+same roster. Flow registers SDK factories; OpenHands TaskToolSet/TaskManager
+creates, runs, reports and resumes child conversations. A native-bound role
+returns the stock ACPAgent and reuses its existing native authentication.
+Custom project and user role definitions use the same composition pipeline.
+The prompt lists each specialist's actual profile and provider kind.
+
+An explicit role profile selects the child's endpoint, including native
+providers. An unbound local child inherits the LLM supplied by the SDK, including
+an active model chosen through routing. Child tools and context come from the
+child's role. Omitted child rosters follow the normal merged-role default;
+`specialists = []` is the explicit way to make a role a leaf. SDK tool/MCP scope
+restrictions still apply and reject ACP children when their capabilities cannot
+be checked. A roster is discovery guidance, not a security boundary.
+
+Local model routing is optional and uses the pinned SDK's
+ClassifyAndSwitchLLMTool with inline resolved LLM profiles. It does not create
+saved global profiles or a Flow execution controller. Configure task categories
+on the coordinating role in `.flow/runtime.toml`, for example:
+
+```toml
+[roles.lead-developer]
+specialists = ["test-engineer", "native-reviewer"]
+
+[roles.lead-developer.model_routing]
+classifier_profile = "ollama"
+
+[[roles.lead-developer.model_routing.categories]]
+description = "Implementing or testing code"
+profile = "ollama"
+
+[[roles.lead-developer.model_routing.categories]]
+description = "Complex architectural reasoning"
+profile = "local-reasoner"
+
+[roles.native-reviewer]
+profile = "codex"
+file = ".flow/agents/native-reviewer.md"
+
+[roles.test-engineer]
+specialists = []
+```
+
+Each referenced local profile must define its self-hosted model, endpoint and
+context settings in `[profiles.<name>]`. The classifier and every category must
+resolve to a local profile. Native harnesses are specialist endpoints, because
+SDK LLM switching does not switch ACP sessions. `--profile` preserves an explicit
+user selection and suppresses automatic model routing for that role and its
+unbound children. Explicit child role bindings still win. Whole-stage native
+selection and native-generated model/effort settings continue to work.
+
+Model routing runs when the agent calls `route_task_to_model`; the role prompt
+instructs it to route near the start or when requirements change. Classification
+errors are SDK error observations with no silent default. The active model and
+classifier usage are recorded in SDK events/metrics. Profile override intent is
+included in routing-enabled session bindings, so resume cannot silently change
+that intent. Existing bindings without routing retain their fingerprint format. The prior
+v0.43 implicit-leaf factory identifiers remain registered as resume aliases.
+
+Native delegation retains the existing `permission_requests = "stock-openhands"`
+acknowledgement, ambient paid-API checks and native session modes. Stock ACP
+answers permission requests automatically, including potentially persistent
+`allow_always` choices. SDK `AlwaysConfirm` is not a native permission mediator.
+Use the existing host containment and native configuration; this integration
+adds no filesystem/network grants. Read the native access decision before
+choosing these profiles. Validation details and SDK limitations are in
+[specialist-validation.md](specialist-validation.md).

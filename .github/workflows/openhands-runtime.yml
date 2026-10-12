@@ -32,6 +32,7 @@ jobs:
           python -m unittest
           tests.test_agent_distribution
           tests.test_openhands_sdk_construction
+          tests.test_openhands_specialists
           tests.test_openhands_workflow
           tests.test_openhands_provision
           tests.test_openhands_lifecycle
@@ -39,3 +40,8 @@ jobs:
           tests.test_expertise_advisory_render
           tests.test_flow.FlowCliTests.test_runtime_smoke_checks_generated_surfaces
           tests.test_flow.FlowCliTests.test_install_verifies_openhands_and_does_not_activate_maf
+      - name: Verify stock task ACP execution, permissions and resume with a disposable peer
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          OPENHANDS_SUPPRESS_BANNER: '1'
+        run: python tests/openhands_specialist_eval.py

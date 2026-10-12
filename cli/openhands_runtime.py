@@ -79,10 +79,23 @@ def _context(selection: Selection, root: Path):
                         load_user_skills=False, load_public_skills=False, load_project_skills=True)
 
 
-def build_agent(selection: Selection, root: Path):
+def local_llm(selection: Selection):
+    from openhands.sdk import LLM
+    provider = selection.provider
+    key_env = provider.get("api_key_env")
+    key = os.environ.get(key_env) if key_env else "self-hosted"
+    if key_env and not key:
+        raise RuntimeConfigurationError(f"self-hosted credential variable {key_env} is unset")
+    llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens") if name in provider}
+    llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
+              usage_id=f"flow-{selection.role}", **llm_options)
+    return llm
+
+
+def build_agent(selection: Selection, root: Path, inherited_llm=None):
     if selection.provider["kind"] != "local":
         return build_native_agent(selection, root)
-    from openhands.sdk import Agent, LLM, Tool
+    from openhands.sdk import Agent, Tool
     from openhands.tools.terminal import TerminalTool
     from openhands.tools.file_editor import FileEditorTool
     from openhands.tools.task_tracker import TaskTrackerTool
@@ -92,14 +105,8 @@ def build_agent(selection: Selection, root: Path):
 
     tools = {"terminal": TerminalTool, "file_editor": FileEditorTool,
              "task_tracker": TaskTrackerTool, "task": TaskToolSet}
+    llm = inherited_llm if inherited_llm is not None else local_llm(selection)
     provider = selection.provider
-    key_env = provider.get("api_key_env")
-    key = os.environ.get(key_env) if key_env else "self-hosted"
-    if key_env and not key:
-        raise RuntimeConfigurationError(f"self-hosted credential variable {key_env} is unset")
-    llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens") if name in provider}
-    llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
-              usage_id=f"flow-{selection.role}", **llm_options)
     condenser = None
     if provider.get("condenser_max_tokens") is not None:
         from openhands.sdk.context.condenser import LLMSummarizingCondenser
@@ -107,7 +114,7 @@ def build_agent(selection: Selection, root: Path):
             llm=llm.model_copy(update={"usage_id": f"flow-{selection.role}-condenser"}),
             max_tokens=provider["condenser_max_tokens"])
     # Register declared specialists with the SDK's own delegation mechanism.
-    # Each factory resolves its own local profile; no Flow manager/dispatch loop.
+    # Explicit child bindings win; unbound local children inherit the active SDK LLM.
     config = load_config(root)
     delegation = []
     from sync import merge_user_overlay, shared_agents
@@ -127,28 +134,52 @@ def build_agent(selection: Selection, root: Path):
     for name in roster if "task" in selected_tools else []:
         if name == selection.role:
             continue
-        # Endpoint selection remains the parent's local profile unless the
-        # runtime explicitly binds this role. Never silently dispatch native ACP.
-        child_profile = config.get("roles", {}).get(name, {}).get("profile", selection.profile)
-        child = select(root, "implement", name, child_profile, config=config)
-        if child.provider["kind"] != "local":
-            raise RuntimeConfigurationError(f"local delegation requires a local profile for {name}")
-        if "specialists" not in child.role_options:
-            child = replace(child, role_options={**child.role_options, "specialists": []})
+        child_profile = config.get("roles", {}).get(name, {}).get("profile")
+        child = select(root, "implement", name, child_profile or selection.profile, config=config)
+        # Only explicit role bindings choose a new endpoint. The SDK passes its
+        # current (possibly switched) LLM to every unbound local child.
+        inherit = child_profile is None and child.provider["kind"] == "local"
+        child = replace(child, profile_override=selection.profile_override if inherit else False)
         # The SDK registry is process-global. Scope its identity to the actual
         # project/profile binding so repeats reuse a factory and different
         # projects or changed profiles do not inherit a stale factory.
         import hashlib
         registry_key = f"{name}-{hashlib.sha256((str(root.resolve()) + child.fingerprint()).encode()).hexdigest()[:16]}"
-        register_agent_if_absent(name=registry_key,
-                                factory_func=lambda _llm, selected=child: build_agent(selected, root),
-                                description=f"Flow specialist {name}: {child.role_file.name}")
-        delegation.append(f"{name}: use task subagent_type={registry_key}")
+        from render import parse_frontmatter
+        metadata, _ = parse_frontmatter(child.role_file.read_text())
+        description = metadata.get("description") or f"Flow specialist {name}"
+        factory = lambda parent_llm, selected=child, inherit=inherit: build_agent(
+            selected, root, parent_llm if inherit else None)
+        register_agent_if_absent(name=registry_key, factory_func=factory,
+                                 description=f"{description} ({child.profile}, {child.provider['kind']})")
+        # v0.43 implicitly registered local children as leaves. Retain those
+        # identifiers so an unchanged persisted parent's old task hints remain
+        # callable; execution now follows the same stock roster semantics.
+        if child.provider["kind"] == "local" and "specialists" not in child.role_options:
+            legacy = replace(child, role_options={**child.role_options, "specialists": []})
+            legacy_key = f"{name}-{hashlib.sha256((str(root.resolve()) + legacy.fingerprint()).encode()).hexdigest()[:16]}"
+            register_agent_if_absent(name=legacy_key, factory_func=factory,
+                                     description=f"{description} (v0.43 resume alias)")
+        delegation.append(f"{name}: use task subagent_type={registry_key} [profile={child.profile}, kind={child.provider['kind']}, model={'inherited' if inherit else child.provider.get('model', 'native default')}] {description}")
     context = _context(selection, root)
     if delegation:
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
+    tool_specs = [Tool(name=tools[t].name) for t in selected_tools]
+    routing = selection.role_options.get("model_routing")
+    if routing and not selection.profile_override:
+        from openhands.sdk.tool.builtins.classify_and_switch_llm import ClassifyAndSwitchLLMTool
+        names = {routing["classifier_profile"], *(entry["profile"] for entry in routing["categories"])}
+        resolved = {name: local_llm(select(root, "implement", selection.role, name, config=config)) for name in sorted(names)}
+        tool_specs.append(Tool(name=ClassifyAndSwitchLLMTool.__name__, params={
+            "meta_profile": {"classifier_model": routing["classifier_profile"],
+                             "classes": [{"description": entry["description"], "model": entry["profile"]}
+                                         for entry in routing["categories"]]},
+            "meta_profile_llms": resolved}))
+        context = context.model_copy(update={"system_message_suffix": context.system_message_suffix +
+            "\n\nUse route_task_to_model near the start of a task or when its requirements change. "
+            "This switches local models; use task for specialist and native delegation."})
     return Agent(llm=llm,
-                 tools=[Tool(name=tools[t].name) for t in selected_tools],
+                 tools=tool_specs,
                  agent_context=context, condenser=condenser)
 
 
