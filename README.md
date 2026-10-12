@@ -6,15 +6,40 @@ Portable workflow framework for AI-assisted development.
 
 Flow owns define, solution, plan, implement, review and archive, specialist roles,
 skills, context and project outputs. OpenHands 1.54.0 owns execution, conversations,
-workspaces, tools and specialist delegation. Self-hosted compatible models are
-coding providers; existing native subscriptions continue through interactive
-handoffs while upstream ACP permission handling blocks automated native execution.
+workspaces, tools and specialist delegation. Self-hosted profiles run stock OpenHands agents and SDK tools. Claude and Codex
+profiles run their maintained ACP bridges and stock subscription-backed native
+harnesses, using existing native authentication. Automated native execution
+requires the explicit `permission_requests = "stock-openhands"` access decision;
+stock permission handling can approve requests and may persist Claude rules.
+See [the native access decision](docs/native-access-decision.md). Interactive
+`native-handoff` remains available. Neither path creates API credentials or
+silently changes providers.
 
 Start with [the branch migration guide](docs/openhands-migration.md) and
 [the runtime profile template](templates/openhands-runtime.toml). Preview with an
 isolated Python environment; do not replace the live install. Old MAF execution
 commands are retired and historical records remain inspectable.
 
+
+## Quickstart for the current runtime
+
+Preview in an isolated checkout before coordinating any live installation:
+
+```sh
+python3.12 -m venv .venv-openhands
+.venv-openhands/bin/python -m pip install -r runtime/openhands/requirements.txt
+# Copy the template into an already initialized project and edit its endpoint/model.
+cp templates/openhands-runtime.toml /path/to/project/.flow/runtime.toml
+.venv-openhands/bin/python cli/flow.py workflow runtime --json
+.venv-openhands/bin/python cli/flow.py workflow init my-change --project-root /path/to/project
+.venv-openhands/bin/python cli/flow.py workflow execute my-change --stage define --task-file /path/to/task.md --project-root /path/to/project
+```
+
+Review durable outputs before `workflow approve`. These execution commands
+require an authorized endpoint; parser and discovery checks need no model calls.
+The [migration guide](docs/openhands-migration.md) covers subsequent stages,
+profile precedence, workspace access and native execution. The [role distribution
+contract](docs/agent-distribution.md) covers all 13 roles and safe installation.
 
 ## What It Is
 
@@ -69,8 +94,8 @@ Start with commands and agents. The other files support customization, project o
 
 Main surfaces:
 
-- [command contracts](scaffolds/default/commands/) under `.flow/commands/`
-- [agent role definitions](scaffolds/default/agents/) under `.flow/agents/`
+- [command contracts](scaffolds/default/commands/) under `scaffolds/default/commands/`
+- [agent role definitions](scaffolds/default/agents/) under `scaffolds/default/agents/`
 - [standards](scaffolds/default/standards/), resolved at runtime from the user overlay or the framework default
 
 Customization and project files:
@@ -254,7 +279,7 @@ This is the command map, not the full reference. For detailed flags and behavior
 
 ### Install and Update
 
-Most users only need the bootstrap installer once, then `flow update --resync` later. Use the other commands when setting up a machine, connecting your user overlay to git, or converting an existing install between modes.
+Most users only need the bootstrap installer once, then `flow update` later. Use the other commands when setting up a machine, connecting your user overlay to git, or converting an existing install between modes.
 
 - `flow setup machine`
   - prepare `~/.flow/`, `~/.local/bin/flow`, and local config
@@ -310,8 +335,10 @@ Use these after changing framework content, user overlays, project overlays, com
   - generate Claude runtime files at user level
 - `flow sync codex --user`
   - generate Codex runtime files at user level
+- `flow sync openhands --user`
+  - generate OpenHands role discovery definitions at user level
 - `flow runtime smoke --target all`
-  - check generated Claude/Codex surfaces and list manual runtime smoke evidence
+  - check generated native surfaces and pinned OpenHands readiness
 - `flow model context --runtime codex --lane plan --json`
   - read the active runtime's configured parent-session profiles and bounded
     local evidence without harvesting, normalizing, migrating, or writing
@@ -331,8 +358,10 @@ Typical user-level sync:
 ```bash
 flow sync claude --user
 flow sync codex --user
+flow sync openhands --user
 flow sync claude --user --check
 flow sync codex --user --check
+flow sync openhands --user --check
 flow runtime smoke --target all
 ```
 
@@ -447,18 +476,19 @@ Two things to know before acting on the numbers. **A high count usually means ho
 
 ## How Flow Manages Runtime Files
 
-Most users only need to know that flow writes the Claude and Codex files each runtime expects. For the full adapter model and file list, see [runtime-adapters.md](docs/runtime-adapters.md).
+Flow generates Claude, Codex and OpenHands role definitions from the same authoritative Markdown sources and shared manifest. For the full adapter model and file list, see [runtime-adapters.md](docs/runtime-adapters.md).
 
 ### What Gets Installed
 
 At user level, flow installs the pieces each runtime needs:
 
-- Claude gets `flow-*` skills, project subagents, and hooks that add flow context and warn when generated files are edited directly.
-- Codex gets flow skills, native agent definitions, hooks, and a managed-file manifest.
+- Claude gets `flow-*` skills, native role agents, and managed hooks.
+- Codex gets Flow skills, native agent definitions, hooks, and a managed-file manifest.
+- OpenHands gets Markdown discovery definitions. Flow local execution also registers contextual factories with stock SDK delegation.
 
 ### Why Generated Files Exist
 
-Claude and Codex do not read the same configuration format. Flow keeps one source of truth under `.flow/`, then generates the shape each runtime expects.
+Claude and Codex do not read the same configuration format. Flow keeps role Markdown with YAML frontmatter in `scaffolds/default/agents/`, registers it through shared `[[agents]]` in `flow.toml`, and generates each runtime format. User manifest entries can replace or add roles.
 
 That keeps commands, agents, and hooks portable without asking you to hand-maintain parallel Claude and Codex copies.
 
@@ -466,12 +496,19 @@ That keeps commands, agents, and hooks portable without asking you to hand-maint
 
 Flow-managed files are generated. Change the `.flow/` source files instead of editing generated copies directly:
 
-- edit `.flow/commands/*` to change generated skills
-- edit `.flow/agents/*` to change generated agents
+- edit `scaffolds/default/commands/*` or registered user-overlay sources to change generated skills
+- edit `scaffolds/default/agents/*` or registered user-overlay sources to change generated agents
 - edit framework hook sources in this repo to change generated hook scripts
 - rerun `flow sync claude --user` and `flow sync codex --user` after changing the source of truth
 
-Flow preserves unmanaged Claude and Codex files. It only removes files that were previously marked as flow-managed and are no longer part of the generated surface.
+Discovery agents link to `~/.flow/generated/agents/<runtime>/`; unsupported
+symlink filesystems use managed copies. SHA-256 ownership checks preserve custom
+files and edits to managed output. A conflict prevents writes for that target;
+legacy unproven differences require review. Translation reports identify fields
+that cannot be represented. See [distribution and migration](docs/agent-distribution.md).
+Bootstrap, conversion and release update sync all three targets automatically;
+`--resync` is retained for compatibility. Develop mode still needs an explicit
+pull and sync. Coordinate live updates with active sessions, including Witmark.
 
 ## Maintainer Docs
 

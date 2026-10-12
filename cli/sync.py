@@ -19,6 +19,8 @@ survive a sync.
 """
 
 import json
+import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -55,6 +57,8 @@ from render import (
     codex_skill_dir,
     hook_command_for,
     manifest_ref_for,
+    render_openhands_agent,
+    parse_frontmatter,
     render_claude_agent,
     render_codex_agent,
     render_codex_skill,
@@ -132,7 +136,7 @@ def shared_agents(manifest: dict) -> list:
     return manifest.get("agents", [])
 
 
-def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
+def merge_user_overlay(framework_dir: Path, *, user_overlay: Path | None = None) -> tuple[Path, dict]:
     """Load the framework manifest and merge in `~/.flow/user/flow.toml` if it exists.
 
     Each `[[claude.commands]]`, `[[codex.commands]]`, and `[[agents]]`
@@ -155,6 +159,7 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     `[[replaces]]` wiring > user overlay > framework default), not this merge
     step. A project can name a replacement but never holds one.
     """
+    user_overlay = USER_OVERLAY_DIR if user_overlay is None else user_overlay
     framework_manifest_path = framework_dir / "flow.toml"
     if not framework_manifest_path.exists():
         raise FileNotFoundError(f"missing manifest: {framework_manifest_path}")
@@ -166,7 +171,7 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     if "codex" in manifest:
         _tag_entries(manifest["codex"].get("commands", []), framework_dir, "framework")
 
-    user_manifest_path = USER_OVERLAY_DIR / "flow.toml"
+    user_manifest_path = user_overlay / "flow.toml"
     if not user_manifest_path.exists():
         manifest["session_model_profiles"] = merge_session_model_profiles(
             manifest,
@@ -209,7 +214,7 @@ def merge_user_overlay(framework_dir: Path) -> tuple[Path, dict]:
     def merge_named(framework_list: list, user_list: list) -> list:
         if not user_list:
             return framework_list
-        _tag_entries(user_list, USER_OVERLAY_DIR, "user")
+        _tag_entries(user_list, user_overlay, "user")
         result = list(framework_list)
         framework_by_name = {entry.get("name"): idx for idx, entry in enumerate(result) if "name" in entry}
         for entry in user_list:
@@ -668,6 +673,9 @@ def analyze_sync(
     changed: list[Path] = []
 
     for target, content in desired.items():
+        if target.is_symlink() and target not in previous_managed:
+            conflicts.append(target)
+            continue
         if target.exists():
             current = target.read_text()
             if current == content:
@@ -718,9 +726,17 @@ def sync_outputs(
     check: bool,
     merge_protected: set[Path] | None = None,
     as_json: bool = False,
+    agent_links: dict[Path, Path] | None = None,
+    edit_conflicts: list[Path] | None = None,
 ) -> int:
+    agent_links = agent_links or {}
     merge_protected = merge_protected or set()
     conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
+    conflicts.extend(path for path in (edit_conflicts or []) if path not in conflicts)
+    for path, backing in agent_links.items():
+        expected = os.path.relpath(backing, path.parent)
+        if path not in conflicts and (not path.is_symlink() or os.readlink(path) != expected) and path not in changed:
+            changed.append(path)
     removed: list[Path] = []
 
     if conflicts:
@@ -807,12 +823,31 @@ def sync_outputs(
         remove_empty_parents(path, root)
         removed.append(path)
 
+    # Write backing definitions before installing links, and never write
+    # through a symlink (including an unrelated dangling symlink).
     for target, content in desired.items():
+        if target in agent_links:
+            continue
         ensure_dir(target.parent)
         if not target.exists() or target.read_text() != content:
+            if target.is_symlink():
+                target.unlink()
             target.write_text(content)
         if target.suffix == ".sh":
             target.chmod(0o755)
+
+    for target, backing in agent_links.items():
+        ensure_dir(target.parent)
+        relative = os.path.relpath(backing, target.parent)
+        if target.is_symlink() and os.readlink(target) == relative:
+            continue
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        try:
+            target.symlink_to(relative)
+        except OSError:
+            # Managed copies remain hash-owned on filesystems without symlinks.
+            target.write_text(desired[target])
 
     print(f"{target_name} sync wrote managed files:")
     for path in changed:
@@ -824,14 +859,89 @@ def sync_outputs(
     return 0
 
 
-def desired_outputs_for_target(
-    target: str, root: Path, flow_dir: Path, manifest: dict, manifest_rel: str
-) -> tuple[dict[Path, str], list[dict], set[Path]]:
-    if target == "claude":
-        return desired_claude_outputs(root, flow_dir, manifest, manifest_rel)
-    if target == "codex":
-        return desired_codex_outputs(root, flow_dir, manifest, manifest_rel)
-    raise ValueError(f"unsupported sync target: {target}")
+def desired_openhands_outputs(root: Path, flow_dir: Path, manifest: dict, manifest_rel: str) -> tuple[dict[Path, str], list[dict], set[Path]]:
+    runtime = manifest["openhands"]
+    outputs, entries = {}, []
+    for agent in shared_agents(manifest):
+        source = source_ref_for(agent["source"], agent.get("_origin", "framework"))
+        path = root / runtime["agent_dir"] / (agent["name"] + ".md")
+        outputs[path] = render_openhands_agent(agent["name"], source,
+            agent_body(agent, agent.get("_root", flow_dir), flow_dir, manifest.get("claude", {}).get("agent_defaults", {})))
+        entries.append(dict(path=rel_posix(path, root), kind="agent", source=source, sync_mode="replace"))
+    path = root / runtime["managed_manifest"]
+    entries.append(dict(path=rel_posix(path, root), kind="managed-manifest", source=manifest_rel, sync_mode="replace"))
+    outputs[path] = build_managed_manifest("openhands", entries)
+    return outputs, entries, set()
+
+
+def desired_outputs_for_target(target: str, root: Path, flow_dir: Path, manifest: dict, manifest_rel: str) -> tuple[dict[Path, str], list[dict], set[Path]]:
+    renderers = {"claude": desired_claude_outputs, "codex": desired_codex_outputs,
+                 "openhands": desired_openhands_outputs}
+    if target not in renderers:
+        raise ValueError(f"unsupported sync target: {target}")
+    outputs, entries, mergeable = renderers[target](root, flow_dir, manifest, manifest_rel)
+    for entry in list(entries):
+        if entry["kind"] != "agent":
+            continue
+        path = root / entry["path"]
+        content = outputs[path]
+        backing = root / ".flow/generated/agents" / target / path.name
+        outputs[backing] = content
+        digest = hashlib.sha256(content.encode()).hexdigest()
+        entry.update(sha256=digest, link=rel_posix(backing, root))
+        entries.append(dict(path=rel_posix(backing, root), kind="agent-definition",
+                            source=entry["source"], sync_mode="replace", sha256=digest))
+    report = []
+    for agent in shared_agents(manifest):
+        metadata, _ = parse_frontmatter(agent_body(agent, agent.get("_root", flow_dir), flow_dir, {}))
+        supported = {"name", "description", "skills"} if target == "openhands" else ({"name", "description"} if target == "codex" else {"name", "description", "tools", "model", "effort", "skills", "color"})
+        report.append({"role": agent["name"], "unsupported_source_fields": sorted(set(metadata) - supported),
+                       "policy": "runtime profile and native harness permissions apply; no sandbox parity is implied"})
+    report_path = root / ".flow/generated/agents" / target / "translation-report.json"
+    outputs[report_path] = json.dumps(report, indent=2) + "\n"
+    entries.append(dict(path=rel_posix(report_path, root), kind="translation-report", source=manifest_rel, sync_mode="replace"))
+    for entry in entries:
+        if entry["kind"] != "managed-manifest" and entry["sync_mode"] == "replace":
+            entry["sha256"] = hashlib.sha256(outputs[root / entry["path"]].encode()).hexdigest()
+    outputs[root / manifest[target]["managed_manifest"]] = build_managed_manifest(target, entries)
+    return outputs, entries, mergeable
+
+
+def output_ownership(root: Path, manifest_path: Path) -> list[dict]:
+    """Reuse the managed manifest; hashes distinguish generated output from edits."""
+    return [entry for entry in read_toml(manifest_path).get("files", [])
+            if entry.get("sync_mode") == "replace" and entry.get("kind") != "managed-manifest"] if manifest_path.exists() else []
+
+
+def output_edit_conflicts(root: Path, previous: list[dict], desired: dict[Path, str]) -> list[Path]:
+    conflicts = []
+    for entry in previous:
+        path = root / entry["path"]
+        # Lexical containment as well as resolved containment. A replaced link
+        # must be reported, never followed and written through.
+        if Path(entry["path"]).is_absolute() or ".." in Path(entry["path"]).parts:
+            continue
+        if not (path.exists() or path.is_symlink()):
+            continue
+        if path.is_symlink() and (not entry.get("link") or
+                os.readlink(path) != os.path.relpath(root / entry["link"], path.parent)):
+            conflicts.append(path)
+            continue
+        if path.is_symlink() and not path.exists() and root / entry.get("link", "") in desired:
+            # An intact owned link with a missing owned backing file is drift,
+            # not an edit. Regenerate the backing file without replacing it.
+            continue
+        if not path.is_file():
+            conflicts.append(path)
+            continue
+        digest = entry.get("sha256")
+        if digest:
+            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                conflicts.append(path)
+        elif desired.get(path) != path.read_text():
+            # Legacy manifests cannot prove a differing file is unedited.
+            conflicts.append(path)
+    return conflicts
 
 
 def sync_target(target: str, check: bool = False, user_mode: bool = False, as_json: bool = False) -> int:
@@ -941,6 +1051,21 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False, as_js
         else:
             print(str(err))
         return 1
+    if not as_json:
+        report_path = root / ".flow/generated/agents" / target / "translation-report.json"
+        for entry in json.loads(desired[report_path]):
+            unsupported = entry["unsupported_source_fields"]
+            if unsupported:
+                print(f"{target} {entry['role']}: source fields not translated: {', '.join(unsupported)}; native runtime policy applies")
+    links = {root / entry["path"]: root / entry["link"] for entry in _managed_entries if "link" in entry}
+    ownership = output_ownership(root, root / runtime["managed_manifest"])
+    edits = output_edit_conflicts(root, ownership, desired)
+    # A previously hash-owned regular file is a managed-copy fallback. Keep
+    # that installation mode idempotent rather than attempting a link every run.
+    for entry in ownership:
+        path = root / entry["path"]
+        if entry.get("sha256") and entry.get("link") and path.is_file() and not path.is_symlink():
+            links.pop(path, None)
     result = sync_outputs(
         root,
         target,
@@ -950,6 +1075,8 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False, as_js
         check=check,
         merge_protected=merge_protected,
         as_json=as_json,
+        agent_links=links,
+        edit_conflicts=edits,
     )
     if result == 0 and not as_json:
         verb = "check" if check else "sync"

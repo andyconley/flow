@@ -101,16 +101,28 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
             raise RuntimeConfigurationError("do not persist credentials in runtime.toml; use api_key_env")
     elif kind not in {"codex", "claude"}:
         raise RuntimeConfigurationError("profile kind must be local, codex, or claude")
+    from sync import merge_user_overlay, shared_agents
+    _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent, user_overlay=user_overlay)
+    declaration = next((a for a in shared_agents(manifest) if a["name"] == role), None)
+    declared_file = declaration["_root"] / declaration["source"] if declaration else FRAMEWORK_ROLES / f"{role}.md"
     candidates = [root / ".flow/agents" / f"{role}.md", root / ".agents/agents" / f"{role}.md",
-                  user_overlay / "agents" / f"{role}.md", FRAMEWORK_ROLES / f"{role}.md"]
+                  user_overlay / "agents" / f"{role}.md", declared_file, FRAMEWORK_ROLES / f"{role}.md"]
     if options.get("file"):
         candidates.insert(0, root / options["file"])
     role_file = next((p.resolve() for p in candidates if p.is_file()), None)
     if role_file is None:
         raise RuntimeConfigurationError(f"specialist definition not found: {role}")
-    tools = options.get("tools", ["terminal", "file_editor"])
+    tools = options.get("tools", ["terminal", "file_editor", "task"])
     if not isinstance(tools, list) or any(t not in {"terminal", "file_editor", "task_tracker", "task"} for t in tools):
         raise RuntimeConfigurationError("role tools must be a list of terminal, file_editor, task_tracker, task")
+    specialists = options.get("specialists")
+    if specialists is not None:
+        if not isinstance(specialists, list) or any(not isinstance(name, str) for name in specialists):
+            raise RuntimeConfigurationError("specialists must be a list of role names")
+        for name in specialists:
+            identifier(name, "specialist")
+        if len(set(specialists)) != len(specialists):
+            raise RuntimeConfigurationError("specialist names must be unique")
     if options.get("specialists") and "task" not in tools:
         raise RuntimeConfigurationError("a specialist roster requires the SDK task tool")
     workspace = config.get("workspace", {"kind": "local"})

@@ -24,8 +24,7 @@ owns execution. Historical runs are not silently migrated.
 
 ### `flow workflow execute <work-id>`
 
-Execute or resume a specialist using the pinned SDK and an explicit self-hosted
-profile. `--task-file PATH` is required; `--stage`, `--role`, `--profile`,
+Execute or resume a specialist using the pinned SDK and an explicit self-hosted or authorized native subscription profile. `--task-file PATH` is required; `--stage`, `--role`, `--profile`,
 `--new-session`, `--project-root` and `--json` are available. Optional SDK
 confirmation uses `--confirm-pending` or `--reject-pending REASON`.
 
@@ -39,8 +38,7 @@ review approval accepts it. This does not merge, push or deploy.
 
 Prepare context for an existing official Codex or Claude session with
 `--stage`, `--profile` and required `--task-file PATH`. Native subscriptions
-and permissions stay on the interactive native path. Automated SDK ACP
-execution is blocked by upstream auto-approval of permission requests.
+and permissions remain in the stock native harness. Automated ACP execution is also available after the explicit `permission_requests = "stock-openhands"` access decision; see [native access](native-access-decision.md).
 
 ### `flow workflow archive <work-id>`
 
@@ -94,7 +92,7 @@ Install flow at the **user level** so it is active in every supported runtime se
 
 Behavior:
 
-- runs `flow sync claude --user` and `flow sync codex --user` in sequence
+- runs user-level Claude, Codex and OpenHands sync in sequence
 - generates `~/.claude/skills/flow-*/`, `~/.claude/agents/*.md`, `~/.claude/hooks/flow-*.sh`
 - generates `~/.agents/skills/flow-*/`, `~/.codex/agents/*.toml`, `~/.codex/hooks/flow-*.sh`
 - merges flow hook entries into `~/.claude/settings.json` (preserves unmanaged settings)
@@ -193,6 +191,9 @@ The command validates declarations. It cannot query hidden runtime grants, prove
 
 ### `flow run execute-local <work-id>`
 
+> Historical execution contract. This provider-start/resume entry point is retired
+> on the OpenHands branch. Use `flow workflow` for new work; preserve old evidence.
+
 Start one local `test-engineer` execution attempt through an optional supervised Microsoft Agent Framework (MAF) process. Flow owns the policy gate, physical Ollama call, execution ledger, and sealed receipt; MAF proposes the specialist action and coordinates the result. This command does not advance the C-lite lifecycle.
 
 ```sh
@@ -226,6 +227,9 @@ itself approve lifecycle handback.
 For the bounded multi-turn exercise, add `--multi-turn`. Flow then records three ordered action positions and three separate replan decisions. The first two replans may be allowed; the third is denied by the two-replan cap and ends that MAF phase. Flow checks the denial state before starting an independent action-3 phase in the same attempt. `--interrupt-after-third-send` is an exercise-only fault point: it marks the third action `unknown` immediately after Flow records `adapter_send_started`, before calling Ollama. The first two actions still make physical Ollama calls. This flag does not prove that Ollama received the third request. Inspect the v2 receipt and checkpoint positions for the evidence actually recorded. For a disposable loopback arrival observer, set `FLOW_OLLAMA_OBSERVER=1`, `FLOW_OLLAMA_URL=http://127.0.0.1:PORT/api/chat`, and `FLOW_OLLAMA_OBSERVER_LOG` to its owner-only JSONL file inside the run. The receipt seals a per-action arrival table; without an observer it labels endpoint arrival evidence unavailable.
 
 ### `flow run execute-chartered-job <work-id> --worktree PATH --source-commit COMMIT [--legacy-v8]`
+
+> Historical execution contract. This provider-start/resume entry point is retired
+> on the OpenHands branch. Use `flow workflow` for new work; preserve old evidence.
 
 Run an approved charter-selected specialist roster through Flow-gated Magentic, for the revision-2 implementing run.
 
@@ -279,6 +283,9 @@ provider I/O. A clean completed-action boundary reports
 
 ### `flow run resume-chartered-job <work-id> <attempt-id>`
 
+> Historical execution contract. This provider-start/resume entry point is retired
+> on the OpenHands branch. Use `flow workflow` for new work; preserve old evidence.
+
 Continue a started protocol v9 charter after every recorded action completed
 but the coordinator stopped before the next provider send. Flow reconstructs
 the dependency frontier and retained edit/test evidence, reuses a completed
@@ -293,6 +300,9 @@ receipt preserves the consumed selection, unknown action, operator attribution,
 and terminal explanation so a fresh attempt can be prepared safely.
 
 ### `flow run recover-runtime-startup <work-id> <attempt-id>`
+
+> Historical execution contract. This provider-start/resume entry point is retired
+> on the OpenHands branch. Use `flow workflow` for new work; preserve old evidence.
 
 Create a fresh linked successor only after a sealed v8 MAF startup failure with no manager, worker, verifier, observed, or uncertain send. The original receipt remains immutable. The successor performs normal authority, clean-worktree, and MAF readiness checks; it is not a replay of the predecessor.
 
@@ -344,6 +354,9 @@ Recover a v8 attempt through a fenced recovery claim, or reconcile and resume a 
 
 ### `flow run resume-execution <work-id> <attempt-id>`
 
+> Historical execution contract. This provider-start/resume entry point is retired
+> on the OpenHands branch. Use `flow workflow` for new work; preserve old evidence.
+
 Fence the previous parent and reopen the same attempt. An uncertain dispatch returns `reconciliation_required` without a provider send. The v1 path can replay one committed result through a bound MAF checkpoint. For v2, a completed first or second action can be replayed through its verified pending checkpoint in a fresh MAF process; Flow reuses committed results and decisions and authorizes only the next logical action. A missing, changed, or incompatible checkpoint halts as a runtime protocol gap. A matching receipt written before the ledger's terminal update is repaired without dispatch. An unresolved third action always halts pending reconciliation. This command never allocates a replacement attempt.
 
 ### `flow run resolve-execution <work-id> <attempt-id> <action-id>`
@@ -351,6 +364,9 @@ Fence the previous parent and reopen the same attempt. An uncertain dispatch ret
 Append an operator resolution using `--actor`, `--disposition`, `--explanation`, and `--evidence-file`. The evidence file contains a JSON list of `{ "kind": "...", "path": ".flow/runs/.../execution/.../file", "sha256": "..." }` records; each referenced file must exist inside the original attempt directory and match its digest. Flow copies bounded proof bytes into an owner-only, read-only attempt directory and checks their hashes on inspection. Completion requires a durable validated response observation. No-dispatch is permitted only before Flow's dispatch boundary. `still_unknown` records the investigation and leaves dispatch blocked.
 
 ### `flow run continue-resolved-execution <work-id> <attempt-id> <action-id>`
+
+> Historical execution contract. This provider-start/resume entry point is retired
+> on the OpenHands branch. Use `flow workflow` for new work; preserve old evidence.
 
 Continue an evidence-resolved third action with `--actor` for local operator attribution. The command requires the original terminal receipt, exact resolution, and a verified `pending_delegate:3` checkpoint. Pinned MAF must restore that checkpoint and report the same pending action before Flow considers a new send. `resolved_completed` replays the durable result without a provider call; `resolved_not_dispatched` requires a fresh policy grant and makes at most one send. Flow writes a separate linked continuation receipt; the original receipt remains unchanged. A failed readiness check halts without a send, and an uncertain post-send response remains `unknown`. The local OS file permission boundary controls access; actor text is attribution, not authentication.
 
@@ -441,12 +457,11 @@ configure delegated agents.
 
 ### `flow runtime smoke`
 
-Check generated Claude and Codex runtime adapter surfaces, or strict MAF
-Delivery readiness with `--target maf`.
+Check generated native adapter surfaces and pinned OpenHands readiness without starting a model. Historical MAF target selection is retired.
 
 Flags:
 
-- `--target all|claude|codex|maf` — runtime target to check (default: all)
+- `--target all|claude|codex|openhands` — runtime target to check (default: all)
 - `--json` — emit JSON
 
 Static checks prove local generated files only:
@@ -518,6 +533,10 @@ Behavior:
 
 Use this when a contributor's machine is ready to switch off development mode and pin to copied release content.
 
+Both install-mode conversions sync all three runtime targets after selecting
+the new source. Generation conflicts can leave a target unsynced while source
+conversion has succeeded; inspect the reported conflicts before continuing.
+
 ### `flow install --develop <clone-path>`
 
 Convert the current install from release mode (copied directory) to develop mode (symlink to a clone).
@@ -548,11 +567,16 @@ In develop mode: prints the manual `git pull` + `flow sync ... --user` commands;
 Flags:
 
 - `--check` — report current vs latest version without applying. When a newer version is available, also fetches `CHANGELOG.md` from the remote at the new tag (via a sparse partial-clone — only the one file is actually downloaded) and prints the `## [<version>]` section so you can see what's in the available release. Falls back silently if no CHANGELOG entry exists for that version.
-- `--resync` — after applying, also run `flow sync claude --user` and `flow sync codex --user`
+- `--resync` — compatibility flag; applying an update already syncs Claude, Codex and OpenHands using the new CLI
 - `--remote URL` — override the remote configured in `~/.flow/config.toml` (useful for testing)
 - `--json` — with `--check`, emit classified update diagnostics for support automation
 
-The update is atomic: staging is validated before any rename happens, so a failed clone, broken staging, or swap error leaves the existing install intact. A successful update keeps no rollback state — to revert, run `flow update --remote <url>` against an older tag or re-run `install-flow.sh --release` from a checkout at the desired version.
+The source swap is atomic: clone, staging or swap failures preserve the prior
+source. Post-swap sync conflicts are reported separately and preserve edited
+runtime files. To roll back, coordinate with active sessions, restore a reviewed
+older checkout using `install-flow.sh --release`, and inspect sync conflicts.
+`flow update` chooses the highest remote tag; it is not an older-tag selector.
+Back up discovery/backing outputs before migration. See [distribution](agent-distribution.md).
 
 ### `flow sync claude --user`
 
@@ -567,6 +591,15 @@ Outputs, all under `~/`:
 - `~/.claude/flow.managed.toml`
 
 If `~/.flow/user/flow.toml` exists, the user overlay merges on top of the framework manifest before generation: same-name commands and shared agents override the framework entry, new names append. User-origin entries in the managed manifest carry `~/.flow/user/...` source paths so origin stays auditable. See `docs/architecture.md` "User Overlay" for the merge semantics.
+
+### `flow sync openhands --user`
+
+Generate Markdown role definitions into `~/.flow/generated/agents/openhands/`
+and install discovery symlinks at `~/.agents/agents/` (managed-copy fallback).
+`--check` reports drift without writes. External discovery is instructions-only;
+Flow local execution registers contextual factories and SDK tools separately.
+All targets emit translation reports and preserve custom/edited files through
+hash ownership. See [agent distribution](agent-distribution.md).
 
 ### `flow sync codex --user`
 
@@ -1052,7 +1085,7 @@ flow setup user        # installs flow at user level — active in every support
 ```bash
 flow update --check    # see what's available
 flow update            # apply atomically
-flow update --resync   # apply + re-sync user-level adapters
+flow update            # apply + automatically sync all three adapters
 ```
 
 ### First-time project bootstrap (only for repos where you want a project overlay)
@@ -1070,7 +1103,7 @@ Runtime surfaces come from the user-level install and need no per-project step.
 ### Framework update roll-forward
 
 ```bash
-flow update --resync              # framework, plus user-level adapters
+flow update                       # framework plus all three user-level adapters
 cd /path/to/project
 flow bootstrap
 flow project audit                # did the update leave stale copies behind?

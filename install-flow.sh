@@ -279,6 +279,15 @@ rm -rf "${SOURCE_BACKUP}" "${CONFIG_BACKUP}"
 
 "${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/archive_preflight.py" || true
 
+# Render/install native role discovery surfaces with the installed version.
+# Conflicts preserve user files and leave the source install available to repair.
+for target in claude codex openhands; do
+  if ! "${BIN_DIR}/flow" sync "${target}" --user; then
+    echo "Installed source; ${target} adapter conflicts need attention. Run flow sync ${target} --user after reconciling the reported files." >&2
+    exit 1
+  fi
+done
+
 echo "Installed flow (${MODE} mode)."
 echo "Source:    ${SOURCE_DIR}"
 echo "Launcher:  ${BIN_DIR}/flow"

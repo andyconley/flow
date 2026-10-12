@@ -43,21 +43,53 @@ An authenticated self-hosted host can name a dedicated `api_key_env`; credential
 are never stored in Flow configuration or copied from Codex/Claude. Native API
 credential variables and direct paid OpenAI/Anthropic endpoints are rejected.
 
-Roles resolve from project `.flow/agents`, project `.agents/agents`, the user
-Flow overlay, then framework defaults. `roles.<name>.file` selects another
-Markdown definition. OpenHands parses the file's role body. Flow's historical
+Runtime configuration recursively merges `~/.flow/user/runtime.toml`, then
+project `.flow/runtime.toml`; project values win and lists replace lists. Role
+selection is `--role` > stage role > built-in stage role. Profile selection is
+`--profile` > role profile > stage profile > `default_profile`. There is no
+fallback if the selected profile is missing or invalid.
+
+Role source precedence is `roles.<name>.file` (relative to the project root) >
+project `.flow/agents/<role>.md` > project `.agents/agents/<role>.md` >
+user overlay `agents/<role>.md` > merged shared-manifest source > framework
+`agents/<role>.md`. This execution resolution is separate from user-level
+adapter generation, which merges the framework and registered user manifest. OpenHands parses the file's role body. Flow's historical
 Claude `model` and `tools` hints are not translated into new grants: the profile
 and SDK tool selection are explicit runtime settings. Configured context files,
 `.flow/PROJECT.md`, project `.agents/skills` and `.flow/skills` enter AgentContext.
 Configured skill files retain SDK triggers and resource discovery. Public skills
 are not downloaded implicitly.
 
-Each role can select its own profile. The SDK TaskToolSet handles a role's
-configured specialist roster; Flow does not run a second manager loop. Native specialists use stock ACPAgent after the explicit native access decision
-described below. A `task` tool is required when a role declares a specialist roster. SDK factory
+The stock SDK TaskToolSet handles local delegation. Default tools are
+`terminal`, `file_editor`, `task`; omitted `specialists` exposes all other merged
+roles. Explicit `specialists = []` disables delegation, and an explicit list
+controls Flow factory registration and prompt hints, rather than an enforceable SDK
+allowlist. Implicit children receive an empty roster to prevent recursive
+fan-out; explicitly configured child rosters remain. Children inherit the
+parent's local profile unless runtime configuration selects another local
+profile. A native child in a local roster is rejected, preventing an implicit
+provider switch. Native parent execution uses stock ACP discovery for delegated
+roles, rather than SDK custom tools or condensers. A `task` tool is required when a role declares a specialist roster. SDK factory
 names include a project/profile binding suffix; the agent context maps configured
 role names to those identifiers. Repeated construction reuses the SDK registry
 without confusing different project profiles.
+
+## Generated discovery and installation
+
+All 13 source roles are distributed to Claude `.claude/agents/*.md`, Codex
+`.codex/agents/*.toml`, and OpenHands `.agents/agents/*.md` at user level.
+Relative symlinks point into `~/.flow/generated/agents/`; managed copies are the
+fallback. `flow setup user`, bootstrap install, release updates and mode
+conversions refresh all three using the newly installed CLI. Develop updates
+require a manual pull and `flow setup user`. `flow sync openhands --user --check`
+checks drift without writing, alongside Claude/Codex checks.
+
+OpenHands external file discovery is instructions-only (`tools: []`); local
+Flow factories supply configured tools, profiles, project context and skills.
+Native discovery translates only supported metadata. Hash-based ownership
+preserves custom files and modified outputs; older hashless differences stop
+sync for review. See [role distribution](agent-distribution.md) for reports,
+conflict recovery and the coordinated installation step.
 
 ## Workflow
 
@@ -108,8 +140,7 @@ approved disposable acceptances; see docs/acceptance/.
 Stock SDK selects the first permission option; the pinned Claude adapter puts
 `allow_always` first. This can create permission rules. Before enabling
 `permission_requests="stock-openhands"`, approve the exact scoped access decision
-in [native-access-decision.md](native-access-decision.md) and independently enforce
-its workspace containment. The setting acknowledges SDK behavior; it creates no
+in [native-access-decision.md](native-access-decision.md) and establish the intended execution environment access. The setting acknowledges SDK behavior; it creates no
 OS sandbox or network grant. No profile enables it by default. Flow does not patch
 private SDK callbacks or implement a replacement transport.
 
@@ -143,7 +174,7 @@ the SDK confirmation API. Flow does not add a homegrown permission system.
 | Sealed orchestration manifests and charters required for new runs | Revision 3 reuses Flow lifecycle and actual stage artifacts | Stage approvals remain; old execution-control artifacts are not required |
 | Install/update automatically provisions/activates MAF | Explicit isolated pinned OpenHands dependencies | Installing core Flow does not start providers or replace a runtime selection |
 | Agent metadata assumed Claude tools/models | OpenHands file parsing plus explicit runtime profile/tools | Old role bodies remain useful; endpoint/tool selection moves to runtime.toml |
-| Automated native invocation with broad defaults | Stock ACPAgent with explicit modes and scoped access acknowledgement | Live native validation awaits the documented permission decision |
+| Automated native invocation with broad defaults | Stock ACPAgent with explicit modes and scoped access acknowledgement | Scoped disposable native acceptance passed; future execution still requires the documented access decision |
 | Current run.json plus separate execution state systems | Flow stage state plus SDK conversation persistence | Sessions are references, not another checkpoint/receipt ledger |
 
 Historical modules remain for reading and testing old records. They are not used
@@ -177,3 +208,20 @@ Absent fields retain SDK defaults. The isolated branch project's current profile
 selects the existing Ollama development model with context 65,536, output 8,192
 and summary threshold 57,344. No global/user profile is changed. See
 [64K setup and rollback](ollama-64k-setup.md).
+
+## Coordinated migration and rollback
+
+Keep active Witmark/native sessions and `~/.flow/source` untouched while testing
+a candidate. Run installer/update tests in isolated homes and coordinate the
+live window after active work stops. Back up runtime managed manifests, backing
+definitions and discovery files. Install the reviewed source with
+`./install-flow.sh --release`, review any conflicts, then run `flow setup user`
+and all three `--check` commands in a fresh session. A source swap can succeed
+while a target sync reports a conflict; inspect both outcomes.
+
+For rollback, select the reviewed earlier checkout and rerun its release
+installer during a coordinated window. Restore only backed-up owned files after
+review; preserve custom files and edits. `flow update` selects the latest remote
+tag and is not an older-tag selector. Historical run artifacts are retained;
+new runtime workflows do not reinterpret old MAF receipts. Provider profiles
+remain explicit and no migration authorizes new access or model calls.

@@ -933,7 +933,8 @@ def main() -> int:
         epilog=(
             "Targets:\n"
             "  claude  Generate .claude skills, agents, hooks, settings, and a managed manifest.\n"
-            "  codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.\n\n"
+            "  codex   Generate .agents skills, .codex agents, hooks, hooks.json, and a managed manifest.\n"
+            "  openhands Generate .agents/agents definitions and a managed manifest.\n\n"
             "Examples:\n"
             "  flow sync claude --user\n"
             "  flow sync claude --user --check\n"
@@ -944,7 +945,7 @@ def main() -> int:
     )
     sync.add_argument(
         "target",
-        choices=["claude", "codex"],
+        choices=["claude", "codex", "openhands"],
         help="runtime adapter target to generate or check",
     )
     sync.add_argument(
@@ -1012,7 +1013,7 @@ def main() -> int:
     update_parser.add_argument(
         "--resync",
         action="store_true",
-        help="after applying, run `flow sync claude --user` and `flow sync codex --user`",
+        help="compatibility flag; all adapters are refreshed after every update",
     )
     update_parser.add_argument(
         "--remote",

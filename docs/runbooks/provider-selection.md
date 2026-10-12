@@ -1,5 +1,11 @@
 # Provider Selection Runbook
 
+> Historical MAF/v8/v9 execution reference. New workflows use stock OpenHands
+> and native ACP harnesses; old provider-start/resume commands are retired.
+> Preserved contracts and records do not describe current runtime containment,
+> install provisioning or provider precedence. See [OpenHands migration](../openhands-migration.md).
+
+
 - Subject: Protocol v9 provider selection, dispatch, recovery, and rollback
 - Scope (versions, environments): Protocol v9 chartered delivery on local Flow hosts
 - Owner role: Flow operator

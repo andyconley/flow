@@ -1,5 +1,10 @@
 # Local-agent resource observations
 
+This resource monitor documents retained local-agent/MAF support. New stock
+OpenHands workflows do not automatically inherit these custom thresholds or
+controls. Configure SDK context limits through `.flow/runtime.toml`; see
+[OpenHands migration](openhands-migration.md).
+
 `cli/local_resources.py` observes resources without inference, model unloading or
 system changes. On macOS it reads actual kernel pressure (normal/warning/critical),
 raw VM compression/page-in/page-out/swap counters and interval rates, swap usage,

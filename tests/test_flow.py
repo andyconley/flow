@@ -1679,7 +1679,8 @@ class FlowCliTests(FlowCliHarness):
 
         result = self.run_flow("sync", "codex", "--user", "--check")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("codex sync check: drift detected", result.stdout)
+        self.assertIn("found unmanaged conflicts", result.stdout)
+        self.assertIn("manual drift", skill_path.read_text())
 
     def test_sync_without_user_is_refused(self) -> None:
         """Project-level sync was retired. Exiting 1 rather than 0 matters: a
@@ -1796,7 +1797,8 @@ class FlowCliTests(FlowCliHarness):
         self.assertEqual(drift.returncode, 1)
         drift_payload = json.loads(drift.stdout)
         self.assertFalse(drift_payload["ok"])
-        self.assertEqual(drift_payload["diagnostics"][0]["category"], "drift")
+        self.assertEqual(drift_payload["diagnostics"][0]["category"], "managed_conflict")
+        self.assertIn("manual drift", skill_path.read_text())
 
     def test_sync_check_json_classifies_stale_managed_output(self) -> None:
         import io
@@ -1979,7 +1981,7 @@ class FlowCliTests(FlowCliHarness):
 
         result = self.run_flow("sync", "claude", "--user", "--check")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("drift detected", result.stdout)
+        self.assertIn("found unmanaged conflicts", result.stdout)
 
     # ----------------------------------------------------------------------
     # User overlay (P2) — ~/.flow/user/ merge during user-mode sync
@@ -2165,7 +2167,7 @@ class FlowCliTests(FlowCliHarness):
                 self.assertEqual(tools.count("WebSearch"), 1)
                 self.assertEqual(tools.count("WebFetch"), 1)
                 self.assertEqual(codex["web_search"], "live")
-                self.assertTrue(codex["tools"]["web_search"])
+                self.assertNotIn("tools", codex)  # pinned 0.153.4 ignores legacy boolean web_search
                 self.assertEqual(claude_body.count(enabled_marker), 1)
                 self.assertEqual(codex_body.count(enabled_marker), 1)
                 self._assert_enabled_web_guidance(claude_body)
@@ -2260,7 +2262,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertNotIn("WebSearch", claude["tools"])
         self.assertNotIn("WebFetch", claude["tools"])
         self.assertEqual(codex["web_search"], "disabled")
-        self.assertFalse(codex["tools"]["web_search"])
+        self.assertNotIn("tools", codex)  # use the native web_search mode above
         self.assertEqual(claude_body.count(self._web_policy_marker(False)), 1)
         self.assertEqual(codex_body.count(self._web_policy_marker(False)), 1)
         self.assertNotIn(self._web_policy_marker(True), claude_body)
@@ -2291,7 +2293,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertNotIn("WebSearch", claude["tools"])
         self.assertNotIn("WebFetch", claude["tools"])
         self.assertEqual(codex["web_search"], "disabled")
-        self.assertFalse(codex["tools"]["web_search"])
+        self.assertNotIn("tools", codex)  # use the native web_search mode above
         managed = (fake_home / ".claude" / "flow.managed.toml").read_text()
         self.assertIn("~/.flow/user/agents/security-reviewer.md", managed)
 
@@ -2321,7 +2323,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertEqual(claude["tools"].count("WebSearch"), 1)
         self.assertEqual(claude["tools"].count("WebFetch"), 1)
         self.assertEqual(codex["web_search"], "live")
-        self.assertTrue(codex["tools"]["web_search"])
+        self.assertNotIn("tools", codex)  # pinned 0.153.4 ignores legacy boolean web_search
         self.assertIn(self._web_policy_marker(True), claude_body)
         self.assertIn(self._web_policy_marker(True), codex_body)
 
@@ -2771,6 +2773,10 @@ class FlowCliTests(FlowCliHarness):
             'sync_mode = "replace"\n'
         )
 
+        first = self.run_flow("sync", "codex", "--user")
+        self.assertEqual(first.returncode, 1)
+        self.assertTrue(legacy_skill.exists())  # no prior hash: preserve until reviewed
+        legacy_skill.unlink()  # fixture is reviewed legacy generated content
         self.assert_ok(self.run_flow("sync", "codex", "--user"))
 
         current_skill = fake_home / ".agents" / "skills" / "flow-plan" / "SKILL.md"
@@ -2982,7 +2988,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
         config = (fake_home / ".flow" / "config.toml").read_text()
         self.assertNotIn("maf_runtime_activation_state", config)
-        readiness = subprocess.run([sys.executable, str(FLOW_CLI), "runtime", "readiness"], cwd=self.repo,
+        readiness = subprocess.run([sys.executable, "-S", str(FLOW_CLI), "runtime", "readiness"], cwd=self.repo,
                                   text=True, capture_output=True, env=env)
         self.assertNotEqual(readiness.returncode, 0)
         self.assertIn("openhands-sdk", readiness.stdout)

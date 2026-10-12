@@ -30,22 +30,42 @@ def probe() -> dict:
 
 
 def _context(selection: Selection, root: Path):
-    from openhands.sdk.subagent import AgentDefinition
-    from paths import USER_OVERLAY_DIR
+    from paths import HOME, USER_OVERLAY_DIR
     from openhands.sdk import AgentContext
     from openhands.sdk.context import Skill, load_skills_from_dir
 
-    role = AgentDefinition.load(selection.role_file)
+    # Use the same composition pipeline as distribution, including expertise
+    # and user overlay sources. Project-specific files still win in select().
+    from sync import agent_body, merge_user_overlay, shared_agents
+    from openhands_config import FRAMEWORK_ROLES
+    from render import parse_frontmatter, render_openhands_agent
+    _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent)
+    declaration = next((a for a in shared_agents(manifest) if a["name"] == selection.role), None)
+    from paths import GENERATED_MARKER
+    if declaration is not None and GENERATED_MARKER not in selection.role_file.read_text():
+        declaration = dict(declaration, source=selection.role_file.name)
+        body = agent_body(declaration, selection.role_file.parent, FRAMEWORK_ROLES.parent,
+                          manifest.get("claude", {}).get("agent_defaults", {}))
+    else:
+        body = selection.role_file.read_text()
+    metadata, prompt = parse_frontmatter(render_openhands_agent(selection.role, str(selection.role_file), body))
     skills = {}
-    for directory in (USER_OVERLAY_DIR / "skills", root / ".agents/skills", root / ".flow/skills"):
+    for directory in (HOME / ".agents/skills", USER_OVERLAY_DIR / "skills", root / ".agents/skills", root / ".flow/skills"):
         if directory.is_dir():
             groups = load_skills_from_dir(directory)
             for group in groups:
                 skills.update(group)
+    if metadata.get("skills"):
+        from openhands.sdk.skills import load_available_skills
+        available = load_available_skills(root, include_user=True, include_project=True, include_public=False)
+        for name in metadata["skills"]:
+            if name not in available:
+                raise RuntimeConfigurationError(f"role skill not found: {name}")
+            skills[name] = available[name]
     for relative in selection.role_options.get("skills", []):
         skill = Skill.load(root / relative)
         skills[skill.name] = skill
-    context = [role.system_prompt]
+    context = [prompt]
     for relative in selection.role_options.get("context", []):
         context.append((root / relative).read_text())
     project = root / ".flow/PROJECT.md"
@@ -86,8 +106,31 @@ def build_agent(selection: Selection, root: Path):
     # Each factory resolves its own local profile; no Flow manager/dispatch loop.
     config = load_config(root)
     delegation = []
-    for name in selection.role_options.get("specialists", []):
-        child = select(root, "implement", name, config=config)
+    from sync import merge_user_overlay, shared_agents
+    from openhands_config import FRAMEWORK_ROLES
+    from dataclasses import replace
+    _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent)
+    roster = selection.role_options.get("specialists")
+    if roster is None:
+        roster = [a["name"] for a in shared_agents(manifest)]
+        # Explicit project definitions remain callable alongside framework roles.
+        for directory in (root / ".flow/agents", root / ".agents/agents"):
+            if directory.is_dir():
+                roster.extend(p.stem for p in sorted(directory.glob("*.md")) if p.stem not in roster and p.name.lower() != "readme.md")
+    selected_tools = list(selection.role_options.get("tools", ["terminal", "file_editor", "task"]))
+    if not roster:
+        selected_tools = [tool for tool in selected_tools if tool != "task"]
+    for name in roster if "task" in selected_tools else []:
+        if name == selection.role:
+            continue
+        # Endpoint selection remains the parent's local profile unless the
+        # runtime explicitly binds this role. Never silently dispatch native ACP.
+        child_profile = config.get("roles", {}).get(name, {}).get("profile", selection.profile)
+        child = select(root, "implement", name, child_profile, config=config)
+        if child.provider["kind"] != "local":
+            raise RuntimeConfigurationError(f"local delegation requires a local profile for {name}")
+        if "specialists" not in child.role_options:
+            child = replace(child, role_options={**child.role_options, "specialists": []})
         # The SDK registry is process-global. Scope its identity to the actual
         # project/profile binding so repeats reuse a factory and different
         # projects or changed profiles do not inherit a stale factory.
@@ -101,7 +144,7 @@ def build_agent(selection: Selection, root: Path):
     if delegation:
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
     return Agent(llm=llm,
-                 tools=[Tool(name=tools[t].name) for t in selection.role_options.get("tools", ["terminal", "file_editor"])],
+                 tools=[Tool(name=tools[t].name) for t in selected_tools],
                  agent_context=context, condenser=condenser)
 
 

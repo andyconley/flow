@@ -708,3 +708,7 @@ summary = "Inspect pinned OpenHands packages and native access decision"
 [[help.cli_commands]]
 invocation = "flow runtime readiness [--json]"
 summary = "Inspect OpenHands readiness without starting a provider"
+
+[openhands]
+agent_dir = ".agents/agents"
+managed_manifest = ".agents/flow-managed-agents.toml"
