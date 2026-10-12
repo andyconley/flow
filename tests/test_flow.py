@@ -4,6 +4,7 @@ import os
 import re
 import stat
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -1026,7 +1027,10 @@ class FlowCliTests(FlowCliHarness):
             good_python = fake_bin / good_name
             if good_python.exists() or good_python.is_symlink():
                 good_python.unlink()
-            good_python.symlink_to(sys.executable)
+            # A symlink outside a venv loses its pyvenv.cfg context. Invoke
+            # the actual interpreter so the fixture keeps its pinned SDK.
+            good_python.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + ' "$@"\n')
+            good_python.chmod(0o755)
 
         return fake_bin
 
