@@ -64,6 +64,7 @@ from hookio import log_hook_error as _log_hook_error
 from hookio import read_hook_stdin as _read_hook_stdin
 from hookio import safe_key as _safe_session_id
 from normalize import normalize_all
+from openhands_usage import harvest_project, reporting_rows
 from paths import HOME, SOURCE_DIR
 from session_lookup import lookup_session_for_path
 import telemetry_freshness
@@ -1170,7 +1171,6 @@ def cost_summary_command(days: int = DEFAULT_WINDOW_DAYS, show_all: bool = False
     conn.row_factory = sqlite3.Row
     try:
         rows = summary_rows(conn, since)
-        from openhands_usage import reporting_rows
         sdk_usage = reporting_rows(conn, since)
         gauge = capacity_gauge(conn, since)
         freshness = telemetry_freshness.usage_freshness(conn)
@@ -1222,7 +1222,6 @@ def cost_sessions_command(
     conn.row_factory = sqlite3.Row
     try:
         rows = sessions_rows(conn, since, row_limit)
-        from openhands_usage import reporting_rows
         sdk_usage = reporting_rows(conn, since)
         freshness = telemetry_freshness.usage_freshness(conn)
     finally:
@@ -1324,7 +1323,6 @@ def cost_trend_command(
     conn.row_factory = sqlite3.Row
     try:
         rows = trend_rows(conn, since, bucket=bucket, harness=harness)
-        from openhands_usage import reporting_rows
         sdk_usage = reporting_rows(conn, since)
         floor = coverage_floor(conn)
         freshness = telemetry_freshness.usage_freshness(conn)
@@ -1446,7 +1444,6 @@ def cost_active_command(
                 line = failure["line"]
                 where = f":{line}" if line is not None else ""
                 print(f"note: skipped {failure['path']}{where} — {failure['reason']}")
-        from openhands_usage import harvest_project
         from fsutil import repo_root
         sdk_result = harvest_project(conn, repo_root())
 
@@ -1454,7 +1451,6 @@ def cost_active_command(
         for failure in norm_result["failures"]:
             print(f"note: could not normalize turn_raw id {failure['turn_raw_id']} — {failure['reason']}")
         rows = active_rows(conn, within)
-        from openhands_usage import reporting_rows
         sdk_usage = reporting_rows(conn)
         freshness = telemetry_freshness.usage_freshness(conn)
     finally:

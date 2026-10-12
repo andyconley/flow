@@ -107,6 +107,17 @@ class UsageTests(unittest.TestCase):
         with self.conn:
             self.conn.execute('UPDATE session SET session_id=?',(str(uuid4()),))
         self.assertEqual(sum(r['output_tokens'] for r in summary_rows(self.conn,None)),40)
+        # Rebuild only SDK test rows, leaving the native transcript present:
+        # this exercises the opposite collection order against the same views.
+        with self.conn:
+            self.conn.execute('UPDATE session SET session_id=?',(native,))
+            self.conn.execute('DELETE FROM sdk_turn_norm')
+            self.conn.execute('DELETE FROM sdk_turn_raw')
+            self.conn.execute('DELETE FROM sdk_session')
+        self.harvest()
+        self.assertEqual(len(summary_rows(self.conn,None)),1)
+        self.assertEqual(summary_rows(self.conn,None)[0]['harness'],'codex')
+        self.assertEqual(summary_rows(self.conn,None)[0]['output_tokens'],20)
 
     def test_positive_sdk_estimate_and_raw_correction_recompute(self):
         self.snapshot(self.parent, {'flow-business-analyst': self.metric(cost=.2)})

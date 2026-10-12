@@ -127,8 +127,10 @@ tools=[]
                 reported=second['sessions']['define:business-analyst']['metrics']['accumulated_token_usage']['prompt_tokens']
                 expected=sum(100 if r['model']=='parent' else 50 for r in Endpoint.calls)
                 assert reported < expected, (reported, expected)
+                recovered = check_totals()
                 print(json.dumps({'status':'baseline_risk_reproduced','sdk_requests':len(Endpoint.calls),
-                    'projected_prompt_tokens':reported,'actual_prompt_tokens':expected,'lost_prompt_tokens':expected-reported}))
+                    'projected_prompt_tokens':reported,'actual_prompt_tokens':expected,'lost_prompt_tokens':expected-reported,
+                    'recovered_combined_prompt_tokens':sum(r['fresh_input_tokens'] for r in recovered)}))
                 return
             key='define:business-analyst';identity=first['sessions'][key]['conversation_id']
             second=invoke('run');check_totals()

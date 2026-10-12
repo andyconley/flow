@@ -16,7 +16,9 @@ with one delegate each, against a loopback synthetic endpoint.
 
 Six measured requests consume 500 prompt tokens. The released parent's cumulative
 projection reports only 450: the new child's `task_00000001` bucket replaces the
-historical child's 50 tokens. Both child SDK histories remain on disk.
+historical child's 50 tokens. Both child SDK histories remain on disk. The new
+importer recovers all 500 prompt tokens from those existing histories without
+rewriting the snapshots or workflow artifacts.
 
 ## Repaired deterministic SDK lifecycle
 

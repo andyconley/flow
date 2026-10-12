@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 
 from openhands_config import SDK_VERSION, RuntimeConfigurationError, Selection
+from openhands_accounting import register_accounting_task_tool
 
 
 ACP_ACCESS_NOTE = ("Stock OpenHands ACP automatically answers native permission requests. "
@@ -197,7 +198,6 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
     context = _context(selection, root)
     if delegation:
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
-    from openhands_accounting import register_accounting_task_tool
     tool_specs = [Tool(name=register_accounting_task_tool() if t == "task" else tools[t].name) for t in selected_tools]
     routing = selection.role_options.get("model_routing")
     condenser_profiles = [provider]
