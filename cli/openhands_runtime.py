@@ -133,7 +133,7 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
 
     tools = {"terminal": TerminalTool, "file_editor": FileEditorTool,
              "task_tracker": TaskTrackerTool, "task": TaskToolSet}
-    llm = inherited_llm if inherited_llm is not None else local_llm(selection)
+    llm = inherited_llm.model_copy(update={"usage_id": f"flow-{selection.role}"}) if inherited_llm is not None else local_llm(selection)
     provider = selection.provider
     # Register declared specialists with the SDK's own delegation mechanism.
     # Explicit child bindings win; unbound local children inherit the active SDK LLM.
@@ -197,13 +197,14 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
     context = _context(selection, root)
     if delegation:
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
-    tool_specs = [Tool(name=tools[t].name) for t in selected_tools]
+    from openhands_accounting import register_accounting_task_tool
+    tool_specs = [Tool(name=register_accounting_task_tool() if t == "task" else tools[t].name) for t in selected_tools]
     routing = selection.role_options.get("model_routing")
     condenser_profiles = [provider]
     condenser_llms = [llm]
     # Stock switches retain the condenser's threshold. Honor every candidate's
     # cap conservatively without intercepting or replacing the SDK switch tool.
-    inherited_profile = config.get("profiles", {}).get(llm.usage_id.removeprefix("profile:")) if llm.usage_id.startswith("profile:") else None
+    inherited_profile = config.get("profiles", {}).get((inherited_llm or llm).usage_id.removeprefix("profile:")) if (inherited_llm or llm).usage_id.startswith("profile:") else None
     if inherited_profile and inherited_profile.get("kind") == "local":
         condenser_profiles.append(inherited_profile)
     if routing and not selection.profile_override:

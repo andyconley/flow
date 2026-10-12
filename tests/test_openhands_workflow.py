@@ -50,6 +50,44 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         archived = next(event for event in history if event["event"] == "archive")
         self.assertEqual(archived["approved_artifact_digests"]["archive"], payload["approved_artifact_digests"]["archive"])
 
+    def test_archive_enrichment_search_and_retry_preserve_approval_history(self):
+        from archive_store import ensure_identity, ensure_ignore
+        from archive_query import rebuild, search
+        self.approved_through()
+        ensure_ignore(self.root)
+        ensure_identity(self.root)
+        self.assertEqual(rebuild(self.root)["state"], "complete")
+        (self.directory / "archive.md").write_text("# Archive Summary\n\n## Work Closed\n\nZephyr accounting repair completed with searchable evidence.\n")
+        self.args.disposition = ["memory=recorded", "capability_gaps=none"]
+        result = flow.archive(self.args)
+        self.assertFalse(result["enrichment_diagnostics"], result)
+        self.assertTrue((self.directory / "abstract.json").exists())
+        found = search(self.root, "Zephyr accounting")
+        self.assertTrue(found["hits"], found)
+        before = {name: (self.directory / name).read_bytes() for name in ("run.json", "events.jsonl", "archive.md", "abstract.json")}
+        retry = flow.archive(self.args)
+        self.assertFalse(retry["enrichment_diagnostics"], retry)
+        for name, raw in before.items():
+            self.assertEqual((self.directory / name).read_bytes(), raw, name)
+        self.assertTrue(runstate.verify("example", self.root)[0])
+        self.args.disposition = ["memory=changed", "capability_gaps=none"]
+        with self.assertRaisesRegex(config.RuntimeConfigurationError, "cannot amend dispositions"):
+            flow.archive(self.args)
+
+    def test_archive_generation_failure_is_retryable_without_reclosing(self):
+        import archive_service
+        self.approved_through()
+        self.args.disposition = ["memory=recorded", "capability_gaps=none"]
+        with patch.object(archive_service, "build_envelope", side_effect=OSError("injected write failure")):
+            first = flow.archive(self.args)
+        self.assertEqual(first["state"], "archived")
+        self.assertTrue(first["enrichment_diagnostics"])
+        before = (self.directory / "events.jsonl").read_bytes()
+        retried = flow.archive(self.args)
+        self.assertFalse(retried["enrichment_diagnostics"], retried)
+        self.assertTrue((self.directory / "abstract.json").exists())
+        self.assertEqual((self.directory / "events.jsonl").read_bytes(), before)
+
     def approved_through(self, last_stage="review"):
         flow.initialize(self.args)
         for stage in ("define", "solution", "plan", "implement", "review"):

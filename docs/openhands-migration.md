@@ -385,3 +385,62 @@ factory closures and cannot serialize ACP children. Flow surfaces that mismatch
 before remote specialist execution. Local mixed delegation is verified;
 whole-stage remote work retains stock project discovery. See the
 [remote transport options](specialist-validation.md#remote-factory-transport-limitation).
+
+## Usage and archive continuity after v0.44
+
+`flow harvest openhands --project-root /path/to/project` imports existing SDK
+history into the same `~/.flow/usage.db` used by native Claude/Codex reporting,
+and normalizes it immediately. `flow cost active` also imports the current
+project before normalizing. `flow cost summary`, `sessions`, and `trend` then
+read combined native/SDK views. They retain their existing read-only reporting
+behavior. Run the OpenHands harvest once for other projects you want included;
+Flow does not scan every project or rewrite its artifacts during an upgrade.
+
+The import reads referenced SDK conversations under each run's `openhands`
+directory, including prior sessions and nested delegates. Each conversation
+contributes its own per-call LLM buckets; parent `task:` rollups and overwritten
+outcome JSON files are not additional usage. Repeated imports upsert the same
+conversation/usage-bucket/ordinal identities. A matching native session's
+harvested transcript takes precedence over ACP token projections. Unrelated
+native sessions remain independent. Native transcripts stay in their existing
+tables; additive SDK tables and combined views do not rewrite native history.
+
+SDK tasks now use UUID identities on stock task managers, so a fresh parent
+process cannot overwrite a previous `task_00000001` metric bucket. Same-process
+cumulative replacement and task resume remain SDK behavior. This repair does
+not reconstruct the SDK's volatile task map after a restart. Saved pre-repair
+child snapshots can still supply their own metrics even when an old parent
+rollup has already been overwritten.
+
+Session/outcome projections refresh metrics on waiting, interruption and failure,
+and elapsed seconds accumulate across executions of the same conversation.
+A new session starts its own elapsed total and retains the prior reference.
+The SDK's own persisted snapshots remain the execution history.
+
+Summary/session JSON includes `sdk_usage` with provider, model, work, stage,
+role, profile and parent/session identity where the source supplies them. An
+unavailable child profile/role is null rather than guessed from current config.
+SDK reported cost is retained separately from positive SDK estimates and actual
+billing. A SDK zero with no evidence of a pricing calculation is
+`unknown_pricing`, not a free call; native subscription billing is
+`subscription_not_measured`. `actual_billed_cost` remains null. Imported call
+timestamps use an aligned SDK cost timestamp when available; otherwise they
+are labelled `observation`, so historical windows must not be interpreted as
+precise execution dates for providers (including Ollama) that omit call times.
+Per-LLM cumulative snapshots are upserted as aggregate observations when call
+history is absent; their call count and current context remain unknown. Full call
+history takes precedence if later available. The aggregate combined-only projection cannot safely recover individual model
+or child usage without SDK snapshots; harvest reports that limitation.
+
+`flow workflow archive` now uses the existing archive service to generate
+`abstract.json`, refresh coverage, and update an existing archive index.
+The first index can be built with `flow index rebuild`. Enrichment diagnostics
+are returned separately from canonical closure. Retrying archive with unchanged
+artifacts/dispositions repairs enrichment without adding another approval or
+archive event. Approved artifact bytes and their digests remain intact.
+
+Upgrade does **not** automatically rewrite historical archives. Preview existing
+archive gaps with `flow archive backfill`; review the proposed derived-artifact
+changes before explicitly applying the existing `--apply --yes` backfill path.
+Historical user Markdown and approval history remain authoritative. Rebuild the
+index afterward if needed. No historical backfill is part of installation.

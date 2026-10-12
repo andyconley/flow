@@ -30,7 +30,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 STATE_ABSENT = "absent"
 STATE_OK = "ok"
@@ -411,6 +411,55 @@ CREATE TABLE plugin_usage_scan (
 );
 """
 
+
+_V7 = """
+-- SDK storage is additive: native collectors and their historical rows stay
+-- intact. Negative ids in read views distinguish SDK rows from native ids.
+CREATE TABLE IF NOT EXISTS sdk_session (
+ id INTEGER PRIMARY KEY, session_id TEXT NOT NULL UNIQUE, parent_session_id TEXT,
+ started_at TEXT, cwd TEXT, title TEXT, source_path TEXT,
+ work_id TEXT, stage TEXT, role TEXT, provider TEXT, profile TEXT
+);
+CREATE TABLE IF NOT EXISTS sdk_turn_raw (
+ id INTEGER PRIMARY KEY, session_row_id INTEGER NOT NULL REFERENCES sdk_session(id),
+ natural_turn_id TEXT NOT NULL, turn_seq INTEGER NOT NULL, is_subagent INTEGER NOT NULL,
+ ts TEXT NOT NULL, model TEXT, payload TEXT NOT NULL, source_path TEXT NOT NULL,
+ source_line_no INTEGER NOT NULL, collector_version INTEGER NOT NULL,
+ native_session_id TEXT, reported_cost REAL, pricing_status TEXT NOT NULL,
+ timestamp_basis TEXT NOT NULL,
+ UNIQUE(session_row_id, natural_turn_id)
+);
+CREATE TABLE IF NOT EXISTS sdk_turn_norm AS SELECT * FROM turn_norm WHERE 0;
+CREATE UNIQUE INDEX IF NOT EXISTS sdk_norm_id ON sdk_turn_norm(turn_raw_id);
+CREATE VIEW IF NOT EXISTS usage_session AS
+ SELECT id, harness, session_id, parent_session_id, started_at, cwd, title, source_path,
+ NULL AS work_id, NULL AS stage, NULL AS role, harness AS provider, NULL AS profile FROM session
+ UNION ALL
+ SELECT -id, 'openhands', session_id, parent_session_id, started_at, cwd, title, source_path,
+ work_id, stage, role, provider, profile FROM sdk_session;
+CREATE VIEW IF NOT EXISTS usage_raw AS
+ SELECT id, session_row_id, natural_turn_id, turn_seq, is_subagent, ts, model, payload,
+ source_path, source_line_no, collector_version FROM turn_raw
+ UNION ALL
+ SELECT -r.id, -r.session_row_id, r.natural_turn_id, r.turn_seq, r.is_subagent, r.ts, r.model, r.payload,
+ r.source_path, r.source_line_no, r.collector_version FROM sdk_turn_raw r
+ JOIN sdk_session ss ON ss.id=r.session_row_id
+ WHERE (r.native_session_id IS NULL OR NOT EXISTS (
+ SELECT 1 FROM session s JOIN turn_raw t ON t.session_row_id=s.id
+ WHERE s.harness=ss.provider AND s.session_id=r.native_session_id))
+ AND NOT (json_extract(r.payload, '$.record_kind')='cumulative' AND EXISTS (
+ SELECT 1 FROM sdk_turn_raw calls WHERE calls.session_row_id=r.session_row_id
+ AND json_extract(calls.payload, '$.usage_id')=json_extract(r.payload, '$.usage_id')
+ AND json_extract(calls.payload, '$.record_kind')='call'));
+CREATE VIEW IF NOT EXISTS usage_norm AS
+ SELECT * FROM turn_norm UNION ALL SELECT
+ -turn_raw_id, ts, model, is_subagent, fresh_input_tokens, cache_read_tokens,
+ cache_write_tokens, output_tokens, reasoning_tokens, context_window,
+ capacity_primary_used_pct, capacity_primary_window_minutes, capacity_primary_resets_at,
+ norm_version, capacity_secondary_used_pct, capacity_secondary_window_minutes,
+ capacity_secondary_resets_at, cache_write_1h_tokens, cache_write_5m_tokens FROM sdk_turn_norm;
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "initial schema: raw + normalized layers, harvest watermark, capabilities", _V1),
     (2, "agent activity log for sub-agent telemetry with no local token data", _V2),
@@ -418,6 +467,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (4, "title provenance and a session-level timestamp high-water mark", _V4),
     (5, "cache-TTL split columns on turn_norm", _V5),
     (6, "plugin and skill usage counter observations, scoped scan watermark", _V6),
+    (7, "SDK usage raw/normalized records and combined read views", _V7),
 ]
 
 
@@ -549,8 +599,8 @@ def store_status(path: Path) -> dict:
                 "user_version": version,
                 "pending": pending,
             }
-        turns = int(conn.execute("SELECT count(*) FROM turn_raw").fetchone()[0])
-        sessions = int(conn.execute("SELECT count(*) FROM session").fetchone()[0])
+        turns = int(conn.execute("SELECT (SELECT count(*) FROM turn_raw) + (SELECT count(*) FROM sdk_turn_raw)").fetchone()[0])
+        sessions = int(conn.execute("SELECT (SELECT count(*) FROM session) + (SELECT count(*) FROM sdk_session)").fetchone()[0])
         return {
             "state": STATE_EMPTY if turns == 0 else STATE_OK,
             "path": path,

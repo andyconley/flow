@@ -223,26 +223,25 @@ def backfill(root, rescan=False, apply=False, yes=False, work_ids=None):
     return result
 
 
-def archive_transition(args):
+def archive_transition_result(root, work_id, event="archive", artifacts=None, dispositions=None, note=None):
+    """Close canonically, then enrich; enrichment failures remain retryable."""
     import runstate
-    from fsutil import repo_root
-    root = repo_root().resolve()
+    root = Path(root).resolve()
+    artifacts = dict(artifacts or {})
+    dispositions = dict(dispositions or {})
     errors = []
-    try:
-        artifacts = runstate.parse_assignments(args.artifact, "--artifact")
-        dispositions = runstate.parse_assignments(args.disposition, "--disposition")
-    except ValueError as error:
-        print(str(error))
-        return 1
+    if not runstate.valid_work_id(work_id):
+        return {"ok": False, "run": {}, "errors": ["invalid work id: use a single directory name"],
+                "enrichment_diagnostics": [], "archive_coverage": cached_coverage(root)}
     dispositions["archive_enrichment"] = "1"
     try:
         with writer_lock(root):
             ensure_ignore(root)
             source_id = ensure_identity(root)
-            previous = load_envelope(root, args.work_id)
+            previous = load_envelope(root, work_id)
             if previous:
                 validate_envelope(previous)
-                if previous["identity"] != {"source_id": source_id, "work_id": args.work_id}:
+                if previous["identity"] != {"source_id": source_id, "work_id": work_id}:
                     raise ArchiveError("archive identity mismatch")
                 if previous.get("declarations", {}).get("supersedes"):
                     for edge in previous["declarations"]["supersedes"]:
@@ -252,54 +251,82 @@ def archive_transition(args):
                             verify_pointer(root, pointer)
                     dispositions["archive_declarations"] = declaration_digest(previous["identity"], previous["declarations"])
     except (OSError, ValueError, KeyError, TypeError) as error:
-        errors.append(f"{args.work_id}: prepare: {error}; restore identity/control evidence then backfill")
+        errors.append(f"{work_id}: prepare: {error}; restore identity/control evidence then backfill")
         dispositions.pop("archive_declarations", None)
     # Do not wrap lifecycle persistence exceptions as enrichment success.
-    ok, payload, refused = runstate.apply_transition(args.work_id, args.event, artifacts=artifacts, dispositions=dispositions, note=args.note, root=root)
+    from delivery_control import run_lock
+    with run_lock(runstate._run_dir(work_id, root)):
+        current = runstate._load_run(work_id, root) or {}
+        if event == "archive" and current.get("state") == "archived":
+            # Retrying enrichment does not manufacture another approval/event.
+            refused = runstate.openhands_approval_errors(work_id, current, root)
+            if current.get("pending_lifecycle_event"):
+                refused.append("lifecycle event projection repair is required before archive retry")
+            if any(current.get("artifacts", {}).get(key) != value for key, value in artifacts.items()):
+                refused.append("archive retry cannot amend approved artifacts")
+            if any(current.get("dispositions", {}).get(key) != value for key, value in dispositions.items()):
+                refused.append("archive retry cannot amend dispositions")
+            ok, payload = not refused, current
+        else:
+            ok, payload, refused = runstate.apply_transition(work_id, event, artifacts=artifacts, dispositions=dispositions, note=note, root=root, _lock_held=True)
     if ok:
         try:
             source_id = read_identity(root)
             # Parse and hash one byte snapshot, never a second read of a newer base.
             with writer_lock(root):
-                if load_run(root, args.work_id) != payload:
+                if load_run(root, work_id) != payload:
                     raise ArchiveError("canonical run changed after closure; regenerate through backfill")
-                path = envelope_path(root, args.work_id)
+                path = envelope_path(root, work_id)
                 raw = path.read_bytes() if path.exists() else None
                 previous = json.loads(raw) if raw is not None else None
                 import hashlib
                 base = hashlib.sha256(raw).hexdigest() if raw is not None else "absent"
             value = build_envelope(root, payload, source_id, previous, "archive")
             with writer_lock(root):
-                if load_run(root, args.work_id) != payload:
+                if load_run(root, work_id) != payload:
                     raise ArchiveError("canonical run changed during archive generation")
                 if extract(root, payload, source_id, value["declarations"]) != value["generated"]:
                     raise ArchiveError("source changed during archive generation")
-                write_envelope(root, args.work_id, value, base)
+                write_envelope(root, work_id, value, base)
         except Exception as error:
-            errors.append(f"{args.work_id}: abstract: {error}; repair source and run flow archive backfill")
+            errors.append(f"{work_id}: abstract: {error}; repair source and run flow archive backfill")
         if (cache_dir(root) / "index.sqlite3").exists():
             try:
                 from archive_query import rebuild
                 result = rebuild(root, incremental=True)
                 if result["state"] != "complete":
-                    errors.append(f"{args.work_id}: index: {result}; run flow index rebuild")
+                    errors.append(f"{work_id}: index: {result}; run flow index rebuild")
             except Exception as error:
-                errors.append(f"{args.work_id}: index: {error}; run flow index rebuild")
+                errors.append(f"{work_id}: index: {error}; run flow index rebuild")
         try:
             with writer_lock(root):
-                refresh_coverage(root, args.work_id)
+                refresh_coverage(root, work_id)
         except Exception as error:
-            errors.append(f"{args.work_id}: coverage: {error}; observation not persisted; run flow archive backfill")
+            errors.append(f"{work_id}: coverage: {error}; observation not persisted; run flow archive backfill")
     coverage = cached_coverage(root)
+    return {"ok": ok, "run": payload, "errors": refused,
+            "enrichment_diagnostics": errors, "archive_coverage": coverage}
+
+
+def archive_transition(args):
+    from fsutil import repo_root
+    import runstate
+    try:
+        artifacts = runstate.parse_assignments(args.artifact, "--artifact")
+        dispositions = runstate.parse_assignments(args.disposition, "--disposition")
+    except ValueError as error:
+        print(str(error))
+        return 1
+    result = archive_transition_result(repo_root(), args.work_id, args.event, artifacts, dispositions, args.note)
     if args.json:
-        print(json.dumps({"ok": ok, "run": payload, "errors": refused, "enrichment_diagnostics": errors, "archive_coverage": coverage}, sort_keys=True))
+        print(json.dumps(result, sort_keys=True))
     else:
-        print(f"transition {'accepted' if ok else 'refused'}: {args.event}")
-        if ok:
-            print("state: " + payload["state"])
-        for error in refused + errors:
+        print(f"transition {'accepted' if result['ok'] else 'refused'}: {args.event}")
+        if result["ok"]:
+            print("state: " + result["run"]["state"])
+        for error in result["errors"] + result["enrichment_diagnostics"]:
             print("- " + error)
-    return 0 if ok else 1
+    return 0 if result["ok"] else 1
 
 
 def mutate(root, work, operation, data, base_digest, apply=False, yes=False):

@@ -6,6 +6,7 @@ references below are links, not a second execution ledger or checkpoint system.
 from __future__ import annotations
 
 from argparse import Namespace
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 import json
@@ -117,6 +118,10 @@ def execute(args) -> dict:
             if getattr(event, "source", None) == "agent" and hasattr(event, "llm_message"):
                 reference["response"] = "\n".join(getattr(item, "text", "") for item in event.llm_message.content if hasattr(item, "text"))
         started = time.monotonic()
+        elapsed_before = reference.get("elapsed_seconds", 0)
+        session = None
+        reference["provider"] = selection.provider["kind"]
+        reference["model"] = selection.provider.get("model")
         try:
             with conversation(selection, root, directory / "openhands", conversation_id, progress) as session:
                 from openhands.sdk.conversation.state import ConversationExecutionStatus, ConversationState
@@ -150,7 +155,17 @@ def execute(args) -> dict:
             reference["error_type"] = type(exc).__name__
             raise
         finally:
-            reference["elapsed_seconds"] = round(time.monotonic() - started, 3)
+            reference["elapsed_seconds"] = round(elapsed_before + time.monotonic() - started, 3)
+            # Also refresh on waiting, provider failures and Ctrl-C. The context
+            # manager has persisted/closed the SDK conversation before this runs.
+            if session is not None and hasattr(session, "conversation_stats"):
+                try:
+                    reference["metrics"] = session.conversation_stats.get_combined_metrics().model_dump(mode="json")
+                    reference["metrics_by_usage"] = session.conversation_stats.model_dump(mode="json")["usage_to_metrics"]
+                    reference.pop("metrics_error_type", None)
+                except Exception as metrics_error:
+                    reference["metrics_error_type"] = type(metrics_error).__name__
+            reference["metrics_observed_at"] = datetime.now(timezone.utc).isoformat()
             runstate._write_run(args.work_id, payload, root)
             report = {"work_id": args.work_id, **reference}
             write_atomic(directory / f"{stage}-{selection.role}-outcome.json", json.dumps(report, indent=2) + "\n")
@@ -207,7 +222,7 @@ def archive(args) -> dict:
     root = _root(args)
     directory, payload = _run(root, args.work_id)
     dispositions = runstate.parse_assignments(args.disposition, "disposition")
-    if payload["state"] != "review_accepted" or not all(dispositions.get(key) for key in ("memory", "capability_gaps")):
+    if payload["state"] not in {"review_accepted", "archived"} or not all(dispositions.get(key) for key in ("memory", "capability_gaps")):
         raise RuntimeConfigurationError("archive requires accepted review and memory/capability_gaps dispositions")
     summary = directory / "archive.md"
     if not summary.exists():
@@ -215,8 +230,13 @@ def archive(args) -> dict:
         write_atomic(summary, f"# Archive Summary: {args.work_id}\n\n## Work Closed\n\nAccepted review. Detailed outcomes and evidence are in the approved artifacts below.\n\n{sources}\n\n## Dispositions\n\n" + "\n".join(f"- {key}: {value}" for key, value in dispositions.items()) + "\n")
     if summary.is_symlink() or not summary.resolve().is_relative_to(directory.resolve()):
         raise RuntimeConfigurationError("archive summary must be a current-run regular file")
-    return _transition(root, args.work_id, "archive", dispositions=dispositions,
-                       artifacts={"archive": summary.relative_to(root).as_posix()})
+    from archive_service import archive_transition_result
+    result = archive_transition_result(root, args.work_id, dispositions=dispositions,
+                                      artifacts={"archive": summary.relative_to(root).as_posix()})
+    if not result["ok"]:
+        raise RuntimeConfigurationError("; ".join(result["errors"]))
+    return {**result["run"], "enrichment_diagnostics": result["enrichment_diagnostics"],
+            "archive_coverage": result["archive_coverage"]}
 
 
 def show(args) -> dict:
@@ -264,6 +284,8 @@ def _summary(result):
         integrity = result.get("approval_integrity", {})
         if integrity.get("errors"):
             text += "\napproval integrity: " + "; ".join(integrity["errors"])
+        if result.get("enrichment_diagnostics"):
+            text += "\narchive enrichment: " + "; ".join(result["enrichment_diagnostics"])
         return text
     return json.dumps(result, indent=2)
 

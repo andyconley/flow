@@ -228,6 +228,8 @@ def main() -> int:
         help="harvest ~/.codex/sessions/ into the usage store",
         description="Incrementally read Codex session transcripts, writing session and turn records into the usage store's raw layer.",
     )
+    sdk_harvest = harvest_sub.add_parser("openhands", help="import current project SDK usage into combined reports")
+    sdk_harvest.add_argument("--project-root", type=Path)
     harvest_claude_parser = harvest_sub.add_parser(
         "claude",
         help="harvest ~/.claude/projects/ into the usage store",
@@ -1084,6 +1086,10 @@ def main() -> int:
         return setup_user(overlay_repo=args.overlay_repo)
     if args.command == "refresh" and args.refresh_target == "project":
         return refresh_project(all_files=args.all, interactive=args.interactive)
+    if args.command == "harvest" and args.harvest_target == "openhands":
+        from openhands_usage import harvest_command
+        from fsutil import repo_root
+        return harvest_command(args.project_root or repo_root())
     if args.command == "harvest" and args.harvest_target == "codex":
         return harvest_codex_command()
     if args.command == "harvest" and args.harvest_target == "claude":

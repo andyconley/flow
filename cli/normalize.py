@@ -224,9 +224,28 @@ def _normalize_claude_row(payload: dict) -> dict | None:
     }
 
 
+def _normalize_openhands_row(payload: dict) -> dict | None:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    # LiteLLM prompt includes cache reads. ACP prompt/cache buckets are disjoint.
+    prompt = _num(usage.get("prompt_tokens"))
+    cached = _num(usage.get("cache_read_tokens"))
+    fresh = prompt if payload.get("provider") in {"claude", "codex"} else _compute_fresh_input_tokens(prompt, cached)
+    return {"fresh_input_tokens": fresh, "cache_read_tokens": cached,
+            "cache_write_tokens": _num(usage.get("cache_write_tokens")),
+            "output_tokens": _num(usage.get("completion_tokens")),
+            "reasoning_tokens": _num(usage.get("reasoning_tokens")),
+            "context_window": (_num(usage.get("context_window")) or None) if payload.get("record_kind") != "cumulative" else None,
+            **{name: None for name in ("cache_write_1h_tokens", "cache_write_5m_tokens",
+               "capacity_primary_used_pct", "capacity_primary_window_minutes", "capacity_primary_resets_at",
+               "capacity_secondary_used_pct", "capacity_secondary_window_minutes", "capacity_secondary_resets_at")}}
+
+
 _EXTRACTORS = {
     "codex": _normalize_codex_row,
     "claude": _normalize_claude_row,
+    "openhands": _normalize_openhands_row,
 }
 
 
@@ -266,9 +285,9 @@ def normalize_all(conn: sqlite3.Connection) -> dict:
     extractors_placeholder = ",".join("?" for _ in _EXTRACTORS)
     rows = conn.execute(
         "SELECT tr.id, tr.payload, tr.ts, tr.model, tr.is_subagent, s.harness"
-        " FROM turn_raw tr"
-        " JOIN session s ON s.id = tr.session_row_id"
-        " LEFT JOIN turn_norm tn ON tn.turn_raw_id = tr.id"
+        " FROM usage_raw tr"
+        " JOIN usage_session s ON s.id = tr.session_row_id"
+        " LEFT JOIN usage_norm tn ON tn.turn_raw_id = tr.id"
         " WHERE s.harness IN (" + extractors_placeholder + ")"
         " AND (tn.turn_raw_id IS NULL OR COALESCE(tn.norm_version, -1) < ?)",
         (*_EXTRACTORS.keys(), NORM_VERSION),
@@ -292,9 +311,10 @@ def normalize_all(conn: sqlite3.Connection) -> dict:
                 # indistinguishable from a legitimate absence-of-data case.
                 skipped += 1
                 continue
+            table = "sdk_turn_norm" if harness == "openhands" else "turn_norm"
             with conn:
                 conn.execute(
-                    "INSERT INTO turn_norm"
+                    f"INSERT INTO {table}"
                     " (turn_raw_id, ts, model, is_subagent, fresh_input_tokens, cache_read_tokens,"
                     "  cache_write_tokens, cache_write_1h_tokens, cache_write_5m_tokens,"
                     "  output_tokens, reasoning_tokens, context_window,"
@@ -322,7 +342,7 @@ def normalize_all(conn: sqlite3.Connection) -> dict:
                     "   capacity_secondary_resets_at = excluded.capacity_secondary_resets_at,"
                     "   norm_version = excluded.norm_version",
                     (
-                        turn_raw_id,
+                        abs(turn_raw_id),
                         ts,
                         model,
                         is_subagent,
