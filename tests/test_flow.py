@@ -2980,7 +2980,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn("brew install python@3.12", combined)
         self.assertFalse((fake_home / ".flow" / "source").exists())
 
-    def test_install_keeps_openhands_explicit_and_does_not_activate_maf(self) -> None:
+    def test_install_verifies_openhands_and_does_not_activate_maf(self) -> None:
         fake_home = self._new_fake_home()
         base = self.repo / "unsupported-maf-python"
         base.write_text("#!/bin/sh\ncase \"$2\" in\n  *sys.platform*) echo 'linux|x86_64|3|12' ;;\n  *) echo '3.12.0' ;;\nesac\n")
@@ -2991,7 +2991,7 @@ class FlowCliTests(FlowCliHarness):
         result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
                                 text=True, capture_output=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("runtime/openhands/requirements.txt", result.stdout)
+        self.assertIn("OpenHands SDK 1.54.0 verified; launcher bound to", result.stdout)
         self.assertTrue((fake_home / ".flow" / "source" / "cli" / "flow.py").is_file())
         config = (fake_home / ".flow" / "config.toml").read_text()
         self.assertNotIn("maf_runtime_activation_state", config)
