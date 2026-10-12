@@ -220,7 +220,15 @@ def archive(args) -> dict:
 
 
 def show(args) -> dict:
-    return _run(_root(args), args.work_id)[1]
+    root = _root(args)
+    payload = runstate.status(args.work_id, root)
+    if payload.get("runtime") != "openhands" or payload.get("protocol_revision") != 3:
+        raise RuntimeConfigurationError("this is not an OpenHands workflow; use flow run status for historical runs")
+    result = dict(payload)
+    errors = runstate.openhands_approval_errors(args.work_id, payload, root)
+    if errors:
+        result["approval_integrity"] = {"ok": False, "errors": errors}
+    return result
 
 
 def runtime_info(args) -> dict:
@@ -252,7 +260,11 @@ def _summary(result):
     if "session" in result:
         return f"{result['work_id']} {result['stage']}: {result['session']['status']} ({result['session']['conversation_id']})"
     if "state" in result:
-        return f"{result['work_id']}: {result['state']}"
+        text = f"{result['work_id']}: {result['state']}"
+        integrity = result.get("approval_integrity", {})
+        if integrity.get("errors"):
+            text += "\napproval integrity: " + "; ".join(integrity["errors"])
+        return text
     return json.dumps(result, indent=2)
 
 

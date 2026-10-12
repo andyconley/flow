@@ -96,14 +96,22 @@ activation fails. Verified custom pinned interpreters and user runtime profiles
 are preserved. Readiness checks do not call a model.
 
 An older updater may replace source without knowing about OpenHands provisioning.
-First use of the newly installed CLI for workflow/update/bootstrap or runtime
-readiness/smoke checks the explicit installed-source binding and missing activation
+First use of the newly installed CLI for `workflow execute`, explicit `update`
+(without `--check`), or `bootstrap` checks the installed-source binding and missing activation
 marker, binds the verified SDK interpreter and re-executes the requested command.
 Project checkouts and retired execution commands do not activate this bridge.
 On failure, the prior launcher/configuration/runtime pointer remain available;
 stdlib inspection still works and OpenHands-dependent commands report the error.
 Retry `flow update` to repair. A predecessor-deleted source cannot be restored
 by this first-use bridge. See [the upgrade and rollback boundaries](openhands-migration.md#upgrade-through-a-predecessor-installer).
+
+
+Inspection remains free of installation side effects: `workflow status`,
+`workflow runtime`, runtime readiness/smoke, and `update --check` report existing
+state without provisioning. Workflow init, approve, archive and native-handoff
+also do not activate the bridge because they do not require SDK execution.
+Readiness reports a missing runtime; use `workflow execute`, explicit
+`flow update`, or bootstrap to activate an unmarked installed upgrade.
 
 #### Release Validation Gate
 

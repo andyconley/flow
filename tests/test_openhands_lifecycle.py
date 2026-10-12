@@ -147,7 +147,7 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
         self.assertEqual(self.pointer.read_text(), 'new verified pointer')
         self.assertEqual(lifecycle.read_install_config()['openhands_runtime_activation_state'], 'succeeded')
 
-    def test_installed_cli_reexecutes_and_refreshes_all_role_discovery_paths(self):
+    def copy_installed_cli(self):
         repository = Path(__file__).resolve().parents[1]
         shutil.copytree(repository / 'cli', self.source / 'cli', dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns('__pycache__'))
@@ -155,19 +155,27 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
         shutil.copytree(repository / 'hooks', self.source / 'hooks')
         shutil.copytree(repository / 'runtime', self.source / 'runtime',
                         ignore=shutil.ignore_patterns('__pycache__', 'wheelhouse'))
+    def test_installed_cli_reexecutes_and_refreshes_all_role_discovery_paths(self):
+        self.copy_installed_cli()
+        module = self.source / "cli/openhands_flow.py"
+        with module.open("a") as handle:
+            handle.write("\nimport sys\ndef execute(args):\n    return {'work_id': args.work_id, 'execution_python': sys.executable}\n")
+        task = self.home / "task.md"
+        task.write_text("Offline reexec fixture")
         # Provisioning itself is separately covered. This fixture supplies a
         # verified interpreter without network access or live model execution.
         (self.source / 'cli/openhands_provision.py').write_text(
             'VERSION = "1.54.0"\nif __name__ == "__main__":\n    print(' + repr(sys.executable) + ')\n')
         environment = {**os.environ, 'HOME': str(self.home), 'PYTHONDONTWRITEBYTECODE': '1'}
         process = subprocess.run([sys.executable, str(self.source / 'cli/flow.py'),
-                                  'workflow', 'runtime', '--json'], env=environment,
+                                  'workflow', 'execute', 'example', '--task-file', str(task), '--json'], env=environment,
                                  text=True, capture_output=True, timeout=60)
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         # Pure JSON proves adapter progress was quiet before os.execv reran
         # the originally requested command under the activated interpreter.
         payload = json.loads(process.stdout)
-        self.assertIn('ready', payload)
+        self.assertEqual(payload['execution_python'], sys.executable)
+        self.assertEqual(payload['work_id'], 'example')
         for directory, suffix in (('.claude/agents', '.md'), ('.codex/agents', '.toml'),
                                   ('.agents/agents', '.md')):
             generated = list((self.home / directory).glob('*' + suffix))
@@ -175,3 +183,36 @@ class PredecessorActivationBridgeTests(unittest.TestCase):
             self.assertTrue(all(path.is_symlink() for path in generated))
         self.assertIn(sys.executable, self.launcher.read_text())
         self.assertEqual(self.profile.read_text(), '[profiles.custom]\nkind="local"\nmodel="local/custom"\n')
+
+    def test_installed_inspection_and_workflow_metadata_do_not_provision(self):
+        self.copy_installed_cli()
+        (self.source / 'cli/openhands_provision.py').write_text(
+            'VERSION = "1.54.0"\nif __name__ == "__main__":\n    raise RuntimeError("must not install during inspection")\n')
+        # Resolve update diagnostics wholly offline against a nonexistent local
+        # remote, rather than probing a live index or GitHub repository.
+        self.config.write_text('[flow]\npython="prior-python"\n[install]\nmode="release"\nversion="candidate"\nremote="file:///nonexistent-flow-remote"\n')
+        before = {path: path.read_bytes() for path in (self.config, self.launcher, self.pointer, self.profile)}
+        environment = {**os.environ, 'HOME': str(self.home), 'PYTHONDONTWRITEBYTECODE': '1'}
+        project = self.home / 'project'
+        project.mkdir()
+        commands = [
+            (['workflow', 'runtime', '--json'], 0),
+            (['workflow', 'init', 'inspection', '--project-root', str(project), '--json'], 0),
+            (['workflow', 'status', 'inspection', '--project-root', str(project), '--json'], 0),
+            (['runtime', 'readiness', '--json'], 1),
+            (['update', '--check', '--json'], None),
+        ]
+        for arguments, exit_code in commands:
+            with self.subTest(command=arguments):
+                process = subprocess.run([sys.executable, '-S', str(self.source / 'cli/flow.py'), *arguments],
+                                         env=environment, text=True, capture_output=True, timeout=60)
+                if exit_code is not None:
+                    self.assertEqual(process.returncode, exit_code, process.stdout + process.stderr)
+                self.assertNotIn('must not install', process.stdout + process.stderr)
+                payload = json.loads(process.stdout)
+                if arguments[:2] in (['workflow', 'runtime'], ['runtime', 'readiness']):
+                    self.assertFalse(payload['ready'])
+                for path, content in before.items():
+                    self.assertEqual(path.read_bytes(), content, path)
+                self.assertFalse((self.flow / 'generated').exists())
+        self.assertTrue((project / '.flow/runs/inspection/run.json').is_file())

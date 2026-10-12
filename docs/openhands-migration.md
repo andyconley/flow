@@ -65,12 +65,20 @@ restoring backups. Do not change a live installation during an active run.
 
 The pre-OpenHands updater cannot execute provisioning code shipped only in the
 new release. It may swap the source first, leaving its prior Python launcher in
-place. On the first invocation of the newly installed CLI for `workflow`,
-`update`, `bootstrap`, runtime readiness or runtime smoke, Flow checks that this
+place. On the first invocation of the newly installed CLI for `workflow execute`,
+explicit `update` (without `--check`), or `bootstrap`, Flow checks that this
 is the explicitly installed source and that its OpenHands activation marker is
 missing. It provisions/binds the pinned SDK, then re-executes the requested
 command with the verified interpreter. Running a project checkout does not
 activate this bridge, and retired execution paths do not trigger it.
+
+
+Inspection remains free of installation side effects: `workflow status`,
+`workflow runtime`, runtime readiness/smoke, and `update --check` report existing
+state without provisioning. Workflow init, approve, archive and native-handoff
+also do not activate the bridge because they do not require SDK execution.
+Readiness reports a missing runtime; use `workflow execute`, explicit
+`flow update`, or bootstrap to activate an unmarked installed upgrade.
 
 A bridge failure retains the previous launcher, configuration and managed
 runtime pointer. The new standard-library CLI remains inspectable, while

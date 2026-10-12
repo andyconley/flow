@@ -64,10 +64,16 @@ Close an accepted review with `--disposition memory=VALUE` and
 Inspect stages, outputs, SDK conversation IDs, outcomes and metrics. Use `--json`
 for a structured projection.
 
+Status reports approval-integrity errors for old unsealed or changed approvals without changing the run; execution and archival remain blocked until the approved context is reviewed in a new workflow.
+
 ### `flow workflow runtime`
 
 Read exact pinned package versions and the native access decision. `--json` is
-available. This command does not install packages or start providers.
+available. This command does not install packages or start providers, including
+on first use after a predecessor upgrade. Runtime readiness/smoke and
+`flow update --check` likewise report state without repairing it.
+`flow workflow execute`, explicit `flow update`, or `flow bootstrap` can activate
+a missing runtime for the explicitly installed source.
 
 The [OpenHands migration guide](openhands-migration.md) documents configuration,
 workspace access, supported execution and differences from historical MAF runs.

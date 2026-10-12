@@ -102,10 +102,18 @@ checks do not establish live acceptance. The live installation remains unchanged
 
 A fresh review identified the first upgrade from an older updater: it swaps
 source before it can know about new OpenHands provisioning. The follow-up adds
-an installed-source/missing-marker bridge on workflow/update/bootstrap and
-runtime readiness/smoke invocation. It binds the verified SDK interpreter and
+an installed-source/missing-marker bridge on `workflow execute`, explicit
+`update` (without `--check`), and `bootstrap`. It binds the verified SDK interpreter and
 re-executes the requested command. Checkout use and retired execution commands
 do not activate it. User profiles and custom pinned Python are preserved.
+
+
+Inspection remains free of installation side effects: `workflow status`,
+`workflow runtime`, runtime readiness/smoke, and `update --check` report existing
+state without provisioning. Workflow init, approve, archive and native-handoff
+also do not activate the bridge because they do not require SDK execution.
+Readiness reports a missing runtime; use `workflow execute`, explicit
+`flow update`, or bootstrap to activate an unmarked installed upgrade.
 
 Failure retains the prior launcher/configuration/runtime pointer and stdlib
 inspection, while OpenHands-dependent commands report an error. `flow update`
@@ -113,7 +121,7 @@ retries repair. Source already deleted by the predecessor cannot be restored;
 current new install/update paths still provision before swap with full activation
 rollback. See [the migration boundary](openhands-migration.md#upgrade-through-a-predecessor-installer).
 
-The bridge passes six lifecycle tests, including actual isolated CLI activation, clean JSON after re-execution, and all 39 role discovery links. The focused bridge/install/approval/staging suite passes 30 tests. These fixtures contact no package index or model. The live installation remains untouched.
+The bridge passes seven lifecycle tests, including actual isolated CLI activation, clean JSON after re-execution, all 39 role discovery links, and read-only command preservation. The focused bridge/install/approval/staging suite passes 30 tests. These fixtures contact no package index or model. The live installation remains untouched.
 
 Release candidate and published verification now install the pinned SDK in their
 CI environment before requiring all-target runtime smoke, and both verify the

@@ -49,8 +49,8 @@ mixing prose into diagnostic JSON.
 Current install/update code provisions the pinned SDK before source activation,
 with source/configuration/launcher/runtime-pointer rollback on activation failure.
 A predecessor updater may instead replace source first. The new explicitly
-installed CLI detects the missing activation marker on workflow/update/bootstrap
-or runtime readiness/smoke use, binds the pinned SDK and re-executes the requested
+installed CLI detects the missing activation marker on `workflow execute`,
+explicit `update` (without `--check`), or `bootstrap`, binds the pinned SDK and re-executes the requested
 command. It does not activate from a project checkout or retired execution path.
 User profiles and verified custom pinned Python remain preserved.
 
@@ -58,6 +58,14 @@ If this bridge fails, the prior launcher/configuration/runtime pointer remain
 and stdlib inspection works; OpenHands-dependent commands report failure.
 Retry `flow update` to repair. The bridge cannot restore old source already
 deleted by the predecessor. See [migration and rollback](openhands-migration.md#upgrade-through-a-predecessor-installer).
+
+
+Inspection remains free of installation side effects: `workflow status`,
+`workflow runtime`, runtime readiness/smoke, and `update --check` report existing
+state without provisioning. Workflow init, approve, archive and native-handoff
+also do not activate the bridge because they do not require SDK execution.
+Readiness reports a missing runtime; use `workflow execute`, explicit
+`flow update`, or bootstrap to activate an unmarked installed upgrade.
 
 ## Ownership and migration
 

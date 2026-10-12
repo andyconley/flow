@@ -1031,9 +1031,8 @@ def main() -> int:
     # An older updater cannot call new installer hooks. Complete that installed
     # source's bounded bridge before SDK-dependent commands, never for a plain
     # project checkout, read-only inspection or retired historical execution.
-    needs_openhands = args.command in {"workflow", "bootstrap"} or (
-        args.command == "update" and not args.check) or (
-        args.command == "runtime" and args.runtime_target in {"readiness", "smoke"})
+    needs_openhands = (args.command == "workflow" and args.workflow_command == "execute") or (
+        args.command == "update" and not args.check) or args.command == "bootstrap"
     if needs_openhands:
         from lifecycle import activate_managed_openhands_runtime
         activation = activate_managed_openhands_runtime()
