@@ -858,6 +858,10 @@ def sync_outputs(
 
     def restore_prior_outputs():
         for path, (kind, content, mode) in prior_outputs.items():
+            if kind == "link" and path.is_symlink() and os.readlink(path) == content:
+                continue
+            if kind == "file" and not path.is_symlink() and path.is_file() and path.read_bytes() == content and path.stat().st_mode & 0o777 == mode:
+                continue
             if path.is_symlink():
                 path.unlink()
             if kind == "absent":

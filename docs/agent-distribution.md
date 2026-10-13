@@ -95,10 +95,10 @@ of the whole user configuration. Removed Flow roles are removed only from the
 owned block. `--check` never creates a backup or writes configuration.
 
 Backing definitions are prepared first, followed by the atomic ownership
-receipt, discovery links and registration. The receipt precedes the block;
-if receipt persistence fails, prior generated files are restored so their
-recorded hashes remain valid for a retry. Unchanged receipts are not rewritten.
-its prior-block hash permits retry after an interrupted configuration write
+receipt, discovery links and registration. If receipt persistence fails, changed
+generated files are restored so their recorded hashes remain valid for a retry.
+Unchanged receipts are not rewritten. The receipt's prior-block hash permits
+retry after an interrupted configuration write
 without treating the untouched prior registration as a user edit.
 
 Before a changed configuration is atomically replaced, the original is backed

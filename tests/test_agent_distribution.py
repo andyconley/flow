@@ -177,7 +177,11 @@ class AgentDistributionTests(unittest.TestCase):
                 entry['sha256'] = hashlib.sha256(desired[backing].encode()).hexdigest()
         desired[receipt] = build_managed_manifest("codex", entries)
         before = {p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
-        with patch.object(sync, "write_atomic", side_effect=OSError("synthetic receipt failure")):
+        real_write = Path.write_bytes
+        def restore_changed_only(path, content):
+            self.assertEqual(path, backing, "unchanged files must not be rewritten during rollback")
+            return real_write(path, content)
+        with patch.object(sync, "write_atomic", side_effect=OSError("synthetic receipt failure")), patch.object(Path, "write_bytes", restore_changed_only):
             self.assertEqual(self.apply_registration_desired(values), 1)
         self.assertEqual({p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}, before)
         ownership = sync.output_ownership(self.home, receipt)
