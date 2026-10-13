@@ -76,7 +76,7 @@ def registration_config(root: Path, roles: dict[str, Path], ownership: dict | No
                 raise ValueError(f'Codex user-owned registration collision: {name}')
             # Compatible user-owned registrations stay outside Flow's ownership.
             continue
-        lines.extend([f'[agents.{json.dumps(name)}]', f'config_file = {json.dumps(str(target))}', ''])
+        lines.extend([f'[agents.{json.dumps(name, ensure_ascii=False)}]', f'config_file = {json.dumps(str(target), ensure_ascii=False)}', ''])
     block = BEGIN + '\n'.join(lines) + END if lines else ''
     if old and hashlib.sha256(old.encode()).hexdigest() != ownership['block_sha256'] and old != block:
         raise ValueError('Flow-owned Codex registrations were edited; preserve and resolve manually')

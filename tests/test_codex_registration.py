@@ -47,6 +47,14 @@ class CodexRegistrationTests(unittest.TestCase):
         write_registration_config(self.root, b, a)
         self.assertEqual(len(list(backups[0].parent.glob('*.toml'))), 1)
 
+    def test_non_bmp_role_and_home_path_are_valid_toml(self):
+        root = self.root / "home-🤖"
+        target = root / ".flow/generated/agents/codex/role-💡.toml"
+        before, after, _ = registration_config(root, {"role-💡": target}, None)
+        self.assertEqual(before, "")
+        self.assertEqual(tomllib.loads(after)["agents"]["role-💡"]["config_file"], str(target))
+        self.assertNotIn("\\ud83d", after)
+
     def test_all_reserved_names_fail_before_writes(self):
         original = '# untouched\nmodel = "user"\n'
         self.config.write_text(original)
