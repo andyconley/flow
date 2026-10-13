@@ -3,6 +3,7 @@
 After explicit solution approval, the active host assistant assumes Delivery
 Lead coordination and initiates planning. Planning may also start directly
 from an approved definition when the optional solution stage is skipped.
+When both inputs are retained, the approved solution takes precedence.
 The host coordinates technical specialists
 and validation, reconciles evidence into the plan, handoff and validation plan,
 and presents those outputs for explicit user approval before implementation.

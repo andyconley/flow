@@ -47,8 +47,8 @@ results and unresolved questions; a model response alone does not approve work.
 ## Delivery Lead coordination
 
 The host assistant owns Delivery Lead coordination for this stage. Initiate
-planning from the approved definition or approved solution, whichever is
-present (the solution stage is optional), coordinate technical specialists and
+planning from the approved solution when available, otherwise the approved
+definition (the solution stage is optional), coordinate technical specialists and
 validation, and reconcile their evidence into the durable outputs listed above.
 The lead-developer specialist supplies technical planning expertise; the host
 retains coordination ownership. Present the plan and validation approach to
