@@ -42,6 +42,15 @@ Use specialist roles, project skills, context and existing approved artifacts as
 needed. SDK TaskToolSet handles configured specialist delegation. Record actual
 results and unresolved questions; a model response alone does not approve work.
 
+## Delivery Lead coordination
+
+Once the user explicitly approves the solution, the host assistant assumes
+Delivery Lead coordination and initiates `flow-plan` in the active session.
+Coordinate specialists and validation through OpenHands or the existing native
+session. If another session is required, prepare the plan native handoff and
+make the ownership and next action explicit. Approval records lifecycle state;
+it does not dispatch an agent or authorize implementation.
+
 ## Approval and continuation
 
 After the user/operator has reviewed the outputs:
@@ -50,6 +59,9 @@ After the user/operator has reviewed the outputs:
 flow workflow approve <work-id> --stage solution --disposition risk=accepted
 ```
 
+
+Only explicit plan approval authorizes implementation. Do not infer it from
+solution approval, completed planning, or specialist validation.
 
 Inspect progress with `flow workflow status`, `flow run history` and SDK outcome
 artifacts. Pause/block/resume through ordinary Flow lifecycle transitions.
