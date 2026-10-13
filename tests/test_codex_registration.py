@@ -8,7 +8,7 @@ import tomllib
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'cli'))
-from codex_registration import BEGIN, END, registration_config, write_registration_config
+from codex_registration import BEGIN, END, registration_config, write_registration_config, RESERVED_AGENT_NAMES
 
 
 class CodexRegistrationTests(unittest.TestCase):
@@ -46,6 +46,16 @@ class CodexRegistrationTests(unittest.TestCase):
         self.assertEqual(b, a)
         write_registration_config(self.root, b, a)
         self.assertEqual(len(list(backups[0].parent.glob('*.toml'))), 1)
+
+    def test_all_reserved_names_fail_before_writes(self):
+        original = '# untouched\nmodel = "user"\n'
+        self.config.write_text(original)
+        for name in RESERVED_AGENT_NAMES:
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, 'reserved agents settings'):
+                    registration_config(self.root, {name: self.target}, None)
+                self.assertEqual(self.config.read_text(), original)
+                self.assertFalse((self.root / '.flow/backups').exists())
 
     def test_conflicting_user_registration_is_not_adopted_or_written(self):
         raw = '[agents."support-lead"]\nconfig_file = "my-custom-role.toml"\n'

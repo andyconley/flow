@@ -12,9 +12,19 @@ from fsutil import write_atomic
 
 BEGIN = '\n# BEGIN FLOW MANAGED CODEX ROLES\n'
 END = '# END FLOW MANAGED CODEX ROLES\n'
+# Codex rust-v0.162.0-alpha.17.2 AgentsToml scalar properties, plus its
+# documented max_threads compatibility alias. These cannot be role tables.
+RESERVED_AGENT_NAMES = frozenset({
+    'enabled', 'interrupt_message', 'max_concurrent_threads_per_session',
+    'max_threads', 'max_depth', 'default_subagent_model',
+    'default_subagent_reasoning_effort',
+})
 
 
 def registration_config(root: Path, roles: dict[str, Path], ownership: dict | None) -> tuple[str, str, str]:
+    reserved = sorted(set(roles) & RESERVED_AGENT_NAMES)
+    if reserved:
+        raise ValueError('Codex role names are reserved agents settings: ' + ', '.join(reserved))
     if tomllib is None:
         raise ValueError('Safe Codex registration requires Python 3.11+; use the installed OpenHands interpreter')
     path = root / '.codex/config.toml'
