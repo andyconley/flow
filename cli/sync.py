@@ -877,7 +877,8 @@ def sync_outputs(
                 raise ValueError("Codex ownership receipt is a symlink; preserve and resolve manually")
             # Definitions are ready; record ownership before installing links or
             # exposing registrations. Failed writes leave the prior receipt intact.
-            write_atomic(registration_manifest, desired[registration_manifest])
+            if not registration_manifest.exists() or registration_manifest.read_bytes().decode("utf-8") != desired[registration_manifest]:
+                write_atomic(registration_manifest, desired[registration_manifest])
         except (ValueError, OSError) as err:
             if as_json:
                 print_json(support_payload("sync", Path.cwd(), [diagnostic("sync.codex.registration", STATUS_FAILED, SEVERITY_ERROR, "managed_conflict", str(err))]))

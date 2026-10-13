@@ -153,6 +153,15 @@ class AgentDistributionTests(unittest.TestCase):
         self.assertTrue(receipt.is_symlink())
         self.assertEqual({p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}, before)
 
+    def test_unchanged_receipt_is_not_rewritten(self):
+        self.sync("codex")
+        values = self.registration_desired()
+        before = values[-1].stat()
+        with patch.object(values[0], "write_atomic", side_effect=AssertionError("no-op sync must not write")):
+            self.assertEqual(self.apply_registration_desired(values), 0)
+        after = values[-1].stat()
+        self.assertEqual((before.st_ino, before.st_mtime_ns), (after.st_ino, after.st_mtime_ns))
+
     def test_config_failure_keeps_prior_block_retryable(self):
         import codex_registration
         self.sync("codex")
