@@ -97,7 +97,7 @@ class AgentDistributionTests(unittest.TestCase):
     def registration_desired(self, omit=None):
         import sync
         from unittest.mock import patch
-        with patch.object(sync, "USER_OVERLAY_DIR", self.home / ".flow/user"):
+        with patch.object(sync, "USER_OVERLAY_DIR", self.home / ".flow/user"), patch.object(sync, "SOURCE_DIR", ROOT):
             _, manifest = sync.merge_user_overlay(ROOT / "scaffolds/default")
             if omit:
                 manifest["agents"] = [a for a in manifest["agents"] if a["name"] != omit]
