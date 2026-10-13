@@ -28,6 +28,40 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         for filename in config.OUTPUTS[stage].values():
             (self.directory / filename).write_text(f"Evidence for {stage}\n")
 
+    def test_delivery_lead_prompt_and_plan_approval_boundary(self):
+        flow.initialize(self.args)
+        self.outputs("define")
+        self.args.stage = "define"
+        flow.approve(self.args)
+        flow._transition(self.root, "example", "start-solution")
+        self.outputs("solution")
+        self.args.stage = "solution"
+        self.args.disposition = ["risk=accepted"]
+        approved = flow.approve(self.args)
+        self.assertEqual(approved["state"], "solution_approved")
+        with self.assertRaises(config.RuntimeConfigurationError):
+            flow._transition(self.root, "example", "start-implementation")
+        planning = flow._transition(self.root, "example", "start-plan")
+        prompt = flow._stage_prompt(self.root, self.directory, planning, "plan", "Plan the change")
+        self.assertIn("Delivery Lead coordinator", prompt)
+        self.assertIn("explicit plan approval", prompt)
+        self.assertIn("Do not start implementation", prompt)
+        self.outputs("plan")
+        with self.assertRaises(config.RuntimeConfigurationError):
+            flow._transition(self.root, "example", "start-implementation")
+        self.args.stage = "plan"
+        self.args.disposition = []
+        task = self.root / "task.md"
+        task.write_text("Plan the change")
+        (self.root / ".flow/runtime.toml").write_text('default_profile="native"\n[profiles.native]\nkind="codex"\n')
+        self.args.task_file = task
+        self.args.role = self.args.profile = None
+        handoff = flow.native_handoff(self.args)
+        self.assertIn("Delivery Lead coordinator", Path(handoff["artifact"]).read_text())
+        self.assertIn("explicit plan approval", Path(handoff["artifact"]).read_text())
+        flow.approve(self.args)
+        self.assertEqual(flow._transition(self.root, "example", "start-implementation")["state"], "implementing")
+
     def test_full_lifecycle_has_artifacts_without_legacy_orchestration(self):
         self.assertEqual(flow.initialize(self.args)["protocol_revision"], 3)
         for stage in ("define", "solution", "plan", "implement", "review"):

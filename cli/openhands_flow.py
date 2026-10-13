@@ -51,6 +51,12 @@ def initialize(args) -> dict:
     return _transition(root, args.work_id, "start-definition", protocol_revision=3)
 
 
+STAGE_COORDINATION = {
+    "solution": "After explicit solution approval, the host assistant assumes Delivery Lead coordination and initiates planning. Solution approval does not authorize implementation.",
+    "plan": "Act as Delivery Lead coordinator: initiate planning from the approved solution, coordinate technical specialists and validation through the existing runtime, and reconcile their evidence into plan.md, handoff.md and validation-plan.md. Present the plan to the user for explicit plan approval before implementation. The lead-developer role supplies technical planning expertise; it does not replace host coordination. Do not start implementation until the plan is approved.",
+}
+
+
 def _stage_prompt(root: Path, directory: Path, payload: dict, stage: str, task: str) -> str:
     outputs = "\n".join(f"- {name}: {(directory / filename).relative_to(root)}" for name, filename in OUTPUTS[stage].items())
     inputs = "\n".join(f"- {name}: {relative}" for name, relative in payload.get("artifacts", {}).items())
@@ -59,6 +65,7 @@ def _stage_prompt(root: Path, directory: Path, payload: dict, stage: str, task: 
             f"Produce the following durable stage outputs, with actual evidence and unresolved questions:\n{outputs}\n"
             "Flow owns lifecycle approvals; do not change run.json, events.jsonl, or runtime session storage. "
             "A stage response does not approve the work. Follow project instructions and actual workspace permissions.\n\n"
+            f"{STAGE_COORDINATION.get(stage, '')}\n\n"
             f"Requested outcome:\n{task}")
 
 

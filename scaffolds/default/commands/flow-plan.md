@@ -44,6 +44,15 @@ Use specialist roles, project skills, context and existing approved artifacts as
 needed. SDK TaskToolSet handles configured specialist delegation. Record actual
 results and unresolved questions; a model response alone does not approve work.
 
+## Delivery Lead coordination
+
+The host assistant owns Delivery Lead coordination for this stage. Initiate
+planning from the approved solution, coordinate technical specialists and
+validation, and reconcile their evidence into the durable outputs listed above.
+The lead-developer specialist supplies technical planning expertise; the host
+retains coordination ownership. Present the plan and validation approach to
+the user for explicit approval before beginning implementation.
+
 ## Approval and continuation
 
 After the user/operator has reviewed the outputs:
@@ -52,6 +61,9 @@ After the user/operator has reviewed the outputs:
 flow workflow approve <work-id> --stage plan
 ```
 
+
+Only explicit plan approval authorizes implementation. Do not infer it from
+solution approval, completed planning, or specialist validation.
 
 Inspect progress with `flow workflow status`, `flow run history` and SDK outcome
 artifacts. Pause/block/resume through ordinary Flow lifecycle transitions.
