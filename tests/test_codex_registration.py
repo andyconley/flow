@@ -66,6 +66,16 @@ class CodexRegistrationTests(unittest.TestCase):
                 self.assertEqual(self.config.read_text(), original)
                 self.assertFalse((self.root / '.flow/backups').exists())
 
+    def test_path_separator_names_fail_before_writes(self):
+        original = '# untouched\nmodel = "user"\n'
+        self.config.write_text(original)
+        for name in ('nested/role', 'nested\\role', '../role'):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, 'path separators'):
+                    registration_config(self.root, {name: self.target}, None)
+                self.assertEqual(self.config.read_text(), original)
+                self.assertFalse((self.root / '.flow/backups').exists())
+
     def test_conflicting_user_registration_is_not_adopted_or_written(self):
         raw = '[agents."support-lead"]\nconfig_file = "my-custom-role.toml"\n'
         self.config.write_text(raw)

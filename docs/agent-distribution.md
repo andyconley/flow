@@ -89,7 +89,7 @@ Codex role registration preserves all text outside its marked block, including
 comments, formatting, custom agents and access settings. A compatible user-owned
 registration for the same file stays user-owned. A conflicting name, redirected
 config symlink, malformed TOML or edited/unowned block stops sync before writes.
-Reserved Codex `[agents]` setting names (including compatibility aliases) are
+Role names containing path separators and reserved Codex `[agents]` setting names (including compatibility aliases) are
 rejected as role names before registration. The managed manifest records current and prior owned-block hashes; it does not claim ownership
 of the whole user configuration. Removed Flow roles are removed only from the
 owned block. `--check` never creates a backup or writes configuration.

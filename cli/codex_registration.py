@@ -22,6 +22,9 @@ RESERVED_AGENT_NAMES = frozenset({
 
 
 def registration_config(root: Path, roles: dict[str, Path], ownership: dict | None) -> tuple[str, str, str]:
+    invalid_paths = sorted(name for name in roles if '/' in name or '\\' in name)
+    if invalid_paths:
+        raise ValueError('Codex role names cannot contain path separators: ' + ', '.join(invalid_paths))
     reserved = sorted(set(roles) & RESERVED_AGENT_NAMES)
     if reserved:
         raise ValueError('Codex role names are reserved agents settings: ' + ', '.join(reserved))
