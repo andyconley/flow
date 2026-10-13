@@ -59,6 +59,169 @@ class AgentDistributionTests(unittest.TestCase):
             self.sync(target, check=True)
             self.assertIn("no changes needed", self.sync(target).stdout)
 
+    def test_codex_registration_preserves_user_config_and_check_is_read_only(self):
+        config_path = self.home / ".codex/config.toml"
+        config_path.parent.mkdir(parents=True)
+        original = '# User comment\r\nmodel = "my-model"\r\nsandbox_mode = "read-only"\r\n[projects."/my/work"]\r\ntrust_level = "untrusted"\r\n[agents.custom]\r\nconfig_file = "custom.toml"'
+        config_path.write_bytes(original.encode())
+        self.sync("codex", check=True, okay=False)
+        self.assertEqual(config_path.read_bytes(), original.encode())
+        self.assertFalse((self.home / ".flow/backups").exists())
+        self.sync("codex")
+        generated = config_path.read_bytes().decode()
+        self.assertTrue(generated.startswith(original))
+        config = tomllib.loads(generated)
+        self.assertEqual(config["sandbox_mode"], "read-only")
+        self.assertEqual(config["projects"]["/my/work"]["trust_level"], "untrusted")
+        self.assertEqual(config["agents"]["custom"]["config_file"], "custom.toml")
+        for role in (ROOT / "scaffolds/default/agents").glob("*.md"):
+            self.assertEqual(config["agents"][role.stem]["config_file"],
+                             str(self.home / ".flow/generated/agents/codex" / (role.stem + ".toml")))
+        self.sync("codex", check=True)
+        self.sync("codex")
+        self.assertEqual(config_path.read_bytes().decode(), generated)
+        backups = list((self.home / ".flow/backups/codex-role-registration").glob("*.toml"))
+        self.assertEqual([p.read_bytes() for p in backups], [original.encode()])
+
+    def test_codex_registration_collision_blocks_all_sync_writes(self):
+        config = self.home / ".codex/config.toml"
+        config.parent.mkdir(parents=True)
+        original = '[agents."support-lead"]\nconfig_file = "user-owned.toml"\n'
+        config.write_text(original)
+        result = self.sync("codex", okay=False)
+        self.assertIn("user-owned registration collision: support-lead", result.stdout)
+        self.assertEqual(config.read_text(), original)
+        self.assertFalse((self.home / ".flow/generated").exists())
+        self.assertFalse((self.home / ".flow/backups").exists())
+
+    def registration_desired(self, omit=None):
+        import sync
+        from unittest.mock import patch
+        with patch.object(sync, "USER_OVERLAY_DIR", self.home / ".flow/user"), patch.object(sync, "SOURCE_DIR", ROOT):
+            _, manifest = sync.merge_user_overlay(ROOT / "scaffolds/default")
+            if omit:
+                manifest["agents"] = [a for a in manifest["agents"] if a["name"] != omit]
+            desired, entries, mergeable = sync.desired_outputs_for_target("codex", self.home,
+                ROOT / "scaffolds/default", manifest, sync.manifest_ref_for())
+        path = self.home / manifest["codex"]["managed_manifest"]
+        return sync, desired, entries, mergeable, path
+
+    def apply_registration_desired(self, values):
+        sync, desired, entries, mergeable, manifest_path = values
+        from contextlib import redirect_stdout
+        import io
+        links = {self.home / e["path"]: self.home / e["link"] for e in entries if "link" in e}
+        before = next(e["_registration_before"] for e in entries if "_registration_before" in e)
+        with redirect_stdout(io.StringIO()):
+            return sync.sync_outputs(self.home, "codex", desired,
+                sync.read_managed_paths(self.home, manifest_path), mergeable, check=False,
+                merge_protected=sync.read_managed_merge_paths(self.home, manifest_path),
+                agent_links=links, registration_before=before, registration_manifest=manifest_path)
+
+    def test_backing_failure_never_exposes_registration(self):
+        values = self.registration_desired()
+        original_write = Path.write_text
+        def fail_backing(path, content, *args, **kwargs):
+            if path == self.home / ".flow/generated/agents/codex/architect.toml":
+                raise OSError("synthetic backing write failure")
+            return original_write(path, content, *args, **kwargs)
+        with patch.object(Path, "write_text", fail_backing):
+            with self.assertRaisesRegex(OSError, "backing write failure"):
+                self.apply_registration_desired(values)
+        self.assertFalse((self.home / ".codex/config.toml").exists())
+        self.assertFalse(values[-1].exists())
+
+    def test_receipt_failure_never_exposes_registration(self):
+        values = self.registration_desired()
+        with patch.object(values[0], "write_atomic", side_effect=OSError("synthetic receipt write failure")):
+            self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertFalse((self.home / ".codex/config.toml").exists())
+        self.assertFalse(values[-1].exists())
+        self.sync("codex")
+        self.sync("codex", check=True)
+
+    def test_symlinked_receipt_blocks_all_sync_writes(self):
+        self.sync("codex")
+        values = self.registration_desired(omit="support-lead")
+        receipt = values[-1]
+        referent = self.home / "unrelated-receipt.toml"
+        referent.write_bytes(receipt.read_bytes())
+        receipt.unlink()
+        receipt.symlink_to(referent)
+        before = {p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
+        self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertTrue(receipt.is_symlink())
+        self.assertEqual({p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}, before)
+
+    def test_unchanged_receipt_is_not_rewritten(self):
+        self.sync("codex")
+        values = self.registration_desired()
+        before = values[-1].stat()
+        with patch.object(values[0], "write_atomic", side_effect=AssertionError("no-op sync must not write")):
+            self.assertEqual(self.apply_registration_desired(values), 0)
+        after = values[-1].stat()
+        self.assertEqual((before.st_ino, before.st_mtime_ns), (after.st_ino, after.st_mtime_ns))
+
+    def test_receipt_failure_restores_existing_outputs_and_allows_retry(self):
+        self.sync("codex")
+        values = self.registration_desired()
+        sync, desired, entries, _, receipt = values
+        backing = self.home / ".flow/generated/agents/codex/architect.toml"
+        desired[backing] += "\n# changed definition\n"
+        link = self.home / ".codex/agents/architect.toml"
+        desired[link] = desired[backing]
+        import hashlib
+        from render import build_managed_manifest
+        for entry in entries:
+            if self.home / entry['path'] in {backing, link}:
+                entry['sha256'] = hashlib.sha256(desired[backing].encode()).hexdigest()
+        desired[receipt] = build_managed_manifest("codex", entries)
+        before = {p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
+        real_write = Path.write_bytes
+        def restore_changed_only(path, content):
+            self.assertEqual(path, backing, "unchanged files must not be rewritten during rollback")
+            return real_write(path, content)
+        with patch.object(sync, "write_atomic", side_effect=OSError("synthetic receipt failure")), patch.object(Path, "write_bytes", restore_changed_only):
+            self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertEqual({p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}, before)
+        ownership = sync.output_ownership(self.home, receipt)
+        self.assertEqual(sync.output_edit_conflicts(self.home, ownership, desired), [])
+        self.assertEqual(self.apply_registration_desired(values), 0)
+        self.assertEqual(backing.read_text(), desired[backing])
+        self.assertEqual(sync.output_edit_conflicts(self.home, sync.output_ownership(self.home, receipt), desired), [])
+
+    def test_config_failure_keeps_prior_block_retryable(self):
+        import codex_registration
+        self.sync("codex")
+        config_path = self.home / ".codex/config.toml"
+        original = config_path.read_bytes()
+        values = self.registration_desired(omit="support-lead")
+        real_atomic = codex_registration.write_atomic
+        def fail_config(path, content, **kwargs):
+            if path == config_path:
+                raise OSError("synthetic config write failure")
+            return real_atomic(path, content, **kwargs)
+        with patch.object(codex_registration, "write_atomic", fail_config):
+            self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertEqual(config_path.read_bytes(), original)
+        retry = self.registration_desired(omit="support-lead")
+        self.assertEqual(self.apply_registration_desired(retry), 0)
+        self.assertNotIn("support-lead", tomllib.loads(config_path.read_text())["agents"])
+        self.assertEqual(self.apply_registration_desired(self.registration_desired(omit="support-lead")), 0)
+
+    def test_codex_managed_copy_fallback_registration_smoke(self):
+        values = self.registration_desired()
+        with patch.object(Path, "symlink_to", side_effect=OSError("unsupported")):
+            self.assertEqual(self.apply_registration_desired(values), 0)
+        self.assertFalse((self.home / ".codex/agents/support-lead.toml").is_symlink())
+        result = subprocess.run([sys.executable, str(ROOT / "cli/flow.py"), "runtime", "smoke",
+                                 "--target", "codex", "--json"], env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        rows = json.loads(result.stdout)["targets"][0]["static"]
+        registrations = [r for r in rows if r["name"].endswith("explicit registration")]
+        self.assertEqual(len(registrations), 13)
+        self.assertTrue(all(r["status"] == "passed" for r in registrations))
+
     def test_bootstrap_release_install_and_repeat_are_offline_and_isolated(self):
         for _ in range(2):
             result = subprocess.run(["bash", str(ROOT / "install-flow.sh"), "--release"],

@@ -9,7 +9,7 @@ No role instructions need three independently maintained copies.
 | Runtime | Generated backing definitions | Discovery surface | Format |
 | --- | --- | --- | --- |
 | Claude ACP 0.63.0 | `~/.flow/generated/agents/claude/<role>.md` | `~/.claude/agents/<role>.md` | YAML metadata + Markdown |
-| Codex ACP 1.10.0 / Codex 0.153.4 | `~/.flow/generated/agents/codex/<role>.toml` | `~/.codex/agents/<role>.toml` | name, description, developer_instructions, model/reasoning policy |
+| Codex ACP 1.10.0 / Codex 0.162.0-alpha.17.2 | `~/.flow/generated/agents/codex/<role>.toml` | `~/.codex/agents/<role>.toml` | name, description, developer_instructions, model/reasoning policy |
 | OpenHands SDK 1.54.0 | `~/.flow/generated/agents/openhands/<role>.md` | `~/.agents/agents/<role>.md` | SDK Markdown AgentDefinition |
 
 Each `<role>` is one of: architect, solution-architect, business-analyst,
@@ -20,6 +20,14 @@ Discovery files are relative symlinks to Flow's generated directory. A
 filesystem that rejects symlinks receives a hash-owned copy instead; later
 syncs preserve that installation mode. The generated directory is outside the
 source checkout, so release source swaps do not strand discovery links.
+Codex sync also explicitly registers those files in a delimited, hash-owned
+block in `~/.codex/config.toml`, using `[agents."<role>"]` and `config_file`.
+This supplements directory discovery on clients where the generated files are
+present but the agent type is unavailable. Registrations point to the stable generated backing files. The existing
+discovery symlinks remain intact; the tested Codex build accepted backing-file
+registrations while rejecting registrations through those discovery links.
+No model, effort, tool, permission, trust, or profile settings are added to the
+registration block. Start a fresh native session to load the updated roster.
 Existing commands and hooks continue through the same renderers and manifests.
 Native skills stay at their existing Claude and `.agents/skills` locations.
 
@@ -77,6 +85,30 @@ causes a conflict. A target with any conflict performs no writes for that
 runtime. Unrelated custom agents, skills and other files are retained. Merged
 settings and hook configuration retain the existing merge behavior.
 
+Codex role registration preserves all text outside its marked block, including
+comments, formatting, custom agents and access settings. A compatible user-owned
+registration for the same file stays user-owned. A conflicting name, redirected
+config symlink, malformed TOML or edited/unowned block stops sync before writes.
+Role names containing path separators and reserved Codex `[agents]` setting names (including compatibility aliases) are
+rejected as role names before registration. The managed manifest records current and prior owned-block hashes; it does not claim ownership
+of the whole user configuration. Removed Flow roles are removed only from the
+owned block. `--check` never creates a backup or writes configuration.
+
+Backing definitions are prepared first, followed by the atomic ownership
+receipt, discovery links and registration. If receipt persistence fails, changed
+generated files are restored so their recorded hashes remain valid for a retry.
+Unchanged receipts are not rewritten. The receipt's prior-block hash permits
+retry after an interrupted configuration write
+without treating the untouched prior registration as a user edit.
+
+Before a changed configuration is atomically replaced, the original is backed
+up with owner-only permissions under
+`~/.flow/backups/codex-role-registration/<content-sha256>.toml`. Restore that
+backup only after reviewing any later user edits; otherwise remove only the
+verified Flow block and retain the surrounding user text. Configuration file
+permissions are preserved. Safe registration uses Python's full TOML parser;
+the installed pinned OpenHands interpreter meets its Python 3.11+ requirement.
+
 Older manifests have no hashes. If a legacy replacement file differs from the
 new desired output, Flow cannot prove it is an unedited old generation and
 preserves it as a conflict. The Codex string encoding change can trigger this
@@ -85,6 +117,17 @@ back up the reported files, move intentional edits into the user overlay, then
 remove only the reviewed generated files and rerun that target's sync. Do not
 remove the whole runtime agents or skills directory. There is no force-overwrite
 mode and no automatic adoption of modified files.
+
+
+## Host ownership and delegation
+
+Shaper and Delivery Lead remain responsibilities of the host assistant, not new
+specialist personas. Registration lets that host invoke the declared specialist
+names through Codex's supported native interface: for example, Shaper can gather
+business-analysis or UX evidence, and Delivery Lead can request lead-developer,
+test-engineer and quality-reviewer work. The host reconciles the outputs and
+retains the existing approval boundaries. Registration neither launches agents
+nor changes Flow's OpenHands execution runtime, conversation handling or retries.
 
 ## Execution and supported semantics
 

@@ -427,6 +427,7 @@ Current behavior:
 
 - unchanged owned outputs can be replaced or retired after SHA-256 verification
 - agent discovery uses relative symlinks to stable Flow backing definitions, with managed-copy fallback
+- Codex also receives hash-owned explicit role-file registrations; user configuration and host ownership remain preserved
 - custom files, modified backing content, redirected links and edited managed copies are preserved as conflicts
 - a conflict stops writes for that runtime; hashless legacy differences require review
 
