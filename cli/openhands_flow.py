@@ -53,19 +53,24 @@ def initialize(args) -> dict:
 
 STAGE_COORDINATION = {
     "solution": "After explicit solution approval, the host assistant assumes Delivery Lead coordination and initiates planning. Solution approval does not authorize implementation.",
-    "plan": "Act as Delivery Lead coordinator: initiate planning from the approved solution, coordinate technical specialists and validation through the existing runtime, and reconcile their evidence into plan.md, handoff.md and validation-plan.md. Present the plan to the user for explicit plan approval before implementation. The lead-developer role supplies technical planning expertise; it does not replace host coordination. Do not start implementation until the plan is approved.",
+    "plan": "Prepare technical planning and validation from the approved solution when available, otherwise the approved definition; the solution stage is optional. Supply evidence for plan.md, handoff.md and validation-plan.md to the host assistant, who owns Delivery Lead coordination and requests explicit plan approval from the user. The executing specialist supplies technical expertise and does not take over host coordination. Do not start implementation until the plan is approved.",
 }
 
 
 def _stage_prompt(root: Path, directory: Path, payload: dict, stage: str, task: str) -> str:
     outputs = "\n".join(f"- {name}: {(directory / filename).relative_to(root)}" for name, filename in OUTPUTS[stage].items())
     inputs = "\n".join(f"- {name}: {relative}" for name, relative in payload.get("artifacts", {}).items())
+    planning_basis = (
+        "Planning basis: the approved solution takes precedence over the retained definition."
+        if "solution" in payload.get("artifacts", {}) else
+        "Planning basis: the approved definition; the optional solution stage was skipped."
+    ) if stage == "plan" else ""
     return (f"Flow workflow {payload['work_id']}, stage {stage}.\n"
             f"Project workspace: {root}\nExisting project artifacts:\n{inputs}\n"
             f"Produce the following durable stage outputs, with actual evidence and unresolved questions:\n{outputs}\n"
             "Flow owns lifecycle approvals; do not change run.json, events.jsonl, or runtime session storage. "
             "A stage response does not approve the work. Follow project instructions and actual workspace permissions.\n\n"
-            f"{STAGE_COORDINATION.get(stage, '')}\n\n"
+            f"{STAGE_COORDINATION.get(stage, '')}\n{planning_basis}\n\n"
             f"Requested outcome:\n{task}")
 
 
@@ -215,10 +220,18 @@ def native_handoff(args) -> dict:
     if payload["state"] != stage_state:
         payload = _transition(root, args.work_id, start_event)
     from openhands_runtime import ACP_BLOCKER
+    host_guidance = (
+        "## Host coordination\n\n"
+        "As the host assistant, assume Delivery Lead coordination for planning from the approved solution "
+        "when available, otherwise the approved definition. Coordinate specialists and validation through the existing "
+        "session, reconcile their evidence, and present the plan for explicit user approval before implementation. "
+        "The specialist context and task below provide technical guidance; they do not transfer host ownership.\n\n"
+    ) if stage == "plan" else ""
     text = (f"# Flow {stage}: {args.work_id}\n\n"
             f"Use your existing interactive {selection.provider['kind']} session in {root}.\n"
             "Use its current account, permission settings and native tools.\n\n"
             f"{ACP_BLOCKER}\n\n"
+            f"{host_guidance}"
             f"## Specialist context\n\n{selection.role_file.read_text()}\n\n"
             f"## Task\n\n{_stage_prompt(root, directory, payload, stage, task)}\n")
     path = directory / f"{stage}-{selection.role}-native-handoff.md"
