@@ -3861,6 +3861,7 @@ class FlowCliTests(FlowCliHarness):
                 "claude_gateway",
                 "claude_worker",
                 "codex_collector",
+                "codex_registration",
                 "codex_worker",
                 "cost",
                 "delivery_cancel",
