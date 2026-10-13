@@ -162,6 +162,30 @@ class AgentDistributionTests(unittest.TestCase):
         after = values[-1].stat()
         self.assertEqual((before.st_ino, before.st_mtime_ns), (after.st_ino, after.st_mtime_ns))
 
+    def test_receipt_failure_restores_existing_outputs_and_allows_retry(self):
+        self.sync("codex")
+        values = self.registration_desired()
+        sync, desired, entries, _, receipt = values
+        backing = self.home / ".flow/generated/agents/codex/architect.toml"
+        desired[backing] += "\n# changed definition\n"
+        link = self.home / ".codex/agents/architect.toml"
+        desired[link] = desired[backing]
+        import hashlib
+        from render import build_managed_manifest
+        for entry in entries:
+            if self.home / entry['path'] in {backing, link}:
+                entry['sha256'] = hashlib.sha256(desired[backing].encode()).hexdigest()
+        desired[receipt] = build_managed_manifest("codex", entries)
+        before = {p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
+        with patch.object(sync, "write_atomic", side_effect=OSError("synthetic receipt failure")):
+            self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertEqual({p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}, before)
+        ownership = sync.output_ownership(self.home, receipt)
+        self.assertEqual(sync.output_edit_conflicts(self.home, ownership, desired), [])
+        self.assertEqual(self.apply_registration_desired(values), 0)
+        self.assertEqual(backing.read_text(), desired[backing])
+        self.assertEqual(sync.output_edit_conflicts(self.home, sync.output_ownership(self.home, receipt), desired), [])
+
     def test_config_failure_keeps_prior_block_retryable(self):
         import codex_registration
         self.sync("codex")

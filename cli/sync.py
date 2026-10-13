@@ -844,30 +844,64 @@ def sync_outputs(
                 print(str(err))
             return 1
 
-    for path in stale:
-        if path in merge_protected:
-            # A merge-mode file (settings.json, hooks.json) holds the
-            # user's own content alongside flow's; never delete it, just
-            # stop managing it. Flow's handlers remain until the user
-            # removes them or re-registers hooks.
-            print(f"- unmanaged (kept, contains user content): {rel_posix(path, root)}")
-            continue
-        path.unlink()
-        remove_empty_parents(path, root)
-        removed.append(path)
+    prior_outputs = {}
+    if registration_before is not None:
+        # Until the receipt commits, preserve the files whose old hashes it owns.
+        candidates = (set(desired) - set(agent_links) - {root / ".codex/config.toml", registration_manifest}) | (set(stale) - merge_protected)
+        for path in candidates:
+            if path.is_symlink():
+                prior_outputs[path] = ("link", os.readlink(path), None)
+            elif path.exists():
+                prior_outputs[path] = ("file", path.read_bytes(), path.stat().st_mode & 0o777)
+            else:
+                prior_outputs[path] = ("absent", None, None)
 
-    # Write backing definitions before installing links, and never write
-    # through a symlink (including an unrelated dangling symlink).
-    for target, content in desired.items():
-        if target in agent_links or (registration_before is not None and target in {root / ".codex/config.toml", registration_manifest}):
-            continue
-        ensure_dir(target.parent)
-        if not target.exists() or target.read_text() != content:
-            if target.is_symlink():
-                target.unlink()
-            target.write_text(content)
-        if target.suffix == ".sh":
-            target.chmod(0o755)
+    def restore_prior_outputs():
+        for path, (kind, content, mode) in prior_outputs.items():
+            if path.is_symlink():
+                path.unlink()
+            if kind == "absent":
+                if path.exists():
+                    path.unlink()
+            elif kind == "link":
+                if path.exists():
+                    path.unlink()
+                ensure_dir(path.parent)
+                path.symlink_to(content)
+            else:
+                ensure_dir(path.parent)
+                path.write_bytes(content)
+                path.chmod(mode)
+
+    try:
+        for path in stale:
+            if path in merge_protected:
+                # A merge-mode file (settings.json, hooks.json) holds the
+                # user's own content alongside flow's; never delete it, just
+                # stop managing it. Flow's handlers remain until the user
+                # removes them or re-registers hooks.
+                print(f"- unmanaged (kept, contains user content): {rel_posix(path, root)}")
+                continue
+            path.unlink()
+            remove_empty_parents(path, root)
+            removed.append(path)
+
+        # Write backing definitions before installing links, and never write
+        # through a symlink (including an unrelated dangling symlink).
+        for target, content in desired.items():
+            if target in agent_links or (registration_before is not None and target in {root / ".codex/config.toml", registration_manifest}):
+                continue
+            ensure_dir(target.parent)
+            if not target.exists() or target.read_text() != content:
+                if target.is_symlink():
+                    target.unlink()
+                target.write_text(content)
+            if target.suffix == ".sh":
+                target.chmod(0o755)
+
+    except OSError:
+        restore_prior_outputs()
+        raise
 
     if registration_before is not None:
         try:
@@ -880,6 +914,7 @@ def sync_outputs(
             if not registration_manifest.exists() or registration_manifest.read_bytes().decode("utf-8") != desired[registration_manifest]:
                 write_atomic(registration_manifest, desired[registration_manifest])
         except (ValueError, OSError) as err:
+            restore_prior_outputs()
             if as_json:
                 print_json(support_payload("sync", Path.cwd(), [diagnostic("sync.codex.registration", STATUS_FAILED, SEVERITY_ERROR, "managed_conflict", str(err))]))
             else:

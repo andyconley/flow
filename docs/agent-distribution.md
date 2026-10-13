@@ -96,6 +96,8 @@ owned block. `--check` never creates a backup or writes configuration.
 
 Backing definitions are prepared first, followed by the atomic ownership
 receipt, discovery links and registration. The receipt precedes the block;
+if receipt persistence fails, prior generated files are restored so their
+recorded hashes remain valid for a retry. Unchanged receipts are not rewritten.
 its prior-block hash permits retry after an interrupted configuration write
 without treating the untouched prior registration as a user edit.
 
