@@ -94,8 +94,8 @@ rejected as role names before registration. The managed manifest records current
 of the whole user configuration. Removed Flow roles are removed only from the
 owned block. `--check` never creates a backup or writes configuration.
 
-Backing definitions and links are written before the ownership receipt and
-registration. The receipt is atomically persisted before exposing the block;
+Backing definitions are prepared first, followed by the atomic ownership
+receipt, discovery links and registration. The receipt precedes the block;
 its prior-block hash permits retry after an interrupted configuration write
 without treating the untouched prior registration as a user edit.
 
