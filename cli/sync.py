@@ -753,6 +753,8 @@ def sync_outputs(
     merge_protected = merge_protected or set()
     conflicts, changed, stale = analyze_sync(desired, previous_managed, mergeable_paths)
     conflicts.extend(path for path in (edit_conflicts or []) if path not in conflicts)
+    if registration_manifest is not None and registration_manifest.is_symlink() and registration_manifest not in conflicts:
+        conflicts.append(registration_manifest)
     for path, backing in agent_links.items():
         expected = os.path.relpath(backing, path.parent)
         if path not in conflicts and (not path.is_symlink() or os.readlink(path) != expected) and path not in changed:
@@ -871,6 +873,8 @@ def sync_outputs(
         try:
             if registration_manifest is None:
                 raise ValueError("Codex registration requires its managed ownership receipt")
+            if registration_manifest.is_symlink():
+                raise ValueError("Codex ownership receipt is a symlink; preserve and resolve manually")
             # Definitions are ready; record ownership before installing links or
             # exposing registrations. Failed writes leave the prior receipt intact.
             write_atomic(registration_manifest, desired[registration_manifest])

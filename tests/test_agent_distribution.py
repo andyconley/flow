@@ -140,6 +140,19 @@ class AgentDistributionTests(unittest.TestCase):
         self.sync("codex")
         self.sync("codex", check=True)
 
+    def test_symlinked_receipt_blocks_all_sync_writes(self):
+        self.sync("codex")
+        values = self.registration_desired(omit="support-lead")
+        receipt = values[-1]
+        referent = self.home / "unrelated-receipt.toml"
+        referent.write_bytes(receipt.read_bytes())
+        receipt.unlink()
+        receipt.symlink_to(referent)
+        before = {p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
+        self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertTrue(receipt.is_symlink())
+        self.assertEqual({p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}, before)
+
     def test_config_failure_keeps_prior_block_retryable(self):
         import codex_registration
         self.sync("codex")
