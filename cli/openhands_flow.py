@@ -225,14 +225,19 @@ def native_handoff(args) -> dict:
         "As the host assistant, assume Delivery Lead coordination for planning from the approved solution "
         "when available, otherwise the approved definition. Coordinate specialists and validation through the existing "
         "session, reconcile their evidence, and present the plan for explicit user approval before implementation. "
-        "The specialist context and task below provide technical guidance; they do not transfer host ownership.\n\n"
+        "The specialist delegation reference and technical task below do not transfer host ownership.\n\n"
     ) if stage == "plan" else ""
+    specialist_context = (
+        f"## Specialist delegation reference\n\n"
+        f"Technical planning specialist: {selection.role}. Role file: {selection.role_file}.\n"
+        "These role instructions apply only to a separately invoked specialist, not to the host assistant.\n\n"
+    ) if stage == "plan" else f"## Specialist context\n\n{selection.role_file.read_text()}\n\n"
     text = (f"# Flow {stage}: {args.work_id}\n\n"
             f"Use your existing interactive {selection.provider['kind']} session in {root}.\n"
             "Use its current account, permission settings and native tools.\n\n"
             f"{ACP_BLOCKER}\n\n"
             f"{host_guidance}"
-            f"## Specialist context\n\n{selection.role_file.read_text()}\n\n"
+            f"{specialist_context}"
             f"## Task\n\n{_stage_prompt(root, directory, payload, stage, task)}\n")
     path = directory / f"{stage}-{selection.role}-native-handoff.md"
     write_atomic(path, text)

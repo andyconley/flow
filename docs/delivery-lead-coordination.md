@@ -12,7 +12,9 @@ The lead-developer remains the default technical specialist for planning.
 This is an instruction contract in command templates and the shared stage
 prompt used by OpenHands execution and native handoffs. The specialist prompt
 asks for technical planning outputs returned to the host; ownership instructions
-live in the host-facing command and native handoff guidance. Approval records the
+live in the host-facing command and native handoff guidance. The planning
+handoff references the specialist role file for separate delegation rather
+than embedding its persona directives into the host prompt. Approval records the
 lifecycle transition; it does not launch a conversation. The active host starts
 planning or explicitly hands it to another native session. OpenHands continues
 to own execution, delegation, retries and conversation persistence. No MAF
