@@ -43,7 +43,8 @@ class OpenHandsWorkflowTests(unittest.TestCase):
             flow._transition(self.root, "example", "start-implementation")
         planning = flow._transition(self.root, "example", "start-plan")
         prompt = flow._stage_prompt(self.root, self.directory, planning, "plan", "Plan the change")
-        self.assertIn("Delivery Lead coordinator", prompt)
+        self.assertIn("host assistant, who owns Delivery Lead coordination", prompt)
+        self.assertNotIn("Act as Delivery Lead", prompt)
         self.assertIn("explicit plan approval", prompt)
         self.assertIn("Do not start implementation", prompt)
         self.outputs("plan")
@@ -57,10 +58,40 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         self.args.task_file = task
         self.args.role = self.args.profile = None
         handoff = flow.native_handoff(self.args)
-        self.assertIn("Delivery Lead coordinator", Path(handoff["artifact"]).read_text())
+        self.assertIn("As the host assistant, assume Delivery Lead coordination", Path(handoff["artifact"]).read_text())
         self.assertIn("explicit plan approval", Path(handoff["artifact"]).read_text())
         flow.approve(self.args)
         self.assertEqual(flow._transition(self.root, "example", "start-implementation")["state"], "implementing")
+
+    def test_planning_from_approved_definition_keeps_host_specialist_boundary(self):
+        flow.initialize(self.args)
+        self.outputs("define")
+        self.args.stage = "define"
+        flow.approve(self.args)
+        self.assertNotIn("solution", runstate.status("example", self.root)["artifacts"])
+        task = self.root / "task.md"
+        task.write_text("Plan from the approved definition")
+        (self.root / ".flow/runtime.toml").write_text('default_profile="native"\n[profiles.native]\nkind="codex"\n')
+        self.args.stage = "plan"
+        self.args.task_file = task
+        self.args.role = self.args.profile = None
+        self.assertEqual(config.select(self.root, "plan").role, "lead-developer")
+        result = flow.native_handoff(self.args)
+        planning = runstate.status("example", self.root)
+        self.assertEqual(planning["state"], "planning")
+        specialist = flow._stage_prompt(self.root, self.directory, planning, "plan", task.read_text())
+        self.assertIn("approved definition or approved solution, whichever is present", specialist)
+        self.assertIn("solution stage is optional", specialist)
+        self.assertIn("executing specialist supplies technical expertise", specialist)
+        self.assertNotIn("Act as Delivery Lead", specialist)
+        self.assertNotIn("As the host assistant, assume", specialist)
+        handoff = Path(result["artifact"]).read_text()
+        self.assertIn("## Host coordination", handoff)
+        self.assertIn("As the host assistant, assume Delivery Lead coordination", handoff)
+        self.assertIn("they do not transfer host ownership", handoff)
+        self.assertIn("explicit user approval before implementation", handoff)
+        with self.assertRaises(config.RuntimeConfigurationError):
+            flow._transition(self.root, "example", "start-implementation")
 
     def test_full_lifecycle_has_artifacts_without_legacy_orchestration(self):
         self.assertEqual(flow.initialize(self.args)["protocol_revision"], 3)
