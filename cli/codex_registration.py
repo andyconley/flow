@@ -17,7 +17,7 @@ END = '# END FLOW MANAGED CODEX ROLES\n'
 RESERVED_AGENT_NAMES = frozenset({
     'enabled', 'interrupt_message', 'max_concurrent_threads_per_session',
     'max_threads', 'max_depth', 'default_subagent_model',
-    'default_subagent_reasoning_effort',
+    'default_subagent_reasoning_effort', 'job_max_runtime_seconds',
 })
 
 

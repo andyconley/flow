@@ -56,6 +56,7 @@ class CodexRegistrationTests(unittest.TestCase):
         self.assertNotIn("\\ud83d", after)
 
     def test_all_reserved_names_fail_before_writes(self):
+        self.assertIn('job_max_runtime_seconds', RESERVED_AGENT_NAMES)
         original = '# untouched\nmodel = "user"\n'
         self.config.write_text(original)
         for name in RESERVED_AGENT_NAMES:
