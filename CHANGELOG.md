@@ -4,6 +4,17 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- After solution approval, the host coordinates planning and validation as Delivery Lead and requests explicit plan approval before implementation.
+
+
+## [0.44.2](https://github.com/andyconley/flow/compare/v0.44.1...v0.44.2) (2026-10-12)
+
+### Bug Fixes
+
+* make host Delivery Lead planning coordination explicit ([b01aa1e](https://github.com/andyconley/flow/commit/b01aa1ef56f8fb0e035b7817816a0282c80b7d71))
+
+### Highlights
+
 - OpenHands usage now joins native reports without duplicate counts, survives parent restarts and interruptions, and archived workflows regain searchable enrichment.
 
 
