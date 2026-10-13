@@ -509,6 +509,8 @@ symlink filesystems use managed copies. SHA-256 ownership checks preserve custom
 files and edits to managed output. A conflict prevents writes for that target;
 legacy unproven differences require review. Translation reports identify fields
 that cannot be represented. See [distribution and migration](docs/agent-distribution.md).
+Codex sync explicitly registers the generated role files in a hash-owned config block, preserving user settings and conflicting custom registrations. See [role distribution](docs/agent-distribution.md).
+
 Bootstrap, conversion and release update sync all three targets automatically;
 `--resync` is retained for compatibility. Develop mode still needs an explicit
 pull and sync. Coordinate live updates with active sessions, including Witmark.

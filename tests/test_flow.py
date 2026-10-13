@@ -2520,11 +2520,11 @@ class FlowCliTests(FlowCliHarness):
     # [[codex.hooks]] — full-parity hook management for the Codex runtime
     # ------------------------------------------------------------------
 
-    def test_codex_hooks_generate_script_and_hooks_json_without_touching_config_toml(self) -> None:
+    def test_codex_hooks_preserve_config_settings_with_separate_role_registration(self) -> None:
         """A [[codex.hooks]] entry deploys its script to ~/.codex/hooks/ and
-        merges a handler into ~/.codex/hooks.json — and never touches
-        config.toml, which is user-owned (model, plugins, the desktop
-        app's own `notify` key). Also proves re-sync idempotency: the
+        merges a handler into ~/.codex/hooks.json. Separate role registration
+        appends only its owned config block; user model, plugins and notify
+        settings remain byte-preserved. Also proves re-sync idempotency: the
         handler must not duplicate.
         """
         fake_home = self.use_fake_home()
@@ -2558,7 +2558,8 @@ class FlowCliTests(FlowCliHarness):
         self.assertEqual(handler["timeout"], 15)
         self.assertNotIn("matcher", group, "omitted matcher must be omitted, not emitted empty")
 
-        self.assertEqual((codex_dir / "config.toml").read_text(), config_before)
+        self.assertTrue((codex_dir / "config.toml").read_text().startswith(config_before))
+        self.assertEqual(load_cli_module("flowtoml").read_toml(codex_dir / "config.toml")["notify"], ["someapp", "turn-ended"])
 
         # Idempotent: second sync must not duplicate any handler.
         self.assert_ok(self.run_flow("sync", "codex", "--user"))

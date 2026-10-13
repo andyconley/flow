@@ -59,6 +59,41 @@ class AgentDistributionTests(unittest.TestCase):
             self.sync(target, check=True)
             self.assertIn("no changes needed", self.sync(target).stdout)
 
+    def test_codex_registration_preserves_user_config_and_check_is_read_only(self):
+        config_path = self.home / ".codex/config.toml"
+        config_path.parent.mkdir(parents=True)
+        original = '# User comment\r\nmodel = "my-model"\r\nsandbox_mode = "read-only"\r\n[projects."/my/work"]\r\ntrust_level = "untrusted"\r\n[agents.custom]\r\nconfig_file = "custom.toml"'
+        config_path.write_bytes(original.encode())
+        self.sync("codex", check=True, okay=False)
+        self.assertEqual(config_path.read_bytes(), original.encode())
+        self.assertFalse((self.home / ".flow/backups").exists())
+        self.sync("codex")
+        generated = config_path.read_bytes().decode()
+        self.assertTrue(generated.startswith(original))
+        config = tomllib.loads(generated)
+        self.assertEqual(config["sandbox_mode"], "read-only")
+        self.assertEqual(config["projects"]["/my/work"]["trust_level"], "untrusted")
+        self.assertEqual(config["agents"]["custom"]["config_file"], "custom.toml")
+        for role in (ROOT / "scaffolds/default/agents").glob("*.md"):
+            self.assertEqual(config["agents"][role.stem]["config_file"],
+                             str(self.home / ".flow/generated/agents/codex" / (role.stem + ".toml")))
+        self.sync("codex", check=True)
+        self.sync("codex")
+        self.assertEqual(config_path.read_bytes().decode(), generated)
+        backups = list((self.home / ".flow/backups/codex-role-registration").glob("*.toml"))
+        self.assertEqual([p.read_bytes() for p in backups], [original.encode()])
+
+    def test_codex_registration_collision_blocks_all_sync_writes(self):
+        config = self.home / ".codex/config.toml"
+        config.parent.mkdir(parents=True)
+        original = '[agents."support-lead"]\nconfig_file = "user-owned.toml"\n'
+        config.write_text(original)
+        result = self.sync("codex", okay=False)
+        self.assertIn("user-owned registration collision: support-lead", result.stdout)
+        self.assertEqual(config.read_text(), original)
+        self.assertFalse((self.home / ".flow/generated").exists())
+        self.assertFalse((self.home / ".flow/backups").exists())
+
     def test_bootstrap_release_install_and_repeat_are_offline_and_isolated(self):
         for _ in range(2):
             result = subprocess.run(["bash", str(ROOT / "install-flow.sh"), "--release"],

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from model_policy import runtime_policy_for_agent
+from flowtoml import read_toml
 from paths import HOME, SCAFFOLD_DIR
 from render import SHAPER_COMMANDS, codex_skill_dir, manifest_ref_for
 from sync import (
@@ -184,6 +185,18 @@ def _check_target(root: Path, manifest_path: Path, manifest: dict[str, Any], tar
         if not agent_path.exists():
             static.append(_check(f"agent {name}", "failed", "generated agent missing", agent_path))
             continue
+        if target == "codex":
+            config_path = root / ".codex/config.toml"
+            try:
+                registration = read_toml(config_path).get("agents", {}).get(name, {})
+                pointer = Path(registration.get("config_file", "")).expanduser()
+                if not pointer.is_absolute():
+                    pointer = config_path.parent / pointer
+                valid = bool(registration.get("config_file")) and not pointer.is_symlink() and pointer.resolve() == agent_path.resolve()
+            except (ValueError, OSError, TypeError, AttributeError):
+                valid = False
+            static.append(_check(f"agent {name} explicit registration", "passed" if valid else "failed",
+                                 "config_file resolves to the generated role" if valid else "missing or conflicting config_file", config_path))
         text = agent_path.read_text()
         policy = runtime_policy_for_agent(manifest, target, agent)
         needles = _agent_policy_needles(target, policy)

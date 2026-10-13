@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 from agent_capabilities import resolve_agent_capabilities
+from codex_registration import registration_config, write_registration_config
 from diagnostic_model import (
     SEVERITY_ERROR,
     SEVERITY_INFO,
@@ -382,7 +383,8 @@ def build_codex_hooks_file(root: Path, runtime: dict) -> str:
     MCP servers, the desktop app's own `notify` key) with no stdlib TOML
     writer to round-trip it safely — while hooks.json is a dedicated JSON
     file this module's existing read-merge-write machinery handles exactly
-    like Claude's settings. Flow never touches config.toml at all.
+    like Claude's settings. Role registration separately appends a hash-owned block to config.toml;
+    this hook merger never edits its settings.
     """
     hooks_path = root / runtime["hooks_file"]
     doc = remove_managed_codex_hooks(read_json(hooks_path))
@@ -616,6 +618,18 @@ def desired_codex_outputs(
             }
         )
 
+    config_path = root / ".codex/config.toml"
+    prior_entries = read_toml(root / runtime["managed_manifest"]).get("files", []) if (root / runtime["managed_manifest"]).exists() else []
+    prior = next((e for e in prior_entries
+                  if e.get("kind") == "agent-registration-config" and e.get("path") == ".codex/config.toml"), None)
+    roles = {agent["name"]: root / ".flow/generated/agents/codex" / f'{agent["name"]}.toml' for agent in agents}
+    before, configured, block_digest = registration_config(root, roles, prior)
+    outputs[config_path] = configured
+    mergeable_paths.add(config_path)
+    managed_entries.append(dict(path=".codex/config.toml", kind="agent-registration-config",
+                                source=manifest_rel, sync_mode="merge", block_sha256=block_digest,
+                                _registration_before=before))
+
     # Hook support mirrors desired_claude_outputs exactly, gated on the
     # runtime declaring hook_dir + hooks_file — older manifests without
     # them keep today's skill/agent-only surface untouched.
@@ -677,7 +691,7 @@ def analyze_sync(
             conflicts.append(target)
             continue
         if target.exists():
-            current = target.read_text()
+            current = target.read_bytes().decode("utf-8")
             if current == content:
                 continue
             if (
@@ -728,6 +742,7 @@ def sync_outputs(
     as_json: bool = False,
     agent_links: dict[Path, Path] | None = None,
     edit_conflicts: list[Path] | None = None,
+    registration_before: str | None = None,
 ) -> int:
     agent_links = agent_links or {}
     merge_protected = merge_protected or set()
@@ -811,6 +826,17 @@ def sync_outputs(
                 print(f"- remove: {path}")
         return 1
 
+    if target_name == "codex" and registration_before is not None:
+        config_path = root / ".codex/config.toml"
+        try:
+            write_registration_config(root, registration_before, desired[config_path])
+        except ValueError as err:
+            if as_json:
+                print_json(support_payload("sync", Path.cwd(), [diagnostic("sync.codex.registration", STATUS_FAILED, SEVERITY_ERROR, "managed_conflict", str(err))]))
+            else:
+                print(str(err))
+            return 1
+
     for path in stale:
         if path in merge_protected:
             # A merge-mode file (settings.json, hooks.json) holds the
@@ -826,7 +852,7 @@ def sync_outputs(
     # Write backing definitions before installing links, and never write
     # through a symlink (including an unrelated dangling symlink).
     for target, content in desired.items():
-        if target in agent_links:
+        if target in agent_links or (registration_before is not None and target == root / ".codex/config.toml"):
             continue
         ensure_dir(target.parent)
         if not target.exists() or target.read_text() != content:
@@ -1078,6 +1104,7 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False, as_js
         as_json=as_json,
         agent_links=links,
         edit_conflicts=edits,
+        registration_before=next((e["_registration_before"] for e in _managed_entries if "_registration_before" in e), None),
     )
     if result == 0 and not as_json:
         verb = "check" if check else "sync"
