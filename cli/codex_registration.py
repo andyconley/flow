@@ -78,7 +78,7 @@ def registration_config(root: Path, roles: dict[str, Path], ownership: dict | No
             continue
         lines.extend([f'[agents.{json.dumps(name, ensure_ascii=False)}]', f'config_file = {json.dumps(str(target), ensure_ascii=False)}', ''])
     block = BEGIN + '\n'.join(lines) + END if lines else ''
-    if old and hashlib.sha256(old.encode()).hexdigest() != ownership['block_sha256'] and old != block:
+    if old and hashlib.sha256(old.encode()).hexdigest() not in {ownership['block_sha256'], ownership.get('previous_block_sha256')} and old != block:
         raise ValueError('Flow-owned Codex registrations were edited; preserve and resolve manually')
     desired = base + block
     try:

@@ -192,7 +192,7 @@ def _check_target(root: Path, manifest_path: Path, manifest: dict[str, Any], tar
                 pointer = Path(registration.get("config_file", "")).expanduser()
                 if not pointer.is_absolute():
                     pointer = config_path.parent / pointer
-                valid = bool(registration.get("config_file")) and not pointer.is_symlink() and pointer.resolve() == agent_path.resolve()
+                valid = bool(registration.get("config_file")) and not pointer.is_symlink() and pointer.resolve() == (root / ".flow/generated/agents/codex" / f"{name}.toml").resolve()
             except (ValueError, OSError, TypeError, AttributeError):
                 valid = False
             static.append(_check(f"agent {name} explicit registration", "passed" if valid else "failed",

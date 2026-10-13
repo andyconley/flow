@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 from agent_capabilities import resolve_agent_capabilities
-from codex_registration import registration_config, write_registration_config
+from codex_registration import BEGIN as REGISTRATION_BEGIN, END as REGISTRATION_END, registration_config, write_registration_config
 from diagnostic_model import (
     SEVERITY_ERROR,
     SEVERITY_INFO,
@@ -42,6 +42,7 @@ from fsutil import (
     read_json,
     rel_posix,
     remove_empty_parents,
+    write_atomic,
 )
 from model_policy import merge_session_model_profiles, runtime_policy_for_agent
 from provider_selection import merge_selection_policy
@@ -624,10 +625,13 @@ def desired_codex_outputs(
                   if e.get("kind") == "agent-registration-config" and e.get("path") == ".codex/config.toml"), None)
     roles = {agent["name"]: root / ".flow/generated/agents/codex" / f'{agent["name"]}.toml' for agent in agents}
     before, configured, block_digest = registration_config(root, roles, prior)
+    old_block = before[before.index(REGISTRATION_BEGIN):before.index(REGISTRATION_END) + len(REGISTRATION_END)] if REGISTRATION_BEGIN in before else ""
+    old_digest = hashlib.sha256(old_block.encode()).hexdigest()
+    previous_digest = prior.get("previous_block_sha256", old_digest) if prior and prior.get("block_sha256") == block_digest else old_digest
     outputs[config_path] = configured
     mergeable_paths.add(config_path)
     managed_entries.append(dict(path=".codex/config.toml", kind="agent-registration-config",
-                                source=manifest_rel, sync_mode="merge", block_sha256=block_digest,
+                                source=manifest_rel, sync_mode="merge", block_sha256=block_digest, previous_block_sha256=previous_digest,
                                 _registration_before=before))
 
     # Hook support mirrors desired_claude_outputs exactly, gated on the
@@ -743,6 +747,7 @@ def sync_outputs(
     agent_links: dict[Path, Path] | None = None,
     edit_conflicts: list[Path] | None = None,
     registration_before: str | None = None,
+    registration_manifest: Path | None = None,
 ) -> int:
     agent_links = agent_links or {}
     merge_protected = merge_protected or set()
@@ -826,10 +831,10 @@ def sync_outputs(
                 print(f"- remove: {path}")
         return 1
 
-    if target_name == "codex" and registration_before is not None:
-        config_path = root / ".codex/config.toml"
+    if registration_before is not None:
         try:
-            write_registration_config(root, registration_before, desired[config_path])
+            # Snapshot check only: do not expose registrations before their outputs.
+            write_registration_config(root, registration_before, registration_before)
         except ValueError as err:
             if as_json:
                 print_json(support_payload("sync", Path.cwd(), [diagnostic("sync.codex.registration", STATUS_FAILED, SEVERITY_ERROR, "managed_conflict", str(err))]))
@@ -852,7 +857,7 @@ def sync_outputs(
     # Write backing definitions before installing links, and never write
     # through a symlink (including an unrelated dangling symlink).
     for target, content in desired.items():
-        if target in agent_links or (registration_before is not None and target == root / ".codex/config.toml"):
+        if target in agent_links or (registration_before is not None and target in {root / ".codex/config.toml", registration_manifest}):
             continue
         ensure_dir(target.parent)
         if not target.exists() or target.read_text() != content:
@@ -861,6 +866,20 @@ def sync_outputs(
             target.write_text(content)
         if target.suffix == ".sh":
             target.chmod(0o755)
+
+    if registration_before is not None:
+        try:
+            if registration_manifest is None:
+                raise ValueError("Codex registration requires its managed ownership receipt")
+            # Definitions are ready; record ownership before installing links or
+            # exposing registrations. Failed writes leave the prior receipt intact.
+            write_atomic(registration_manifest, desired[registration_manifest])
+        except (ValueError, OSError) as err:
+            if as_json:
+                print_json(support_payload("sync", Path.cwd(), [diagnostic("sync.codex.registration", STATUS_FAILED, SEVERITY_ERROR, "managed_conflict", str(err))]))
+            else:
+                print(str(err))
+            return 1
 
     for target, backing in agent_links.items():
         ensure_dir(target.parent)
@@ -874,6 +893,19 @@ def sync_outputs(
         except OSError:
             # Managed copies remain hash-owned on filesystems without symlinks.
             target.write_text(desired[target])
+
+    if registration_before is not None:
+        config_path = root / ".codex/config.toml"
+        try:
+            # Owned definitions and links are ready; the receipt's prior-block
+            # hash makes an interrupted configuration write retryable.
+            write_registration_config(root, registration_before, desired[config_path])
+        except (ValueError, OSError) as err:
+            if as_json:
+                print_json(support_payload("sync", Path.cwd(), [diagnostic("sync.codex.registration", STATUS_FAILED, SEVERITY_ERROR, "managed_conflict", str(err))]))
+            else:
+                print(str(err))
+            return 1
 
     print(f"{target_name} sync wrote managed files:")
     for path in changed:
@@ -1105,6 +1137,7 @@ def sync_target(target: str, check: bool = False, user_mode: bool = False, as_js
         agent_links=links,
         edit_conflicts=edits,
         registration_before=next((e["_registration_before"] for e in _managed_entries if "_registration_before" in e), None),
+        registration_manifest=root / runtime["managed_manifest"] if target == "codex" else None,
     )
     if result == 0 and not as_json:
         verb = "check" if check else "sync"

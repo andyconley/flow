@@ -94,6 +94,84 @@ class AgentDistributionTests(unittest.TestCase):
         self.assertFalse((self.home / ".flow/generated").exists())
         self.assertFalse((self.home / ".flow/backups").exists())
 
+    def registration_desired(self, omit=None):
+        import sync
+        from unittest.mock import patch
+        with patch.object(sync, "USER_OVERLAY_DIR", self.home / ".flow/user"):
+            _, manifest = sync.merge_user_overlay(ROOT / "scaffolds/default")
+            if omit:
+                manifest["agents"] = [a for a in manifest["agents"] if a["name"] != omit]
+            desired, entries, mergeable = sync.desired_outputs_for_target("codex", self.home,
+                ROOT / "scaffolds/default", manifest, sync.manifest_ref_for())
+        path = self.home / manifest["codex"]["managed_manifest"]
+        return sync, desired, entries, mergeable, path
+
+    def apply_registration_desired(self, values):
+        sync, desired, entries, mergeable, manifest_path = values
+        from contextlib import redirect_stdout
+        import io
+        links = {self.home / e["path"]: self.home / e["link"] for e in entries if "link" in e}
+        before = next(e["_registration_before"] for e in entries if "_registration_before" in e)
+        with redirect_stdout(io.StringIO()):
+            return sync.sync_outputs(self.home, "codex", desired,
+                sync.read_managed_paths(self.home, manifest_path), mergeable, check=False,
+                merge_protected=sync.read_managed_merge_paths(self.home, manifest_path),
+                agent_links=links, registration_before=before, registration_manifest=manifest_path)
+
+    def test_backing_failure_never_exposes_registration(self):
+        values = self.registration_desired()
+        original_write = Path.write_text
+        def fail_backing(path, content, *args, **kwargs):
+            if path == self.home / ".flow/generated/agents/codex/architect.toml":
+                raise OSError("synthetic backing write failure")
+            return original_write(path, content, *args, **kwargs)
+        with patch.object(Path, "write_text", fail_backing):
+            with self.assertRaisesRegex(OSError, "backing write failure"):
+                self.apply_registration_desired(values)
+        self.assertFalse((self.home / ".codex/config.toml").exists())
+        self.assertFalse(values[-1].exists())
+
+    def test_receipt_failure_never_exposes_registration(self):
+        values = self.registration_desired()
+        with patch.object(values[0], "write_atomic", side_effect=OSError("synthetic receipt write failure")):
+            self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertFalse((self.home / ".codex/config.toml").exists())
+        self.assertFalse(values[-1].exists())
+        self.sync("codex")
+        self.sync("codex", check=True)
+
+    def test_config_failure_keeps_prior_block_retryable(self):
+        import codex_registration
+        self.sync("codex")
+        config_path = self.home / ".codex/config.toml"
+        original = config_path.read_bytes()
+        values = self.registration_desired(omit="support-lead")
+        real_atomic = codex_registration.write_atomic
+        def fail_config(path, content, **kwargs):
+            if path == config_path:
+                raise OSError("synthetic config write failure")
+            return real_atomic(path, content, **kwargs)
+        with patch.object(codex_registration, "write_atomic", fail_config):
+            self.assertEqual(self.apply_registration_desired(values), 1)
+        self.assertEqual(config_path.read_bytes(), original)
+        retry = self.registration_desired(omit="support-lead")
+        self.assertEqual(self.apply_registration_desired(retry), 0)
+        self.assertNotIn("support-lead", tomllib.loads(config_path.read_text())["agents"])
+        self.assertEqual(self.apply_registration_desired(self.registration_desired(omit="support-lead")), 0)
+
+    def test_codex_managed_copy_fallback_registration_smoke(self):
+        values = self.registration_desired()
+        with patch.object(Path, "symlink_to", side_effect=OSError("unsupported")):
+            self.assertEqual(self.apply_registration_desired(values), 0)
+        self.assertFalse((self.home / ".codex/agents/support-lead.toml").is_symlink())
+        result = subprocess.run([sys.executable, str(ROOT / "cli/flow.py"), "runtime", "smoke",
+                                 "--target", "codex", "--json"], env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        rows = json.loads(result.stdout)["targets"][0]["static"]
+        registrations = [r for r in rows if r["name"].endswith("explicit registration")]
+        self.assertEqual(len(registrations), 13)
+        self.assertTrue(all(r["status"] == "passed" for r in registrations))
+
     def test_bootstrap_release_install_and_repeat_are_offline_and_isolated(self):
         for _ in range(2):
             result = subprocess.run(["bash", str(ROOT / "install-flow.sh"), "--release"],

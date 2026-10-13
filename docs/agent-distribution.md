@@ -90,9 +90,14 @@ comments, formatting, custom agents and access settings. A compatible user-owned
 registration for the same file stays user-owned. A conflicting name, redirected
 config symlink, malformed TOML or edited/unowned block stops sync before writes.
 Reserved Codex `[agents]` setting names (including compatibility aliases) are
-rejected as role names before registration. The managed manifest records only the block's hash; it does not claim ownership
+rejected as role names before registration. The managed manifest records current and prior owned-block hashes; it does not claim ownership
 of the whole user configuration. Removed Flow roles are removed only from the
 owned block. `--check` never creates a backup or writes configuration.
+
+Backing definitions and links are written before the ownership receipt and
+registration. The receipt is atomically persisted before exposing the block;
+its prior-block hash permits retry after an interrupted configuration write
+without treating the untouched prior registration as a user edit.
 
 Before a changed configuration is atomically replaced, the original is backed
 up with owner-only permissions under

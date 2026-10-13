@@ -477,7 +477,7 @@ def build_managed_manifest(target_name: str, entries: list[dict]) -> str:
                 f'sync_mode = "{entry["sync_mode"]}"',
             ]
         )
-        for key in ("sha256", "link", "block_sha256"):
+        for key in ("sha256", "link", "block_sha256", "previous_block_sha256"):
             if key in entry:
                 lines.append(f"{key} = {toml_string(entry[key])}")
         lines.append("")
