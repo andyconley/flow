@@ -94,7 +94,12 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         handoff = Path(result["artifact"]).read_text()
         self.assertIn("## Host coordination", handoff)
         self.assertIn("As the host assistant, assume Delivery Lead coordination", handoff)
-        self.assertIn("they do not transfer host ownership", handoff)
+        self.assertIn("do not transfer host ownership", handoff)
+        role = config.select(self.root, "plan")
+        self.assertIn(str(role.role_file), handoff)
+        self.assertIn("only to a separately invoked specialist, not to the host assistant", handoff)
+        self.assertNotIn(role.role_file.read_text(), handoff)
+        self.assertNotIn("You are the **Lead Developer**", handoff)
         self.assertIn("explicit user approval before implementation", handoff)
         with self.assertRaises(config.RuntimeConfigurationError):
             flow._transition(self.root, "example", "start-implementation")
