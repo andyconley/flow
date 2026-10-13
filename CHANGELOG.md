@@ -4,6 +4,35 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Shaper and Delivery Lead hosts can delegate to all 13 Codex specialists through explicit role-file registrations that preserve user settings and existing model choices.
+
+
+## [0.44.4](https://github.com/andyconley/flow/compare/v0.44.3...v0.44.4) (2026-10-13)
+
+### Bug Fixes
+
+* explicitly register generated Codex specialist roles ([58eabc0](https://github.com/andyconley/flow/commit/58eabc00f763fbcc8624dfa173d524e9660e5183))
+* keep unchanged Codex ownership receipts intact ([22897f1](https://github.com/andyconley/flow/commit/22897f13c99d9a86c3026afcdf5a6b1d8c068bcc))
+* persist role ownership before registration and validate copy fallback ([0800bce](https://github.com/andyconley/flow/commit/0800bce6b9f06cc2535f4175f27d0b73ff99ba71))
+* preserve symlinked Codex ownership receipts ([da6ad5c](https://github.com/andyconley/flow/commit/da6ad5c2f3f99923798e0071c919dbf2d4cc25c6))
+* preserve Unicode in Codex role registrations ([3b35ed2](https://github.com/andyconley/flow/commit/3b35ed2e45faa240f35338d22d1ee7f39d0146ef))
+* reject path separators in Codex role registrations ([d9a3e43](https://github.com/andyconley/flow/commit/d9a3e4364b5db5bc9e9d039f08e64b6febc6464d))
+* reject reserved Codex settings as role names ([19f3c3d](https://github.com/andyconley/flow/commit/19f3c3d8005ddd32b0a17036d5d11a7f84fd0271))
+* reserve legacy Codex agent job setting ([b62bb62](https://github.com/andyconley/flow/commit/b62bb6256a2e6deb88888565ad1f9a85dab9cbaa))
+* restore generated outputs when Codex receipt persistence fails ([5a38ddc](https://github.com/andyconley/flow/commit/5a38ddc681c917ecf57f78a423994d58f2846caf))
+* restore only changed files after receipt failure ([3abbbd2](https://github.com/andyconley/flow/commit/3abbbd2bf6aa91529415f4254f08db2ab6cc1558))
+
+### Documentation
+
+* clarify Codex registration write order ([446136e](https://github.com/andyconley/flow/commit/446136ef76466bf8ce196420a5b0b13d9479ca44))
+
+### Tests
+
+* cover registration module in release staging guard ([e688696](https://github.com/andyconley/flow/commit/e688696b63d7258ec671b5a814ab929c3d25ca08))
+* isolate role registration recovery fixtures ([cc8bb1e](https://github.com/andyconley/flow/commit/cc8bb1e516c27b6470e4986a33e1a52c64ef714a))
+
+### Highlights
+
 - Native planning handoffs keep the host as Delivery Lead and reference specialist roles for separate delegation without embedding conflicting persona instructions.
 - Planning now supports an approved definition without a solution stage and keeps Delivery Lead ownership on the host-facing instructions.
 
