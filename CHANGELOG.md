@@ -4,6 +4,20 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Native planning handoffs keep the host as Delivery Lead and reference specialist roles for separate delegation without embedding conflicting persona instructions.
+- Planning now supports an approved definition without a solution stage and keeps Delivery Lead ownership on the host-facing instructions.
+
+
+## [0.44.3](https://github.com/andyconley/flow/compare/v0.44.2...v0.44.3) (2026-10-12)
+
+### Bug Fixes
+
+* keep specialist personas out of native planning handoffs ([12b99c6](https://github.com/andyconley/flow/commit/12b99c696795a41f7d17ae111f9c4beea141bfda))
+* prefer the approved solution as planning basis ([7a8b753](https://github.com/andyconley/flow/commit/7a8b753b0a4994addee04113a461037e54dc4e8f))
+* separate planning host ownership from specialist work ([926538b](https://github.com/andyconley/flow/commit/926538bd6dcf2dc8da9772d64544af9a90dd4799))
+
+### Highlights
+
 - After solution approval, the host coordinates planning and validation as Delivery Lead and requests explicit plan approval before implementation.
 
 
