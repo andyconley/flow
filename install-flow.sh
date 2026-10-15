@@ -329,6 +329,8 @@ for target in claude codex openhands; do
   fi
 done
 
+"${BIN_DIR}/flow" setup runtime
+
 echo "Installed flow (${MODE} mode)."
 echo "Source:    ${SOURCE_DIR}"
 echo "Launcher:  ${BIN_DIR}/flow"

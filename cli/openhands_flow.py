@@ -277,7 +277,14 @@ def native_handoff(args) -> dict:
     start_event, stage_state, _ = STAGES[stage]
     if payload["state"] != stage_state:
         payload = _transition(root, args.work_id, start_event)
-    from openhands_runtime import ACP_BLOCKER
+    from openhands_runtime import ACP_BLOCKER, role_context
+    metadata, composed_role = role_context(selection)
+    references = [".flow/PROJECT.md", *selection.role_options.get("context", []),
+                  *selection.role_options.get("skills", [])]
+    context_guidance = ("## Context and skills\n\nRead existing project instructions and these configured references: "
+                        + ", ".join(str(p) for p in references) + ".\n"
+                        + "Resolve declared role skills through native skill discovery: "
+                        + ", ".join(metadata.get("skills", [])) + ".\n\n")
     host_guidance = (
         "## Host coordination\n\n"
         "As the host assistant, assume Delivery Lead coordination for planning from the approved solution "
@@ -289,12 +296,13 @@ def native_handoff(args) -> dict:
         f"## Specialist delegation reference\n\n"
         f"Technical planning specialist: {selection.role}. Role file: {selection.role_file}.\n"
         "These role instructions apply only to a separately invoked specialist, not to the host assistant.\n\n"
-    ) if stage == "plan" else f"## Specialist context\n\n{selection.role_file.read_text()}\n\n"
+    ) if stage == "plan" else f"## Specialist context\n\n{composed_role}\n\n"
     text = (f"# Flow {stage}: {args.work_id}\n\n"
             f"Use your existing interactive {selection.provider['kind']} session in {root}.\n"
             "Use its current account, permission settings and native tools.\n\n"
             f"{ACP_BLOCKER}\n\n"
             f"{host_guidance}"
+            f"{context_guidance}"
             f"{specialist_context}"
             f"## Task\n\n{_stage_prompt(root, directory, payload, stage, task)}\n")
     path = directory / f"{stage}-{selection.role}-native-handoff.md"
@@ -388,7 +396,10 @@ def evidence_report(args) -> dict:
 
 def runtime_info(args) -> dict:
     from openhands_runtime import probe
-    return probe()
+    from openhands_config import wiring_report
+    result = probe()
+    return {**result, "sdk_ready": result["ready"], "readiness_scope": "sdk_packages_only",
+            "wiring": wiring_report(_root(args))}
 
 
 def _handler(function):

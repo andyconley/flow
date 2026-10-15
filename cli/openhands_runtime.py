@@ -30,11 +30,8 @@ def probe() -> dict:
             "packages": packages, "native_automation": "implemented", "native_access_note": ACP_ACCESS_NOTE}
 
 
-def _context(selection: Selection, root: Path):
-    from paths import HOME, USER_OVERLAY_DIR
-    from openhands.sdk import AgentContext
-    from openhands.sdk.context import Skill, load_skills_from_dir
-
+def role_context(selection: Selection):
+    """Compose the canonical role without constructing an SDK agent or session."""
     # Use the same composition pipeline as distribution, including expertise
     # and user overlay sources. Project-specific files still win in select().
     from sync import agent_body, merge_user_overlay, shared_agents
@@ -54,6 +51,15 @@ def _context(selection: Selection, root: Path):
     if GENERATED_MARKER in body:
         capabilities = None
     metadata, prompt = parse_frontmatter(render_openhands_agent(selection.role, str(selection.role_file), body, capabilities))
+    return metadata, prompt
+
+
+def _context(selection: Selection, root: Path):
+    from paths import HOME, USER_OVERLAY_DIR
+    from openhands.sdk import AgentContext
+    from openhands.sdk.context import Skill, load_skills_from_dir
+
+    metadata, prompt = role_context(selection)
     from openhands.sdk.skills import load_available_skills
     # SDK discovery also composes AGENTS.md and conditional project rules.
     skills = load_available_skills(root, include_user=True, include_project=False, include_public=False)
@@ -115,7 +121,7 @@ def local_llm(selection: Selection):
     key = os.environ.get(key_env) if key_env else "self-hosted"
     if key_env and not key:
         raise RuntimeConfigurationError(f"self-hosted credential variable {key_env} is unset")
-    llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens") if name in provider}
+    llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens", "reasoning_effort") if name in provider}
     llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
               usage_id=f"flow-{selection.role}", **llm_options)
     return llm

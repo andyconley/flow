@@ -99,6 +99,18 @@ upgrades.
 Copy `templates/openhands-runtime.toml` to a project's `.flow/runtime.toml` and
 edit its endpoints and model names. The user overlay at
 `~/.flow/user/runtime.toml` supplies defaults; project settings override them.
+Install/update adds `claude` and `codex` interactive profiles only when the user
+`runtime.toml` is absent. Existing files are never overwritten, no default provider
+is chosen, and no automated permission acknowledgement is added. Select the native
+profile explicitly for `native-handoff`. Native profile models default to the
+canonical Flow role model policy unless explicitly overridden; ACP effort remains
+a native harness setting and is reported as unsupported by the adapter. Local
+profiles may set `reasoning_effort`, passed directly to the SDK.
+
+`flow workflow runtime --json --project-root PATH` reports package readiness
+separately from resolved role/profile routes, models, context references and
+execution configuration. It makes no model calls and does not verify authentication.
+
 A profile is explicit: there is no automatic cloud model or billing fallback.
 Ollama, llama.cpp, vLLM, LM Studio and compatible hosts use the SDK's LLM
 interface. Model capability and tool support remain the selected host's concern.

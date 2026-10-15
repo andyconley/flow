@@ -371,6 +371,8 @@ def setup_user(overlay_repo: str | None = None) -> int:
     if claude_result != 0 or codex_result != 0 or openhands_result != 0 or overlay_result != 0:
         print("user-level setup completed with errors; review output above")
         return 1
+    from openhands_config import provision_native_profiles
+    print(provision_native_profiles(USER_OVERLAY_DIR))
     print("user-level setup complete")
     print("next: open a fresh Claude Code session anywhere and try `/flow-boot`")
     return 0

@@ -118,7 +118,7 @@ def routing_hints_for(target: str, agents: list[dict], manifest: dict, *, comman
     lines = [
         "## Flow Agent Routing",
         "",
-        "When this command's Composition section calls for role agents, use these Flow-managed runtime agents and keep the task bounded to the role.",
+        "When delegating this command's specialist work, use these Flow-managed native agents and keep the task bounded to the role. OpenHands execution resolves its models and tools through runtime.toml; this table describes native agent discovery.",
         "",
         "| Agent | Tier | Runtime model | Effort |",
         "|---|---|---|---|",

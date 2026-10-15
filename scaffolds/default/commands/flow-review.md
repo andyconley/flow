@@ -20,7 +20,13 @@ different self-hosted endpoint. Profile and role settings live in `.flow/runtime
 and the user overlay. The installed OpenHands packages must match the pinned
 runtime requirements. Actual workspace permissions still apply.
 
-For an existing official native Codex/Claude session:
+For an existing official native Codex/Claude session, select `--profile codex`
+or `--profile claude`. Install/update provisions these interactive profiles only
+when no user runtime configuration exists; existing configuration is preserved.
+Inspect `flow workflow runtime --json` for resolved roles and missing setup.
+SDK readiness is not execution readiness; never bypass a missing profile by
+implementing directly in the host. Native handoff uses existing permissions and
+does not enable automated ACP permission handling.
 
 ```sh
 flow workflow native-handoff <work-id> --stage review --profile <codex-or-claude-profile> --task-file <task.md>
