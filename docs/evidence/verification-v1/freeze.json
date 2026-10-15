@@ -1,0 +1,8 @@
+{
+  "frozen_at": "2026-10-14T23:33:44.019281+00:00",
+  "baseline": "8af8d7bca6d36f97200e140a3001bc026d4efb8d",
+  "files": {
+    "tests/fixtures/verification-evaluation/v1/cases.json": "6e3901f0a1050aa7f77f3ad89c3a89e11725687ba6a8b2a033d1c138f370c045",
+    "docs/verification-evaluation.md": "f2fd52b0acb87f5eeb054101ae297cc529d6ebbcba58278ffcd9d44ff9eae4e1"
+  }
+}

@@ -35,6 +35,8 @@ jobs:
           tests.test_openhands_specialists
           tests.test_openhands_usage
           tests.test_openhands_workflow
+          tests.test_verification_evidence
+          tests.test_review_reliability
           tests.test_openhands_provision
           tests.test_openhands_lifecycle
           tests.test_agent_capabilities

@@ -702,6 +702,22 @@ invocation = "flow workflow status WORK_ID [--json]"
 summary = "Inspect workflow state and SDK conversation references"
 
 [[help.cli_commands]]
+invocation = "flow workflow check WORK_ID --check-id ID --session-id SESSION --assignment-id ASSIGNMENT --environment TEXT"
+summary = "Run an approved check and capture workspace-bound verification evidence"
+
+[[help.cli_commands]]
+invocation = "flow workflow repair WORK_ID --check-id ID --specialist ROLE --scope TEXT --reason TEXT --failure-evidence PATH"
+summary = "Allocate a targeted repair within the persistent two-attempt allowance"
+
+[[help.cli_commands]]
+invocation = "flow workflow review-test-change WORK_ID --reviewer ROLE --reviewer-session-id SESSION --disposition equivalent --rationale TEXT --evidence PATH"
+summary = "Record independent equivalence review of changed evaluation inputs"
+
+[[help.cli_commands]]
+invocation = "flow workflow evidence-report WORK_ID [--usage-store PATH] [--json]"
+summary = "Report verification, handoff rejections, repairs and usage attribution"
+
+[[help.cli_commands]]
 invocation = "flow workflow runtime [--json]"
 summary = "Inspect pinned OpenHands packages and native access decision"
 

@@ -1,0 +1,90 @@
+{
+  "recorded_at": "2026-10-15T04:10:40.634229+00:00",
+  "candidate_aggregate": {
+    "selected": 841,
+    "passed": 836,
+    "skipped": 5,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 216.976,
+    "modules": [
+      "tests.test_review_reliability",
+      "tests.test_verification_evidence",
+      "tests.test_openhands_workflow",
+      "tests.test_openhands_usage",
+      "tests.test_openhands_sdk_construction",
+      "tests.test_openhands_specialists",
+      "tests.test_regenerate_flow_help",
+      "tests.test_flow",
+      "tests.test_openhands_provision",
+      "tests.test_openhands_lifecycle"
+    ]
+  },
+  "nineteen_prior_failures": {
+    "classification": "Environment interpreter selection, not candidate regression",
+    "baseline_retest_passed": 19,
+    "candidate_retest_passed": 19,
+    "baseline_seconds": 84.2,
+    "evidence": "All19 methods AST-identical; provisioning/install scripts and requirements byte-identical. Baseline/candidate original base ready=False; existing pinned ready=True. Supported FLOW_PYTHON route reuses dependencies without installation.",
+    "names": [
+      "test_bootstrap_installer_installs_latest_tag_from_remote",
+      "test_doctor_develop_install_reports_source_target",
+      "test_doctor_release_install_reports_mode_and_version",
+      "test_install_command_requires_a_mode",
+      "test_install_develop_rejects_non_flow_directory",
+      "test_install_develop_rejects_nonexistent_path",
+      "test_install_flow_sh_develop_creates_symlink",
+      "test_install_flow_sh_release_creates_real_directory",
+      "test_install_flow_sh_release_stamps_mode_and_version",
+      "test_install_verifies_openhands_and_does_not_activate_maf",
+      "test_release_install_includes_arbitrary_new_top_level_file",
+      "test_release_install_is_self_contained_after_clone_removed",
+      "test_update_check_already_current_is_noop",
+      "test_update_check_in_release_mode_reports_available_tag",
+      "test_update_check_shows_changelog_section_for_new_version",
+      "test_update_in_develop_mode_prints_manual_instructions",
+      "test_update_json_classifies_no_semver_tags",
+      "test_update_json_classifies_unreachable_remote",
+      "test_update_picks_highest_semver_tag"
+    ]
+  },
+  "supplemental_unchanged_test_bodies": {
+    "baseline_passed": 4,
+    "candidate_passed": 4,
+    "baseline_seconds": 28.501,
+    "candidate_seconds": 29.578,
+    "method": "Separate process unwraps only the legacy wheelhouse skip decorator for four named tests after asserting existing SDK readiness; every original test assertion retained. Normal aggregate skip records preserved. No repository code/test change.",
+    "names": [
+      "test_install_command_release_converts_from_develop",
+      "test_install_release_cleans_up_source_old_symlink_leftover",
+      "test_install_command_develop_converts_from_release",
+      "test_update_apply_in_release_mode_swaps_and_records_version"
+    ]
+  },
+  "remaining_unexecuted": [
+    {
+      "check": "tests.test_flow.FlowCliTests.test_refresh_script_dry_run_resolves_upstream",
+      "candidate": "skipped: offline: cannot reach upstream",
+      "baseline": "same skip reproduced; 5-test optional subset0.058s",
+      "impact": "Maintainer refresh-script upstream connectivity smoke only; no change to reviewed production files.",
+      "smallest_needed_action": "Run this single existing test later in an environment where its normal upstream request is permitted. No credentials, package installation or restriction bypass is needed or attempted here."
+    }
+  ],
+  "checks": {
+    "reviewed_source_unchanged": true,
+    "configuration_unchanged": true,
+    "frozen_evaluation_criteria_unchanged": true,
+    "live_trial_results_unchanged": true,
+    "installed_source_unchanged": true,
+    "original_checkout_clean": true
+  },
+  "installed_source_files_compared": 408,
+  "mistaken_module_resolution": "Removed nonexistent tests.test_runstate; existing lifecycle tests included via test_flow, test_openhands_workflow, test_openhands_lifecycle. No fake module added.",
+  "network": "Restrictions unchanged; no bypass or access/credential expansion",
+  "live_model_calls": 0,
+  "dependency_installation": false,
+  "host_installation_changed": false,
+  "production_or_test_source_changed": false,
+  "commit_release_deploy": false,
+  "readiness": "Applicable deterministic aggregate green, plus4 supplemental local-fixture assertions pass in both arms. One upstream smoke remains environment-blocked. No candidate regression identified; release remains on hold and live reliability/utility claims remain unestablished."
+}

@@ -3932,6 +3932,7 @@ class FlowCliTests(FlowCliHarness):
                 "receipt_compare",
                 "receipt_verify",
                 "render",
+                "review_output",
                 "runner_limits",
                 "runner_progress",
                 "runstate",
@@ -3943,6 +3944,7 @@ class FlowCliTests(FlowCliHarness):
                 "sync",
                 "telemetry_freshness",
                 "usage_store",
+                "verification",
                 "verifier_contracts",
             ],
         )

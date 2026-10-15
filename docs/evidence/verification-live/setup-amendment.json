@@ -1,0 +1,33 @@
+{
+  "recorded_at": "2026-10-15T00:42:47.723607+00:00",
+  "authorization": "Andy agreed: use existing time and attempt limits, measure actual usage and disclose gaps; 40000 was an assistant planning assumption, not an approved requirement. Parent delegated explicit live evaluation authorization.",
+  "amendment": {
+    "aggregate_generated_token_ceiling": "removed; no new budget machinery",
+    "matched_token_budget_claim": false,
+    "wall_seconds_per_arm_trial": 1800,
+    "focused_repairs_per_check": 2,
+    "cases": 4,
+    "paired_repetitions": 3,
+    "models_roles_tools_topology": "unchanged existing local Ollama profile and stock Flow/OpenHands role factories, default specialist roster; lead-developer producer and quality-reviewer; no native permission acknowledgement added",
+    "model": "ollama_chat/gemma4-26b-dev:latest",
+    "max_input_tokens": 65536,
+    "max_output_tokens_per_request": 8192,
+    "condenser_max_tokens": 57344,
+    "external_correctness_and_success_measures": "unchanged; token-ratio criterion reported only with measurement completeness; no matched token budget assertion",
+    "execution": "stock OpenHands async arun API for interrupt support; same factories, context and tools both arms; deterministic host handles frozen injections, checks and lifecycle. Active host preparation time/tokens outside per-trial measured model accounting remain unknown.",
+    "usage": "retain SDK metrics and provider-reported counts when available; unknown coverage/actual bills stay null",
+    "cancellation_precondition": "installed SDK interrupt probe must pass before any live generation",
+    "order": "counterbalanced across repetitions, sequential arms",
+    "access": "existing localhost endpoint only; no purchases, new credentials, services or native permission expansion"
+  },
+  "frozen_files_sha256": {
+    "tests/fixtures/verification-evaluation/v1/cases.json": "6e3901f0a1050aa7f77f3ad89c3a89e11725687ba6a8b2a033d1c138f370c045",
+    "docs/verification-evaluation.md": "f2fd52b0acb87f5eeb054101ae297cc529d6ebbcba58278ffcd9d44ff9eae4e1"
+  },
+  "candidate_production_sha256": {
+    "cli/runstate.py": "95eadd9d6d3eded4449420ef507b50af9111d9f38d38e413862a5007a28a47d6",
+    "cli/verification.py": "9af2098f28da7b18b3abcdbc83b30a700c30a1341098ba3b31953bf096a79e7f",
+    "cli/openhands_flow.py": "9f4fec461d7206e20e6672837773102ed31d9481f641fdae91e39e4e49604dd8",
+    "cli/delivery_control.py": "68a22eedf78f8612545551e4a23727328b79a23f961b9e66d5dcda2fc379d522"
+  }
+}

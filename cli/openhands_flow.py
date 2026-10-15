@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 import json
+import asyncio
 import time
+import verification
+import review_output
 
 from delivery_control import run_lock
 from fsutil import repo_root, write_atomic
@@ -53,12 +56,13 @@ def initialize(args) -> dict:
 
 STAGE_COORDINATION = {
     "solution": "After explicit solution approval, the host assistant assumes Delivery Lead coordination and initiates planning. Solution approval does not authorize implementation.",
+    "review": "Review implementation correctness against approved criteria separately from test equivalence. Fixing a misspelled test import without changing assertions can be equivalent; correcting implementation logic to satisfy those assertions is implementation work, not a criterion change. Write exactly one Verdict: ACCEPT or REJECT in review.md. If evaluation inputs changed, also write exactly one Test equivalence: EQUIVALENT, MATERIAL or UNCERTAIN with before/after rationale. An ACCEPT does not itself authorize a test-change receipt. Missing output needs bounded repair; do not synthesize approval.",
     "plan": "Prepare technical planning and validation from the approved solution when available, otherwise the approved definition; the solution stage is optional. Supply evidence for plan.md, handoff.md and validation-plan.md to the host assistant, who owns Delivery Lead coordination and requests explicit plan approval from the user. The executing specialist supplies technical expertise and does not take over host coordination. Do not start implementation until the plan is approved.",
 }
 
 
 def _stage_prompt(root: Path, directory: Path, payload: dict, stage: str, task: str) -> str:
-    outputs = "\n".join(f"- {name}: {(directory / filename).relative_to(root)}" for name, filename in OUTPUTS[stage].items())
+    outputs = "\n".join(f"- {name}: {(directory / filename).relative_to(root)}" for name, filename in specialist_outputs(payload, stage).items())
     inputs = "\n".join(f"- {name}: {relative}" for name, relative in payload.get("artifacts", {}).items())
     planning_basis = (
         "Planning basis: the approved solution takes precedence over the retained definition."
@@ -70,8 +74,41 @@ def _stage_prompt(root: Path, directory: Path, payload: dict, stage: str, task: 
             f"Produce the following durable stage outputs, with actual evidence and unresolved questions:\n{outputs}\n"
             "Flow owns lifecycle approvals; do not change run.json, events.jsonl, or runtime session storage. "
             "A stage response does not approve the work. Follow project instructions and actual workspace permissions.\n\n"
+            f"For verification-v1 work, follow {Path(__file__).resolve().parent.parent / 'docs/verification-evidence.md'}. Register checks and evaluation inputs "
+            "in verification-plan.json before plan approval. The host runs workflow check after workflow execute returns; "
+            "SDK specialists run tests through their tools and must not invoke Flow check/repair/lifecycle commands "
+            "inside the running execute, which holds the run lock. The host alone creates verification.json after execute returns. Specialists must not create, edit, or synthesize verification.json or its captured logs; "
+            "record actual session/assignment identities. Never weaken approved criteria or tests to obtain a pass. "
+            "Equivalent test repairs require independent evidence review; material or uncertain criterion changes "
+            "require separate user approval in a successor workflow. Targeted repair allocations persist across sessions.\n\n"
             f"{STAGE_COORDINATION.get(stage, '')}\n{planning_basis}\n\n"
             f"Requested outcome:\n{task}")
+
+
+def stage_outputs(payload, stage):
+    return {**OUTPUTS[stage], **(verification.EXTRAS.get(stage, {}) if verification.enabled(payload) else {})}
+
+
+def specialist_outputs(payload, stage):
+    """Separate specialist deliverables from host-captured approval inputs."""
+    return {name: path for name, path in stage_outputs(payload, stage).items()
+            if name != "verification"}
+
+
+def _run_session(session, review_result):
+    if review_result is None:
+        return session.run()
+    # Use the pinned SDK's own async cancellation, not a new executor loop.
+    async def run_review():
+        remaining = (verification.parse_time(review_result["deadline"]) - datetime.now(timezone.utc)).total_seconds()
+        if remaining <= 0:
+            raise RuntimeConfigurationError("review deadline exhausted; block and escalate")
+        timer = asyncio.get_running_loop().call_later(remaining, session.interrupt)
+        try:
+            await session.arun()
+        finally:
+            timer.cancel()
+    return asyncio.run(run_review())
 
 
 def execute(args) -> dict:
@@ -99,7 +136,8 @@ def execute(args) -> dict:
     with run_lock(directory):
         directory, payload = _run(root, args.work_id)
         start_event, stage_state, _ = STAGES[stage]
-        if payload["state"] != stage_state:
+        equivalence_review = stage == "review" and verification.enabled(payload) and payload["state"] == "implementing"
+        if payload["state"] != stage_state and not equivalence_review:
             payload = _transition(root, args.work_id, start_event, _lock_held=True)
         key = f"{stage}:{selection.role}"
         sessions = dict(payload.get("sessions", {}))
@@ -116,6 +154,10 @@ def execute(args) -> dict:
                      "conversation_id": str(conversation_id), "binding": binding,
                      "role": selection.role, "profile": selection.profile, "stage": stage,
                      "workspace": selection.workspace, "status": "starting"}
+        review_result = None
+        if stage == "review" and verification.enabled(payload):
+            review_result, review_before = review_output.begin(root, payload, str(conversation_id),
+                continuing=bool(previous and not args.new_session and previous.get("status") == "waiting_for_confirmation"))
         reference.pop("error_type", None)
         if previous and args.new_session:
             payload.setdefault("prior_sessions", []).append(previous)
@@ -141,9 +183,9 @@ def execute(args) -> dict:
                 if waiting:
                     if getattr(args, "reject_pending", None):
                         session.reject_pending_actions(args.reject_pending)
-                        session.run()
+                        _run_session(session, review_result)
                     elif getattr(args, "confirm_pending", False):
-                        session.run()  # SDK's documented explicit continuation confirms pending actions.
+                        _run_session(session, review_result)  # SDK's documented explicit continuation confirms pending actions.
                     else:
                         reference["status"] = session.state.execution_status.value
                         reference["pending_actions"] = [event.action.model_dump(mode="json") for event in ConversationState.get_unmatched_actions(session.state.active_branch())]
@@ -153,12 +195,22 @@ def execute(args) -> dict:
                     if getattr(args, "confirm_pending", False) or getattr(args, "reject_pending", None):
                         raise RuntimeConfigurationError("no SDK actions are waiting for confirmation")
                     session.send_message(_stage_prompt(root, directory, payload, stage, task))
-                    session.run()
+                    _run_session(session, review_result)
                 reference["status"] = session.state.execution_status.value
                 if session.state.execution_status == ConversationExecutionStatus.WAITING_FOR_CONFIRMATION:
                     reference["pending_actions"] = [event.action.model_dump(mode="json") for event in ConversationState.get_unmatched_actions(session.state.active_branch())]
                 else:
                     reference.pop("pending_actions", None)
+                if review_result is not None and reference["status"] == "finished":
+                    review_output.finish(root, payload, review_result, review_before)
+                    if review_result["status"] != "complete":
+                        reference["status"] = "incomplete_review"
+                    reference["review_output"] = review_result
+                if review_result is not None and datetime.now(timezone.utc) >= verification.parse_time(review_result["deadline"]):
+                    review_result["status"] = "incomplete"
+                    review_result["reason"] = "review deadline exhausted; block and escalate"
+                    reference["status"] = "incomplete_review"
+                    reference["review_output"] = review_result
                 reference["metrics"] = session.conversation_stats.get_combined_metrics().model_dump(mode="json")
         except BaseException as exc:
             reference["status"] = "interrupted" if isinstance(exc, KeyboardInterrupt) else "error"
@@ -183,8 +235,12 @@ def execute(args) -> dict:
             runstate._write_run(args.work_id, payload, root)
             report = {"work_id": args.work_id, **reference}
             write_atomic(directory / f"{stage}-{selection.role}-outcome.json", json.dumps(report, indent=2) + "\n")
+            if review_result is not None:
+                write_atomic(directory / "review-outcomes" / f"{review_result['id']}.json", json.dumps(report, indent=2) + "\n")
         return {"work_id": args.work_id, "stage": stage, "session": reference,
-                "outputs": {name: str(directory / filename) for name, filename in OUTPUTS[stage].items()}}
+                "outputs": {name: str(directory / filename) for name, filename in specialist_outputs(payload, stage).items()},
+                "host_recorded_outputs": {name: str(directory / filename) for name, filename in stage_outputs(payload, stage).items()
+                                          if name not in specialist_outputs(payload, stage)}}
 
 
 def approve(args) -> dict:
@@ -193,12 +249,14 @@ def approve(args) -> dict:
     stage = args.stage or payload["lane"]
     if stage not in {*APPROVALS, "implement"}:
         raise RuntimeConfigurationError("this stage has no approval transition")
-    artifacts = {name: (directory / filename).relative_to(root).as_posix() for name, filename in OUTPUTS[stage].items()}
-    for name, relative in artifacts.items():
+    artifacts = {name: (directory / filename).relative_to(root).as_posix() for name, filename in stage_outputs(payload, stage).items()}
+    for name, relative in (artifacts.items() if stage != "implement" else ()):
         path = root / relative
         if not path.is_file() or not path.read_text().strip():
             raise RuntimeConfigurationError(f"missing or empty stage output: {name} ({relative})")
     dispositions = runstate.parse_assignments(args.disposition, "disposition")
+    if stage == "review":
+        review_output.validate_approval(root, payload)
     if stage == "implement":
         with run_lock(directory):
             _, current = _run(root, args.work_id)
@@ -275,7 +333,57 @@ def show(args) -> dict:
     errors = runstate.openhands_approval_errors(args.work_id, payload, root)
     if errors:
         result["approval_integrity"] = {"ok": False, "errors": errors}
+    result["verification_status"] = "required" if verification.enabled(payload) else "historical_unbound"
     return result
+
+
+def check(args) -> dict:
+    root = _root(args)
+    with run_lock(runstate._run_dir(args.work_id, root), blocking=False):
+        _, payload = _run(root, args.work_id)
+        result = verification.capture(root, payload, args.check_id, args.session_id,
+                                      args.assignment_id, args.environment, args.timeout)
+        if result["status"] == "failed" and result["repair_attempt"] >= verification.REPAIR_LIMIT:
+            _transition(root, args.work_id, "block", note="Repair budget exhausted; escalate to the user.", _lock_held=True)
+        return result
+
+
+def repair(args) -> dict:
+    root = _root(args)
+    with run_lock(runstate._run_dir(args.work_id, root), blocking=False):
+        _, payload = _run(root, args.work_id)
+        if not verification.enabled(payload):
+            raise RuntimeConfigurationError("bounded repair requires a new verification-v1 workflow")
+        used = sum(a["check_id"] == args.check_id for a in payload.get("repair_attempts", []))
+        if used >= verification.REPAIR_LIMIT:
+            blocked = payload if payload["state"] == "blocked" else _transition(
+                root, args.work_id, "block", note="Repair budget exhausted; escalate to the user.", _lock_held=True)
+            return {**blocked, "status": "blocked"}
+        return _transition(root, args.work_id, "request-refinement", _lock_held=True,
+            dispositions={"failed_check": args.check_id, "specialist": args.specialist,
+                          "narrowed_scope": args.scope, "reason": args.reason,
+                          "failure_evidence": args.failure_evidence})
+
+
+def review_test_change(args) -> dict:
+    root = _root(args)
+    with run_lock(runstate._run_dir(args.work_id, root), blocking=False):
+        _, payload = _run(root, args.work_id)
+        return verification.review_change(root, payload, args.reviewer, args.reviewer_session_id,
+                                          args.rationale, args.evidence, args.disposition)
+
+
+def evidence_report(args) -> dict:
+    root = _root(args)
+    _, payload = _run(root, args.work_id)
+    rows = None
+    if getattr(args, "usage_store", None):
+        import sqlite3
+        from openhands_usage import reporting_rows
+        with sqlite3.connect(args.usage_store.resolve().as_uri() + "?mode=ro", uri=True) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = reporting_rows(conn)
+    return verification.report(root, payload, rows)
 
 
 def runtime_info(args) -> dict:
@@ -297,7 +405,7 @@ def _handler(function):
             print(json.dumps({"status": "error", "error_type": type(exc).__name__, "reason": "SDK execution failed; inspect the preserved session and masked runtime diagnostic."}))
             return 1
         print(json.dumps(result, indent=2, default=str) if args.json else _summary(result))
-        return 1 if result.get("session", {}).get("status") == "error" else 0
+        return 1 if result.get("session", {}).get("status") in {"error", "interrupted", "incomplete_review"} or result.get("status") in {"failed", "blocked"} else 0
     return handle
 
 
@@ -328,6 +436,10 @@ def register_commands(sub):
         ("archive", archive, "archive an accepted review with project dispositions"),
         ("status", show, "show workflow and SDK session references"),
         ("runtime", runtime_info, "inspect exact runtime versions and native access limitation"),
+        ("check", check, "run an approved check and record workspace-bound evidence"),
+        ("repair", repair, "allocate a bounded targeted repair or escalate"),
+        ("review-test-change", review_test_change, "record independent evidence for an equivalent test repair"),
+        ("evidence-report", evidence_report, "report verification attempts and existing usage join identities"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.set_defaults(openhands_handler=_handler(function))
@@ -346,5 +458,25 @@ def register_commands(sub):
             confirmation.add_argument("--confirm-pending", action="store_true", help="confirm the SDK actions shown by status")
             confirmation.add_argument("--reject-pending", metavar="REASON", help="reject waiting actions through the SDK")
             command.add_argument("--new-session", action="store_true", help="retain the old conversation and start a new one")
+        if name in {"check", "repair"}:
+            command.add_argument("--check-id", required=True)
+        if name == "check":
+            command.add_argument("--session-id", required=True)
+            command.add_argument("--assignment-id", required=True)
+            command.add_argument("--environment", required=True)
+            command.add_argument("--timeout", type=int, default=1800)
+        if name == "repair":
+            command.add_argument("--specialist", required=True)
+            command.add_argument("--scope", required=True)
+            command.add_argument("--reason", required=True)
+            command.add_argument("--failure-evidence", required=True)
+        if name == "review-test-change":
+            command.add_argument("--reviewer", required=True)
+            command.add_argument("--reviewer-session-id", required=True)
+            command.add_argument("--rationale", required=True)
+            command.add_argument("--evidence", required=True)
+            command.add_argument("--disposition", choices=("equivalent", "material", "uncertain"), required=True)
+        if name == "evidence-report":
+            command.add_argument("--usage-store", type=Path, help="read an already harvested usage store without modifying it")
         if name in {"approve", "archive"}:
             command.add_argument("--disposition", action="append", default=[], metavar="NAME=VALUE")

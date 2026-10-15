@@ -39,6 +39,11 @@ Write these files under `.flow/runs/<work-id>/`:
 - `implementation-evidence.md`
 - `handback.md`
 
+For verification-v1 workflows, the host runs `flow workflow check` after execution
+returns to create `verification.json` and captured logs. Specialists must not
+create, edit, or synthesize those host-owned records. Link the expected record
+from the handback and state that host verification is pending until it exists.
+
 Use specialist roles, project skills, context and existing approved artifacts as
 needed. SDK TaskToolSet handles configured specialist delegation. Record actual
 results and unresolved questions; a model response alone does not approve work.

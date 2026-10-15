@@ -38,6 +38,12 @@ Write these files under `.flow/runs/<work-id>/`:
 
 - `review.md`
 
+For verification-v1 work, inspect the tested workspace, check logs and registered
+evaluation input changes. Equivalent test repairs need independent before/after
+evidence; changed success conditions need separate user approval in a linked
+successor workflow. Do not accept assertion deletion, reduced coverage or an
+implementation shortcut merely because the recorded checks pass.
+
 Use specialist roles, project skills, context and existing approved artifacts as
 needed. SDK TaskToolSet handles configured specialist delegation. Record actual
 results and unresolved questions; a model response alone does not approve work.
@@ -60,3 +66,12 @@ Use the active runtime memory provider as companion context when available.
 Verify material claims against canonical project artifacts and code.
 
 Follow `standards/git-commits.md` for any authorized commits.
+
+Verification-v1 output contract: write exactly one `Verdict: ACCEPT` or
+`Verdict: REJECT` in `review.md`. For changed registered tests, separately write
+`Test equivalence: EQUIVALENT`, `MATERIAL` or `UNCERTAIN` and before/after rationale.
+An import spelling repair can preserve assertions; correcting implementation
+logic to meet those assertions is not a criterion change. A passing sample does
+not justify assertion deletion or a semantic shortcut. Missing or unusable review
+output requires host-allocated `workflow repair --check-id review-output` within
+the persistent two-repair limit and shared deadline. Do not synthesize approval.

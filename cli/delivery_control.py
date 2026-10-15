@@ -24,12 +24,15 @@ def _now() -> str:
 
 
 @contextmanager
-def run_lock(run_dir: Path) -> Iterator[None]:
+def run_lock(run_dir: Path, *, blocking: bool = True) -> Iterator[None]:
     ensure_dir(run_dir)
     path = run_dir / ".delivery.lock"
     fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        except BlockingIOError as exc:
+            raise DeliveryControlError("workflow busy; the host must record evidence after workflow execute returns") from exc
         yield
     finally:
         fcntl.flock(fd, fcntl.LOCK_UN)

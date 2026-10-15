@@ -72,6 +72,17 @@ Optional prioritization or urgency context.
 
 ## Required handback
 
+For verification-v1 workflows, link `verification-plan.json` and `verification.json`.
+The specialist supplies actual producer session and assignment identities and
+ordinary test results in its handback. After execution returns, the host alone
+runs `flow workflow check` to record the tested workspace, registered evaluator
+inputs, commands, results, environment and log hashes. Specialists must not create
+or edit `verification.json` or captured logs; report host verification as pending
+until the host records it. Independent review must explain equivalent test repairs.
+Material or uncertain changes to approved success conditions require separate
+user approval in a linked successor workflow. The host uses `workflow repair` for narrowed
+repairs; the two-attempt allowance persists across sessions.
+
 - files changed
 - test and validation results
 - deploy/runtime status

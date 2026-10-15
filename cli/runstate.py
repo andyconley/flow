@@ -12,6 +12,8 @@ import hashlib
 import os
 import sqlite3
 import stat
+import verification
+from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -291,22 +293,36 @@ def _write_run(work_id: str, payload: dict[str, Any], root: Path | None = None) 
 def _append_event(work_id: str, event: dict[str, Any], root: Path | None = None) -> None:
     path = _events_path(work_id, root)
     ensure_dir(path.parent)
-    with path.open("a") as handle:
-        handle.write(json.dumps(event, sort_keys=True) + "\n")
+    if verification.enabled(_load_run(work_id, root) or {}):
+        # Include the committed pending event and replace atomically: a torn
+        # append must not turn an otherwise recoverable transaction into JSON
+        # corruption. The run projection remains the authority commit point.
+        events = _load_events(work_id, root)
+        if not event.get("verification_event_id") or event not in events:
+            events.append(event)
+        write_atomic(path, "".join(json.dumps(item, sort_keys=True) + "\n" for item in events))
+    else:
+        with path.open("a") as handle:
+            handle.write(json.dumps(event, sort_keys=True) + "\n")
 
 
 def _load_events(work_id: str, root: Path | None = None) -> list[dict[str, Any]]:
     path = _events_path(work_id, root)
-    if not path.exists():
-        return []
     events = []
-    for line_no, line in enumerate(path.read_text().splitlines(), start=1):
+    for line_no, line in enumerate(path.read_text().splitlines() if path.exists() else [], start=1):
         if not line.strip():
             continue
         try:
             events.append(json.loads(line))
         except json.JSONDecodeError as exc:
             raise ValueError(f"{EVENTS_FILE}:{line_no}: {exc.msg}") from exc
+    payload = _load_run(work_id, root) or {}
+    pending = payload.get("verification_pending_event") if verification.enabled(payload) else None
+    if pending is not None:
+        if not isinstance(pending, dict):
+            raise ValueError("verification pending lifecycle event must be an object")
+        if pending not in events:
+            events.append(pending)
     return events
 
 
@@ -626,6 +642,16 @@ OPENHANDS_SEAL_EVENTS = frozenset({"approve-definition", "approve-solution", "ap
                                   "mark-handback-ready", "accept-review", "archive"})
 
 
+def _openhands_artifact_names(payload, event):
+    names = TRANSITIONS[event].required_artifacts
+    if verification.enabled(payload):
+        if event == "approve-plan":
+            names = (*names, "verification_plan")
+        elif event == "mark-handback-ready":
+            names = (*names, "verification")
+    return (*names, "archive") if event == "archive" else names
+
+
 def openhands_approval_errors(work_id: str, payload: dict[str, Any], root: Path | None = None) -> list[str]:
     """Check recorded approved bytes without manufacturing authority for old runs."""
     if payload.get("runtime") != "openhands" or payload.get("protocol_revision") != PROTOCOL_REVISION_OPENHANDS:
@@ -634,12 +660,18 @@ def openhands_approval_errors(work_id: str, payload: dict[str, Any], root: Path 
     if not isinstance(digests, dict):
         return ["approved_artifact_digests must be a mapping"]
     expected = {name for event in OPENHANDS_SEAL_EVENTS if event in payload.get("gates", {})
-                for name in TRANSITIONS[event].required_artifacts}
+                for name in _openhands_artifact_names(payload, event)}
     if "archive" in payload.get("gates", {}):
         expected.add("archive")
     errors = [f"unsealed approved artifact:{name}; review prior artifacts in a new workflow"
               for name in sorted(expected - set(digests))]
     active_root = (root or repo_root()).resolve()
+    try:
+        starts = [e for e in _load_events(work_id, active_root) if e["event"] == "start-definition"]
+        if starts and starts[0].get("verification_revision") != payload.get("verification_revision"):
+            errors.append("verification revision differs from workflow creation history")
+    except (ValueError, KeyError, OSError) as exc:
+        errors.append(f"verification history unavailable: {exc}")
     run_dir = _run_dir(work_id, active_root).resolve()
     for name, digest in digests.items():
         relative = payload.get("artifacts", {}).get(name)
@@ -650,6 +682,18 @@ def openhands_approval_errors(work_id: str, payload: dict[str, Any], root: Path 
             continue
         if not isinstance(digest, str) or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             errors.append(f"approved artifact:{name} changed after approval")
+    if verification.enabled(payload):
+        try:
+            journal = _load_events(work_id, active_root)
+            recorded_repairs = [event["repair_attempt"] for event in journal if "repair_attempt" in event]
+            if recorded_repairs != payload.get("repair_attempts", []):
+                errors.append("verification: repair projection differs from lifecycle history")
+            if "approve-plan" in payload.get("gates", {}):
+                approved = [event for event in journal if event["event"] == "approve-plan"]
+                if not approved or approved[-1].get("evaluation_baseline") != payload.get("evaluation_baseline"):
+                    errors.append("verification: evaluation baseline differs from plan approval history")
+        except (ValueError, KeyError, OSError) as exc:
+            errors.append(f"verification history unavailable: {exc}")
     return errors
 
 
@@ -734,7 +778,11 @@ def apply_transition(
         return False, current, ["scout review must use request-scout-refinement"]
     if event_name == "request-scout-refinement" and not is_scout_review:
         return False, current or {}, ["request-scout-refinement requires scout review provenance"]
-    if current_state not in transition.from_states:
+    review_repair = (verification.enabled(current or {}) and event_name == "request-refinement"
+                     and (dispositions or {}).get("failed_check") == "review-output")
+    refinement_in_progress = (verification.enabled(current or {}) and event_name == "request-refinement"
+                              and current_state == STATE_IMPLEMENTING)
+    if current_state not in transition.from_states and not refinement_in_progress:
         expected = ", ".join(state or "<new>" for state in transition.from_states)
         actual = current_state or "<new>"
         return False, current or {}, [
@@ -748,6 +796,7 @@ def apply_transition(
         payload["protocol_revision"] = protocol_revision or PROTOCOL_REVISION_CURRENT
         if payload["protocol_revision"] == PROTOCOL_REVISION_OPENHANDS:
             payload["runtime"] = "openhands"
+            payload["verification_revision"] = verification.REVISION
     payload.setdefault("work_id", work_id)
     payload.setdefault("created_at", now)
     payload["artifacts"] = dict(payload.get("artifacts", {}))
@@ -759,9 +808,21 @@ def apply_transition(
         return False, current or {}, ["orchestration_manifest cannot be replaced after it is recorded"]
     payload["artifacts"].update(artifacts or {})
     payload["dispositions"].update(dispositions or {})
-    if event_name == "request-refinement" and payload.get("runtime") == "openhands":
+    if verification.enabled(payload):
+        run_dir = _run_dir(work_id, root)
+        for name, filename in verification.EXTRAS.get(
+                {"approve-plan": "plan", "mark-handback-ready": "implement"}.get(event_name), {}).items():
+            payload["artifacts"].setdefault(name, (run_dir / filename).relative_to((root or repo_root()).resolve()).as_posix())
+        try:
+            verification.gate((root or repo_root()).resolve(), payload, event_name, dispositions or {})
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            if current:
+                _append_event(work_id, {"at": now, "event": "verification-rejection", "gate": event_name,
+                                       "from": current_state, "to": current_state, "reason": str(exc)}, root)
+            return False, current or {}, [str(exc)]
+    if event_name == "request-refinement" and payload.get("runtime") == "openhands" and not review_repair:
         payload["approved_artifact_digests"] = dict(payload.get("approved_artifact_digests") or {})
-        for name in ("implementation_evidence", "handback", "review"):
+        for name in ("implementation_evidence", "handback", "review", "verification"):
             payload["approved_artifact_digests"].pop(name, None)
         for approval_event in ("mark-handback-ready", "accept-review"):
             payload["gates"].pop(approval_event, None)
@@ -796,7 +857,7 @@ def apply_transition(
     missing = _missing_gate_items(payload, transition)
     if payload.get("runtime") == "openhands":
         active_root = (root or repo_root()).resolve()
-        seal_names = (*transition.required_artifacts, "archive") if event_name == "archive" else transition.required_artifacts
+        seal_names = _openhands_artifact_names(payload, event_name)
         for name in seal_names:
             relative = payload["artifacts"].get(name)
             path = active_root / relative if isinstance(relative, str) else None
@@ -841,6 +902,8 @@ def apply_transition(
     else:
         next_state = transition.to_state
         next_lane = transition.lane
+    if review_repair:
+        next_state, next_lane = current_state, payload["lane"]
     if event_name in {"pause", "block"} and previous_state:
         payload["return_state"] = previous_state
         payload["return_lane"] = payload.get("lane") or STATE_LANES.get(previous_state)
@@ -863,11 +926,13 @@ def apply_transition(
         "artifacts": artifacts or {},
         "dispositions": dispositions or {},
     }
+    if event_name == "start-definition" and verification.enabled(payload):
+        event["verification_revision"] = verification.REVISION
     if ((event_name in {"approve-definition", "approve-solution"} or
          payload.get("runtime") == "openhands" and event_name in OPENHANDS_SEAL_EVENTS)
             and payload.get("approved_artifact_digests")):
         if payload.get("runtime") == "openhands":
-            names = (*transition.required_artifacts, "archive") if event_name == "archive" else transition.required_artifacts
+            names = _openhands_artifact_names(payload, event_name)
         else:
             names = ("requirements", "acceptance_criteria", "shaper_intent", "orchestration_manifest") if event_name == "approve-definition" else ("solution",)
         event["approved_artifact_digests"] = {
@@ -875,7 +940,20 @@ def apply_transition(
         }
     if note:
         event["note"] = note
+    if verification.enabled(payload) and event_name == "request-refinement":
+        event["repair_attempt"] = payload["repair_attempts"][-1]
+    if verification.enabled(payload) and event_name == "approve-plan":
+        event["evaluation_baseline"] = payload["evaluation_baseline"]
 
+    if verification.enabled(payload):
+        # Materialize any prior committed pending event before replacing its
+        # projection. Then persist this event with the state in one atomic file.
+        # Readers can recover the event even if journal publication fails.
+        prior = _load_events(work_id, root)
+        write_atomic(_events_path(work_id, root),
+                     "".join(json.dumps(item, sort_keys=True) + "\n" for item in prior))
+        event["verification_event_id"] = uuid4().hex
+        payload["verification_pending_event"] = event
     _write_run(work_id, payload, root)
     _append_event(work_id, event, root)
     return True, payload, []
@@ -1037,7 +1115,7 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
         events = _load_events(work_id, root)
     except ValueError as exc:
         return False, [str(exc)], payload
-    lifecycle_events = [event for event in events if not str(event.get("event", "")).startswith("delivery-lead-")]
+    lifecycle_events = [event for event in events if not str(event.get("event", "")).startswith(("delivery-lead-", "verification-"))]
     if not lifecycle_events:
         ok = False
         messages.append("events: missing transition history")
@@ -1053,6 +1131,13 @@ def verify(work_id: str, root: Path | None = None) -> tuple[bool, list[str], dic
     if approval_errors:
         ok = False
         messages.extend(approval_errors)
+    if verification.enabled(payload) and payload.get("state") in {
+            STATE_HANDBACK_READY, STATE_REVIEWING, STATE_REVIEW_ACCEPTED}:
+        try:
+            verification.gate((root or repo_root()).resolve(), dict(payload), "accept-review", {})
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            ok = False
+            messages.append(str(exc))
     if ok:
         messages.append("ok")
     return ok, messages, payload

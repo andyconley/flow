@@ -1,0 +1,92 @@
+{
+  "previous_failures": [
+    "test_bootstrap_installer_installs_latest_tag_from_remote",
+    "test_doctor_develop_install_reports_source_target",
+    "test_doctor_release_install_reports_mode_and_version",
+    "test_install_command_requires_a_mode",
+    "test_install_develop_rejects_non_flow_directory",
+    "test_install_develop_rejects_nonexistent_path",
+    "test_install_flow_sh_develop_creates_symlink",
+    "test_install_flow_sh_release_creates_real_directory",
+    "test_install_flow_sh_release_stamps_mode_and_version",
+    "test_install_verifies_openhands_and_does_not_activate_maf",
+    "test_release_install_includes_arbitrary_new_top_level_file",
+    "test_release_install_is_self_contained_after_clone_removed",
+    "test_update_check_already_current_is_noop",
+    "test_update_check_in_release_mode_reports_available_tag",
+    "test_update_check_shows_changelog_section_for_new_version",
+    "test_update_in_develop_mode_prints_manual_instructions",
+    "test_update_json_classifies_no_semver_tags",
+    "test_update_json_classifies_unreachable_remote",
+    "test_update_picks_highest_semver_tag"
+  ],
+  "unchanged_provisioning_sources": {
+    "cli/openhands_provision.py": true,
+    "install-flow.sh": true,
+    "install.sh": true,
+    "runtime/openhands/requirements.txt": true
+  },
+  "readiness_probes": {
+    "baseline": {
+      "original_base": {
+        "exit": 0,
+        "ready": "False",
+        "stderr": ""
+      },
+      "existing_pinned": {
+        "exit": 0,
+        "ready": "True",
+        "stderr": ""
+      }
+    },
+    "candidate": {
+      "original_base": {
+        "exit": 0,
+        "ready": "False",
+        "stderr": ""
+      },
+      "existing_pinned": {
+        "exit": 0,
+        "ready": "True",
+        "stderr": ""
+      }
+    }
+  },
+  "supported_route": "FLOW_PYTHON selects the already provisioned pinned SDK interpreter; no package installation needed.",
+  "incorrect_module": "tests.test_runstate does not exist; lifecycle tests reside in tests.test_flow, test_openhands_workflow and test_openhands_lifecycle.",
+  "network": "Restricted; no bypass or permission expansion.",
+  "affected_test_methods_identical": {
+    "test_bootstrap_installer_installs_latest_tag_from_remote": true,
+    "test_doctor_develop_install_reports_source_target": true,
+    "test_doctor_release_install_reports_mode_and_version": true,
+    "test_install_command_requires_a_mode": true,
+    "test_install_develop_rejects_non_flow_directory": true,
+    "test_install_develop_rejects_nonexistent_path": true,
+    "test_install_flow_sh_develop_creates_symlink": true,
+    "test_install_flow_sh_release_creates_real_directory": true,
+    "test_install_flow_sh_release_stamps_mode_and_version": true,
+    "test_install_verifies_openhands_and_does_not_activate_maf": true,
+    "test_release_install_includes_arbitrary_new_top_level_file": true,
+    "test_release_install_is_self_contained_after_clone_removed": true,
+    "test_update_check_already_current_is_noop": true,
+    "test_update_check_in_release_mode_reports_available_tag": true,
+    "test_update_check_shows_changelog_section_for_new_version": true,
+    "test_update_in_develop_mode_prints_manual_instructions": true,
+    "test_update_json_classifies_no_semver_tags": true,
+    "test_update_json_classifies_unreachable_remote": true,
+    "test_update_picks_highest_semver_tag": true
+  },
+  "baseline_retest": {
+    "tests": 19,
+    "seconds": 84.2,
+    "failures": 0,
+    "errors": 0,
+    "route": "existing pinned SDK interpreter via FLOW_PYTHON"
+  },
+  "baseline_optional_checks": {
+    "tests": 5,
+    "skipped": 5,
+    "seconds": 0.058,
+    "result": "same optional environment skips"
+  }
+}

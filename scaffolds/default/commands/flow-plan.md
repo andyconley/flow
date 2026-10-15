@@ -39,6 +39,8 @@ Write these files under `.flow/runs/<work-id>/`:
 - `plan.md`
 - `handoff.md`
 - `validation-plan.md`
+- `verification-plan.json` for verification-v1 workflows: approved check IDs,
+  criteria references, argv, registered evaluator files and `repair_limit: 2`.
 
 Use specialist roles, project skills, context and existing approved artifacts as
 needed. SDK TaskToolSet handles configured specialist delegation. Record actual

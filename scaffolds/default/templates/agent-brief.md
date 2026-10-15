@@ -28,6 +28,12 @@
 - Format:
 - Observable success criteria:
 - Prohibited actions:
+- Host-owned evidence: never create or edit `verification.json` or captured logs;
+  return ordinary test results and identities for host capture after execution.
+- Approved criteria and verification-plan references/digests:
+- Registered evaluator inputs; changing them requires explicit review:
+- Failed check and failure evidence (for repairs):
+- Remaining repair allowance (two allocations per check across sessions):
 
 ## Handback
 

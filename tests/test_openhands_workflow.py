@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cli"))
 import openhands_config as config
 import openhands_flow as flow
 import runstate
+from tests import verification_fixture
 
 
 class OpenHandsWorkflowTests(unittest.TestCase):
@@ -19,6 +20,7 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()
         self.directory = self.root / ".flow/runs/example"
+        verification_fixture.prepare(self.root)
         self.args = Namespace(project_root=self.root, work_id="example", stage=None, disposition=[])
 
     def tearDown(self):
@@ -27,6 +29,7 @@ class OpenHandsWorkflowTests(unittest.TestCase):
     def outputs(self, stage):
         for filename in config.OUTPUTS[stage].values():
             (self.directory / filename).write_text(f"Evidence for {stage}\n")
+        verification_fixture.outputs(self.root, self.directory, stage, runstate.status("example", self.root))
 
     def test_delivery_lead_prompt_and_plan_approval_boundary(self):
         flow.initialize(self.args)
@@ -184,7 +187,7 @@ class OpenHandsWorkflowTests(unittest.TestCase):
 
     def test_every_approved_stage_records_byte_digests_and_journal_evidence(self):
         payload = self.approved_through()
-        expected = {name for outputs in config.OUTPUTS.values() for name in outputs}
+        expected = {name for outputs in config.OUTPUTS.values() for name in outputs} | {"verification_plan", "verification"}
         self.assertEqual(set(payload["approved_artifact_digests"]), expected)
         for name in expected:
             self.assertEqual(payload["approved_artifact_digests"][name],
@@ -250,14 +253,19 @@ class OpenHandsWorkflowTests(unittest.TestCase):
     def test_authorized_refinement_releases_only_implementation_seals(self):
         payload = self.approved_through("implement")
         earlier = {name: digest for name, digest in payload["approved_artifact_digests"].items()
-                   if name not in {"implementation_evidence", "handback", "review"}}
+                   if name not in {"implementation_evidence", "handback", "review", "verification"}}
         self.outputs("review")
-        refined = flow._transition(self.root, "example", "request-refinement")
+        proof = self.directory / "failure.txt"
+        proof.write_text("Reviewer found a fixture concern")
+        refined = flow._transition(self.root, "example", "request-refinement", dispositions={
+            "failed_check": "behavior", "specialist": "lead-developer", "narrowed_scope": "fixture concern",
+            "reason": "review finding", "failure_evidence": proof.relative_to(self.root).as_posix()})
         self.assertEqual(refined["approved_artifact_digests"], earlier)
         self.assertNotIn("mark-handback-ready", refined["gates"])
         self.assertNotIn("accept-review", refined["gates"])
         for filename in config.OUTPUTS["implement"].values():
             (self.directory / filename).write_text("Revised implementation evidence\n")
+        verification_fixture.outputs(self.root, self.directory, "implement", refined)
         self.args.stage = "implement"
         resumed = flow.approve(self.args)
         self.assertEqual(resumed["state"], "reviewing")

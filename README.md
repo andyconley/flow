@@ -276,6 +276,10 @@ This is the command map, not the full reference. For detailed flags and behavior
 | `flow workflow native-handoff WORK_ID --stage STAGE --profile PROFILE --task-file PATH` | Prepare context for an existing official Codex or Claude subscription session |
 | `flow workflow archive WORK_ID --disposition memory=VALUE --disposition capability_gaps=VALUE` | Archive accepted review outcomes |
 | `flow workflow status WORK_ID [--json]` | Inspect workflow state and SDK conversation references |
+| `flow workflow check WORK_ID --check-id ID --session-id SESSION --assignment-id ASSIGNMENT --environment TEXT` | Run an approved check and capture workspace-bound verification evidence |
+| `flow workflow repair WORK_ID --check-id ID --specialist ROLE --scope TEXT --reason TEXT --failure-evidence PATH` | Allocate a targeted repair within the persistent two-attempt allowance |
+| `flow workflow review-test-change WORK_ID --reviewer ROLE --reviewer-session-id SESSION --disposition equivalent --rationale TEXT --evidence PATH` | Record independent equivalence review of changed evaluation inputs |
+| `flow workflow evidence-report WORK_ID [--usage-store PATH] [--json]` | Report verification, handoff rejections, repairs and usage attribution |
 | `flow workflow runtime [--json]` | Inspect pinned OpenHands packages and native access decision |
 | `flow runtime readiness [--json]` | Inspect OpenHands readiness without starting a provider |
 <!-- generated:cli-commands-table:end -->
