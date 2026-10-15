@@ -1,0 +1,51 @@
+{
+  "recorded_at": "2026-10-15T05:33:06.654643+00:00",
+  "failed_release_run": "https://github.com/andyconley/flow/actions/runs/38685277471",
+  "publication": "skipped; no v0.45.0 public release from this run",
+  "suite": {
+    "tests": 2280,
+    "failures": 2,
+    "skipped": 56,
+    "seconds": 992.188
+  },
+  "failed_tests": [
+    "test_plan_commit_recovers_missing_journal_and_keeps_approved_baseline",
+    "test_repair_commit_recovers_missing_journal_without_refunding_allocation"
+  ],
+  "cause": "Discovery fixture removes runstate from sys.modules; string mock imports new module while Flow retains executing module. Fault never injected.",
+  "bounded_diagnosis": {
+    "executing_module_differs_from_import_cache": true,
+    "original_wrong_target_expected_failures": 2,
+    "original_errors": 0,
+    "exact_original_failures": [
+      "tests.test_verification_evidence.EvidenceTests.test_plan_commit_recovers_missing_journal_and_keeps_approved_baseline",
+      "tests.test_verification_evidence.EvidenceTests.test_repair_commit_recovers_missing_journal_without_refunding_allocation"
+    ],
+    "correct_target_passes": 2,
+    "production_source_changed": false,
+    "assertions_removed": false,
+    "cause": "Earlier discovery fixture removes runstate from sys.modules. String patch imports a new module; Flow retains original module. Fault never reaches executing _append_event. Patching flow.runstate targets actual executing function."
+  },
+  "change": "Patch executing flow.runstate object; detached import-cache module makes regression explicit. Fixed-time mock also targets executing module. No success/failure/recovery/budget assertions removed or changed.",
+  "risk": "Low-risk equivalent test-harness repair. Production bytes, frozen criteria and all3 real CLI smoke results remain applicable. Do not classify failed run as pass.",
+  "production_unchanged": {
+    "cli/verification.py": true,
+    "cli/review_output.py": true,
+    "cli/openhands_flow.py": true,
+    "cli/runstate.py": true,
+    "cli/delivery_control.py": true
+  },
+  "author_targeted": {
+    "tests": 3,
+    "passed": 3,
+    "seconds": 0.657
+  },
+  "independent_review": {
+    "reviewer": "/root/review_reliability_independent",
+    "verdict": "Legitimate low-risk correction; no weakened assertions/criteria; production unchanged; no actionable findings",
+    "targeted_tests": 3,
+    "seconds": 0.643
+  },
+  "scope": "No new live trial or repeated evaluation campaign. One normal corrective commit triggers repository-required exact-SHA gate; no blind publisher retry/bypass.",
+  "draft_command_note": "An initial targeted invocation misspelled the fixed-time test name; loader error retained locally, then corrected without production change."
+}

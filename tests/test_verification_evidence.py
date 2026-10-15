@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import ModuleType
 from unittest.mock import patch
 from argparse import Namespace
 
@@ -337,7 +338,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(len(runstate.status('checks', self.root)['repair_attempts']), 2)
 
     def test_same_timestamp_rejections_remain_distinct_occurrences(self):
-        with patch('runstate._now', return_value='2026-10-15T00:00:00Z'):
+        with patch.object(flow.runstate, '_now', return_value='2026-10-15T00:00:00Z'):
             for _ in range(2):
                 with self.assertRaisesRegex(flow.RuntimeConfigurationError, 'missing, failed or stale'):
                     self.handoff()
@@ -345,8 +346,13 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(v.report(self.root, run)['handoff_rejections'], 2)
 
     def test_repair_commit_recovers_missing_journal_without_refunding_allocation(self):
+        # Discovery may reload sys.modules["runstate"]; inject into Flow's actual
+        # executing module, not a newly imported object with the same name.
         self.capture()
-        with patch('runstate._append_event', side_effect=OSError('journal unavailable')):
+        detached = ModuleType('runstate')
+        detached._append_event = lambda *args, **kwargs: None
+        with patch.dict(sys.modules, {'runstate': detached}), patch.object(
+                flow.runstate, '_append_event', side_effect=OSError('journal unavailable')):
             with self.assertRaisesRegex(OSError, 'journal unavailable'):
                 self.repair()
         _, run = flow._run(self.root, 'checks')
@@ -375,7 +381,10 @@ class EvidenceTests(unittest.TestCase):
         flow.approve(self.args)
         flow._transition(self.root, 'plan-crash', 'start-plan')
         self.args.stage = 'plan'
-        with patch('runstate._append_event', side_effect=OSError('journal unavailable')):
+        detached = ModuleType('runstate')
+        detached._append_event = lambda *args, **kwargs: None
+        with patch.dict(sys.modules, {'runstate': detached}), patch.object(
+                flow.runstate, '_append_event', side_effect=OSError('journal unavailable')):
             with self.assertRaisesRegex(OSError, 'journal unavailable'):
                 flow.approve(self.args)
         _, run = flow._run(self.root, 'plan-crash')
