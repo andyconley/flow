@@ -15,6 +15,7 @@ import time
 import verification
 import review_output
 
+from acp_permissions import Terminal
 from delivery_control import run_lock
 from fsutil import repo_root, write_atomic
 from openhands_config import STAGES, OUTPUTS, RuntimeConfigurationError, select
@@ -124,7 +125,6 @@ def execute(args) -> dict:
     if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
         raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
     if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") == "interactive":
-        from acp_permissions import Terminal
         try:
             terminal = Terminal()
             terminal.close()
