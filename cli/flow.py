@@ -158,6 +158,7 @@ def main() -> int:
         ),
     )
     setup_sub = setup.add_subparsers(dest="setup_target", required=True, title="setup targets")
+    setup_sub.add_parser("runtime", help="add missing interactive native profiles without selecting a default or granting permissions")
     setup_sub.add_parser(
         "machine",
         help="create ~/.flow support directories, config, and launcher expectations",
@@ -1080,6 +1081,11 @@ def main() -> int:
 
     if args.command == "setup" and args.setup_target == "machine":
         return setup_machine()
+    if args.command == "setup" and args.setup_target == "runtime":
+        from openhands_config import provision_native_profiles
+        from paths import USER_OVERLAY_DIR
+        print(provision_native_profiles(USER_OVERLAY_DIR))
+        return 0
     if args.command == "setup" and args.setup_target == "project":
         return setup_project()
     if args.command == "setup" and args.setup_target == "user":

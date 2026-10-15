@@ -334,13 +334,14 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         self.args.role = self.args.profile = None
         self.args.stage = "define"
         before = (self.directory / "run.json").read_bytes()
-        with self.assertRaisesRegex(config.RuntimeConfigurationError, "Native access decision required"):
+        with patch("acp_permissions.Terminal", side_effect=OSError("no tty")), self.assertRaisesRegex(config.RuntimeConfigurationError, "human controlling terminal"):
             flow.execute(self.args)
         self.assertEqual(before, (self.directory / "run.json").read_bytes())
         import openhands_runtime
         selection = config.select(self.root, "define")
-        with self.assertRaisesRegex(config.RuntimeConfigurationError, "Native access decision required"):
-            openhands_runtime.build_native_agent(selection, self.root)
+        agent = openhands_runtime.build_native_agent(selection, self.root)
+        self.assertIn("acp_permissions.py", agent.acp_command[1])
+        self.assertEqual(agent.acp_session_mode, "agent")
 
     def test_sdk_error_status_is_cli_failure(self):
         handler = flow._handler(lambda _: {"work_id": "example", "stage": "define",

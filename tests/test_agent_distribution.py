@@ -16,6 +16,20 @@ from openhands_runtime import probe
 
 
 class AgentDistributionTests(unittest.TestCase):
+    def test_setup_runtime_is_additive_and_does_not_grant_native_permissions(self):
+        command = [sys.executable, str(ROOT / "cli/flow.py"), "setup", "runtime"]
+        result = subprocess.run(command, env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        path = self.home / ".flow/user/runtime.toml"
+        config = tomllib.loads(path.read_text())
+        self.assertEqual(set(config["profiles"]), {"claude", "codex"})
+        self.assertNotIn("default_profile", config)
+        self.assertNotIn("permission_requests", path.read_text())
+        path.write_text("# existing profile\n")
+        result = subprocess.run(command, env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(path.read_text(), "# existing profile\n")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -228,6 +242,9 @@ class AgentDistributionTests(unittest.TestCase):
                 env={**self.env, "FLOW_PYTHON": sys.executable}, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse((self.home / ".flow/source").is_symlink())
+        runtime = tomllib.loads((self.home / ".flow/user/runtime.toml").read_text())
+        self.assertEqual(set(runtime["profiles"]), {"claude", "codex"})
+        self.assertNotIn("default_profile", runtime)
         for directory, suffix in ((".claude/agents", "md"), (".codex/agents", "toml"), (".agents/agents", "md")):
             agents = list((self.home / directory).glob(f"*.{suffix}"))
             self.assertEqual(len(agents), 13)

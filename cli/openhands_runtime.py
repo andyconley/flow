@@ -5,12 +5,14 @@ from contextlib import contextmanager
 from importlib.metadata import version, PackageNotFoundError
 from pathlib import Path
 import os
+import sys
 
 from openhands_config import SDK_VERSION, RuntimeConfigurationError, Selection
 from openhands_accounting import register_accounting_task_tool
 
 
-ACP_ACCESS_NOTE = ("Stock OpenHands ACP automatically answers native permission requests. "
+ACP_ACCESS_NOTE = ("Flow defaults to explicit terminal permission choices through its ACP proxy; headless execution fails closed. "
+                   "Explicit legacy stock-openhands handling automatically answers native permission requests. "
                    "Flow selects Codex agent (workspace-write/auto_review) or Claude default, "
                    "and inherits the execution environment's actual containment. Claude may offer allow_always first and update native permission rules. "
                    "A live native run requires authorized native network and session-state access; "
@@ -30,11 +32,8 @@ def probe() -> dict:
             "packages": packages, "native_automation": "implemented", "native_access_note": ACP_ACCESS_NOTE}
 
 
-def _context(selection: Selection, root: Path):
-    from paths import HOME, USER_OVERLAY_DIR
-    from openhands.sdk import AgentContext
-    from openhands.sdk.context import Skill, load_skills_from_dir
-
+def role_context(selection: Selection):
+    """Compose the canonical role without constructing an SDK agent or session."""
     # Use the same composition pipeline as distribution, including expertise
     # and user overlay sources. Project-specific files still win in select().
     from sync import agent_body, merge_user_overlay, shared_agents
@@ -54,6 +53,15 @@ def _context(selection: Selection, root: Path):
     if GENERATED_MARKER in body:
         capabilities = None
     metadata, prompt = parse_frontmatter(render_openhands_agent(selection.role, str(selection.role_file), body, capabilities))
+    return metadata, prompt
+
+
+def _context(selection: Selection, root: Path):
+    from paths import HOME, USER_OVERLAY_DIR
+    from openhands.sdk import AgentContext
+    from openhands.sdk.context import Skill, load_skills_from_dir
+
+    metadata, prompt = role_context(selection)
     from openhands.sdk.skills import load_available_skills
     # SDK discovery also composes AGENTS.md and conditional project rules.
     skills = load_available_skills(root, include_user=True, include_project=False, include_public=False)
@@ -115,7 +123,7 @@ def local_llm(selection: Selection):
     key = os.environ.get(key_env) if key_env else "self-hosted"
     if key_env and not key:
         raise RuntimeConfigurationError(f"self-hosted credential variable {key_env} is unset")
-    llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens") if name in provider}
+    llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens", "reasoning_effort") if name in provider}
     llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
               usage_id=f"flow-{selection.role}", **llm_options)
     return llm
@@ -242,8 +250,8 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
 
 
 def build_native_agent(selection: Selection, root: Path):
-    if selection.provider.get("permission_requests") != "stock-openhands":
-        raise RuntimeConfigurationError("Native access decision required: see docs/native-access-decision.md before selecting permission_requests=stock-openhands.")
+    if selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
+        raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
     from openhands.sdk.agent import ACPAgent
     from openhands.sdk.settings.acp_install_catalog import ACP_INSTALL_CATALOG
     kind = selection.provider["kind"]
@@ -257,9 +265,13 @@ def build_native_agent(selection: Selection, root: Path):
         raise RuntimeConfigurationError("native session mode would broaden access; supported modes: " + ", ".join(sorted(modes[kind])))
     provider_key = "codex" if kind == "codex" else "claude-code"
     spec = ACP_INSTALL_CATALOG[provider_key]
-    # Official maintained bridge and native agent. SDK owns stdio, permissions,
-    # session resume, npm cache, authentication and metrics. No wrapper transport.
-    return ACPAgent(acp_command=list(spec.npx_command()), acp_server=provider_key,
+    # Keep the official adapter, native modes, authentication and SDK sessions.
+    # The public command boundary intercepts permission requests only.
+    command = list(spec.npx_command())
+    if selection.provider.get("permission_requests", "interactive") == "interactive":
+        command = [sys.executable, str(Path(__file__).with_name("acp_permissions.py")),
+                   "--npm-cache", str(root / ".flow/runs/.acp-cache/npm"), "--", *command]
+    return ACPAgent(acp_command=command, acp_server=provider_key,
                     acp_session_mode=mode, acp_model=selection.provider.get("model"),
                     acp_isolate_data_dir=False, acp_file_secrets=[],
                     agent_context=_context(selection, root))
@@ -270,7 +282,7 @@ def conversation(selection: Selection, root: Path, persistence: Path, conversati
     diagnostic = probe()
     if not diagnostic["ready"]:
         raise RuntimeConfigurationError("run this command with the isolated pinned OpenHands environment: " + str(diagnostic["packages"]))
-    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests") != "stock-openhands":
+    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
         raise RuntimeConfigurationError("Native access decision required: stock ACP auto-approval may add native permission rules. See docs/native-access-decision.md; after approval select permission_requests=stock-openhands in the native profile.")
     from openhands.sdk import Conversation
     from openhands.sdk.workspace import LocalWorkspace

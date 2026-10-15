@@ -33,6 +33,22 @@ class RuntimeConfigurationError(ValueError):
     pass
 
 
+def provision_native_profiles(user_overlay: Path) -> str:
+    """Add usable interactive routes without choosing a provider or granting access."""
+    path = user_overlay / "runtime.toml"
+    user_overlay.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x") as stream:
+            stream.write('# Native subscriptions; select explicitly with --profile claude or codex.\n'
+                         '# No default provider or automated permission acknowledgement is set.\n'
+                         '# Model defaults follow the canonical Flow role policy.\n'
+                         '[profiles.claude]\nkind = "claude"\nsession_mode = "default"\n\n'
+                         '[profiles.codex]\nkind = "codex"\nsession_mode = "agent"\n')
+    except FileExistsError:
+        return f"runtime profiles preserved: {path}"
+    return f"interactive native profiles installed: {path}; select --profile claude or codex; execution requires explicit terminal approvals; headless execution is refused"
+
+
 def _merge(base: dict, override: dict) -> dict:
     result = dict(base)
     for key, value in override.items():
@@ -89,12 +105,16 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
             profile = stage_options["profile"]
         else:
             profile = config.get("default_profile", "")
+    if not profile:
+        raise RuntimeConfigurationError("invalid profile: No runtime profile selected. Use --profile claude or codex for a configured native route, or configure a self-hosted default_profile in .flow/runtime.toml. Missing configuration never enables host fallback.")
     profile = identifier(profile, "profile")
     provider = config.get("profiles", {}).get(profile)
     if not isinstance(provider, dict):
         raise RuntimeConfigurationError(f"profile {profile!r} is not configured in .flow/runtime.toml")
     kind = provider.get("kind")
     if kind == "local":
+        if "reasoning_effort" in provider and (not isinstance(provider["reasoning_effort"], str) or not provider["reasoning_effort"].strip()):
+            raise RuntimeConfigurationError("reasoning_effort must be a nonempty provider-supported string")
         url = urlsplit(provider.get("base_url", ""))
         if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password:
             raise RuntimeConfigurationError("local profiles require an explicit compatible base_url without embedded credentials")
@@ -117,6 +137,16 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
     from sync import merge_user_overlay, shared_agents
     _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent, user_overlay=user_overlay)
     declaration = next((a for a in shared_agents(manifest) if a["name"] == role), None)
+    provider = dict(provider)
+    if kind in {"codex", "claude"}:
+        provider.setdefault("permission_requests", "interactive")
+        if provider["permission_requests"] not in {"interactive", "stock-openhands"}:
+            raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
+    if kind in {"codex", "claude"} and declaration:
+        from model_policy import runtime_policy_for_agent
+        policy = runtime_policy_for_agent(manifest, kind, declaration)
+        if policy.get("model"):
+            provider.setdefault("model", policy["model"])
     declared_file = declaration["_root"] / declaration["source"] if declaration else FRAMEWORK_ROLES / f"{role}.md"
     candidates = [root / ".flow/agents" / f"{role}.md", root / ".agents/agents" / f"{role}.md",
                   user_overlay / "agents" / f"{role}.md", declared_file, FRAMEWORK_ROLES / f"{role}.md"]
@@ -163,3 +193,38 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
     if workspace.get("confirmation") not in {None, "always"}:
         raise RuntimeConfigurationError("workspace confirmation must be always, or omitted to use the SDK default")
     return Selection(role, profile, dict(provider), role_file, dict(options), dict(workspace), profile_override, routing_profiles)
+
+
+def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
+    """Inspect configuration without SDK construction, credentials or provider calls."""
+    config = load_config(root, user_overlay)
+    from sync import merge_user_overlay, shared_agents
+    from model_policy import runtime_policy_for_agent
+    _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent, user_overlay=user_overlay)
+    roles = shared_agents(manifest)
+    routes = []
+    for profile in config.get("profiles", {}):
+        for role in roles:
+            try:
+                selected = select(root, "implement", role["name"], profile,
+                                  config=config, user_overlay=user_overlay)
+                kind = selected.provider["kind"]
+                policy = runtime_policy_for_agent(manifest, kind, role) if kind != "local" else {}
+                supported = ({"kind", "model", "base_url", "api_key_env", "max_input_tokens", "max_output_tokens", "condenser_max_tokens", "reasoning_effort"}
+                             if kind == "local" else {"kind", "model", "session_mode", "permission_requests"})
+                routes.append({"profile": profile, "role": selected.role, "kind": kind,
+                    "role_file": str(selected.role_file), "model": selected.provider.get("model"),
+                    "canonical_effort": policy.get("effort", policy.get("model_reasoning_effort")),
+                    "reasoning_effort": selected.provider.get("reasoning_effort") if kind == "local" else "native harness setting; ACP does not forward Flow effort",
+                    "tools": selected.role_options.get("tools", ["terminal", "file_editor", "task"]) if kind == "local" else "native harness permissions; SDK tool restrictions do not apply",
+                    "context": selected.role_options.get("context", []),
+                    "skills": selected.role_options.get("skills", []),
+                    "untranslated_profile_fields": sorted(set(selected.provider) - supported),
+                    "interactive_handoff_configured": kind != "local",
+                    "permission_requests": selected.provider.get("permission_requests"),
+                    "human_terminal_required": kind != "local" and selected.provider.get("permission_requests") == "interactive",
+                    "execution_configured": kind == "local" or selected.provider.get("permission_requests") in {"interactive", "stock-openhands"}})
+            except (ValueError, OSError) as exc:
+                routes.append({"profile": profile, "role": role["name"], "error": str(exc)})
+    return {"default_profile": config.get("default_profile"), "routes": routes,
+            "note": "Configuration only: no authentication, model availability or effective permissions verified. Skills/AGENTS discovery and PROJECT.md are composed at execution. SDK readiness alone does not mean execution is configured."}

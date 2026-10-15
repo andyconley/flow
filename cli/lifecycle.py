@@ -1076,4 +1076,8 @@ def _sync_installed_adapters(*, quiet: bool = False) -> int:
         print("source installed; adapter conflicts need attention: " + ", ".join(failures),
               file=sys.stderr if quiet else sys.stdout)
         return 1
-    return 0
+    result = subprocess.run([python, str(SOURCE_DIR / "cli/flow.py"), "setup", "runtime"],
+                            check=False, capture_output=quiet, text=quiet)
+    if result.returncode and quiet:
+        print(result.stdout + result.stderr, file=sys.stderr)
+    return result.returncode
