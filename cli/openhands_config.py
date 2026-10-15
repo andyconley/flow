@@ -106,7 +106,7 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
         else:
             profile = config.get("default_profile", "")
     if not profile:
-        raise RuntimeConfigurationError("No runtime profile selected. Use --profile claude or codex for a configured native route, or configure a self-hosted default_profile in .flow/runtime.toml. Missing configuration never enables host fallback.")
+        raise RuntimeConfigurationError("invalid profile: No runtime profile selected. Use --profile claude or codex for a configured native route, or configure a self-hosted default_profile in .flow/runtime.toml. Missing configuration never enables host fallback.")
     profile = identifier(profile, "profile")
     provider = config.get("profiles", {}).get(profile)
     if not isinstance(provider, dict):

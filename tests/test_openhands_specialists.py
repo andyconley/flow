@@ -114,11 +114,12 @@ class SpecialistTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeConfigurationError, 'use a specialist'):
             self.build()
 
-    def test_native_permission_acknowledgement_is_not_removed(self):
+    def test_unacknowledged_native_child_uses_interactive_proxy(self):
         self.config['profiles']['native'].pop('permission_requests')
         parent = self.build()
-        with self.assertRaisesRegex(RuntimeConfigurationError, 'Native access decision required'):
-            self.factories(parent)['native'](parent.llm)
+        child = self.factories(parent)['native'](parent.llm)
+        self.assertIn('acp_permissions.py', child.acp_command[1])
+        self.assertEqual(child.acp_session_mode, 'read-only')
 
     def test_nonrouting_fingerprint_preserves_release_session_bindings(self):
         import hashlib
