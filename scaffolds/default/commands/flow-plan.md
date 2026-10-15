@@ -26,17 +26,21 @@ when no user runtime configuration exists; existing configuration is preserved.
 Inspect `flow workflow runtime --json` for resolved roles and missing setup.
 SDK readiness is not execution readiness; never bypass a missing profile by
 implementing directly in the host. Native handoff uses existing permissions and
-does not enable automated ACP permission handling.
+does not enable automatic ACP permission handling. `workflow execute` with a native
+profile uses terminal approvals by default: run it from a human-controlled terminal;
+headless execution fails closed. These are terminal prompts, not desktop dialogs.
 
 ```sh
 flow workflow native-handoff <work-id> --stage plan --profile <codex-or-claude-profile> --task-file <task.md>
 ```
 
 Use that context artifact in the native session with its existing subscription
-and permissions. Automated native profiles use stock OpenHands ACPAgent after
-the scoped access decision in docs/native-access-decision.md. Stock ACP can grant
-persistent native permissions; defaults leave acknowledgement unset. Native
-handoff is a temporary interactive fallback. Do not copy credentials or switch billing.
+and permissions. Native execution uses OpenHands ACPAgent through Flow's terminal permission proxy.
+Every native permission request requires explicit human selection; timeout, EOF or
+missing terminal denies it. Selecting a persistent option can change native rules.
+The legacy `stock-openhands` option automatically answers requests and requires
+a separate access decision; it is never selected by default. Native handoff
+is a temporary interactive fallback. Do not copy credentials or switch billing.
 
 ## Durable outputs
 

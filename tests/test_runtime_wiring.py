@@ -49,7 +49,8 @@ class RuntimeWiringTests(unittest.TestCase):
             report = config.wiring_report(root, root)
             self.assertEqual(len(report["routes"]), 26)
             self.assertTrue(all(r["interactive_handoff_configured"] for r in report["routes"]))
-            self.assertFalse(any(r["execution_configured"] for r in report["routes"]))
+            self.assertTrue(all(r["execution_configured"] and r["human_terminal_required"] for r in report["routes"]))
+            self.assertTrue(all(r["permission_requests"] == "interactive" for r in report["routes"]))
             self.assertEqual((root / "runtime.toml").read_bytes(), before)
 
     def test_local_reasoning_is_forwarded_to_sdk(self):

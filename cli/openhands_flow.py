@@ -121,8 +121,15 @@ def execute(args) -> dict:
     selection = select(root, stage, args.role, args.profile)
     # Consent to stock native permission handling is consequential: the pinned
     # Claude bridge may offer allow_always first and update native rules.
-    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests") != "stock-openhands":
-        raise RuntimeConfigurationError("Native access decision required: see docs/native-access-decision.md before selecting permission_requests=stock-openhands.")
+    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
+        raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
+    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") == "interactive":
+        from acp_permissions import Terminal
+        try:
+            terminal = Terminal()
+            terminal.close()
+        except OSError as exc:
+            raise RuntimeConfigurationError("Interactive ACP requires a human controlling terminal; no stage was started. Use a terminal or native-handoff; no automatic approval fallback.") from exc
     # Profile validation does not manufacture a workspace or native access grant.
     from openhands_runtime import probe
     if not probe()["ready"]:

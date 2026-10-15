@@ -1,5 +1,40 @@
 # Native ACP access decision
 
+## Current default: terminal approval proxy
+
+Native profiles now default to `permission_requests="interactive"`. Flow launches
+the unchanged pinned adapter through `cli/acp_permissions.py`, using the public
+ACP command boundary. The proxy intercepts `session/request_permission` before
+it reaches the stock automatic callback. It displays the complete escaped request
+and actual option kinds on the controlling terminal and returns only an explicit
+human choice. Empty/invalid input, EOF, errors, timeout or session cancellation
+return `cancelled`; no terminal fails before workflow stage entry or native launch.
+Prompts are terminal-only, not Codex/Claude desktop approval dialogs. A profile
+with omitted permission handling also uses this route; existing configuration is
+not rewritten. Explicit `stock-openhands` retains the legacy behavior audited below.
+
+The default response deadline is 120 seconds including time waiting for the
+terminal lock. Prompts are serialized across concurrent proxies on the same tty.
+Intercepted permission requests are displayed only on the terminal, never logged
+or forwarded upstream by the proxy. Ordinary tool notifications are relayed
+unchanged and can still contain arguments under the SDK's existing policy. Native
+stderr is suppressed by the proxy because it may contain sensitive requests.
+The proxy uses a project cache under `.flow/runs/.acp-cache/npm`; it does not
+grant that cache, native-state or network access. Outer permissions still apply.
+Human selection of `allow_always` can have the persistent effects described below;
+Flow neither preselects nor silently rewrites that choice. Adapter/session
+initialization and operations that native policies already permit may happen
+without a new permission request. This proxy is not a new sandbox.
+
+All protocol messages other than permission requests are relayed, including
+unknown extension fields. Invalid protocol, duplicate outstanding request IDs,
+overlarge messages or excess pending permissions stop the proxy. Host EOF and
+cancellation terminate the adapter process group; no background approval worker
+is retained. SDK files and private callbacks remain unmodified.
+
+The remaining sections record the previous stock-path audit and historical
+approvals. They do not require stock automatic approval for the interactive route.
+
 Native automation uses stock `ACPAgent`. **Live Codex and Claude acceptance passed** under
 their subsequently approved launcher scopes. Interactive
 handoff is a temporary fallback, not the final architecture. This document keeps

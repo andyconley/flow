@@ -46,7 +46,7 @@ def provision_native_profiles(user_overlay: Path) -> str:
                          '[profiles.codex]\nkind = "codex"\nsession_mode = "agent"\n')
     except FileExistsError:
         return f"runtime profiles preserved: {path}"
-    return f"interactive native profiles installed: {path}; select --profile claude or codex; automated execution still requires the native access decision"
+    return f"interactive native profiles installed: {path}; select --profile claude or codex; execution requires explicit terminal approvals; headless execution is refused"
 
 
 def _merge(base: dict, override: dict) -> dict:
@@ -138,6 +138,10 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
     _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent, user_overlay=user_overlay)
     declaration = next((a for a in shared_agents(manifest) if a["name"] == role), None)
     provider = dict(provider)
+    if kind in {"codex", "claude"}:
+        provider.setdefault("permission_requests", "interactive")
+        if provider["permission_requests"] not in {"interactive", "stock-openhands"}:
+            raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
     if kind in {"codex", "claude"} and declaration:
         from model_policy import runtime_policy_for_agent
         policy = runtime_policy_for_agent(manifest, kind, declaration)
@@ -217,7 +221,9 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
                     "skills": selected.role_options.get("skills", []),
                     "untranslated_profile_fields": sorted(set(selected.provider) - supported),
                     "interactive_handoff_configured": kind != "local",
-                    "execution_configured": kind == "local" or selected.provider.get("permission_requests") == "stock-openhands"})
+                    "permission_requests": selected.provider.get("permission_requests"),
+                    "human_terminal_required": kind != "local" and selected.provider.get("permission_requests") == "interactive",
+                    "execution_configured": kind == "local" or selected.provider.get("permission_requests") in {"interactive", "stock-openhands"}})
             except (ValueError, OSError) as exc:
                 routes.append({"profile": profile, "role": role["name"], "error": str(exc)})
     return {"default_profile": config.get("default_profile"), "routes": routes,

@@ -26,13 +26,14 @@ base_url = "http://127.0.0.1:11434"
 kind = "codex"
 # Existing official native authentication; no credential copies.
 session_mode = "agent"
-# After scoped approval: permission_requests = "stock-openhands"
+permission_requests = "interactive" # explicit human terminal choices; headless fails closed
 
 [profiles.claude]
 kind = "claude"
 session_mode = "default"
-# After scoped approval: permission_requests = "stock-openhands"
-# See docs/native-access-decision.md before enabling either native profile.
+permission_requests = "interactive" # terminal prompts, not desktop approval dialogs
+# Legacy automatic stock-openhands handling requires separate scoped approval.
+# See docs/native-access-decision.md; no new credentials or OS grants are implied.
 
 [roles.lead-developer]
 profile = "local-coder"
