@@ -4,6 +4,21 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Workflow handoffs now require current verification evidence, protect approved criteria, and bound incomplete-review repairs across sessions.
+
+
+## [0.45.0](https://github.com/andyconley/flow/compare/v0.44.4...v0.45.0) (2026-10-15)
+
+### Features
+
+* **workflow:** bind handoffs to verified evidence and bounded review repairs ([bebff68](https://github.com/andyconley/flow/commit/bebff683702aab312fa19577e75a41325d30e03c))
+
+### Tests
+
+* **workflow:** bind recovery faults to the executing module ([f4ee745](https://github.com/andyconley/flow/commit/f4ee74534cd3d263c8a42b9e48b546426af44725))
+
+### Highlights
+
 - Shaper and Delivery Lead hosts can delegate to all 13 Codex specialists through explicit role-file registrations that preserve user settings and existing model choices.
 
 
