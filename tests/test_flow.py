@@ -3841,6 +3841,7 @@ class FlowCliTests(FlowCliHarness):
         self.assertEqual(
             victims,
             [
+                "acp_permissions",
                 "agent_capabilities",
                 "archive_commands",
                 "archive_extract",

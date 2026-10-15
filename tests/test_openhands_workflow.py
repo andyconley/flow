@@ -334,7 +334,7 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         self.args.role = self.args.profile = None
         self.args.stage = "define"
         before = (self.directory / "run.json").read_bytes()
-        with patch("acp_permissions.Terminal", side_effect=OSError("no tty")), self.assertRaisesRegex(config.RuntimeConfigurationError, "human controlling terminal"):
+        with patch("openhands_flow.Terminal", side_effect=OSError("no tty")), self.assertRaisesRegex(config.RuntimeConfigurationError, "human controlling terminal"):
             flow.execute(self.args)
         self.assertEqual(before, (self.directory / "run.json").read_bytes())
         import openhands_runtime
