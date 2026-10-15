@@ -2,6 +2,18 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.45.1](https://github.com/andyconley/flow/compare/v0.45.0...v0.45.1) (2026-10-15)
+
+### Bug Fixes
+
+* **release:** validate the native permission proxy in staged installs ([aa09f1c](https://github.com/andyconley/flow/commit/aa09f1ca6760957470cda928612b38b6fc2640f2))
+* **runtime:** require human terminal decisions for native ACP permissions ([0f95ce7](https://github.com/andyconley/flow/commit/0f95ce797a3d175ee5a0d298234660eabcba95ea))
+* **runtime:** wire native profiles and expose resolved agent configuration ([6ede7ac](https://github.com/andyconley/flow/commit/6ede7ac375738c39a72265994ad656460bcc8877))
+
+### Tests
+
+* **runtime:** gate interactive native child wiring in CI ([72ba8f5](https://github.com/andyconley/flow/commit/72ba8f54707396120e2ec29f6cc49352ca7638c8))
+
 ### Highlights
 
 - Workflow handoffs now require current verification evidence, protect approved criteria, and bound incomplete-review repairs across sessions.
