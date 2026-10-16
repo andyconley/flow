@@ -1,6 +1,15 @@
 """Pinned SDK task identity compatibility, without changing task execution."""
 from uuid import uuid4
 
+from openhands.tools.task.definition import TaskAction
+from pydantic import ConfigDict
+
+
+class RoleTaskAction(TaskAction):
+    """Stable SDK action identity for persisted checked-dispatch events."""
+    model_config = ConfigDict(extra="forbid")
+
+
 _REGISTERED = False
 
 
@@ -39,13 +48,9 @@ def register_policy_task_tool():
     """Expose logical roles only; stock SDK still owns task execution and history."""
     global _POLICY_REGISTERED
     from openhands.tools.task import TaskToolSet
-    from openhands.tools.task.definition import TaskAction, TaskObservation
+    from openhands.tools.task.definition import TaskObservation
     from openhands.sdk.tool import register_tool
     from openhands.sdk.tool.tool import ToolExecutor
-    from pydantic import ConfigDict
-
-    class RoleTaskAction(TaskAction):
-        model_config = ConfigDict(extra='forbid')
 
     class CheckedExecutor(ToolExecutor):
         def __init__(self, delegate, bindings):
